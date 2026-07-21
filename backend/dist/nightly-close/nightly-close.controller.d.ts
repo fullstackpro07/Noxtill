@@ -1,0 +1,33 @@
+import { NightlyCloseService } from './nightly-close.service';
+import { UpdateNightlyCloseDto } from './dto/update-nightly-close.dto';
+import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+export declare class NightlyCloseController {
+    private readonly nightlyClose;
+    constructor(nightlyClose: NightlyCloseService);
+    getDay(user: AuthenticatedUser, date: string): Promise<import("./nightly-close.types").NightlyCloseData>;
+    updateSettings(user: AuthenticatedUser, dto: UpdateNightlyCloseDto): Promise<{
+        name: string;
+        country: string | null;
+        currency: string;
+        locale: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        slug: string;
+        timezone: string;
+        channelPref: import("generated/prisma").$Enums.MessageChannel;
+        nightlyCloseTime: string;
+        taxLabel: string;
+        taxRate: import("generated/prisma/runtime/library").Decimal;
+        msgQuota: number;
+        msgUsed: number;
+        branding: import("generated/prisma/runtime/library").JsonValue;
+        dashboardConfig: import("generated/prisma/runtime/library").JsonValue;
+        publicReviewUrl: string | null;
+        workingHours: import("generated/prisma/runtime/library").JsonValue;
+        trialEndsAt: Date | null;
+        typeId: string | null;
+        planId: string | null;
+        parentId: string | null;
+    }>;
+}

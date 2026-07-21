@@ -1,0 +1,4 @@
+export declare const INVENTORY_ERROR_CODES: {
+    readonly PRODUCT_NOT_FOUND: "PRODUCT_NOT_FOUND";
+    readonly INSUFFICIENT_STOCK: "INSUFFICIENT_STOCK";
+};

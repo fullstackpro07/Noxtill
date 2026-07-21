@@ -1,0 +1,820 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  owner
+  manager
+  staff
+}
+
+enum ProductKind {
+  product
+  service
+}
+
+enum OrderType {
+  counter
+  online
+  dine_in
+  takeaway
+  delivery
+  quotation
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  in_progress
+  completed
+  cancelled
+}
+
+enum PaymentMethod {
+  cash
+  card
+  online
+  credit
+}
+
+enum CreditEntryKind {
+  credit
+  payment
+}
+
+enum AppointmentStatus {
+  booked
+  confirmed
+  completed
+  no_show
+  cancelled
+}
+
+enum AppointmentSource {
+  link
+  qr
+  walk_in
+}
+
+enum MessageChannel {
+  whatsapp
+  sms
+  email
+}
+
+enum MessageCategory {
+  utility
+  marketing
+}
+
+enum MessageStatus {
+  queued
+  sent
+  delivered
+  read
+  failed
+}
+
+enum ReviewRoute {
+  public
+  private
+}
+
+enum FeedbackStatus {
+  open
+  assigned
+  resolved
+}
+
+enum StockMovementKind {
+  purchase
+  sale
+  wastage
+  adjustment
+}
+
+enum ImportSource {
+  csv
+  xlsx
+  text
+  docx
+}
+
+enum ImportStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum IntegrationProvider {
+  email
+  gmb
+  google_ads
+  merchant
+  meta_ads
+  tiktok_ads
+}
+
+enum IntegrationStatus {
+  not_connected
+  connected
+  needs_attention
+}
+
+enum EmailEventType {
+  sent
+  delivered
+  open
+  click
+  unsub
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BE-001 — Identity & tenancy
+// ─────────────────────────────────────────────────────────────────────────
+
+model BusinessCategory {
+  id              String         @id @default(uuid())
+  key             String         @unique
+  name            String
+  defaultTemplate Json           @default("{}") @map("default_template")
+  businessTypes   BusinessType[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("business_categories")
+}
+
+model BusinessType {
+  id              String           @id @default(uuid())
+  categoryId      String           @map("category_id")
+  category        BusinessCategory @relation(fields: [categoryId], references: [id])
+  key             String           @unique
+  label           String
+  labelOverrides  Json             @default("{}") @map("label_overrides")
+  widgetOverrides Json             @default("{}") @map("widget_overrides")
+  aiGenerated     Boolean          @default(false) @map("ai_generated")
+  businesses      Business[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([categoryId])
+  @@map("business_types")
+}
+
+model Widget {
+  id           String @id @default(uuid())
+  key          String @unique
+  name         String
+  module       String
+  dataEndpoint String @map("data_endpoint")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("widgets")
+}
+
+model Plan {
+  id         String     @id @default(uuid())
+  key        String     @unique
+  name       String
+  price      Decimal    @db.Decimal(10, 2)
+  msgQuota   Int        @map("msg_quota")
+  userLimit  Int        @map("user_limit")
+  features   Json       @default("{}")
+  businesses Business[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("plans")
+}
+
+model Business {
+  id     String        @id @default(uuid())
+  name   String
+  slug   String        @unique
+  typeId String?       @map("type_id")
+  type   BusinessType? @relation(fields: [typeId], references: [id])
+  planId String?       @map("plan_id")
+  plan   Plan?         @relation(fields: [planId], references: [id])
+
+  currency    String         @default("USD")
+  timezone    String         @default("UTC")
+  locale      String         @default("en")
+  country     String?
+  channelPref MessageChannel @default(whatsapp) @map("channel_pref")
+
+  nightlyCloseTime String  @default("22:00") @map("nightly_close_time")
+  taxLabel         String  @default("Tax") @map("tax_label")
+  taxRate          Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+
+  msgQuota Int @default(600) @map("msg_quota")
+  msgUsed  Int @default(0) @map("msg_used")
+
+  branding        Json    @default("{}")
+  dashboardConfig Json    @default("{}") @map("dashboard_config")
+  publicReviewUrl String? @map("public_review_url")
+
+  /// Weekly hours, e.g. `{"mon":[["09:00","17:00"]],"tue":[...] , ... }`; a missing/empty day is closed.
+  workingHours Json @default("{}") @map("working_hours")
+
+  parentId String?    @map("parent_id")
+  parent   Business?  @relation("BusinessBranches", fields: [parentId], references: [id])
+  branches Business[] @relation("BusinessBranches")
+
+  trialEndsAt DateTime? @map("trial_ends_at")
+
+  businessUsers    BusinessUser[]
+  customers        Customer[]
+  products         Product[]
+  orders           Order[]
+  creditEntries    CreditEntry[]
+  appointments     Appointment[]
+  messages         Message[]
+  whatsappWindows  WhatsappWindow[]
+  reviewRequests   ReviewRequest[]
+  privateFeedback  PrivateFeedback[]
+  externalReviews  ExternalReview[]
+  stockMovements   StockMovement[]
+  expenses         Expense[]
+  attendance       Attendance[]
+  campaigns        Campaign[]
+  competitors      Competitor[]
+  auditLogs        AuditLog[]
+  importBatches    ImportBatch[]
+  integrations     Integration[]
+  adCampaigns      AdCampaign[]
+  emailCampaigns   EmailCampaign[]
+  productFeedItems ProductFeedItem[]
+  gmbPosts         GmbPost[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("businesses")
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  email               String?   @unique
+  phone               String?   @unique
+  passwordHash        String    @map("password_hash")
+  name                String
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  refreshTokenHash    String?   @map("refresh_token_hash")
+
+  businessUsers BusinessUser[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model BusinessUser {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  business       Business @relation(fields: [businessId], references: [id])
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id])
+  role           Role     @default(staff)
+  commissionRule Json     @default("{}") @map("commission_rule")
+
+  attendance   Attendance[]
+  appointments Appointment[] @relation("StaffAppointments")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, userId])
+  @@index([businessId])
+  @@map("business_users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BE-002 — Commerce
+// ─────────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  business         Business  @relation(fields: [businessId], references: [id])
+  phone            String
+  name             String
+  email            String?
+  address          String?
+  birthday         DateTime? @db.Date
+  notes            String?
+  tags             String[]  @default([])
+  consentMarketing Boolean   @default(true) @map("consent_marketing")
+  optedOut         Boolean   @default(false) @map("opted_out")
+  lifetimeSpend    Decimal   @default(0) @map("lifetime_spend") @db.Decimal(12, 2)
+  visitCount       Int       @default(0) @map("visit_count")
+  lastVisitAt      DateTime? @map("last_visit_at")
+
+  orders          Order[]
+  creditEntries   CreditEntry[]
+  appointments    Appointment[]
+  messages        Message[]
+  whatsappWindows WhatsappWindow[]
+  reviewRequests  ReviewRequest[]
+  privateFeedback PrivateFeedback[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, phone])
+  @@index([businessId, name])
+  @@map("customers")
+}
+
+model Product {
+  id                String      @id @default(uuid())
+  businessId        String      @map("business_id")
+  business          Business    @relation(fields: [businessId], references: [id])
+  kind              ProductKind @default(product)
+  name              String
+  category          String?
+  variations        Json        @default("[]")
+  costPrice         Decimal     @default(0) @map("cost_price") @db.Decimal(12, 2)
+  sellingPrice      Decimal     @default(0) @map("selling_price") @db.Decimal(12, 2)
+  stockQty          Int         @default(0) @map("stock_qty")
+  lowStockThreshold Int         @default(5) @map("low_stock_threshold")
+  durationMin       Int?        @map("duration_min")
+  active            Boolean     @default(true)
+
+  orderItems       OrderItem[]
+  stockMovements   StockMovement[]
+  appointments     Appointment[]
+  productFeedItems ProductFeedItem[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("products")
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  businessId  String      @map("business_id")
+  business    Business    @relation(fields: [businessId], references: [id])
+  orderNo     Int         @map("order_no")
+  customerId  String?     @map("customer_id")
+  customer    Customer?   @relation(fields: [customerId], references: [id])
+  orderType   OrderType   @default(counter) @map("order_type")
+  tableNo     String?     @map("table_no")
+  status      OrderStatus @default(pending)
+  subtotal    Decimal     @default(0) @db.Decimal(12, 2)
+  tax         Decimal     @default(0) @db.Decimal(12, 2)
+  discount    Decimal     @default(0) @db.Decimal(12, 2)
+  total       Decimal     @default(0) @db.Decimal(12, 2)
+  cogs        Decimal     @default(0) @db.Decimal(12, 2)
+  isQuotation Boolean     @default(false) @map("is_quotation")
+
+  items         OrderItem[]
+  payments      Payment[]
+  creditEntries CreditEntry[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, orderNo])
+  @@index([businessId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId String?  @map("product_id")
+  product   Product? @relation(fields: [productId], references: [id])
+  name      String
+  price     Decimal  @db.Decimal(12, 2)
+  cost      Decimal  @db.Decimal(12, 2)
+  qty       Int
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  orderId     String        @map("order_id")
+  order       Order         @relation(fields: [orderId], references: [id])
+  method      PaymentMethod
+  amount      Decimal       @db.Decimal(12, 2)
+  providerRef String?       @map("provider_ref")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+model CreditEntry {
+  id         String          @id @default(uuid())
+  businessId String          @map("business_id")
+  business   Business        @relation(fields: [businessId], references: [id])
+  customerId String          @map("customer_id")
+  customer   Customer        @relation(fields: [customerId], references: [id])
+  kind       CreditEntryKind
+  amount     Decimal         @db.Decimal(12, 2)
+  method     PaymentMethod?
+  note       String?
+  orderId    String?         @map("order_id")
+  order      Order?          @relation(fields: [orderId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, customerId])
+  @@map("credit_entries")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BE-003 — Ops
+// ─────────────────────────────────────────────────────────────────────────
+
+model Appointment {
+  id              String            @id @default(uuid())
+  businessId      String            @map("business_id")
+  business        Business          @relation(fields: [businessId], references: [id])
+  serviceId       String            @map("service_id")
+  service         Product           @relation(fields: [serviceId], references: [id])
+  staffUserId     String?           @map("staff_user_id")
+  staffUser       BusinessUser?     @relation("StaffAppointments", fields: [staffUserId], references: [id])
+  customerId      String            @map("customer_id")
+  customer        Customer          @relation(fields: [customerId], references: [id])
+  startsAt        DateTime          @map("starts_at")
+  endsAt          DateTime          @map("ends_at")
+  status          AppointmentStatus @default(booked)
+  depositPaid     Decimal           @default(0) @map("deposit_paid") @db.Decimal(12, 2)
+  source          AppointmentSource @default(link)
+  rescheduleToken String?           @unique @map("reschedule_token")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, startsAt])
+  @@index([staffUserId, startsAt])
+  @@map("appointments")
+}
+
+model Message {
+  id           String          @id @default(uuid())
+  businessId   String          @map("business_id")
+  business     Business        @relation(fields: [businessId], references: [id])
+  customerId   String?         @map("customer_id")
+  customer     Customer?       @relation(fields: [customerId], references: [id])
+  channel      MessageChannel
+  category     MessageCategory
+  templateKey  String          @map("template_key")
+  locale       String          @default("en")
+  payload      Json            @default("{}")
+  status       MessageStatus   @default(queued)
+  providerRef  String?         @map("provider_ref")
+  scheduledFor DateTime?       @map("scheduled_for")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, customerId])
+  @@index([status, scheduledFor])
+  @@map("messages")
+}
+
+/**
+ * BE-016: tracks the Meta WhatsApp 24h customer-service window — replies inside it are free-form and free.
+ */
+model WhatsappWindow {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  customerId String   @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id])
+  expiresAt  DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, customerId])
+  @@map("whatsapp_windows")
+}
+
+model WebhookEvent {
+  provider  String
+  eventId   String   @map("event_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([provider, eventId])
+  @@map("webhook_events")
+}
+
+model ReviewRequest {
+  id            String       @id @default(uuid())
+  businessId    String       @map("business_id")
+  business      Business     @relation(fields: [businessId], references: [id])
+  customerId    String?      @map("customer_id")
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  token         String       @unique
+  source        String
+  sourceId      String?      @map("source_id")
+  stars         Int?
+  message       String?
+  routedTo      ReviewRoute? @map("routed_to")
+  reminderCount Int          @default(0) @map("reminder_count")
+  respondedAt   DateTime?    @map("responded_at")
+
+  privateFeedback PrivateFeedback[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("review_requests")
+}
+
+model PrivateFeedback {
+  id              String         @id @default(uuid())
+  businessId      String         @map("business_id")
+  business        Business       @relation(fields: [businessId], references: [id])
+  reviewRequestId String?        @map("review_request_id")
+  reviewRequest   ReviewRequest? @relation(fields: [reviewRequestId], references: [id])
+  customerId      String?        @map("customer_id")
+  customer        Customer?      @relation(fields: [customerId], references: [id])
+  stars           Int
+  message         String?
+  status          FeedbackStatus @default(open)
+  assignedTo      String?        @map("assigned_to")
+  resolutionNote  String?        @map("resolution_note")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("private_feedback")
+}
+
+model ExternalReview {
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  business   Business  @relation(fields: [businessId], references: [id])
+  platform   String
+  externalId String    @map("external_id")
+  author     String?
+  stars      Int
+  text       String?
+  replyText  String?   @map("reply_text")
+  repliedAt  DateTime? @map("replied_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, platform, externalId])
+  @@map("external_reviews")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BE-004 — Inventory & finance
+// ─────────────────────────────────────────────────────────────────────────
+
+model StockMovement {
+  id         String            @id @default(uuid())
+  businessId String            @map("business_id")
+  business   Business          @relation(fields: [businessId], references: [id])
+  productId  String            @map("product_id")
+  product    Product           @relation(fields: [productId], references: [id])
+  kind       StockMovementKind
+  qty        Int
+  unitCost   Decimal?          @map("unit_cost") @db.Decimal(12, 2)
+  supplier   String?
+  reason     String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, productId])
+  @@map("stock_movements")
+}
+
+model Expense {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  category   String
+  amount     Decimal  @db.Decimal(12, 2)
+  recurring  Boolean  @default(false)
+  incurredOn DateTime @map("incurred_on") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, incurredOn])
+  @@map("expenses")
+}
+
+model Attendance {
+  id          String       @id @default(uuid())
+  businessId  String       @map("business_id")
+  business    Business     @relation(fields: [businessId], references: [id])
+  staffUserId String       @map("staff_user_id")
+  staffUser   BusinessUser @relation(fields: [staffUserId], references: [id])
+  checkIn     DateTime     @map("check_in")
+  checkOut    DateTime?    @map("check_out")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, staffUserId])
+  @@map("attendance")
+}
+
+model Campaign {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  business     Business  @relation(fields: [businessId], references: [id])
+  segment      String
+  templateKey  String    @map("template_key")
+  body         String
+  scheduledFor DateTime? @map("scheduled_for")
+  sentCount    Int       @default(0) @map("sent_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("campaigns")
+}
+
+model Competitor {
+  id               String   @id @default(uuid())
+  businessId       String   @map("business_id")
+  business         Business @relation(fields: [businessId], references: [id])
+  platformRef      String   @map("platform_ref")
+  lastRating       Decimal? @map("last_rating") @db.Decimal(2, 1)
+  lastReviewsCount Int?     @map("last_reviews_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("competitors")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  entity      String
+  entityId    String   @map("entity_id")
+  before      Json?
+  after       Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, entity, entityId])
+  @@map("audit_log")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BE-005 — New tables (import, integrations hub, ads/email/feed)
+// ─────────────────────────────────────────────────────────────────────────
+
+model ImportBatch {
+  id            String       @id @default(uuid())
+  businessId    String       @map("business_id")
+  business      Business     @relation(fields: [businessId], references: [id])
+  source        ImportSource
+  status        ImportStatus @default(pending)
+  counts        Json         @default("{}")
+  /**
+   * Staged, normalized rows with a per-row action (create/update/skip) — powers preview + confirm/execute.
+   */
+  rows          Json         @default("[]")
+  errorsFileUrl String?      @map("errors_file_url")
+  contentHash   String       @map("content_hash")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, contentHash])
+  @@map("import_batches")
+}
+
+model Integration {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  provider   IntegrationProvider
+  status     IntegrationStatus   @default(not_connected)
+  tokens     String?
+  meta       Json                @default("{}")
+
+  adCampaigns AdCampaign[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, provider])
+  @@map("integrations")
+}
+
+model AdCampaign {
+  id            String              @id @default(uuid())
+  businessId    String              @map("business_id")
+  business      Business            @relation(fields: [businessId], references: [id])
+  integrationId String?             @map("integration_id")
+  integration   Integration?        @relation(fields: [integrationId], references: [id])
+  provider      IntegrationProvider
+  goal          String
+  budget        Decimal             @db.Decimal(12, 2)
+  status        String              @default("draft")
+  externalId    String?             @map("external_id")
+  stats         Json                @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("ad_campaigns")
+}
+
+model EmailCampaign {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  business     Business  @relation(fields: [businessId], references: [id])
+  subject      String
+  body         String
+  segment      String
+  scheduledFor DateTime? @map("scheduled_for")
+  sentCount    Int       @default(0) @map("sent_count")
+
+  events EmailEvent[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("email_campaigns")
+}
+
+model EmailEvent {
+  id              String         @id @default(uuid())
+  emailCampaignId String         @map("email_campaign_id")
+  emailCampaign   EmailCampaign  @relation(fields: [emailCampaignId], references: [id])
+  recipient       String
+  type            EmailEventType
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([emailCampaignId])
+  @@map("email_events")
+}
+
+model ProductFeedItem {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  productId  String   @map("product_id")
+  product    Product  @relation(fields: [productId], references: [id])
+  syncState  String   @default("pending") @map("sync_state")
+  issues     Json     @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, productId])
+  @@map("product_feed_items")
+}
+
+model GmbPost {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  business     Business  @relation(fields: [businessId], references: [id])
+  text         String
+  photoUrl     String?   @map("photo_url")
+  buttonType   String?   @map("button_type")
+  scheduledFor DateTime? @map("scheduled_for")
+  externalId   String?   @map("external_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("gmb_posts")
+}

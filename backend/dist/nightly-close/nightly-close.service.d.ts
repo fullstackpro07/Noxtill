@@ -1,0 +1,37 @@
+import { PrismaService } from '../prisma/prisma.service';
+import { LocaleService } from '../common/localization/locale.service';
+import { SendGateService } from '../messaging/send-gate.service';
+import { NightlyCloseData } from './nightly-close.types';
+export declare class NightlyCloseService {
+    private readonly prisma;
+    private readonly locale;
+    private readonly sendGate;
+    constructor(prisma: PrismaService, locale: LocaleService, sendGate: SendGateService);
+    composeDayData(businessId: string, date: Date): Promise<NightlyCloseData>;
+    composeAndSend(businessId: string, date?: Date): Promise<void>;
+    updateSettings(businessId: string, time?: string, channel?: 'whatsapp' | 'sms' | 'email'): Promise<{
+        name: string;
+        country: string | null;
+        currency: string;
+        locale: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        slug: string;
+        timezone: string;
+        channelPref: import("../../generated/prisma").$Enums.MessageChannel;
+        nightlyCloseTime: string;
+        taxLabel: string;
+        taxRate: import("generated/prisma/runtime/library").Decimal;
+        msgQuota: number;
+        msgUsed: number;
+        branding: import("generated/prisma/runtime/library").JsonValue;
+        dashboardConfig: import("generated/prisma/runtime/library").JsonValue;
+        publicReviewUrl: string | null;
+        workingHours: import("generated/prisma/runtime/library").JsonValue;
+        trialEndsAt: Date | null;
+        typeId: string | null;
+        planId: string | null;
+        parentId: string | null;
+    }>;
+}

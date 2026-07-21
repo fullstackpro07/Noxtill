@@ -1,0 +1,142 @@
+import { ClsService } from 'nestjs-cls';
+import { PrismaService } from '../prisma/prisma.service';
+import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
+import { ReviewRequestsService } from '../reviews/review-requests.service';
+import { AppointmentsService } from './appointments.service';
+import { AppException } from '../common/filters/app.exception';
+
+class FakeClsService {
+  private store: Record<string, unknown> = {};
+  get<T>(key: string): T {
+    return this.store[key] as T;
+  }
+  set(key: string, value: unknown) {
+    this.store[key] = value;
+  }
+}
+
+describe('AppointmentsService (BE-054)', () => {
+  let prisma: PrismaService;
+  let service: AppointmentsService;
+  let businessId: string;
+  let customerId: string;
+  let serviceProductId: string;
+  const reviewRequests = {
+    scheduleSend: jest.fn().mockResolvedValue(undefined),
+  };
+
+  beforeAll(async () => {
+    prisma = new PrismaService();
+    await prisma.$connect();
+
+    const cls = new FakeClsService();
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    service = new AppointmentsService(
+      tenantPrisma,
+      reviewRequests as unknown as ReviewRequestsService,
+    );
+
+    const business = await prisma.business.create({
+      data: {
+        name: 'Appt Service Test Biz',
+        slug: `appt-service-test-${Date.now()}`,
+      },
+    });
+    businessId = business.id;
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+
+    const customer = await prisma.customer.create({
+      data: { businessId, phone: `+1${Date.now()}`, name: 'Hank' },
+    });
+    customerId = customer.id;
+
+    const svc = await prisma.product.create({
+      data: { businessId, kind: 'service', name: 'Massage', durationMin: 60 },
+    });
+    serviceProductId = svc.id;
+  });
+
+  afterEach(() => {
+    reviewRequests.scheduleSend.mockClear();
+  });
+
+  afterAll(async () => {
+    await prisma.reviewRequest.deleteMany({ where: { businessId } });
+    await prisma.appointment.deleteMany({ where: { businessId } });
+    await prisma.product.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({ where: { businessId } });
+    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$disconnect();
+  });
+
+  it('completing an appointment enqueues a review request', async () => {
+    const appointment = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        customerId,
+        startsAt: new Date('2026-08-01T10:00:00Z'),
+        endsAt: new Date('2026-08-01T11:00:00Z'),
+        status: 'confirmed',
+      },
+    });
+
+    const updated = await service.updateStatus(
+      businessId,
+      appointment.id,
+      'completed',
+    );
+    expect(updated.status).toBe('completed');
+
+    const request = await prisma.reviewRequest.findFirst({
+      where: { sourceId: appointment.id, source: 'appointment' },
+    });
+    expect(request).not.toBeNull();
+    expect(reviewRequests.scheduleSend).toHaveBeenCalledWith(
+      businessId,
+      customerId,
+      expect.any(String),
+    );
+  });
+
+  it('marking no_show tags the customer', async () => {
+    const appointment = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        customerId,
+        startsAt: new Date('2026-08-02T10:00:00Z'),
+        endsAt: new Date('2026-08-02T11:00:00Z'),
+        status: 'booked',
+      },
+    });
+
+    await service.updateStatus(businessId, appointment.id, 'no_show');
+
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { id: customerId },
+    });
+    expect(customer.tags).toContain('No-show');
+  });
+
+  it('rejects an illegal status transition', async () => {
+    const appointment = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        customerId,
+        startsAt: new Date('2026-08-03T10:00:00Z'),
+        endsAt: new Date('2026-08-03T11:00:00Z'),
+        status: 'completed',
+      },
+    });
+
+    await expect(
+      service.updateStatus(businessId, appointment.id, 'confirmed'),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+});

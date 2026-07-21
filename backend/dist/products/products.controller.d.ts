@@ -1,0 +1,97 @@
+import { ProductsService } from './products.service';
+import { ProductsImportService } from './products-import.service';
+import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+import { QueryProductsDto } from './dto/query-products.dto';
+import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+export declare class ProductsController {
+    private readonly productsService;
+    private readonly productsImportService;
+    constructor(productsService: ProductsService, productsImportService: ProductsImportService);
+    create(dto: CreateProductDto): import("generated/prisma/runtime/library").DynamicModelExtensionFluentApi<import("generated/prisma").Prisma.TypeMap<import("generated/prisma/runtime/library").InternalArgs & {
+        result: {};
+        model: {};
+        query: {};
+        client: {};
+    }, {}>, "Product", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
+        name: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        kind: import("generated/prisma").$Enums.ProductKind;
+        category: string | null;
+        variations: import("generated/prisma/runtime/library").JsonValue;
+        costPrice: import("generated/prisma/runtime/library").Decimal;
+        sellingPrice: import("generated/prisma/runtime/library").Decimal;
+        stockQty: number;
+        lowStockThreshold: number;
+        durationMin: number | null;
+        active: boolean;
+    }>;
+    import(user: AuthenticatedUser, file?: Express.Multer.File): Promise<import("./products-import.service").ImportSummary>;
+    findAll(query: QueryProductsDto): import("generated/prisma/runtime/library").PrismaPromise<{
+        name: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        kind: import("generated/prisma").$Enums.ProductKind;
+        category: string | null;
+        variations: import("generated/prisma/runtime/library").JsonValue;
+        costPrice: import("generated/prisma/runtime/library").Decimal;
+        sellingPrice: import("generated/prisma/runtime/library").Decimal;
+        stockQty: number;
+        lowStockThreshold: number;
+        durationMin: number | null;
+        active: boolean;
+    }[]>;
+    findOne(id: string): Promise<{
+        name: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        kind: import("generated/prisma").$Enums.ProductKind;
+        category: string | null;
+        variations: import("generated/prisma/runtime/library").JsonValue;
+        costPrice: import("generated/prisma/runtime/library").Decimal;
+        sellingPrice: import("generated/prisma/runtime/library").Decimal;
+        stockQty: number;
+        lowStockThreshold: number;
+        durationMin: number | null;
+        active: boolean;
+    }>;
+    update(id: string, dto: UpdateProductDto): Promise<{
+        name: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        kind: import("generated/prisma").$Enums.ProductKind;
+        category: string | null;
+        variations: import("generated/prisma/runtime/library").JsonValue;
+        costPrice: import("generated/prisma/runtime/library").Decimal;
+        sellingPrice: import("generated/prisma/runtime/library").Decimal;
+        stockQty: number;
+        lowStockThreshold: number;
+        durationMin: number | null;
+        active: boolean;
+    }>;
+    deactivate(id: string): Promise<{
+        name: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        kind: import("generated/prisma").$Enums.ProductKind;
+        category: string | null;
+        variations: import("generated/prisma/runtime/library").JsonValue;
+        costPrice: import("generated/prisma/runtime/library").Decimal;
+        sellingPrice: import("generated/prisma/runtime/library").Decimal;
+        stockQty: number;
+        lowStockThreshold: number;
+        durationMin: number | null;
+        active: boolean;
+    }>;
+}

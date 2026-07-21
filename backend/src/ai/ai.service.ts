@@ -1,0 +1,87 @@
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AppException } from '../common/filters/app.exception';
+import { LocaleService } from '../common/localization/locale.service';
+import { ClaudeClient } from './claude.client';
+import { WhatIfDto } from './dto/what-if.dto';
+
+const DISCLAIMER =
+  'This is an AI-generated estimate based on your own sales history — not a guarantee.';
+
+interface MonthlyHistoryRow {
+  month: string;
+  units: bigint;
+  revenue: string;
+}
+
+@Injectable()
+export class AiService {
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly locale: LocaleService,
+    private readonly claude: ClaudeClient,
+  ) {}
+
+  async whatIf(businessId: string, dto: WhatIfDto) {
+    const [business, product] = await Promise.all([
+      this.tenantPrisma.client.business.findUniqueOrThrow({
+        where: { id: businessId },
+      }),
+      this.tenantPrisma.client.product.findUnique({
+        where: { id: dto.productId },
+      }),
+    ]);
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const history = await this.tenantPrisma.client.$queryRaw<
+      MonthlyHistoryRow[]
+    >`
+      SELECT to_char(o.created_at, 'YYYY-MM') AS month, SUM(oi.qty) AS units, SUM(oi.price * oi.qty) AS revenue
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.product_id = ${dto.productId}
+        AND o.status = 'completed' AND o.is_quotation = false
+        AND o.created_at >= now() - interval '6 months'
+      GROUP BY month
+      ORDER BY month
+    `;
+
+    if (history.length === 0) {
+      return {
+        estimate:
+          'Not enough sales history for this product yet — check back after a few sales.',
+        disclaimer: DISCLAIMER,
+      };
+    }
+
+    const historyLines = history
+      .map(
+        (row) =>
+          `${row.month}: ${row.units} units, ${this.locale.formatCurrency(Number(row.revenue), business)}`,
+      )
+      .join('\n');
+
+    const prompt = [
+      `You are a plain-language business assistant for a small business owner using ${business.currency} currency.`,
+      `Product: "${product.name}", currently priced at ${this.locale.formatCurrency(Number(product.sellingPrice), business)}.`,
+      `Monthly sales history (last 6 months):\n${historyLines}`,
+      `The owner is considering a ${dto.priceDeltaPct > 0 ? '+' : ''}${dto.priceDeltaPct}% price change.`,
+      'In 2-3 short sentences, estimate the likely impact on monthly revenue based ONLY on the history above. Be specific with a number where possible. Do not invent data not shown above.',
+    ].join('\n\n');
+
+    let estimate: string;
+    try {
+      estimate = await this.claude.complete(prompt);
+    } catch {
+      throw new AppException(
+        'AI_UNAVAILABLE',
+        'The AI assistant is not available right now — please try again later.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    return { estimate, disclaimer: DISCLAIMER };
+  }
+}

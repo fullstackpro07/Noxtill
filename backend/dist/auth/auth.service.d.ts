@@ -1,0 +1,66 @@
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../prisma/prisma.service';
+import { SignupDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
+import { Prisma } from '../../generated/prisma';
+export interface TokenPair {
+    accessToken: string;
+    refreshToken: string;
+}
+export declare class AuthService {
+    private readonly prisma;
+    private readonly jwt;
+    private readonly config;
+    constructor(prisma: PrismaService, jwt: JwtService, config: ConfigService);
+    signup(dto: SignupDto): Promise<{
+        accessToken: string;
+        refreshToken: string;
+        business: {
+            name: string;
+            country: string | null;
+            currency: string;
+            locale: string;
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            slug: string;
+            timezone: string;
+            channelPref: import("../../generated/prisma").$Enums.MessageChannel;
+            nightlyCloseTime: string;
+            taxLabel: string;
+            taxRate: Prisma.Decimal;
+            msgQuota: number;
+            msgUsed: number;
+            branding: Prisma.JsonValue;
+            dashboardConfig: Prisma.JsonValue;
+            publicReviewUrl: string | null;
+            workingHours: Prisma.JsonValue;
+            trialEndsAt: Date | null;
+            typeId: string | null;
+            planId: string | null;
+            parentId: string | null;
+        };
+        user: {
+            id: string;
+            name: string;
+            email: string | null;
+            phone: string | null;
+        };
+    }>;
+    login(dto: LoginDto): Promise<{
+        accessToken: string;
+        refreshToken: string;
+        user: {
+            id: string;
+            name: string;
+            email: string | null;
+            phone: string | null;
+        };
+    }>;
+    refresh(refreshToken: string): Promise<TokenPair>;
+    logout(userId: string): Promise<void>;
+    private registerFailedAttempt;
+    private issueTokens;
+    private toPublicUser;
+}
