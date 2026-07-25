@@ -16,6 +16,8 @@ export interface SendGateParams {
   customerId?: string;
   /** Only used when customerId is omitted (e.g. an owner test send to an arbitrary contact). */
   to?: { phone?: string; email?: string };
+  /** Set for campaign fan-out sends (BE-061) so the funnel report can attribute delivery/read status back. */
+  campaignId?: string;
 }
 
 /**
@@ -107,6 +109,7 @@ export class SendGateService {
         data: {
           businessId: params.businessId,
           customerId: params.customerId,
+          campaignId: params.campaignId,
           channel,
           category: definition.category,
           templateKey: params.templateKey,

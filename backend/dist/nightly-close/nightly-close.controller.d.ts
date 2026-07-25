@@ -25,7 +25,12 @@ export declare class NightlyCloseController {
         dashboardConfig: import("generated/prisma/runtime/library").JsonValue;
         publicReviewUrl: string | null;
         workingHours: import("generated/prisma/runtime/library").JsonValue;
+        referralSettings: import("generated/prisma/runtime/library").JsonValue;
+        aiMonthlyCostCapUsd: import("generated/prisma/runtime/library").Decimal;
+        aiRateLimitPerMinute: number;
         trialEndsAt: Date | null;
+        stripeCustomerId: string | null;
+        stripeSubscriptionId: string | null;
         typeId: string | null;
         planId: string | null;
         parentId: string | null;

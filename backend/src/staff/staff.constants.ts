@@ -1,0 +1,11 @@
+export const STAFF_ERROR_CODES = {
+  IDENTITY_REQUIRED: 'STAFF_IDENTITY_REQUIRED',
+  ALREADY_STAFF: 'STAFF_ALREADY_STAFF',
+  STAFF_NOT_FOUND: 'STAFF_NOT_FOUND',
+  CANNOT_MODIFY_OWNER: 'STAFF_CANNOT_MODIFY_OWNER',
+  ALREADY_CLOCKED_IN: 'STAFF_ALREADY_CLOCKED_IN',
+  NOT_CLOCKED_IN: 'STAFF_NOT_CLOCKED_IN',
+} as const;
+
+/** 12 hex chars — a throwaway temp password the owner relays to the new hire, not a security boundary. */
+export const TEMP_PASSWORD_BYTES = 6;

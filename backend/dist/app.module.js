@@ -38,6 +38,18 @@ const profit_module_1 = require("./profit/profit.module");
 const customer_import_module_1 = require("./customer-import/customer-import.module");
 const reviews_module_1 = require("./reviews/reviews.module");
 const bookings_module_1 = require("./bookings/bookings.module");
+const staff_module_1 = require("./staff/staff.module");
+const branches_module_1 = require("./branches/branches.module");
+const marketing_module_1 = require("./marketing/marketing.module");
+const billing_module_1 = require("./billing/billing.module");
+const widgets_module_1 = require("./widgets/widgets.module");
+const dashboard_module_1 = require("./dashboard/dashboard.module");
+const business_types_module_1 = require("./business-types/business-types.module");
+const search_module_1 = require("./search/search.module");
+const analytics_module_1 = require("./analytics/analytics.module");
+const platform_admin_module_1 = require("./platform-admin/platform-admin.module");
+const help_module_1 = require("./help/help.module");
+const assistant_module_1 = require("./assistant/assistant.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -72,6 +84,18 @@ exports.AppModule = AppModule = __decorate([
             customer_import_module_1.CustomerImportModule,
             reviews_module_1.ReviewsModule,
             bookings_module_1.BookingsModule,
+            staff_module_1.StaffModule,
+            branches_module_1.BranchesModule,
+            marketing_module_1.MarketingModule,
+            billing_module_1.BillingModule,
+            widgets_module_1.WidgetsModule,
+            dashboard_module_1.DashboardModule,
+            business_types_module_1.BusinessTypesModule,
+            search_module_1.SearchModule,
+            analytics_module_1.AnalyticsModule,
+            platform_admin_module_1.PlatformAdminModule,
+            help_module_1.HelpModule,
+            assistant_module_1.AssistantModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

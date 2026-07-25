@@ -118,6 +118,7 @@ export class OrdersService {
             customerId,
             orderType: dto.orderType ?? 'counter',
             tableNo: dto.tableNo,
+            staffUserId: dto.staffUserId,
             status: OrderStatus.completed,
             subtotal,
             tax,

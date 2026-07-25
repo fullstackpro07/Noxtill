@@ -93,6 +93,7 @@ let OrdersService = class OrdersService {
                     customerId,
                     orderType: dto.orderType ?? 'counter',
                     tableNo: dto.tableNo,
+                    staffUserId: dto.staffUserId,
                     status: prisma_1.OrderStatus.completed,
                     subtotal,
                     tax,

@@ -22,6 +22,7 @@ export declare class SegmentsController {
             lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
             visitCount: number;
             lastVisitAt: Date | null;
+            referredByCustomerId: string | null;
         }[];
     }>;
 }

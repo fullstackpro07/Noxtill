@@ -71,6 +71,7 @@ let SendGateService = class SendGateService {
                 data: {
                     businessId: params.businessId,
                     customerId: params.customerId,
+                    campaignId: params.campaignId,
                     channel,
                     category: definition.category,
                     templateKey: params.templateKey,

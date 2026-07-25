@@ -19,6 +19,7 @@ export declare class QuotationsService {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     convert(businessId: string, quotationId: string): Promise<{
         id: string;
@@ -36,5 +37,6 @@ export declare class QuotationsService {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
 }

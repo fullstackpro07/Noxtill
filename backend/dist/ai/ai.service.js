@@ -14,16 +14,16 @@ const common_1 = require("@nestjs/common");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
 const locale_service_1 = require("../common/localization/locale.service");
-const claude_client_1 = require("./claude.client");
+const ai_infra_service_1 = require("./ai-infra.service");
 const DISCLAIMER = 'This is an AI-generated estimate based on your own sales history — not a guarantee.';
 let AiService = class AiService {
     tenantPrisma;
     locale;
-    claude;
-    constructor(tenantPrisma, locale, claude) {
+    aiInfra;
+    constructor(tenantPrisma, locale, aiInfra) {
         this.tenantPrisma = tenantPrisma;
         this.locale = locale;
-        this.claude = claude;
+        this.aiInfra = aiInfra;
     }
     async whatIf(businessId, dto) {
         const [business, product] = await Promise.all([
@@ -65,9 +65,12 @@ let AiService = class AiService {
         ].join('\n\n');
         let estimate;
         try {
-            estimate = await this.claude.complete(prompt);
+            estimate = await this.aiInfra.complete(businessId, prompt);
         }
-        catch {
+        catch (error) {
+            if (error instanceof app_exception_1.AppException) {
+                throw error;
+            }
             throw new app_exception_1.AppException('AI_UNAVAILABLE', 'The AI assistant is not available right now — please try again later.', common_1.HttpStatus.SERVICE_UNAVAILABLE);
         }
         return { estimate, disclaimer: DISCLAIMER };
@@ -78,6 +81,6 @@ exports.AiService = AiService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
         locale_service_1.LocaleService,
-        claude_client_1.ClaudeClient])
+        ai_infra_service_1.AiInfraService])
 ], AiService);
 //# sourceMappingURL=ai.service.js.map

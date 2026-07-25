@@ -25,6 +25,7 @@ export declare class CustomersService {
         lifetimeSpend: Prisma.Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
     findAll(query: QueryCustomersDto): import("generated/prisma/runtime/library").PrismaPromise<{
         name: string;
@@ -43,6 +44,7 @@ export declare class CustomersService {
         lifetimeSpend: Prisma.Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }[]>;
     findOne(id: string): Promise<{
         privateFeedback: {
@@ -84,6 +86,7 @@ export declare class CustomersService {
             total: Prisma.Decimal;
             cogs: Prisma.Decimal;
             isQuotation: boolean;
+            staffUserId: string | null;
         })[];
     } & {
         name: string;
@@ -102,6 +105,7 @@ export declare class CustomersService {
         lifetimeSpend: Prisma.Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
     update(id: string, dto: UpdateCustomerDto): Promise<{
         name: string;
@@ -120,6 +124,7 @@ export declare class CustomersService {
         lifetimeSpend: Prisma.Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
     erase(id: string, confirmPhone: string): Promise<{
         name: string;
@@ -138,6 +143,7 @@ export declare class CustomersService {
         lifetimeSpend: Prisma.Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
     private assertExists;
 }

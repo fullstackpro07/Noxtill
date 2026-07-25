@@ -23,6 +23,7 @@ export declare class SegmentsService {
             lifetimeSpend: Prisma.Decimal;
             visitCount: number;
             lastVisitAt: Date | null;
+            referredByCustomerId: string | null;
         }[];
     }>;
     private whereForKey;

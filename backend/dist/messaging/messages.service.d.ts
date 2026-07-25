@@ -16,5 +16,6 @@ export declare class MessagesService {
         payload: import("generated/prisma/runtime/library").JsonValue;
         providerRef: string | null;
         scheduledFor: Date | null;
+        campaignId: string | null;
     }[]>;
 }

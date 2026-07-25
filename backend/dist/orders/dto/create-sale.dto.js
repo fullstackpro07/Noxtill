@@ -60,6 +60,7 @@ class CreateSaleDto {
     customerId;
     customerPhone;
     customerName;
+    staffUserId;
     items;
     discount;
     payment;
@@ -90,6 +91,11 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateSaleDto.prototype, "customerName", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateSaleDto.prototype, "staffUserId", void 0);
 __decorate([
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ValidateNested)({ each: true }),

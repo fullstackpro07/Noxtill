@@ -24,6 +24,7 @@ export declare class CustomersController {
         lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
     findAll(query: QueryCustomersDto): import("generated/prisma/runtime/library").PrismaPromise<{
         name: string;
@@ -42,6 +43,7 @@ export declare class CustomersController {
         lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }[]>;
     findOne(id: string): Promise<{
         privateFeedback: {
@@ -83,6 +85,7 @@ export declare class CustomersController {
             total: import("generated/prisma/runtime/library").Decimal;
             cogs: import("generated/prisma/runtime/library").Decimal;
             isQuotation: boolean;
+            staffUserId: string | null;
         })[];
     } & {
         name: string;
@@ -101,6 +104,7 @@ export declare class CustomersController {
         lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
     update(id: string, dto: UpdateCustomerDto): Promise<{
         name: string;
@@ -119,6 +123,7 @@ export declare class CustomersController {
         lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
     erase(id: string, dto: EraseCustomerDto): Promise<{
         name: string;
@@ -137,5 +142,6 @@ export declare class CustomersController {
         lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
         visitCount: number;
         lastVisitAt: Date | null;
+        referredByCustomerId: string | null;
     }>;
 }

@@ -19,34 +19,71 @@ const config_1 = require("@nestjs/config");
 const axios_1 = __importDefault(require("axios"));
 const ANTHROPIC_API_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-3-5-haiku-20241022';
+const DEFAULT_MAX_TOKENS = 1024;
 let ClaudeClient = ClaudeClient_1 = class ClaudeClient {
     config;
     logger = new common_1.Logger(ClaudeClient_1.name);
     constructor(config) {
         this.config = config;
     }
-    async complete(prompt, temperature = 0) {
+    apiKey() {
         const apiKey = this.config.get('ANTHROPIC_API_KEY');
         if (!apiKey) {
             throw new Error('ANTHROPIC_API_KEY is not configured');
         }
-        const response = await axios_1.default.post('https://api.anthropic.com/v1/messages', {
-            model: DEFAULT_MODEL,
-            max_tokens: 512,
-            temperature,
+        return apiKey;
+    }
+    async complete(prompt, temperature = 0) {
+        const result = await this.createMessage({
             messages: [{ role: 'user', content: prompt }],
-        }, {
-            headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': ANTHROPIC_API_VERSION,
-                'content-type': 'application/json',
-            },
+            temperature,
         });
-        const text = response.data.content.find((block) => block.type === 'text')?.text;
+        const text = result.content.find((block) => block.type === 'text')?.text;
         if (!text) {
             this.logger.warn('Claude response contained no text block');
         }
         return text ?? '';
+    }
+    async createMessage(params) {
+        const response = await axios_1.default.post('https://api.anthropic.com/v1/messages', {
+            model: DEFAULT_MODEL,
+            max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
+            temperature: params.temperature ?? 0,
+            system: params.system,
+            messages: params.messages,
+            tools: params.tools,
+        }, {
+            headers: {
+                'x-api-key': this.apiKey(),
+                'anthropic-version': ANTHROPIC_API_VERSION,
+                'content-type': 'application/json',
+            },
+        });
+        return {
+            content: response.data.content,
+            stopReason: response.data.stop_reason,
+            inputTokens: response.data.usage.input_tokens,
+            outputTokens: response.data.usage.output_tokens,
+        };
+    }
+    async streamMessage(params) {
+        const response = await axios_1.default.post('https://api.anthropic.com/v1/messages', {
+            model: DEFAULT_MODEL,
+            max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
+            temperature: params.temperature ?? 0,
+            system: params.system,
+            messages: params.messages,
+            tools: params.tools,
+            stream: true,
+        }, {
+            headers: {
+                'x-api-key': this.apiKey(),
+                'anthropic-version': ANTHROPIC_API_VERSION,
+                'content-type': 'application/json',
+            },
+            responseType: 'stream',
+        });
+        return response.data;
     }
 };
 exports.ClaudeClient = ClaudeClient;

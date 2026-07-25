@@ -1,11 +1,13 @@
+import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { ClaudeClient } from '../ai/claude.client';
+import { AiInfraService } from '../ai/ai-infra.service';
 import { QueryReviewsDto } from './dto/query-reviews.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 export declare class ReviewsService {
     private readonly tenantPrisma;
-    private readonly claude;
-    constructor(tenantPrisma: TenantPrismaService, claude: ClaudeClient);
+    private readonly aiInfra;
+    private readonly cls;
+    constructor(tenantPrisma: TenantPrismaService, aiInfra: AiInfraService, cls: ClsService);
     list(query: QueryReviewsDto): Promise<({
         source: "external";
         id: string;

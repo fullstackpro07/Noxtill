@@ -1,7 +1,9 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { ClaudeClient } from '../ai/claude.client';
+import { AiInfraService } from '../ai/ai-infra.service';
+import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { QueryReviewsDto } from './dto/query-reviews.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { ExternalReview, PrivateFeedback } from '../../generated/prisma';
@@ -21,7 +23,8 @@ const REVIEWS_ERROR_CODES = {
 export class ReviewsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
-    private readonly claude: ClaudeClient,
+    private readonly aiInfra: AiInfraService,
+    private readonly cls: ClsService,
   ) {}
 
   async list(query: QueryReviewsDto) {
@@ -117,7 +120,8 @@ export class ReviewsService {
       'Write a short, warm, professional business-owner reply IN THE SAME LANGUAGE the review ' +
       'was written in. No preamble — return only the reply text.';
 
-    const draft = await this.claude.complete(prompt);
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const draft = await this.aiInfra.complete(businessId, prompt);
     return { draft };
   }
 }

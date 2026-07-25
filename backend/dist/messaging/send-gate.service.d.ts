@@ -12,6 +12,7 @@ export interface SendGateParams {
         phone?: string;
         email?: string;
     };
+    campaignId?: string;
 }
 export declare class SendGateService {
     private readonly tenantPrisma;

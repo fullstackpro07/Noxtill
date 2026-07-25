@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { LocaleService } from '../common/localization/locale.service';
 import { AiService } from './ai.service';
-import { ClaudeClient } from './claude.client';
+import { AiInfraService } from './ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 
 class FakeClsService {
@@ -21,7 +21,7 @@ describe('AiService.whatIf (BE-038)', () => {
   let aiService: AiService;
   let businessId: string;
   let productId: string;
-  const claude = { complete: jest.fn() };
+  const aiInfra = { complete: jest.fn() };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -35,7 +35,7 @@ describe('AiService.whatIf (BE-038)', () => {
     aiService = new AiService(
       tenantPrisma,
       new LocaleService(),
-      claude as unknown as ClaudeClient,
+      aiInfra as unknown as AiInfraService,
     );
 
     const business = await prisma.business.create({
@@ -57,7 +57,7 @@ describe('AiService.whatIf (BE-038)', () => {
   });
 
   afterEach(() => {
-    claude.complete.mockClear();
+    aiInfra.complete.mockClear();
   });
 
   afterAll(async () => {
@@ -74,7 +74,7 @@ describe('AiService.whatIf (BE-038)', () => {
       priceDeltaPct: 10,
     });
 
-    expect(claude.complete).not.toHaveBeenCalled();
+    expect(aiInfra.complete).not.toHaveBeenCalled();
     expect(result.estimate).toMatch(/not enough/i);
     expect(result.disclaimer).toMatch(/not a guarantee/i);
   });
@@ -101,7 +101,7 @@ describe('AiService.whatIf (BE-038)', () => {
       },
     });
 
-    claude.complete.mockResolvedValue(
+    aiInfra.complete.mockResolvedValue(
       'Revenue would likely increase by about 5%.',
     );
 
@@ -110,8 +110,9 @@ describe('AiService.whatIf (BE-038)', () => {
       priceDeltaPct: 10,
     });
 
-    expect(claude.complete).toHaveBeenCalledTimes(1);
-    expect(claude.complete).toHaveBeenCalledWith(
+    expect(aiInfra.complete).toHaveBeenCalledTimes(1);
+    expect(aiInfra.complete).toHaveBeenCalledWith(
+      businessId,
       expect.stringContaining('Gizmo'),
     );
     expect(result.estimate).toContain('Revenue would likely increase');
@@ -119,7 +120,7 @@ describe('AiService.whatIf (BE-038)', () => {
   });
 
   it('throws a typed AI_UNAVAILABLE error when Claude fails, never fabricating an estimate', async () => {
-    claude.complete.mockRejectedValue(new Error('network error'));
+    aiInfra.complete.mockRejectedValue(new Error('network error'));
 
     await expect(
       aiService.whatIf(businessId, { productId, priceDeltaPct: 5 }),

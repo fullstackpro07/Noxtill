@@ -21,6 +21,6 @@ import { MessagingModule } from '../messaging/messaging.module';
     CrmJobsScheduler,
     CrmJobsProcessor,
   ],
-  exports: [CustomersService],
+  exports: [CustomersService, SegmentsService],
 })
 export class CustomersModule {}

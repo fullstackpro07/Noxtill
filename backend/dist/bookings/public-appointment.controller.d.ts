@@ -10,8 +10,8 @@ export declare class PublicAppointmentController {
         businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
-        serviceId: string;
         staffUserId: string | null;
+        serviceId: string;
         startsAt: Date;
         endsAt: Date;
         depositPaid: import("generated/prisma/runtime/library").Decimal;
@@ -25,8 +25,8 @@ export declare class PublicAppointmentController {
         businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
-        serviceId: string;
         staffUserId: string | null;
+        serviceId: string;
         startsAt: Date;
         endsAt: Date;
         depositPaid: import("generated/prisma/runtime/library").Decimal;

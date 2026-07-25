@@ -3,12 +3,23 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { PublicBookingService } from './public-booking.service';
 import { AppException } from '../common/filters/app.exception';
 
+// Always at least 30 days out and a Wednesday, so this test never becomes a
+// ticking time bomb as the real "now" (the slot computation's default) advances.
+function futureWednesday(): string {
+  const d = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  while (d.getUTCDay() !== 3) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 describe('PublicBookingService (BE-051/052/053/055)', () => {
   let prisma: PrismaService;
   let service: PublicBookingService;
   let businessId: string;
   let slug: string;
   let serviceProductId: string;
+  const testDate = futureWednesday();
   const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
@@ -62,15 +73,15 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
   it('returns computed slots for a configured working day', async () => {
     const result = await service.getSlots(slug, {
       service: serviceProductId,
-      date: '2026-07-22', // Wednesday, far enough in the future to not be "past"
+      date: testDate,
     });
-    expect(result.slots).toContain('2026-07-22T09:00:00.000Z');
+    expect(result.slots).toContain(`${testDate}T09:00:00.000Z`);
   });
 
   it('books a slot, marks it unavailable afterward, and confirms via send gate', async () => {
     const booking = await service.createBooking(slug, {
       serviceId: serviceProductId,
-      startsAt: '2026-07-22T09:00:00.000Z',
+      startsAt: `${testDate}T09:00:00.000Z`,
       customerPhone: `+1${Date.now()}`,
       customerName: 'Dana',
     });
@@ -81,16 +92,16 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
 
     const result = await service.getSlots(slug, {
       service: serviceProductId,
-      date: '2026-07-22',
+      date: testDate,
     });
-    expect(result.slots).not.toContain('2026-07-22T09:00:00.000Z');
+    expect(result.slots).not.toContain(`${testDate}T09:00:00.000Z`);
   });
 
   it('rejects a second booking for the same already-taken slot with a 409', async () => {
     await expect(
       service.createBooking(slug, {
         serviceId: serviceProductId,
-        startsAt: '2026-07-22T09:00:00.000Z',
+        startsAt: `${testDate}T09:00:00.000Z`,
         customerPhone: `+1${Date.now()}`,
         customerName: 'Eve',
       }),
@@ -100,22 +111,24 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
   it('reschedules a booking to a free slot via its token', async () => {
     const booking = await service.createBooking(slug, {
       serviceId: serviceProductId,
-      startsAt: '2026-07-22T11:00:00.000Z',
+      startsAt: `${testDate}T11:00:00.000Z`,
       customerPhone: `+1${Date.now()}`,
       customerName: 'Frank',
     });
 
     const rescheduled = await service.reschedule(
       booking.rescheduleToken!,
-      '2026-07-22T13:00:00.000Z',
+      `${testDate}T13:00:00.000Z`,
     );
-    expect(rescheduled.startsAt.toISOString()).toBe('2026-07-22T13:00:00.000Z');
+    expect(rescheduled.startsAt.toISOString()).toBe(
+      `${testDate}T13:00:00.000Z`,
+    );
   });
 
   it('cancels a booking via its token, freeing the slot', async () => {
     const booking = await service.createBooking(slug, {
       serviceId: serviceProductId,
-      startsAt: '2026-07-22T15:00:00.000Z',
+      startsAt: `${testDate}T15:00:00.000Z`,
       customerPhone: `+1${Date.now()}`,
       customerName: 'Grace',
     });
@@ -125,8 +138,8 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
 
     const result = await service.getSlots(slug, {
       service: serviceProductId,
-      date: '2026-07-22',
+      date: testDate,
     });
-    expect(result.slots).toContain('2026-07-22T15:00:00.000Z');
+    expect(result.slots).toContain(`${testDate}T15:00:00.000Z`);
   });
 });

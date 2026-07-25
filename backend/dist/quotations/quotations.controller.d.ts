@@ -20,6 +20,7 @@ export declare class QuotationsController {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     convert(user: AuthenticatedUser, id: string): Promise<{
         id: string;
@@ -37,5 +38,6 @@ export declare class QuotationsController {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
 }

@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.TEMP_PASSWORD_BYTES = exports.STAFF_ERROR_CODES = void 0;
+exports.STAFF_ERROR_CODES = {
+    IDENTITY_REQUIRED: 'STAFF_IDENTITY_REQUIRED',
+    ALREADY_STAFF: 'STAFF_ALREADY_STAFF',
+    STAFF_NOT_FOUND: 'STAFF_NOT_FOUND',
+    CANNOT_MODIFY_OWNER: 'STAFF_CANNOT_MODIFY_OWNER',
+    ALREADY_CLOCKED_IN: 'STAFF_ALREADY_CLOCKED_IN',
+    NOT_CLOCKED_IN: 'STAFF_NOT_CLOCKED_IN',
+};
+exports.TEMP_PASSWORD_BYTES = 6;
+//# sourceMappingURL=staff.constants.js.map

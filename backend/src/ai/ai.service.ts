@@ -2,7 +2,7 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { LocaleService } from '../common/localization/locale.service';
-import { ClaudeClient } from './claude.client';
+import { AiInfraService } from './ai-infra.service';
 import { WhatIfDto } from './dto/what-if.dto';
 
 const DISCLAIMER =
@@ -19,7 +19,7 @@ export class AiService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly locale: LocaleService,
-    private readonly claude: ClaudeClient,
+    private readonly aiInfra: AiInfraService,
   ) {}
 
   async whatIf(businessId: string, dto: WhatIfDto) {
@@ -73,8 +73,11 @@ export class AiService {
 
     let estimate: string;
     try {
-      estimate = await this.claude.complete(prompt);
-    } catch {
+      estimate = await this.aiInfra.complete(businessId, prompt);
+    } catch (error) {
+      if (error instanceof AppException) {
+        throw error; // rate-limit / cost-cap errors from AiInfraService are already typed
+      }
       throw new AppException(
         'AI_UNAVAILABLE',
         'The AI assistant is not available right now — please try again later.',

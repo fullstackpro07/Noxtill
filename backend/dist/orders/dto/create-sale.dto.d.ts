@@ -14,6 +14,7 @@ export declare class CreateSaleDto {
     customerId?: string;
     customerPhone?: string;
     customerName?: string;
+    staffUserId?: string;
     items: SaleItemDto[];
     discount?: number;
     payment: SalePaymentDto;

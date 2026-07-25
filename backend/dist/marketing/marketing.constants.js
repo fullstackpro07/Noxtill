@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.COMPETITOR_SNAPSHOT_QUEUE = exports.MAX_COMPETITORS = exports.CAMPAIGN_TEMPLATE_KEY = exports.MARKETING_ERROR_CODES = void 0;
+exports.MARKETING_ERROR_CODES = {
+    QUOTA_EXCEEDED: 'CAMPAIGN_QUOTA_EXCEEDED',
+    EMPTY_SEGMENT: 'CAMPAIGN_EMPTY_SEGMENT',
+    CAMPAIGN_NOT_FOUND: 'CAMPAIGN_NOT_FOUND',
+    COMPETITOR_LIMIT_REACHED: 'COMPETITOR_LIMIT_REACHED',
+    COMPETITOR_NOT_FOUND: 'COMPETITOR_NOT_FOUND',
+};
+exports.CAMPAIGN_TEMPLATE_KEY = 'campaign';
+exports.MAX_COMPETITORS = 5;
+exports.COMPETITOR_SNAPSHOT_QUEUE = 'competitor-snapshot';
+//# sourceMappingURL=marketing.constants.js.map

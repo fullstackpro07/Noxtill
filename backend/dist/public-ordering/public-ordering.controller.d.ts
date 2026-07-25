@@ -43,5 +43,6 @@ export declare class PublicOrderingController {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
 }

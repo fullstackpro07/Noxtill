@@ -11,18 +11,22 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReviewsService = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_cls_1 = require("nestjs-cls");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
-const claude_client_1 = require("../ai/claude.client");
+const ai_infra_service_1 = require("../ai/ai-infra.service");
+const tenant_constants_1 = require("../common/tenancy/tenant.constants");
 const REVIEWS_ERROR_CODES = {
     REVIEW_NOT_FOUND: 'reviews.not_found',
 };
 let ReviewsService = class ReviewsService {
     tenantPrisma;
-    claude;
-    constructor(tenantPrisma, claude) {
+    aiInfra;
+    cls;
+    constructor(tenantPrisma, aiInfra, cls) {
         this.tenantPrisma = tenantPrisma;
-        this.claude = claude;
+        this.aiInfra = aiInfra;
+        this.cls = cls;
     }
     async list(query) {
         const ratingFilter = query.rating ? { stars: Number(query.rating) } : {};
@@ -92,7 +96,8 @@ let ReviewsService = class ReviewsService {
         const prompt = `A customer left this ${review.stars}-star review: "${review.text ?? ''}". ` +
             'Write a short, warm, professional business-owner reply IN THE SAME LANGUAGE the review ' +
             'was written in. No preamble — return only the reply text.';
-        const draft = await this.claude.complete(prompt);
+        const businessId = this.cls.get(tenant_constants_1.CLS_KEY_BUSINESS_ID);
+        const draft = await this.aiInfra.complete(businessId, prompt);
         return { draft };
     }
 };
@@ -100,6 +105,7 @@ exports.ReviewsService = ReviewsService;
 exports.ReviewsService = ReviewsService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
-        claude_client_1.ClaudeClient])
+        ai_infra_service_1.AiInfraService,
+        nestjs_cls_1.ClsService])
 ], ReviewsService);
 //# sourceMappingURL=reviews.service.js.map

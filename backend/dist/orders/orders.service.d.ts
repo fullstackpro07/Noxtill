@@ -26,6 +26,7 @@ export declare class OrdersService {
         total: Prisma.Decimal;
         cogs: Prisma.Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     updateStatus(businessId: string, orderId: string, nextStatus: OrderStatus): Promise<{
         id: string;
@@ -43,6 +44,7 @@ export declare class OrdersService {
         total: Prisma.Decimal;
         cogs: Prisma.Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     findOne(id: string): Promise<{
         items: {
@@ -78,6 +80,7 @@ export declare class OrdersService {
         total: Prisma.Decimal;
         cogs: Prisma.Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     findAll(status?: OrderStatus): import("generated/prisma/runtime/library").PrismaPromise<({
         items: {
@@ -105,5 +108,6 @@ export declare class OrdersService {
         total: Prisma.Decimal;
         cogs: Prisma.Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     })[]>;
 }

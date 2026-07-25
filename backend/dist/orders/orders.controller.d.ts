@@ -25,6 +25,7 @@ export declare class OrdersController {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     findAll(status?: OrderStatus): import("generated/prisma/runtime/library").PrismaPromise<({
         items: {
@@ -52,6 +53,7 @@ export declare class OrdersController {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     })[]>;
     findOne(id: string): Promise<{
         items: {
@@ -87,6 +89,7 @@ export declare class OrdersController {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     updateStatus(user: AuthenticatedUser, id: string, dto: UpdateOrderStatusDto): Promise<{
         id: string;
@@ -104,6 +107,7 @@ export declare class OrdersController {
         total: import("generated/prisma/runtime/library").Decimal;
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
+        staffUserId: string | null;
     }>;
     generateInvoice(user: AuthenticatedUser, id: string, dto: GenerateInvoiceDto): Promise<{
         url: string;

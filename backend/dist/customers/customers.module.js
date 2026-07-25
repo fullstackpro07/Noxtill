@@ -33,7 +33,7 @@ exports.CustomersModule = CustomersModule = __decorate([
             crm_jobs_scheduler_1.CrmJobsScheduler,
             crm_jobs_processor_1.CrmJobsProcessor,
         ],
-        exports: [customers_service_1.CustomersService],
+        exports: [customers_service_1.CustomersService, segments_service_1.SegmentsService],
     })
 ], CustomersModule);
 //# sourceMappingURL=customers.module.js.map

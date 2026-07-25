@@ -36,7 +36,12 @@ export declare class AuthService {
             dashboardConfig: Prisma.JsonValue;
             publicReviewUrl: string | null;
             workingHours: Prisma.JsonValue;
+            referralSettings: Prisma.JsonValue;
+            aiMonthlyCostCapUsd: Prisma.Decimal;
+            aiRateLimitPerMinute: number;
             trialEndsAt: Date | null;
+            stripeCustomerId: string | null;
+            stripeSubscriptionId: string | null;
             typeId: string | null;
             planId: string | null;
             parentId: string | null;

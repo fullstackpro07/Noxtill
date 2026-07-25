@@ -29,6 +29,18 @@ import { ProfitModule } from './profit/profit.module';
 import { CustomerImportModule } from './customer-import/customer-import.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { StaffModule } from './staff/staff.module';
+import { BranchesModule } from './branches/branches.module';
+import { MarketingModule } from './marketing/marketing.module';
+import { BillingModule } from './billing/billing.module';
+import { WidgetsModule } from './widgets/widgets.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { BusinessTypesModule } from './business-types/business-types.module';
+import { SearchModule } from './search/search.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module';
+import { HelpModule } from './help/help.module';
+import { AssistantModule } from './assistant/assistant.module';
 
 @Module({
   imports: [
@@ -60,6 +72,18 @@ import { BookingsModule } from './bookings/bookings.module';
     CustomerImportModule,
     ReviewsModule,
     BookingsModule,
+    StaffModule,
+    BranchesModule,
+    MarketingModule,
+    BillingModule,
+    WidgetsModule,
+    DashboardModule,
+    BusinessTypesModule,
+    SearchModule,
+    AnalyticsModule,
+    PlatformAdminModule,
+    HelpModule,
+    AssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

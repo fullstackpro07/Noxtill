@@ -189,14 +189,15 @@ model Widget {
 }
 
 model Plan {
-  id         String     @id @default(uuid())
-  key        String     @unique
-  name       String
-  price      Decimal    @db.Decimal(10, 2)
-  msgQuota   Int        @map("msg_quota")
-  userLimit  Int        @map("user_limit")
-  features   Json       @default("{}")
-  businesses Business[]
+  id            String  @id @default(uuid())
+  key           String  @unique
+  name          String
+  price         Decimal @db.Decimal(10, 2)
+  msgQuota      Int     @map("msg_quota")
+  userLimit     Int     @map("user_limit")
+  features      Json    @default("{}")
+  stripePriceId String? @unique @map("stripe_price_id")
+  businesses    Business[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -233,11 +234,23 @@ model Business {
   /// Weekly hours, e.g. `{"mon":[["09:00","17:00"]],"tue":[...] , ... }`; a missing/empty day is closed.
   workingHours Json @default("{}") @map("working_hours")
 
+  /// Referral reward config (BE-062), e.g. `{"enabled":true,"rewardType":"credit","rewardValue":10}`.
+  referralSettings Json @default("{}") @map("referral_settings")
+
+  /// AI usage guardrails (BE-075): shared across every AI feature (what-if, branch-advisor,
+  /// review AI-draft, business-type mapping, RAG help, assistant chat).
+  aiMonthlyCostCapUsd Decimal @default(5.00) @map("ai_monthly_cost_cap_usd") @db.Decimal(8, 2)
+  aiRateLimitPerMinute Int    @default(10) @map("ai_rate_limit_per_minute")
+
   parentId String?    @map("parent_id")
   parent   Business?  @relation("BusinessBranches", fields: [parentId], references: [id])
   branches Business[] @relation("BusinessBranches")
 
   trialEndsAt DateTime? @map("trial_ends_at")
+
+  /// Billing (BE-064/065): Stripe customer/subscription linkage, set once checkout completes.
+  stripeCustomerId     String? @unique @map("stripe_customer_id")
+  stripeSubscriptionId String? @unique @map("stripe_subscription_id")
 
   businessUsers    BusinessUser[]
   customers        Customer[]
@@ -298,6 +311,7 @@ model BusinessUser {
 
   attendance   Attendance[]
   appointments Appointment[] @relation("StaffAppointments")
+  orders       Order[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -327,6 +341,11 @@ model Customer {
   lifetimeSpend    Decimal   @default(0) @map("lifetime_spend") @db.Decimal(12, 2)
   visitCount       Int       @default(0) @map("visit_count")
   lastVisitAt      DateTime? @map("last_visit_at")
+
+  /// Referrals (BE-062): the existing customer whose code brought this customer in, if any.
+  referredByCustomerId String?   @map("referred_by_customer_id")
+  referredBy           Customer? @relation("CustomerReferrals", fields: [referredByCustomerId], references: [id])
+  referrals            Customer[] @relation("CustomerReferrals")
 
   orders          Order[]
   creditEntries   CreditEntry[]
@@ -387,6 +406,10 @@ model Order {
   total       Decimal     @default(0) @db.Decimal(12, 2)
   cogs        Decimal     @default(0) @db.Decimal(12, 2)
   isQuotation Boolean     @default(false) @map("is_quotation")
+
+  /// Staff member who rang up the sale, if any — drives commission attribution (BE-058).
+  staffUserId String?       @map("staff_user_id")
+  staffUser   BusinessUser? @relation(fields: [staffUserId], references: [id])
 
   items         OrderItem[]
   payments      Payment[]
@@ -491,6 +514,10 @@ model Message {
   status       MessageStatus   @default(queued)
   providerRef  String?         @map("provider_ref")
   scheduledFor DateTime?       @map("scheduled_for")
+
+  /// Set only for campaign fan-out sends (BE-061) — drives the funnel report.
+  campaignId String?   @map("campaign_id")
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -651,6 +678,8 @@ model Campaign {
   body         String
   scheduledFor DateTime? @map("scheduled_for")
   sentCount    Int       @default(0) @map("sent_count")
+
+  messages Message[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -817,4 +846,62 @@ model GmbPost {
 
   @@index([businessId])
   @@map("gmb_posts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BE-M11 — Widgets, Dashboard, Search, Analytics
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Product-analytics instrumentation (BE-072). Not tenant-scoped by the
+/// Prisma extension — recorded explicitly per request and read cross-tenant
+/// by platform-admin endpoints, so businessId is nullable (pre-signup events)
+/// and every access goes through the raw PrismaService on purpose.
+model Event {
+  id         String   @id @default(uuid())
+  businessId String?  @map("business_id")
+  userId     String?  @map("user_id")
+  name       String
+  properties Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([name, createdAt])
+  @@index([businessId])
+  @@map("events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BE-M12 — AI Assistant
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Shared AI infra call log (BE-075) — every AI feature in the product logs
+/// through here. Not tenant-scoped: businessId is nullable (BusinessTypesService's
+/// AI-map runs pre-signup, before a business exists) and rate-limit/cost-cap
+/// checks read across this table directly via the raw PrismaService.
+model AiCallLog {
+  id               String   @id @default(uuid())
+  businessId       String?  @map("business_id")
+  kind             String
+  inputTokens      Int      @map("input_tokens")
+  outputTokens     Int      @map("output_tokens")
+  estimatedCostUsd Decimal  @map("estimated_cost_usd") @db.Decimal(10, 4)
+  /// Which tools were invoked and what they returned — the audit trail behind "never fabricated" (BE-074).
+  toolCalls        Json?    @map("tool_calls")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("ai_call_logs")
+}
+
+/// RAG help-pipeline source content (BE-073) — small enough that a keyword/
+/// trigram hybrid over this table is plenty; no separate vector store needed.
+model HelpArticle {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  title     String
+  body      String
+  url       String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("help_articles")
 }
