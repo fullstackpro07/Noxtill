@@ -29,12 +29,11 @@ const NO_FLASH_SCRIPT = `
     var state = raw ? JSON.parse(raw).state : null;
     var theme = (state && state.theme) || "system";
     var localeCode = (state && state.localeCode) || "en";
-    var rtlLocales = ["ur", "ar"];
     var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     var dark = theme === "dark" || (theme === "system" && systemDark);
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     document.documentElement.lang = localeCode;
-    document.documentElement.dir = rtlLocales.indexOf(localeCode) !== -1 ? "rtl" : "ltr";
+    document.documentElement.dir = "ltr";
   } catch (e) {}
 })();
 `;
@@ -49,6 +48,7 @@ export default function RootLayout({
       lang="en"
       dir="ltr"
       className={`${bricolage.variable} ${instrument.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />

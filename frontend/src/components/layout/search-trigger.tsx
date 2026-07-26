@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
+import { useTranslation } from "@/hooks/use-translation";
 
 /**
  * Trigger only for FE-002 — the real Deep Search overlay (grouped results,
@@ -14,6 +15,7 @@ export function SearchTrigger() {
   // something computable during render — swapping the label in an effect,
   // not a lazy initializer, is what keeps first paint hydration-safe.
   const [mac, setMac] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time platform detection unavailable during SSR, not derived render state
@@ -36,7 +38,7 @@ export function SearchTrigger() {
       className="flex h-9 w-full max-w-72 items-center gap-2 rounded-full border border-border-strong bg-surface-2/60 px-3.5 text-sm text-fg-faint transition-colors hover:border-border-strong hover:bg-surface-2"
     >
       <Search className="h-4 w-4 shrink-0" aria-hidden />
-      <span className="flex-1 truncate text-start">Search customers, orders…</span>
+      <span className="flex-1 truncate text-start">{t("topbar.searchPlaceholder")}</span>
       <kbd className="hidden shrink-0 rounded-md border border-border-strong bg-surface px-1.5 py-0.5 font-sans text-[10px] font-medium text-fg-faint sm:inline-block">
         {mac ? "⌘K" : "Ctrl K"}
       </kbd>

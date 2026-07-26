@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { navItemsForRole, type Role } from "@/lib/nav-items";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface SidebarProps {
   role: Role;
@@ -14,6 +15,7 @@ interface SidebarProps {
 }
 
 function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string; onNavigate?: () => void }) {
+  const { t } = useTranslation();
   return (
     <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
       {navItemsForRole(role).map((item) => {
@@ -39,7 +41,7 @@ function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string;
               )}
               aria-hidden
             />
-            <span className="truncate">{item.label}</span>
+            <span className="truncate">{t(item.labelKey)}</span>
           </Link>
         );
       })}
@@ -64,6 +66,7 @@ function Wordmark({ businessName }: { businessName: string }) {
 /** Desktop: fixed 220px rail. Mobile (<768px): slide-in drawer with backdrop (FE-002). */
 export function Sidebar({ role, businessName, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   return (
     <>
@@ -75,7 +78,7 @@ export function Sidebar({ role, businessName, mobileOpen, onMobileClose }: Sideb
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <button
-            aria-label="Close menu"
+            aria-label={t("topbar.closeMenu")}
             className="absolute inset-0 bg-black/40"
             onClick={onMobileClose}
           />
@@ -83,7 +86,7 @@ export function Sidebar({ role, businessName, mobileOpen, onMobileClose }: Sideb
             <div className="flex items-center justify-between">
               <Wordmark businessName={businessName} />
               <button
-                aria-label="Close menu"
+                aria-label={t("topbar.closeMenu")}
                 onClick={onMobileClose}
                 className="me-4 mt-4 flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2"
               >

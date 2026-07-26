@@ -29,7 +29,10 @@ export const useUiStore = create<UiState>()(
   ),
 );
 
-/** Applies the persisted theme + locale/RTL to <html> — call once from a client-only bootstrap component. */
+/**
+ * Applies the persisted theme + locale to <html> — call once from a client-only bootstrap component.
+ * Layout direction is intentionally always "ltr": Urdu/Arabic translate the text but keep the LTR layout.
+ */
 export function applyDocumentPreferences(theme: Theme, localeCode: string) {
   const root = document.documentElement;
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -38,5 +41,5 @@ export function applyDocumentPreferences(theme: Theme, localeCode: string) {
 
   const locale = localeByCode(localeCode);
   root.lang = locale.code;
-  root.dir = locale.dir;
+  root.dir = "ltr";
 }

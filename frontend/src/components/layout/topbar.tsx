@@ -8,14 +8,16 @@ import { NotificationBell } from "./notification-bell";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 import type { Session } from "@/lib/mock-session";
+import { useTranslation } from "@/hooks/use-translation";
 
 export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6">
       <button
         type="button"
         onClick={onMenuClick}
-        aria-label="Open menu"
+        aria-label={t("topbar.openMenu")}
         className="flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 md:hidden"
       >
         <Menu className="h-5 w-5" aria-hidden />
