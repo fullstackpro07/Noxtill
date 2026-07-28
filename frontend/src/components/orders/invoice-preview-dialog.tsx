@@ -8,15 +8,9 @@ import { Button } from "@/components/ui/button";
 import type { Order } from "@/lib/orders";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { fakeQrCells } from "@/lib/fake-qr";
 
 const TAX_RATE = 0.085;
-
-/** Deterministic pseudo-QR — a stand-in for a real QR encoder, just enough to read as a scannable code in preview. */
-function fakeQrCells(seed: string): boolean[] {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return Array.from({ length: 49 }, (_, i) => ((hash >> (i % 24)) & 1) === 1);
-}
 
 function FakeQr({ seed }: { seed: string }) {
   const cells = fakeQrCells(seed);

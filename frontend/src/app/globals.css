@@ -40,6 +40,16 @@
 
   --ring: #0c4b3b;
 
+  /* Categorical chart series (validated: node scripts/validate_palette.js, dataviz skill) — fixed order, never cycled or reassigned per-filter. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-good: #0ca30c;
+  --chart-warning: #fab219;
+  --chart-critical: #d03b3b;
+
   --radius-md: 14px;
   --radius-sm: 9px;
   --radius-full: 999px;
@@ -77,6 +87,15 @@
 
   --ring: #63b294;
 
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-good: #0ca30c;
+  --chart-warning: #fab219;
+  --chart-critical: #d03b3b;
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.45), 0 2px 6px -2px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
@@ -111,6 +130,15 @@
 
     --ring: #63b294;
 
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-good: #0ca30c;
+    --chart-warning: #fab219;
+    --chart-critical: #d03b3b;
+
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.45), 0 2px 6px -2px rgba(0, 0, 0, 0.35);
     --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
@@ -144,6 +172,15 @@
   --color-whatsapp-foreground: var(--whatsapp-foreground);
 
   --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-good: var(--chart-good);
+  --color-chart-warning: var(--chart-warning);
+  --color-chart-critical: var(--chart-critical);
 
   --radius-noxtill: var(--radius-md);
   --radius-noxtill-sm: var(--radius-sm);

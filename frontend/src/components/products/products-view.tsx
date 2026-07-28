@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Plus, Upload, LayoutGrid, List as ListIcon, Pencil, Package } from "lucide-react";
+import Link from "next/link";
+import { Search, Plus, Upload, LayoutGrid, List as ListIcon, Pencil, Package, Boxes } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +63,12 @@ export function ProductsView({ currency }: { currency: string }) {
           <p className="mt-0.5 text-sm text-fg-muted">{PRODUCTS.length} items in your catalog</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/inventory">
+            <Button variant="outline" size="sm">
+              <Boxes className="h-4 w-4" aria-hidden />
+              Inventory
+            </Button>
+          </Link>
           <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
             <Upload className="h-4 w-4" aria-hidden />
             Import
