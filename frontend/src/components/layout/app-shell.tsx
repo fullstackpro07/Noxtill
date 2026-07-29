@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { OfflineBanner } from "@/components/shared/offline-banner";
+import { DeepSearchOverlay } from "@/components/search/deep-search-overlay";
 import { useMockSession } from "@/lib/mock-session";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Topbar session={session} onMenuClick={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
+      <DeepSearchOverlay />
     </div>
   );
 }

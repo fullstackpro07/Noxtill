@@ -3,12 +3,9 @@
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
+import { useSearchStore } from "@/store/search-store";
 
-/**
- * Trigger only for FE-002 — the real Deep Search overlay (grouped results,
- * keyboard nav) is FE-032. This wires the Ctrl/⌘K shortcut and shows the
- * expected badge so the affordance is real even before that overlay exists.
- */
+/** Ctrl/⌘K shortcut and click both open the Deep Search overlay (FE-032). */
 export function SearchTrigger() {
   // Server always renders the Ctrl-K fallback (no `navigator` during SSR);
   // detecting the real platform is unavoidably a post-mount effect, not
@@ -16,6 +13,7 @@ export function SearchTrigger() {
   // not a lazy initializer, is what keeps first paint hydration-safe.
   const [mac, setMac] = useState(false);
   const { t } = useTranslation();
+  const setOpen = useSearchStore((s) => s.setOpen);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time platform detection unavailable during SSR, not derived render state
@@ -35,6 +33,7 @@ export function SearchTrigger() {
     <button
       id="global-search-trigger"
       type="button"
+      onClick={() => setOpen(true)}
       className="flex h-9 w-full max-w-72 items-center gap-2 rounded-full border border-border-strong bg-surface-2/60 px-3.5 text-sm text-fg-faint transition-colors hover:border-border-strong hover:bg-surface-2"
     >
       <Search className="h-4 w-4 shrink-0" aria-hidden />
