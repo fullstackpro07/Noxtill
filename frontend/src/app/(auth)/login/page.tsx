@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -40,6 +41,7 @@ const signupSchema = z.object({
 type SignupValues = z.infer<typeof signupSchema>;
 
 function LoginForm() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const {
     register,
@@ -48,9 +50,10 @@ function LoginForm() {
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
 
-  async function onSubmit(values: LoginValues) {
+  async function onSubmit() {
     await new Promise((r) => setTimeout(r, 500));
-    toast.info(`Live login wires up in INT-001 — got "${values.identifier}"`);
+    toast.success("Signed in. Live auth wires up in INT-001.");
+    router.push("/dashboard");
   }
 
   return (
@@ -90,6 +93,7 @@ function LoginForm() {
 }
 
 function SignupForm() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const {
     register,
@@ -118,7 +122,8 @@ function SignupForm() {
 
   async function onSubmit(values: SignupValues) {
     await new Promise((r) => setTimeout(r, 500));
-    toast.info(`Live signup wires up in INT-001 — welcome, ${values.businessOwnerName}!`);
+    toast.success(`Welcome, ${values.businessOwnerName}! Live signup wires up in INT-001.`);
+    router.push("/dashboard");
   }
 
   return (

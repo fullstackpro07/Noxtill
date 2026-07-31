@@ -5,6 +5,8 @@ import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { OfflineBanner } from "@/components/shared/offline-banner";
 import { DeepSearchOverlay } from "@/components/search/deep-search-overlay";
+import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import { AssistantTriggerButton } from "@/components/assistant/assistant-trigger-button";
 import { useMockSession } from "@/lib/mock-session";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,6 +27,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
       <DeepSearchOverlay />
+      <AssistantPanel />
+      <AssistantTriggerButton />
     </div>
   );
 }
