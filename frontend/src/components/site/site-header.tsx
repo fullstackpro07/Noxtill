@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Moon } from "lucide-react";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export function SiteHeader() {
   return (
@@ -26,6 +27,7 @@ export function SiteHeader() {
           </a>
         </nav>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Link href="/login" className="hidden text-sm font-medium text-fg-muted hover:text-fg sm:block">
             Sign in
           </Link>

@@ -27,7 +27,7 @@ const NO_FLASH_SCRIPT = `
   try {
     var raw = localStorage.getItem("noxtill-ui");
     var state = raw ? JSON.parse(raw).state : null;
-    var theme = (state && state.theme) || "system";
+    var theme = (state && state.theme) || "light";
     var localeCode = (state && state.localeCode) || "en";
     var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     var dark = theme === "dark" || (theme === "system" && systemDark);
