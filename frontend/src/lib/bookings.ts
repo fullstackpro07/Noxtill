@@ -1,4 +1,4 @@
-export type AppointmentStatus = "confirmed" | "completed" | "cancelled" | "no_show";
+export type AppointmentStatus = "booked" | "confirmed" | "completed" | "cancelled" | "no_show";
 
 export interface Appointment {
   id: string;
@@ -16,16 +16,17 @@ export const WORKING_HOURS = Array.from({ length: 10 }, (_, i) => 9 + i);
 
 export const TODAY = "2026-07-29";
 
-const ILLEGAL_STATUS_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
-  confirmed: [],
-  completed: ["confirmed", "cancelled", "no_show"],
-  cancelled: ["confirmed", "completed", "no_show"],
-  no_show: ["confirmed", "completed", "cancelled"],
+/** Mirrors the backend's flow guard (BE-054 APPOINTMENT_STATUS_TRANSITIONS) so the UI can pre-validate before the server round-trip. */
+const APPOINTMENT_STATUS_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
+  booked: ["confirmed", "cancelled", "no_show"],
+  confirmed: ["completed", "cancelled", "no_show"],
+  completed: [],
+  no_show: [],
+  cancelled: [],
 };
 
 export function canTransition(from: AppointmentStatus, to: AppointmentStatus): boolean {
-  if (from === to) return false;
-  return !ILLEGAL_STATUS_TRANSITIONS[from].includes(to);
+  return APPOINTMENT_STATUS_TRANSITIONS[from].includes(to);
 }
 
 /** Mock appointment book — real slot-lock booking + status flow is BE-052/053/054, live wiring is INT-008. */
@@ -44,10 +45,25 @@ export function appointmentsForDate(date: string): Appointment[] {
   return APPOINTMENTS.filter((a) => a.date === date);
 }
 
-export function appointmentOccupying(appointments: Appointment[], staffId: string, hour: number, excludeId?: string): Appointment | undefined {
+interface OccupyingCheck {
+  id: string;
+  staffId?: string;
+  startHour: number;
+  durationHours: number;
+}
+
+export function appointmentOccupying<T extends OccupyingCheck>(appointments: T[], staffId: string, hour: number, excludeId?: string): T | undefined {
   return appointments.find(
     (a) => a.id !== excludeId && a.staffId === staffId && hour >= a.startHour && hour < a.startHour + a.durationHours,
   );
+}
+
+/** Combines a "YYYY-MM-DD" date with a whole/half hour into a real local-time ISO instant. */
+export function dateHourToIso(date: string, hour: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const wholeHour = Math.floor(hour);
+  const minutes = Math.round((hour - wholeHour) * 60);
+  return new Date(y, m - 1, d, wholeHour, minutes).toISOString();
 }
 
 export function weekDates(anchor: string): string[] {

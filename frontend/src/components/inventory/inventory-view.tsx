@@ -2,41 +2,58 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Search, Boxes, History, PackagePlus, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorBanner } from "@/components/shared/error-states";
+import { SkeletonRow } from "@/components/shared/skeleton";
 import { MovementHistoryDrawer } from "./movement-history-drawer";
 import { PurchaseDialog } from "./purchase-drawer";
 import { WastageDialog } from "./wastage-drawer";
-import { INVENTORY_ITEMS, SUPPLIERS, type InventoryItem } from "@/lib/inventory";
+import { fetchInventory, type InventoryStatus, type LiveInventoryItem } from "@/lib/inventory-api";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type StatusFilter = "all" | "low" | "ok";
+type StatusFilter = "all" | InventoryStatus;
 
-function statusOf(item: InventoryItem): "low" | "ok" {
-  return item.stockOnHand <= item.lowStockThreshold ? "low" : "ok";
-}
+const STATUS_LABEL: Record<InventoryStatus, string> = {
+  ok: "In stock",
+  low_stock: "Low stock",
+  out_of_stock: "Out of stock",
+};
 
 export function InventoryView({ currency }: { currency: string }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [supplier, setSupplier] = useState("all");
-  const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null);
-  const [purchaseItem, setPurchaseItem] = useState<InventoryItem | null>(null);
-  const [wastageItem, setWastageItem] = useState<InventoryItem | null>(null);
+  const [historyItem, setHistoryItem] = useState<LiveInventoryItem | null>(null);
+  const [purchaseItem, setPurchaseItem] = useState<LiveInventoryItem | null>(null);
+  const [wastageItem, setWastageItem] = useState<LiveInventoryItem | null>(null);
+
+  const {
+    data: items = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["inventory"], queryFn: fetchInventory });
+
+  const suppliers = useMemo(
+    () => [...new Set(items.map((i) => i.supplier).filter((s): s is string => Boolean(s)))].sort(),
+    [items],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return INVENTORY_ITEMS.filter((item) => {
+    return items.filter((item) => {
       if (q && !item.name.toLowerCase().includes(q)) return false;
-      if (status !== "all" && statusOf(item) !== status) return false;
+      if (status !== "all" && item.status !== status) return false;
       if (supplier !== "all" && item.supplier !== supplier) return false;
       return true;
     });
-  }, [query, status, supplier]);
+  }, [items, query, status, supplier]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -63,12 +80,13 @@ export function InventoryView({ currency }: { currency: string }) {
         </div>
         <Select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className="w-40">
           <option value="all">All statuses</option>
-          <option value="low">Low stock</option>
+          <option value="low_stock">Low stock</option>
+          <option value="out_of_stock">Out of stock</option>
           <option value="ok">In stock</option>
         </Select>
         <Select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-56">
           <option value="all">All suppliers</option>
-          {SUPPLIERS.map((s) => (
+          {suppliers.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
@@ -76,8 +94,20 @@ export function InventoryView({ currency }: { currency: string }) {
         </Select>
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState icon={Boxes} title="No items match" description="Try a different search or filter." />
+      {isError ? (
+        <ErrorBanner title="Couldn't load inventory" description="Check your connection and try again." onRetry={() => refetch()} />
+      ) : isPending ? (
+        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={Boxes}
+          title={items.length === 0 ? "No stocked products yet" : "No items match"}
+          description={items.length === 0 ? "Products you add with kind “Product” will show up here." : "Try a different search or filter."}
+        />
       ) : (
         <div className="overflow-x-auto rounded-[var(--radius-noxtill)] border border-border bg-surface">
           <table className="w-full text-sm">
@@ -92,21 +122,21 @@ export function InventoryView({ currency }: { currency: string }) {
             </thead>
             <tbody>
               {filtered.map((item) => {
-                const low = statusOf(item) === "low";
+                const low = item.status !== "ok";
                 return (
-                  <tr key={item.productId} className="border-b border-border last:border-0 hover:bg-surface-2/50">
+                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-surface-2/50">
                     <td className="px-4 py-3 font-medium text-fg">{item.name}</td>
-                    <td className="px-4 py-3 text-fg-muted">{item.supplier}</td>
+                    <td className="px-4 py-3 text-fg-muted">{item.supplier ?? "—"}</td>
                     <td className="px-4 py-3">
-                      <span className={cn("font-medium", low ? "text-destructive" : "text-fg")}>{item.stockOnHand}</span>
+                      <span className={cn("font-medium", low ? "text-destructive" : "text-fg")}>{item.stockQty}</span>
                       {low && (
                         <span className="ms-1.5 inline-flex items-center gap-1 text-xs text-destructive">
                           <AlertTriangle className="h-3 w-3" aria-hidden />
-                          low
+                          {STATUS_LABEL[item.status].toLowerCase()}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-fg-muted">{formatCurrency(item.stockOnHand * item.costPrice, currency)}</td>
+                    <td className="px-4 py-3 text-fg-muted">{formatCurrency(item.stockValue, currency)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button

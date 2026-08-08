@@ -10,6 +10,8 @@ interface DashboardState {
   range: DashboardRange;
   isCustomizing: boolean;
   setRange: (range: DashboardRange) => void;
+  /** Overwrites the layout wholesale — used to hydrate from the server's saved dashboard config (INT-002). */
+  setLayout: (layout: string[]) => void;
   enterCustomize: () => void;
   reorderDraft: (layout: string[]) => void;
   addWidget: (key: string) => void;
@@ -28,6 +30,8 @@ export const useDashboardStore = create<DashboardState>()(
       isCustomizing: false,
 
       setRange: (range) => set({ range }),
+
+      setLayout: (layout) => set({ layout }),
 
       enterCustomize: () => set({ isCustomizing: true, draftLayout: get().layout }),
 

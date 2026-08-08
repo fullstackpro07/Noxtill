@@ -63,14 +63,25 @@ export class RollupService {
     `;
     const byBusiness = new Map(rows.map((r) => [r.business_id, r]));
 
+    const reviewAggs = await this.prisma.externalReview.groupBy({
+      by: ['businessId'],
+      where: { businessId: { in: ids }, createdAt: { gte: since } },
+      _avg: { stars: true },
+    });
+    const reviewAvgByBusiness = new Map(
+      reviewAggs.map((r) => [r.businessId, r._avg.stars]),
+    );
+
     const branches = group.map((b) => {
       const row = byBusiness.get(b.id);
+      const reviewAvg = reviewAvgByBusiness.get(b.id);
       return {
         businessId: b.id,
         name: b.name,
         ordersCount: Number(row?.orders_count ?? 0),
         revenue: Number(row?.revenue ?? 0),
         grossProfit: Number(row?.gross_profit ?? 0),
+        reviewAvg: reviewAvg != null ? Number(reviewAvg) : null,
       };
     });
 

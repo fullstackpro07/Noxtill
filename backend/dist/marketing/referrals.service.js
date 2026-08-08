@@ -18,6 +18,32 @@ let ReferralsService = class ReferralsService {
     constructor(tenantPrisma) {
         this.tenantPrisma = tenantPrisma;
     }
+    async issueRewardIfEligible(businessId, customerId, tx) {
+        const customer = await tx.customer.findUnique({ where: { id: customerId } });
+        if (!customer ||
+            !customer.referredByCustomerId ||
+            customer.referralRewardedAt ||
+            customer.visitCount !== 1) {
+            return;
+        }
+        const business = await tx.business.findUniqueOrThrow({ where: { id: businessId } });
+        const settings = business.referralSettings;
+        if (settings?.enabled && settings.rewardType === 'credit' && settings.rewardValue) {
+            await tx.creditEntry.create({
+                data: {
+                    businessId,
+                    customerId: customer.referredByCustomerId,
+                    kind: 'credit',
+                    amount: settings.rewardValue,
+                    note: 'Referral reward',
+                },
+            });
+        }
+        await tx.customer.update({
+            where: { id: customerId },
+            data: { referralRewardedAt: new Date() },
+        });
+    }
     async updateSettings(businessId, dto) {
         await this.tenantPrisma.client.business.update({
             where: { id: businessId },
@@ -52,8 +78,10 @@ let ReferralsService = class ReferralsService {
     async stats() {
         const referred = await this.tenantPrisma.client.customer.findMany({
             where: { referredByCustomerId: { not: null } },
-            select: { referredByCustomerId: true },
+            select: { referredByCustomerId: true, visitCount: true, referralRewardedAt: true },
         });
+        const converted = referred.filter((r) => r.visitCount >= 1).length;
+        const rewardsIssued = referred.filter((r) => r.referralRewardedAt != null).length;
         const countsByReferrer = new Map();
         for (const row of referred) {
             const key = row.referredByCustomerId;
@@ -73,6 +101,8 @@ let ReferralsService = class ReferralsService {
             .sort((a, b) => b.count - a.count);
         return {
             totalReferred: referred.length,
+            converted,
+            rewardsIssued,
             leaderboard,
         };
     }

@@ -13,12 +13,13 @@ const invoice_service_1 = require("./invoice.service");
 const orders_controller_1 = require("./orders.controller");
 const messaging_module_1 = require("../messaging/messaging.module");
 const reviews_module_1 = require("../reviews/reviews.module");
+const marketing_module_1 = require("../marketing/marketing.module");
 let OrdersModule = class OrdersModule {
 };
 exports.OrdersModule = OrdersModule;
 exports.OrdersModule = OrdersModule = __decorate([
     (0, common_1.Module)({
-        imports: [messaging_module_1.MessagingModule, reviews_module_1.ReviewsModule],
+        imports: [messaging_module_1.MessagingModule, reviews_module_1.ReviewsModule, marketing_module_1.MarketingModule],
         controllers: [orders_controller_1.OrdersController],
         providers: [orders_service_1.OrdersService, invoice_service_1.InvoiceService],
         exports: [orders_service_1.OrdersService, invoice_service_1.InvoiceService],

@@ -85,6 +85,22 @@ describe('StaffService (BE-056)', () => {
     expect(list.length).toBeGreaterThan(0);
   });
 
+  it('includes the owner in the list (booking calendar needs a solo owner-operator to appear)', async () => {
+    const ownerUser = await prisma.user.create({
+      data: {
+        name: 'Owner Person',
+        email: `owner-${Date.now()}@example.com`,
+        passwordHash: 'x',
+      },
+    });
+    const ownerLink = await prisma.businessUser.create({
+      data: { businessId, userId: ownerUser.id, role: 'owner' },
+    });
+
+    const list = await service.list();
+    expect(list.find((m) => m.id === ownerLink.id)?.role).toBe('owner');
+  });
+
   it('removes a staff member', async () => {
     const created = await service.create(businessId, {
       name: 'Removable',
@@ -97,5 +113,97 @@ describe('StaffService (BE-056)', () => {
 
     const list = await service.list();
     expect(list.find((m) => m.id === created.id)).toBeUndefined();
+  });
+
+  describe('inbox()', () => {
+    it('composes upcoming appointments, unresolved complaints, and low-stock alerts', async () => {
+      const staffMember = await service.create(businessId, {
+        name: 'Inbox Staffer',
+        email: `inbox-staffer-${Date.now()}@example.com`,
+        role: 'staff',
+      });
+      const customer = await prisma.customer.create({
+        data: { businessId, phone: `+1${Date.now()}`, name: 'Inbox Customer' },
+      });
+      const svc = await prisma.product.create({
+        data: { businessId, kind: 'service', name: 'Inbox Service', durationMin: 30 },
+      });
+      const lowStockProduct = await prisma.product.create({
+        data: {
+          businessId,
+          kind: 'product',
+          name: 'Low Stock Widget',
+          stockQty: 1,
+          lowStockThreshold: 5,
+        },
+      });
+      const appointment = await prisma.appointment.create({
+        data: {
+          businessId,
+          serviceId: svc.id,
+          customerId: customer.id,
+          staffUserId: staffMember.id,
+          startsAt: new Date(Date.now() + 60 * 60 * 1000),
+          endsAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+          status: 'confirmed',
+        },
+      });
+      const feedback = await prisma.privateFeedback.create({
+        data: {
+          businessId,
+          stars: 2,
+          message: 'Needs follow-up',
+          status: 'assigned',
+          assignedTo: staffMember.id,
+        },
+      });
+      // A resolved complaint and a completed appointment must NOT show up.
+      await prisma.privateFeedback.create({
+        data: { businessId, stars: 1, status: 'resolved', assignedTo: staffMember.id },
+      });
+      const completedAppt = await prisma.appointment.create({
+        data: {
+          businessId,
+          serviceId: svc.id,
+          customerId: customer.id,
+          staffUserId: staffMember.id,
+          startsAt: new Date(Date.now() - 60 * 60 * 1000),
+          endsAt: new Date(Date.now() - 30 * 60 * 1000),
+          status: 'completed',
+        },
+      });
+
+      const tasks = await service.inbox();
+
+      const apptTask = tasks.find((t) => t.id === appointment.id);
+      expect(apptTask).toMatchObject({
+        type: 'appointment',
+        title: 'Inbox Customer',
+        detail: 'Inbox Service',
+        assigneeStaffId: staffMember.id,
+      });
+
+      const feedbackTask = tasks.find((t) => t.id === feedback.id);
+      expect(feedbackTask).toMatchObject({
+        type: 'complaint',
+        title: '2★ feedback',
+        detail: 'Needs follow-up',
+        assigneeStaffId: staffMember.id,
+      });
+
+      const restockTask = tasks.find((t) => t.id === lowStockProduct.id);
+      expect(restockTask).toMatchObject({
+        type: 'restock',
+        title: 'Low Stock Widget',
+        assigneeStaffId: null,
+      });
+
+      expect(tasks.find((t) => t.id === completedAppt.id)).toBeUndefined();
+
+      await prisma.appointment.deleteMany({ where: { businessId } });
+      await prisma.privateFeedback.deleteMany({ where: { businessId } });
+      await prisma.product.deleteMany({ where: { businessId } });
+      await prisma.customer.deleteMany({ where: { businessId } });
+    });
   });
 });

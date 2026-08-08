@@ -28,6 +28,8 @@ let SegmentsService = class SegmentsService {
     }
     whereForKey(key) {
         switch (key) {
+            case 'all':
+                return {};
             case 'vip':
                 return { tags: { has: 'VIP' } };
             case 'lapsed':

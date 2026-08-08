@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { X, Sparkles, Send } from "lucide-react";
 import { useAssistantStore } from "@/store/assistant-store";
-import { QUICK_CHIPS, getAssistantAnswer, type DeepLink } from "@/lib/assistant";
+import { QUICK_CHIPS, type DeepLink } from "@/lib/assistant";
+import { streamAssistantChat, type AssistantToolCall } from "@/lib/assistant-api";
 import { cn } from "@/lib/utils";
 
 interface ChatMessage {
@@ -13,11 +14,55 @@ interface ChatMessage {
   fullText: string;
   displayedText: string;
   streaming: boolean;
+  isError?: boolean;
   deepLinks?: DeepLink[];
+  sources?: string[];
 }
 
-const THINKING_DELAY_MS = 700;
-const WORD_INTERVAL_MS = 35;
+const TOOL_DEEP_LINKS: Record<string, DeepLink> = {
+  get_revenue_today: { label: "View dashboard", href: "/dashboard" },
+  get_orders_today: { label: "View orders", href: "/orders" },
+  get_revenue_this_month: { label: "View P&L", href: "/profit" },
+  get_low_stock_count: { label: "View inventory", href: "/inventory" },
+  get_credit_outstanding: { label: "View credit", href: "/credit" },
+  get_upcoming_appointments: { label: "Open calendar", href: "/bookings" },
+  get_todays_bookings: { label: "Open calendar", href: "/bookings" },
+  get_no_show_rate: { label: "Open calendar", href: "/bookings" },
+  get_reviews_average: { label: "View reviews", href: "/reviews" },
+  get_open_complaints: { label: "View reviews", href: "/reviews" },
+  get_campaign_performance: { label: "View marketing", href: "/marketing" },
+  get_staff_leaderboard: { label: "View staff", href: "/staff" },
+  get_message_quota_usage: { label: "View settings", href: "/settings" },
+  get_new_customers_this_month: { label: "View customers", href: "/customers" },
+  find_customer_by_phone: { label: "View customers", href: "/customers" },
+  get_order_by_number: { label: "View orders", href: "/orders" },
+};
+
+/** Derives deep-link chips + help-doc source labels from the real tool trace — the backend's `toolCalls[]` carries no suggested link itself. */
+function deriveLinksAndSources(toolCalls: AssistantToolCall[]): { deepLinks: DeepLink[]; sources: string[] } {
+  const deepLinks: DeepLink[] = [];
+  const sources: string[] = [];
+  const seenLinks = new Set<string>();
+
+  for (const call of toolCalls) {
+    if (call.name === "search_help_docs") {
+      const output = call.output as { found?: boolean; passages?: { title: string }[] } | undefined;
+      if (output?.found && output.passages) {
+        for (const p of output.passages) {
+          if (!sources.includes(p.title)) sources.push(p.title);
+        }
+      }
+      continue;
+    }
+    const link = TOOL_DEEP_LINKS[call.name];
+    if (link && !seenLinks.has(link.href)) {
+      seenLinks.add(link.href);
+      deepLinks.push(link);
+    }
+  }
+
+  return { deepLinks, sources };
+}
 
 function TypingDots() {
   return (
@@ -36,6 +81,12 @@ export function AssistantPanel() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const nextId = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  function close() {
+    abortRef.current?.abort();
+    setOpen(false);
+  }
 
   if (!open) return null;
 
@@ -51,17 +102,35 @@ export function AssistantPanel() {
     setMessages((prev) => [...prev, userMessage, { id: assistantId, role: "assistant", fullText: "", displayedText: "", streaming: true }]);
     setBusy(true);
 
-    const answer = getAssistantAnswer(question);
-    await new Promise((r) => setTimeout(r, THINKING_DELAY_MS));
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-    const words = answer.text.split(" ");
-    for (let i = 0; i < words.length; i++) {
-      await new Promise((r) => setTimeout(r, WORD_INTERVAL_MS));
-      const partial = words.slice(0, i + 1).join(" ");
-      setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, fullText: answer.text, displayedText: partial } : m)));
-    }
+    await streamAssistantChat(
+      question,
+      {
+        onDelta: (text) => {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, fullText: m.fullText + text, displayedText: m.displayedText + text } : m)),
+          );
+        },
+        onDone: (result) => {
+          const { deepLinks, sources } = deriveLinksAndSources(result.toolCalls);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, streaming: false, fullText: result.text, displayedText: result.text, deepLinks, sources } : m,
+            ),
+          );
+        },
+        onError: (message) => {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, streaming: false, isError: true, fullText: message, displayedText: message } : m)),
+          );
+        },
+      },
+      controller.signal,
+    );
 
-    setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, streaming: false, deepLinks: answer.deepLinks } : m)));
+    abortRef.current = null;
     setBusy(false);
   }
 
@@ -80,7 +149,7 @@ export function AssistantPanel() {
 
   return (
     <div className="fixed inset-0 z-[150] flex justify-end sm:items-stretch">
-      <button aria-label="Close assistant" onClick={() => setOpen(false)} className="absolute inset-0 bg-[#1c231e]/45 sm:hidden" />
+      <button aria-label="Close assistant" onClick={close} className="absolute inset-0 bg-[#1c231e]/45 sm:hidden" />
       <div className="animate-sheet-in relative flex h-full w-full max-w-sm flex-col border-s border-border bg-surface shadow-[var(--shadow-lg)]">
         <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
           <p className="flex items-center gap-2 font-display text-base font-semibold text-fg">
@@ -88,7 +157,7 @@ export function AssistantPanel() {
             Assistant
           </p>
           <button
-            onClick={() => setOpen(false)}
+            onClick={close}
             aria-label="Close"
             className="flex h-8 w-8 items-center justify-center rounded-full text-fg-faint hover:bg-surface-2"
           >
@@ -111,17 +180,24 @@ export function AssistantPanel() {
                   <div
                     className={cn(
                       "max-w-[85%] rounded-[var(--radius-noxtill)] px-3.5 py-2.5 text-sm",
-                      m.role === "user" ? "bg-primary text-primary-foreground" : "bg-surface-2 text-fg",
+                      m.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : m.isError
+                          ? "bg-destructive/8 text-destructive"
+                          : "bg-surface-2 text-fg",
                     )}
                   >
                     {m.streaming && m.displayedText === "" ? <TypingDots /> : <p className="whitespace-pre-wrap">{m.displayedText}</p>}
+                    {!m.streaming && m.sources && m.sources.length > 0 && (
+                      <p className="mt-2 text-xs text-fg-faint">Source: {m.sources.join(", ")}</p>
+                    )}
                     {!m.streaming && m.deepLinks && m.deepLinks.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {m.deepLinks.map((link) => (
                           <Link
                             key={link.href}
                             href={link.href}
-                            onClick={() => setOpen(false)}
+                            onClick={close}
                             className="rounded-full border border-primary/30 bg-primary/8 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/15"
                           >
                             {link.label} →

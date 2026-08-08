@@ -23,6 +23,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'Attendance',
   'Campaign',
   'Competitor',
+  'TrackedKeyword',
   'AuditLog',
   'ImportBatch',
   'Integration',
@@ -30,6 +31,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'EmailCampaign',
   'ProductFeedItem',
   'GmbPost',
+  'Notification',
 ]);
 
 export const CLS_KEY_BUSINESS_ID = 'businessId';

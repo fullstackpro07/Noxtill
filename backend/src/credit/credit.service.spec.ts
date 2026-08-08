@@ -107,4 +107,33 @@ describe('CreditService (BE-030)', () => {
     const debtors = await creditService.listDebtors();
     expect(debtors.find((d) => d.customerId === customerId)).toBeUndefined();
   });
+
+  it('flags opted-out customers in the debtors list', async () => {
+    const optedOutCustomer = await prisma.customer.create({
+      data: { businessId, phone: `+1${Date.now()}9`, name: 'Opted Out Ollie', optedOut: true },
+    });
+    await prisma.creditEntry.create({
+      data: { businessId, customerId: optedOutCustomer.id, kind: 'credit', amount: 50, note: 'Opening balance' },
+    });
+
+    const debtors = await creditService.listDebtors();
+    const debtor = debtors.find((d) => d.customerId === optedOutCustomer.id);
+    expect(debtor?.optedOutOfReminders).toBe(true);
+  });
+
+  it('builds a ledger with correct running balance for a customer with credit and payment entries', async () => {
+    const ledgerCustomer = await prisma.customer.create({
+      data: { businessId, phone: `+1${Date.now()}8`, name: 'Ledger Larry' },
+    });
+    await prisma.creditEntry.create({
+      data: { businessId, customerId: ledgerCustomer.id, kind: 'credit', amount: 100, note: 'Sale' },
+    });
+    await creditService.recordPayment({ customerId: ledgerCustomer.id, amount: 40, method: 'cash' });
+
+    const ledger = await creditService.getLedger(ledgerCustomer.id);
+    expect(ledger.balance).toBe(60);
+    expect(ledger.entries).toHaveLength(2);
+    expect(ledger.entries[0].runningBalance).toBe(100);
+    expect(ledger.entries[1].runningBalance).toBe(60);
+  });
 });

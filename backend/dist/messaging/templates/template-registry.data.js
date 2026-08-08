@@ -45,6 +45,13 @@ exports.TEMPLATE_REGISTRY = {
             en: '{{alertTitle}}: {{alertBody}}',
         },
     },
+    report_ready: {
+        key: 'report_ready',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: 'Your {{reportLabel}} report is ready: {{url}}',
+        },
+    },
     nightly_close: {
         key: 'nightly_close',
         category: prisma_1.MessageCategory.utility,
@@ -64,6 +71,13 @@ exports.TEMPLATE_REGISTRY = {
         category: prisma_1.MessageCategory.marketing,
         locales: {
             en: 'Hi {{customerName}}, thanks for visiting {{businessName}}! Could you rate your experience? {{reviewUrl}}',
+        },
+    },
+    feedback_reply: {
+        key: 'feedback_reply',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: '{{message}}',
         },
     },
     campaign: {

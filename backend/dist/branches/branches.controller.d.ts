@@ -18,6 +18,7 @@ export declare class BranchesController {
             ordersCount: number;
             revenue: number;
             grossProfit: number;
+            reviewAvg: number | null;
         }[];
     }>;
     compare(user: AuthenticatedUser, weeks?: string): Promise<{

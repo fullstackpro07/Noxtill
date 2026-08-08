@@ -7,7 +7,7 @@ import { BranchSwitcher } from "./branch-switcher";
 import { NotificationBell } from "./notification-bell";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
-import type { Session } from "@/lib/mock-session";
+import type { Session } from "@/lib/session";
 import { useTranslation } from "@/hooks/use-translation";
 
 export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick: () => void }) {
@@ -35,7 +35,7 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
           <LanguageSwitcher />
         </div>
         <ThemeToggle />
-        <NotificationBell notifications={session.notifications} />
+        <NotificationBell />
         <div className="ms-1 h-6 w-px bg-border" />
         <UserMenu user={session.user} />
       </div>

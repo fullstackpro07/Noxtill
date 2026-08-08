@@ -1,29 +1,58 @@
 "use client";
 
 import { useState } from "react";
+import { useQueries, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ChevronLeft, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { QuotaModal } from "@/components/shared/quota-modal";
 import { AUDIENCE_OPTIONS, VARIABLE_CHIPS, type AudienceKey } from "@/lib/campaigns";
+import { fetchAudienceCount, fetchQuotaUsage, createCampaign } from "@/lib/campaigns-api";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
-
-const PLAN_MSG_QUOTA = 1000;
-const PLAN_MSG_USED = 640;
 
 type Step = 1 | 2 | 3 | 4;
 
 export function CampaignBuilder({ onDone }: { onDone: () => void }) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>(1);
   const [audience, setAudience] = useState<AudienceKey>("all");
   const [name, setName] = useState("");
   const [message, setMessage] = useState("Hi {{customerName}}, ");
   const [quotaModalOpen, setQuotaModalOpen] = useState(false);
 
-  const selectedAudience = AUDIENCE_OPTIONS.find((a) => a.key === audience)!;
-  const remaining = PLAN_MSG_QUOTA - PLAN_MSG_USED;
-  const insufficientQuota = selectedAudience.count > remaining;
+  const audienceCounts = useQueries({
+    queries: AUDIENCE_OPTIONS.map((opt) => ({
+      queryKey: ["audience-count", opt.key],
+      queryFn: () => fetchAudienceCount(opt.key),
+    })),
+  });
+  const countByKey = new Map(AUDIENCE_OPTIONS.map((opt, i) => [opt.key, audienceCounts[i].data ?? 0]));
+  const selectedCount = countByKey.get(audience) ?? 0;
+
+  const { data: quotaUsage } = useQuery({ queryKey: ["quota-usage"], queryFn: fetchQuotaUsage });
+  const used = quotaUsage?.used ?? 0;
+  const quota = quotaUsage?.quota ?? 0;
+  const remaining = quota - used;
+  const insufficientQuota = selectedCount > remaining;
+
+  const sendMutation = useMutation({
+    mutationFn: () => createCampaign({ segment: audience, body: message }),
+    onSuccess: (campaign) => {
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["quota-usage"] });
+      toast.success(`"${name || campaign.segment}" sent to ${campaign.sentCount} customers.`);
+      onDone();
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.code === "CAMPAIGN_QUOTA_EXCEEDED") {
+        setQuotaModalOpen(true);
+        return;
+      }
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send this campaign — please try again.");
+    },
+  });
 
   function insertVariable(token: string) {
     setMessage((m) => `${m}${token}`);
@@ -35,11 +64,6 @@ export function CampaignBuilder({ onDone }: { onDone: () => void }) {
       return;
     }
     setStep(4);
-  }
-
-  function handleSend() {
-    toast.success(`"${name}" sent to ${selectedAudience.count} customers. Live send wires up in INT-010.`);
-    onDone();
   }
 
   return (
@@ -63,7 +87,7 @@ export function CampaignBuilder({ onDone }: { onDone: () => void }) {
                 }`}
               >
                 <span className="block font-medium text-fg">{opt.label}</span>
-                <span className="text-xs text-fg-faint">{opt.count} customers</span>
+                <span className="text-xs text-fg-faint">{countByKey.get(opt.key) ?? 0} customers</span>
               </button>
             ))}
           </div>
@@ -122,16 +146,16 @@ export function CampaignBuilder({ onDone }: { onDone: () => void }) {
           <div className="rounded-[var(--radius-sm)] bg-surface-2 p-4">
             <div className="mb-2 flex items-center justify-between text-sm">
               <span className="text-fg-muted">This campaign needs</span>
-              <span className="font-medium text-fg">{selectedAudience.count} messages</span>
+              <span className="font-medium text-fg">{selectedCount} messages</span>
             </div>
             <div className="mb-2 flex items-center justify-between text-sm">
               <span className="text-fg-muted">Remaining this month</span>
-              <span className={insufficientQuota ? "font-medium text-destructive" : "font-medium text-fg"}>{remaining} of {PLAN_MSG_QUOTA}</span>
+              <span className={insufficientQuota ? "font-medium text-destructive" : "font-medium text-fg"}>{remaining} of {quota}</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-surface">
               <div
                 className={`h-full rounded-full ${insufficientQuota ? "bg-destructive" : "bg-primary"}`}
-                style={{ width: `${Math.min(100, (PLAN_MSG_USED / PLAN_MSG_QUOTA) * 100)}%` }}
+                style={{ width: `${quota > 0 ? Math.min(100, (used / quota) * 100) : 0}%` }}
               />
             </div>
             {insufficientQuota && (
@@ -159,18 +183,19 @@ export function CampaignBuilder({ onDone }: { onDone: () => void }) {
           <div className="rounded-[var(--radius-sm)] bg-surface-2 p-4 text-sm">
             <p className="text-fg-muted">
               Sending <span className="font-medium text-fg">{name}</span> to{" "}
-              <span className="font-medium text-fg">{selectedAudience.count} customers</span> ({selectedAudience.label})
+              <span className="font-medium text-fg">{selectedCount} customers</span> (
+              {AUDIENCE_OPTIONS.find((a) => a.key === audience)!.label})
             </p>
             <p className="mt-2 whitespace-pre-wrap text-fg">{message}</p>
           </div>
           <div className="flex justify-between">
-            <Button variant="ghost" onClick={() => setStep(3)}>
+            <Button variant="ghost" onClick={() => setStep(3)} disabled={sendMutation.isPending}>
               <ChevronLeft className="h-4 w-4" aria-hidden />
               Back
             </Button>
-            <Button onClick={handleSend}>
+            <Button onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending}>
               <Send className="h-4 w-4" aria-hidden />
-              Send campaign
+              {sendMutation.isPending ? "Sending…" : "Send campaign"}
             </Button>
           </div>
         </div>
@@ -183,8 +208,8 @@ export function CampaignBuilder({ onDone }: { onDone: () => void }) {
           setQuotaModalOpen(false);
           toast.info("Upgrade flow wires up in INT-014.");
         }}
-        used={PLAN_MSG_USED}
-        quota={PLAN_MSG_QUOTA}
+        used={used}
+        quota={quota}
       />
     </div>
   );

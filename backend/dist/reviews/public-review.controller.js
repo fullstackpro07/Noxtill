@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PublicReviewController = void 0;
 const common_1 = require("@nestjs/common");
+const throttler_1 = require("@nestjs/throttler");
 const public_review_service_1 = require("./public-review.service");
 const submit_review_dto_1 = require("./dto/submit-review.dto");
 const public_decorator_1 = require("../common/decorators/public.decorator");
@@ -28,7 +29,11 @@ let PublicReviewController = class PublicReviewController {
     submit(token, dto) {
         return this.publicReviewService.submit(token, dto);
     }
-    widget(biz) {
+    mintQrLink(slug) {
+        return this.publicReviewService.mintAnonymousLink(slug);
+    }
+    async widget(biz, res) {
+        res.header('Access-Control-Allow-Origin', '*');
         return this.publicReviewService.getWidget(biz);
     }
 };
@@ -52,11 +57,21 @@ __decorate([
 ], PublicReviewController.prototype, "submit", null);
 __decorate([
     (0, public_decorator_1.Public)(),
-    (0, common_1.Get)('reviews/widget/:biz'),
-    __param(0, (0, common_1.Param)('biz')),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 60_000 } }),
+    (0, common_1.Post)('reviews/qr/:slug'),
+    __param(0, (0, common_1.Param)('slug')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
+], PublicReviewController.prototype, "mintQrLink", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Get)('reviews/widget/:biz'),
+    __param(0, (0, common_1.Param)('biz')),
+    __param(1, (0, common_1.Res)({ passthrough: true })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
 ], PublicReviewController.prototype, "widget", null);
 exports.PublicReviewController = PublicReviewController = __decorate([
     (0, common_1.Controller)(),

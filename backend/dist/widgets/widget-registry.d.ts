@@ -1,8 +1,11 @@
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { WidgetCategory } from './widgets.constants';
 export interface WidgetContext {
     businessId: string;
     tenantPrisma: TenantPrismaService;
+    days?: number;
+    prisma?: PrismaService;
 }
 export interface WidgetDefinition {
     key: string;

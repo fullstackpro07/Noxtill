@@ -2,7 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { OrderCard } from "./order-card";
-import type { Order } from "@/lib/orders";
+import type { LiveOrder } from "@/lib/orders-api";
 import { cn } from "@/lib/utils";
 
 export function KanbanColumn({
@@ -14,9 +14,9 @@ export function KanbanColumn({
 }: {
   status: string;
   label: string;
-  orders: Order[];
+  orders: LiveOrder[];
   currency: string;
-  onViewInvoice: (order: Order) => void;
+  onViewInvoice: (order: LiveOrder) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 

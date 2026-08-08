@@ -15,6 +15,14 @@ import { OrderStatus } from '../../generated/prisma';
 export class QuotationsService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
+  findAll() {
+    return this.tenantPrisma.client.order.findMany({
+      where: { isQuotation: true },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true, customer: true },
+    });
+  }
+
   async create(businessId: string, dto: CreateQuotationDto) {
     return this.tenantPrisma.client.$transaction(async (tx) => {
       let customerId = dto.customerId;

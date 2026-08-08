@@ -8,10 +8,10 @@ export declare class ReferralsController {
     updateSettings(user: AuthenticatedUser, dto: UpdateReferralSettingsDto): Promise<UpdateReferralSettingsDto>;
     getSettings(user: AuthenticatedUser): Promise<import("generated/prisma/runtime/library").JsonValue>;
     redeem(user: AuthenticatedUser, dto: RedeemReferralDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -25,9 +25,12 @@ export declare class ReferralsController {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     stats(): Promise<{
         totalReferred: number;
+        converted: number;
+        rewardsIssued: number;
         leaderboard: {
             customerId: string;
             name: string;

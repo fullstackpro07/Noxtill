@@ -28,7 +28,7 @@ export function StaffView({ currency, role }: { currency: string; role: Role }) 
         />
       </div>
 
-      {tab === "team" && <TeamList />}
+      {tab === "team" && <TeamList role={role} />}
       {tab === "commissions" && <CommissionReport currency={currency} />}
       {tab === "inbox" && <TeamInbox role={role} />}
     </div>

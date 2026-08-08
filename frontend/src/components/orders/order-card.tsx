@@ -2,14 +2,14 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { Banknote, CreditCard, Wallet, HandCoins, FileText } from "lucide-react";
-import type { Order, PaymentMethod } from "@/lib/orders";
+import type { LiveOrder, LivePaymentMethod } from "@/lib/orders-api";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const PAYMENT_ICON: Record<PaymentMethod, typeof Banknote> = {
+const PAYMENT_ICON: Record<LivePaymentMethod, typeof Banknote> = {
   cash: Banknote,
   card: CreditCard,
-  wallet: Wallet,
+  online: Wallet,
   credit: HandCoins,
 };
 
@@ -18,9 +18,9 @@ export function OrderCard({
   currency,
   onViewInvoice,
 }: {
-  order: Order;
+  order: LiveOrder;
   currency: string;
-  onViewInvoice: (order: Order) => void;
+  onViewInvoice: (order: LiveOrder) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: order.id });
   const PaymentIcon = PAYMENT_ICON[order.paymentMethod];

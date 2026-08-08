@@ -1,9 +1,9 @@
 "use client";
 
 import { OrdersView } from "@/components/orders/orders-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function OrdersPage() {
-  const session = useMockSession();
-  return <OrdersView currency={session.business.currency} />;
+  const session = useSession();
+  return <OrdersView currency={session.business.currency} businessName={session.business.name} />;
 }

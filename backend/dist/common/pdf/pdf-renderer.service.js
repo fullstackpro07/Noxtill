@@ -13,7 +13,7 @@ exports.PdfRendererService = void 0;
 const common_1 = require("@nestjs/common");
 const puppeteer_1 = __importDefault(require("puppeteer"));
 let PdfRendererService = class PdfRendererService {
-    async renderPdf(html) {
+    async renderPdf(html, pageSize) {
         const browser = await puppeteer_1.default.launch({
             headless: true,
             args: ['--no-sandbox'],
@@ -21,8 +21,26 @@ let PdfRendererService = class PdfRendererService {
         try {
             const page = await browser.newPage();
             await page.setContent(html, { waitUntil: 'load' });
-            const pdf = await page.pdf({ format: 'A4' });
+            const pdf = await page.pdf(pageSize
+                ? { width: pageSize.width, height: pageSize.height, printBackground: true }
+                : { format: 'A4' });
             return Buffer.from(pdf);
+        }
+        finally {
+            await browser.close();
+        }
+    }
+    async renderPng(html, viewport) {
+        const browser = await puppeteer_1.default.launch({
+            headless: true,
+            args: ['--no-sandbox'],
+        });
+        try {
+            const page = await browser.newPage();
+            await page.setViewport(viewport);
+            await page.setContent(html, { waitUntil: 'load' });
+            const png = await page.screenshot({ type: 'png' });
+            return Buffer.from(png);
         }
         finally {
             await browser.close();

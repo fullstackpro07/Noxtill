@@ -50,6 +50,13 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       en: '{{alertTitle}}: {{alertBody}}',
     },
   },
+  report_ready: {
+    key: 'report_ready',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Your {{reportLabel}} report is ready: {{url}}',
+    },
+  },
   nightly_close: {
     key: 'nightly_close',
     category: MessageCategory.utility,
@@ -69,6 +76,15 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     category: MessageCategory.marketing,
     locales: {
       en: 'Hi {{customerName}}, thanks for visiting {{businessName}}! Could you rate your experience? {{reviewUrl}}',
+    },
+  },
+  feedback_reply: {
+    key: 'feedback_reply',
+    // Utility, not marketing: a direct customer-service reply to feedback the customer themselves
+    // submitted must reach them even if they've opted out of marketing sends (BE-047).
+    category: MessageCategory.utility,
+    locales: {
+      en: '{{message}}',
     },
   },
   campaign: {

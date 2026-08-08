@@ -161,4 +161,50 @@ describe('PublicReviewService (BE-046)', () => {
 
     await prisma.externalReview.deleteMany({ where: { businessId } });
   });
+
+  it('mints an anonymous, customerless review request for a QR scan', async () => {
+    const business = await prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+
+    const result = await service.mintAnonymousLink(business.slug);
+    expect(result.token).toHaveLength(32);
+
+    const created = await prisma.reviewRequest.findUniqueOrThrow({
+      where: { token: result.token },
+    });
+    expect(created.customerId).toBeNull();
+    expect(created.source).toBe('qr');
+
+    await prisma.reviewRequest.delete({ where: { id: created.id } });
+  });
+
+  it('404s minting a link for an unknown slug', async () => {
+    await expect(
+      service.mintAnonymousLink('no-such-business-slug'),
+    ).rejects.toThrow();
+  });
+
+  it('refuses to mint once a business hits its daily QR-request cap', async () => {
+    const capBusiness = await prisma.business.create({
+      data: { name: 'Cap Test Biz', slug: `qr-cap-test-${Date.now()}` },
+    });
+
+    await prisma.reviewRequest.createMany({
+      data: Array.from({ length: 200 }, (_, i) => ({
+        businessId: capBusiness.id,
+        token: `cap-fill-token-${Date.now()}-${i}`,
+        source: 'qr',
+      })),
+    });
+
+    await expect(
+      service.mintAnonymousLink(capBusiness.slug),
+    ).rejects.toThrow();
+
+    await prisma.reviewRequest.deleteMany({
+      where: { businessId: capBusiness.id },
+    });
+    await prisma.business.delete({ where: { id: capBusiness.id } });
+  });
 });

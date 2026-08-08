@@ -10,12 +10,23 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HelpService = exports.HELP_NOT_FOUND_MESSAGE = void 0;
+exports.retrieveHelpPassages = retrieveHelpPassages;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const ai_infra_service_1 = require("../ai/ai-infra.service");
 const TOP_K = 3;
 const RELEVANCE_THRESHOLD = 0.3;
 exports.HELP_NOT_FOUND_MESSAGE = "I couldn't find anything about that in the help docs — try rephrasing, or contact support.";
+async function retrieveHelpPassages(prisma, question) {
+    const rows = await prisma.$queryRaw `
+    SELECT slug, title, url, body,
+           (similarity(title, ${question}) * 2 + similarity(body, ${question})) AS score
+    FROM help_articles
+    ORDER BY score DESC
+    LIMIT ${TOP_K}
+  `;
+    return rows.filter((r) => Number(r.score) > RELEVANCE_THRESHOLD);
+}
 let HelpService = class HelpService {
     prisma;
     aiInfra;
@@ -24,7 +35,7 @@ let HelpService = class HelpService {
         this.aiInfra = aiInfra;
     }
     async ask(businessId, dto) {
-        const passages = await this.retrieve(dto.question);
+        const passages = await retrieveHelpPassages(this.prisma, dto.question);
         if (passages.length === 0) {
             return { answer: exports.HELP_NOT_FOUND_MESSAGE, sources: [] };
         }
@@ -43,16 +54,6 @@ let HelpService = class HelpService {
             answer,
             sources: passages.map((p) => ({ title: p.title, url: p.url })),
         };
-    }
-    async retrieve(question) {
-        const rows = await this.prisma.$queryRaw `
-      SELECT slug, title, url, body,
-             (similarity(title, ${question}) * 2 + similarity(body, ${question})) AS score
-      FROM help_articles
-      ORDER BY score DESC
-      LIMIT ${TOP_K}
-    `;
-        return rows.filter((r) => Number(r.score) > RELEVANCE_THRESHOLD);
     }
 };
 exports.HelpService = HelpService;

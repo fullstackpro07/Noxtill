@@ -25,4 +25,18 @@ export declare class CompetitorsController {
     remove(id: string): Promise<{
         success: boolean;
     }>;
+    history(id: string): Promise<{
+        rating: number;
+        reviewsCount: number;
+        capturedAt: string;
+    }[]>;
+    triggerSnapshot(id: string): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        platformRef: string;
+        lastRating: import("generated/prisma/runtime/library").Decimal | null;
+        lastReviewsCount: number | null;
+    }>;
 }

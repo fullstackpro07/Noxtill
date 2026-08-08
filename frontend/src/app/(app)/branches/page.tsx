@@ -1,9 +1,9 @@
 "use client";
 
 import { BranchesView } from "@/components/branches/branches-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function BranchesPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <BranchesView currency={session.business.currency} />;
 }

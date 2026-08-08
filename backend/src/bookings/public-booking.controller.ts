@@ -9,6 +9,12 @@ export class PublicBookingController {
   constructor(private readonly publicBookingService: PublicBookingService) {}
 
   @Public()
+  @Get(':biz')
+  getBusinessInfo(@Param('biz') biz: string) {
+    return this.publicBookingService.getBusinessInfo(biz);
+  }
+
+  @Public()
   @Get(':biz/services')
   listServices(@Param('biz') biz: string) {
     return this.publicBookingService.listServices(biz);

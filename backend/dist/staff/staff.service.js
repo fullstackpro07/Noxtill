@@ -50,6 +50,7 @@ const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service
 const app_exception_1 = require("../common/filters/app.exception");
 const staff_constants_1 = require("./staff.constants");
 const prisma_1 = require("../../generated/prisma");
+const INBOX_APPOINTMENT_WINDOW_DAYS = 14;
 const BCRYPT_ROUNDS = 10;
 let StaffService = class StaffService {
     tenantPrisma;
@@ -58,10 +59,62 @@ let StaffService = class StaffService {
     }
     list() {
         return this.tenantPrisma.client.businessUser.findMany({
-            where: { role: { in: [prisma_1.Role.manager, prisma_1.Role.staff] } },
+            where: { role: { in: [prisma_1.Role.owner, prisma_1.Role.manager, prisma_1.Role.staff] } },
             include: { user: true },
             orderBy: { createdAt: 'asc' },
         });
+    }
+    async inbox() {
+        const windowEnd = new Date(Date.now() + INBOX_APPOINTMENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        const [appointments, complaints, restockProducts] = await Promise.all([
+            this.tenantPrisma.client.appointment.findMany({
+                where: {
+                    status: { in: [prisma_1.AppointmentStatus.booked, prisma_1.AppointmentStatus.confirmed] },
+                    startsAt: { lte: windowEnd },
+                },
+                include: { customer: true, service: true },
+                orderBy: { startsAt: 'asc' },
+            }),
+            this.tenantPrisma.client.privateFeedback.findMany({
+                where: { status: { not: prisma_1.FeedbackStatus.resolved } },
+                orderBy: { createdAt: 'asc' },
+            }),
+            this.tenantPrisma.client.product.findMany({
+                where: { kind: prisma_1.ProductKind.product, active: true },
+            }),
+        ]);
+        const tasks = [];
+        for (const a of appointments) {
+            tasks.push({
+                id: a.id,
+                type: 'appointment',
+                title: a.customer.name,
+                detail: a.service.name,
+                assigneeStaffId: a.staffUserId,
+                dueAt: a.startsAt.toISOString(),
+            });
+        }
+        for (const f of complaints) {
+            tasks.push({
+                id: f.id,
+                type: 'complaint',
+                title: `${f.stars}★ feedback`,
+                detail: f.message ?? 'No comment left',
+                assigneeStaffId: f.assignedTo,
+                dueAt: f.createdAt.toISOString(),
+            });
+        }
+        for (const p of restockProducts.filter((p) => p.stockQty <= p.lowStockThreshold)) {
+            tasks.push({
+                id: p.id,
+                type: 'restock',
+                title: p.name,
+                detail: `${p.stockQty} left (threshold ${p.lowStockThreshold})`,
+                assigneeStaffId: null,
+                dueAt: null,
+            });
+        }
+        return tasks;
     }
     async create(businessId, dto) {
         if (!dto.email && !dto.phone) {

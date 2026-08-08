@@ -7,35 +7,35 @@ export declare class MessagesController {
     private readonly messagesService;
     constructor(sendGate: SendGateService, messagesService: MessagesService);
     test(user: AuthenticatedUser, dto: TestMessageDto): Promise<{
-        locale: string;
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
-        category: import("../../generated/prisma").$Enums.MessageCategory;
         customerId: string | null;
-        status: import("../../generated/prisma").$Enums.MessageStatus;
         channel: import("../../generated/prisma").$Enums.MessageChannel;
+        category: import("../../generated/prisma").$Enums.MessageCategory;
         templateKey: string;
+        locale: string;
         payload: import("generated/prisma/runtime/library").JsonValue;
+        status: import("../../generated/prisma").$Enums.MessageStatus;
         providerRef: string | null;
         scheduledFor: Date | null;
         campaignId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     list(customerId: string): Promise<{
-        locale: string;
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
-        category: import("../../generated/prisma").$Enums.MessageCategory;
         customerId: string | null;
-        status: import("../../generated/prisma").$Enums.MessageStatus;
         channel: import("../../generated/prisma").$Enums.MessageChannel;
+        category: import("../../generated/prisma").$Enums.MessageCategory;
         templateKey: string;
+        locale: string;
         payload: import("generated/prisma/runtime/library").JsonValue;
+        status: import("../../generated/prisma").$Enums.MessageStatus;
         providerRef: string | null;
         scheduledFor: Date | null;
         campaignId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
     }[]>;
 }

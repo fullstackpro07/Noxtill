@@ -76,6 +76,7 @@ describe('ProfitService (BE-036/BE-037)', () => {
     await prisma.expense.create({
       data: {
         businessId,
+        description: 'Studio rent',
         category: 'Rent',
         amount: 30,
         incurredOn: new Date(),

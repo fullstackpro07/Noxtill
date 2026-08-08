@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SettingsSectionHeader } from "./settings-section-header";
 import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { useTranslation } from "@/hooks/use-translation";
 
 /** Every action here is permanent and irreversible — each gets its own typed-confirm dialog, never a plain "Are you sure?". */
 export function DangerZoneSection() {
   const router = useRouter();
-  const session = useMockSession();
+  const session = useSession();
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState(false);

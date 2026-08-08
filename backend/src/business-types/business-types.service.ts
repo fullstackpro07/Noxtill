@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { AppException } from '../common/filters/app.exception';
 import { AiMapBusinessTypeDto } from './dto/ai-map-business-type.dto';
 
 const OTHER_CATEGORY_KEY = 'other';
@@ -50,7 +51,19 @@ export class BusinessTypesService {
     ].join('\n\n');
 
     // No businessId: this runs pre-signup, before a business exists to rate-limit/cost-cap against.
-    const response = (await this.aiInfra.complete(undefined, prompt)).trim();
+    let response: string;
+    try {
+      response = (await this.aiInfra.complete(undefined, prompt)).trim();
+    } catch (error) {
+      if (error instanceof AppException) {
+        throw error;
+      }
+      throw new AppException(
+        'AI_UNAVAILABLE',
+        'The AI assistant is not available right now — please try again later.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
 
     const existingMatch = existing.find((t) => t.key === response);
     if (existingMatch) {

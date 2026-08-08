@@ -7,14 +7,19 @@ export declare class PublicBookingService {
     private readonly sendGate;
     constructor(prisma: PrismaService, sendGate: SendGateService);
     private resolveBusiness;
+    getBusinessInfo(slug: string): Promise<{
+        businessName: string;
+        branding: import("generated/prisma/runtime/library").JsonValue;
+    }>;
     listServices(slug: string): Promise<{
         name: string;
         id: string;
+        businessId: string;
+        category: string | null;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         kind: import("../../generated/prisma").$Enums.ProductKind;
-        category: string | null;
+        sku: string | null;
         variations: import("generated/prisma/runtime/library").JsonValue;
         costPrice: import("generated/prisma/runtime/library").Decimal;
         sellingPrice: import("generated/prisma/runtime/library").Decimal;
@@ -28,11 +33,11 @@ export declare class PublicBookingService {
     }>;
     createBooking(slug: string, dto: CreatePublicBookingDto): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.AppointmentStatus;
+        createdAt: Date;
+        updatedAt: Date;
         staffUserId: string | null;
         serviceId: string;
         startsAt: Date;
@@ -43,11 +48,11 @@ export declare class PublicBookingService {
     }>;
     reschedule(token: string, startsAt: string): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.AppointmentStatus;
+        createdAt: Date;
+        updatedAt: Date;
         staffUserId: string | null;
         serviceId: string;
         startsAt: Date;
@@ -58,11 +63,11 @@ export declare class PublicBookingService {
     }>;
     cancel(token: string): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.AppointmentStatus;
+        createdAt: Date;
+        updatedAt: Date;
         staffUserId: string | null;
         serviceId: string;
         startsAt: Date;

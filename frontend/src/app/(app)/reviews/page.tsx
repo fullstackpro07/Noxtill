@@ -1,10 +1,10 @@
 "use client";
 
 import { ReviewsView } from "@/components/reviews/reviews-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function ReviewsPage() {
-  const session = useMockSession();
+  const session = useSession();
   return (
     <ReviewsView
       currency={session.business.currency}

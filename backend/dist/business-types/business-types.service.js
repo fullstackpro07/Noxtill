@@ -13,6 +13,7 @@ exports.BusinessTypesService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const ai_infra_service_1 = require("../ai/ai-infra.service");
+const app_exception_1 = require("../common/filters/app.exception");
 const OTHER_CATEGORY_KEY = 'other';
 function slugify(label) {
     return label
@@ -47,7 +48,16 @@ let BusinessTypesService = class BusinessTypesService {
             "If one of these existing types is a good fit, reply with EXACTLY that type's key and nothing else.",
             'If none fit, reply with EXACTLY: NEW: <a short 2-4 word label for this business type>.',
         ].join('\n\n');
-        const response = (await this.aiInfra.complete(undefined, prompt)).trim();
+        let response;
+        try {
+            response = (await this.aiInfra.complete(undefined, prompt)).trim();
+        }
+        catch (error) {
+            if (error instanceof app_exception_1.AppException) {
+                throw error;
+            }
+            throw new app_exception_1.AppException('AI_UNAVAILABLE', 'The AI assistant is not available right now — please try again later.', common_1.HttpStatus.SERVICE_UNAVAILABLE);
+        }
         const existingMatch = existing.find((t) => t.key === response);
         if (existingMatch) {
             return this.prisma.businessType.findUniqueOrThrow({

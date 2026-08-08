@@ -9,10 +9,10 @@ export declare class CustomersService {
     private readonly auditService;
     constructor(tenantPrisma: TenantPrismaService, auditService: AuditService);
     create(businessId: string, dto: CreateCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -26,12 +26,13 @@ export declare class CustomersService {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     findAll(query: QueryCustomersDto): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -45,6 +46,7 @@ export declare class CustomersService {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }[]>;
     findOne(id: string): Promise<{
         privateFeedback: {
@@ -62,13 +64,13 @@ export declare class CustomersService {
         }[];
         orders: ({
             items: {
-                name: string;
                 id: string;
+                name: string;
+                price: Prisma.Decimal;
                 orderId: string;
                 productId: string | null;
-                qty: number;
-                price: Prisma.Decimal;
                 cost: Prisma.Decimal;
+                qty: number;
             }[];
         } & {
             id: string;
@@ -89,10 +91,10 @@ export declare class CustomersService {
             staffUserId: string | null;
         })[];
     } & {
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -106,12 +108,13 @@ export declare class CustomersService {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     update(id: string, dto: UpdateCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -125,12 +128,13 @@ export declare class CustomersService {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     erase(id: string, confirmPhone: string): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -144,6 +148,7 @@ export declare class CustomersService {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     private assertExists;
 }

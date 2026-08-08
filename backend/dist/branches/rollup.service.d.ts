@@ -15,6 +15,7 @@ export declare class RollupService {
             ordersCount: number;
             revenue: number;
             grossProfit: number;
+            reviewAvg: number | null;
         }[];
     }>;
     compare(businessId: string, weeks?: number): Promise<{

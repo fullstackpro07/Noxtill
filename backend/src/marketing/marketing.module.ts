@@ -3,18 +3,25 @@ import { BullModule } from '@nestjs/bullmq';
 import { CampaignsService } from './campaigns.service';
 import { ReferralsService } from './referrals.service';
 import { CompetitorsService } from './competitors.service';
+import { KeywordsService } from './keywords.service';
 import { CampaignsController } from './campaigns.controller';
 import { ReferralsController } from './referrals.controller';
 import { CompetitorsController } from './competitors.controller';
+import { KeywordsController } from './keywords.controller';
 import { CompetitorSnapshotScheduler } from './jobs/competitor-snapshot.scheduler';
 import { CompetitorSnapshotProcessor } from './jobs/competitor-snapshot.processor';
-import { COMPETITOR_SNAPSHOT_QUEUE } from './marketing.constants';
+import { KeywordRankScheduler } from './jobs/keyword-rank.scheduler';
+import { KeywordRankProcessor } from './jobs/keyword-rank.processor';
+import { GooglePlacesService } from './google-places.service';
+import { SerpRankService } from './serp-rank.service';
+import { COMPETITOR_SNAPSHOT_QUEUE, KEYWORD_RANK_QUEUE } from './marketing.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { CustomersModule } from '../customers/customers.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: COMPETITOR_SNAPSHOT_QUEUE }),
+    BullModule.registerQueue({ name: KEYWORD_RANK_QUEUE }),
     MessagingModule,
     CustomersModule,
   ],
@@ -22,13 +29,20 @@ import { CustomersModule } from '../customers/customers.module';
     CampaignsController,
     ReferralsController,
     CompetitorsController,
+    KeywordsController,
   ],
   providers: [
     CampaignsService,
     ReferralsService,
     CompetitorsService,
+    KeywordsService,
     CompetitorSnapshotScheduler,
     CompetitorSnapshotProcessor,
+    KeywordRankScheduler,
+    KeywordRankProcessor,
+    GooglePlacesService,
+    SerpRankService,
   ],
+  exports: [ReferralsService],
 })
 export class MarketingModule {}

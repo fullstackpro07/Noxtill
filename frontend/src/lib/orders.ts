@@ -1,4 +1,4 @@
-export type OrderStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
+export type OrderStatus = "pending" | "confirmed" | "in_progress" | "completed" | "cancelled";
 export type PaymentMethod = "cash" | "card" | "wallet" | "credit";
 
 export interface OrderItem {
@@ -42,10 +42,19 @@ export interface Quotation {
 
 export const ORDER_STATUS_COLUMNS: { key: OrderStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
-  { key: "preparing", label: "Preparing" },
-  { key: "ready", label: "Ready" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "in_progress", label: "In Progress" },
   { key: "completed", label: "Completed" },
 ];
+
+/** Mirrors the backend's flow guard (BE-M2 ORDER_STATUS_TRANSITIONS) so the board can pre-validate drags before the server round-trip. */
+export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["in_progress", "cancelled"],
+  in_progress: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
 
 /** Mock order book — real live wiring (incl. row-level slot lock, atomic sale transaction) is INT-003. */
 export const ORDERS: Order[] = [
@@ -68,7 +77,7 @@ export const ORDERS: Order[] = [
       { productId: "p4", name: "Deep Conditioning Treatment", price: 35, qty: 1 },
     ],
     total: 155,
-    status: "preparing",
+    status: "confirmed",
     paymentMethod: "cash",
     createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
   },
@@ -78,7 +87,7 @@ export const ORDERS: Order[] = [
     customerName: "Casey Nolan",
     items: [{ productId: "p7", name: "Argan Oil Shampoo", price: 24, qty: 2 }],
     total: 48,
-    status: "ready",
+    status: "in_progress",
     paymentMethod: "wallet",
     createdAt: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
   },

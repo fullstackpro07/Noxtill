@@ -17,6 +17,7 @@ const app_exception_1 = require("../common/filters/app.exception");
 const tenant_constants_1 = require("../common/tenancy/tenant.constants");
 const send_gate_service_1 = require("../messaging/send-gate.service");
 const review_requests_service_1 = require("../reviews/review-requests.service");
+const referrals_service_1 = require("../marketing/referrals.service");
 const review_token_util_1 = require("../reviews/review-token.util");
 const orders_constants_1 = require("./orders.constants");
 const order_totals_util_1 = require("./order-totals.util");
@@ -26,11 +27,13 @@ let OrdersService = class OrdersService {
     cls;
     sendGate;
     reviewRequests;
-    constructor(tenantPrisma, cls, sendGate, reviewRequests) {
+    referrals;
+    constructor(tenantPrisma, cls, sendGate, reviewRequests, referrals) {
         this.tenantPrisma = tenantPrisma;
         this.cls = cls;
         this.sendGate = sendGate;
         this.reviewRequests = reviewRequests;
+        this.referrals = referrals;
     }
     async createSale(businessId, dto) {
         const actorUserId = this.cls.get(tenant_constants_1.CLS_KEY_USER_ID);
@@ -159,6 +162,7 @@ let OrdersService = class OrdersService {
                         lastVisitAt: new Date(),
                     },
                 });
+                await this.referrals.issueRewardIfEligible(businessId, customerId, tx);
             }
             await tx.auditLog.create({
                 data: {
@@ -220,7 +224,7 @@ let OrdersService = class OrdersService {
     async findOne(id) {
         const order = await this.tenantPrisma.client.order.findUnique({
             where: { id },
-            include: { items: true, payments: true },
+            include: { items: true, payments: true, creditEntries: true, customer: true },
         });
         if (!order) {
             throw new common_1.NotFoundException('Order not found');
@@ -231,7 +235,7 @@ let OrdersService = class OrdersService {
         return this.tenantPrisma.client.order.findMany({
             where: { status, isQuotation: false },
             orderBy: { createdAt: 'desc' },
-            include: { items: true },
+            include: { items: true, payments: true, creditEntries: true, customer: true },
         });
     }
 };
@@ -241,6 +245,7 @@ exports.OrdersService = OrdersService = __decorate([
     __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
         nestjs_cls_1.ClsService,
         send_gate_service_1.SendGateService,
-        review_requests_service_1.ReviewRequestsService])
+        review_requests_service_1.ReviewRequestsService,
+        referrals_service_1.ReferralsService])
 ], OrdersService);
 //# sourceMappingURL=orders.service.js.map

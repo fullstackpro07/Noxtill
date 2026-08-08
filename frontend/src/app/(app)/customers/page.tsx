@@ -1,9 +1,9 @@
 "use client";
 
 import { CustomersView } from "@/components/customers/customers-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function CustomersPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <CustomersView currency={session.business.currency} />;
 }

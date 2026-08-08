@@ -14,6 +14,10 @@ export function formatDate(value: string, locale = "en-US"): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(value));
 }
 
+export function formatTime(value: string, locale = "en-US"): string {
+  return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
 export function daysAgo(value: string): number {
   return Math.floor((Date.now() - new Date(value).getTime()) / (1000 * 60 * 60 * 24));
 }

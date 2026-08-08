@@ -1,9 +1,9 @@
 "use client";
 
 import { CreditView } from "@/components/credit/credit-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function CreditPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <CreditView currency={session.business.currency} />;
 }

@@ -6,24 +6,24 @@ export declare class CampaignsController {
     constructor(campaignsService: CampaignsService);
     create(user: AuthenticatedUser, dto: CreateCampaignDto): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         templateKey: string;
         scheduledFor: Date | null;
-        segment: string;
+        createdAt: Date;
+        updatedAt: Date;
         body: string;
+        segment: string;
         sentCount: number;
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         templateKey: string;
         scheduledFor: Date | null;
-        segment: string;
+        createdAt: Date;
+        updatedAt: Date;
         body: string;
+        segment: string;
         sentCount: number;
     }[]>;
     report(id: string): Promise<{

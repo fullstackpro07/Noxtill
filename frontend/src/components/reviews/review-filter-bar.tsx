@@ -1,32 +1,47 @@
 "use client";
 
 import { Select } from "@/components/ui/select";
-import { PLATFORM_LABELS, type ReviewPlatform } from "@/lib/reviews";
 
-export type PlatformFilter = "all" | ReviewPlatform;
 export type RatingFilter = "all" | "5" | "4" | "3" | "2" | "1";
-export type StatusFilter = "all" | "new" | "replied" | "open" | "resolved";
+export type StatusFilter = "all" | "new" | "replied" | "open" | "assigned" | "resolved";
 export type DateFilter = "all" | "7d" | "30d" | "90d";
 
 export interface InboxFilters {
-  platform: PlatformFilter;
+  platform: string;
   rating: RatingFilter;
   status: StatusFilter;
   date: DateFilter;
 }
 
-export function ReviewFilterBar({ filters, onChange }: { filters: InboxFilters; onChange: (f: InboxFilters) => void }) {
+const PLATFORM_LABEL: Record<string, string> = {
+  google: "Google",
+  gmb: "Google",
+  facebook: "Facebook",
+  yelp: "Yelp",
+};
+
+function platformLabel(platform: string): string {
+  return PLATFORM_LABEL[platform] ?? platform.charAt(0).toUpperCase() + platform.slice(1);
+}
+
+/** `platforms` is derived from whatever's actually in the live review list — there's no fixed platform roster to hardcode. */
+export function ReviewFilterBar({
+  filters,
+  onChange,
+  platforms,
+}: {
+  filters: InboxFilters;
+  onChange: (f: InboxFilters) => void;
+  platforms: string[];
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
-      <Select
-        value={filters.platform}
-        onChange={(e) => onChange({ ...filters, platform: e.target.value as PlatformFilter })}
-        className="w-40"
-      >
+      <Select value={filters.platform} onChange={(e) => onChange({ ...filters, platform: e.target.value })} className="w-40">
         <option value="all">All platforms</option>
-        {Object.entries(PLATFORM_LABELS).map(([key, label]) => (
-          <option key={key} value={key}>
-            {label}
+        <option value="private">Private feedback</option>
+        {platforms.map((p) => (
+          <option key={p} value={p}>
+            {platformLabel(p)}
           </option>
         ))}
       </Select>
@@ -43,6 +58,7 @@ export function ReviewFilterBar({ filters, onChange }: { filters: InboxFilters; 
         <option value="new">New</option>
         <option value="replied">Replied</option>
         <option value="open">Open</option>
+        <option value="assigned">Assigned</option>
         <option value="resolved">Resolved</option>
       </Select>
       <Select value={filters.date} onChange={(e) => onChange({ ...filters, date: e.target.value as DateFilter })} className="w-36">

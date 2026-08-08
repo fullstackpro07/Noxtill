@@ -1,26 +1,43 @@
 "use client";
 
-import { useState } from "react";
-import { FileSpreadsheet, Archive } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { FileSpreadsheet, Archive, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReportCard } from "./report-card";
 import { REPORT_DEFS, EXCEL_EXPORTS } from "@/lib/reports";
+import { generateExport, requestAccountZip } from "@/lib/exports-api";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import type { Role } from "@/lib/nav-items";
 
 export function ReportsView({ role }: { role: Role }) {
-  const [exporting, setExporting] = useState(false);
+  const excelExportMutation = useMutation({
+    mutationFn: (kind: string) => generateExport(kind),
+    onSuccess: ({ url }) => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't generate that export — please try again.");
+    },
+  });
 
-  function handleExcelExport(label: string) {
-    toast.success(`${label}.xlsx downloaded.`);
+  const accountZipMutation = useMutation({
+    mutationFn: requestAccountZip,
+    onSuccess: () => {
+      toast.success("Export ready — check your notifications for the download link (expires in 24h).");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't start the export — please try again.");
+    },
+  });
+
+  function handleExcelExport(kind: string) {
+    excelExportMutation.mutate(kind);
   }
 
-  async function handleExportEverything() {
-    setExporting(true);
+  function handleExportEverything() {
     toast.info("Preparing your export — this can take a few minutes for larger accounts.");
-    await new Promise((r) => setTimeout(r, 1500));
-    setExporting(false);
-    toast.success("Export ready — check your notifications for the download link (expires in 24h).");
+    accountZipMutation.mutate();
   }
 
   return (
@@ -31,9 +48,9 @@ export function ReportsView({ role }: { role: Role }) {
           <p className="mt-0.5 text-sm text-fg-muted">PDF summaries and Excel exports for every part of the business</p>
         </div>
         {role === "owner" && (
-          <Button variant="outline" size="sm" onClick={handleExportEverything} disabled={exporting}>
+          <Button variant="outline" size="sm" onClick={handleExportEverything} disabled={accountZipMutation.isPending}>
             <Archive className="h-4 w-4" aria-hidden />
-            {exporting ? "Preparing…" : "Export everything"}
+            {accountZipMutation.isPending ? "Preparing…" : "Export everything"}
           </Button>
         )}
       </div>
@@ -44,23 +61,26 @@ export function ReportsView({ role }: { role: Role }) {
         ))}
       </div>
 
-      <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-        <p className="mb-3 flex items-center gap-1.5 text-sm font-medium text-fg">
-          <FileSpreadsheet className="h-4 w-4 text-fg-faint" aria-hidden />
-          Excel exports
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {EXCEL_EXPORTS.map((x) => (
-            <button
-              key={x.key}
-              onClick={() => handleExcelExport(x.label)}
-              className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2"
-            >
-              {x.label}.xlsx
-            </button>
-          ))}
+      {role === "owner" && (
+        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
+          <p className="mb-3 flex items-center gap-1.5 text-sm font-medium text-fg">
+            <FileSpreadsheet className="h-4 w-4 text-fg-faint" aria-hidden />
+            Excel exports
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {EXCEL_EXPORTS.map((x) => (
+              <button
+                key={x.key}
+                onClick={() => handleExcelExport(x.key)}
+                disabled={excelExportMutation.isPending}
+                className="rounded-full border border-border-strong px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-40"
+              >
+                {x.label}.xlsx
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

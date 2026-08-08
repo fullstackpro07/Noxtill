@@ -4,6 +4,7 @@ exports.ASSISTANT_TOOLS = void 0;
 exports.findAssistantTool = findAssistantTool;
 exports.toAnthropicTools = toAnthropicTools;
 const widget_registry_1 = require("../widgets/widget-registry");
+const help_service_1 = require("../help/help.service");
 const EMPTY_SCHEMA = { type: 'object', properties: {}, required: [] };
 function fromWidget(widgetKey, name, description) {
     return {
@@ -33,6 +34,36 @@ exports.ASSISTANT_TOOLS = [
     fromWidget('staff_leaderboard_month', 'get_staff_leaderboard', 'Top 5 staff by total sales this month.'),
     fromWidget('message_quota_usage', 'get_message_quota_usage', "This business's messaging quota usage."),
     fromWidget('new_customers_month', 'get_new_customers_this_month', 'Count of new customers this month.'),
+    fromWidget('pending_appointments_today', 'get_todays_bookings', "Count of today's booked/confirmed appointments."),
+    {
+        name: 'search_help_docs',
+        description: "Search Noxtill's help documentation for how-to and product questions (policies, definitions, how a feature works) — not live business data.",
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: 'The question or topic to search help docs for.',
+                },
+            },
+            required: ['query'],
+        },
+        async execute({ prisma }, input) {
+            const query = typeof input.query === 'string' ? input.query : '';
+            const passages = await (0, help_service_1.retrieveHelpPassages)(prisma, query);
+            return passages.length === 0
+                ? { found: false }
+                : {
+                    found: true,
+                    passages: passages.map((p, i) => ({
+                        n: i + 1,
+                        title: p.title,
+                        url: p.url,
+                        body: p.body,
+                    })),
+                };
+        },
+    },
     {
         name: 'find_customer_by_phone',
         description: 'Look up a customer by their exact phone number.',

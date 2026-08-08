@@ -17,6 +17,7 @@ exports.ProfitModule = ProfitModule = __decorate([
     (0, common_1.Module)({
         controllers: [profit_controller_1.ProfitController],
         providers: [profit_service_1.ProfitService],
+        exports: [profit_service_1.ProfitService],
     })
 ], ProfitModule);
 //# sourceMappingURL=profit.module.js.map

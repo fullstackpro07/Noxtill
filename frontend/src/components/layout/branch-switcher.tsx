@@ -1,18 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { Building2, Check, ChevronsUpDown } from "lucide-react";
 import { DropdownMenu, DropdownTrigger, DropdownContent, DropdownItem } from "@/components/ui/dropdown-menu";
-import type { SessionBusiness } from "@/lib/mock-session";
-
-const ALL_BRANCHES = "__all__";
+import { useBranchContextStore } from "@/store/branch-context-store";
+import type { SessionBusiness } from "@/lib/session";
 
 /** Only rendered when a business has branches — single-location businesses never see this (FE-002 / BE-059). */
 export function BranchSwitcher({ branches }: { branches: SessionBusiness["branches"] }) {
-  const [selected, setSelected] = useState<string>(ALL_BRANCHES);
+  const selected = useBranchContextStore((s) => s.selectedBranchId);
+  const setSelected = useBranchContextStore((s) => s.setSelectedBranchId);
   if (branches.length < 2) return null;
 
-  const label = selected === ALL_BRANCHES ? "All branches" : branches.find((b) => b.id === selected)?.name;
+  const label = selected === null ? "All branches" : branches.find((b) => b.id === selected)?.name;
 
   return (
     <DropdownMenu>
@@ -24,9 +23,9 @@ export function BranchSwitcher({ branches }: { branches: SessionBusiness["branch
         </span>
       </DropdownTrigger>
       <DropdownContent>
-        <DropdownItem active={selected === ALL_BRANCHES} onSelect={() => setSelected(ALL_BRANCHES)}>
+        <DropdownItem active={selected === null} onSelect={() => setSelected(null)}>
           <span className="flex-1">All branches</span>
-          {selected === ALL_BRANCHES && <Check className="h-3.5 w-3.5 text-primary" aria-hidden />}
+          {selected === null && <Check className="h-3.5 w-3.5 text-primary" aria-hidden />}
         </DropdownItem>
         {branches.map((branch) => (
           <DropdownItem key={branch.id} active={selected === branch.id} onSelect={() => setSelected(branch.id)}>

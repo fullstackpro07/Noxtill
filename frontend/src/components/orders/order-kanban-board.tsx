@@ -1,21 +1,50 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { KanbanColumn } from "./kanban-column";
 import { InvoicePreviewDialog } from "./invoice-preview-dialog";
-import { ORDER_STATUS_COLUMNS, ORDERS, type Order, type OrderStatus } from "@/lib/orders";
+import { ErrorBanner } from "@/components/shared/error-states";
+import { SkeletonCard } from "@/components/shared/skeleton";
+import { ORDER_STATUS_COLUMNS, ORDER_STATUS_TRANSITIONS, type OrderStatus } from "@/lib/orders";
+import { fetchOrders, updateOrderStatus, type LiveOrder } from "@/lib/orders-api";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
-const ILLEGAL_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  completed: [],
-  cancelled: [],
-};
-
-export function OrderKanbanBoard({ currency }: { currency: string }) {
-  const [orders, setOrders] = useState<Order[]>(ORDERS);
-  const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
+export function OrderKanbanBoard({ currency, businessName }: { currency: string; businessName: string }) {
+  const [invoiceOrder, setInvoiceOrder] = useState<LiveOrder | null>(null);
+  const queryClient = useQueryClient();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const {
+    data: orders = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["orders"], queryFn: () => fetchOrders() });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => updateOrderStatus(id, status),
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["orders"] });
+      const previous = queryClient.getQueryData<LiveOrder[]>(["orders"]);
+      queryClient.setQueryData<LiveOrder[]>(["orders"], (prev) =>
+        prev?.map((o) => (o.id === id ? { ...o, status } : o)),
+      );
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["orders"], context.previous);
+      toast.error(err instanceof ApiError ? err.message : "Couldn't update this order's status.");
+    },
+    onSuccess: (updated) => {
+      toast.success(`Order #${updated.orderNo} moved to ${updated.status.replace("_", " ")}.`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -24,13 +53,26 @@ export function OrderKanbanBoard({ currency }: { currency: string }) {
     const order = orders.find((o) => o.id === active.id);
     if (!order || order.status === newStatus) return;
 
-    if (ILLEGAL_TRANSITIONS[order.status]?.includes(newStatus) || order.status === "completed" || order.status === "cancelled") {
-      toast.error(`Can't move a ${order.status} order back to ${newStatus}.`);
+    if (!ORDER_STATUS_TRANSITIONS[order.status].includes(newStatus)) {
+      toast.error(`Can't move a ${order.status.replace("_", " ")} order to ${newStatus.replace("_", " ")}.`);
       return;
     }
 
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: newStatus } : o)));
-    toast.success(`Order #${order.orderNo} moved to ${newStatus}. Live update wires up in INT-003.`);
+    statusMutation.mutate({ id: order.id, status: newStatus });
+  }
+
+  if (isError) {
+    return <ErrorBanner title="Couldn't load orders" description="Check your connection and try again." onRetry={() => refetch()} />;
+  }
+
+  if (isPending) {
+    return (
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -49,7 +91,7 @@ export function OrderKanbanBoard({ currency }: { currency: string }) {
           ))}
         </div>
       </DndContext>
-      <InvoicePreviewDialog order={invoiceOrder} currency={currency} onClose={() => setInvoiceOrder(null)} />
+      <InvoicePreviewDialog order={invoiceOrder} currency={currency} businessName={businessName} onClose={() => setInvoiceOrder(null)} />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { WidgetContext, findWidget } from '../widgets/widget-registry';
 import { AnthropicTool } from '../ai/claude.client';
+import { retrieveHelpPassages } from '../help/help.service';
 
 export interface AssistantTool {
   name: string;
@@ -32,13 +33,15 @@ function fromWidget(
 }
 
 /**
- * Tool-calling registry (BE-074) — 15 read-only tools, every one tenant-locked
+ * Tool-calling registry (BE-074) — 17 read-only tools, every one tenant-locked
  * server-side via WidgetContext.businessId (taken from the authenticated
  * caller, never from model input, so Claude cannot be tricked into reading
- * another business's data). 13 of these simply reuse widget resolvers
+ * another business's data). 14 of these simply reuse widget resolvers
  * (BE-067) — same real, tenant-scoped queries, just exposed to the model
- * instead of a dashboard. The other 2 take model-supplied input for a
- * concrete lookup.
+ * instead of a dashboard. `search_help_docs` (BE-073) is the odd one out —
+ * it queries the global, non-tenant `help_articles` table via `ctx.prisma`
+ * rather than `ctx.tenantPrisma`. The remaining 2 take model-supplied input
+ * for a concrete lookup.
  */
 export const ASSISTANT_TOOLS: AssistantTool[] = [
   fromWidget(
@@ -106,6 +109,41 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
     'get_new_customers_this_month',
     'Count of new customers this month.',
   ),
+  fromWidget(
+    'pending_appointments_today',
+    'get_todays_bookings',
+    "Count of today's booked/confirmed appointments.",
+  ),
+  {
+    name: 'search_help_docs',
+    description:
+      "Search Noxtill's help documentation for how-to and product questions (policies, definitions, how a feature works) — not live business data.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The question or topic to search help docs for.',
+        },
+      },
+      required: ['query'],
+    },
+    async execute({ prisma }, input) {
+      const query = typeof input.query === 'string' ? input.query : '';
+      const passages = await retrieveHelpPassages(prisma!, query);
+      return passages.length === 0
+        ? { found: false }
+        : {
+            found: true,
+            passages: passages.map((p, i) => ({
+              n: i + 1,
+              title: p.title,
+              url: p.url,
+              body: p.body,
+            })),
+          };
+    },
+  },
   {
     name: 'find_customer_by_phone',
     description: 'Look up a customer by their exact phone number.',

@@ -3,6 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { SendGateService } from '../messaging/send-gate.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { QueryReviewsDto } from './dto/query-reviews.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
@@ -10,7 +11,15 @@ import { ExternalReview, PrivateFeedback } from '../../generated/prisma';
 
 const REVIEWS_ERROR_CODES = {
   REVIEW_NOT_FOUND: 'reviews.not_found',
+  NO_CUSTOMER_TO_REPLY_TO: 'reviews.no_customer_to_reply_to',
 };
+
+const SPARKLINE_WEEKS = 8;
+const CONVERSION_WINDOW_DAYS = 30;
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 /**
  * Unified reviews inbox (BE-047) merges ExternalReview (public platform
@@ -24,6 +33,7 @@ export class ReviewsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly aiInfra: AiInfraService,
+    private readonly sendGate: SendGateService,
     private readonly cls: ClsService,
   ) {}
 
@@ -121,7 +131,120 @@ export class ReviewsService {
       'was written in. No preamble — return only the reply text.';
 
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
-    const draft = await this.aiInfra.complete(businessId, prompt);
+    let draft: string;
+    try {
+      draft = await this.aiInfra.complete(businessId, prompt);
+    } catch (error) {
+      if (error instanceof AppException) {
+        throw error; // rate-limit / cost-cap errors from AiInfraService are already typed
+      }
+      throw new AppException(
+        'AI_UNAVAILABLE',
+        'The AI assistant is not available right now — please try again later.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
     return { draft };
+  }
+
+  /** Sends a direct reply to the customer who left this private feedback (BE-047 inbox drawer). */
+  async replyToFeedback(id: string, message: string) {
+    const feedback = await this.tenantPrisma.client.privateFeedback.findUnique(
+      { where: { id } },
+    );
+    if (!feedback) {
+      throw new AppException(
+        REVIEWS_ERROR_CODES.REVIEW_NOT_FOUND,
+        'Feedback not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (!feedback.customerId) {
+      throw new AppException(
+        REVIEWS_ERROR_CODES.NO_CUSTOMER_TO_REPLY_TO,
+        'This feedback has no linked customer to reply to',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return this.sendGate.send({
+      businessId: feedback.businessId,
+      customerId: feedback.customerId,
+      templateKey: 'feedback_reply',
+      variables: { message },
+    });
+  }
+
+  /** Powers the inbox summary panel and the dashboard's latest-review card — all computed from real data, nothing fabricated. */
+  async getSummary() {
+    const external = await this.tenantPrisma.client.externalReview.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const averageRating = external.length
+      ? round2(
+          external.reduce((sum, r) => sum + r.stars, 0) / external.length,
+        )
+      : 0;
+    const distribution = [5, 4, 3, 2, 1].map((stars) => ({
+      stars,
+      count: external.filter((r) => r.stars === stars).length,
+    }));
+    const sparkline = this.buildWeeklySparkline(external);
+
+    const since = new Date(
+      Date.now() - CONVERSION_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const [requested, received] = await Promise.all([
+      this.tenantPrisma.client.reviewRequest.count({
+        where: { createdAt: { gte: since } },
+      }),
+      this.tenantPrisma.client.reviewRequest.count({
+        where: { createdAt: { gte: since }, respondedAt: { not: null } },
+      }),
+    ]);
+
+    const latest = external[0];
+    return {
+      averageRating,
+      distribution,
+      sparkline,
+      conversion: { requested, received },
+      latestReview: latest
+        ? {
+            id: latest.id,
+            platform: latest.platform,
+            author: latest.author,
+            stars: latest.stars,
+            text: latest.text,
+            createdAt: latest.createdAt,
+          }
+        : null,
+    };
+  }
+
+  /** Only weeks that actually have a review are included — no fabricated zero-dips or interpolation for quiet weeks. */
+  private buildWeeklySparkline(
+    reviews: { stars: number; createdAt: Date }[],
+  ): number[] {
+    const now = Date.now();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const buckets = new Map<number, number[]>();
+
+    for (const review of reviews) {
+      const ageMs = now - review.createdAt.getTime();
+      const weekIndex = SPARKLINE_WEEKS - 1 - Math.floor(ageMs / weekMs);
+      if (weekIndex < 0 || weekIndex >= SPARKLINE_WEEKS) continue;
+      const bucket = buckets.get(weekIndex) ?? [];
+      bucket.push(review.stars);
+      buckets.set(weekIndex, bucket);
+    }
+
+    return [...buckets.keys()]
+      .sort((a, b) => a - b)
+      .map((key) => {
+        const bucket = buckets.get(key)!;
+        return round2(bucket.reduce((sum, v) => sum + v, 0) / bucket.length);
+      });
   }
 }

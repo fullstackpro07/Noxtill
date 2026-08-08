@@ -3,6 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { LocaleService } from '../common/localization/locale.service';
 import { S3Service } from '../common/storage/s3.service';
 import { PdfRendererService } from '../common/pdf/pdf-renderer.service';
+import { buildLedgerRows } from './credit.types';
 
 /** Khata-style credit statement PDF (BE-032): dated entries + running balance. */
 @Injectable()
@@ -35,18 +36,7 @@ export class CreditStatementService {
       throw new NotFoundException('Customer not found');
     }
 
-    let running = 0;
-    const rows = entries.map((entry) => {
-      const amount = Number(entry.amount);
-      running += entry.kind === 'credit' ? amount : -amount;
-      return {
-        date: entry.createdAt,
-        kind: entry.kind,
-        amount,
-        note: entry.note,
-        runningBalance: running,
-      };
-    });
+    const rows = buildLedgerRows(entries);
 
     const html = this.renderHtml(business, customer, rows);
     const pdf = await this.pdfRenderer.renderPdf(html);

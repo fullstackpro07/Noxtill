@@ -3,12 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreVertical, Download, Trash2, Star, MessageSquareWarning, Wallet, ShoppingBag, Calendar } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MoreVertical, Download, Trash2, MessageSquareWarning, Wallet, ShoppingBag, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownTrigger, DropdownContent, DropdownItem } from "@/components/ui/dropdown-menu";
 import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog";
-import { CUSTOMER_TAGS, type Customer, type CustomerTag } from "@/lib/customers";
+import { CUSTOMER_TAGS, type CustomerTag } from "@/lib/customers";
+import { updateCustomer, eraseCustomer, type CustomerDetail } from "@/lib/customers-api";
+import { fetchLedger } from "@/lib/credit-api";
+import { ApiError } from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
@@ -18,6 +22,20 @@ const TAG_TONE: Record<CustomerTag, "primary" | "success" | "warning" | "danger"
   Regular: "success",
   New: "warning",
   Lapsed: "danger",
+};
+
+/** "New" is computed from signup date server-side (BE-041), not a stored tag — nothing to toggle manually. */
+const TOGGLEABLE_TAGS = CUSTOMER_TAGS.filter((t) => t !== "New");
+
+const NEW_CUSTOMER_WINDOW_DAYS = 30;
+function isNewCustomer(c: CustomerDetail): boolean {
+  return Date.now() - new Date(c.createdAt).getTime() <= NEW_CUSTOMER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
+
+const FEEDBACK_STATUS_LABEL: Record<CustomerDetail["privateFeedback"][number]["status"], string> = {
+  open: "Open",
+  in_progress: "In progress",
+  resolved: "Resolved",
 };
 
 function StatCard({
@@ -47,32 +65,46 @@ function StatCard({
   );
 }
 
-export function CustomerProfileView({ customer, currency }: { customer: Customer; currency: string }) {
+export function CustomerProfileView({ customer, currency }: { customer: CustomerDetail; currency: string }) {
   const router = useRouter();
-  const [tags, setTags] = useState<CustomerTag[]>(customer.tags);
-  const [notes, setNotes] = useState(customer.notes);
+  const queryClient = useQueryClient();
+  const [tags, setTags] = useState<CustomerTag[]>(customer.tags.filter((t): t is CustomerTag => (CUSTOMER_TAGS as string[]).includes(t)));
+  const [notes, setNotes] = useState(customer.notes ?? "");
   const [eraseOpen, setEraseOpen] = useState(false);
-  const [erasing, setErasing] = useState(false);
+
+  const { data: ledger } = useQuery({ queryKey: ["ledger", customer.id], queryFn: () => fetchLedger(customer.id) });
+
+  const saveMutation = useMutation({
+    mutationFn: () => updateCustomer(customer.id, { tags, notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer", customer.id] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      toast.success("Customer updated.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't save changes — please try again.");
+    },
+  });
+
+  const eraseMutation = useMutation({
+    mutationFn: (confirmPhrase: string) => eraseCustomer(customer.id, confirmPhrase),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      toast.success(`${customer.name} erased — history anonymized, audit logged.`);
+      router.push("/customers");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't erase this customer — please try again.");
+      setEraseOpen(false);
+    },
+  });
 
   function toggleTag(tag: CustomerTag) {
     setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   }
 
-  function handleSaveNotes() {
-    toast.success("Customer updated. Live save wires up in INT-006.");
-  }
-
   function handleExport() {
-    toast.success(`${customer.name}'s data exported. Live export wires up in INT-006.`);
-  }
-
-  async function handleErase() {
-    setErasing(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setErasing(false);
-    setEraseOpen(false);
-    toast.success(`${customer.name} erased — history anonymized, audit logged. Live erase wires up in INT-006.`);
-    router.push("/customers");
+    toast.info("Customer data export lands with the Exports module — not available yet.");
   }
 
   return (
@@ -103,22 +135,28 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard icon={Wallet} label="Total spent" value={formatCurrency(customer.totalSpent, currency)} href="#purchase-history" />
+        <StatCard icon={Wallet} label="Total spent" value={formatCurrency(customer.lifetimeSpend, currency)} href="#purchase-history" />
         <StatCard icon={ShoppingBag} label="Visits" value={String(customer.visitCount)} href="#purchase-history" />
-        <StatCard icon={Calendar} label="Last visit" value={formatDate(customer.lastVisit)} href="#purchase-history" />
+        <StatCard
+          icon={Calendar}
+          label="Last visit"
+          value={customer.lastVisitAt ? formatDate(customer.lastVisitAt) : "—"}
+          href="#purchase-history"
+        />
         <StatCard
           icon={Wallet}
           label="Credit balance"
-          value={formatCurrency(customer.creditBalance, currency)}
+          value={ledger ? formatCurrency(ledger.balance, currency) : "…"}
           href="/credit"
-          tone={customer.creditBalance > 0 ? "destructive" : undefined}
+          tone={ledger && ledger.balance > 0 ? "destructive" : undefined}
         />
       </div>
 
       <div className="mb-6 rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
         <p className="mb-3 text-sm font-medium text-fg">Tags</p>
         <div className="mb-4 flex flex-wrap gap-1.5">
-          {CUSTOMER_TAGS.map((tag) => {
+          {isNewCustomer(customer) && <Badge tone={TAG_TONE.New}>New</Badge>}
+          {TOGGLEABLE_TAGS.map((tag) => {
             const active = tags.includes(tag);
             return (
               <button
@@ -147,25 +185,27 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
           className="w-full rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3.5 py-2.5 text-sm text-fg focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
         <div className="mt-3 flex justify-end">
-          <Button size="sm" onClick={handleSaveNotes}>
-            Save changes
+          <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? "Saving…" : "Save changes"}
           </Button>
         </div>
       </div>
 
       <div id="purchase-history" className="mb-6 scroll-mt-6 rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
         <p className="mb-3 text-sm font-medium text-fg">Purchase history</p>
-        {customer.purchaseHistory.length === 0 ? (
+        {customer.orders.length === 0 ? (
           <p className="text-sm text-fg-faint">No purchases yet.</p>
         ) : (
           <ul className="divide-y divide-border">
-            {customer.purchaseHistory.map((h) => (
-              <li key={h.id} className="flex items-center justify-between py-2.5 text-sm">
+            {customer.orders.map((o) => (
+              <li key={o.id} className="flex items-center justify-between py-2.5 text-sm">
                 <div>
-                  <p className="text-fg">{h.description}</p>
-                  <p className="text-xs text-fg-faint">{formatDate(h.date)}</p>
+                  <p className="text-fg">
+                    #{o.orderNo} · {o.items.map((i) => i.name).join(", ")}
+                  </p>
+                  <p className="text-xs text-fg-faint">{formatDate(o.createdAt)}</p>
                 </div>
-                <span className="font-medium tabular-nums text-fg">{formatCurrency(h.amount, currency)}</span>
+                <span className="font-medium tabular-nums text-fg">{formatCurrency(o.total, currency)}</span>
               </li>
             ))}
           </ul>
@@ -173,24 +213,23 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
       </div>
 
       <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
-        <p className="mb-3 text-sm font-medium text-fg">Reviews & complaints</p>
-        {customer.reviews.length === 0 ? (
-          <p className="text-sm text-fg-faint">No reviews or complaints on file.</p>
+        <p className="mb-3 text-sm font-medium text-fg">Complaints & feedback</p>
+        {customer.privateFeedback.length === 0 ? (
+          <p className="text-sm text-fg-faint">Nothing on file.</p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {customer.reviews.map((r) => (
-              <li key={r.id} className="flex items-start gap-2.5 text-sm">
-                {r.type === "review" ? (
-                  <Star className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
-                ) : (
-                  <MessageSquareWarning className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
-                )}
+            {customer.privateFeedback.map((f) => (
+              <li key={f.id} className="flex items-start gap-2.5 text-sm">
+                <MessageSquareWarning className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
                 <div className="min-w-0 flex-1">
                   <p className="text-fg">
-                    {"★".repeat(r.rating)}
-                    {"☆".repeat(5 - r.rating)} <span className="text-fg-faint">· {formatDate(r.date)}</span>
+                    {"★".repeat(f.stars)}
+                    {"☆".repeat(5 - f.stars)} <span className="text-fg-faint">· {formatDate(f.createdAt)}</span>{" "}
+                    <Badge tone={f.status === "resolved" ? "success" : "neutral"} className="ms-1">
+                      {FEEDBACK_STATUS_LABEL[f.status]}
+                    </Badge>
                   </p>
-                  <p className="text-fg-muted">{r.snippet}</p>
+                  {f.message && <p className="text-fg-muted">{f.message}</p>}
                 </div>
               </li>
             ))}
@@ -201,12 +240,12 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
       <DestructiveConfirmDialog
         open={eraseOpen}
         onClose={() => setEraseOpen(false)}
-        onConfirm={handleErase}
+        onConfirm={() => eraseMutation.mutate(customer.phone)}
         title={`Erase ${customer.name}?`}
         description="Permanently removes personal details. Purchase history is kept, anonymized, for accounting records. This is audit-logged and cannot be undone."
         confirmPhrase={customer.phone}
         confirmLabel="Erase customer"
-        pending={erasing}
+        pending={eraseMutation.isPending}
       />
     </div>
   );

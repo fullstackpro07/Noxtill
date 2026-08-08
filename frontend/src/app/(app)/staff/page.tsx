@@ -1,9 +1,9 @@
 "use client";
 
 import { StaffView } from "@/components/staff/staff-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function StaffPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <StaffView currency={session.business.currency} role={session.user.role} />;
 }

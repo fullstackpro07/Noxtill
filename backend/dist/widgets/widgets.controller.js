@@ -23,8 +23,9 @@ let WidgetsController = class WidgetsController {
     registry() {
         return this.widgetsService.listRegistry();
     }
-    data(key) {
-        return this.widgetsService.getWidgetData(key);
+    data(key, daysParam) {
+        const days = daysParam === undefined ? undefined : Number(daysParam);
+        return this.widgetsService.getWidgetData(key, days);
     }
 };
 exports.WidgetsController = WidgetsController;
@@ -37,8 +38,9 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':key'),
     __param(0, (0, common_1.Param)('key')),
+    __param(1, (0, common_1.Query)('days')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], WidgetsController.prototype, "data", null);
 exports.WidgetsController = WidgetsController = __decorate([

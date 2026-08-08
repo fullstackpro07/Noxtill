@@ -125,6 +125,30 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
     );
   });
 
+  it('rejects rescheduling onto a slot already taken by another booking', async () => {
+    const fixed = await service.createBooking(slug, {
+      serviceId: serviceProductId,
+      startsAt: `${testDate}T10:00:00.000Z`,
+      customerPhone: `+1${Date.now()}1`,
+      customerName: 'Holly',
+    });
+    const movable = await service.createBooking(slug, {
+      serviceId: serviceProductId,
+      startsAt: `${testDate}T14:00:00.000Z`,
+      customerPhone: `+1${Date.now()}2`,
+      customerName: 'Ian',
+    });
+
+    await expect(
+      service.reschedule(movable.rescheduleToken!, fixed.startsAt.toISOString()),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('returns business name and branding for the public booking page header', async () => {
+    const info = await service.getBusinessInfo(slug);
+    expect(info.businessName).toBe('Booking Test Biz');
+  });
+
   it('cancels a booking via its token, freeing the slot', async () => {
     const booking = await service.createBooking(slug, {
       serviceId: serviceProductId,

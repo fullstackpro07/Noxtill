@@ -46,13 +46,22 @@ let ProductsImportService = class ProductsImportService {
                 errors.push({ row: rowNumber, reason: validation.error, data: row });
                 continue;
             }
-            await this.tenantPrisma.client.product.create({
-                data: {
-                    businessId,
-                    ...validation.data,
-                },
-            });
-            created += 1;
+            try {
+                await this.tenantPrisma.client.product.create({
+                    data: {
+                        businessId,
+                        ...validation.data,
+                    },
+                });
+                created += 1;
+            }
+            catch {
+                errors.push({
+                    row: rowNumber,
+                    reason: `A product with sku "${validation.data.sku}" already exists`,
+                    data: row,
+                });
+            }
         }
         const errorsFileUrl = errors.length > 0
             ? await this.uploadErrorsCsv(businessId, errors)
@@ -117,6 +126,7 @@ let ProductsImportService = class ProductsImportService {
                 name,
                 kind,
                 category: row.category?.trim() || undefined,
+                sku: row.sku?.trim() || undefined,
                 costPrice,
                 sellingPrice,
                 stockQty,

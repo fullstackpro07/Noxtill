@@ -1,25 +1,32 @@
 "use client";
 
 import { Select } from "@/components/ui/select";
-import { BRANCH_METRICS } from "@/lib/branches";
+import { useBranchContextStore } from "@/store/branch-context-store";
+import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
-export function BranchDropdown({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+const ALL_BRANCHES = "__all__";
+
+export function BranchDropdown() {
+  const { business } = useSession();
+  const selected = useBranchContextStore((s) => s.selectedBranchId);
+  const setSelected = useBranchContextStore((s) => s.setSelectedBranchId);
+
   return (
     <Select
-      value={value}
+      value={selected ?? ALL_BRANCHES}
       onChange={(e) => {
         if (e.target.value === "__add__") {
-          toast.info("Add-branch flow wires up in INT-009.");
+          toast.info("Adding a new branch isn't available yet.");
           return;
         }
-        onChange(e.target.value);
+        setSelected(e.target.value === ALL_BRANCHES ? null : e.target.value);
       }}
       className="w-48"
     >
-      <option value="all">All branches</option>
-      {BRANCH_METRICS.map((b) => (
-        <option key={b.branchId} value={b.branchId}>
+      <option value={ALL_BRANCHES}>All branches</option>
+      {business.branches.map((b) => (
+        <option key={b.id} value={b.id}>
           {b.name}
         </option>
       ))}

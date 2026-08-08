@@ -31,8 +31,10 @@ export declare class InventoryService {
         name: string;
         stockQty: number;
         lowStockThreshold: number;
+        costPrice: number;
         stockValue: number;
         lastPurchaseAt: Date | null;
+        supplier: string | null;
         status: string;
     }[]>;
     getMovements(productId: string): Promise<{

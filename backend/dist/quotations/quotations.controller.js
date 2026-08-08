@@ -22,6 +22,9 @@ let QuotationsController = class QuotationsController {
     constructor(quotationsService) {
         this.quotationsService = quotationsService;
     }
+    findAll() {
+        return this.quotationsService.findAll();
+    }
     create(user, dto) {
         return this.quotationsService.create(user.businessId, dto);
     }
@@ -30,6 +33,12 @@ let QuotationsController = class QuotationsController {
     }
 };
 exports.QuotationsController = QuotationsController;
+__decorate([
+    (0, common_1.Get)(),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], QuotationsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

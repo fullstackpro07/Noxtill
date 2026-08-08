@@ -87,4 +87,9 @@ describe('SegmentsService (BE-041)', () => {
     const segment = await segmentsService.getSegment('VIP');
     expect(segment.count).toBe(1);
   });
+
+  it('returns every customer for the all segment', async () => {
+    const segment = await segmentsService.getSegment('all');
+    expect(segment.count).toBe(3);
+  });
 });

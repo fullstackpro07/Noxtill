@@ -15,6 +15,7 @@ const nestjs_cls_1 = require("nestjs-cls");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const audit_service_1 = require("../common/audit/audit.service");
 const tenant_constants_1 = require("../common/tenancy/tenant.constants");
+const credit_types_1 = require("./credit.types");
 let CreditService = class CreditService {
     tenantPrisma;
     cls;
@@ -27,7 +28,7 @@ let CreditService = class CreditService {
     async listDebtors() {
         const businessId = this.cls.get(tenant_constants_1.CLS_KEY_BUSINESS_ID);
         const rows = await this.tenantPrisma.client.$queryRaw `
-      SELECT v.customer_id, c.name, c.phone, v.balance, v.last_entry_at, v.days_outstanding
+      SELECT v.customer_id, c.name, c.phone, v.balance, v.last_entry_at, v.days_outstanding, c.opted_out
       FROM v_credit_balances v
       JOIN customers c ON c.id = v.customer_id
       WHERE v.business_id = ${businessId} AND v.balance > 0
@@ -40,7 +41,28 @@ let CreditService = class CreditService {
             balance: Number(row.balance),
             lastEntryAt: row.last_entry_at,
             daysOutstanding: row.days_outstanding,
+            optedOutOfReminders: row.opted_out,
         }));
+    }
+    async getLedger(customerId) {
+        const customer = await this.tenantPrisma.client.customer.findUnique({
+            where: { id: customerId },
+        });
+        if (!customer) {
+            throw new common_1.NotFoundException('Customer not found');
+        }
+        const entries = await this.tenantPrisma.client.creditEntry.findMany({
+            where: { customerId },
+            orderBy: { createdAt: 'asc' },
+        });
+        const rows = (0, credit_types_1.buildLedgerRows)(entries);
+        return {
+            customerId,
+            name: customer.name,
+            phone: customer.phone,
+            balance: rows.length ? rows[rows.length - 1].runningBalance : 0,
+            entries: rows,
+        };
     }
     async getBalance(customerId) {
         const businessId = this.cls.get(tenant_constants_1.CLS_KEY_BUSINESS_ID);

@@ -1,15 +1,16 @@
 "use client";
 
-import { HOURLY_REVENUE, formatHour } from "@/lib/profit";
+import type { HourlyRevenue } from "@/lib/profit-api";
+import { formatHour } from "@/lib/profit";
 import { formatCurrency } from "@/lib/format";
 
-export function HourlyBarChart({ currency }: { currency: string }) {
-  const max = Math.max(...HOURLY_REVENUE.map((d) => d.revenue));
-  const peak = HOURLY_REVENUE.reduce((m, d) => (d.revenue > m.revenue ? d : m), HOURLY_REVENUE[0]);
+export function HourlyBarChart({ data, currency }: { data: HourlyRevenue[]; currency: string }) {
+  const max = Math.max(...data.map((d) => d.revenue));
+  const peak = data.reduce((m, d) => (d.revenue > m.revenue ? d : m), data[0]);
 
   return (
     <div className="flex h-48 items-end gap-2">
-      {HOURLY_REVENUE.map((d) => {
+      {data.map((d) => {
         const heightPct = max > 0 ? (d.revenue / max) * 100 : 0;
         const isPeak = d.hour === peak.hour;
         return (

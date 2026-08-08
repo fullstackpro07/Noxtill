@@ -1,9 +1,12 @@
 "use client";
 
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { Session } from "@/lib/mock-session";
+import { fetchNotifications, markNotificationRead, type LiveNotification } from "@/lib/notifications-api";
+
+const POLL_INTERVAL_MS = 30_000;
 
 function timeAgo(iso: string): string {
   const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -13,8 +16,27 @@ function timeAgo(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-export function NotificationBell({ notifications }: { notifications: Session["notifications"] }) {
+export function NotificationBell() {
+  const queryClient = useQueryClient();
+  const { data: notifications = [] } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: fetchNotifications,
+    refetchInterval: POLL_INTERVAL_MS,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => markNotificationRead(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  function handleClick(n: LiveNotification) {
+    if (!n.read) markReadMutation.mutate(n.id);
+    if (n.link) window.open(n.link, "_blank", "noopener,noreferrer");
+  }
 
   return (
     <DropdownMenu>
@@ -38,25 +60,27 @@ export function NotificationBell({ notifications }: { notifications: Session["no
         ) : (
           <ul className="max-h-80 overflow-y-auto py-1">
             {notifications.map((n) => (
-              <li
-                key={n.id}
-                className={cn(
-                  "flex gap-2.5 px-4 py-2.5 text-sm",
-                  !n.read && "bg-primary/[0.04]",
-                )}
-              >
-                <span
+              <li key={n.id}>
+                <button
+                  onClick={() => handleClick(n)}
                   className={cn(
-                    "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                    n.read ? "bg-transparent" : "bg-accent",
+                    "flex w-full gap-2.5 px-4 py-2.5 text-start text-sm hover:bg-surface-2",
+                    !n.read && "bg-primary/[0.04]",
                   )}
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-fg">{n.title}</p>
-                  <p className="truncate text-xs text-fg-muted">{n.body}</p>
-                </div>
-                <span className="shrink-0 text-[11px] text-fg-faint">{timeAgo(n.createdAt)}</span>
+                >
+                  <span
+                    className={cn(
+                      "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
+                      n.read ? "bg-transparent" : "bg-accent",
+                    )}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-fg">{n.title}</p>
+                    <p className="truncate text-xs text-fg-muted">{n.body}</p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-fg-faint">{timeAgo(n.createdAt)}</span>
+                </button>
               </li>
             ))}
           </ul>

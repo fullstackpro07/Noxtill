@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { PRODUCT_CATEGORIES, marginPercent, type Product, type ProductKind, type ProductVariation } from "@/lib/products";
+import { createProduct, updateProduct } from "@/lib/products-api";
+import { ApiError } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 
@@ -48,9 +51,23 @@ export function ProductFormDrawer({
 
 function ProductFormPanel({ product, onClose }: { product: Product | null; onClose: () => void }) {
   const [draft, setDraft] = useState<Omit<Product, "id" | "active">>(() => product ?? emptyDraft());
+  const queryClient = useQueryClient();
 
   const margin = marginPercent(draft.price, draft.costPrice);
   const marginTone = margin < 10 ? "text-destructive" : margin < 30 ? "text-accent-foreground" : "text-whatsapp";
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      product ? updateProduct(product.id, { ...draft, active: product.active }) : createProduct({ ...draft, active: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success(product ? `"${draft.name}" updated.` : `"${draft.name}" added.`);
+      onClose();
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't save this product — please try again.");
+    },
+  });
 
   function updateVariation(index: number, patch: Partial<ProductVariation>) {
     setDraft((d) => ({
@@ -65,13 +82,6 @@ function ProductFormPanel({ product, onClose }: { product: Product | null; onClo
 
   function removeVariation(index: number) {
     setDraft((d) => ({ ...d, variations: d.variations.filter((_, i) => i !== index) }));
-  }
-
-  function handleSave() {
-    toast.success(
-      product ? `"${draft.name}" updated. Live save wires up in INT-003.` : `"${draft.name}" added. Live save wires up in INT-003.`,
-    );
-    onClose();
   }
 
   return (
@@ -217,11 +227,11 @@ function ProductFormPanel({ product, onClose }: { product: Product | null; onClo
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!draft.name.trim()}>
-            {product ? "Save changes" : "Add product"}
+          <Button onClick={() => mutation.mutate()} disabled={!draft.name.trim() || mutation.isPending}>
+            {mutation.isPending ? "Saving…" : product ? "Save changes" : "Add product"}
           </Button>
         </div>
       </div>

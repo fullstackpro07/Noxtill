@@ -7,6 +7,7 @@ import { useDashboardStore } from "@/store/dashboard-store";
 
 export function WidgetGridCustomize({ currency }: { currency: string }) {
   const draftLayout = useDashboardStore((s) => s.draftLayout) ?? [];
+  const range = useDashboardStore((s) => s.range);
   const reorderDraft = useDashboardStore((s) => s.reorderDraft);
   const removeWidget = useDashboardStore((s) => s.removeWidget);
 
@@ -25,7 +26,7 @@ export function WidgetGridCustomize({ currency }: { currency: string }) {
       <SortableContext items={draftLayout} strategy={rectSortingStrategy}>
         <div className="grid grid-cols-2 gap-4 pt-2 lg:grid-cols-4">
           {draftLayout.map((key) => (
-            <SortableWidgetCard key={key} id={key} currency={currency} onRemove={() => removeWidget(key)} />
+            <SortableWidgetCard key={key} id={key} currency={currency} range={range} onRemove={() => removeWidget(key)} />
           ))}
         </div>
       </SortableContext>

@@ -1,22 +1,32 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Sun, Moon, Copy, Check } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { EXTERNAL_REVIEWS, averageRating } from "@/lib/reviews";
+import { fetchReviewWidget } from "@/lib/public-review-api";
 import { toast } from "@/lib/toast";
 
 type WidgetTheme = "light" | "dark";
 type WidgetLayout = "badge" | "carousel" | "grid";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api/v1";
+
 export function WidgetGenerator({ businessSlug }: { businessSlug: string }) {
   const [theme, setTheme] = useState<WidgetTheme>("light");
   const [layout, setLayout] = useState<WidgetLayout>("badge");
   const [copied, setCopied] = useState(false);
+  // Safe to read directly (no SSR/hydration concern): this component only ever mounts after a
+  // user clicks into the "Grow" tab, which is itself a post-hydration client-side interaction —
+  // it can never be part of the server-rendered HTML in the first place.
+  const origin = window.location.origin;
 
-  const avg = averageRating(EXTERNAL_REVIEWS);
-  const snippet = `<script src="https://noxtill.app/widget.js" data-business="${businessSlug}" data-theme="${theme}" data-layout="${layout}"></script>`;
+  const { data } = useQuery({ queryKey: ["review-widget", businessSlug], queryFn: () => fetchReviewWidget(businessSlug) });
+  const reviews = data?.reviews ?? [];
+  const avg = reviews.length ? reviews.reduce((sum, r) => sum + r.stars, 0) / reviews.length : 0;
+  const platforms = [...new Set(reviews.map((r) => r.platform))];
+  const snippet = `<script src="${origin}/widget.js" data-business="${businessSlug}" data-theme="${theme}" data-layout="${layout}" data-api="${API_BASE}"></script>`;
 
   async function handleCopy() {
     try {
@@ -69,7 +79,11 @@ export function WidgetGenerator({ businessSlug }: { businessSlug: string }) {
             <span className="font-display text-2xl font-bold">{avg.toFixed(1)}</span>
             <span className="text-accent-foreground">{"★".repeat(Math.round(avg))}</span>
           </div>
-          <p className="mt-1 text-xs opacity-70">{EXTERNAL_REVIEWS.length} reviews across Google, Facebook &amp; Yelp</p>
+          <p className="mt-1 text-xs opacity-70">
+            {reviews.length > 0
+              ? `${reviews.length} review${reviews.length === 1 ? "" : "s"} across ${platforms.join(", ")}`
+              : "No 4-5★ reviews yet — this widget will populate automatically once you have some."}
+          </p>
         </div>
       </div>
 

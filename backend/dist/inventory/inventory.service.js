@@ -88,7 +88,10 @@ let InventoryService = class InventoryService {
         const lastPurchaseMap = new Map();
         for (const movement of lastPurchases) {
             if (!lastPurchaseMap.has(movement.productId)) {
-                lastPurchaseMap.set(movement.productId, movement.createdAt);
+                lastPurchaseMap.set(movement.productId, {
+                    at: movement.createdAt,
+                    supplier: movement.supplier,
+                });
             }
         }
         return products.map((product) => ({
@@ -96,8 +99,10 @@ let InventoryService = class InventoryService {
             name: product.name,
             stockQty: product.stockQty,
             lowStockThreshold: product.lowStockThreshold,
+            costPrice: Number(product.costPrice),
             stockValue: product.stockQty * Number(product.costPrice),
-            lastPurchaseAt: lastPurchaseMap.get(product.id) ?? null,
+            lastPurchaseAt: lastPurchaseMap.get(product.id)?.at ?? null,
+            supplier: lastPurchaseMap.get(product.id)?.supplier ?? null,
             status: product.stockQty <= 0
                 ? 'out_of_stock'
                 : product.stockQty <= product.lowStockThreshold

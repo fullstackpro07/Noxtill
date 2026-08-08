@@ -7,5 +7,5 @@ export declare class WidgetsController {
         title: string;
         category: import("./widgets.constants").WidgetCategory;
     }[];
-    data(key: string): Promise<unknown>;
+    data(key: string, daysParam?: string): Promise<unknown>;
 }

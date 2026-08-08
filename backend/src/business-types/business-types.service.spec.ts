@@ -1,6 +1,7 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessTypesService } from './business-types.service';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { AppException } from '../common/filters/app.exception';
 
 describe('BusinessTypesService (BE-069)', () => {
   let prisma: PrismaService;
@@ -71,5 +72,13 @@ describe('BusinessTypesService (BE-069)', () => {
 
     expect(result.label).toBe(uniqueLabel);
     expect(result.aiGenerated).toBe(true);
+  });
+
+  it('wraps a Claude failure as a clean AI_UNAVAILABLE error instead of a raw 500', async () => {
+    aiInfra.complete.mockRejectedValue(new Error('x-api-key header is required'));
+
+    await expect(
+      service.aiMap({ description: 'We wash and groom dogs' }),
+    ).rejects.toBeInstanceOf(AppException);
   });
 });

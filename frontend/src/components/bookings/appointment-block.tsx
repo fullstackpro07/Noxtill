@@ -1,27 +1,36 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import type { Appointment } from "@/lib/bookings";
-import { staffById } from "@/lib/staff";
+import { User } from "lucide-react";
+import type { LiveAppointment } from "@/lib/bookings-api";
 import { cn } from "@/lib/utils";
 
-const STATUS_STYLE: Record<Appointment["status"], string> = {
+const STATUS_STYLE: Record<LiveAppointment["status"], string> = {
+  booked: "border-dashed",
   confirmed: "",
   completed: "opacity-70",
   cancelled: "opacity-50 line-through",
   no_show: "opacity-60 border-dashed",
 };
 
+/** Opacity/strikethrough alone reads as a rendering glitch at this size — spell out the status too. */
+const STATUS_LABEL: Partial<Record<LiveAppointment["status"], string>> = {
+  completed: "Completed",
+  cancelled: "Cancelled",
+  no_show: "No-show",
+};
+
 export function AppointmentBlock({
   appointment,
+  color,
   onSelect,
   shaking,
 }: {
-  appointment: Appointment;
-  onSelect: (appointment: Appointment) => void;
+  appointment: LiveAppointment;
+  color?: string;
+  onSelect: (appointment: LiveAppointment) => void;
   shaking: boolean;
 }) {
-  const staff = staffById(appointment.staffId);
   const draggable = appointment.status === "confirmed";
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: appointment.id,
@@ -35,8 +44,8 @@ export function AppointmentBlock({
       {...(draggable ? attributes : {})}
       onClick={() => onSelect(appointment)}
       style={{
-        borderColor: staff?.color,
-        backgroundColor: `color-mix(in srgb, ${staff?.color ?? "var(--chart-1)"} 14%, transparent)`,
+        borderColor: color,
+        backgroundColor: `color-mix(in srgb, ${color ?? "var(--chart-1)"} 14%, transparent)`,
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
       }}
       className={cn(
@@ -47,8 +56,14 @@ export function AppointmentBlock({
         STATUS_STYLE[appointment.status],
       )}
     >
-      <span className="truncate font-medium">{appointment.customerName}</span>
-      <span className="truncate text-fg-faint">{appointment.serviceName}</span>
+      <span className="flex shrink-0 items-center gap-1 truncate font-medium">
+        <User className="h-3 w-3 shrink-0 text-fg-faint" aria-hidden />
+        <span className="truncate">{appointment.customerName}</span>
+      </span>
+      <span className="shrink-0 truncate text-fg-faint">
+        {appointment.serviceName}
+        {STATUS_LABEL[appointment.status] && ` · ${STATUS_LABEL[appointment.status]}`}
+      </span>
     </button>
   );
 }

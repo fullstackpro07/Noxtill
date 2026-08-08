@@ -53,12 +53,12 @@ function WidgetBody({ widget, data, currency }: { widget: WidgetDef; data: unkno
       return <p className="font-display text-2xl font-bold text-fg">{formatPercent(rate)}</p>;
     }
     case "average": {
-      const { average } = data as { average: number };
+      const { average } = data as { average: number | null };
       const isRating = widget.key === "reviews_average";
       return (
         <div className="flex items-center gap-1.5">
-          <p className="font-display text-2xl font-bold text-fg">{average.toFixed(1)}</p>
-          {isRating && <Star className="h-4 w-4 fill-accent text-accent" aria-hidden />}
+          <p className="font-display text-2xl font-bold text-fg">{average === null ? "—" : average.toFixed(1)}</p>
+          {isRating && average !== null && <Star className="h-4 w-4 fill-accent text-accent" aria-hidden />}
         </div>
       );
     }
@@ -80,6 +80,7 @@ function WidgetBody({ widget, data, currency }: { widget: WidgetDef; data: unkno
     }
     case "productList": {
       const items = data as { name: string; units: number; revenue: number }[];
+      if (items.length === 0) return <p className="text-sm text-fg-faint">No sales yet.</p>;
       return (
         <ul className="space-y-1.5">
           {items.slice(0, 3).map((item) => (
@@ -93,6 +94,7 @@ function WidgetBody({ widget, data, currency }: { widget: WidgetDef; data: unkno
     }
     case "leaderboard": {
       const items = data as { name: string; total: number }[];
+      if (items.length === 0) return <p className="text-sm text-fg-faint">No sales yet.</p>;
       return (
         <ul className="space-y-1.5">
           {items.slice(0, 3).map((item, i) => (
@@ -108,15 +110,16 @@ function WidgetBody({ widget, data, currency }: { widget: WidgetDef; data: unkno
       );
     }
     case "competitorList": {
-      const items = data as { platformRef: string; rating: number; reviewsCount: number }[];
+      const items = data as { platformRef: string; rating: number | null; reviewsCount: number }[];
+      if (items.length === 0) return <p className="text-sm text-fg-faint">No competitors tracked yet.</p>;
       return (
         <ul className="space-y-1.5">
           {items.slice(0, 3).map((item) => (
             <li key={item.platformRef} className="flex items-center justify-between text-sm">
               <span className="min-w-0 flex-1 truncate text-fg-muted">{item.platformRef}</span>
               <span className="flex shrink-0 items-center gap-1 font-medium text-fg">
-                <Star className="h-3 w-3 fill-accent text-accent" aria-hidden />
-                {item.rating.toFixed(1)}
+                {item.rating !== null && <Star className="h-3 w-3 fill-accent text-accent" aria-hidden />}
+                {item.rating === null ? "—" : item.rating.toFixed(1)}
               </span>
             </li>
           ))}
@@ -125,10 +128,12 @@ function WidgetBody({ widget, data, currency }: { widget: WidgetDef; data: unkno
     }
     case "channelBreakdown": {
       const breakdown = data as Record<string, number>;
-      const total = Object.values(breakdown).reduce((a, b) => a + b, 0) || 1;
+      const entries = Object.entries(breakdown);
+      const total = entries.reduce((sum, [, count]) => sum + count, 0) || 1;
+      if (entries.length === 0) return <p className="text-sm text-fg-faint">No messages sent yet.</p>;
       return (
         <div className="space-y-1.5">
-          {Object.entries(breakdown).map(([channel, count]) => (
+          {entries.map(([channel, count]) => (
             <div key={channel} className="flex items-center gap-2 text-xs">
               <span className="w-16 shrink-0 capitalize text-fg-faint">{channel}</span>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">

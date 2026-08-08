@@ -50,6 +50,9 @@ const analytics_module_1 = require("./analytics/analytics.module");
 const platform_admin_module_1 = require("./platform-admin/platform-admin.module");
 const help_module_1 = require("./help/help.module");
 const assistant_module_1 = require("./assistant/assistant.module");
+const notifications_module_1 = require("./notifications/notifications.module");
+const reports_module_1 = require("./reports/reports.module");
+const exports_module_1 = require("./exports/exports.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -96,6 +99,9 @@ exports.AppModule = AppModule = __decorate([
             platform_admin_module_1.PlatformAdminModule,
             help_module_1.HelpModule,
             assistant_module_1.AssistantModule,
+            notifications_module_1.NotificationsModule,
+            reports_module_1.ReportsModule,
+            exports_module_1.ExportsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

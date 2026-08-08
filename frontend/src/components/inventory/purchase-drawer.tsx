@@ -1,27 +1,47 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { InventoryItem } from "@/lib/inventory";
+import type { LiveInventoryItem } from "@/lib/inventory-api";
+import { recordPurchase } from "@/lib/inventory-api";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
-export function PurchaseDialog({ item, onClose }: { item: InventoryItem | null; onClose: () => void }) {
+export function PurchaseDialog({ item, onClose }: { item: LiveInventoryItem | null; onClose: () => void }) {
   if (!item) return null;
-  return <PurchaseDialogBody key={item.productId} item={item} onClose={onClose} />;
+  return <PurchaseDialogBody key={item.id} item={item} onClose={onClose} />;
 }
 
-function PurchaseDialogBody({ item, onClose }: { item: InventoryItem; onClose: () => void }) {
+function PurchaseDialogBody({ item, onClose }: { item: LiveInventoryItem; onClose: () => void }) {
   const [qty, setQty] = useState("");
-  const [costPrice, setCostPrice] = useState(String(item.costPrice));
+  const [unitCost, setUnitCost] = useState(String(item.costPrice));
+  const [supplier, setSupplier] = useState("");
+  const queryClient = useQueryClient();
 
   const validQty = qty.trim() !== "" && Number(qty) > 0;
+  const validCost = unitCost.trim() === "" || Number(unitCost) >= 0;
 
-  function handleConfirm() {
-    toast.success(`Received ${qty} units of ${item.name} — cost price updated to $${costPrice}. Live save wires up in INT-005.`);
-    onClose();
-  }
+  const mutation = useMutation({
+    mutationFn: () =>
+      recordPurchase({
+        productId: item.id,
+        qty: Number(qty),
+        unitCost: unitCost.trim() === "" ? 0 : Number(unitCost),
+        supplier: supplier.trim() || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-movements", item.id] });
+      toast.success(`Received ${qty} units of ${item.name}.`);
+      onClose();
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't record this purchase — please try again.");
+    },
+  });
 
   return (
     <Dialog
@@ -31,11 +51,11 @@ function PurchaseDialogBody({ item, onClose }: { item: InventoryItem; onClose: (
       description="Adds to stock on hand and refreshes the product's cost price."
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm} disabled={!validQty}>
-            Record purchase
+          <Button onClick={() => mutation.mutate()} disabled={!validQty || !validCost || mutation.isPending}>
+            {mutation.isPending ? "Recording…" : "Record purchase"}
           </Button>
         </>
       }
@@ -47,10 +67,11 @@ function PurchaseDialogBody({ item, onClose }: { item: InventoryItem; onClose: (
           type="number"
           min={0}
           step="0.01"
-          value={costPrice}
-          onChange={(e) => setCostPrice(e.target.value)}
+          value={unitCost}
+          onChange={(e) => setUnitCost(e.target.value)}
           leadingSlot={<span className="text-sm">$</span>}
         />
+        <Input label="Supplier (optional)" value={supplier} onChange={(e) => setSupplier(e.target.value)} />
       </div>
     </Dialog>
   );

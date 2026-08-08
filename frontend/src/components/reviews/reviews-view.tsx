@@ -34,7 +34,7 @@ export function ReviewsView({ currency, businessName, businessSlug }: { currency
         <div className="flex flex-col gap-6">
           <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
             <p className="mb-4 text-sm font-medium text-fg">QR code</p>
-            <QrGenerator businessName={businessName} />
+            <QrGenerator businessName={businessName} businessSlug={businessSlug} />
           </div>
           <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
             <p className="mb-4 text-sm font-medium text-fg">Website widget</p>

@@ -18,6 +18,7 @@ exports.TENANT_SCOPED_MODELS = new Set([
     'Attendance',
     'Campaign',
     'Competitor',
+    'TrackedKeyword',
     'AuditLog',
     'ImportBatch',
     'Integration',
@@ -25,6 +26,7 @@ exports.TENANT_SCOPED_MODELS = new Set([
     'EmailCampaign',
     'ProductFeedItem',
     'GmbPost',
+    'Notification',
 ]);
 exports.CLS_KEY_BUSINESS_ID = 'businessId';
 exports.CLS_KEY_USER_ID = 'userId';

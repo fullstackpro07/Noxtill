@@ -90,10 +90,16 @@ export class InventoryService {
         orderBy: { createdAt: 'desc' },
       },
     );
-    const lastPurchaseMap = new Map<string, Date>();
+    const lastPurchaseMap = new Map<
+      string,
+      { at: Date; supplier: string | null }
+    >();
     for (const movement of lastPurchases) {
       if (!lastPurchaseMap.has(movement.productId)) {
-        lastPurchaseMap.set(movement.productId, movement.createdAt);
+        lastPurchaseMap.set(movement.productId, {
+          at: movement.createdAt,
+          supplier: movement.supplier,
+        });
       }
     }
 
@@ -102,8 +108,10 @@ export class InventoryService {
       name: product.name,
       stockQty: product.stockQty,
       lowStockThreshold: product.lowStockThreshold,
+      costPrice: Number(product.costPrice),
       stockValue: product.stockQty * Number(product.costPrice),
-      lastPurchaseAt: lastPurchaseMap.get(product.id) ?? null,
+      lastPurchaseAt: lastPurchaseMap.get(product.id)?.at ?? null,
+      supplier: lastPurchaseMap.get(product.id)?.supplier ?? null,
       status:
         product.stockQty <= 0
           ? 'out_of_stock'

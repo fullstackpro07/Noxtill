@@ -24,6 +24,10 @@ export class CreateProductDto {
   category?: string;
 
   @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => VariationDto)

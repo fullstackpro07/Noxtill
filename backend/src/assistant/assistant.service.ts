@@ -1,11 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   ClaudeClient,
   AnthropicContentBlock,
   AnthropicMessage,
 } from '../ai/claude.client';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { AppException } from '../common/filters/app.exception';
 import { collectAnthropicStream } from '../ai/anthropic-stream.util';
 import {
   ASSISTANT_TOOLS,
@@ -21,6 +23,9 @@ const SYSTEM_PROMPT = [
   'Use the provided tools to answer any question involving numbers, counts, or business data — ' +
     'NEVER state a number, count, or fact you did not get from a tool result. If no tool can answer ' +
     'the question, say so honestly rather than guessing.',
+  'For "how do I" or product-usage questions (features, policies, definitions), use search_help_docs ' +
+    'and cite the passage number(s) you used, e.g. "(see [1])". If search_help_docs finds nothing ' +
+    'relevant, say so honestly instead of guessing how the product works.',
   'Keep answers short (2-4 sentences) and plain-language.',
 ].join(' ');
 
@@ -42,6 +47,7 @@ export class AssistantService {
 
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
+    private readonly prisma: PrismaService,
     private readonly claude: ClaudeClient,
     private readonly aiInfra: AiInfraService,
   ) {}
@@ -58,11 +64,23 @@ export class AssistantService {
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
       await this.aiInfra.checkGuardrails(businessId);
 
-      const stream = await this.claude.streamMessage({
-        system: SYSTEM_PROMPT,
-        messages,
-        tools: toAnthropicTools(),
-      });
+      let stream: NodeJS.ReadableStream;
+      try {
+        stream = await this.claude.streamMessage({
+          system: SYSTEM_PROMPT,
+          messages,
+          tools: toAnthropicTools(),
+        });
+      } catch (error) {
+        this.logger.error(
+          `Assistant Claude call failed: ${(error as Error).message}`,
+        );
+        throw new AppException(
+          'AI_UNAVAILABLE',
+          'The AI assistant is not available right now — please try again later.',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
       const result = await collectAnthropicStream(stream, onTextDelta);
 
       const toolUseBlocks = result.content.filter((b) => b.type === 'tool_use');
@@ -123,7 +141,7 @@ export class AssistantService {
     }
     try {
       return await tool.execute(
-        { businessId, tenantPrisma: this.tenantPrisma },
+        { businessId, tenantPrisma: this.tenantPrisma, prisma: this.prisma },
         input,
       );
     } catch (error) {

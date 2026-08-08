@@ -48,6 +48,7 @@ describe('ReferralsService (BE-062)', () => {
   });
 
   afterAll(async () => {
+    await prisma.creditEntry.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
@@ -91,5 +92,77 @@ describe('ReferralsService (BE-062)', () => {
     expect(stats.totalReferred).toBeGreaterThanOrEqual(1);
     const row = stats.leaderboard.find((r) => r.customerId === referrerId);
     expect(row).toMatchObject({ name: 'Referrer Rita', count: 1 });
+  });
+
+  it("credits the referrer when their referral's first order completes (settings already enabled/credit/20 from the first test)", async () => {
+    const referee = await service.redeem(businessId, {
+      code: referrerId,
+      refereePhone: `+1${Date.now()}8`,
+      refereeName: 'Rewarded Rex',
+    });
+    await prisma.customer.update({
+      where: { id: referee.id },
+      data: { visitCount: 1 },
+    });
+
+    await prisma.$transaction((tx) =>
+      service.issueRewardIfEligible(businessId, referee.id, tx),
+    );
+
+    const rewardedReferee = await prisma.customer.findUniqueOrThrow({
+      where: { id: referee.id },
+    });
+    expect(rewardedReferee.referralRewardedAt).not.toBeNull();
+
+    const creditEntry = await prisma.creditEntry.findFirst({
+      where: { customerId: referrerId, note: 'Referral reward' },
+    });
+    expect(creditEntry).not.toBeNull();
+    expect(Number(creditEntry!.amount)).toBe(20);
+
+    const stats = await service.stats();
+    expect(stats.rewardsIssued).toBeGreaterThanOrEqual(1);
+    expect(stats.converted).toBeGreaterThanOrEqual(1);
+  });
+
+  it('is idempotent — calling it again for the same referee issues no second reward', async () => {
+    const referee = await service.redeem(businessId, {
+      code: referrerId,
+      refereePhone: `+1${Date.now()}7`,
+      refereeName: 'Idempotent Ivy',
+    });
+    await prisma.customer.update({
+      where: { id: referee.id },
+      data: { visitCount: 1 },
+    });
+
+    const before = await prisma.creditEntry.count({
+      where: { customerId: referrerId, note: 'Referral reward' },
+    });
+
+    await prisma.$transaction((tx) =>
+      service.issueRewardIfEligible(businessId, referee.id, tx),
+    );
+    await prisma.$transaction((tx) =>
+      service.issueRewardIfEligible(businessId, referee.id, tx),
+    );
+
+    const after = await prisma.creditEntry.count({
+      where: { customerId: referrerId, note: 'Referral reward' },
+    });
+    expect(after - before).toBe(1);
+  });
+
+  it('does nothing for a customer who was not referred', async () => {
+    const organic = await prisma.customer.create({
+      data: { businessId, phone: `+1${Date.now()}6`, name: 'Organic Oscar', visitCount: 1 },
+    });
+
+    await prisma.$transaction((tx) =>
+      service.issueRewardIfEligible(businessId, organic.id, tx),
+    );
+
+    const refreshed = await prisma.customer.findUniqueOrThrow({ where: { id: organic.id } });
+    expect(refreshed.referralRewardedAt).toBeNull();
   });
 });

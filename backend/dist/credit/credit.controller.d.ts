@@ -16,18 +16,26 @@ export declare class CreditController {
         balance: number;
         lastEntryAt: Date;
         daysOutstanding: number;
+        optedOutOfReminders: boolean;
     }[]>;
+    entries(customerId: string): Promise<{
+        customerId: string;
+        name: string;
+        phone: string;
+        balance: number;
+        entries: import("./credit.types").LedgerRow[];
+    }>;
     recordPayment(dto: RecordPaymentDto): Promise<{
         entry: {
             id: string;
-            createdAt: Date;
             businessId: string;
-            kind: import("generated/prisma").$Enums.CreditEntryKind;
             customerId: string;
-            amount: import("generated/prisma/runtime/library").Decimal;
-            method: import("generated/prisma").$Enums.PaymentMethod | null;
-            note: string | null;
+            createdAt: Date;
+            kind: import("generated/prisma").$Enums.CreditEntryKind;
             orderId: string | null;
+            method: import("generated/prisma").$Enums.PaymentMethod | null;
+            amount: import("generated/prisma/runtime/library").Decimal;
+            note: string | null;
         };
         balanceBefore: number;
         balanceAfter: number;

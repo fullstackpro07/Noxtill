@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { useSearchStore } from "@/store/search-store";
-import { searchAll, groupResults, CATEGORY_LABELS, type SearchResult } from "@/lib/search-index";
+import { fetchSearch, groupResults, CATEGORY_LABELS, type SearchResult } from "@/lib/search-api";
 import { cn } from "@/lib/utils";
 
 const DEBOUNCE_MS = 150;
@@ -37,7 +38,11 @@ function SearchPanel({ onClose }: { onClose: () => void }) {
     setActiveIndex(0);
   }
 
-  const results = useMemo(() => searchAll(debouncedQuery), [debouncedQuery]);
+  const { data: results = [], isFetching } = useQuery({
+    queryKey: ["search", debouncedQuery],
+    queryFn: () => fetchSearch(debouncedQuery),
+    enabled: debouncedQuery.trim() !== "",
+  });
   const grouped = useMemo(() => groupResults(results), [results]);
   const flat = useMemo(() => grouped.flatMap((g) => g.results), [grouped]);
 
@@ -94,6 +99,8 @@ function SearchPanel({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto p-2">
           {debouncedQuery.trim() === "" ? (
             <p className="py-10 text-center text-sm text-fg-faint">Start typing to search across your business.</p>
+          ) : isFetching && grouped.length === 0 ? (
+            <p className="py-10 text-center text-sm text-fg-faint">Searching…</p>
           ) : grouped.length === 0 ? (
             <p className="py-10 text-center text-sm text-fg-faint">No results for &quot;{debouncedQuery}&quot;.</p>
           ) : (

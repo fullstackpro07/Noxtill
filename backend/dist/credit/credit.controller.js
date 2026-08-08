@@ -32,6 +32,9 @@ let CreditController = class CreditController {
     listDebtors() {
         return this.creditService.listDebtors();
     }
+    entries(customerId) {
+        return this.creditService.getLedger(customerId);
+    }
     recordPayment(dto) {
         return this.creditService.recordPayment(dto);
     }
@@ -49,6 +52,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], CreditController.prototype, "listDebtors", null);
+__decorate([
+    (0, common_1.Get)(':customer/entries'),
+    __param(0, (0, common_1.Param)('customer')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CreditController.prototype, "entries", null);
 __decorate([
     (0, common_1.Post)('payments'),
     __param(0, (0, common_1.Body)()),

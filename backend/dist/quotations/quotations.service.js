@@ -21,6 +21,13 @@ let QuotationsService = class QuotationsService {
     constructor(tenantPrisma) {
         this.tenantPrisma = tenantPrisma;
     }
+    findAll() {
+        return this.tenantPrisma.client.order.findMany({
+            where: { isQuotation: true },
+            orderBy: { createdAt: 'desc' },
+            include: { items: true, customer: true },
+        });
+    }
     async create(businessId, dto) {
         return this.tenantPrisma.client.$transaction(async (tx) => {
             let customerId = dto.customerId;

@@ -1,6 +1,16 @@
 "use client";
 
 export function RatingSparkline({ data, width = 100, height = 32 }: { data: number[]; width?: number; height?: number }) {
+  if (data.length === 0) return null;
+
+  if (data.length === 1) {
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Average rating trend">
+        <circle cx={width / 2} cy={height / 2} r={3} fill="var(--chart-1)" />
+      </svg>
+    );
+  }
+
   const min = Math.min(...data);
   const max = Math.max(...data);
   const span = max - min || 1;
@@ -15,7 +25,7 @@ export function RatingSparkline({ data, width = 100, height = 32 }: { data: numb
   const last = points[points.length - 1];
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Average rating trend, last 8 weeks">
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Average rating trend, recent weeks">
       <path d={path} fill="none" stroke="var(--chart-1)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={last.x} cy={last.y} r={3} fill="var(--chart-1)" />
     </svg>

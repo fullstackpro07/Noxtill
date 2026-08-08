@@ -3,13 +3,13 @@
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { canTransition, type Appointment, type AppointmentStatus } from "@/lib/bookings";
-import { staffById } from "@/lib/staff";
+import { canTransition, type AppointmentStatus } from "@/lib/bookings";
+import type { LiveAppointment } from "@/lib/bookings-api";
 import { formatHour } from "@/lib/profit";
 import { formatDate } from "@/lib/format";
-import { toast } from "@/lib/toast";
 
 const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "neutral" | "danger"> = {
+  booked: "neutral",
   confirmed: "primary",
   completed: "success",
   cancelled: "neutral",
@@ -17,6 +17,7 @@ const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "neutral" |
 };
 
 const STATUS_ACTIONS: { to: AppointmentStatus; label: string }[] = [
+  { to: "confirmed", label: "Confirm appointment" },
   { to: "completed", label: "Mark completed" },
   { to: "no_show", label: "Mark no-show" },
   { to: "cancelled", label: "Cancel appointment" },
@@ -27,16 +28,14 @@ export function AppointmentStatusDrawer({
   onClose,
   onStatusChange,
 }: {
-  appointment: Appointment | null;
+  appointment: LiveAppointment | null;
   onClose: () => void;
   onStatusChange: (id: string, status: AppointmentStatus) => void;
 }) {
   if (!appointment) return null;
-  const staff = staffById(appointment.staffId);
 
   function handleTransition(to: AppointmentStatus) {
     onStatusChange(appointment!.id, to);
-    toast.success(`Appointment marked ${to.replace("_", " ")}.`);
     onClose();
   }
 
@@ -45,7 +44,7 @@ export function AppointmentStatusDrawer({
       open
       onClose={onClose}
       title={appointment.customerName}
-      description={`${appointment.serviceName} with ${staff?.name ?? "staff"}`}
+      description={`${appointment.serviceName} with ${appointment.staffName ?? "staff"}`}
       footer={
         <Button variant="ghost" onClick={onClose}>
           Close

@@ -1,34 +1,54 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Wallet, Bell, HandCoins, FileText, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorBanner } from "@/components/shared/error-states";
+import { SkeletonRow } from "@/components/shared/skeleton";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { StatementDialog } from "./statement-dialog";
 import { RemindAllDialog } from "./remind-all-dialog";
-import { DEBTORS as INITIAL_DEBTORS, totalReceivable, type Debtor } from "@/lib/credit";
-import { formatCurrency, daysAgo } from "@/lib/format";
+import { fetchDebtors, remindCustomer, type LiveDebtor } from "@/lib/credit-api";
+import { ApiError } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format";
 import { toast } from "@/lib/toast";
 
 export function CreditView({ currency }: { currency: string }) {
-  const [debtors, setDebtors] = useState<Debtor[]>(INITIAL_DEBTORS);
   const [remindAllOpen, setRemindAllOpen] = useState(false);
-  const [payingDebtor, setPayingDebtor] = useState<Debtor | null>(null);
-  const [statementDebtor, setStatementDebtor] = useState<Debtor | null>(null);
+  const [payingDebtor, setPayingDebtor] = useState<LiveDebtor | null>(null);
+  const [statementDebtor, setStatementDebtor] = useState<LiveDebtor | null>(null);
 
-  function handleRemind(debtor: Debtor) {
-    toast.success(`Reminder sent to ${debtor.name}. Live send wires up in INT-004.`);
+  const {
+    data: debtors = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["debtors"], queryFn: fetchDebtors });
+
+  const remindMutation = useMutation({
+    mutationFn: (debtor: LiveDebtor) => remindCustomer(debtor.customerId),
+    onSuccess: (result, debtor) => {
+      toast.success(result.sent > 0 ? `Reminder sent to ${debtor.name}.` : `Couldn't send a reminder to ${debtor.name}.`);
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send this reminder.");
+    },
+  });
+
+  const total = debtors.reduce((sum, d) => sum + d.balance, 0);
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <ErrorBanner title="Couldn't load the credit ledger" description="Check your connection and try again." onRetry={() => refetch()} />
+      </div>
+    );
   }
 
-  function handlePaymentRecorded(customerId: string, amount: number) {
-    setDebtors((prev) => prev.map((d) => (d.customerId === customerId ? { ...d, balance: Math.max(0, d.balance - amount) } : d)));
-  }
-
-  const total = totalReceivable(debtors);
-
-  if (debtors.length === 0) {
+  if (!isPending && debtors.length === 0) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
         <EmptyState
@@ -74,6 +94,14 @@ export function CreditView({ currency }: { currency: string }) {
             </tr>
           </thead>
           <tbody>
+            {isPending &&
+              Array.from({ length: 4 }).map((_, i) => (
+                <tr key={i}>
+                  <td colSpan={4}>
+                    <SkeletonRow />
+                  </td>
+                </tr>
+              ))}
             {debtors.map((d) => (
               <tr key={d.customerId} className="border-b border-border last:border-0 hover:bg-surface-2/50">
                 <td className="px-4 py-3">
@@ -90,12 +118,12 @@ export function CreditView({ currency }: { currency: string }) {
                     {formatCurrency(d.balance, currency)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-fg-muted">{daysAgo(d.lastActivity)}d ago</td>
+                <td className="px-4 py-3 text-fg-muted">{d.daysOutstanding}d ago</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
                     <button
-                      onClick={() => handleRemind(d)}
-                      disabled={d.optedOutOfReminders}
+                      onClick={() => remindMutation.mutate(d)}
+                      disabled={d.optedOutOfReminders || remindMutation.isPending}
                       aria-label={`Remind ${d.name}`}
                       className="flex h-8 w-8 items-center justify-center rounded-full text-fg-faint hover:bg-surface-2 hover:text-fg disabled:pointer-events-none disabled:opacity-30"
                     >
@@ -124,12 +152,7 @@ export function CreditView({ currency }: { currency: string }) {
       </div>
 
       <RemindAllDialog open={remindAllOpen} debtors={debtors} onClose={() => setRemindAllOpen(false)} />
-      <RecordPaymentDialog
-        debtor={payingDebtor}
-        currency={currency}
-        onClose={() => setPayingDebtor(null)}
-        onRecorded={handlePaymentRecorded}
-      />
+      <RecordPaymentDialog debtor={payingDebtor} currency={currency} onClose={() => setPayingDebtor(null)} />
       <StatementDialog debtor={statementDebtor} currency={currency} onClose={() => setStatementDebtor(null)} />
     </div>
   );

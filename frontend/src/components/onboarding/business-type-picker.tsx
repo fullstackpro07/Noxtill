@@ -1,44 +1,34 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, Sparkles, Check, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Search, Sparkles, Check, Loader2, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { BUSINESS_CATEGORIES } from "@/lib/business-categories";
+import { fetchBusinessTypes, aiMapBusinessType } from "@/lib/business-types-api";
+import { ApiError } from "@/lib/api-client";
 
 export interface BusinessTypePickerProps {
   value: string | null;
   onChange: (categoryKey: string, label: string) => void;
 }
 
-/** Search + 12 category cards + AI one-line-description fallback when nothing matches (FE-005). */
+/** Search + real business-type cards + AI one-line-description fallback when nothing matches (FE-005). */
 export function BusinessTypePicker({ value, onChange }: BusinessTypePickerProps) {
   const [query, setQuery] = useState("");
   const [aiDescription, setAiDescription] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return BUSINESS_CATEGORIES;
-    return BUSINESS_CATEGORIES.filter(
-      (c) => c.label.toLowerCase().includes(q) || c.examples.toLowerCase().includes(q),
-    );
-  }, [query]);
+  const { data: types = [], isPending } = useQuery({
+    queryKey: ["business-types", query],
+    queryFn: () => fetchBusinessTypes(query),
+  });
+  const noMatches = !isPending && types.length === 0;
 
-  const noMatches = filtered.length === 0;
-
-  async function handleAiMap() {
-    if (!aiDescription.trim()) return;
-    setAiLoading(true);
-    setAiResult(null);
-    // Wires to POST /business-types/ai-map (BE-069) in INT-006 — stubbed here so the flow is fully clickable now.
-    await new Promise((r) => setTimeout(r, 900));
-    setAiResult(aiDescription.trim());
-    setAiLoading(false);
-    onChange("ai_generated", aiDescription.trim());
-  }
+  const aiMapMutation = useMutation({
+    mutationFn: () => aiMapBusinessType(aiDescription.trim()),
+    onSuccess: (matched) => onChange(matched.key, matched.label),
+  });
 
   return (
     <div>
@@ -51,14 +41,13 @@ export function BusinessTypePicker({ value, onChange }: BusinessTypePickerProps)
 
       {!noMatches && (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {filtered.map((category) => {
-            const Icon = category.icon;
-            const selected = value === category.key;
+          {types.map((type) => {
+            const selected = value === type.key;
             return (
               <button
-                key={category.key}
+                key={type.id}
                 type="button"
-                onClick={() => onChange(category.key, category.label)}
+                onClick={() => onChange(type.key, type.label)}
                 className={cn(
                   "group relative flex flex-col items-start gap-2.5 rounded-[var(--radius-noxtill)] border p-4 text-start transition-all",
                   selected
@@ -77,10 +66,9 @@ export function BusinessTypePicker({ value, onChange }: BusinessTypePickerProps)
                     selected ? "bg-primary text-primary-foreground" : "bg-surface-2 text-fg-muted",
                   )}
                 >
-                  <Icon className="h-4.5 w-4.5" aria-hidden />
+                  <Building2 className="h-4.5 w-4.5" aria-hidden />
                 </span>
-                <span className="font-display text-sm font-semibold text-fg">{category.label}</span>
-                <span className="text-xs text-fg-faint">{category.examples}</span>
+                <span className="font-display text-sm font-semibold text-fg">{type.label}</span>
               </button>
             );
           })}
@@ -111,17 +99,22 @@ export function BusinessTypePicker({ value, onChange }: BusinessTypePickerProps)
                   type="button"
                   variant="accent"
                   size="sm"
-                  disabled={!aiDescription.trim() || aiLoading}
-                  onClick={handleAiMap}
+                  disabled={!aiDescription.trim() || aiMapMutation.isPending}
+                  onClick={() => aiMapMutation.mutate()}
                   className="shrink-0"
                 >
-                  {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : "Match it"}
+                  {aiMapMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : "Match it"}
                 </Button>
               </div>
-              {aiResult && (
+              {aiMapMutation.isSuccess && (
                 <p className="mt-2.5 flex items-center gap-1.5 text-sm font-medium text-primary">
                   <Check className="h-4 w-4" aria-hidden />
-                  Got it — set up as &ldquo;{aiResult}&rdquo;
+                  Got it — set up as &ldquo;{aiMapMutation.data.label}&rdquo;
+                </p>
+              )}
+              {aiMapMutation.isError && (
+                <p className="mt-2.5 text-sm text-destructive">
+                  {aiMapMutation.error instanceof ApiError ? aiMapMutation.error.message : "Couldn't match this — please try again."}
                 </p>
               )}
             </div>

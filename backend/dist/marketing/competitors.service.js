@@ -14,10 +14,14 @@ const common_1 = require("@nestjs/common");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
 const marketing_constants_1 = require("./marketing.constants");
+const competitor_snapshot_processor_1 = require("./jobs/competitor-snapshot.processor");
+const HISTORY_WEEKS = 12;
 let CompetitorsService = class CompetitorsService {
     tenantPrisma;
-    constructor(tenantPrisma) {
+    snapshotProcessor;
+    constructor(tenantPrisma, snapshotProcessor) {
         this.tenantPrisma = tenantPrisma;
+        this.snapshotProcessor = snapshotProcessor;
     }
     list() {
         return this.tenantPrisma.client.competitor.findMany({
@@ -46,10 +50,43 @@ let CompetitorsService = class CompetitorsService {
         await this.tenantPrisma.client.competitor.delete({ where: { id } });
         return { success: true };
     }
+    async history(id) {
+        const competitor = await this.tenantPrisma.client.competitor.findUnique({
+            where: { id },
+        });
+        if (!competitor) {
+            throw new common_1.NotFoundException('Competitor not found');
+        }
+        const snapshots = await this.tenantPrisma.client.competitorSnapshot.findMany({
+            where: { competitorId: id },
+            orderBy: { capturedAt: 'desc' },
+            take: HISTORY_WEEKS,
+        });
+        return snapshots
+            .reverse()
+            .map((s) => ({
+            rating: Number(s.rating),
+            reviewsCount: s.reviewsCount,
+            capturedAt: s.capturedAt.toISOString(),
+        }));
+    }
+    async triggerSnapshot(id) {
+        const competitor = await this.tenantPrisma.client.competitor.findUnique({
+            where: { id },
+        });
+        if (!competitor) {
+            throw new common_1.NotFoundException('Competitor not found');
+        }
+        await this.snapshotProcessor.snapshotOne(competitor.id, competitor.platformRef);
+        return this.tenantPrisma.client.competitor.findUniqueOrThrow({
+            where: { id },
+        });
+    }
 };
 exports.CompetitorsService = CompetitorsService;
 exports.CompetitorsService = CompetitorsService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService])
+    __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
+        competitor_snapshot_processor_1.CompetitorSnapshotProcessor])
 ], CompetitorsService);
 //# sourceMappingURL=competitors.service.js.map

@@ -20,6 +20,11 @@ export class CreditController {
     return this.creditService.listDebtors();
   }
 
+  @Get(':customer/entries')
+  entries(@Param('customer') customerId: string) {
+    return this.creditService.getLedger(customerId);
+  }
+
   // Not @Audited() here: CreditService.recordPayment writes its own audit_log
   // row directly (with real before/after balances), same pattern as sales.
   @Post('payments')

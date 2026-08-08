@@ -1,9 +1,9 @@
 "use client";
 
 import { IntegrationsHubView } from "@/components/integrations/integrations-hub-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function IntegrationsPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <IntegrationsHubView currency={session.business.currency} />;
 }

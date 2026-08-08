@@ -13,14 +13,35 @@ exports.PublicReviewService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const send_gate_service_1 = require("../messaging/send-gate.service");
+const app_exception_1 = require("../common/filters/app.exception");
+const review_token_util_1 = require("./review-token.util");
 const prisma_1 = require("../../generated/prisma");
 const TOKEN_EXPIRY_DAYS = 30;
+const QR_DAILY_CAP_PER_BUSINESS = 200;
 let PublicReviewService = class PublicReviewService {
     prisma;
     sendGate;
     constructor(prisma, sendGate) {
         this.prisma = prisma;
         this.sendGate = sendGate;
+    }
+    async mintAnonymousLink(slug) {
+        const business = await this.prisma.business.findUnique({ where: { slug } });
+        if (!business) {
+            throw new common_1.NotFoundException('Business not found');
+        }
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const recentQrCount = await this.prisma.reviewRequest.count({
+            where: { businessId: business.id, source: 'qr', createdAt: { gte: since } },
+        });
+        if (recentQrCount >= QR_DAILY_CAP_PER_BUSINESS) {
+            throw new app_exception_1.AppException('REVIEW_QR_DAILY_CAP_REACHED', 'Too many review links have been requested today — please try again tomorrow.', common_1.HttpStatus.TOO_MANY_REQUESTS);
+        }
+        const token = (0, review_token_util_1.generateReviewToken)();
+        await this.prisma.reviewRequest.create({
+            data: { businessId: business.id, token, source: 'qr' },
+        });
+        return { token };
     }
     async getWidget(slug) {
         const business = await this.prisma.business.findUnique({ where: { slug } });

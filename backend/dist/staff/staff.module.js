@@ -19,7 +19,7 @@ exports.StaffModule = StaffModule = __decorate([
     (0, common_1.Module)({
         controllers: [staff_controller_1.StaffController],
         providers: [staff_service_1.StaffService, attendance_service_1.AttendanceService, commissions_service_1.CommissionsService],
-        exports: [staff_service_1.StaffService],
+        exports: [staff_service_1.StaffService, commissions_service_1.CommissionsService],
     })
 ], StaffModule);
 //# sourceMappingURL=staff.module.js.map

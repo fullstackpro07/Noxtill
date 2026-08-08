@@ -1,19 +1,40 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Gift } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_REFERRAL_SETTINGS, REFERRAL_STATS } from "@/lib/referrals";
+import { fetchReferralSettings, saveReferralSettings, fetchReferralStats } from "@/lib/referrals-api";
+import { DEFAULT_REFERRAL_SETTINGS, type ReferralSettings } from "@/lib/referrals";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
 export function ReferralSettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: liveSettings } = useQuery({ queryKey: ["referral-settings"], queryFn: fetchReferralSettings });
+  const { data: stats } = useQuery({ queryKey: ["referral-stats"], queryFn: fetchReferralStats });
   const [settings, setSettings] = useState(DEFAULT_REFERRAL_SETTINGS);
-
-  function handleSave() {
-    toast.success("Referral settings saved. Live save wires up in INT-010.");
+  // Once the real settings arrive, sync them into local editable state exactly once — further local
+  // edits shouldn't be clobbered by refetches, so this compares by reference, not by re-running on
+  // every render (React's own recommended pattern for "initialize editable state from a fetch").
+  const [syncedFrom, setSyncedFrom] = useState<ReferralSettings | undefined>(undefined);
+  if (liveSettings && liveSettings !== syncedFrom) {
+    setSyncedFrom(liveSettings);
+    setSettings(liveSettings);
   }
+
+  const saveMutation = useMutation({
+    mutationFn: () => saveReferralSettings({ ...settings, enabled: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["referral-settings"] });
+      toast.success("Referral settings saved.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't save these settings — please try again.");
+    },
+  });
 
   return (
     <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
@@ -25,15 +46,15 @@ export function ReferralSettingsCard() {
       <div className="mb-4 grid grid-cols-3 gap-3">
         <div>
           <p className="text-xs text-fg-faint">Referred</p>
-          <p className="font-display text-lg font-bold text-fg">{REFERRAL_STATS.totalReferred}</p>
+          <p className="font-display text-lg font-bold text-fg">{stats?.totalReferred ?? "—"}</p>
         </div>
         <div>
           <p className="text-xs text-fg-faint">Converted</p>
-          <p className="font-display text-lg font-bold text-fg">{REFERRAL_STATS.converted}</p>
+          <p className="font-display text-lg font-bold text-fg">{stats?.converted ?? "—"}</p>
         </div>
         <div>
           <p className="text-xs text-fg-faint">Rewards issued</p>
-          <p className="font-display text-lg font-bold text-fg">{REFERRAL_STATS.rewardsIssued}</p>
+          <p className="font-display text-lg font-bold text-fg">{stats?.rewardsIssued ?? "—"}</p>
         </div>
       </div>
 
@@ -56,8 +77,8 @@ export function ReferralSettingsCard() {
         />
       </div>
       <div className="mt-4 flex justify-end">
-        <Button size="sm" onClick={handleSave}>
-          Save changes
+        <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+          {saveMutation.isPending ? "Saving…" : "Save changes"}
         </Button>
       </div>
     </div>

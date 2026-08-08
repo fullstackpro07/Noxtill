@@ -15,6 +15,7 @@ const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service
 const locale_service_1 = require("../common/localization/locale.service");
 const s3_service_1 = require("../common/storage/s3.service");
 const pdf_renderer_service_1 = require("../common/pdf/pdf-renderer.service");
+const credit_types_1 = require("./credit.types");
 let CreditStatementService = class CreditStatementService {
     tenantPrisma;
     locale;
@@ -42,18 +43,7 @@ let CreditStatementService = class CreditStatementService {
         if (!customer) {
             throw new common_1.NotFoundException('Customer not found');
         }
-        let running = 0;
-        const rows = entries.map((entry) => {
-            const amount = Number(entry.amount);
-            running += entry.kind === 'credit' ? amount : -amount;
-            return {
-                date: entry.createdAt,
-                kind: entry.kind,
-                amount,
-                note: entry.note,
-                runningBalance: running,
-            };
-        });
+        const rows = (0, credit_types_1.buildLedgerRows)(entries);
         const html = this.renderHtml(business, customer, rows);
         const pdf = await this.pdfRenderer.renderPdf(html);
         const key = `statements/${businessId}/${customerId}-${Date.now()}.pdf`;

@@ -1,9 +1,9 @@
 "use client";
 
 import { ProfitView } from "@/components/profit/profit-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function ProfitPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <ProfitView currency={session.business.currency} />;
 }

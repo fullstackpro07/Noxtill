@@ -5,11 +5,11 @@ export declare class PublicAppointmentController {
     constructor(publicBookingService: PublicBookingService);
     reschedule(token: string, dto: RescheduleAppointmentDto): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
+        createdAt: Date;
+        updatedAt: Date;
         staffUserId: string | null;
         serviceId: string;
         startsAt: Date;
@@ -20,11 +20,11 @@ export declare class PublicAppointmentController {
     }>;
     cancel(token: string): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
+        createdAt: Date;
+        updatedAt: Date;
         staffUserId: string | null;
         serviceId: string;
         startsAt: Date;

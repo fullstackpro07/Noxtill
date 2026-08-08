@@ -1,3 +1,4 @@
+import type { Response } from 'express';
 import { PublicReviewService } from './public-review.service';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 export declare class PublicReviewController {
@@ -14,7 +15,10 @@ export declare class PublicReviewController {
         redirect: string;
         thankYou?: undefined;
     }>;
-    widget(biz: string): Promise<{
+    mintQrLink(slug: string): Promise<{
+        token: string;
+    }>;
+    widget(biz: string, res: Response): Promise<{
         businessName: string;
         branding: import("generated/prisma/runtime/library").JsonValue;
         reviews: {

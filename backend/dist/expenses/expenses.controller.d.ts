@@ -17,6 +17,7 @@ export declare class ExpensesController {
         businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }>;
@@ -27,6 +28,7 @@ export declare class ExpensesController {
         businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }[]>;
@@ -37,6 +39,7 @@ export declare class ExpensesController {
         businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }>;
@@ -47,6 +50,7 @@ export declare class ExpensesController {
         businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }>;

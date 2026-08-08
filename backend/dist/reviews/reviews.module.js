@@ -12,6 +12,7 @@ const bullmq_1 = require("@nestjs/bullmq");
 const review_requests_service_1 = require("./review-requests.service");
 const reviews_service_1 = require("./reviews.service");
 const public_review_service_1 = require("./public-review.service");
+const qr_poster_service_1 = require("./qr-poster.service");
 const reviews_controller_1 = require("./reviews.controller");
 const public_review_controller_1 = require("./public-review.controller");
 const review_reminders_scheduler_1 = require("./jobs/review-reminders.scheduler");
@@ -37,6 +38,7 @@ exports.ReviewsModule = ReviewsModule = __decorate([
             review_requests_service_1.ReviewRequestsService,
             reviews_service_1.ReviewsService,
             public_review_service_1.PublicReviewService,
+            qr_poster_service_1.QrPosterService,
             review_reminders_scheduler_1.ReviewRemindersScheduler,
             review_reminders_processor_1.ReviewRemindersProcessor,
             google_sync_scheduler_1.GoogleSyncScheduler,

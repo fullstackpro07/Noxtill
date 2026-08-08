@@ -110,6 +110,13 @@ describe('InventoryService (BE-033/BE-034)', () => {
     const item = inventory.find((i) => i.id === productId);
     expect(item).toBeDefined();
     expect(item?.stockValue).toBeCloseTo(25 * 1.5);
+    expect(item?.costPrice).toBe(1.5);
     expect(item?.status).toBe('ok');
+  });
+
+  it("surfaces the most recent purchase's supplier on the inventory row", async () => {
+    const inventory = await inventoryService.listInventory();
+    const item = inventory.find((i) => i.id === productId);
+    expect(item?.supplier).toBe('Acme');
   });
 });

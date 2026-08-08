@@ -64,13 +64,21 @@ export class ProductsImportService {
         continue;
       }
 
-      await this.tenantPrisma.client.product.create({
-        data: {
-          businessId,
-          ...validation.data,
-        } as Prisma.ProductUncheckedCreateInput,
-      });
-      created += 1;
+      try {
+        await this.tenantPrisma.client.product.create({
+          data: {
+            businessId,
+            ...validation.data,
+          } as Prisma.ProductUncheckedCreateInput,
+        });
+        created += 1;
+      } catch {
+        errors.push({
+          row: rowNumber,
+          reason: `A product with sku "${(validation.data as { sku?: string }).sku}" already exists`,
+          data: row,
+        });
+      }
     }
 
     const errorsFileUrl =
@@ -156,6 +164,7 @@ export class ProductsImportService {
         name,
         kind,
         category: row.category?.trim() || undefined,
+        sku: row.sku?.trim() || undefined,
         costPrice,
         sellingPrice,
         stockQty,

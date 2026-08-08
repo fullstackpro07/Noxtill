@@ -5,6 +5,9 @@ export declare class PublicReviewService {
     private readonly prisma;
     private readonly sendGate;
     constructor(prisma: PrismaService, sendGate: SendGateService);
+    mintAnonymousLink(slug: string): Promise<{
+        token: string;
+    }>;
     getWidget(slug: string): Promise<{
         businessName: string;
         branding: import("generated/prisma/runtime/library").JsonValue;

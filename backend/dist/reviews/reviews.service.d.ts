@@ -1,18 +1,20 @@
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { SendGateService } from '../messaging/send-gate.service';
 import { QueryReviewsDto } from './dto/query-reviews.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 export declare class ReviewsService {
     private readonly tenantPrisma;
     private readonly aiInfra;
+    private readonly sendGate;
     private readonly cls;
-    constructor(tenantPrisma: TenantPrismaService, aiInfra: AiInfraService, cls: ClsService);
+    constructor(tenantPrisma: TenantPrismaService, aiInfra: AiInfraService, sendGate: SendGateService, cls: ClsService);
     list(query: QueryReviewsDto): Promise<({
         source: "external";
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         stars: number;
         platform: string;
         externalId: string;
@@ -24,11 +26,11 @@ export declare class ReviewsService {
         source: "private";
         message: string | null;
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.FeedbackStatus;
+        createdAt: Date;
+        updatedAt: Date;
         stars: number;
         reviewRequestId: string | null;
         assignedTo: string | null;
@@ -37,11 +39,11 @@ export declare class ReviewsService {
     updateFeedback(id: string, dto: UpdateFeedbackDto): Promise<{
         message: string | null;
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.FeedbackStatus;
+        createdAt: Date;
+        updatedAt: Date;
         stars: number;
         reviewRequestId: string | null;
         assignedTo: string | null;
@@ -49,8 +51,8 @@ export declare class ReviewsService {
     }>;
     reply(id: string, replyText: string): Promise<{
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         stars: number;
         platform: string;
         externalId: string;
@@ -62,4 +64,41 @@ export declare class ReviewsService {
     aiDraft(id: string): Promise<{
         draft: string;
     }>;
+    replyToFeedback(id: string, message: string): Promise<{
+        id: string;
+        businessId: string;
+        customerId: string | null;
+        channel: import("../../generated/prisma").$Enums.MessageChannel;
+        category: import("../../generated/prisma").$Enums.MessageCategory;
+        templateKey: string;
+        locale: string;
+        payload: import("generated/prisma/runtime/library").JsonValue;
+        status: import("../../generated/prisma").$Enums.MessageStatus;
+        providerRef: string | null;
+        scheduledFor: Date | null;
+        campaignId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
+    getSummary(): Promise<{
+        averageRating: number;
+        distribution: {
+            stars: number;
+            count: number;
+        }[];
+        sparkline: number[];
+        conversion: {
+            requested: number;
+            received: number;
+        };
+        latestReview: {
+            id: string;
+            platform: string;
+            author: string | null;
+            stars: number;
+            text: string | null;
+            createdAt: Date;
+        } | null;
+    }>;
+    private buildWeeklySparkline;
 }

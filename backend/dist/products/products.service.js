@@ -12,33 +12,49 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsService = void 0;
 const common_1 = require("@nestjs/common");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
+const app_exception_1 = require("../common/filters/app.exception");
+const prisma_1 = require("../../generated/prisma");
+const PRODUCT_ERROR_CODES = {
+    DUPLICATE_SKU: 'DUPLICATE_SKU',
+};
 let ProductsService = class ProductsService {
     tenantPrisma;
     constructor(tenantPrisma) {
         this.tenantPrisma = tenantPrisma;
     }
-    create(dto) {
-        return this.tenantPrisma.client.product.create({
-            data: {
-                kind: dto.kind,
-                name: dto.name,
-                category: dto.category,
-                variations: (dto.variations ?? []),
-                costPrice: dto.costPrice,
-                sellingPrice: dto.sellingPrice,
-                stockQty: dto.stockQty ?? 0,
-                lowStockThreshold: dto.lowStockThreshold ?? 5,
-                durationMin: dto.kind === 'service' ? dto.durationMin : undefined,
-                active: dto.active ?? true,
-            },
-        });
+    async create(dto) {
+        try {
+            return await this.tenantPrisma.client.product.create({
+                data: {
+                    kind: dto.kind,
+                    name: dto.name,
+                    category: dto.category,
+                    sku: dto.sku,
+                    variations: (dto.variations ?? []),
+                    costPrice: dto.costPrice,
+                    sellingPrice: dto.sellingPrice,
+                    stockQty: dto.stockQty ?? 0,
+                    lowStockThreshold: dto.lowStockThreshold ?? 5,
+                    durationMin: dto.kind === 'service' ? dto.durationMin : undefined,
+                    active: dto.active ?? true,
+                },
+            });
+        }
+        catch (err) {
+            throw this.mapDuplicateSkuError(err, dto.sku);
+        }
     }
     findAll(query) {
         const where = {
             kind: query.kind,
             category: query.category,
             active: query.active,
-            name: query.q ? { contains: query.q, mode: 'insensitive' } : undefined,
+            OR: query.q
+                ? [
+                    { name: { contains: query.q, mode: 'insensitive' } },
+                    { sku: { contains: query.q, mode: 'insensitive' } },
+                ]
+                : undefined,
         };
         return this.tenantPrisma.client.product.findMany({
             where,
@@ -56,23 +72,29 @@ let ProductsService = class ProductsService {
     }
     async update(id, dto) {
         await this.findOne(id);
-        return this.tenantPrisma.client.product.update({
-            where: { id },
-            data: {
-                kind: dto.kind,
-                name: dto.name,
-                category: dto.category,
-                variations: dto.variations
-                    ? dto.variations
-                    : undefined,
-                costPrice: dto.costPrice,
-                sellingPrice: dto.sellingPrice,
-                stockQty: dto.stockQty,
-                lowStockThreshold: dto.lowStockThreshold,
-                durationMin: dto.durationMin,
-                active: dto.active,
-            },
-        });
+        try {
+            return await this.tenantPrisma.client.product.update({
+                where: { id },
+                data: {
+                    kind: dto.kind,
+                    name: dto.name,
+                    category: dto.category,
+                    sku: dto.sku,
+                    variations: dto.variations
+                        ? dto.variations
+                        : undefined,
+                    costPrice: dto.costPrice,
+                    sellingPrice: dto.sellingPrice,
+                    stockQty: dto.stockQty,
+                    lowStockThreshold: dto.lowStockThreshold,
+                    durationMin: dto.durationMin,
+                    active: dto.active,
+                },
+            });
+        }
+        catch (err) {
+            throw this.mapDuplicateSkuError(err, dto.sku);
+        }
     }
     async deactivate(id) {
         await this.findOne(id);
@@ -80,6 +102,14 @@ let ProductsService = class ProductsService {
             where: { id },
             data: { active: false },
         });
+    }
+    mapDuplicateSkuError(err, sku) {
+        if (err instanceof prisma_1.Prisma.PrismaClientKnownRequestError &&
+            err.code === 'P2002' &&
+            err.meta?.target?.includes('sku')) {
+            return new app_exception_1.AppException(PRODUCT_ERROR_CODES.DUPLICATE_SKU, `A product with sku "${sku}" already exists`, common_1.HttpStatus.BAD_REQUEST);
+        }
+        return err;
     }
 };
 exports.ProductsService = ProductsService;

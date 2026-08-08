@@ -3,6 +3,54 @@ import { CreateQuotationDto } from './dto/create-quotation.dto';
 export declare class QuotationsService {
     private readonly tenantPrisma;
     constructor(tenantPrisma: TenantPrismaService);
+    findAll(): import("generated/prisma/runtime/library").PrismaPromise<({
+        customer: {
+            id: string;
+            email: string | null;
+            phone: string;
+            name: string;
+            createdAt: Date;
+            updatedAt: Date;
+            businessId: string;
+            address: string | null;
+            birthday: Date | null;
+            notes: string | null;
+            tags: string[];
+            consentMarketing: boolean;
+            optedOut: boolean;
+            lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
+            visitCount: number;
+            lastVisitAt: Date | null;
+            referredByCustomerId: string | null;
+            referralRewardedAt: Date | null;
+        } | null;
+        items: {
+            id: string;
+            name: string;
+            price: import("generated/prisma/runtime/library").Decimal;
+            orderId: string;
+            productId: string | null;
+            cost: import("generated/prisma/runtime/library").Decimal;
+            qty: number;
+        }[];
+    } & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        orderNo: number;
+        customerId: string | null;
+        orderType: import("../../generated/prisma").$Enums.OrderType;
+        tableNo: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        subtotal: import("generated/prisma/runtime/library").Decimal;
+        tax: import("generated/prisma/runtime/library").Decimal;
+        discount: import("generated/prisma/runtime/library").Decimal;
+        total: import("generated/prisma/runtime/library").Decimal;
+        cogs: import("generated/prisma/runtime/library").Decimal;
+        isQuotation: boolean;
+        staffUserId: string | null;
+    })[]>;
     create(businessId: string, dto: CreateQuotationDto): Promise<{
         id: string;
         createdAt: Date;

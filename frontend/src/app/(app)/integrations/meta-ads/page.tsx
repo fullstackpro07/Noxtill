@@ -1,9 +1,9 @@
 "use client";
 
 import { MetaAdsView } from "@/components/integrations/meta-ads/meta-ads-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function MetaAdsIntegrationPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <MetaAdsView currency={session.business.currency} />;
 }

@@ -14,13 +14,16 @@ exports.CompetitorSnapshotProcessor = void 0;
 const bullmq_1 = require("@nestjs/bullmq");
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
+const google_places_service_1 = require("../google-places.service");
 const marketing_constants_1 = require("../marketing.constants");
 let CompetitorSnapshotProcessor = CompetitorSnapshotProcessor_1 = class CompetitorSnapshotProcessor extends bullmq_1.WorkerHost {
     prisma;
+    googlePlaces;
     logger = new common_1.Logger(CompetitorSnapshotProcessor_1.name);
-    constructor(prisma) {
+    constructor(prisma, googlePlaces) {
         super();
         this.prisma = prisma;
+        this.googlePlaces = googlePlaces;
     }
     async process(job) {
         if (job.name !== 'tick')
@@ -30,27 +33,34 @@ let CompetitorSnapshotProcessor = CompetitorSnapshotProcessor_1 = class Competit
     async runSnapshot() {
         const competitors = await this.prisma.competitor.findMany();
         for (const competitor of competitors) {
-            const snapshot = await this.fetchPlaceSnapshot(competitor.platformRef);
-            if (!snapshot)
-                continue;
-            await this.prisma.competitor.update({
-                where: { id: competitor.id },
-                data: {
-                    lastRating: snapshot.rating,
-                    lastReviewsCount: snapshot.reviewsCount,
-                },
-            });
+            await this.snapshotOne(competitor.id, competitor.platformRef);
         }
         this.logger.debug(`Competitor snapshot evaluated ${competitors.length} competitor(s)`);
     }
-    fetchPlaceSnapshot(platformRef) {
-        void platformRef;
-        return Promise.resolve(null);
+    async snapshotOne(competitorId, platformRef) {
+        const snapshot = await this.googlePlaces.fetchPlaceSnapshot(platformRef);
+        if (!snapshot)
+            return;
+        await this.prisma.competitor.update({
+            where: { id: competitorId },
+            data: {
+                lastRating: snapshot.rating,
+                lastReviewsCount: snapshot.reviewsCount,
+            },
+        });
+        await this.prisma.competitorSnapshot.create({
+            data: {
+                competitorId,
+                rating: snapshot.rating,
+                reviewsCount: snapshot.reviewsCount,
+            },
+        });
     }
 };
 exports.CompetitorSnapshotProcessor = CompetitorSnapshotProcessor;
 exports.CompetitorSnapshotProcessor = CompetitorSnapshotProcessor = CompetitorSnapshotProcessor_1 = __decorate([
     (0, bullmq_1.Processor)(marketing_constants_1.COMPETITOR_SNAPSHOT_QUEUE),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        google_places_service_1.GooglePlacesService])
 ], CompetitorSnapshotProcessor);
 //# sourceMappingURL=competitor-snapshot.processor.js.map

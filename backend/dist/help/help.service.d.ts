@@ -2,6 +2,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AskHelpDto } from './help.dto';
 export declare const HELP_NOT_FOUND_MESSAGE = "I couldn't find anything about that in the help docs \u2014 try rephrasing, or contact support.";
+export interface RetrievedRow {
+    slug: string;
+    title: string;
+    url: string;
+    body: string;
+    score: number;
+}
+export declare function retrieveHelpPassages(prisma: PrismaService, question: string): Promise<RetrievedRow[]>;
 export declare class HelpService {
     private readonly prisma;
     private readonly aiInfra;
@@ -13,5 +21,4 @@ export declare class HelpService {
             url: string;
         }[];
     }>;
-    private retrieve;
 }

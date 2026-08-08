@@ -7,6 +7,7 @@ import { CreatePublicBookingDto } from './dto/create-public-booking.dto';
 import { QuerySlotsDto } from './dto/query-slots.dto';
 import { computeAvailableSlots, WorkingHours } from './working-hours.util';
 import { BOOKING_ERROR_CODES } from './bookings.constants';
+import { assertSlotAvailable } from './booking-lock.util';
 import { AppointmentStatus, ProductKind } from '../../generated/prisma';
 
 const RESCHEDULE_TOKEN_BYTES = 16;
@@ -32,6 +33,12 @@ export class PublicBookingService {
       throw new NotFoundException('Business not found');
     }
     return business;
+  }
+
+  /** Public booking page header (name/branding) — same shape/pattern as PublicReviewService.getByToken. */
+  async getBusinessInfo(slug: string) {
+    const business = await this.resolveBusiness(slug);
+    return { businessName: business.name, branding: business.branding };
   }
 
   async listServices(slug: string) {
@@ -112,25 +119,13 @@ export class PublicBookingService {
     );
 
     const appointment = await this.prisma.$transaction(async (tx) => {
-      const lockKey = `${business.id}:${dto.staffId ?? dto.serviceId}:${startsAt.toISOString()}`;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-
-      const conflict = await tx.appointment.findFirst({
-        where: {
-          businessId: business.id,
-          ...(dto.staffId ? { staffUserId: dto.staffId } : {}),
-          status: { notIn: [AppointmentStatus.cancelled] },
-          startsAt: { lt: endsAt },
-          endsAt: { gt: startsAt },
-        },
+      await assertSlotAvailable(tx, {
+        businessId: business.id,
+        staffId: dto.staffId,
+        serviceId: dto.serviceId,
+        startsAt,
+        endsAt,
       });
-      if (conflict) {
-        throw new AppException(
-          BOOKING_ERROR_CODES.SLOT_UNAVAILABLE,
-          'That slot was just taken',
-          HttpStatus.CONFLICT,
-        );
-      }
 
       const customer = await tx.customer.upsert({
         where: {
@@ -184,25 +179,14 @@ export class PublicBookingService {
     const newEnd = new Date(newStart.getTime() + durationMs);
 
     return this.prisma.$transaction(async (tx) => {
-      const conflict = await tx.appointment.findFirst({
-        where: {
-          id: { not: appointment.id },
-          businessId: appointment.businessId,
-          ...(appointment.staffUserId
-            ? { staffUserId: appointment.staffUserId }
-            : {}),
-          status: { notIn: [AppointmentStatus.cancelled] },
-          startsAt: { lt: newEnd },
-          endsAt: { gt: newStart },
-        },
+      await assertSlotAvailable(tx, {
+        businessId: appointment.businessId,
+        staffId: appointment.staffUserId,
+        serviceId: appointment.serviceId,
+        startsAt: newStart,
+        endsAt: newEnd,
+        excludeAppointmentId: appointment.id,
       });
-      if (conflict) {
-        throw new AppException(
-          BOOKING_ERROR_CODES.SLOT_UNAVAILABLE,
-          'That slot was just taken',
-          HttpStatus.CONFLICT,
-        );
-      }
 
       return tx.appointment.update({
         where: { id: appointment.id },

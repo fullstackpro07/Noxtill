@@ -15,6 +15,7 @@ const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service
 const app_exception_1 = require("../common/filters/app.exception");
 const review_requests_service_1 = require("../reviews/review-requests.service");
 const review_token_util_1 = require("../reviews/review-token.util");
+const booking_lock_util_1 = require("./booking-lock.util");
 const bookings_constants_1 = require("./bookings.constants");
 const prisma_1 = require("../../generated/prisma");
 let AppointmentsService = class AppointmentsService {
@@ -38,7 +39,11 @@ let AppointmentsService = class AppointmentsService {
                     : {}),
             },
             orderBy: { startsAt: 'asc' },
-            include: { service: true, customer: true },
+            include: {
+                service: true,
+                customer: true,
+                staffUser: { include: { user: true } },
+            },
         });
     }
     async updateStatus(businessId, id, nextStatus) {
@@ -81,6 +86,82 @@ let AppointmentsService = class AppointmentsService {
             }
         }
         return updated;
+    }
+    async reschedule(businessId, id, dto) {
+        const appointment = await this.tenantPrisma.client.appointment.findUnique({ where: { id } });
+        if (!appointment) {
+            throw new common_1.NotFoundException('Appointment not found');
+        }
+        const durationMs = appointment.endsAt.getTime() - appointment.startsAt.getTime();
+        const newStart = new Date(dto.startsAt);
+        const newEnd = new Date(newStart.getTime() + durationMs);
+        const staffId = dto.staffUserId !== undefined ? dto.staffUserId : appointment.staffUserId;
+        return this.tenantPrisma.client.$transaction(async (tx) => {
+            await (0, booking_lock_util_1.assertSlotAvailable)(tx, {
+                businessId,
+                staffId,
+                serviceId: appointment.serviceId,
+                startsAt: newStart,
+                endsAt: newEnd,
+                excludeAppointmentId: appointment.id,
+            });
+            return tx.appointment.update({
+                where: { id: appointment.id },
+                data: { startsAt: newStart, endsAt: newEnd, staffUserId: staffId },
+                include: {
+                    service: true,
+                    customer: true,
+                    staffUser: { include: { user: true } },
+                },
+            });
+        });
+    }
+    async createWalkIn(businessId, dto) {
+        const service = await this.tenantPrisma.client.product.findFirst({
+            where: { id: dto.serviceId, kind: prisma_1.ProductKind.service },
+        });
+        if (!service) {
+            throw new app_exception_1.AppException(bookings_constants_1.BOOKING_ERROR_CODES.SERVICE_NOT_FOUND, 'Service not found', common_1.HttpStatus.NOT_FOUND);
+        }
+        const startsAt = new Date(dto.startsAt);
+        const endsAt = new Date(startsAt.getTime() + (service.durationMin ?? 30) * 60 * 1000);
+        return this.tenantPrisma.client.$transaction(async (tx) => {
+            await (0, booking_lock_util_1.assertSlotAvailable)(tx, {
+                businessId,
+                staffId: dto.staffId,
+                serviceId: dto.serviceId,
+                startsAt,
+                endsAt,
+            });
+            const customer = await tx.customer.upsert({
+                where: {
+                    businessId_phone: { businessId, phone: dto.customerPhone },
+                },
+                create: {
+                    businessId,
+                    phone: dto.customerPhone,
+                    name: dto.customerName,
+                },
+                update: {},
+            });
+            return tx.appointment.create({
+                data: {
+                    businessId,
+                    serviceId: dto.serviceId,
+                    staffUserId: dto.staffId,
+                    customerId: customer.id,
+                    startsAt,
+                    endsAt,
+                    status: prisma_1.AppointmentStatus.confirmed,
+                    source: prisma_1.AppointmentSource.walk_in,
+                },
+                include: {
+                    service: true,
+                    customer: true,
+                    staffUser: { include: { user: true } },
+                },
+            });
+        });
     }
 };
 exports.AppointmentsService = AppointmentsService;

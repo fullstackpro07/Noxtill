@@ -45,11 +45,13 @@ describe('ExpensesService (BE-035)', () => {
 
   it('creates and lists expenses filtered by month', async () => {
     await expensesService.create({
+      description: 'Studio rent',
       category: 'Rent',
       amount: 1000,
       incurredOn: '2026-01-05',
     });
     await expensesService.create({
+      description: 'Electricity',
       category: 'Utilities',
       amount: 200,
       incurredOn: '2026-02-10',
@@ -66,6 +68,7 @@ describe('ExpensesService (BE-035)', () => {
     await prisma.expense.create({
       data: {
         businessId,
+        description: 'Software subscription',
         category: 'Subscription',
         amount: 50,
         recurring: true,

@@ -51,9 +51,19 @@ describe('RollupService (BE-059)', () => {
         createdAt: new Date(`${today}T09:00:00Z`),
       },
     });
+
+    await prisma.externalReview.createMany({
+      data: [
+        { businessId: branchId, platform: 'google', externalId: `rollup-rev-1-${Date.now()}`, stars: 5 },
+        { businessId: branchId, platform: 'google', externalId: `rollup-rev-2-${Date.now()}`, stars: 3 },
+      ],
+    });
   });
 
   afterAll(async () => {
+    await prisma.externalReview.deleteMany({
+      where: { businessId: { in: [parentId, branchId] } },
+    });
     await prisma.order.deleteMany({
       where: { businessId: { in: [parentId, branchId] } },
     });
@@ -71,6 +81,14 @@ describe('RollupService (BE-059)', () => {
 
     const fromBranch = await service.dashboard(branchId);
     expect(fromBranch.totals.revenue).toBe(400);
+  });
+
+  it('includes each branch\'s average review rating, null when it has none', async () => {
+    const result = await service.dashboard(parentId);
+    const branchRow = result.branches.find((b) => b.businessId === branchId)!;
+    const parentRow = result.branches.find((b) => b.businessId === parentId)!;
+    expect(branchRow.reviewAvg).toBe(4);
+    expect(parentRow.reviewAvg).toBeNull();
   });
 
   it('returns a per-branch weekly comparison series', async () => {

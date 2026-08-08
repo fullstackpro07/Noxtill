@@ -1,10 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { AppException } from '../common/filters/app.exception';
 import { SubmitReviewDto } from './dto/submit-review.dto';
+import { generateReviewToken } from './review-token.util';
 import { ReviewRoute, Role } from '../../generated/prisma';
 
 const TOKEN_EXPIRY_DAYS = 30;
+/** Defense-in-depth against a distributed (multi-IP) abuser — the per-IP throttle on the mint endpoint can't catch this alone. */
+const QR_DAILY_CAP_PER_BUSINESS = 200;
 
 /**
  * Public rating page (BE-046) — no auth, resolved entirely by the token.
@@ -17,6 +21,40 @@ export class PublicReviewService {
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
   ) {}
+
+  /**
+   * Mints a fresh, anonymous, single-use review-request token for a QR-scan/no-login entry point
+   * (no customerId — unlike every other review request, which is tied to a real customer after a
+   * real sale). From here on the customer is on the exact same `/r/:token` flow as everyone else;
+   * this method's only job is issuing that token safely. Rate-limited at the controller
+   * (`@Throttle`, 5/min/IP) plus a per-business daily cap here as defense-in-depth against a
+   * distributed abuser the per-IP limit alone can't stop.
+   */
+  async mintAnonymousLink(slug: string): Promise<{ token: string }> {
+    const business = await this.prisma.business.findUnique({ where: { slug } });
+    if (!business) {
+      throw new NotFoundException('Business not found');
+    }
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentQrCount = await this.prisma.reviewRequest.count({
+      where: { businessId: business.id, source: 'qr', createdAt: { gte: since } },
+    });
+    if (recentQrCount >= QR_DAILY_CAP_PER_BUSINESS) {
+      throw new AppException(
+        'REVIEW_QR_DAILY_CAP_REACHED',
+        'Too many review links have been requested today — please try again tomorrow.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const token = generateReviewToken();
+    await this.prisma.reviewRequest.create({
+      data: { businessId: business.id, token, source: 'qr' },
+    });
+
+    return { token };
+  }
 
   /** BE-050: public, cacheable embed of a business's best reviews (4-5★, most recent first). */
   async getWidget(slug: string) {

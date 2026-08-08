@@ -23,6 +23,9 @@ let PublicBookingController = class PublicBookingController {
     constructor(publicBookingService) {
         this.publicBookingService = publicBookingService;
     }
+    getBusinessInfo(biz) {
+        return this.publicBookingService.getBusinessInfo(biz);
+    }
     listServices(biz) {
         return this.publicBookingService.listServices(biz);
     }
@@ -34,6 +37,14 @@ let PublicBookingController = class PublicBookingController {
     }
 };
 exports.PublicBookingController = PublicBookingController;
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Get)(':biz'),
+    __param(0, (0, common_1.Param)('biz')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PublicBookingController.prototype, "getBusinessInfo", null);
 __decorate([
     (0, public_decorator_1.Public)(),
     (0, common_1.Get)(':biz/services'),

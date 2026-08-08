@@ -4,7 +4,12 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AppException } from '../common/filters/app.exception';
 import { findWidget, WIDGET_REGISTRY } from './widget-registry';
-import { WIDGET_CACHE_TTL_MS, WIDGET_ERROR_CODES } from './widgets.constants';
+import {
+  WIDGET_CACHE_TTL_MS,
+  WIDGET_ERROR_CODES,
+  WIDGET_RANGE_DAYS,
+  type WidgetRangeDays,
+} from './widgets.constants';
 
 interface CacheEntry {
   value: unknown;
@@ -35,7 +40,7 @@ export class WidgetsService {
     }));
   }
 
-  async getWidgetData(key: string): Promise<unknown> {
+  async getWidgetData(key: string, days?: WidgetRangeDays): Promise<unknown> {
     const widget = findWidget(key);
     if (!widget) {
       throw new AppException(
@@ -44,9 +49,16 @@ export class WidgetsService {
         HttpStatus.NOT_FOUND,
       );
     }
+    if (days !== undefined && !(WIDGET_RANGE_DAYS as readonly number[]).includes(days)) {
+      throw new AppException(
+        WIDGET_ERROR_CODES.INVALID_RANGE,
+        `days must be one of ${WIDGET_RANGE_DAYS.join(', ')}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
-    const cacheKey = `${businessId}:${key}`;
+    const cacheKey = `${businessId}:${key}:${days ?? 'month'}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.value;
@@ -55,6 +67,7 @@ export class WidgetsService {
     const value = await widget.resolve({
       businessId,
       tenantPrisma: this.tenantPrisma,
+      days,
     });
     this.cache.set(cacheKey, {
       value,

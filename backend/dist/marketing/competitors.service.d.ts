@@ -1,8 +1,10 @@
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CreateCompetitorDto } from './dto/create-competitor.dto';
+import { CompetitorSnapshotProcessor } from './jobs/competitor-snapshot.processor';
 export declare class CompetitorsService {
     private readonly tenantPrisma;
-    constructor(tenantPrisma: TenantPrismaService);
+    private readonly snapshotProcessor;
+    constructor(tenantPrisma: TenantPrismaService, snapshotProcessor: CompetitorSnapshotProcessor);
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
         createdAt: Date;
@@ -23,5 +25,19 @@ export declare class CompetitorsService {
     }>;
     remove(id: string): Promise<{
         success: boolean;
+    }>;
+    history(id: string): Promise<{
+        rating: number;
+        reviewsCount: number;
+        capturedAt: string;
+    }[]>;
+    triggerSnapshot(id: string): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        platformRef: string;
+        lastRating: import("generated/prisma/runtime/library").Decimal | null;
+        lastReviewsCount: number | null;
     }>;
 }

@@ -1,12 +1,21 @@
+"use client";
+
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { WIDGETS, getMockWidgetData, getWidgetAlert } from "@/lib/widgets";
+import { WIDGETS, getWidgetAlert } from "@/lib/widgets";
+import { useWidgetDataMany } from "@/hooks/use-widget-data";
+
+const ALERT_WORTHY_WIDGETS = WIDGETS.filter((w) => w.alertWorthy);
 
 /** Surfaces every alert-worthy widget that's currently crossing its threshold — never more than what's real. */
 export function AlertStack() {
-  const alerts = WIDGETS.filter((w) => w.alertWorthy)
-    .map((w) => getWidgetAlert(w, getMockWidgetData(w.key)))
-    .filter((a): a is NonNullable<typeof a> => a !== null);
+  const results = useWidgetDataMany(ALERT_WORTHY_WIDGETS.map((w) => w.key));
+
+  const alerts = ALERT_WORTHY_WIDGETS.map((widget, i) => {
+    const result = results[i];
+    if (!result.data) return null;
+    return getWidgetAlert(widget, result.data);
+  }).filter((a): a is NonNullable<typeof a> => a !== null);
 
   if (alerts.length === 0) return null;
 

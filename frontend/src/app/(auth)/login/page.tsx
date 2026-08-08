@@ -2,10 +2,10 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldPath, type UseFormSetError } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Store, User } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -15,6 +15,24 @@ import { PasswordStrengthMeter } from "@/components/auth/password-strength-meter
 import { COUNTRIES, COUNTRY_TO_LOCALE, countryByCode } from "@/lib/countries";
 import { LOCALES } from "@/lib/locales";
 import { toast } from "@/lib/toast";
+import { ApiError } from "@/lib/api-client";
+import { login as loginRequest, signup as signupRequest, fetchMe } from "@/lib/auth-api";
+import { useAuthStore } from "@/store/auth-store";
+
+/** Maps the backend's {fields: {name: [msg]}} validation shape onto react-hook-form fields; falls back to a toast for anything else. */
+function applyApiError<T extends Record<string, unknown>>(err: unknown, setError: UseFormSetError<T>) {
+  if (!(err instanceof ApiError)) {
+    toast.error("Something went wrong — please try again.");
+    return;
+  }
+  if (err.fields) {
+    for (const [field, messages] of Object.entries(err.fields)) {
+      setError(field as FieldPath<T>, { message: messages[0] });
+    }
+    return;
+  }
+  toast.error(err.message);
+}
 
 const identifierSchema = z
   .string()
@@ -31,6 +49,7 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>;
 
 const signupSchema = z.object({
+  businessName: z.string().min(2, "Enter your business name"),
   businessOwnerName: z.string().min(2, "Enter your full name"),
   identifier: identifierSchema,
   password: z.string().min(8, "At least 8 characters"),
@@ -42,18 +61,27 @@ type SignupValues = z.infer<typeof signupSchema>;
 
 function LoginForm() {
   const router = useRouter();
+  const setSession = useAuthStore((s) => s.setSession);
   const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
 
-  async function onSubmit() {
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success("Signed in. Live auth wires up in INT-001.");
-    router.push("/dashboard");
+  async function onSubmit(values: LoginValues) {
+    try {
+      const tokens = await loginRequest({ emailOrPhone: values.identifier, password: values.password });
+      useAuthStore.getState().setTokens(tokens);
+      const { user, business } = await fetchMe();
+      setSession({ ...tokens, user, business });
+      toast.success(`Welcome back, ${user.name}!`);
+      router.push("/dashboard");
+    } catch (err) {
+      applyApiError(err, setError);
+    }
   }
 
   return (
@@ -94,12 +122,14 @@ function LoginForm() {
 
 function SignupForm() {
   const router = useRouter();
+  const setSession = useAuthStore((s) => s.setSession);
   const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
@@ -121,13 +151,36 @@ function SignupForm() {
   }
 
   async function onSubmit(values: SignupValues) {
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success(`Welcome, ${values.businessOwnerName}! Live signup wires up in INT-001.`);
-    router.push("/dashboard");
+    try {
+      const isPhone = looksLikePhone(values.identifier);
+      const tokens = await signupRequest({
+        businessName: values.businessName,
+        name: values.businessOwnerName,
+        email: isPhone ? undefined : values.identifier,
+        phone: isPhone ? values.identifier : undefined,
+        password: values.password,
+        country: values.country,
+        currency: values.currency,
+        locale: values.locale,
+      });
+      useAuthStore.getState().setTokens(tokens);
+      const { user, business } = await fetchMe();
+      setSession({ ...tokens, user, business });
+      toast.success(`Welcome, ${values.businessOwnerName}!`);
+      router.push("/dashboard");
+    } catch (err) {
+      applyApiError(err, setError);
+    }
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Input
+        label="Business name"
+        leadingSlot={<Store className="h-4 w-4" aria-hidden />}
+        error={errors.businessName?.message}
+        {...register("businessName")}
+      />
       <Input
         label="Your name"
         leadingSlot={<User className="h-4 w-4" aria-hidden />}

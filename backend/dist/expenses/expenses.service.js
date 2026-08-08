@@ -29,6 +29,7 @@ let ExpensesService = class ExpensesService {
     create(dto) {
         return this.tenantPrisma.client.expense.create({
             data: {
+                description: dto.description,
                 category: dto.category,
                 amount: dto.amount,
                 recurring: dto.recurring ?? false,
@@ -61,6 +62,7 @@ let ExpensesService = class ExpensesService {
         return this.tenantPrisma.client.expense.update({
             where: { id },
             data: {
+                description: dto.description,
                 category: dto.category,
                 amount: dto.amount,
                 recurring: dto.recurring,
@@ -86,6 +88,7 @@ let ExpensesService = class ExpensesService {
             const alreadyCloned = await this.prisma.expense.findFirst({
                 where: {
                     businessId: expense.businessId,
+                    description: expense.description,
                     category: expense.category,
                     amount: expense.amount,
                     recurring: true,
@@ -97,6 +100,7 @@ let ExpensesService = class ExpensesService {
             await this.prisma.expense.create({
                 data: {
                     businessId: expense.businessId,
+                    description: expense.description,
                     category: expense.category,
                     amount: expense.amount,
                     recurring: true,

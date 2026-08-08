@@ -12,13 +12,14 @@ export declare class PublicOrderingService {
             branding: import("generated/prisma/runtime/library").JsonValue;
         };
         products: {
-            name: string;
             id: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
             businessId: string;
             kind: import("../../generated/prisma").$Enums.ProductKind;
             category: string | null;
+            sku: string | null;
             variations: import("generated/prisma/runtime/library").JsonValue;
             costPrice: import("generated/prisma/runtime/library").Decimal;
             sellingPrice: import("generated/prisma/runtime/library").Decimal;

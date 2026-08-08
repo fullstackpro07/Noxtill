@@ -1,9 +1,9 @@
 "use client";
 
 import { ProductsView } from "@/components/products/products-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function ProductsPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <ProductsView currency={session.business.currency} />;
 }

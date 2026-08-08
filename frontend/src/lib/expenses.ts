@@ -32,7 +32,9 @@ export const EXPENSES: Expense[] = [
   { id: "x9", description: "Signage repair", category: "Supplies", amount: 95, date: "2026-07-21", recurring: false },
 ];
 
-export function totalsByCategory(expenses: Expense[]): { category: ExpenseCategory; total: number }[] {
+export function totalsByCategory(
+  expenses: { category: string; amount: number }[],
+): { category: ExpenseCategory; total: number }[] {
   return EXPENSE_CATEGORIES.map((category) => ({
     category,
     total: expenses.filter((e) => e.category === category).reduce((sum, e) => sum + e.amount, 0),

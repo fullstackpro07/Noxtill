@@ -1,9 +1,9 @@
 "use client";
 
 import { MarketingView } from "@/components/marketing/marketing-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function MarketingPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <MarketingView currency={session.business.currency} />;
 }

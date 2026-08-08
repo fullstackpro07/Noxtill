@@ -1,9 +1,9 @@
 "use client";
 
 import { ExpensesView } from "@/components/expenses/expenses-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function ExpensesPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <ExpensesView currency={session.business.currency} />;
 }

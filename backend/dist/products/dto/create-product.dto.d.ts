@@ -3,6 +3,7 @@ export declare class CreateProductDto {
     kind: 'product' | 'service';
     name: string;
     category?: string;
+    sku?: string;
     variations?: VariationDto[];
     costPrice: number;
     sellingPrice: number;

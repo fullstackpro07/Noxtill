@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button";
 import { SettingsSectionHeader } from "./settings-section-header";
 import { COUNTRIES } from "@/lib/countries";
 import { TIMEZONES } from "@/lib/timezones";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { useTranslation } from "@/hooks/use-translation";
 
 export function BusinessProfileSection() {
-  const session = useMockSession();
+  const session = useSession();
   const { t } = useTranslation();
   const [name, setName] = useState(session.business.name);
   const [phone, setPhone] = useState("+1 555 013 8420");

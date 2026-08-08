@@ -25,4 +25,14 @@ export class CompetitorsController {
   remove(@Param('id') id: string) {
     return this.competitorsService.remove(id);
   }
+
+  @Get(':id/history')
+  history(@Param('id') id: string) {
+    return this.competitorsService.history(id);
+  }
+
+  @Post(':id/snapshot')
+  triggerSnapshot(@Param('id') id: string) {
+    return this.competitorsService.triggerSnapshot(id);
+  }
 }

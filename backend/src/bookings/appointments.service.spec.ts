@@ -65,10 +65,17 @@ describe('AppointmentsService (BE-054)', () => {
   });
 
   afterAll(async () => {
+    const staffUsers = await prisma.businessUser.findMany({
+      where: { businessId },
+    });
     await prisma.reviewRequest.deleteMany({ where: { businessId } });
     await prisma.appointment.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
+    await prisma.businessUser.deleteMany({ where: { businessId } });
+    await prisma.user.deleteMany({
+      where: { id: { in: staffUsers.map((s) => s.userId) } },
+    });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
@@ -137,6 +144,95 @@ describe('AppointmentsService (BE-054)', () => {
 
     await expect(
       service.updateStatus(businessId, appointment.id, 'confirmed'),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('reschedules an appointment to a free slot', async () => {
+    const appointment = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        customerId,
+        startsAt: new Date('2026-08-04T10:00:00Z'),
+        endsAt: new Date('2026-08-04T11:00:00Z'),
+        status: 'confirmed',
+      },
+    });
+
+    const updated = await service.reschedule(businessId, appointment.id, {
+      startsAt: '2026-08-04T14:00:00Z',
+    });
+    expect(updated.startsAt.toISOString()).toBe('2026-08-04T14:00:00.000Z');
+    expect(updated.endsAt.toISOString()).toBe('2026-08-04T15:00:00.000Z');
+  });
+
+  it('rejects a reschedule onto a conflicting slot for the same staff', async () => {
+    const staff = await prisma.businessUser.create({
+      data: {
+        businessId,
+        userId: (
+          await prisma.user.create({
+            data: {
+              name: 'Reschedule Staffer',
+              email: `reschedule-staff-${Date.now()}@example.com`,
+              passwordHash: 'x',
+            },
+          })
+        ).id,
+        role: 'staff',
+      },
+    });
+
+    const fixed = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        staffUserId: staff.id,
+        customerId,
+        startsAt: new Date('2026-08-05T10:00:00Z'),
+        endsAt: new Date('2026-08-05T11:00:00Z'),
+        status: 'confirmed',
+      },
+    });
+    const movable = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        staffUserId: staff.id,
+        customerId,
+        startsAt: new Date('2026-08-05T14:00:00Z'),
+        endsAt: new Date('2026-08-05T15:00:00Z'),
+        status: 'confirmed',
+      },
+    });
+
+    await expect(
+      service.reschedule(businessId, movable.id, {
+        startsAt: fixed.startsAt.toISOString(),
+      }),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('creates a confirmed walk-in appointment with source walk_in', async () => {
+    const appointment = await service.createWalkIn(businessId, {
+      serviceId: serviceProductId,
+      startsAt: '2026-08-06T10:00:00Z',
+      customerName: 'Walk-in Wendy',
+      customerPhone: `+1${Date.now()}9`,
+    });
+
+    expect(appointment.status).toBe('confirmed');
+    expect(appointment.source).toBe('walk_in');
+  });
+
+  it('rejects a walk-in booking for an unknown service', async () => {
+    await expect(
+      service.createWalkIn(businessId, {
+        serviceId: 'not-a-real-service-id',
+        startsAt: '2026-08-06T12:00:00Z',
+        customerName: 'Nobody',
+        customerPhone: `+1${Date.now()}8`,
+      }),
     ).rejects.toBeInstanceOf(AppException);
   });
 });

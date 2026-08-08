@@ -35,6 +35,9 @@ let StaffController = class StaffController {
     list() {
         return this.staffService.list();
     }
+    inbox() {
+        return this.staffService.inbox();
+    }
     create(user, dto) {
         return this.staffService.create(user.businessId, dto);
     }
@@ -58,6 +61,12 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], StaffController.prototype, "list", null);
+__decorate([
+    (0, common_1.Get)('staff/inbox'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], StaffController.prototype, "inbox", null);
 __decorate([
     (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
     (0, common_1.Post)('staff'),

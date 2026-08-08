@@ -1,50 +1,84 @@
 "use client";
 
 import { useState } from "react";
-import { PRODUCTS, type Product } from "@/lib/products";
-import { STAFF } from "@/lib/staff";
-import { nextDates, availableHours } from "@/lib/public-booking";
-import { formatHour } from "@/lib/profit";
-import { formatDate } from "@/lib/format";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  fetchPublicServices,
+  fetchPublicSlots,
+  createPublicBooking,
+  type PublicService,
+} from "@/lib/public-booking-api";
+import { formatDate, formatTime } from "@/lib/format";
+import { ApiError } from "@/lib/api-client";
 
-const SERVICES = PRODUCTS.filter((p) => p.kind === "service" && p.active);
+function nextDates(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+}
+
 const DATES = nextDates(7);
 
 type Step = 1 | 2 | 3;
 
-export function PublicBookingFlow({ businessName }: { businessName: string }) {
+export function PublicBookingFlow({ slug, businessName }: { slug: string; businessName: string }) {
   const [step, setStep] = useState<Step>(1);
-  const [service, setService] = useState<Product | null>(null);
-  const [staffId, setStaffId] = useState("any");
+  const [service, setService] = useState<PublicService | null>(null);
   const [date, setDate] = useState(DATES[0]);
-  const [hour, setHour] = useState<number | null>(null);
+  const [slot, setSlot] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [takenOverrides, setTakenOverrides] = useState<Set<string>>(new Set());
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
-  const hours = availableHours(date, staffId, takenOverrides);
+  const { data: services = [] } = useQuery({
+    queryKey: ["public-services", slug],
+    queryFn: () => fetchPublicServices(slug),
+  });
 
-  function selectService(s: Product) {
+  const {
+    data: slotsData,
+    refetch: refetchSlots,
+  } = useQuery({
+    queryKey: ["public-slots", slug, service?.id, date],
+    queryFn: () => fetchPublicSlots(slug, { service: service!.id, date }),
+    enabled: !!service,
+  });
+  const slots = slotsData?.slots ?? [];
+
+  const bookMutation = useMutation({
+    mutationFn: () =>
+      createPublicBooking(slug, {
+        serviceId: service!.id,
+        startsAt: slot!,
+        customerName: name.trim(),
+        customerPhone: phone.trim(),
+      }),
+    onSuccess: () => setConfirmed(true),
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) {
+        setConflictMessage("That time was just taken by another customer — please pick a different time.");
+        setSlot(null);
+        setStep(2);
+        refetchSlots();
+      } else {
+        setConflictMessage("Something went wrong — please try again.");
+      }
+    },
+  });
+
+  function selectService(s: PublicService) {
     setService(s);
+    setSlot(null);
     setStep(2);
   }
 
   function handleConfirm(e: React.FormEvent) {
     e.preventDefault();
-    if (hour === null) return;
-
-    // The earliest-shown slot simulates a race loss — someone else grabbed it between selection and confirm.
-    if (hour === hours[0]) {
-      setTakenOverrides((prev) => new Set(prev).add(`${staffId}:${date}:${hour}`));
-      setConflictMessage(`${formatHour(hour)} was just taken by another customer — please pick a different time.`);
-      setHour(null);
-      setStep(2);
-      return;
-    }
-
-    setConfirmed(true);
+    if (!slot) return;
+    bookMutation.mutate();
   }
 
   return (
@@ -60,7 +94,7 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
         <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
           <h2 className="text-xl font-bold text-[#1c231e]">You&apos;re booked!</h2>
           <p className="text-sm text-[#6b6353]">
-            {service?.name} on {formatDate(date)} at {hour !== null ? formatHour(hour) : ""}.
+            {service?.name} on {formatDate(date)} at {slot ? formatTime(slot) : ""}.
           </p>
           <p className="text-sm text-[#6b6353]">A confirmation was sent to {phone}.</p>
         </div>
@@ -78,7 +112,8 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
           {step === 1 && (
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-[#1c231e]">Choose a service</p>
-              {SERVICES.map((s) => (
+              {services.length === 0 && <p className="text-sm text-[#a89f8b]">No services available right now.</p>}
+              {services.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => selectService(s)}
@@ -86,9 +121,9 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
                 >
                   <span>
                     <span className="block text-sm font-medium text-[#1c231e]">{s.name}</span>
-                    <span className="block text-xs text-[#a89f8b]">{s.durationMinutes} min</span>
+                    <span className="block text-xs text-[#a89f8b]">{s.durationMin ?? 30} min</span>
                   </span>
-                  <span className="text-sm font-bold text-[#0c4b3b]">${s.price}</span>
+                  <span className="text-sm font-bold text-[#0c4b3b]">${Number(s.sellingPrice)}</span>
                 </button>
               ))}
             </div>
@@ -101,33 +136,6 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
               )}
 
               <div>
-                <p className="mb-1.5 text-sm font-medium text-[#1c231e]">Staff</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    onClick={() => {
-                      setStaffId("any");
-                      setHour(null);
-                    }}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium ${staffId === "any" ? "border-[#0c4b3b] bg-[#0c4b3b]/8 text-[#0c4b3b]" : "border-[#e6dcc6] text-[#6b6353]"}`}
-                  >
-                    Any available
-                  </button>
-                  {STAFF.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        setStaffId(s.id);
-                        setHour(null);
-                      }}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium ${staffId === s.id ? "border-[#0c4b3b] bg-[#0c4b3b]/8 text-[#0c4b3b]" : "border-[#e6dcc6] text-[#6b6353]"}`}
-                    >
-                      {s.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
                 <p className="mb-1.5 text-sm font-medium text-[#1c231e]">Date</p>
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
                   {DATES.map((d) => (
@@ -135,7 +143,7 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
                       key={d}
                       onClick={() => {
                         setDate(d);
-                        setHour(null);
+                        setSlot(null);
                       }}
                       className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${date === d ? "border-[#0c4b3b] bg-[#0c4b3b]/8 text-[#0c4b3b]" : "border-[#e6dcc6] text-[#6b6353]"}`}
                     >
@@ -148,16 +156,16 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
               <div>
                 <p className="mb-1.5 text-sm font-medium text-[#1c231e]">Time</p>
                 <div className="grid grid-cols-4 gap-1.5">
-                  {hours.length === 0 ? (
+                  {slots.length === 0 ? (
                     <p className="col-span-4 text-sm text-[#a89f8b]">No times available this day.</p>
                   ) : (
-                    hours.map((h) => (
+                    slots.map((s) => (
                       <button
-                        key={h}
-                        onClick={() => setHour(h)}
-                        className={`rounded-lg border px-2 py-2 text-xs font-medium ${hour === h ? "border-[#0c4b3b] bg-[#0c4b3b] text-[#faf7f0]" : "border-[#e6dcc6] text-[#6b6353]"}`}
+                        key={s}
+                        onClick={() => setSlot(s)}
+                        className={`rounded-lg border px-2 py-2 text-xs font-medium ${slot === s ? "border-[#0c4b3b] bg-[#0c4b3b] text-[#faf7f0]" : "border-[#e6dcc6] text-[#6b6353]"}`}
                       >
-                        {formatHour(h)}
+                        {formatTime(s)}
                       </button>
                     ))
                   )}
@@ -166,7 +174,7 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
 
               <button
                 onClick={() => setStep(3)}
-                disabled={hour === null}
+                disabled={slot === null}
                 className="w-full rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-40"
               >
                 Continue
@@ -177,7 +185,7 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
           {step === 3 && (
             <form onSubmit={handleConfirm} className="flex flex-col gap-3">
               <div className="rounded-xl bg-[#f2ecdd] px-3.5 py-2.5 text-sm text-[#1c231e]">
-                {service?.name} · {formatDate(date)} · {hour !== null ? formatHour(hour) : ""}
+                {service?.name} · {formatDate(date)} · {slot ? formatTime(slot) : ""}
               </div>
               <input
                 required
@@ -195,9 +203,10 @@ export function PublicBookingFlow({ businessName }: { businessName: string }) {
               />
               <button
                 type="submit"
-                className="w-full rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0]"
+                disabled={bookMutation.isPending}
+                className="w-full rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-60"
               >
-                Confirm booking
+                {bookMutation.isPending ? "Booking…" : "Confirm booking"}
               </button>
             </form>
           )}

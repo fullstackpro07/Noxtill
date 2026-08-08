@@ -2,15 +2,19 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Search, Plus, Upload, LayoutGrid, List as ListIcon, Pencil, Package, Boxes } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorBanner } from "@/components/shared/error-states";
+import { SkeletonRow } from "@/components/shared/skeleton";
 import { Button } from "@/components/ui/button";
 import { ProductFormDrawer } from "./product-form-drawer";
 import { ImportProductsDialog } from "./import-products-dialog";
-import { PRODUCTS, PRODUCT_CATEGORIES, marginPercent, type Product, type ProductKind } from "@/lib/products";
+import { PRODUCT_CATEGORIES, marginPercent, type Product, type ProductKind } from "@/lib/products";
+import { fetchProducts } from "@/lib/products-api";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,15 +39,22 @@ export function ProductsView({ currency }: { currency: string }) {
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
 
+  const {
+    data: products = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["products"], queryFn: () => fetchProducts() });
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return PRODUCTS.filter((p) => {
-      if (q && !p.name.toLowerCase().includes(q)) return false;
+    return products.filter((p) => {
+      if (q && !p.name.toLowerCase().includes(q) && !p.sku?.toLowerCase().includes(q)) return false;
       if (category !== "all" && p.category !== category) return false;
       if (kind !== "all" && p.kind !== kind) return false;
       return true;
     });
-  }, [query, category, kind]);
+  }, [products, query, category, kind]);
 
   function openAdd() {
     setEditing(null);
@@ -60,7 +71,7 @@ export function ProductsView({ currency }: { currency: string }) {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-fg">Products</h1>
-          <p className="mt-0.5 text-sm text-fg-muted">{PRODUCTS.length} items in your catalog</p>
+          <p className="mt-0.5 text-sm text-fg-muted">{products.length} items in your catalog</p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/inventory">
@@ -122,8 +133,21 @@ export function ProductsView({ currency }: { currency: string }) {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState icon={Package} title="No products match" description="Try a different search or filter." />
+      {isError ? (
+        <ErrorBanner title="Couldn't load products" description="Check your connection and try again." onRetry={() => refetch()} />
+      ) : isPending ? (
+        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={Package}
+          title={products.length === 0 ? "No products yet" : "No products match"}
+          description={products.length === 0 ? "Add your first product to get started." : "Try a different search or filter."}
+          action={products.length === 0 ? { label: "Add product", onClick: openAdd } : undefined}
+        />
       ) : view === "table" ? (
         <div className="overflow-x-auto rounded-[var(--radius-noxtill)] border border-border bg-surface">
           <table className="w-full text-sm">

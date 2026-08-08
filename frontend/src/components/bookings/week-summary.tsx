@@ -1,6 +1,6 @@
 "use client";
 
-import { weekDates, type Appointment } from "@/lib/bookings";
+import { weekDates } from "@/lib/bookings";
 import { cn } from "@/lib/utils";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -11,7 +11,7 @@ export function WeekSummary({
   onSelectDate,
 }: {
   anchor: string;
-  appointments: Appointment[];
+  appointments: { date: string }[];
   onSelectDate: (date: string) => void;
 }) {
   const dates = weekDates(anchor);

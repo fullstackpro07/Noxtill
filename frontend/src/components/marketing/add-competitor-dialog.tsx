@@ -1,46 +1,47 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { Competitor } from "@/lib/competitors";
+import { addCompetitor } from "@/lib/competitors-api";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
 export function AddCompetitorDialog({
   open,
   onClose,
-  onAdd,
   atLimit,
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (competitor: Competitor) => void;
   atLimit: boolean;
 }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
 
-  if (!open) return null;
+  const addMutation = useMutation({
+    mutationFn: () => addCompetitor(name.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["competitors"] });
+      toast.success(`${name} added to competitor tracking.`);
+      setName("");
+      onClose();
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't add this competitor — please try again.");
+    },
+  });
 
-  function handleAdd() {
-    onAdd({
-      id: `cp-${Date.now()}`,
-      name: name.trim(),
-      rating: 4.0,
-      reviewCount: 0,
-      weeklyRatings: Array(12).fill(4.0),
-    });
-    toast.success(`${name} added to competitor tracking.`);
-    setName("");
-    onClose();
-  }
+  if (!open) return null;
 
   return (
     <Dialog
       open
       onClose={onClose}
       title="Track a competitor"
-      description={atLimit ? undefined : "Search Google Places for a business to track (mocked as a name field here)."}
+      description={atLimit ? undefined : "Their business name, as it appears on Google — used to look up their public rating."}
       footer={
         atLimit ? (
           <Button variant="ghost" onClick={onClose}>
@@ -51,8 +52,8 @@ export function AddCompetitorDialog({
             <Button variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleAdd} disabled={!name.trim()}>
-              Add competitor
+            <Button onClick={() => addMutation.mutate()} disabled={!name.trim() || addMutation.isPending}>
+              {addMutation.isPending ? "Adding…" : "Add competitor"}
             </Button>
           </>
         )

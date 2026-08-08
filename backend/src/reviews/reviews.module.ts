@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ReviewRequestsService } from './review-requests.service';
 import { ReviewsService } from './reviews.service';
 import { PublicReviewService } from './public-review.service';
+import { QrPosterService } from './qr-poster.service';
 import { ReviewsController } from './reviews.controller';
 import { PublicReviewController } from './public-review.controller';
 import { ReviewRemindersScheduler } from './jobs/review-reminders.scheduler';
@@ -28,6 +29,7 @@ import { AiModule } from '../ai/ai.module';
     ReviewRequestsService,
     ReviewsService,
     PublicReviewService,
+    QrPosterService,
     ReviewRemindersScheduler,
     ReviewRemindersProcessor,
     GoogleSyncScheduler,

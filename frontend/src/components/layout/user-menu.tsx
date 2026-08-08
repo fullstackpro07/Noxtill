@@ -1,8 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { LogOut, Settings, User } from "lucide-react";
 import { DropdownMenu, DropdownTrigger, DropdownContent, DropdownItem } from "@/components/ui/dropdown-menu";
-import type { SessionUser } from "@/lib/mock-session";
+import type { SessionUser } from "@/lib/session";
+import { logout } from "@/lib/auth-api";
+import { useAuthStore } from "@/store/auth-store";
 
 function initials(name: string): string {
   return name
@@ -14,6 +17,18 @@ function initials(name: string): string {
 }
 
 export function UserMenu({ user }: { user: SessionUser }) {
+  const router = useRouter();
+
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch {
+      // Best-effort — clear the local session and redirect regardless of whether the server call succeeded.
+    }
+    useAuthStore.getState().clearSession();
+    router.push("/login");
+  }
+
   return (
     <DropdownMenu>
       <DropdownTrigger>
@@ -39,7 +54,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
           Settings
         </DropdownItem>
         <div className="my-1 h-px bg-border" />
-        <DropdownItem className="text-destructive hover:bg-destructive/8">
+        <DropdownItem onSelect={handleLogout} className="text-destructive hover:bg-destructive/8">
           <LogOut className="h-4 w-4" aria-hidden />
           Log out
         </DropdownItem>

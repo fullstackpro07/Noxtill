@@ -1,14 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Plus, Minus, Trash2, Banknote, CreditCard, Wallet, HandCoins, Barcode, ShoppingCart, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { PRODUCTS } from "@/lib/products";
-import { findCustomerByPhone, type CustomerLookup } from "@/lib/customers";
+import { Skeleton } from "@/components/shared/skeleton";
+import { InlineError } from "@/components/shared/error-states";
+import { fetchProducts } from "@/lib/products-api";
+import { createSale, type CreateSaleInput } from "@/lib/orders-api";
+import { searchCustomers, fetchDebtors } from "@/lib/customers-api";
+import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+
+const CUSTOMER_SEARCH_DEBOUNCE_MS = 300;
+
+interface CustomerMatch {
+  id: string;
+  name: string;
+  phone: string;
+  creditBalance: number;
+}
 
 interface CartLine {
   productId: string;
@@ -38,6 +52,7 @@ function CartPanel({
   paymentMethod,
   onPaymentMethodChange,
   onConfirm,
+  confirming,
   total,
 }: {
   cart: CartLine[];
@@ -47,10 +62,11 @@ function CartPanel({
   currency: string;
   customerQuery: string;
   onCustomerQueryChange: (v: string) => void;
-  customer: CustomerLookup | undefined;
+  customer: CustomerMatch | undefined;
   paymentMethod: PaymentMethod;
   onPaymentMethodChange: (m: PaymentMethod) => void;
   onConfirm: () => void;
+  confirming: boolean;
   total: number;
 }) {
   return (
@@ -151,8 +167,8 @@ function CartPanel({
           <span className="font-display text-xl font-bold text-fg">{formatCurrency(total, currency)}</span>
         </div>
 
-        <Button className="w-full" size="lg" disabled={cart.length === 0} onClick={onConfirm}>
-          Confirm sale
+        <Button className="w-full" size="lg" disabled={cart.length === 0 || confirming} onClick={onConfirm}>
+          {confirming ? "Recording…" : "Confirm sale"}
         </Button>
       </div>
     </div>
@@ -163,15 +179,62 @@ export function PosView({ currency }: { currency: string }) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [barcodeQuery, setBarcodeQuery] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
+  const [debouncedCustomerQuery, setDebouncedCustomerQuery] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const queryClient = useQueryClient();
 
-  const activeProducts = useMemo(() => PRODUCTS.filter((p) => p.active), []);
-  const customer = findCustomerByPhone(customerQuery);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedCustomerQuery(customerQuery), CUSTOMER_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [customerQuery]);
+
+  const {
+    data: products = [],
+    isPending: productsPending,
+    isError: productsError,
+  } = useQuery({ queryKey: ["products", "active"], queryFn: () => fetchProducts({ active: true }) });
+
+  const { data: customerMatches = [] } = useQuery({
+    queryKey: ["customer-search", debouncedCustomerQuery],
+    queryFn: () => searchCustomers(debouncedCustomerQuery),
+    enabled: debouncedCustomerQuery.trim().length > 0,
+  });
+  const { data: debtors = [] } = useQuery({
+    queryKey: ["debtors"],
+    queryFn: fetchDebtors,
+    staleTime: 30_000,
+  });
+
+  const firstMatch = customerMatches[0];
+  const customer: CustomerMatch | undefined = firstMatch
+    ? {
+        id: firstMatch.id,
+        name: firstMatch.name,
+        phone: firstMatch.phone,
+        creditBalance: debtors.find((d) => d.customerId === firstMatch.id)?.balance ?? 0,
+      }
+    : undefined;
+
+  const saleMutation = useMutation({
+    mutationFn: (payload: CreateSaleInput) => createSale(payload),
+    onSuccess: (order) => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["products", "active"] });
+      toast.success(`Sale #${order.orderNo} recorded — ${formatCurrency(order.total, currency)} via ${paymentMethod}.`);
+      setCart([]);
+      setCustomerQuery("");
+      setMobileCartOpen(false);
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't complete this sale — please try again.");
+    },
+  });
+
   const total = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
 
   function addToCart(productId: string) {
-    const product = PRODUCTS.find((p) => p.id === productId);
+    const product = products.find((p) => p.id === productId);
     if (!product) return;
     setCart((prev) => {
       const existing = prev.find((l) => l.productId === productId);
@@ -196,7 +259,7 @@ export function PosView({ currency }: { currency: string }) {
 
   function handleBarcodeSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const bySku = PRODUCTS.find((p) => p.sku?.toLowerCase() === barcodeQuery.trim().toLowerCase());
+    const bySku = products.find((p) => p.sku?.toLowerCase() === barcodeQuery.trim().toLowerCase());
     if (bySku) {
       addToCart(bySku.id);
       setBarcodeQuery("");
@@ -206,10 +269,11 @@ export function PosView({ currency }: { currency: string }) {
   }
 
   function handleConfirm() {
-    toast.success(`Sale of ${formatCurrency(total, currency)} recorded via ${paymentMethod}. Live checkout wires up in INT-003.`);
-    setCart([]);
-    setCustomerQuery("");
-    setMobileCartOpen(false);
+    saleMutation.mutate({
+      items: cart.map((l) => ({ productId: l.productId, qty: l.qty })),
+      payment: { method: paymentMethod === "wallet" ? "online" : paymentMethod },
+      ...(customer ? { customerId: customer.id } : customerQuery.trim() ? { customerPhone: customerQuery.trim() } : {}),
+    });
   }
 
   return (
@@ -228,8 +292,13 @@ export function PosView({ currency }: { currency: string }) {
             </form>
           </div>
 
+          {productsError ? (
+            <InlineError message="Couldn't load products — check your connection and reload." />
+          ) : (
           <div className="grid flex-1 grid-cols-2 content-start gap-2.5 overflow-y-auto pb-4 sm:grid-cols-3 lg:grid-cols-4">
-            {activeProducts.map((p) => (
+            {productsPending
+              ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
+              : products.map((p) => (
               <button
                 key={p.id}
                 onClick={() => addToCart(p.id)}
@@ -240,6 +309,7 @@ export function PosView({ currency }: { currency: string }) {
               </button>
             ))}
           </div>
+          )}
         </div>
 
         <div className="hidden w-80 shrink-0 border-s border-border bg-surface lg:block">
@@ -255,6 +325,7 @@ export function PosView({ currency }: { currency: string }) {
             paymentMethod={paymentMethod}
             onPaymentMethodChange={setPaymentMethod}
             onConfirm={handleConfirm}
+            confirming={saleMutation.isPending}
             total={total}
           />
         </div>
@@ -299,6 +370,7 @@ export function PosView({ currency }: { currency: string }) {
               paymentMethod={paymentMethod}
               onPaymentMethodChange={setPaymentMethod}
               onConfirm={handleConfirm}
+              confirming={saleMutation.isPending}
               total={total}
             />
           </div>

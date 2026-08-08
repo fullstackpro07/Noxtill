@@ -12,12 +12,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateExpenseDto = void 0;
 const class_validator_1 = require("class-validator");
 class CreateExpenseDto {
+    description;
     category;
     amount;
     recurring;
     incurredOn;
 }
 exports.CreateExpenseDto = CreateExpenseDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateExpenseDto.prototype, "description", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

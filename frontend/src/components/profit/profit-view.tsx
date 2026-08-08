@@ -32,7 +32,7 @@ export function ProfitView({ currency }: { currency: string }) {
       {tab === "products" && <ProfitProductsTab currency={currency} />}
       {tab === "time" && <ProfitTimeTab currency={currency} />}
       {tab === "pnl" && <ProfitPnlTab currency={currency} />}
-      {tab === "whatif" && <ProfitWhatifTab currency={currency} />}
+      {tab === "whatif" && <ProfitWhatifTab />}
     </div>
   );
 }

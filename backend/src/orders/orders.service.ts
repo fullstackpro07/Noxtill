@@ -5,6 +5,7 @@ import { AppException } from '../common/filters/app.exception';
 import { CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
+import { ReferralsService } from '../marketing/referrals.service';
 import { generateReviewToken } from '../reviews/review-token.util';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import {
@@ -26,6 +27,7 @@ export class OrdersService {
     private readonly cls: ClsService,
     private readonly sendGate: SendGateService,
     private readonly reviewRequests: ReviewRequestsService,
+    private readonly referrals: ReferralsService,
   ) {}
 
   async createSale(businessId: string, dto: CreateSaleDto) {
@@ -187,6 +189,7 @@ export class OrdersService {
               lastVisitAt: new Date(),
             },
           });
+          await this.referrals.issueRewardIfEligible(businessId, customerId, tx);
         }
 
         await tx.auditLog.create({
@@ -273,7 +276,7 @@ export class OrdersService {
   async findOne(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
       where: { id },
-      include: { items: true, payments: true },
+      include: { items: true, payments: true, creditEntries: true, customer: true },
     });
     if (!order) {
       throw new NotFoundException('Order not found');
@@ -285,7 +288,7 @@ export class OrdersService {
     return this.tenantPrisma.client.order.findMany({
       where: { status, isQuotation: false },
       orderBy: { createdAt: 'desc' },
-      include: { items: true },
+      include: { items: true, payments: true, creditEntries: true, customer: true },
     });
   }
 }

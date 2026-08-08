@@ -32,6 +32,11 @@ export class StaffController {
     return this.staffService.list();
   }
 
+  @Get('staff/inbox')
+  inbox() {
+    return this.staffService.inbox();
+  }
+
   @Roles(Role.owner)
   @Post('staff')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateStaffDto) {

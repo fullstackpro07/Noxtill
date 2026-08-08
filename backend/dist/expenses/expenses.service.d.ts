@@ -20,6 +20,7 @@ export declare class ExpensesService {
         businessId: string;
         category: string;
         amount: Prisma.Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }>;
@@ -30,6 +31,7 @@ export declare class ExpensesService {
         businessId: string;
         category: string;
         amount: Prisma.Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }[]>;
@@ -40,6 +42,7 @@ export declare class ExpensesService {
         businessId: string;
         category: string;
         amount: Prisma.Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }>;
@@ -50,6 +53,7 @@ export declare class ExpensesService {
         businessId: string;
         category: string;
         amount: Prisma.Decimal;
+        description: string;
         recurring: boolean;
         incurredOn: Date;
     }>;

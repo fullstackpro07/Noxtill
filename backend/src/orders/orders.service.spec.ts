@@ -5,6 +5,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { OrdersService } from './orders.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
+import { ReferralsService } from '../marketing/referrals.service';
 import { AppException } from '../common/filters/app.exception';
 import { ORDER_ERROR_CODES } from './orders.constants';
 
@@ -27,6 +28,9 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
   const reviewRequests = {
     scheduleSend: jest.fn().mockResolvedValue(undefined),
   };
+  const referrals = {
+    issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -42,6 +46,7 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
       cls as unknown as ClsService,
       sendGate as unknown as SendGateService,
       reviewRequests as unknown as ReviewRequestsService,
+      referrals as unknown as ReferralsService,
     );
 
     const business = await prisma.business.create({
@@ -182,6 +187,9 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
   const reviewRequests = {
     scheduleSend: jest.fn().mockResolvedValue(undefined),
   };
+  const referrals = {
+    issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -197,6 +205,7 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
       cls as unknown as ClsService,
       sendGate as unknown as SendGateService,
       reviewRequests as unknown as ReviewRequestsService,
+      referrals as unknown as ReferralsService,
     );
 
     const business = await prisma.business.create({

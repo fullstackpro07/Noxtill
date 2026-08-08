@@ -1,9 +1,9 @@
 "use client";
 
 import { ReportsView } from "@/components/reports/reports-view";
-import { useMockSession } from "@/lib/mock-session";
+import { useSession } from "@/lib/session";
 
 export default function ReportsPage() {
-  const session = useMockSession();
+  const session = useSession();
   return <ReportsView role={session.user.role} />;
 }

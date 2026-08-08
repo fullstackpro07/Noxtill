@@ -8,7 +8,7 @@ const RELEVANCE_THRESHOLD = 0.3;
 export const HELP_NOT_FOUND_MESSAGE =
   "I couldn't find anything about that in the help docs — try rephrasing, or contact support.";
 
-interface RetrievedRow {
+export interface RetrievedRow {
   slug: string;
   title: string;
   url: string;
@@ -17,10 +17,28 @@ interface RetrievedRow {
 }
 
 /**
- * RAG help pipeline (BE-073). Retrieval is a keyword/trigram hybrid over
+ * Shared retrieval primitive (BE-073) reused by both `/help/ask` and the
+ * assistant's `search_help_docs` tool (BE-074) — trigram hybrid over
  * `help_articles` (title similarity weighted higher than body similarity)
- * rather than embeddings — the corpus is small enough that a vector store
- * would be pure overhead. Claude is instructed to answer ONLY from the
+ * rather than embeddings, since the corpus is small enough that a vector
+ * store would be pure overhead.
+ */
+export async function retrieveHelpPassages(
+  prisma: PrismaService,
+  question: string,
+): Promise<RetrievedRow[]> {
+  const rows = await prisma.$queryRaw<RetrievedRow[]>`
+    SELECT slug, title, url, body,
+           (similarity(title, ${question}) * 2 + similarity(body, ${question})) AS score
+    FROM help_articles
+    ORDER BY score DESC
+    LIMIT ${TOP_K}
+  `;
+  return rows.filter((r) => Number(r.score) > RELEVANCE_THRESHOLD);
+}
+
+/**
+ * RAG help pipeline (BE-073). Claude is instructed to answer ONLY from the
  * retrieved passages and to say so honestly when nothing relevant was
  * retrieved at all, so an out-of-scope question never gets a fabricated answer.
  */
@@ -32,7 +50,7 @@ export class HelpService {
   ) {}
 
   async ask(businessId: string | undefined, dto: AskHelpDto) {
-    const passages = await this.retrieve(dto.question);
+    const passages = await retrieveHelpPassages(this.prisma, dto.question);
 
     if (passages.length === 0) {
       return { answer: HELP_NOT_FOUND_MESSAGE, sources: [] };
@@ -56,16 +74,5 @@ export class HelpService {
       answer,
       sources: passages.map((p) => ({ title: p.title, url: p.url })),
     };
-  }
-
-  private async retrieve(question: string): Promise<RetrievedRow[]> {
-    const rows = await this.prisma.$queryRaw<RetrievedRow[]>`
-      SELECT slug, title, url, body,
-             (similarity(title, ${question}) * 2 + similarity(body, ${question})) AS score
-      FROM help_articles
-      ORDER BY score DESC
-      LIMIT ${TOP_K}
-    `;
-    return rows.filter((r) => Number(r.score) > RELEVANCE_THRESHOLD);
   }
 }

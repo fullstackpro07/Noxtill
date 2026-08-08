@@ -1,16 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/shared/error-states";
+import { SkeletonCard } from "@/components/shared/skeleton";
 import { DayGrid } from "./day-grid";
 import { WeekSummary } from "./week-summary";
 import { AppointmentStatusDrawer } from "./appointment-status-drawer";
 import { WalkInDialog } from "./walk-in-dialog";
-import { APPOINTMENTS, TODAY, appointmentOccupying, type Appointment, type AppointmentStatus } from "@/lib/bookings";
+import { weekDates, appointmentOccupying, dateHourToIso, type AppointmentStatus } from "@/lib/bookings";
+import { fetchAppointments, updateAppointmentStatus, rescheduleAppointment, type LiveAppointment } from "@/lib/bookings-api";
+import { fetchStaff } from "@/lib/staff-api";
 import { formatDate } from "@/lib/format";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
 type ViewMode = "day" | "week";
@@ -23,14 +29,62 @@ function shiftDate(date: string, days: number): string {
 
 export function BookingsCalendarView() {
   const [view, setView] = useState<ViewMode>("day");
-  const [date, setDate] = useState(TODAY);
-  const [appointments, setAppointments] = useState<Appointment[]>(APPOINTMENTS);
-  const [selected, setSelected] = useState<Appointment | null>(null);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selected, setSelected] = useState<LiveAppointment | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [shakingId, setShakingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const dates = weekDates(date);
+  const from = new Date(`${dates[0]}T00:00:00`).toISOString();
+  const to = new Date(`${dates[6]}T23:59:59.999`).toISOString();
+
+  const {
+    data: appointments = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["appointments", dates[0], dates[6]],
+    queryFn: () => fetchAppointments({ from, to }),
+  });
+  const { data: staff = [] } = useQuery({ queryKey: ["staff"], queryFn: fetchStaff });
+
   const dayAppointments = appointments.filter((a) => a.date === date);
+
+  const rescheduleMutation = useMutation({
+    mutationFn: ({ id, startsAt, staffUserId }: { id: string; startsAt: string; staffUserId?: string }) =>
+      rescheduleAppointment(id, { startsAt, staffUserId }),
+    onError: (err, vars) => {
+      setShakingId(vars.id);
+      setTimeout(() => setShakingId(null), 400);
+      toast.error(
+        err instanceof ApiError && err.status === 409
+          ? "That slot was just taken."
+          : "Couldn't reschedule this appointment.",
+      );
+    },
+    onSuccess: (updated) => {
+      toast.success(`${updated.customerName} rescheduled.`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: AppointmentStatus }) => updateAppointmentStatus(id, status),
+    onSuccess: (updated) => {
+      toast.success(`Appointment marked ${updated.status.replace("_", " ")}.`);
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't update this appointment's status.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -49,16 +103,15 @@ export function BookingsCalendarView() {
       return;
     }
 
-    setAppointments((prev) => prev.map((a) => (a.id === appointment.id ? { ...a, staffId, startHour: hour } : a)));
-    toast.success(`${appointment.customerName} rescheduled. Live update wires up in INT-008.`);
+    rescheduleMutation.mutate({ id: appointment.id, startsAt: dateHourToIso(date, hour), staffUserId: staffId });
   }
 
   function handleStatusChange(id: string, status: AppointmentStatus) {
-    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+    statusMutation.mutate({ id, status });
   }
 
-  function handleCreate(appointment: Appointment) {
-    setAppointments((prev) => [...prev, appointment]);
+  if (isError) {
+    return <ErrorBanner title="Couldn't load bookings" description="Check your connection and try again." onRetry={() => refetch()} />;
   }
 
   return (
@@ -100,7 +153,13 @@ export function BookingsCalendarView() {
         </button>
       </div>
 
-      {view === "week" ? (
+      {isPending ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      ) : view === "week" ? (
         <WeekSummary
           anchor={date}
           appointments={appointments}
@@ -111,18 +170,12 @@ export function BookingsCalendarView() {
         />
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <DayGrid appointments={dayAppointments} onSelect={setSelected} shakingId={shakingId} />
+          <DayGrid appointments={dayAppointments} staff={staff} onSelect={setSelected} shakingId={shakingId} />
         </DndContext>
       )}
 
       <AppointmentStatusDrawer appointment={selected} onClose={() => setSelected(null)} onStatusChange={handleStatusChange} />
-      <WalkInDialog
-        open={walkInOpen}
-        onClose={() => setWalkInOpen(false)}
-        date={date}
-        existingAppointments={dayAppointments}
-        onCreate={handleCreate}
-      />
+      <WalkInDialog open={walkInOpen} onClose={() => setWalkInOpen(false)} date={date} existingAppointments={dayAppointments} />
     </div>
   );
 }

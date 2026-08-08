@@ -8,10 +8,10 @@ export declare class CustomersController {
     private readonly customersService;
     constructor(customersService: CustomersService);
     create(user: AuthenticatedUser, dto: CreateCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -25,12 +25,13 @@ export declare class CustomersController {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     findAll(query: QueryCustomersDto): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -44,6 +45,7 @@ export declare class CustomersController {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }[]>;
     findOne(id: string): Promise<{
         privateFeedback: {
@@ -61,13 +63,13 @@ export declare class CustomersController {
         }[];
         orders: ({
             items: {
-                name: string;
                 id: string;
+                name: string;
+                price: import("generated/prisma/runtime/library").Decimal;
                 orderId: string;
                 productId: string | null;
-                qty: number;
-                price: import("generated/prisma/runtime/library").Decimal;
                 cost: import("generated/prisma/runtime/library").Decimal;
+                qty: number;
             }[];
         } & {
             id: string;
@@ -88,10 +90,10 @@ export declare class CustomersController {
             staffUserId: string | null;
         })[];
     } & {
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -105,12 +107,13 @@ export declare class CustomersController {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     update(id: string, dto: UpdateCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -124,12 +127,13 @@ export declare class CustomersController {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
     erase(id: string, dto: EraseCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -143,5 +147,6 @@ export declare class CustomersController {
         visitCount: number;
         lastVisitAt: Date | null;
         referredByCustomerId: string | null;
+        referralRewardedAt: Date | null;
     }>;
 }

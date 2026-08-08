@@ -9,6 +9,9 @@ import {
 
 export class CreateExpenseDto {
   @IsString()
+  description!: string;
+
+  @IsString()
   category!: string;
 
   @IsNumber()

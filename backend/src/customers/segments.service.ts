@@ -20,6 +20,8 @@ export class SegmentsService {
 
   private whereForKey(key: string): Prisma.CustomerWhereInput {
     switch (key) {
+      case 'all':
+        return {};
       case 'vip':
         return { tags: { has: 'VIP' } };
       case 'lapsed':

@@ -32,13 +32,16 @@ let WidgetsService = class WidgetsService {
             category: w.category,
         }));
     }
-    async getWidgetData(key) {
+    async getWidgetData(key, days) {
         const widget = (0, widget_registry_1.findWidget)(key);
         if (!widget) {
             throw new app_exception_1.AppException(widgets_constants_1.WIDGET_ERROR_CODES.WIDGET_NOT_FOUND, `Unknown widget: ${key}`, common_1.HttpStatus.NOT_FOUND);
         }
+        if (days !== undefined && !widgets_constants_1.WIDGET_RANGE_DAYS.includes(days)) {
+            throw new app_exception_1.AppException(widgets_constants_1.WIDGET_ERROR_CODES.INVALID_RANGE, `days must be one of ${widgets_constants_1.WIDGET_RANGE_DAYS.join(', ')}`, common_1.HttpStatus.BAD_REQUEST);
+        }
         const businessId = this.cls.get(tenant_constants_1.CLS_KEY_BUSINESS_ID);
-        const cacheKey = `${businessId}:${key}`;
+        const cacheKey = `${businessId}:${key}:${days ?? 'month'}`;
         const cached = this.cache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now()) {
             return cached.value;
@@ -46,6 +49,7 @@ let WidgetsService = class WidgetsService {
         const value = await widget.resolve({
             businessId,
             tenantPrisma: this.tenantPrisma,
+            days,
         });
         this.cache.set(cacheKey, {
             value,

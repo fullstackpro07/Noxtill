@@ -41,6 +41,9 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { HelpModule } from './help/help.module';
 import { AssistantModule } from './assistant/assistant.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ReportsModule } from './reports/reports.module';
+import { ExportsModule } from './exports/exports.module';
 
 @Module({
   imports: [
@@ -84,6 +87,9 @@ import { AssistantModule } from './assistant/assistant.module';
     PlatformAdminModule,
     HelpModule,
     AssistantModule,
+    NotificationsModule,
+    ReportsModule,
+    ExportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

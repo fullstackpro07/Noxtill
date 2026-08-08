@@ -88,4 +88,62 @@ describe('WidgetsService (BE-067)', () => {
       service.getWidgetData('does_not_exist'),
     ).rejects.toBeInstanceOf(AppException);
   });
+
+  describe('range-aware "(this month)" widgets', () => {
+    let rangeBusinessId: string;
+
+    beforeAll(async () => {
+      const business = await prisma.business.create({
+        data: { name: 'Widgets Range Test Biz', slug: `widgets-range-test-${Date.now()}` },
+      });
+      rangeBusinessId = business.id;
+
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      await prisma.customer.create({
+        data: {
+          businessId: rangeBusinessId,
+          name: 'Range Test Customer',
+          phone: `+1555${Date.now()}`,
+          createdAt: tenDaysAgo,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.customer.deleteMany({ where: { businessId: rangeBusinessId } });
+      await prisma.business.delete({ where: { id: rangeBusinessId } });
+    });
+
+    it('excludes a customer created 10 days ago from a 7-day window', async () => {
+      const cls = new FakeClsService();
+      cls.set(CLS_KEY_BUSINESS_ID, rangeBusinessId);
+      const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+      const scopedService = new WidgetsService(tenantPrisma, cls as unknown as ClsService);
+
+      const result = await scopedService.getWidgetData('new_customers_month', 7);
+      expect(result).toEqual({ count: 0 });
+    });
+
+    it('includes the same customer in a 30-day window', async () => {
+      const cls = new FakeClsService();
+      cls.set(CLS_KEY_BUSINESS_ID, rangeBusinessId);
+      const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+      const scopedService = new WidgetsService(tenantPrisma, cls as unknown as ClsService);
+
+      const result = await scopedService.getWidgetData('new_customers_month', 30);
+      expect(result).toEqual({ count: 1 });
+    });
+
+    it('rejects a days value outside the allowed set', async () => {
+      await expect(
+        service.getWidgetData('new_customers_month', 45 as never),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('a snapshot widget (not range-aware) ignores days entirely', async () => {
+      const withDays = await service.getWidgetData('staff_count', 7);
+      const withoutDays = await service.getWidgetData('staff_count');
+      expect(withDays).toEqual(withoutDays);
+    });
+  });
 });

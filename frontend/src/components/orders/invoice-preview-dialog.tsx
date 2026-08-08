@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { useMutation } from "@tanstack/react-query";
 import { X, Printer } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import type { Order } from "@/lib/orders";
+import type { LiveOrder } from "@/lib/orders-api";
+import { generateInvoice } from "@/lib/orders-api";
+import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { fakeQrCells } from "@/lib/fake-qr";
-
-const TAX_RATE = 0.085;
 
 function FakeQr({ seed }: { seed: string }) {
   const cells = fakeQrCells(seed);
@@ -23,9 +24,8 @@ function FakeQr({ seed }: { seed: string }) {
   );
 }
 
-function InvoiceLines({ order, currency }: { order: Order; currency: string }) {
-  const subtotal = order.total;
-  const tax = subtotal * TAX_RATE;
+function InvoiceLines({ order, currency }: { order: LiveOrder; currency: string }) {
+  const { subtotal, tax, discount, total } = order;
   return (
     <table className="w-full text-sm">
       <thead>
@@ -51,9 +51,17 @@ function InvoiceLines({ order, currency }: { order: Order; currency: string }) {
           </td>
           <td className="pt-2 text-end text-fg">{formatCurrency(subtotal, currency)}</td>
         </tr>
+        {discount > 0 && (
+          <tr>
+            <td colSpan={2} className="text-fg-muted">
+              Discount
+            </td>
+            <td className="text-end text-fg">-{formatCurrency(discount, currency)}</td>
+          </tr>
+        )}
         <tr>
           <td colSpan={2} className="text-fg-muted">
-            Tax (8.5%)
+            Tax
           </td>
           <td className="text-end text-fg">{formatCurrency(tax, currency)}</td>
         </tr>
@@ -61,20 +69,18 @@ function InvoiceLines({ order, currency }: { order: Order; currency: string }) {
           <td colSpan={2} className="pt-1.5 font-semibold text-fg">
             Total
           </td>
-          <td className="pt-1.5 text-end font-display text-base font-bold text-fg">
-            {formatCurrency(subtotal + tax, currency)}
-          </td>
+          <td className="pt-1.5 text-end font-display text-base font-bold text-fg">{formatCurrency(total, currency)}</td>
         </tr>
       </tfoot>
     </table>
   );
 }
 
-function A4Invoice({ order, currency }: { order: Order; currency: string }) {
+function A4Invoice({ order, currency, businessName }: { order: LiveOrder; currency: string; businessName: string }) {
   return (
     <div className="mx-auto w-full max-w-md overflow-hidden rounded-[var(--radius-noxtill)] border border-border bg-surface">
       <div className="bg-primary px-6 py-5 text-primary-foreground">
-        <p className="font-display text-lg font-bold">Sunset Hair Studio</p>
+        <p className="font-display text-lg font-bold">{businessName}</p>
         <p className="text-xs opacity-80">Invoice #{order.orderNo}</p>
       </div>
       <div className="p-6">
@@ -92,12 +98,11 @@ function A4Invoice({ order, currency }: { order: Order; currency: string }) {
   );
 }
 
-function ThermalReceipt({ order, currency }: { order: Order; currency: string }) {
-  const subtotal = order.total;
-  const tax = subtotal * TAX_RATE;
+function ThermalReceipt({ order, currency, businessName }: { order: LiveOrder; currency: string; businessName: string }) {
+  const { subtotal, tax, discount, total } = order;
   return (
     <div className="mx-auto w-[280px] rounded-sm border border-border bg-surface p-3 font-mono text-xs leading-relaxed text-fg">
-      <p className="text-center font-bold">SUNSET HAIR STUDIO</p>
+      <p className="text-center font-bold">{businessName.toUpperCase()}</p>
       <p className="text-center text-fg-faint">Order #{order.orderNo}</p>
       <div className="my-1.5 border-t border-dashed border-border" />
       {order.items.map((item) => (
@@ -113,6 +118,12 @@ function ThermalReceipt({ order, currency }: { order: Order; currency: string })
         <span>Subtotal</span>
         <span className="tabular-nums">{formatCurrency(subtotal, currency)}</span>
       </div>
+      {discount > 0 && (
+        <div className="flex justify-between">
+          <span>Discount</span>
+          <span className="tabular-nums">-{formatCurrency(discount, currency)}</span>
+        </div>
+      )}
       <div className="flex justify-between">
         <span>Tax</span>
         <span className="tabular-nums">{formatCurrency(tax, currency)}</span>
@@ -120,7 +131,7 @@ function ThermalReceipt({ order, currency }: { order: Order; currency: string })
       <div className="my-1.5 border-t border-dashed border-border" />
       <div className="flex justify-between font-bold">
         <span>TOTAL</span>
-        <span className="tabular-nums">{formatCurrency(subtotal + tax, currency)}</span>
+        <span className="tabular-nums">{formatCurrency(total, currency)}</span>
       </div>
       <div className="mt-3 flex justify-center">
         <FakeQr seed={order.id} />
@@ -133,13 +144,25 @@ function ThermalReceipt({ order, currency }: { order: Order; currency: string })
 export function InvoicePreviewDialog({
   order,
   currency,
+  businessName,
   onClose,
 }: {
-  order: Order | null;
+  order: LiveOrder | null;
   currency: string;
+  businessName: string;
   onClose: () => void;
 }) {
   const [format, setFormat] = useState<"a4" | "thermal">("a4");
+
+  const invoiceMutation = useMutation({
+    mutationFn: (orderId: string) => generateInvoice(orderId, false),
+    onSuccess: ({ url }) => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't generate the invoice PDF — please try again.");
+    },
+  });
 
   if (!order || typeof document === "undefined") return null;
 
@@ -166,12 +189,16 @@ export function InvoicePreviewDialog({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto bg-surface-2/40 p-6">
-          {format === "a4" ? <A4Invoice order={order} currency={currency} /> : <ThermalReceipt order={order} currency={currency} />}
+          {format === "a4" ? (
+            <A4Invoice order={order} currency={currency} businessName={businessName} />
+          ) : (
+            <ThermalReceipt order={order} currency={currency} businessName={businessName} />
+          )}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-          <Button variant="outline" onClick={() => toast.info("PDF generation wires up in INT-003.")}>
+          <Button variant="outline" onClick={() => invoiceMutation.mutate(order.id)} disabled={invoiceMutation.isPending}>
             <Printer className="h-4 w-4" aria-hidden />
-            Print / Download
+            {invoiceMutation.isPending ? "Generating…" : "Print / Download"}
           </Button>
         </div>
       </div>

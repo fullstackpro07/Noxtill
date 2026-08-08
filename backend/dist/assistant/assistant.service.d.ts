@@ -1,4 +1,5 @@
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { ClaudeClient } from '../ai/claude.client';
 import { AiInfraService } from '../ai/ai-infra.service';
 export interface AssistantChatResult {
@@ -11,10 +12,11 @@ export interface AssistantChatResult {
 }
 export declare class AssistantService {
     private readonly tenantPrisma;
+    private readonly prisma;
     private readonly claude;
     private readonly aiInfra;
     private readonly logger;
-    constructor(tenantPrisma: TenantPrismaService, claude: ClaudeClient, aiInfra: AiInfraService);
+    constructor(tenantPrisma: TenantPrismaService, prisma: PrismaService, claude: ClaudeClient, aiInfra: AiInfraService);
     chat(businessId: string, message: string, onTextDelta?: (text: string) => void): Promise<AssistantChatResult>;
     private executeTool;
     listTools(): {

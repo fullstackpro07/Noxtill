@@ -1,4 +1,5 @@
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   AppointmentStatus,
   FeedbackStatus,
@@ -11,6 +12,10 @@ import { WidgetCategory } from './widgets.constants';
 export interface WidgetContext {
   businessId: string;
   tenantPrisma: TenantPrismaService;
+  /** Trailing-day window for range-aware widgets (the "(this month)" ones) — undefined means "this calendar month", the original default. */
+  days?: number;
+  /** Plain (non-tenant) Prisma client — only used by the assistant's search_help_docs tool to query the global help_articles table; every widget resolver ignores it. */
+  prisma?: PrismaService;
 }
 
 export interface WidgetDefinition {
@@ -33,6 +38,14 @@ function startOfToday(): Date {
 function startOfMonth(): Date {
   const d = new Date();
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+/** No `days` (dashboard's default) keeps the original calendar-month behavior; an explicit range uses a trailing N-day window instead. */
+function startOfRange(days?: number): Date {
+  if (!days) return startOfMonth();
+  const start = startOfToday();
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  return start;
 }
 
 /**
@@ -79,8 +92,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'avg_order_value_month',
     title: 'Average Order Value (this month)',
     category: 'sales',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const agg = await tenantPrisma.client.order.aggregate({
         where: {
           status: OrderStatus.completed,
@@ -98,8 +111,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'revenue_this_month',
     title: 'Revenue (this month)',
     category: 'sales',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const agg = await tenantPrisma.client.order.aggregate({
         where: {
           status: OrderStatus.completed,
@@ -117,8 +130,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'top_products_month',
     title: 'Top Products (this month)',
     category: 'sales',
-    async resolve({ businessId, tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ businessId, tenantPrisma, days }) {
+      const since = startOfRange(days);
       const rows = await tenantPrisma.client.$queryRaw<
         { name: string; units: bigint; revenue: string }[]
       >`
@@ -142,8 +155,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'expenses_this_month',
     title: 'Expenses (this month)',
     category: 'sales',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const agg = await tenantPrisma.client.expense.aggregate({
         where: { incurredOn: { gte: since } },
         _sum: { amount: true },
@@ -201,8 +214,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'no_show_rate_month',
     title: 'No-show Rate (this month)',
     category: 'bookings',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const [total, noShows] = await Promise.all([
         tenantPrisma.client.appointment.count({
           where: {
@@ -261,8 +274,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'campaign_performance_month',
     title: 'Campaign Performance (this month)',
     category: 'marketing',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const campaigns = await tenantPrisma.client.campaign.findMany({
         where: { createdAt: { gte: since } },
         select: { id: true, sentCount: true },
@@ -301,8 +314,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'staff_leaderboard_month',
     title: 'Staff Sales Leaderboard (this month)',
     category: 'staff',
-    async resolve({ businessId, tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ businessId, tenantPrisma, days }) {
+      const since = startOfRange(days);
       const rows = await tenantPrisma.client.$queryRaw<
         { name: string; total: string }[]
       >`
@@ -354,8 +367,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'channel_breakdown_month',
     title: 'Messages by Channel (this month)',
     category: 'messaging',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const groups = await tenantPrisma.client.message.groupBy({
         by: ['channel'],
         where: { createdAt: { gte: since } },
@@ -368,8 +381,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'delivery_rate_month',
     title: 'Message Delivery Rate (this month)',
     category: 'messaging',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const [total, delivered] = await Promise.all([
         tenantPrisma.client.message.count({
           where: { createdAt: { gte: since } },
@@ -388,8 +401,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'new_customers_month',
     title: 'New Customers (this month)',
     category: 'sales',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const count = await tenantPrisma.client.customer.count({
         where: { createdAt: { gte: since } },
       });
@@ -433,8 +446,8 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     key: 'appointments_completed_month',
     title: 'Appointments Completed (this month)',
     category: 'bookings',
-    async resolve({ tenantPrisma }) {
-      const since = startOfMonth();
+    async resolve({ tenantPrisma, days }) {
+      const since = startOfRange(days);
       const count = await tenantPrisma.client.appointment.count({
         where: {
           startsAt: { gte: since },

@@ -5,6 +5,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { CompetitorsService } from './competitors.service';
 import { AppException } from '../common/filters/app.exception';
 import { MAX_COMPETITORS } from './marketing.constants';
+import type { CompetitorSnapshotProcessor } from './jobs/competitor-snapshot.processor';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -20,6 +21,7 @@ describe('CompetitorsService (BE-063)', () => {
   let prisma: PrismaService;
   let service: CompetitorsService;
   let businessId: string;
+  const snapshotProcessor = { snapshotOne: jest.fn() };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -30,7 +32,10 @@ describe('CompetitorsService (BE-063)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new CompetitorsService(tenantPrisma);
+    service = new CompetitorsService(
+      tenantPrisma,
+      snapshotProcessor as unknown as CompetitorSnapshotProcessor,
+    );
 
     const business = await prisma.business.create({
       data: {
@@ -43,6 +48,10 @@ describe('CompetitorsService (BE-063)', () => {
   });
 
   afterAll(async () => {
+    const competitors = await prisma.competitor.findMany({ where: { businessId } });
+    await prisma.competitorSnapshot.deleteMany({
+      where: { competitorId: { in: competitors.map((c) => c.id) } },
+    });
     await prisma.competitor.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
@@ -69,5 +78,33 @@ describe('CompetitorsService (BE-063)', () => {
       platformRef: 'replacement',
     });
     expect(created.platformRef).toBe('replacement');
+  });
+
+  it('returns snapshot history oldest-first', async () => {
+    const competitor = await prisma.competitor.create({
+      data: { businessId, platformRef: 'history-test' },
+    });
+    await prisma.competitorSnapshot.createMany({
+      data: [
+        { competitorId: competitor.id, rating: 4.2, reviewsCount: 100, capturedAt: new Date('2026-01-01') },
+        { competitorId: competitor.id, rating: 4.4, reviewsCount: 110, capturedAt: new Date('2026-01-08') },
+      ],
+    });
+
+    const history = await service.history(competitor.id);
+    expect(history).toHaveLength(2);
+    expect(history[0].rating).toBe(4.2);
+    expect(history[1].rating).toBe(4.4);
+  });
+
+  it('triggers a manual snapshot via the processor', async () => {
+    const competitor = await prisma.competitor.create({
+      data: { businessId, platformRef: 'trigger-test' },
+    });
+    snapshotProcessor.snapshotOne.mockResolvedValue(undefined);
+
+    await service.triggerSnapshot(competitor.id);
+
+    expect(snapshotProcessor.snapshotOne).toHaveBeenCalledWith(competitor.id, 'trigger-test');
   });
 });

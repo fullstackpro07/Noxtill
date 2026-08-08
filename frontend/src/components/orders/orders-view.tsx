@@ -4,12 +4,11 @@ import { useState } from "react";
 import { Tabs } from "@/components/ui/tabs";
 import { OrderKanbanBoard } from "./order-kanban-board";
 import { TablesGrid } from "./tables-grid";
-import { QuotationCard } from "./quotation-card";
-import { QUOTATIONS } from "@/lib/orders";
+import { QuotationsPanel } from "./quotations-panel";
 
 type OrdersTab = "board" | "tables" | "quotations";
 
-export function OrdersView({ currency }: { currency: string }) {
+export function OrdersView({ currency, businessName }: { currency: string; businessName: string }) {
   const [tab, setTab] = useState<OrdersTab>("board");
 
   return (
@@ -28,15 +27,9 @@ export function OrdersView({ currency }: { currency: string }) {
         />
       </div>
 
-      {tab === "board" && <OrderKanbanBoard currency={currency} />}
+      {tab === "board" && <OrderKanbanBoard currency={currency} businessName={businessName} />}
       {tab === "tables" && <TablesGrid currency={currency} />}
-      {tab === "quotations" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {QUOTATIONS.map((q) => (
-            <QuotationCard key={q.id} quotation={q} currency={currency} />
-          ))}
-        </div>
-      )}
+      {tab === "quotations" && <QuotationsPanel currency={currency} />}
     </div>
   );
 }

@@ -31,6 +31,12 @@ let CompetitorsController = class CompetitorsController {
     remove(id) {
         return this.competitorsService.remove(id);
     }
+    history(id) {
+        return this.competitorsService.history(id);
+    }
+    triggerSnapshot(id) {
+        return this.competitorsService.triggerSnapshot(id);
+    }
 };
 exports.CompetitorsController = CompetitorsController;
 __decorate([
@@ -54,6 +60,20 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], CompetitorsController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Get)(':id/history'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CompetitorsController.prototype, "history", null);
+__decorate([
+    (0, common_1.Post)(':id/snapshot'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CompetitorsController.prototype, "triggerSnapshot", null);
 exports.CompetitorsController = CompetitorsController = __decorate([
     (0, common_1.Controller)('competitors'),
     __metadata("design:paramtypes", [competitors_service_1.CompetitorsService])

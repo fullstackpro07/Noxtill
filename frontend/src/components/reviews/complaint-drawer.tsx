@@ -3,58 +3,79 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { PrivateFeedback } from "@/lib/reviews";
-import { findCustomerById } from "@/lib/customers";
+import type { LivePrivateFeedback, FeedbackStatus } from "@/lib/reviews-api";
+import { updateFeedback, replyToFeedback } from "@/lib/reviews-api";
+import { fetchCustomer } from "@/lib/customers-api";
+import { ApiError } from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+
+const STATUS_TONE: Record<FeedbackStatus, "danger" | "warning" | "success"> = {
+  open: "danger",
+  assigned: "warning",
+  resolved: "success",
+};
 
 export function ComplaintDrawer({
   complaint,
   currency,
   onClose,
-  onResolve,
 }: {
-  complaint: PrivateFeedback | null;
+  complaint: LivePrivateFeedback | null;
   currency: string;
   onClose: () => void;
-  onResolve: (id: string, note: string) => void;
 }) {
   if (!complaint) return null;
-  return (
-    <ComplaintDrawerBody key={complaint.id} complaint={complaint} currency={currency} onClose={onClose} onResolve={onResolve} />
-  );
+  return <ComplaintDrawerBody key={complaint.id} complaint={complaint} currency={currency} onClose={onClose} />;
 }
 
 function ComplaintDrawerBody({
   complaint,
   currency,
   onClose,
-  onResolve,
 }: {
-  complaint: PrivateFeedback;
+  complaint: LivePrivateFeedback;
   currency: string;
   onClose: () => void;
-  onResolve: (id: string, note: string) => void;
 }) {
   const [reply, setReply] = useState("");
   const [resolutionNote, setResolutionNote] = useState(complaint.resolutionNote ?? "");
-  const customer = complaint.customerId ? findCustomerById(complaint.customerId) : undefined;
+  const queryClient = useQueryClient();
+
+  const { data: customer } = useQuery({
+    queryKey: ["customer", complaint.customerId],
+    queryFn: () => fetchCustomer(complaint.customerId!),
+    enabled: !!complaint.customerId,
+  });
 
   const canResolve = resolutionNote.trim().length >= 5;
 
-  function handleSendReply() {
-    toast.success(`Reply sent to ${complaint.customerName}. Live send wires up in INT-007.`);
-    setReply("");
-  }
+  const replyMutation = useMutation({
+    mutationFn: () => replyToFeedback(complaint.id, reply.trim()),
+    onSuccess: () => {
+      toast.success(`Reply sent to ${customer?.name ?? "the customer"}.`);
+      setReply("");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send this reply — please try again.");
+    },
+  });
 
-  function handleResolve() {
-    onResolve(complaint.id, resolutionNote.trim());
-    toast.success("Marked resolved.");
-    onClose();
-  }
+  const resolveMutation = useMutation({
+    mutationFn: () => updateFeedback(complaint.id, { status: "resolved", resolutionNote: resolutionNote.trim() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      toast.success("Marked resolved.");
+      onClose();
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't resolve this — please try again.");
+    },
+  });
 
   if (typeof document === "undefined") return null;
 
@@ -76,17 +97,17 @@ function ComplaintDrawerBody({
         <div className="flex-1 overflow-y-auto p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-fg">{complaint.customerName}</p>
-              <p className="text-xs text-fg-faint">{formatDate(complaint.date)}</p>
+              <p className="text-sm font-medium text-fg">{customer?.name ?? (complaint.customerId ? "…" : "Anonymous")}</p>
+              <p className="text-xs text-fg-faint">{formatDate(complaint.createdAt)}</p>
             </div>
-            <Badge tone={complaint.status === "resolved" ? "success" : "danger"}>{complaint.status}</Badge>
+            <Badge tone={STATUS_TONE[complaint.status]}>{complaint.status}</Badge>
           </div>
 
           <p className="mb-4 text-sm text-accent-foreground">
-            {"★".repeat(complaint.rating)}
-            {"☆".repeat(5 - complaint.rating)}
+            {"★".repeat(complaint.stars)}
+            {"☆".repeat(5 - complaint.stars)}
           </p>
-          <p className="mb-5 whitespace-pre-wrap text-sm text-fg-muted">{complaint.text}</p>
+          <p className="mb-5 whitespace-pre-wrap text-sm text-fg-muted">{complaint.message ?? "(no message left)"}</p>
 
           {customer && (
             <div className="mb-5 rounded-[var(--radius-noxtill)] border border-border bg-surface-2/50 p-3.5">
@@ -95,7 +116,7 @@ function ComplaintDrawerBody({
                 {customer.name}
               </Link>
               <p className="mt-1 text-xs text-fg-muted">
-                {customer.visitCount} visits · {formatCurrency(customer.totalSpent, currency)} lifetime
+                {customer.visitCount} visits · {formatCurrency(customer.lifetimeSpend, currency)} lifetime
               </p>
             </div>
           )}
@@ -104,21 +125,32 @@ function ComplaintDrawerBody({
             <label htmlFor="complaint-reply" className="mb-1.5 block text-sm font-medium text-fg">
               Reply to customer
             </label>
-            <div className="flex gap-2">
-              <textarea
-                id="complaint-reply"
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                rows={2}
-                className="flex-1 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3.5 py-2.5 text-sm text-fg focus:border-primary focus:ring-2 focus:ring-primary/15"
-              />
-            </div>
-            <div className="mt-2 flex justify-end">
-              <Button size="sm" variant="outline" onClick={handleSendReply} disabled={!reply.trim()}>
-                <Send className="h-3.5 w-3.5" aria-hidden />
-                Send reply
-              </Button>
-            </div>
+            {!complaint.customerId ? (
+              <p className="text-xs text-fg-faint">This feedback was left anonymously — there&apos;s no customer to reply to.</p>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <textarea
+                    id="complaint-reply"
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    rows={2}
+                    className="flex-1 rounded-[var(--radius-sm)] border border-border-strong bg-surface px-3.5 py-2.5 text-sm text-fg focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  />
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => replyMutation.mutate()}
+                    disabled={!reply.trim() || replyMutation.isPending}
+                  >
+                    <Send className="h-3.5 w-3.5" aria-hidden />
+                    {replyMutation.isPending ? "Sending…" : "Send reply"}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
 
           <div>
@@ -140,8 +172,8 @@ function ComplaintDrawerBody({
           <Button variant="ghost" onClick={onClose}>
             Close
           </Button>
-          <Button onClick={handleResolve} disabled={!canResolve}>
-            Mark resolved
+          <Button onClick={() => resolveMutation.mutate()} disabled={!canResolve || resolveMutation.isPending}>
+            {resolveMutation.isPending ? "Saving…" : "Mark resolved"}
           </Button>
         </div>
       </div>
