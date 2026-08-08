@@ -8,6 +8,8 @@ import { CampaignsController } from './campaigns.controller';
 import { ReferralsController } from './referrals.controller';
 import { CompetitorsController } from './competitors.controller';
 import { KeywordsController } from './keywords.controller';
+import { OverviewController } from './overview.controller';
+import { MarketingOverviewService } from './overview.service';
 import { CompetitorSnapshotScheduler } from './jobs/competitor-snapshot.scheduler';
 import { CompetitorSnapshotProcessor } from './jobs/competitor-snapshot.processor';
 import { KeywordRankScheduler } from './jobs/keyword-rank.scheduler';
@@ -30,12 +32,14 @@ import { CustomersModule } from '../customers/customers.module';
     ReferralsController,
     CompetitorsController,
     KeywordsController,
+    OverviewController,
   ],
   providers: [
     CampaignsService,
     ReferralsService,
     CompetitorsService,
     KeywordsService,
+    MarketingOverviewService,
     CompetitorSnapshotScheduler,
     CompetitorSnapshotProcessor,
     KeywordRankScheduler,

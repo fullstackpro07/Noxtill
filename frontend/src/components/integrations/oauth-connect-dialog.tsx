@@ -5,6 +5,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, ShieldCheck } from "lucide-react";
 import type { Connector } from "@/lib/integrations";
+import { connectIntegration } from "@/lib/integrations-api";
+import { ApiError } from "@/lib/api-client";
+import { toast } from "@/lib/toast";
 
 export function OAuthConnectDialog({
   connector,
@@ -36,10 +39,21 @@ function OAuthConnectDialogBody({
 
   async function handleAuthorize() {
     setAuthorizing(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setAuthorizing(false);
-    onConnected(connector.key);
-    onClose();
+    try {
+      const result = await connectIntegration(connector.key);
+      if (result.authUrl) {
+        // Real full-page redirect — the token exchange only ever happens server-side at the
+        // callback route, so the browser must actually leave this page for OAuth providers.
+        window.location.href = result.authUrl;
+        return;
+      }
+      onConnected(connector.key);
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : `Couldn't connect ${connector.name} — please try again.`);
+    } finally {
+      setAuthorizing(false);
+    }
   }
 
   return (

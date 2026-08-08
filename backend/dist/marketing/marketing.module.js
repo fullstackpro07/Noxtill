@@ -17,6 +17,8 @@ const campaigns_controller_1 = require("./campaigns.controller");
 const referrals_controller_1 = require("./referrals.controller");
 const competitors_controller_1 = require("./competitors.controller");
 const keywords_controller_1 = require("./keywords.controller");
+const overview_controller_1 = require("./overview.controller");
+const overview_service_1 = require("./overview.service");
 const competitor_snapshot_scheduler_1 = require("./jobs/competitor-snapshot.scheduler");
 const competitor_snapshot_processor_1 = require("./jobs/competitor-snapshot.processor");
 const keyword_rank_scheduler_1 = require("./jobs/keyword-rank.scheduler");
@@ -42,12 +44,14 @@ exports.MarketingModule = MarketingModule = __decorate([
             referrals_controller_1.ReferralsController,
             competitors_controller_1.CompetitorsController,
             keywords_controller_1.KeywordsController,
+            overview_controller_1.OverviewController,
         ],
         providers: [
             campaigns_service_1.CampaignsService,
             referrals_service_1.ReferralsService,
             competitors_service_1.CompetitorsService,
             keywords_service_1.KeywordsService,
+            overview_service_1.MarketingOverviewService,
             competitor_snapshot_scheduler_1.CompetitorSnapshotScheduler,
             competitor_snapshot_processor_1.CompetitorSnapshotProcessor,
             keyword_rank_scheduler_1.KeywordRankScheduler,

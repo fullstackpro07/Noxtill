@@ -55,7 +55,7 @@ describe('ReportsService (INT-012)', () => {
       new LocaleService(),
       s3 as unknown as S3Service,
       pdfRenderer as unknown as PdfRendererService,
-      new ProfitService(tenantPrisma),
+      new ProfitService(tenantPrisma, cls as unknown as ClsService),
       new CommissionsService(tenantPrisma),
       sendGate as unknown as SendGateService,
     );

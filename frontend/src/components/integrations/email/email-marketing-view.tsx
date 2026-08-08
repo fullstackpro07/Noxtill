@@ -1,25 +1,58 @@
 "use client";
 
 import { useState } from "react";
+import { useQueries, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AUDIENCE_OPTIONS, type AudienceKey } from "@/lib/campaigns";
-import { EMAIL_TEMPLATES, SUBJECT_SUGGESTIONS, EMAIL_FUNNEL, LIST_HEALTH } from "@/lib/email-marketing";
+import { fetchAudienceCount } from "@/lib/campaigns-api";
+import { EMAIL_TEMPLATES, SUBJECT_SUGGESTIONS } from "@/lib/email-marketing";
+import { createEmailCampaign, fetchEmailFunnel, fetchEmailListHealth } from "@/lib/email-marketing-api";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 export function EmailMarketingView() {
+  const queryClient = useQueryClient();
   const [audience, setAudience] = useState<AudienceKey>(AUDIENCE_OPTIONS[0].key);
   const [templateKey, setTemplateKey] = useState(EMAIL_TEMPLATES[0].key);
   const [subject, setSubject] = useState(SUBJECT_SUGGESTIONS[0]);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [heading, setHeading] = useState("20% off this weekend only");
   const [body, setBody] = useState("Stop by for your usual, or try something new — this weekend, everything's 20% off.");
+  const [lastCampaignId, setLastCampaignId] = useState<string | null>(null);
 
   const template = EMAIL_TEMPLATES.find((t) => t.key === templateKey)!;
-  const recipientCount = AUDIENCE_OPTIONS.find((a) => a.key === audience)?.count ?? 0;
+
+  const audienceCounts = useQueries({
+    queries: AUDIENCE_OPTIONS.map((opt) => ({
+      queryKey: ["audience-count", opt.key],
+      queryFn: () => fetchAudienceCount(opt.key),
+    })),
+  });
+  const countByKey = new Map(AUDIENCE_OPTIONS.map((opt, i) => [opt.key, audienceCounts[i].data ?? 0]));
+  const recipientCount = countByKey.get(audience) ?? 0;
+
+  const { data: funnel } = useQuery({
+    queryKey: ["email-funnel", lastCampaignId],
+    queryFn: () => fetchEmailFunnel(lastCampaignId!),
+    enabled: !!lastCampaignId,
+  });
+  const { data: listHealth } = useQuery({ queryKey: ["email-list-health"], queryFn: fetchEmailListHealth });
+
+  const sendMutation = useMutation({
+    mutationFn: () => createEmailCampaign({ subject, body: `${heading}\n\n${body}`, segment: audience }),
+    onSuccess: (campaign) => {
+      setLastCampaignId(campaign.id);
+      void queryClient.invalidateQueries({ queryKey: ["email-list-health"] });
+      toast.success(`Email sent to ${campaign.sentCount} recipient${campaign.sentCount === 1 ? "" : "s"}.`);
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't send this email — please try again.");
+    },
+  });
 
   function handleSuggestSubject() {
     const next = (suggestionIndex + 1) % SUBJECT_SUGGESTIONS.length;
@@ -28,7 +61,7 @@ export function EmailMarketingView() {
   }
 
   function handleSend() {
-    toast.success(`Email queued for ${recipientCount} recipients. Live send wires up in INT-013.`);
+    sendMutation.mutate();
   }
 
   return (
@@ -42,7 +75,7 @@ export function EmailMarketingView() {
             <Select value={audience} onChange={(e) => setAudience(e.target.value as AudienceKey)} className="w-56">
               {AUDIENCE_OPTIONS.map((a) => (
                 <option key={a.key} value={a.key}>
-                  {a.label} ({a.count})
+                  {a.label} ({countByKey.get(a.key) ?? 0})
                 </option>
               ))}
             </Select>
@@ -115,25 +148,27 @@ export function EmailMarketingView() {
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={handleSend}>Send to {recipientCount}</Button>
+            <Button onClick={handleSend} disabled={sendMutation.isPending}>
+              {sendMutation.isPending ? "Sending…" : `Send to ${recipientCount}`}
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-              <p className="mb-3 text-sm font-medium text-fg">Funnel</p>
+              <p className="mb-3 text-sm font-medium text-fg">Funnel {!lastCampaignId && <span className="text-xs font-normal text-fg-faint">(send an email to see this)</span>}</p>
               <div className="flex flex-col gap-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-fg-muted">Sent</span><span className="text-fg">{EMAIL_FUNNEL.sent}</span></div>
-                <div className="flex justify-between"><span className="text-fg-muted">Opened</span><span className="text-fg">{EMAIL_FUNNEL.opened}</span></div>
-                <div className="flex justify-between"><span className="text-fg-muted">Clicked</span><span className="text-fg">{EMAIL_FUNNEL.clicked}</span></div>
-                <div className="flex justify-between"><span className="text-fg-muted">Unsubscribed</span><span className="text-destructive">{EMAIL_FUNNEL.unsubscribed}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Sent</span><span className="text-fg">{funnel?.sent ?? 0}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Opened</span><span className="text-fg">{funnel?.opened ?? 0}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Clicked</span><span className="text-fg">{funnel?.clicked ?? 0}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Unsubscribed</span><span className="text-destructive">{funnel?.unsubscribed ?? 0}</span></div>
               </div>
             </div>
             <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
               <p className="mb-3 text-sm font-medium text-fg">List health</p>
               <div className="flex flex-col gap-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-fg-muted">Subscribed</span><span className="text-whatsapp">{LIST_HEALTH.subscribed}</span></div>
-                <div className="flex justify-between"><span className="text-fg-muted">Unsubscribed</span><span className="text-fg">{LIST_HEALTH.unsubscribed}</span></div>
-                <div className="flex justify-between"><span className="text-fg-muted">Bounced</span><span className="text-destructive">{LIST_HEALTH.bounced}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Subscribed</span><span className="text-whatsapp">{listHealth?.subscribed ?? 0}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Unsubscribed</span><span className="text-fg">{listHealth?.unsubscribed ?? 0}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Bounced</span><span className="text-destructive">{listHealth?.bounced ?? 0}</span></div>
               </div>
             </div>
           </div>

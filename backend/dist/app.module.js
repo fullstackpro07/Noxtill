@@ -53,6 +53,7 @@ const assistant_module_1 = require("./assistant/assistant.module");
 const notifications_module_1 = require("./notifications/notifications.module");
 const reports_module_1 = require("./reports/reports.module");
 const exports_module_1 = require("./exports/exports.module");
+const integrations_module_1 = require("./integrations/integrations.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -102,6 +103,7 @@ exports.AppModule = AppModule = __decorate([
             notifications_module_1.NotificationsModule,
             reports_module_1.ReportsModule,
             exports_module_1.ExportsModule,
+            integrations_module_1.IntegrationsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

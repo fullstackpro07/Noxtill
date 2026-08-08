@@ -44,6 +44,7 @@ import { AssistantModule } from './assistant/assistant.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReportsModule } from './reports/reports.module';
 import { ExportsModule } from './exports/exports.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { ExportsModule } from './exports/exports.module';
     NotificationsModule,
     ReportsModule,
     ExportsModule,
+    IntegrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
