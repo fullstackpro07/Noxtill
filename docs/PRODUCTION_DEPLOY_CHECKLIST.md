@@ -128,3 +128,51 @@ to. A production deploy must replace every placeholder row before going live.
 - No Redis is reachable in this local dev environment, so BullMQ-dependent live checks (message sends completing, campaign fan-out, exports) were verified up to the point of enqueueing — real code, real DB writes, blocked only by the missing local Redis. The real e2e suite mocks the queue call specifically to prove the rest of the journey end-to-end despite this.
 - The CI pipeline and backup/restore drill are built and believed correct (standard, well-established `pg_dump`/`pg_restore`/GitHub Actions service-container patterns) but have not yet been observed running green, since that requires pushing `.github/workflows/ci.yml` to the real `origin` remote to trigger a real Actions run — a shared-visibility action requiring separate user confirmation, not bundled into this ticket's own completion.
 - 5 of the 6 Module 18 integration connectors (everything except Email) have real, correctly-shaped OAuth flow code but cannot complete a live connection in any environment without a real registered developer app with Google/Meta/TikTok — an account-creation step outside this project's code, not a code gap.
+
+
+Noxtill — Pre-Launch Checklist
+Everything below is real, working code that just needs a real credential, account, or infra resource to go live. Nothing on this list is a code gap — it's account creation, credential rotation, and infra provisioning.
+
+1. External API keys / accounts needed
+#	What	Used for	Get it from
+1	Anthropic API key	AI Assistant (streaming chat), reviews AI-draft, what-if analysis, branch advisor, business-type AI-mapping	console.anthropic.com
+2	Stripe secret key + webhook secret	Checkout, plan/subscription billing	dashboard.stripe.com (start in test mode)
+3	JazzCash merchant ID	Second payment gateway (regional) — structurally ready, needs real merchant account	JazzCash business onboarding
+4	AWS S3 (or S3-compatible) access key + secret	Every generated file: invoices, statements, reports, exports, QR posters	AWS IAM, or R2/MinIO if avoiding AWS
+5	Meta WhatsApp Cloud API token + phone number ID + app secret	Primary messaging channel	developers.facebook.com (WhatsApp Business Platform)
+6	Twilio account SID + auth token + from-number	SMS fallback channel	twilio.com
+7	Postmark (or SES) API key	Transactional email + email marketing campaigns	postmarkapp.com
+8	Google Places API key	Competitor rating snapshots	Google Cloud Console
+9	SerpApi key	Keyword rank tracking	serpapi.com
+2. OAuth app registrations needed (Module 18 — Integrations Hub)
+These 5 connectors have real, correctly-written OAuth code, but each needs an actual registered developer app before a business can connect one:
+
+ Google Cloud OAuth app (client ID + secret) — powers My Business, Google Ads, and Merchant Center connectors
+ Google Ads developer token — separate approval process on top of the OAuth app, required for every Ads API call
+ Meta developer app (app ID + secret, distinct from the WhatsApp app above) — powers Meta Ads connector
+ TikTok for Business developer app (app ID + secret) — powers TikTok Ads connector
+Only Email is fully deep and live-ready today — it just needs the Postmark key from the table above, no OAuth app required.
+
+3. Infrastructure to provision
+ Managed Redis, version ≥5.0 — confirmed this week the wrong version silently breaks BullMQ; don't reuse an old/legacy Redis instance
+ Managed Postgres 14+ with the pg_trgm extension enabled (used for search/customer lookup)
+ S3-compatible object storage bucket
+ TLS/HTTPS termination at the load balancer or hosting platform (the app itself doesn't terminate TLS)
+ CI runner capable of Postgres + Redis service containers (GitHub Actions config is already written — see below)
+4. Secrets to generate fresh for production (never reuse dev values)
+ JWT_SECRET / JWT_REFRESH_SECRET — production boot will refuse to start if these are weak or placeholder, by design
+ INTEGRATIONS_TOKEN_KEY — encrypts stored OAuth tokens at rest
+ INTEGRATIONS_STATE_SECRET — signs the OAuth callback state param
+ EMAIL_UNSUBSCRIBE_SECRET — signs unsubscribe links
+5. Config values that must point at real production URLs
+ CORS_ALLOWLIST → real production frontend origin(s)
+ FRONTEND_URL / BACKEND_URL → real production origins (used to build OAuth redirect URIs — must also be registered with each provider's app console, or every OAuth callback silently breaks)
+ EMAIL_FROM_ADDRESS → a real verified sending domain
+6. Actions still to take
+ Push .github/workflows/ci.yml to trigger a real CI run — built and believed correct, but has never actually executed (you held off on this last time, still pending)
+ Run the backup/restore drill for real — the script is written but has never dry-run anywhere (no pg_dump/psql on this dev machine); it'll run for real the moment CI executes
+ Smoke-test the core journey on the live deploy: signup → product → sale → nightly close → review request (same journey verified locally this week)
+ Decide whether/when to build the deferred deep features for the 5 non-Email connectors (GMB posts, Google Ads campaign creation, Merchant feed sync, Meta creative rendering, TikTok slideshow generation) — their screens exist but stay mocked until each OAuth app is real
+Not blocking launch, but worth knowing
+Help-doc article URLs (HelpArticle.url, used by the AI assistant's citations) point at /help/[slug] pages that don't exist yet — citations render as plain text, not broken links, so this is cosmetic only.
+Postmark webhook → real open/click tracking for email campaigns was deliberately deferred (funnel numbers will read 0 until this exists).
