@@ -7,8 +7,8 @@ export declare class AdminController {
         count: number;
     }[]>;
     events(name?: string, limit?: string): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         businessId: string | null;
         userId: string | null;

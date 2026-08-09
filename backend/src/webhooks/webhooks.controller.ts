@@ -8,6 +8,7 @@ import {
   Query,
   Req,
   Res,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -19,6 +20,7 @@ import { WebhookIdempotencyService } from '../common/webhooks/webhook-idempotenc
 import {
   verifyMetaSignature,
   verifyTwilioSignature,
+  safeEqual,
 } from '../common/webhooks/signature.util';
 import { WEBHOOK_EVENTS_QUEUE } from './webhooks.constants';
 
@@ -72,10 +74,10 @@ export class WebhooksController {
     @Headers('x-hub-signature-256') signature?: string,
   ) {
     const appSecret = this.config.get<string>('META_APP_SECRET');
-    if (
-      appSecret &&
-      !verifyMetaSignature(req.rawBody ?? Buffer.from(''), signature, appSecret)
-    ) {
+    if (!appSecret) {
+      throw new ServiceUnavailableException('Meta webhook is not configured');
+    }
+    if (!verifyMetaSignature(req.rawBody ?? Buffer.from(''), signature, appSecret)) {
       throw new ForbiddenException('Invalid signature');
     }
 
@@ -112,11 +114,12 @@ export class WebhooksController {
     const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
     const body = req.body as Record<string, string>;
 
-    if (authToken) {
-      const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-      if (!verifyTwilioSignature(fullUrl, body, signature, authToken)) {
-        throw new ForbiddenException('Invalid signature');
-      }
+    if (!authToken) {
+      throw new ServiceUnavailableException('Twilio webhook is not configured');
+    }
+    const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    if (!verifyTwilioSignature(fullUrl, body, signature, authToken)) {
+      throw new ForbiddenException('Invalid signature');
     }
 
     const eventId = body.MessageSid ?? body.SmsSid;
@@ -136,7 +139,10 @@ export class WebhooksController {
   @HttpCode(200)
   async email(@Req() req: Request, @Query('token') token?: string) {
     const expected = this.config.get<string>('EMAIL_WEBHOOK_SECRET');
-    if (expected && token !== expected) {
+    if (!expected) {
+      throw new ServiceUnavailableException('Email webhook is not configured');
+    }
+    if (!token || !safeEqual(token, expected)) {
       throw new ForbiddenException('Invalid webhook token');
     }
 

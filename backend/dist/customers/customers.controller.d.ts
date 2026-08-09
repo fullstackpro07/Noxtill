@@ -8,10 +8,10 @@ export declare class CustomersController {
     private readonly customersService;
     constructor(customersService: CustomersService);
     create(user: AuthenticatedUser, dto: CreateCustomerDto): Promise<{
-        id: string;
+        name: string;
         email: string | null;
         phone: string;
-        name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -28,10 +28,10 @@ export declare class CustomersController {
         referralRewardedAt: Date | null;
     }>;
     findAll(query: QueryCustomersDto): import("generated/prisma/runtime/library").PrismaPromise<{
-        id: string;
+        name: string;
         email: string | null;
         phone: string;
-        name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -55,7 +55,7 @@ export declare class CustomersController {
             updatedAt: Date;
             businessId: string;
             customerId: string | null;
-            status: import("generated/prisma").$Enums.FeedbackStatus;
+            status: import("../../generated/prisma").$Enums.FeedbackStatus;
             stars: number;
             reviewRequestId: string | null;
             assignedTo: string | null;
@@ -63,13 +63,13 @@ export declare class CustomersController {
         }[];
         orders: ({
             items: {
-                id: string;
                 name: string;
-                price: import("generated/prisma/runtime/library").Decimal;
+                id: string;
                 orderId: string;
                 productId: string | null;
-                cost: import("generated/prisma/runtime/library").Decimal;
                 qty: number;
+                price: import("generated/prisma/runtime/library").Decimal;
+                cost: import("generated/prisma/runtime/library").Decimal;
             }[];
         } & {
             id: string;
@@ -78,9 +78,9 @@ export declare class CustomersController {
             businessId: string;
             orderNo: number;
             customerId: string | null;
-            orderType: import("generated/prisma").$Enums.OrderType;
+            orderType: import("../../generated/prisma").$Enums.OrderType;
             tableNo: string | null;
-            status: import("generated/prisma").$Enums.OrderStatus;
+            status: import("../../generated/prisma").$Enums.OrderStatus;
             subtotal: import("generated/prisma/runtime/library").Decimal;
             tax: import("generated/prisma/runtime/library").Decimal;
             discount: import("generated/prisma/runtime/library").Decimal;
@@ -90,10 +90,10 @@ export declare class CustomersController {
             staffUserId: string | null;
         })[];
     } & {
-        id: string;
+        name: string;
         email: string | null;
         phone: string;
-        name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -110,10 +110,10 @@ export declare class CustomersController {
         referralRewardedAt: Date | null;
     }>;
     update(id: string, dto: UpdateCustomerDto): Promise<{
-        id: string;
+        name: string;
         email: string | null;
         phone: string;
-        name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -130,10 +130,10 @@ export declare class CustomersController {
         referralRewardedAt: Date | null;
     }>;
     erase(id: string, dto: EraseCustomerDto): Promise<{
-        id: string;
+        name: string;
         email: string | null;
         phone: string;
-        name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;

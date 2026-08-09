@@ -44,7 +44,7 @@ let EmailService = EmailService_1 = class EmailService {
                 'X-Postmark-Server-Token': serverToken,
             },
         });
-        this.logger.debug(`Email sent to ${params.to}, provider_ref=${response.data.MessageID}`);
+        this.logger.debug(`Email sent, provider_ref=${response.data.MessageID}`);
         return { providerRef: response.data.MessageID };
     }
 };

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 
-function safeEqual(a: string, b: string): boolean {
+/** Constant-time string comparison — exported so callers with their own shared-secret check (not an HMAC signature) can avoid a timing side-channel too. */
+export function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;

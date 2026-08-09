@@ -6,10 +6,10 @@ export declare class QuotationsController {
     constructor(quotationsService: QuotationsService);
     findAll(): import("generated/prisma/runtime/library").PrismaPromise<({
         customer: {
-            id: string;
+            name: string;
             email: string | null;
             phone: string;
-            name: string;
+            id: string;
             createdAt: Date;
             updatedAt: Date;
             businessId: string;
@@ -26,13 +26,13 @@ export declare class QuotationsController {
             referralRewardedAt: Date | null;
         } | null;
         items: {
-            id: string;
             name: string;
-            price: import("generated/prisma/runtime/library").Decimal;
+            id: string;
             orderId: string;
             productId: string | null;
-            cost: import("generated/prisma/runtime/library").Decimal;
             qty: number;
+            price: import("generated/prisma/runtime/library").Decimal;
+            cost: import("generated/prisma/runtime/library").Decimal;
         }[];
     } & {
         id: string;

@@ -51,7 +51,7 @@ let WhatsappService = WhatsappService_1 = class WhatsappService {
         const apiVersion = this.config.get('META_WA_API_VERSION', 'v19.0');
         const response = await axios_1.default.post(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, body, { headers: { Authorization: `Bearer ${token}` } });
         const providerRef = response.data.messages[0]?.id;
-        this.logger.debug(`WhatsApp message sent to ${params.to}, provider_ref=${providerRef}`);
+        this.logger.debug(`WhatsApp message sent, provider_ref=${providerRef}`);
         return { providerRef };
     }
 };

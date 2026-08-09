@@ -10,15 +10,15 @@ export declare class AuthController {
         accessToken: string;
         refreshToken: string;
         business: {
-            id: string;
             name: string;
+            country: string | null;
+            currency: string;
+            locale: string;
+            id: string;
             createdAt: Date;
             updatedAt: Date;
             slug: string;
-            currency: string;
             timezone: string;
-            locale: string;
-            country: string | null;
             channelPref: import("generated/prisma").$Enums.MessageChannel;
             nightlyCloseTime: string;
             taxLabel: string;
@@ -35,6 +35,7 @@ export declare class AuthController {
             trialEndsAt: Date | null;
             stripeCustomerId: string | null;
             stripeSubscriptionId: string | null;
+            msgQuotaResetAt: Date | null;
             typeId: string | null;
             planId: string | null;
             parentId: string | null;

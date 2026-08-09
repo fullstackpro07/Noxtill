@@ -24,11 +24,21 @@ let BillingController = class BillingController {
     constructor(billingService) {
         this.billingService = billingService;
     }
+    status(user) {
+        return this.billingService.status(user.businessId);
+    }
     checkout(user, dto) {
         return this.billingService.createCheckout(user.businessId, dto);
     }
 };
 exports.BillingController = BillingController;
+__decorate([
+    (0, common_1.Get)('status'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], BillingController.prototype, "status", null);
 __decorate([
     (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
     (0, common_1.Post)('checkout'),

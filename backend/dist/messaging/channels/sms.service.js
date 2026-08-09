@@ -32,7 +32,7 @@ let SmsService = SmsService_1 = class SmsService {
             From: fromNumber ?? '',
             Body: params.text,
         }), { auth: { username: accountSid ?? '', password: authToken ?? '' } });
-        this.logger.debug(`SMS sent to ${params.to}, provider_ref=${response.data.sid}`);
+        this.logger.debug(`SMS sent, provider_ref=${response.data.sid}`);
         return { providerRef: response.data.sid };
     }
 };

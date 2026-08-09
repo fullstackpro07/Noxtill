@@ -9,5 +9,5 @@ exports.STAFF_ERROR_CODES = {
     ALREADY_CLOCKED_IN: 'STAFF_ALREADY_CLOCKED_IN',
     NOT_CLOCKED_IN: 'STAFF_NOT_CLOCKED_IN',
 };
-exports.TEMP_PASSWORD_BYTES = 6;
+exports.TEMP_PASSWORD_BYTES = 8;
 //# sourceMappingURL=staff.constants.js.map

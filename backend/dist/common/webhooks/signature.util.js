@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.safeEqual = safeEqual;
 exports.verifyMetaSignature = verifyMetaSignature;
 exports.verifyTwilioSignature = verifyTwilioSignature;
 const crypto_1 = require("crypto");

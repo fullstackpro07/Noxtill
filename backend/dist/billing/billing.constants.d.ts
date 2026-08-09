@@ -4,6 +4,7 @@ export declare const BILLING_ERROR_CODES: {
     readonly GATEWAY_NOT_AVAILABLE: "BILLING_GATEWAY_NOT_AVAILABLE";
 };
 export declare const TRIAL_EXPIRY_QUEUE = "trial-expiry";
+export declare const QUOTA_RESET_QUEUE = "quota-reset";
 export declare const BASIC_PLAN_KEY = "basic";
 export declare const DEFAULT_PLANS: readonly [{
     readonly key: "basic";

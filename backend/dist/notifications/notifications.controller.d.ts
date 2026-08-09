@@ -4,23 +4,23 @@ export declare class NotificationsController {
     private readonly notifications;
     constructor(notifications: NotificationsService);
     list(user: AuthenticatedUser): Promise<{
+        link: string | null;
         id: string;
         createdAt: Date;
-        link: string | null;
         businessId: string;
         userId: string;
-        title: string;
         body: string;
+        title: string;
         read: boolean;
     }[]>;
     markRead(user: AuthenticatedUser, id: string): Promise<{
+        link: string | null;
         id: string;
         createdAt: Date;
-        link: string | null;
         businessId: string;
         userId: string;
-        title: string;
         body: string;
+        title: string;
         read: boolean;
     }>;
 }

@@ -76,4 +76,37 @@ export class BillingService {
 
     return { url: session.url };
   }
+
+  /**
+   * Real current plan + usage (INT-014) — nothing read this back before; the webhook only ever
+   * wrote to `Business`. AI-cost aggregation mirrors `AiInfraService.enforceCostCap`'s exact
+   * UTC-month-start query rather than reimplementing it.
+   */
+  async status(businessId: string) {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      include: { plan: true },
+    });
+
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const aiAgg = await this.prisma.aiCallLog.aggregate({
+      where: { businessId, createdAt: { gte: monthStart } },
+      _sum: { estimatedCostUsd: true },
+    });
+
+    return {
+      planKey: business.plan?.key ?? null,
+      planName: business.plan?.name ?? null,
+      price: business.plan ? Number(business.plan.price) : null,
+      msgQuota: business.msgQuota,
+      msgUsed: business.msgUsed,
+      userLimit: business.plan?.userLimit ?? null,
+      aiCostCapUsd: Number(business.aiMonthlyCostCapUsd),
+      aiCostUsedUsd: Number(aiAgg._sum.estimatedCostUsd ?? 0),
+      trialEndsAt: business.trialEndsAt,
+      hasActiveSubscription: !!business.stripeSubscriptionId,
+    };
+  }
 }

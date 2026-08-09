@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQueries, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ChevronLeft, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { toast } from "@/lib/toast";
 type Step = 1 | 2 | 3 | 4;
 
 export function CampaignBuilder({ onDone }: { onDone: () => void }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>(1);
   const [audience, setAudience] = useState<AudienceKey>("all");
@@ -206,7 +208,7 @@ export function CampaignBuilder({ onDone }: { onDone: () => void }) {
         onClose={() => setQuotaModalOpen(false)}
         onUpgrade={() => {
           setQuotaModalOpen(false);
-          toast.info("Upgrade flow wires up in INT-014.");
+          router.push("/settings/billing");
         }}
         used={used}
         quota={quota}

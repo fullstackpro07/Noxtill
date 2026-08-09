@@ -9,8 +9,8 @@ export declare class ProductsController {
     private readonly productsImportService;
     constructor(productsService: ProductsService, productsImportService: ProductsImportService);
     create(dto: CreateProductDto): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -27,8 +27,8 @@ export declare class ProductsController {
     }>;
     import(user: AuthenticatedUser, file?: Express.Multer.File): Promise<import("./products-import.service").ImportSummary>;
     findAll(query: QueryProductsDto): import("generated/prisma/runtime/library").PrismaPromise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -44,8 +44,8 @@ export declare class ProductsController {
         active: boolean;
     }[]>;
     findOne(id: string): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -61,8 +61,8 @@ export declare class ProductsController {
         active: boolean;
     }>;
     update(id: string, dto: UpdateProductDto): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -78,8 +78,8 @@ export declare class ProductsController {
         active: boolean;
     }>;
     deactivate(id: string): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;

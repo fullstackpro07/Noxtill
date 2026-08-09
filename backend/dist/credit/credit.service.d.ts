@@ -31,10 +31,10 @@ export declare class CreditService {
             businessId: string;
             kind: import("generated/prisma").$Enums.CreditEntryKind;
             customerId: string;
-            orderId: string | null;
-            method: import("generated/prisma").$Enums.PaymentMethod | null;
             amount: import("generated/prisma/runtime/library").Decimal;
+            method: import("generated/prisma").$Enums.PaymentMethod | null;
             note: string | null;
+            orderId: string | null;
         };
         balanceBefore: number;
         balanceAfter: number;

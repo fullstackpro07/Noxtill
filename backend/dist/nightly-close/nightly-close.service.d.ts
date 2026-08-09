@@ -11,21 +11,19 @@ export declare class NightlyCloseService {
     composeAndSend(businessId: string, date?: Date): Promise<void>;
     updateSettings(businessId: string, time?: string, channel?: 'whatsapp' | 'sms' | 'email'): Promise<{
         name: string;
-        id: string;
+        country: string | null;
+        currency: string;
         locale: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
-        msgQuota: number;
         slug: string;
-        typeId: string | null;
-        planId: string | null;
-        currency: string;
         timezone: string;
-        country: string | null;
         channelPref: import("../../generated/prisma").$Enums.MessageChannel;
         nightlyCloseTime: string;
         taxLabel: string;
         taxRate: import("generated/prisma/runtime/library").Decimal;
+        msgQuota: number;
         msgUsed: number;
         branding: import("generated/prisma/runtime/library").JsonValue;
         dashboardConfig: import("generated/prisma/runtime/library").JsonValue;
@@ -34,9 +32,12 @@ export declare class NightlyCloseService {
         referralSettings: import("generated/prisma/runtime/library").JsonValue;
         aiMonthlyCostCapUsd: import("generated/prisma/runtime/library").Decimal;
         aiRateLimitPerMinute: number;
-        parentId: string | null;
         trialEndsAt: Date | null;
         stripeCustomerId: string | null;
         stripeSubscriptionId: string | null;
+        msgQuotaResetAt: Date | null;
+        typeId: string | null;
+        planId: string | null;
+        parentId: string | null;
     }>;
 }

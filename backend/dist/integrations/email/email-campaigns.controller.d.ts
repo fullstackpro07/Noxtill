@@ -9,9 +9,9 @@ export declare class EmailCampaignsController {
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
-        body: string;
         scheduledFor: Date | null;
         segment: string;
+        body: string;
         sentCount: number;
         subject: string;
     }>;
@@ -20,9 +20,9 @@ export declare class EmailCampaignsController {
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
-        body: string;
         scheduledFor: Date | null;
         segment: string;
+        body: string;
         sentCount: number;
         subject: string;
     }[]>;

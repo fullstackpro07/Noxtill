@@ -147,7 +147,7 @@ let EmailCampaignsService = EmailCampaignsService_1 = class EmailCampaignsServic
             return true;
         }
         catch (error) {
-            this.logger.warn(`Email send failed for ${email}: ${error.message}`);
+            this.logger.warn(`Email send failed for campaign ${campaignId}: ${error.message}`);
             return false;
         }
     }

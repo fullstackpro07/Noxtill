@@ -150,4 +150,38 @@ describe('BillingService (BE-064)', () => {
 
     await prisma.plan.delete({ where: { key: bareKey } });
   });
+
+  describe('status()', () => {
+    it('returns the real current plan, quota usage, and AI spend for the business', async () => {
+      const plan = await prisma.plan.findUniqueOrThrow({ where: { key: planKey } });
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { planId: plan.id, msgQuota: plan.msgQuota, msgUsed: 42 },
+      });
+      await prisma.aiCallLog.create({
+        data: {
+          businessId,
+          kind: 'test',
+          inputTokens: 100,
+          outputTokens: 50,
+          estimatedCostUsd: 1.23,
+        },
+      });
+
+      const service = new BillingService(
+        prisma,
+        fakeAdapter('stripe') as unknown as StripeGatewayAdapter,
+        fakeAdapter('jazzcash') as unknown as JazzCashGatewayAdapter,
+      );
+
+      const status = await service.status(businessId);
+      expect(status.planKey).toBe(planKey);
+      expect(status.msgQuota).toBe(1000);
+      expect(status.msgUsed).toBe(42);
+      expect(status.aiCostUsedUsd).toBeGreaterThanOrEqual(1.23);
+      expect(status.hasActiveSubscription).toBe(false);
+
+      await prisma.aiCallLog.deleteMany({ where: { businessId } });
+    });
+  });
 });

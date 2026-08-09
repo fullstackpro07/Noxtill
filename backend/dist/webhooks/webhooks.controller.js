@@ -43,8 +43,10 @@ let WebhooksController = class WebhooksController {
     }
     async meta(req, signature) {
         const appSecret = this.config.get('META_APP_SECRET');
-        if (appSecret &&
-            !(0, signature_util_1.verifyMetaSignature)(req.rawBody ?? Buffer.from(''), signature, appSecret)) {
+        if (!appSecret) {
+            throw new common_1.ServiceUnavailableException('Meta webhook is not configured');
+        }
+        if (!(0, signature_util_1.verifyMetaSignature)(req.rawBody ?? Buffer.from(''), signature, appSecret)) {
             throw new common_1.ForbiddenException('Invalid signature');
         }
         const body = req.body;
@@ -71,11 +73,12 @@ let WebhooksController = class WebhooksController {
     async twilio(req, signature) {
         const authToken = this.config.get('TWILIO_AUTH_TOKEN');
         const body = req.body;
-        if (authToken) {
-            const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-            if (!(0, signature_util_1.verifyTwilioSignature)(fullUrl, body, signature, authToken)) {
-                throw new common_1.ForbiddenException('Invalid signature');
-            }
+        if (!authToken) {
+            throw new common_1.ServiceUnavailableException('Twilio webhook is not configured');
+        }
+        const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+        if (!(0, signature_util_1.verifyTwilioSignature)(fullUrl, body, signature, authToken)) {
+            throw new common_1.ForbiddenException('Invalid signature');
         }
         const eventId = body.MessageSid ?? body.SmsSid;
         if (eventId) {
@@ -89,7 +92,10 @@ let WebhooksController = class WebhooksController {
     }
     async email(req, token) {
         const expected = this.config.get('EMAIL_WEBHOOK_SECRET');
-        if (expected && token !== expected) {
+        if (!expected) {
+            throw new common_1.ServiceUnavailableException('Email webhook is not configured');
+        }
+        if (!token || !(0, signature_util_1.safeEqual)(token, expected)) {
             throw new common_1.ForbiddenException('Invalid webhook token');
         }
         const body = req.body;

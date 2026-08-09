@@ -28,14 +28,14 @@ export declare class CreditController {
     recordPayment(dto: RecordPaymentDto): Promise<{
         entry: {
             id: string;
-            businessId: string;
-            customerId: string;
             createdAt: Date;
+            businessId: string;
             kind: import("generated/prisma").$Enums.CreditEntryKind;
-            orderId: string | null;
-            method: import("generated/prisma").$Enums.PaymentMethod | null;
+            customerId: string;
             amount: import("generated/prisma/runtime/library").Decimal;
+            method: import("generated/prisma").$Enums.PaymentMethod | null;
             note: string | null;
+            orderId: string | null;
         };
         balanceBefore: number;
         balanceAfter: number;

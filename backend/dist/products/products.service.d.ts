@@ -12,8 +12,8 @@ export declare class ProductsService {
     private readonly tenantPrisma;
     constructor(tenantPrisma: TenantPrismaService);
     create(dto: CreateProductDto): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -29,8 +29,8 @@ export declare class ProductsService {
         active: boolean;
     }>;
     findAll(query: ProductQuery): import("generated/prisma/runtime/library").PrismaPromise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -46,8 +46,8 @@ export declare class ProductsService {
         active: boolean;
     }[]>;
     findOne(id: string): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -63,8 +63,8 @@ export declare class ProductsService {
         active: boolean;
     }>;
     update(id: string, dto: UpdateProductDto): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;
@@ -80,8 +80,8 @@ export declare class ProductsService {
         active: boolean;
     }>;
     deactivate(id: string): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;

@@ -9,4 +9,16 @@ export declare class BillingService {
     createCheckout(businessId: string, dto: CreateCheckoutDto): Promise<{
         url: string;
     }>;
+    status(businessId: string): Promise<{
+        planKey: string | null;
+        planName: string | null;
+        price: number | null;
+        msgQuota: number;
+        msgUsed: number;
+        userLimit: number | null;
+        aiCostCapUsd: number;
+        aiCostUsedUsd: number;
+        trialEndsAt: Date | null;
+        hasActiveSubscription: boolean;
+    }>;
 }

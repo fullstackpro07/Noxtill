@@ -6,10 +6,10 @@ export declare class SegmentsController {
         key: string;
         count: number;
         members: {
-            id: string;
+            name: string;
             email: string | null;
             phone: string;
-            name: string;
+            id: string;
             createdAt: Date;
             updatedAt: Date;
             businessId: string;

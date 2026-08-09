@@ -43,10 +43,10 @@ export declare class ReferralsService {
     updateSettings(businessId: string, dto: UpdateReferralSettingsDto): Promise<UpdateReferralSettingsDto>;
     getSettings(businessId: string): Promise<Prisma.JsonValue>;
     redeem(businessId: string, dto: RedeemReferralDto): Promise<{
-        id: string;
+        name: string;
         email: string | null;
         phone: string;
-        name: string;
+        id: string;
         createdAt: Date;
         updatedAt: Date;
         businessId: string;

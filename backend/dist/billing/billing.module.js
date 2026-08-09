@@ -21,6 +21,8 @@ const stripe_webhook_processor_1 = require("./stripe-webhook.processor");
 const stripe_webhook_constants_1 = require("./stripe-webhook.constants");
 const trial_expiry_scheduler_1 = require("./jobs/trial-expiry.scheduler");
 const trial_expiry_processor_1 = require("./jobs/trial-expiry.processor");
+const quota_reset_scheduler_1 = require("./jobs/quota-reset.scheduler");
+const quota_reset_processor_1 = require("./jobs/quota-reset.processor");
 const billing_constants_1 = require("./billing.constants");
 let BillingModule = class BillingModule {
 };
@@ -28,7 +30,7 @@ exports.BillingModule = BillingModule;
 exports.BillingModule = BillingModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            bullmq_1.BullModule.registerQueue({ name: stripe_webhook_constants_1.STRIPE_WEBHOOK_QUEUE }, { name: billing_constants_1.TRIAL_EXPIRY_QUEUE }),
+            bullmq_1.BullModule.registerQueue({ name: stripe_webhook_constants_1.STRIPE_WEBHOOK_QUEUE }, { name: billing_constants_1.TRIAL_EXPIRY_QUEUE }, { name: billing_constants_1.QUOTA_RESET_QUEUE }),
         ],
         controllers: [billing_controller_1.BillingController, stripe_webhook_controller_1.StripeWebhookController],
         providers: [
@@ -41,6 +43,8 @@ exports.BillingModule = BillingModule = __decorate([
             stripe_webhook_processor_1.StripeWebhookProcessor,
             trial_expiry_scheduler_1.TrialExpiryScheduler,
             trial_expiry_processor_1.TrialExpiryProcessor,
+            quota_reset_scheduler_1.QuotaResetScheduler,
+            quota_reset_processor_1.QuotaResetProcessor,
         ],
     })
 ], BillingModule);

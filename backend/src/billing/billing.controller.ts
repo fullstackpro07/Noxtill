@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -9,6 +9,11 @@ import { Role } from '../../generated/prisma';
 @Controller('billing')
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}
+
+  @Get('status')
+  status(@CurrentUser() user: AuthenticatedUser) {
+    return this.billingService.status(user.businessId);
+  }
 
   @Roles(Role.owner)
   @Post('checkout')

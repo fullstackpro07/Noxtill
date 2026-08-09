@@ -1,20 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, MessageSquare, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SettingsSectionHeader } from "./settings-section-header";
 import { PLANS } from "@/lib/plans";
+import { fetchBillingStatus, createCheckout } from "@/lib/billing-api";
+import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { useTranslation } from "@/hooks/use-translation";
-
-const CURRENT_PLAN_KEY = "starter";
-const MOCK_USAGE = {
-  messagesUsed: 640,
-  aiCostUsedUsd: 2.85,
-  aiCostCapUsd: 5,
-};
 
 function UsageMeter({
   icon: Icon,
@@ -53,10 +51,41 @@ function UsageMeter({
 
 export function BillingPlanSection() {
   const { t } = useTranslation();
-  const currentPlan = PLANS.find((p) => p.key === CURRENT_PLAN_KEY)!;
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
-  function handleUpgrade(planName: string) {
-    toast.info(`Checkout for ${planName} wires up in INT-014.`);
+  const { data: status } = useQuery({ queryKey: ["billing-status"], queryFn: fetchBillingStatus });
+  const currentPlanKey = status?.planKey ?? null;
+
+  const checkoutMutation = useMutation({
+    mutationFn: (planKey: string) => createCheckout(planKey),
+    onSuccess: ({ url }) => {
+      // Real full-page redirect to Stripe Checkout — the actual plan change happens via the
+      // webhook once checkout completes, not this redirect itself.
+      window.location.href = url;
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't start checkout — please try again.");
+    },
+  });
+
+  useEffect(() => {
+    const checkout = searchParams.get("checkout");
+    if (checkout === "success") {
+      toast.success("Checkout complete — your plan updates once Stripe confirms the subscription.");
+      void queryClient.invalidateQueries({ queryKey: ["billing-status"] });
+      router.replace(pathname);
+    } else if (checkout === "cancel") {
+      toast.info("Checkout cancelled — your plan is unchanged.");
+      router.replace(pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per mount to consume the redirect params
+  }, []);
+
+  function handleUpgrade(planKey: string) {
+    checkoutMutation.mutate(planKey);
   }
 
   return (
@@ -70,16 +99,16 @@ export function BillingPlanSection() {
         <UsageMeter
           icon={MessageSquare}
           label={t("settings.billing.messagesThisMonth")}
-          used={MOCK_USAGE.messagesUsed}
-          total={currentPlan.msgQuota}
+          used={status?.msgUsed ?? 0}
+          total={status?.msgQuota ?? 0}
           format={(n) => n.toLocaleString()}
           ofLabel={t("settings.billing.usageOf")}
         />
         <UsageMeter
           icon={Sparkles}
           label={t("settings.billing.aiUsageThisMonth")}
-          used={MOCK_USAGE.aiCostUsedUsd}
-          total={MOCK_USAGE.aiCostCapUsd}
+          used={status?.aiCostUsedUsd ?? 0}
+          total={status?.aiCostCapUsd ?? 0}
           format={(n) => `$${n.toFixed(2)}`}
           ofLabel={t("settings.billing.usageOf")}
         />
@@ -87,7 +116,7 @@ export function BillingPlanSection() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PLANS.map((plan) => {
-          const isCurrent = plan.key === CURRENT_PLAN_KEY;
+          const isCurrent = plan.key === currentPlanKey;
           return (
             <div
               key={plan.key}
@@ -120,15 +149,17 @@ export function BillingPlanSection() {
               <Button
                 variant={isCurrent ? "outline" : "primary"}
                 size="sm"
-                disabled={isCurrent}
-                onClick={() => handleUpgrade(plan.name)}
+                disabled={isCurrent || checkoutMutation.isPending}
+                onClick={() => handleUpgrade(plan.key)}
                 className="mt-4 w-full"
               >
                 {isCurrent
                   ? t("settings.billing.currentPlan")
-                  : plan.price === 0
-                    ? t("settings.billing.downgrade")
-                    : t("settings.billing.upgrade")}
+                  : checkoutMutation.isPending && checkoutMutation.variables === plan.key
+                    ? "…"
+                    : plan.price === 0
+                      ? t("settings.billing.downgrade")
+                      : t("settings.billing.upgrade")}
               </Button>
             </div>
           );

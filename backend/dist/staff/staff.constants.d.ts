@@ -6,4 +6,4 @@ export declare const STAFF_ERROR_CODES: {
     readonly ALREADY_CLOCKED_IN: "STAFF_ALREADY_CLOCKED_IN";
     readonly NOT_CLOCKED_IN: "STAFF_NOT_CLOCKED_IN";
 };
-export declare const TEMP_PASSWORD_BYTES = 6;
+export declare const TEMP_PASSWORD_BYTES = 8;

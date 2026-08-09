@@ -32,9 +32,7 @@ export class SmsService implements ChannelSender {
       { auth: { username: accountSid ?? '', password: authToken ?? '' } },
     );
 
-    this.logger.debug(
-      `SMS sent to ${params.to}, provider_ref=${response.data.sid}`,
-    );
+    this.logger.debug(`SMS sent, provider_ref=${response.data.sid}`);
     return { providerRef: response.data.sid };
   }
 }

@@ -251,6 +251,8 @@ model Business {
   /// Billing (BE-064/065): Stripe customer/subscription linkage, set once checkout completes.
   stripeCustomerId     String? @unique @map("stripe_customer_id")
   stripeSubscriptionId String? @unique @map("stripe_subscription_id")
+  /// Last time msgUsed was reset to 0 for a new billing month (INT-014) — null until the first reset.
+  msgQuotaResetAt DateTime? @map("msg_quota_reset_at")
 
   businessUsers    BusinessUser[]
   customers        Customer[]

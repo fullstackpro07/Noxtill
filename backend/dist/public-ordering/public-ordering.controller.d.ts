@@ -11,8 +11,8 @@ export declare class PublicOrderingController {
             branding: import("generated/prisma/runtime/library").JsonValue;
         };
         products: {
-            id: string;
             name: string;
+            id: string;
             createdAt: Date;
             updatedAt: Date;
             businessId: string;

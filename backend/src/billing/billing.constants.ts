@@ -5,6 +5,7 @@ export const BILLING_ERROR_CODES = {
 } as const;
 
 export const TRIAL_EXPIRY_QUEUE = 'trial-expiry';
+export const QUOTA_RESET_QUEUE = 'quota-reset';
 
 /** Every new signup gets 14 trial days with no card required (auth.service.ts). Falls back to this plan on expiry. */
 export const BASIC_PLAN_KEY = 'basic';

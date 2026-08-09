@@ -177,7 +177,9 @@ export class EmailCampaignsService {
       });
       return true;
     } catch (error) {
-      this.logger.warn(`Email send failed for ${email}: ${(error as Error).message}`);
+      this.logger.warn(
+        `Email send failed for campaign ${campaignId}: ${(error as Error).message}`,
+      );
       return false;
     }
   }

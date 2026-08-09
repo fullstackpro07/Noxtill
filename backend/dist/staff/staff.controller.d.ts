@@ -12,11 +12,11 @@ export declare class StaffController {
     constructor(staffService: StaffService, attendanceService: AttendanceService, commissionsService: CommissionsService);
     list(): import("generated/prisma/runtime/library").PrismaPromise<({
         user: {
-            id: string;
+            name: string;
             email: string | null;
             phone: string | null;
+            id: string;
             passwordHash: string;
-            name: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
             refreshTokenHash: string | null;
@@ -36,11 +36,11 @@ export declare class StaffController {
     create(user: AuthenticatedUser, dto: CreateStaffDto): Promise<{
         tempPassword: string | undefined;
         user: {
-            id: string;
+            name: string;
             email: string | null;
             phone: string | null;
+            id: string;
             passwordHash: string;
-            name: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
             refreshTokenHash: string | null;
@@ -57,11 +57,11 @@ export declare class StaffController {
     }>;
     update(id: string, dto: UpdateStaffDto): Promise<{
         user: {
-            id: string;
+            name: string;
             email: string | null;
             phone: string | null;
+            id: string;
             passwordHash: string;
-            name: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
             refreshTokenHash: string | null;

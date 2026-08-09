@@ -5,8 +5,8 @@ export declare class EventsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
     record(dto: CreateEventDto): Prisma.Prisma__EventClient<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         businessId: string | null;
         userId: string | null;

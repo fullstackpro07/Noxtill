@@ -7,5 +7,11 @@ export const STAFF_ERROR_CODES = {
   NOT_CLOCKED_IN: 'STAFF_NOT_CLOCKED_IN',
 } as const;
 
-/** 12 hex chars — a throwaway temp password the owner relays to the new hire, not a security boundary. */
-export const TEMP_PASSWORD_BYTES = 6;
+/**
+ * 16 hex chars — deliberately under spec §6's 22-char minimum for bearer tokens/secrets. This is
+ * a single-use, human-relayed credential (the owner reads it out to a new hire, who's expected to
+ * change it on first real login), not a standing-access token — a 22+ char value would be
+ * impractical to relay verbally/via chat for no meaningful security gain. Reviewed and accepted
+ * as an exception, not an oversight (INT-015).
+ */
+export const TEMP_PASSWORD_BYTES = 8;

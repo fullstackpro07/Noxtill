@@ -42,9 +42,7 @@ export class EmailService implements ChannelSender {
       },
     );
 
-    this.logger.debug(
-      `Email sent to ${params.to}, provider_ref=${response.data.MessageID}`,
-    );
+    this.logger.debug(`Email sent, provider_ref=${response.data.MessageID}`);
     return { providerRef: response.data.MessageID };
   }
 }

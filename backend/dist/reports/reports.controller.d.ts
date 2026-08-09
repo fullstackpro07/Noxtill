@@ -8,19 +8,19 @@ export declare class ReportsController {
         url: string;
     }>;
     send(user: AuthenticatedUser, kind: string, dto: GenerateReportDto): Promise<{
-        id: string;
-        businessId: string;
-        customerId: string | null;
-        channel: import("generated/prisma").$Enums.MessageChannel;
-        category: import("generated/prisma").$Enums.MessageCategory;
-        templateKey: string;
         locale: string;
-        payload: import("generated/prisma/runtime/library").JsonValue;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        category: import("generated/prisma").$Enums.MessageCategory;
+        customerId: string | null;
         status: import("generated/prisma").$Enums.MessageStatus;
+        channel: import("generated/prisma").$Enums.MessageChannel;
+        templateKey: string;
+        payload: import("generated/prisma/runtime/library").JsonValue;
         providerRef: string | null;
         scheduledFor: Date | null;
         campaignId: string | null;
-        createdAt: Date;
-        updatedAt: Date;
     }>;
 }

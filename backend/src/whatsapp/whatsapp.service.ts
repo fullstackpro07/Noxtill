@@ -55,9 +55,7 @@ export class WhatsappService implements ChannelSender {
     );
 
     const providerRef = response.data.messages[0]?.id;
-    this.logger.debug(
-      `WhatsApp message sent to ${params.to}, provider_ref=${providerRef}`,
-    );
+    this.logger.debug(`WhatsApp message sent, provider_ref=${providerRef}`);
     return { providerRef };
   }
 }
