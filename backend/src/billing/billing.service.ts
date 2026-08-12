@@ -78,6 +78,24 @@ export class BillingService {
   }
 
   /**
+   * Refunds a real gateway charge by its provider reference (UPD-BE-011 Returns & Refunds).
+   * `gatewayKey` defaults to 'stripe' since `Payment` doesn't record which gateway processed it —
+   * only Stripe is a real, currently-usable gateway; JazzCash's own adapter still reports itself
+   * unimplemented, matching its checkout stub.
+   */
+  async refund(providerRef: string, amount: number, gatewayKey = 'stripe') {
+    const adapter = this.adapters[gatewayKey];
+    if (!adapter?.isConfigured) {
+      throw new AppException(
+        BILLING_ERROR_CODES.GATEWAY_NOT_CONFIGURED,
+        `Payment gateway "${gatewayKey}" is not configured`,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return adapter.refund(providerRef, amount);
+  }
+
+  /**
    * Real current plan + usage (INT-014) — nothing read this back before; the webhook only ever
    * wrote to `Business`. AI-cost aggregation mirrors `AiInfraService.enforceCostCap`'s exact
    * UTC-month-start query rather than reimplementing it.

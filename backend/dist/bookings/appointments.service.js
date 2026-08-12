@@ -14,6 +14,7 @@ const common_1 = require("@nestjs/common");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
 const review_requests_service_1 = require("../reviews/review-requests.service");
+const activity_service_1 = require("../activity/activity.service");
 const review_token_util_1 = require("../reviews/review-token.util");
 const booking_lock_util_1 = require("./booking-lock.util");
 const bookings_constants_1 = require("./bookings.constants");
@@ -21,9 +22,11 @@ const prisma_1 = require("../../generated/prisma");
 let AppointmentsService = class AppointmentsService {
     tenantPrisma;
     reviewRequests;
-    constructor(tenantPrisma, reviewRequests) {
+    activity;
+    constructor(tenantPrisma, reviewRequests, activity) {
         this.tenantPrisma = tenantPrisma;
         this.reviewRequests = reviewRequests;
+        this.activity = activity;
     }
     findAll(query) {
         return this.tenantPrisma.client.appointment.findMany({
@@ -72,6 +75,12 @@ let AppointmentsService = class AppointmentsService {
                     sourceId: updated.id,
                 },
             });
+            await this.activity.record(businessId, {
+                type: 'booking',
+                description: 'Appointment completed',
+                entityType: 'Appointment',
+                entityId: updated.id,
+            });
             await this.reviewRequests.scheduleSend(businessId, updated.customerId, token);
         }
         if (nextStatus === prisma_1.AppointmentStatus.no_show) {
@@ -88,7 +97,9 @@ let AppointmentsService = class AppointmentsService {
         return updated;
     }
     async reschedule(businessId, id, dto) {
-        const appointment = await this.tenantPrisma.client.appointment.findUnique({ where: { id } });
+        const appointment = await this.tenantPrisma.client.appointment.findUnique({
+            where: { id },
+        });
         if (!appointment) {
             throw new common_1.NotFoundException('Appointment not found');
         }
@@ -168,6 +179,7 @@ exports.AppointmentsService = AppointmentsService;
 exports.AppointmentsService = AppointmentsService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
-        review_requests_service_1.ReviewRequestsService])
+        review_requests_service_1.ReviewRequestsService,
+        activity_service_1.ActivityService])
 ], AppointmentsService);
 //# sourceMappingURL=appointments.service.js.map

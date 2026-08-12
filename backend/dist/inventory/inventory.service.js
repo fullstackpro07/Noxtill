@@ -13,12 +13,15 @@ exports.InventoryService = void 0;
 const common_1 = require("@nestjs/common");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
+const activity_service_1 = require("../activity/activity.service");
 const inventory_constants_1 = require("./inventory.constants");
 const prisma_1 = require("../../generated/prisma");
 let InventoryService = class InventoryService {
     tenantPrisma;
-    constructor(tenantPrisma) {
+    activity;
+    constructor(tenantPrisma, activity) {
         this.tenantPrisma = tenantPrisma;
+        this.activity = activity;
     }
     async recordPurchase(businessId, dto) {
         const product = await this.tenantPrisma.client.product.findUnique({
@@ -43,6 +46,12 @@ let InventoryService = class InventoryService {
                 data: { stockQty: { increment: dto.qty }, costPrice: dto.unitCost },
             }),
         ]);
+        await this.activity.record(businessId, {
+            type: 'stock',
+            description: `Purchase: +${dto.qty} ${product.name}`,
+            entityType: 'StockMovement',
+            entityId: movement.id,
+        });
         return movement;
     }
     async recordWastage(businessId, dto) {
@@ -71,6 +80,12 @@ let InventoryService = class InventoryService {
                 data: { stockQty: { decrement: dto.qty } },
             }),
         ]);
+        await this.activity.record(businessId, {
+            type: 'stock',
+            description: `Wastage: -${dto.qty} ${product.name}`,
+            entityType: 'StockMovement',
+            entityId: movement.id,
+        });
         return movement;
     }
     async listInventory() {
@@ -126,6 +141,7 @@ let InventoryService = class InventoryService {
 exports.InventoryService = InventoryService;
 exports.InventoryService = InventoryService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService])
+    __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
+        activity_service_1.ActivityService])
 ], InventoryService);
 //# sourceMappingURL=inventory.service.js.map

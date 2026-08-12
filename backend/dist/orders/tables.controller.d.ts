@@ -1,0 +1,97 @@
+import { TablesService } from './tables.service';
+import { CreateTableDto } from './dto/create-table.dto';
+import { UpdateTableDto } from './dto/update-table.dto';
+import { MoveTableDto } from './dto/move-table.dto';
+import { MergeTablesDto } from './dto/merge-tables.dto';
+import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+export declare class TablesController {
+    private readonly tablesService;
+    constructor(tablesService: TablesService);
+    list(user: AuthenticatedUser): Promise<{
+        activeOrderId: string | null;
+        runningTotal: number;
+        openedAt: Date | null;
+        number: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        status: import("generated/prisma").$Enums.TableStatus;
+        floor: string | null;
+        posX: number | null;
+        posY: number | null;
+        seats: number | null;
+        seatedAt: Date | null;
+    }[]>;
+    create(user: AuthenticatedUser, dto: CreateTableDto): Promise<{
+        number: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        status: import("generated/prisma").$Enums.TableStatus;
+        floor: string | null;
+        posX: number | null;
+        posY: number | null;
+        seats: number | null;
+        seatedAt: Date | null;
+    }>;
+    update(user: AuthenticatedUser, id: string, dto: UpdateTableDto): Promise<{
+        number: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        status: import("generated/prisma").$Enums.TableStatus;
+        floor: string | null;
+        posX: number | null;
+        posY: number | null;
+        seats: number | null;
+        seatedAt: Date | null;
+    }>;
+    open(user: AuthenticatedUser, id: string): Promise<{
+        number: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        status: import("generated/prisma").$Enums.TableStatus;
+        floor: string | null;
+        posX: number | null;
+        posY: number | null;
+        seats: number | null;
+        seatedAt: Date | null;
+    }>;
+    move(user: AuthenticatedUser, id: string, dto: MoveTableDto): Promise<{
+        activeOrderId: string | null;
+        runningTotal: number;
+        openedAt: Date | null;
+        number: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        status: import("generated/prisma").$Enums.TableStatus;
+        floor: string | null;
+        posX: number | null;
+        posY: number | null;
+        seats: number | null;
+        seatedAt: Date | null;
+    }>;
+    merge(user: AuthenticatedUser, id: string, dto: MergeTablesDto): Promise<{
+        activeOrderId: string | null;
+        runningTotal: number;
+        openedAt: Date | null;
+        number: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        status: import("generated/prisma").$Enums.TableStatus;
+        floor: string | null;
+        posX: number | null;
+        posY: number | null;
+        seats: number | null;
+        seatedAt: Date | null;
+    }>;
+}

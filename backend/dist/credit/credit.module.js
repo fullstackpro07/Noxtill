@@ -13,12 +13,13 @@ const credit_reminder_service_1 = require("./credit-reminder.service");
 const credit_statement_service_1 = require("./credit-statement.service");
 const credit_controller_1 = require("./credit.controller");
 const messaging_module_1 = require("../messaging/messaging.module");
+const activity_module_1 = require("../activity/activity.module");
 let CreditModule = class CreditModule {
 };
 exports.CreditModule = CreditModule;
 exports.CreditModule = CreditModule = __decorate([
     (0, common_1.Module)({
-        imports: [messaging_module_1.MessagingModule],
+        imports: [messaging_module_1.MessagingModule, activity_module_1.ActivityModule],
         controllers: [credit_controller_1.CreditController],
         providers: [credit_service_1.CreditService, credit_reminder_service_1.CreditReminderService, credit_statement_service_1.CreditStatementService],
     })

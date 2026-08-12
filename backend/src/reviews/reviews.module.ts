@@ -14,6 +14,7 @@ import { GoogleSyncProcessor } from './jobs/google-sync.processor';
 import { GOOGLE_SYNC_QUEUE } from './jobs/google-sync.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { AiModule } from '../ai/ai.module';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AiModule } from '../ai/ai.module';
     ),
     MessagingModule,
     AiModule,
+    ActivityModule,
   ],
   controllers: [ReviewsController, PublicReviewController],
   providers: [

@@ -6,6 +6,8 @@ import { OrdersService } from './orders.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ReferralsService } from '../marketing/referrals.service';
+import { ActivityService } from '../activity/activity.service';
+import { CashRegisterService } from '../cash-register/cash-register.service';
 import { AppException } from '../common/filters/app.exception';
 import { ORDER_ERROR_CODES } from './orders.constants';
 
@@ -31,6 +33,10 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
   const referrals = {
     issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
   };
+  const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const cashRegister = {
+    recordSaleMovement: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -47,6 +53,8 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
       sendGate as unknown as SendGateService,
       reviewRequests as unknown as ReviewRequestsService,
       referrals as unknown as ReferralsService,
+      activity as unknown as ActivityService,
+      cashRegister as unknown as CashRegisterService,
     );
 
     const business = await prisma.business.create({
@@ -190,6 +198,10 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
   const referrals = {
     issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
   };
+  const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const cashRegister = {
+    recordSaleMovement: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -206,6 +218,8 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
       sendGate as unknown as SendGateService,
       reviewRequests as unknown as ReviewRequestsService,
       referrals as unknown as ReferralsService,
+      activity as unknown as ActivityService,
+      cashRegister as unknown as CashRegisterService,
     );
 
     const business = await prisma.business.create({

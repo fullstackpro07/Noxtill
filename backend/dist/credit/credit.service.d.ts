@@ -1,12 +1,14 @@
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
+import { ActivityService } from '../activity/activity.service';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 export declare class CreditService {
     private readonly tenantPrisma;
     private readonly cls;
     private readonly auditService;
-    constructor(tenantPrisma: TenantPrismaService, cls: ClsService, auditService: AuditService);
+    private readonly activity;
+    constructor(tenantPrisma: TenantPrismaService, cls: ClsService, auditService: AuditService, activity: ActivityService);
     listDebtors(): Promise<{
         customerId: string;
         name: string;

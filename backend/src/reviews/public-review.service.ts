@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import { generateReviewToken } from './review-token.util';
@@ -20,6 +21,7 @@ export class PublicReviewService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
+    private readonly activity: ActivityService,
   ) {}
 
   /**
@@ -38,7 +40,11 @@ export class PublicReviewService {
 
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentQrCount = await this.prisma.reviewRequest.count({
-      where: { businessId: business.id, source: 'qr', createdAt: { gte: since } },
+      where: {
+        businessId: business.id,
+        source: 'qr',
+        createdAt: { gte: since },
+      },
     });
     if (recentQrCount >= QR_DAILY_CAP_PER_BUSINESS) {
       throw new AppException(
@@ -107,7 +113,7 @@ export class PublicReviewService {
     });
 
     if (routedTo === ReviewRoute.private) {
-      await this.prisma.privateFeedback.create({
+      const feedback = await this.prisma.privateFeedback.create({
         data: {
           businessId: reviewRequest.businessId,
           reviewRequestId: reviewRequest.id,
@@ -117,9 +123,31 @@ export class PublicReviewService {
         },
       });
 
+      // Recorded before alertOwner(): activity recording is fast and fail-fast by design and must
+      // not be gated behind sendGate.send()'s queue add (alertOwner's `.catch()` only guards
+      // against rejection, not a pending add() that never resolves — see orders.service.ts).
+      await this.activity.record(reviewRequest.businessId, {
+        type: 'review',
+        description: `${dto.stars}★ review received`,
+        entityType: 'ReviewRequest',
+        entityId: reviewRequest.id,
+      });
+      await this.activity.record(reviewRequest.businessId, {
+        type: 'complaint',
+        description: `New ${dto.stars}★ private feedback`,
+        entityType: 'PrivateFeedback',
+        entityId: feedback.id,
+      });
       await this.alertOwner(reviewRequest.businessId, dto.stars, dto.message);
       return { thankYou: true };
     }
+
+    await this.activity.record(reviewRequest.businessId, {
+      type: 'review',
+      description: `${dto.stars}★ review received`,
+      entityType: 'ReviewRequest',
+      entityId: reviewRequest.id,
+    });
 
     // 4-5 stars: send them on to the public listing if one is configured; otherwise private mode.
     if (reviewRequest.business.publicReviewUrl) {

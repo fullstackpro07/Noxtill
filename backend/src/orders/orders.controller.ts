@@ -10,6 +10,9 @@ import {
 import { OrdersService } from './orders.service';
 import { InvoiceService } from './invoice.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { HoldSaleDto } from './dto/hold-sale.dto';
+import { ResumeHeldSaleDto } from './dto/resume-held-sale.dto';
+import { SplitBillDto } from './dto/split-bill.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { GenerateInvoiceDto } from './dto/generate-invoice.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -44,6 +47,24 @@ export class OrdersController {
     return this.ordersService.findOne(id);
   }
 
+  // UPD-BE-009: a draft is a real Order row (status "draft") — list via GET /orders?status=draft.
+  @Post('orders/draft')
+  createDraft(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: HoldSaleDto,
+  ) {
+    return this.ordersService.createDraft(user.businessId, dto);
+  }
+
+  @Post('orders/:id/convert')
+  convertDraft(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ResumeHeldSaleDto,
+  ) {
+    return this.ordersService.convertDraft(user.businessId, id, dto);
+  }
+
   @Patch('orders/:id/status')
   updateStatus(
     @CurrentUser() user: AuthenticatedUser,
@@ -51,6 +72,11 @@ export class OrdersController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.updateStatus(user.businessId, id, dto.status);
+  }
+
+  @Post('orders/:id/split-bill')
+  splitBill(@Param('id') id: string, @Body() dto: SplitBillDto) {
+    return this.ordersService.splitBill(id, dto.parts);
   }
 
   @Post('orders/:id/invoice')

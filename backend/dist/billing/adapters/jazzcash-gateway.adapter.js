@@ -35,6 +35,14 @@ let JazzCashGatewayAdapter = JazzCashGatewayAdapter_1 = class JazzCashGatewayAda
         }
         return Promise.reject(new Error('JazzCash checkout is not yet implemented'));
     }
+    refund(providerRef, amount) {
+        void providerRef;
+        void amount;
+        if (!this.merchantId) {
+            throw new Error('JazzCash is not configured');
+        }
+        return Promise.reject(new Error('JazzCash refunds are not yet implemented'));
+    }
 };
 exports.JazzCashGatewayAdapter = JazzCashGatewayAdapter;
 exports.JazzCashGatewayAdapter = JazzCashGatewayAdapter = JazzCashGatewayAdapter_1 = __decorate([

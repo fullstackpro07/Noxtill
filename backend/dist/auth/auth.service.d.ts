@@ -37,6 +37,7 @@ export declare class AuthService {
             publicReviewUrl: string | null;
             workingHours: Prisma.JsonValue;
             referralSettings: Prisma.JsonValue;
+            healthScoreWeights: Prisma.JsonValue;
             aiMonthlyCostCapUsd: Prisma.Decimal;
             aiRateLimitPerMinute: number;
             trialEndsAt: Date | null;

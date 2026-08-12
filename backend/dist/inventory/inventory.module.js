@@ -15,6 +15,7 @@ const low_stock_scan_scheduler_1 = require("./low-stock-scan.scheduler");
 const low_stock_scan_processor_1 = require("./low-stock-scan.processor");
 const low_stock_scan_constants_1 = require("./low-stock-scan.constants");
 const messaging_module_1 = require("../messaging/messaging.module");
+const activity_module_1 = require("../activity/activity.module");
 let InventoryModule = class InventoryModule {
 };
 exports.InventoryModule = InventoryModule;
@@ -23,6 +24,7 @@ exports.InventoryModule = InventoryModule = __decorate([
         imports: [
             bullmq_1.BullModule.registerQueue({ name: low_stock_scan_constants_1.LOW_STOCK_SCAN_QUEUE }),
             messaging_module_1.MessagingModule,
+            activity_module_1.ActivityModule,
         ],
         controllers: [inventory_controller_1.InventoryController],
         providers: [inventory_service_1.InventoryService, low_stock_scan_scheduler_1.LowStockScanScheduler, low_stock_scan_processor_1.LowStockScanProcessor],

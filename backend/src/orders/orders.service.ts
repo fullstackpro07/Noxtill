@@ -6,14 +6,34 @@ import { CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ReferralsService } from '../marketing/referrals.service';
+import { ActivityService } from '../activity/activity.service';
+import { CashRegisterService } from '../cash-register/cash-register.service';
 import { generateReviewToken } from '../reviews/review-token.util';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { HoldSaleDto } from './dto/hold-sale.dto';
+import { ResumeHeldSaleDto } from './dto/resume-held-sale.dto';
 import {
   ORDER_ERROR_CODES,
   ORDER_STATUS_TRANSITIONS,
 } from './orders.constants';
 import { computeOrderTotals } from './order-totals.util';
 import { OrderStatus, Prisma, ProductKind } from '../../generated/prisma';
+
+/**
+ * Narrow shape of the transaction client actually used by `resolveCustomerId` — the tenant-scoped
+ * extended client's real `$transaction` callback type doesn't structurally match the plain
+ * `Prisma.TransactionClient`, so this mirrors the same hand-written-subset-interface pattern
+ * already used by `ReferralsService.issueRewardIfEligible`'s `TxClient`.
+ */
+interface CustomerUpsertTxClient {
+  customer: {
+    upsert(args: {
+      where: { businessId_phone: { businessId: string; phone: string } };
+      create: { businessId: string; phone: string; name: string };
+      update: Record<string, never>;
+    }): Promise<{ id: string }>;
+  };
+}
 
 /**
  * Products/Orders/POS module (BE-M2). `createSale` is THE atomic transaction
@@ -28,7 +48,29 @@ export class OrdersService {
     private readonly sendGate: SendGateService,
     private readonly reviewRequests: ReviewRequestsService,
     private readonly referrals: ReferralsService,
+    private readonly activity: ActivityService,
+    private readonly cashRegister: CashRegisterService,
   ) {}
+
+  /** Shared by createSale and createDraft — a draft's cart may also name a customer by phone. */
+  private async resolveCustomerId(
+    tx: CustomerUpsertTxClient,
+    businessId: string,
+    dto: { customerId?: string; customerPhone?: string; customerName?: string },
+  ): Promise<string | undefined> {
+    if (dto.customerId) return dto.customerId;
+    if (!dto.customerPhone) return undefined;
+    const customer = await tx.customer.upsert({
+      where: { businessId_phone: { businessId, phone: dto.customerPhone } },
+      create: {
+        businessId,
+        phone: dto.customerPhone,
+        name: dto.customerName ?? dto.customerPhone,
+      },
+      update: {},
+    });
+    return customer.id;
+  }
 
   async createSale(businessId: string, dto: CreateSaleDto) {
     const actorUserId = this.cls.get<string>(CLS_KEY_USER_ID);
@@ -39,21 +81,7 @@ export class OrdersService {
           where: { id: businessId },
         });
 
-        let customerId = dto.customerId;
-        if (!customerId && dto.customerPhone) {
-          const customer = await tx.customer.upsert({
-            where: {
-              businessId_phone: { businessId, phone: dto.customerPhone },
-            },
-            create: {
-              businessId,
-              phone: dto.customerPhone,
-              name: dto.customerName ?? dto.customerPhone,
-            },
-            update: {},
-          });
-          customerId = customer.id;
-        }
+        const customerId = await this.resolveCustomerId(tx, businessId, dto);
 
         if (dto.payment.method === 'credit' && !customerId) {
           throw new AppException(
@@ -189,7 +217,11 @@ export class OrdersService {
               lastVisitAt: new Date(),
             },
           });
-          await this.referrals.issueRewardIfEligible(businessId, customerId, tx);
+          await this.referrals.issueRewardIfEligible(
+            businessId,
+            customerId,
+            tx,
+          );
         }
 
         await tx.auditLog.create({
@@ -220,6 +252,29 @@ export class OrdersService {
         return { order, reviewToken, reviewCustomerId: customerId };
       });
 
+    // Recorded before the queue-scheduling call below: activity recording is fast and fail-fast
+    // by design (activity.record() never throws or hangs), and must not be gated behind
+    // scheduleSend()'s queue add, which — unlike activity's own Redis usage — retries
+    // indefinitely by BullMQ's own design and can block this request far longer.
+    await this.activity.record(businessId, {
+      type: 'sale',
+      description: `Sale #${order.orderNo} — ${Number(order.total)}`,
+      amount: Number(order.total),
+      entityType: 'Order',
+      entityId: order.id,
+      actorUserId,
+    });
+
+    // Cash Register (UPD-BE-006): best-effort — silently a no-op if no shift is currently open,
+    // since not every business uses the cash register at all.
+    if (dto.payment.method === 'cash') {
+      await this.cashRegister.recordSaleMovement(
+        businessId,
+        Number(order.total),
+        order.id,
+      );
+    }
+
     // Outside the DB transaction: scheduling a send is queue work, not a DB write.
     // Best-effort — a failure here shouldn't roll back an already-completed sale.
     if (reviewToken && reviewCustomerId) {
@@ -230,6 +285,136 @@ export class OrdersService {
       );
     }
 
+    return order;
+  }
+
+  /**
+   * Draft Orders (UPD-BE-009). Unlike `createSale`, a draft is a real `Order`/`OrderItem` row
+   * pair with status `draft` — but stops there: no stock decrement, no payment/credit entry, no
+   * customer stats bump, no audit log, no review request. Those all happen exactly once, at
+   * `convertDraft`, by handing off to the real `createSale`.
+   */
+  async createDraft(businessId: string, dto: HoldSaleDto) {
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      const business = await tx.business.findUniqueOrThrow({
+        where: { id: businessId },
+      });
+      const customerId = await this.resolveCustomerId(tx, businessId, dto);
+
+      const productIds = [...new Set(dto.items.map((i) => i.productId))];
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+      });
+      const productMap = new Map(products.map((p) => [p.id, p]));
+
+      const itemsData = dto.items.map((item) => {
+        const product = productMap.get(item.productId);
+        if (!product) {
+          throw new AppException(
+            ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
+            `Product ${item.productId} not found`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        return {
+          productId: product.id,
+          name: product.name,
+          price: item.priceOverride ?? Number(product.sellingPrice),
+          cost: Number(product.costPrice),
+          qty: item.qty,
+        };
+      });
+
+      const discount = dto.discount ?? 0;
+      const { subtotal, tax, total, cogs } = computeOrderTotals(
+        itemsData,
+        discount,
+        Number(business.taxRate),
+      );
+
+      const [{ next: orderNo }] = await tx.$queryRaw<{ next: number }[]>`
+        SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${businessId}
+      `;
+
+      const order = await tx.order.create({
+        data: {
+          businessId,
+          orderNo,
+          customerId,
+          orderType: dto.orderType ?? 'counter',
+          tableNo: dto.tableNo,
+          staffUserId: dto.staffUserId,
+          status: OrderStatus.draft,
+          subtotal,
+          tax,
+          discount,
+          total,
+          cogs,
+        },
+      });
+
+      await tx.orderItem.createMany({
+        data: itemsData.map((item) => ({
+          orderId: order.id,
+          productId: item.productId,
+          name: item.name,
+          price: item.price,
+          cost: item.cost,
+          qty: item.qty,
+        })),
+      });
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: { items: true, customer: true },
+      });
+    });
+  }
+
+  async convertDraft(businessId: string, id: string, dto: ResumeHeldSaleDto) {
+    const draft = await this.tenantPrisma.client.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+    if (
+      !draft ||
+      draft.businessId !== businessId ||
+      draft.status !== OrderStatus.draft
+    ) {
+      throw new NotFoundException('Draft order not found');
+    }
+
+    const saleDto: CreateSaleDto = {
+      orderType: draft.orderType as CreateSaleDto['orderType'],
+      tableNo: draft.tableNo ?? undefined,
+      customerId: draft.customerId ?? undefined,
+      staffUserId: draft.staffUserId ?? undefined,
+      // Locks in the price the customer saw on the draft rather than re-pricing at convert time.
+      // `productId` is always set here — createDraft() never stores an item without one.
+      items: draft.items.map((item) => {
+        if (!item.productId) {
+          throw new AppException(
+            ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
+            `Draft order item ${item.id} has no product reference`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        return {
+          productId: item.productId,
+          qty: item.qty,
+          priceOverride: Number(item.price),
+        };
+      }),
+      discount: Number(draft.discount),
+      payment: dto.payment,
+    };
+
+    const order = await this.createSale(businessId, saleDto);
+    // Only removed after the real sale genuinely succeeds — see HeldSalesService.resume().
+    await this.tenantPrisma.client.orderItem.deleteMany({
+      where: { orderId: draft.id },
+    });
+    await this.tenantPrisma.client.order.delete({ where: { id: draft.id } });
     return order;
   }
 
@@ -273,10 +458,36 @@ export class OrdersService {
     return updated;
   }
 
+  /**
+   * Split Bill (UPD-BE-010) — a pure preview, matching the spec's own framing as a "popup"
+   * calculation. Never mutates the order or creates sub-orders; the remainder from rounding
+   * (e.g. 10.01 / 3) is added to the first share so shares always sum exactly to the total.
+   */
+  async splitBill(id: string, parts: number) {
+    const order = await this.tenantPrisma.client.order.findUnique({
+      where: { id },
+    });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const total = Number(order.total);
+    const perShare = Math.floor((total / parts) * 100) / 100;
+    const shares = Array<number>(parts).fill(perShare);
+    shares[0] = Math.round((total - perShare * (parts - 1)) * 100) / 100;
+
+    return { orderId: order.id, total, parts, shares };
+  }
+
   async findOne(id: string) {
     const order = await this.tenantPrisma.client.order.findUnique({
       where: { id },
-      include: { items: true, payments: true, creditEntries: true, customer: true },
+      include: {
+        items: true,
+        payments: true,
+        creditEntries: true,
+        customer: true,
+      },
     });
     if (!order) {
       throw new NotFoundException('Order not found');
@@ -288,7 +499,12 @@ export class OrdersService {
     return this.tenantPrisma.client.order.findMany({
       where: { status, isQuotation: false },
       orderBy: { createdAt: 'desc' },
-      include: { items: true, payments: true, creditEntries: true, customer: true },
+      include: {
+        items: true,
+        payments: true,
+        creditEntries: true,
+        customer: true,
+      },
     });
   }
 }

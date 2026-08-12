@@ -14,16 +14,19 @@ const common_1 = require("@nestjs/common");
 const nestjs_cls_1 = require("nestjs-cls");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const audit_service_1 = require("../common/audit/audit.service");
+const activity_service_1 = require("../activity/activity.service");
 const tenant_constants_1 = require("../common/tenancy/tenant.constants");
 const credit_types_1 = require("./credit.types");
 let CreditService = class CreditService {
     tenantPrisma;
     cls;
     auditService;
-    constructor(tenantPrisma, cls, auditService) {
+    activity;
+    constructor(tenantPrisma, cls, auditService, activity) {
         this.tenantPrisma = tenantPrisma;
         this.cls = cls;
         this.auditService = auditService;
+        this.activity = activity;
     }
     async listDebtors() {
         const businessId = this.cls.get(tenant_constants_1.CLS_KEY_BUSINESS_ID);
@@ -98,6 +101,13 @@ let CreditService = class CreditService {
             before: { balance: before },
             after: { balance: after, entry },
         });
+        await this.activity.record(businessId, {
+            type: 'payment',
+            description: `Credit payment from ${customer.name} — ${dto.amount}`,
+            amount: dto.amount,
+            entityType: 'CreditEntry',
+            entityId: entry.id,
+        });
         return { entry, balanceBefore: before, balanceAfter: after };
     }
 };
@@ -106,6 +116,7 @@ exports.CreditService = CreditService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
         nestjs_cls_1.ClsService,
-        audit_service_1.AuditService])
+        audit_service_1.AuditService,
+        activity_service_1.ActivityService])
 ], CreditService);
 //# sourceMappingURL=credit.service.js.map

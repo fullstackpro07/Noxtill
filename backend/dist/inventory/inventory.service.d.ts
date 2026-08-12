@@ -1,9 +1,11 @@
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { ActivityService } from '../activity/activity.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateWastageDto } from './dto/create-wastage.dto';
 export declare class InventoryService {
     private readonly tenantPrisma;
-    constructor(tenantPrisma: TenantPrismaService);
+    private readonly activity;
+    constructor(tenantPrisma: TenantPrismaService, activity: ActivityService);
     recordPurchase(businessId: string, dto: CreatePurchaseDto): Promise<{
         id: string;
         createdAt: Date;

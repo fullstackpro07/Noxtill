@@ -1,10 +1,12 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { ActivityService } from '../activity/activity.service';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 export declare class PublicReviewService {
     private readonly prisma;
     private readonly sendGate;
-    constructor(prisma: PrismaService, sendGate: SendGateService);
+    private readonly activity;
+    constructor(prisma: PrismaService, sendGate: SendGateService, activity: ActivityService);
     mintAnonymousLink(slug: string): Promise<{
         token: string;
     }>;

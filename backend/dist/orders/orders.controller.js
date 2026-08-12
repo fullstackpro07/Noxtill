@@ -17,6 +17,9 @@ const common_1 = require("@nestjs/common");
 const orders_service_1 = require("./orders.service");
 const invoice_service_1 = require("./invoice.service");
 const create_sale_dto_1 = require("./dto/create-sale.dto");
+const hold_sale_dto_1 = require("./dto/hold-sale.dto");
+const resume_held_sale_dto_1 = require("./dto/resume-held-sale.dto");
+const split_bill_dto_1 = require("./dto/split-bill.dto");
 const update_order_status_dto_1 = require("./dto/update-order-status.dto");
 const generate_invoice_dto_1 = require("./dto/generate-invoice.dto");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
@@ -37,8 +40,17 @@ let OrdersController = class OrdersController {
     findOne(id) {
         return this.ordersService.findOne(id);
     }
+    createDraft(user, dto) {
+        return this.ordersService.createDraft(user.businessId, dto);
+    }
+    convertDraft(user, id, dto) {
+        return this.ordersService.convertDraft(user.businessId, id, dto);
+    }
     updateStatus(user, id, dto) {
         return this.ordersService.updateStatus(user.businessId, id, dto.status);
+    }
+    splitBill(id, dto) {
+        return this.ordersService.splitBill(id, dto.parts);
     }
     generateInvoice(user, id, dto) {
         return this.invoiceService.generate(user.businessId, id, dto.send);
@@ -68,6 +80,23 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], OrdersController.prototype, "findOne", null);
 __decorate([
+    (0, common_1.Post)('orders/draft'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, hold_sale_dto_1.HoldSaleDto]),
+    __metadata("design:returntype", void 0)
+], OrdersController.prototype, "createDraft", null);
+__decorate([
+    (0, common_1.Post)('orders/:id/convert'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, resume_held_sale_dto_1.ResumeHeldSaleDto]),
+    __metadata("design:returntype", void 0)
+], OrdersController.prototype, "convertDraft", null);
+__decorate([
     (0, common_1.Patch)('orders/:id/status'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Param)('id')),
@@ -76,6 +105,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, update_order_status_dto_1.UpdateOrderStatusDto]),
     __metadata("design:returntype", void 0)
 ], OrdersController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Post)('orders/:id/split-bill'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, split_bill_dto_1.SplitBillDto]),
+    __metadata("design:returntype", void 0)
+], OrdersController.prototype, "splitBill", null);
 __decorate([
     (0, common_1.Post)('orders/:id/invoice'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

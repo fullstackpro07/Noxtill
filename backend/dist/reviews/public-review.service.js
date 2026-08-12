@@ -13,6 +13,7 @@ exports.PublicReviewService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const send_gate_service_1 = require("../messaging/send-gate.service");
+const activity_service_1 = require("../activity/activity.service");
 const app_exception_1 = require("../common/filters/app.exception");
 const review_token_util_1 = require("./review-token.util");
 const prisma_1 = require("../../generated/prisma");
@@ -21,9 +22,11 @@ const QR_DAILY_CAP_PER_BUSINESS = 200;
 let PublicReviewService = class PublicReviewService {
     prisma;
     sendGate;
-    constructor(prisma, sendGate) {
+    activity;
+    constructor(prisma, sendGate, activity) {
         this.prisma = prisma;
         this.sendGate = sendGate;
+        this.activity = activity;
     }
     async mintAnonymousLink(slug) {
         const business = await this.prisma.business.findUnique({ where: { slug } });
@@ -32,7 +35,11 @@ let PublicReviewService = class PublicReviewService {
         }
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const recentQrCount = await this.prisma.reviewRequest.count({
-            where: { businessId: business.id, source: 'qr', createdAt: { gte: since } },
+            where: {
+                businessId: business.id,
+                source: 'qr',
+                createdAt: { gte: since },
+            },
         });
         if (recentQrCount >= QR_DAILY_CAP_PER_BUSINESS) {
             throw new app_exception_1.AppException('REVIEW_QR_DAILY_CAP_REACHED', 'Too many review links have been requested today — please try again tomorrow.', common_1.HttpStatus.TOO_MANY_REQUESTS);
@@ -86,7 +93,7 @@ let PublicReviewService = class PublicReviewService {
             },
         });
         if (routedTo === prisma_1.ReviewRoute.private) {
-            await this.prisma.privateFeedback.create({
+            const feedback = await this.prisma.privateFeedback.create({
                 data: {
                     businessId: reviewRequest.businessId,
                     reviewRequestId: reviewRequest.id,
@@ -95,9 +102,27 @@ let PublicReviewService = class PublicReviewService {
                     message: dto.message,
                 },
             });
+            await this.activity.record(reviewRequest.businessId, {
+                type: 'review',
+                description: `${dto.stars}★ review received`,
+                entityType: 'ReviewRequest',
+                entityId: reviewRequest.id,
+            });
+            await this.activity.record(reviewRequest.businessId, {
+                type: 'complaint',
+                description: `New ${dto.stars}★ private feedback`,
+                entityType: 'PrivateFeedback',
+                entityId: feedback.id,
+            });
             await this.alertOwner(reviewRequest.businessId, dto.stars, dto.message);
             return { thankYou: true };
         }
+        await this.activity.record(reviewRequest.businessId, {
+            type: 'review',
+            description: `${dto.stars}★ review received`,
+            entityType: 'ReviewRequest',
+            entityId: reviewRequest.id,
+        });
         if (reviewRequest.business.publicReviewUrl) {
             return { redirect: reviewRequest.business.publicReviewUrl };
         }
@@ -144,6 +169,7 @@ exports.PublicReviewService = PublicReviewService;
 exports.PublicReviewService = PublicReviewService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        send_gate_service_1.SendGateService])
+        send_gate_service_1.SendGateService,
+        activity_service_1.ActivityService])
 ], PublicReviewService);
 //# sourceMappingURL=public-review.service.js.map

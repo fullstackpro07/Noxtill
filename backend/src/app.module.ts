@@ -45,6 +45,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ReportsModule } from './reports/reports.module';
 import { ExportsModule } from './exports/exports.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { ActivityModule } from './activity/activity.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
     BillingModule,
     WidgetsModule,
     DashboardModule,
+    ActivityModule,
     BusinessTypesModule,
     SearchModule,
     AnalyticsModule,

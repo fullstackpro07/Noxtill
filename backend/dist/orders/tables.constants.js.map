@@ -1,0 +1,1 @@
+{"version":3,"file":"tables.constants.js","sourceRoot":"","sources":["../../src/orders/tables.constants.ts"],"names":[],"mappings":";;;AAAa,QAAA,iBAAiB,GAAG;IAC/B,eAAe,EAAE,kBAAkB;IACnC,YAAY,EAAE,qBAAqB;IACnC,eAAe,EAAE,wBAAwB;IACzC,oBAAoB,EAAE,6BAA6B;CACpD,CAAC;AAQW,QAAA,qBAAqB,GAAG;IACnC,OAAO;IACP,SAAS;IACT,WAAW;IACX,aAAa;CACL,CAAC"}

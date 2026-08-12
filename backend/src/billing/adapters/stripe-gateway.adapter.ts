@@ -5,6 +5,7 @@ import {
   CheckoutSession,
   CreateCheckoutParams,
   PaymentGatewayAdapter,
+  RefundResult,
 } from './payment-gateway.adapter';
 
 /**
@@ -63,5 +64,16 @@ export class StripeGatewayAdapter implements PaymentGatewayAdapter {
     }
 
     return { url: session.url, sessionRef: session.id };
+  }
+
+  async refund(providerRef: string, amount: number): Promise<RefundResult> {
+    if (!this.client) {
+      throw new Error('Stripe is not configured');
+    }
+    const refund = await this.client.refunds.create({
+      payment_intent: providerRef,
+      amount: Math.round(amount * 100),
+    });
+    return { refundRef: refund.id };
   }
 }

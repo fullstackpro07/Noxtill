@@ -153,7 +153,9 @@ describe('BillingService (BE-064)', () => {
 
   describe('status()', () => {
     it('returns the real current plan, quota usage, and AI spend for the business', async () => {
-      const plan = await prisma.plan.findUniqueOrThrow({ where: { key: planKey } });
+      const plan = await prisma.plan.findUniqueOrThrow({
+        where: { key: planKey },
+      });
       await prisma.business.update({
         where: { id: businessId },
         data: { planId: plan.id, msgQuota: plan.msgQuota, msgUsed: 42 },

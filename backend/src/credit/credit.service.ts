@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
+import { ActivityService } from '../activity/activity.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { DebtorRow, buildLedgerRows } from './credit.types';
@@ -13,6 +14,7 @@ export class CreditService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly cls: ClsService,
     private readonly auditService: AuditService,
+    private readonly activity: ActivityService,
   ) {}
 
   async listDebtors() {
@@ -101,6 +103,14 @@ export class CreditService {
       action: 'credit.payment',
       before: { balance: before },
       after: { balance: after, entry },
+    });
+
+    await this.activity.record(businessId, {
+      type: 'payment',
+      description: `Credit payment from ${customer.name} — ${dto.amount}`,
+      amount: dto.amount,
+      entityType: 'CreditEntry',
+      entityId: entry.id,
     });
 
     return { entry, balanceBefore: before, balanceAfter: after };

@@ -10,12 +10,14 @@ import { BookingRemindersProcessor } from './jobs/booking-reminders.processor';
 import { BOOKING_REMINDERS_QUEUE } from './jobs/booking-reminders.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ReviewsModule } from '../reviews/reviews.module';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: BOOKING_REMINDERS_QUEUE }),
     MessagingModule,
     ReviewsModule,
+    ActivityModule,
   ],
   controllers: [
     PublicBookingController,

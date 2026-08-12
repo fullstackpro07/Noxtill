@@ -41,7 +41,10 @@ export class QuotaResetProcessor extends WorkerHost {
 
     const due = await this.prisma.business.findMany({
       where: {
-        OR: [{ msgQuotaResetAt: null }, { msgQuotaResetAt: { lt: monthStart } }],
+        OR: [
+          { msgQuotaResetAt: null },
+          { msgQuotaResetAt: { lt: monthStart } },
+        ],
       },
     });
 

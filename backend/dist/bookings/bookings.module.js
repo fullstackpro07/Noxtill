@@ -19,6 +19,7 @@ const booking_reminders_processor_1 = require("./jobs/booking-reminders.processo
 const booking_reminders_constants_1 = require("./jobs/booking-reminders.constants");
 const messaging_module_1 = require("../messaging/messaging.module");
 const reviews_module_1 = require("../reviews/reviews.module");
+const activity_module_1 = require("../activity/activity.module");
 let BookingsModule = class BookingsModule {
 };
 exports.BookingsModule = BookingsModule;
@@ -28,6 +29,7 @@ exports.BookingsModule = BookingsModule = __decorate([
             bullmq_1.BullModule.registerQueue({ name: booking_reminders_constants_1.BOOKING_REMINDERS_QUEUE }),
             messaging_module_1.MessagingModule,
             reviews_module_1.ReviewsModule,
+            activity_module_1.ActivityModule,
         ],
         controllers: [
             public_booking_controller_1.PublicBookingController,

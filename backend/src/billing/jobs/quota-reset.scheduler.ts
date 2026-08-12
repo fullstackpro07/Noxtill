@@ -18,7 +18,9 @@ export class QuotaResetScheduler implements OnModuleInit {
         { repeat: { pattern: '0 * * * *' }, jobId: 'quota-reset-hourly-tick' },
       )
       .catch((error: Error) =>
-        this.logger.error(`Failed to register quota-reset tick: ${error.message}`),
+        this.logger.error(
+          `Failed to register quota-reset tick: ${error.message}`,
+        ),
       );
   }
 }

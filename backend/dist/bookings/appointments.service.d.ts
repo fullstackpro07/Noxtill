@@ -1,5 +1,6 @@
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
+import { ActivityService } from '../activity/activity.service';
 import { QueryAppointmentsDto } from './dto/query-appointments.dto';
 import { RescheduleInternalAppointmentDto } from './dto/reschedule-internal-appointment.dto';
 import { CreateWalkInAppointmentDto } from './dto/create-walk-in-appointment.dto';
@@ -7,7 +8,8 @@ import { AppointmentStatus } from '../../generated/prisma';
 export declare class AppointmentsService {
     private readonly tenantPrisma;
     private readonly reviewRequests;
-    constructor(tenantPrisma: TenantPrismaService, reviewRequests: ReviewRequestsService);
+    private readonly activity;
+    constructor(tenantPrisma: TenantPrismaService, reviewRequests: ReviewRequestsService, activity: ActivityService);
     findAll(query: QueryAppointmentsDto): import("generated/prisma/runtime/library").PrismaPromise<({
         customer: {
             name: string;

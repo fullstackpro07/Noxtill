@@ -6,11 +6,13 @@ import { LowStockScanScheduler } from './low-stock-scan.scheduler';
 import { LowStockScanProcessor } from './low-stock-scan.processor';
 import { LOW_STOCK_SCAN_QUEUE } from './low-stock-scan.constants';
 import { MessagingModule } from '../messaging/messaging.module';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: LOW_STOCK_SCAN_QUEUE }),
     MessagingModule,
+    ActivityModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService, LowStockScanScheduler, LowStockScanProcessor],

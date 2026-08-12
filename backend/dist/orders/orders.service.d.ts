@@ -3,7 +3,11 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ReferralsService } from '../marketing/referrals.service';
+import { ActivityService } from '../activity/activity.service';
+import { CashRegisterService } from '../cash-register/cash-register.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { HoldSaleDto } from './dto/hold-sale.dto';
+import { ResumeHeldSaleDto } from './dto/resume-held-sale.dto';
 import { OrderStatus, Prisma } from '../../generated/prisma';
 export declare class OrdersService {
     private readonly tenantPrisma;
@@ -11,8 +15,77 @@ export declare class OrdersService {
     private readonly sendGate;
     private readonly reviewRequests;
     private readonly referrals;
-    constructor(tenantPrisma: TenantPrismaService, cls: ClsService, sendGate: SendGateService, reviewRequests: ReviewRequestsService, referrals: ReferralsService);
+    private readonly activity;
+    private readonly cashRegister;
+    constructor(tenantPrisma: TenantPrismaService, cls: ClsService, sendGate: SendGateService, reviewRequests: ReviewRequestsService, referrals: ReferralsService, activity: ActivityService, cashRegister: CashRegisterService);
+    private resolveCustomerId;
     createSale(businessId: string, dto: CreateSaleDto): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        orderNo: number;
+        customerId: string | null;
+        orderType: import("../../generated/prisma").$Enums.OrderType;
+        tableNo: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        subtotal: Prisma.Decimal;
+        tax: Prisma.Decimal;
+        discount: Prisma.Decimal;
+        total: Prisma.Decimal;
+        cogs: Prisma.Decimal;
+        isQuotation: boolean;
+        staffUserId: string | null;
+    }>;
+    createDraft(businessId: string, dto: HoldSaleDto): Promise<{
+        customer: {
+            name: string;
+            email: string | null;
+            phone: string;
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            businessId: string;
+            address: string | null;
+            birthday: Date | null;
+            notes: string | null;
+            tags: string[];
+            consentMarketing: boolean;
+            optedOut: boolean;
+            lifetimeSpend: Prisma.Decimal;
+            visitCount: number;
+            lastVisitAt: Date | null;
+            referredByCustomerId: string | null;
+            referralRewardedAt: Date | null;
+        } | null;
+        items: {
+            name: string;
+            id: string;
+            orderId: string;
+            productId: string | null;
+            qty: number;
+            price: Prisma.Decimal;
+            cost: Prisma.Decimal;
+        }[];
+    } & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        orderNo: number;
+        customerId: string | null;
+        orderType: import("../../generated/prisma").$Enums.OrderType;
+        tableNo: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        subtotal: Prisma.Decimal;
+        tax: Prisma.Decimal;
+        discount: Prisma.Decimal;
+        total: Prisma.Decimal;
+        cogs: Prisma.Decimal;
+        isQuotation: boolean;
+        staffUserId: string | null;
+    }>;
+    convertDraft(businessId: string, id: string, dto: ResumeHeldSaleDto): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -47,6 +120,12 @@ export declare class OrdersService {
         cogs: Prisma.Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+    }>;
+    splitBill(id: string, parts: number): Promise<{
+        orderId: string;
+        total: number;
+        parts: number;
+        shares: number[];
     }>;
     findOne(id: string): Promise<{
         customer: {

@@ -46,6 +46,7 @@ exports.BillingModule = BillingModule = __decorate([
             quota_reset_scheduler_1.QuotaResetScheduler,
             quota_reset_processor_1.QuotaResetProcessor,
         ],
+        exports: [billing_service_1.BillingService],
     })
 ], BillingModule);
 //# sourceMappingURL=billing.module.js.map

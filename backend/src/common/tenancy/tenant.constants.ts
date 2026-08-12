@@ -32,6 +32,16 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'ProductFeedItem',
   'GmbPost',
   'Notification',
+  'HealthScoreSnapshot',
+  'ActivityEvent',
+  'AiInsight',
+  'ActionItemState',
+  'HeldSale',
+  'CashShift',
+  'CashMovement',
+  'VoiceSaleDraft',
+  'Table',
+  'Return',
 ]);
 
 export const CLS_KEY_BUSINESS_ID = 'businessId';

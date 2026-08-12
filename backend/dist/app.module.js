@@ -54,6 +54,7 @@ const notifications_module_1 = require("./notifications/notifications.module");
 const reports_module_1 = require("./reports/reports.module");
 const exports_module_1 = require("./exports/exports.module");
 const integrations_module_1 = require("./integrations/integrations.module");
+const activity_module_1 = require("./activity/activity.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -94,6 +95,7 @@ exports.AppModule = AppModule = __decorate([
             billing_module_1.BillingModule,
             widgets_module_1.WidgetsModule,
             dashboard_module_1.DashboardModule,
+            activity_module_1.ActivityModule,
             business_types_module_1.BusinessTypesModule,
             search_module_1.SearchModule,
             analytics_module_1.AnalyticsModule,

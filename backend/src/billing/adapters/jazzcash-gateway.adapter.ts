@@ -4,6 +4,7 @@ import {
   CheckoutSession,
   CreateCheckoutParams,
   PaymentGatewayAdapter,
+  RefundResult,
 } from './payment-gateway.adapter';
 
 /**
@@ -44,6 +45,17 @@ export class JazzCashGatewayAdapter implements PaymentGatewayAdapter {
     // Stub pending real JazzCash merchant integration — same seam StripeGatewayAdapter fills for Stripe.
     return Promise.reject(
       new Error('JazzCash checkout is not yet implemented'),
+    );
+  }
+
+  refund(providerRef: string, amount: number): Promise<RefundResult> {
+    void providerRef;
+    void amount;
+    if (!this.merchantId) {
+      throw new Error('JazzCash is not configured');
+    }
+    return Promise.reject(
+      new Error('JazzCash refunds are not yet implemented'),
     );
   }
 }

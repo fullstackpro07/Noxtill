@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
+import { ActivityService } from '../activity/activity.service';
 import { CreditService } from './credit.service';
 
 class FakeClsService {
@@ -34,10 +35,12 @@ describe('CreditService (BE-030)', () => {
       tenantPrisma,
       cls as unknown as ClsService,
     );
+    const activity = { record: jest.fn().mockResolvedValue(undefined) };
     creditService = new CreditService(
       tenantPrisma,
       cls as unknown as ClsService,
       auditService,
+      activity as unknown as ActivityService,
     );
 
     const business = await prisma.business.create({

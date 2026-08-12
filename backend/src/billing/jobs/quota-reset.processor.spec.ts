@@ -21,7 +21,10 @@ describe('QuotaResetProcessor (INT-014)', () => {
     await prisma.$disconnect();
   });
 
-  async function makeBusiness(data: { msgUsed: number; msgQuotaResetAt: Date | null }) {
+  async function makeBusiness(data: {
+    msgUsed: number;
+    msgQuotaResetAt: Date | null;
+  }) {
     const business = await prisma.business.create({
       data: {
         name: 'Quota Reset Test Biz',
@@ -39,27 +42,39 @@ describe('QuotaResetProcessor (INT-014)', () => {
 
     await processor.runReset(now);
 
-    const refreshed = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
+    const refreshed = await prisma.business.findUniqueOrThrow({
+      where: { id: business.id },
+    });
     expect(refreshed.msgUsed).toBe(0);
     expect(refreshed.msgQuotaResetAt).toEqual(now);
   });
 
   it('resets a business whose last reset was in an earlier UTC calendar month', async () => {
-    const business = await makeBusiness({ msgUsed: 80, msgQuotaResetAt: previousMonthReset });
+    const business = await makeBusiness({
+      msgUsed: 80,
+      msgQuotaResetAt: previousMonthReset,
+    });
 
     await processor.runReset(now);
 
-    const refreshed = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
+    const refreshed = await prisma.business.findUniqueOrThrow({
+      where: { id: business.id },
+    });
     expect(refreshed.msgUsed).toBe(0);
     expect(refreshed.msgQuotaResetAt).toEqual(now);
   });
 
   it('leaves a business untouched if it was already reset this same UTC calendar month', async () => {
-    const business = await makeBusiness({ msgUsed: 30, msgQuotaResetAt: sameMonthReset });
+    const business = await makeBusiness({
+      msgUsed: 30,
+      msgQuotaResetAt: sameMonthReset,
+    });
 
     await processor.runReset(now);
 
-    const refreshed = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
+    const refreshed = await prisma.business.findUniqueOrThrow({
+      where: { id: business.id },
+    });
     expect(refreshed.msgUsed).toBe(30);
     expect(refreshed.msgQuotaResetAt).toEqual(sameMonthReset);
   });

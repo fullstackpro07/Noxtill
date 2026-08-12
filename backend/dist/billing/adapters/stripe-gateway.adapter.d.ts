@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { CheckoutSession, CreateCheckoutParams, PaymentGatewayAdapter } from './payment-gateway.adapter';
+import { CheckoutSession, CreateCheckoutParams, PaymentGatewayAdapter, RefundResult } from './payment-gateway.adapter';
 export declare class StripeGatewayAdapter implements PaymentGatewayAdapter {
     private readonly config;
     readonly key = "stripe";
@@ -10,4 +10,5 @@ export declare class StripeGatewayAdapter implements PaymentGatewayAdapter {
     get isConfigured(): boolean;
     get stripe(): Stripe | undefined;
     createCheckoutSession(params: CreateCheckoutParams): Promise<CheckoutSession>;
+    refund(providerRef: string, amount: number): Promise<RefundResult>;
 }

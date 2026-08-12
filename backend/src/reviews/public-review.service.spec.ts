@@ -2,6 +2,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { PublicReviewService } from './public-review.service';
 import { generateReviewToken } from './review-token.util';
+import { ActivityService } from '../activity/activity.service';
 
 describe('PublicReviewService (BE-046)', () => {
   let prisma: PrismaService;
@@ -9,6 +10,7 @@ describe('PublicReviewService (BE-046)', () => {
   let businessId: string;
   let customerId: string;
   const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
+  const activity = { record: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -16,6 +18,7 @@ describe('PublicReviewService (BE-046)', () => {
     service = new PublicReviewService(
       prisma,
       sendGate as unknown as SendGateService,
+      activity as unknown as ActivityService,
     );
 
     const business = await prisma.business.create({

@@ -15,16 +15,22 @@ export interface CheckoutSession {
   sessionRef: string;
 }
 
+export interface RefundResult {
+  /** Provider-specific refund reference, for audit/reconciliation. */
+  refundRef: string;
+}
+
 /**
- * Adapter interface every payment gateway implements (BE-066). Adding a new
- * regional gateway means writing one class against this contract plus a
- * config row selecting it — nothing else in BillingService should need to
- * change. `createCheckoutSession` is the only capability required so far;
- * webhook handling is necessarily provider-specific and stays in each
- * provider's own webhook controller/processor.
+ * Adapter interface every payment gateway implements (BE-066, `refund` added UPD-BE-011 for
+ * Returns & Refunds). Adding a new regional gateway means writing one class against this
+ * contract plus a config row selecting it — nothing else in BillingService should need to
+ * change. Webhook handling is necessarily provider-specific and stays in each provider's own
+ * webhook controller/processor.
  */
 export interface PaymentGatewayAdapter {
   readonly key: string;
   readonly isConfigured: boolean;
   createCheckoutSession(params: CreateCheckoutParams): Promise<CheckoutSession>;
+  /** `providerRef` is the original charge/payment-intent reference from that gateway. */
+  refund(providerRef: string, amount: number): Promise<RefundResult>;
 }

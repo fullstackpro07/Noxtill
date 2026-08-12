@@ -1,6 +1,9 @@
 import { OrdersService } from './orders.service';
 import { InvoiceService } from './invoice.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { HoldSaleDto } from './dto/hold-sale.dto';
+import { ResumeHeldSaleDto } from './dto/resume-held-sale.dto';
+import { SplitBillDto } from './dto/split-bill.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { GenerateInvoiceDto } from './dto/generate-invoice.dto';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -161,6 +164,72 @@ export declare class OrdersController {
         isQuotation: boolean;
         staffUserId: string | null;
     }>;
+    createDraft(user: AuthenticatedUser, dto: HoldSaleDto): Promise<{
+        customer: {
+            name: string;
+            email: string | null;
+            phone: string;
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            businessId: string;
+            address: string | null;
+            birthday: Date | null;
+            notes: string | null;
+            tags: string[];
+            consentMarketing: boolean;
+            optedOut: boolean;
+            lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
+            visitCount: number;
+            lastVisitAt: Date | null;
+            referredByCustomerId: string | null;
+            referralRewardedAt: Date | null;
+        } | null;
+        items: {
+            name: string;
+            id: string;
+            orderId: string;
+            productId: string | null;
+            qty: number;
+            price: import("generated/prisma/runtime/library").Decimal;
+            cost: import("generated/prisma/runtime/library").Decimal;
+        }[];
+    } & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        orderNo: number;
+        customerId: string | null;
+        orderType: import("../../generated/prisma").$Enums.OrderType;
+        tableNo: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        subtotal: import("generated/prisma/runtime/library").Decimal;
+        tax: import("generated/prisma/runtime/library").Decimal;
+        discount: import("generated/prisma/runtime/library").Decimal;
+        total: import("generated/prisma/runtime/library").Decimal;
+        cogs: import("generated/prisma/runtime/library").Decimal;
+        isQuotation: boolean;
+        staffUserId: string | null;
+    }>;
+    convertDraft(user: AuthenticatedUser, id: string, dto: ResumeHeldSaleDto): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        businessId: string;
+        orderNo: number;
+        customerId: string | null;
+        orderType: import("../../generated/prisma").$Enums.OrderType;
+        tableNo: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        subtotal: import("generated/prisma/runtime/library").Decimal;
+        tax: import("generated/prisma/runtime/library").Decimal;
+        discount: import("generated/prisma/runtime/library").Decimal;
+        total: import("generated/prisma/runtime/library").Decimal;
+        cogs: import("generated/prisma/runtime/library").Decimal;
+        isQuotation: boolean;
+        staffUserId: string | null;
+    }>;
     updateStatus(user: AuthenticatedUser, id: string, dto: UpdateOrderStatusDto): Promise<{
         id: string;
         createdAt: Date;
@@ -178,6 +247,12 @@ export declare class OrdersController {
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+    }>;
+    splitBill(id: string, dto: SplitBillDto): Promise<{
+        orderId: string;
+        total: number;
+        parts: number;
+        shares: number[];
     }>;
     generateInvoice(user: AuthenticatedUser, id: string, dto: GenerateInvoiceDto): Promise<{
         url: string;

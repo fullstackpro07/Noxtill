@@ -33,6 +33,7 @@ enum OrderType {
 }
 
 enum OrderStatus {
+  draft
   pending
   confirmed
   in_progress
@@ -50,6 +51,85 @@ enum PaymentMethod {
 enum CreditEntryKind {
   credit
   payment
+}
+
+enum ActivityEventType {
+  sale
+  booking
+  review
+  payment
+  complaint
+  stock
+}
+
+enum CashShiftStatus {
+  open
+  closed
+}
+
+enum CashMovementType {
+  opening
+  sale
+  refund
+  cash_in
+  cash_out
+}
+
+enum AiInsightCategory {
+  sales
+  stock
+  customers
+  marketing
+  credit
+}
+
+enum AiInsightStatus {
+  new
+  actioned
+  dismissed
+}
+
+/// Real, currently-backed Action Center types (UPD-BE-004). "Failed payment" and "Expiring
+/// warranty" are in the spec's filter list but have no underlying data model anywhere yet (no
+/// PaymentStatus/warranty concept exists) — disclosed scope gap, not implemented until one does.
+enum ActionItemType {
+  complaint
+  low_stock
+  overdue_credit
+  unreplied_review
+}
+
+enum ActionItemPriority {
+  urgent
+  normal
+  low
+}
+
+enum ActionItemStatus {
+  completed
+  dismissed
+  snoozed
+}
+
+enum TableStatus {
+  free
+  occupied
+  reserved
+  needs_cleaning
+}
+
+enum ReturnStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ReturnRefundMethod {
+  cash
+  card
+  online
+  credit
+  store_credit
 }
 
 enum AppointmentStatus {
@@ -101,6 +181,7 @@ enum StockMovementKind {
   sale
   wastage
   adjustment
+  return
 }
 
 enum ImportSource {
@@ -237,6 +318,10 @@ model Business {
   /// Referral reward config (BE-062), e.g. `{"enabled":true,"rewardType":"credit","rewardValue":10}`.
   referralSettings Json @default("{}") @map("referral_settings")
 
+  /// Business Health Score component weighting (UPD-BE-001), each 0-100 summing to 100, e.g.
+  /// `{"ratingTrend":25,"repeatCustomerRate":25,"margin":25,"creditRecovery":25}`. Empty until set.
+  healthScoreWeights Json @default("{}") @map("health_score_weights")
+
   /// AI usage guardrails (BE-075): shared across every AI feature (what-if, branch-advisor,
   /// review AI-draft, business-type mapping, RAG help, assistant chat).
   aiMonthlyCostCapUsd Decimal @default(5.00) @map("ai_monthly_cost_cap_usd") @db.Decimal(8, 2)
@@ -279,6 +364,16 @@ model Business {
   productFeedItems ProductFeedItem[]
   gmbPosts         GmbPost[]
   notifications    Notification[]
+  healthScoreSnapshots HealthScoreSnapshot[]
+  activityEvents   ActivityEvent[]
+  aiInsights       AiInsight[]
+  actionItemStates ActionItemState[]
+  heldSales        HeldSale[]
+  cashShifts       CashShift[]
+  cashMovements    CashMovement[]
+  voiceSaleDrafts  VoiceSaleDraft[]
+  tables           Table[]
+  returns          Return[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -382,6 +477,7 @@ model Customer {
   whatsappWindows WhatsappWindow[]
   reviewRequests  ReviewRequest[]
   privateFeedback PrivateFeedback[]
+  returns         Return[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -444,6 +540,7 @@ model Order {
   items         OrderItem[]
   payments      Payment[]
   creditEntries CreditEntry[]
+  returns       Return[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -480,6 +577,149 @@ model Payment {
 
   @@index([orderId])
   @@map("payments")
+}
+
+/// Tables / restaurant floor mode (UPD-BE-010). Deliberately NOT a foreign key on `Order.tableNo`
+/// (which stays free text, matching every existing order-creation path) — a table's live status
+/// and running total are computed by joining on `Order.tableNo = Table.number` at read time, the
+/// same join the frontend's pre-existing `tables-grid.tsx` already does client-side today.
+model Table {
+  id         String      @id @default(uuid())
+  businessId String      @map("business_id")
+  business   Business    @relation(fields: [businessId], references: [id])
+  number     String
+  floor      String?
+  posX       Int?        @map("pos_x")
+  posY       Int?        @map("pos_y")
+  seats      Int?
+  status     TableStatus @default(free)
+  seatedAt   DateTime?   @map("seated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("tables")
+}
+
+/// Returns & Refunds (UPD-BE-011). A return is raised (any role) then approved/rejected
+/// (owner/manager only, per the plan's own architecture rule). Approval is the one moment real
+/// stock and money move — everything before that is just a proposal.
+model Return {
+  id                 String              @id @default(uuid())
+  businessId         String              @map("business_id")
+  business           Business            @relation(fields: [businessId], references: [id])
+  orderId            String              @map("order_id")
+  order              Order               @relation(fields: [orderId], references: [id])
+  customerId         String?             @map("customer_id")
+  customer           Customer?           @relation(fields: [customerId], references: [id])
+  reason             String
+  refundMethod       ReturnRefundMethod  @map("refund_method")
+  refundAmount       Decimal             @db.Decimal(12, 2) @map("refund_amount")
+  status             ReturnStatus        @default(pending)
+  restock            Boolean             @default(true)
+  requestedByUserId  String?             @map("requested_by_user_id")
+  approvedByUserId   String?             @map("approved_by_user_id")
+
+  items ReturnItem[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("returns")
+}
+
+model ReturnItem {
+  id        String  @id @default(uuid())
+  returnId  String  @map("return_id")
+  return    Return  @relation(fields: [returnId], references: [id])
+  productId String  @map("product_id")
+  qty       Int
+  amount    Decimal @db.Decimal(12, 2)
+
+  @@index([returnId])
+  @@map("return_items")
+}
+
+/// Held Sales (UPD-BE-005) — a cart snapshot taken before checkout (no payment chosen yet).
+/// Resuming feeds `cart` straight into the real `OrdersService.createSale()` unchanged, so the
+/// exact same atomic validation (stock, pricing, credit-requires-customer) applies at resume time
+/// as at any normal sale — a held sale is never itself a special, less-validated path.
+model HeldSale {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  /// The held cart: every `CreateSaleDto` field except `payment`, which isn't chosen until resume.
+  cart         Json
+  heldByUserId String?  @map("held_by_user_id")
+  note         String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("held_sales")
+}
+
+/// Cash Register (UPD-BE-006). At most one open shift per business at a time, enforced in the
+/// service layer (no partial unique index for "one open row" in Postgres without a filtered
+/// index, which Prisma doesn't model directly — checked explicitly before opening a new shift).
+model CashShift {
+  id             String          @id @default(uuid())
+  businessId     String          @map("business_id")
+  business       Business        @relation(fields: [businessId], references: [id])
+  openedByUserId String?         @map("opened_by_user_id")
+  openingFloat   Decimal         @db.Decimal(12, 2) @map("opening_float")
+  status         CashShiftStatus @default(open)
+
+  /// Set only by a real reconciliation (UPD-BE-007) — a bare close via `POST /cash/shift/close`
+  /// leaves these null, since no physical count was taken.
+  countedCash  Decimal? @db.Decimal(12, 2) @map("counted_cash")
+  variance     Decimal? @db.Decimal(12, 2)
+  varianceNote String?  @map("variance_note")
+
+  movements CashMovement[]
+
+  openedAt DateTime  @default(now()) @map("opened_at")
+  closedAt DateTime? @map("closed_at")
+
+  @@index([businessId, status])
+  @@map("cash_shifts")
+}
+
+model CashMovement {
+  id               String            @id @default(uuid())
+  businessId       String            @map("business_id")
+  business         Business          @relation(fields: [businessId], references: [id])
+  shiftId          String            @map("shift_id")
+  shift            CashShift         @relation(fields: [shiftId], references: [id])
+  type             CashMovementType
+  amount           Decimal           @db.Decimal(12, 2)
+  note             String?
+  recordedByUserId String?           @map("recorded_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, shiftId])
+  @@map("cash_movements")
+}
+
+/// Voice-entry Sale (UPD-BE-008) — the AI's parsed guess is staged here, never written as a real
+/// sale until an explicit `POST /voice/sales/:id/confirm` with the user's final (possibly
+/// corrected) line items. Mirrors HeldSale's "never bypass createSale's own validation" discipline.
+model VoiceSaleDraft {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  transcript String
+  /// Best-effort parsed `{items:[{productId,name,qty,matched}], customerName?, paymentMethod?}` —
+  /// `matched:false` items had no confident product-name match and need manual correction.
+  parsedCart Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("voice_sale_drafts")
 }
 
 model CreditEntry {
@@ -747,6 +987,84 @@ model CompetitorSnapshot {
 
   @@index([competitorId, capturedAt])
   @@map("competitor_snapshots")
+}
+
+/// Weekly Business Health Score history (UPD-BE-001) — each component stored as its weighted
+/// 0-weight contribution (default 0-25) plus the summed 0-100 total, so the 12-week trend and the
+/// "what changed" breakdown both read straight off this table without recomputing history.
+model HealthScoreSnapshot {
+  id                 String   @id @default(uuid())
+  businessId         String   @map("business_id")
+  business           Business @relation(fields: [businessId], references: [id])
+  ratingTrendScore   Decimal  @map("rating_trend_score") @db.Decimal(5, 2)
+  repeatCustomerScore Decimal @map("repeat_customer_score") @db.Decimal(5, 2)
+  marginScore        Decimal  @map("margin_score") @db.Decimal(5, 2)
+  creditRecoveryScore Decimal @map("credit_recovery_score") @db.Decimal(5, 2)
+  totalScore         Decimal  @map("total_score") @db.Decimal(5, 2)
+  capturedAt         DateTime @default(now()) @map("captured_at")
+
+  @@index([businessId, capturedAt])
+  @@map("health_score_snapshots")
+}
+
+/// Live Activity feed (UPD-BE-002) — a permanent event log written by every real mutation point
+/// (sale/booking/review/payment/complaint/stock), read by the Dashboard's live feed (SSE tail),
+/// and later by the Automations engine (UPD-BE-028) as its trigger source.
+model ActivityEvent {
+  id          String            @id @default(uuid())
+  businessId  String            @map("business_id")
+  business    Business          @relation(fields: [businessId], references: [id])
+  type        ActivityEventType
+  description String
+  amount      Decimal?          @db.Decimal(12, 2)
+  entityType  String?           @map("entity_type")
+  entityId    String?           @map("entity_id")
+  actorUserId String?           @map("actor_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("activity_events")
+}
+
+/// AI Insights (UPD-BE-003) — one row per generated observation. `sourceFigure` is always computed
+/// deterministically server-side from real data BEFORE the AI call, never trusted from the model's
+/// own output, so every insight is verifiably tied to a real number even though its phrasing is AI-written.
+model AiInsight {
+  id           String            @id @default(uuid())
+  businessId   String            @map("business_id")
+  business     Business          @relation(fields: [businessId], references: [id])
+  category     AiInsightCategory
+  observation  String
+  sourceFigure String            @map("source_figure")
+  status       AiInsightStatus   @default(new)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status, createdAt])
+  @@map("ai_insights")
+}
+
+/// Action Center (UPD-BE-004) — synthesized action items (complaints/low-stock/overdue-credit/
+/// unreplied-reviews) are always freshly queried from their real source tables, mirroring the
+/// read-only Staff Inbox synthesis pattern from v1 INT-009. This model exists ONLY to persist the
+/// one thing Staff Inbox never needed: per-item complete/snooze/dismiss state, keyed by
+/// (type, entityId) rather than duplicating the underlying record. A row's absence means "open".
+model ActionItemState {
+  id           String             @id @default(uuid())
+  businessId   String             @map("business_id")
+  business     Business           @relation(fields: [businessId], references: [id])
+  type         ActionItemType
+  entityId     String             @map("entity_id")
+  status       ActionItemStatus
+  snoozedUntil DateTime?          @map("snoozed_until")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, type, entityId])
+  @@map("action_item_states")
 }
 
 /// Keyword rank tracking (new, BE-063 extension) — a business's own tracked search terms.

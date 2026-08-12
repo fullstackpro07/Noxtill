@@ -4,9 +4,10 @@ import { CreditReminderService } from './credit-reminder.service';
 import { CreditStatementService } from './credit-statement.service';
 import { CreditController } from './credit.controller';
 import { MessagingModule } from '../messaging/messaging.module';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
-  imports: [MessagingModule],
+  imports: [MessagingModule, ActivityModule],
   controllers: [CreditController],
   providers: [CreditService, CreditReminderService, CreditStatementService],
 })

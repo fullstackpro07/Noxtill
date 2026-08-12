@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { InventoryService } from './inventory.service';
 import { AppException } from '../common/filters/app.exception';
+import { ActivityService } from '../activity/activity.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -30,7 +31,11 @@ describe('InventoryService (BE-033/BE-034)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    inventoryService = new InventoryService(tenantPrisma);
+    const activity = { record: jest.fn().mockResolvedValue(undefined) };
+    inventoryService = new InventoryService(
+      tenantPrisma,
+      activity as unknown as ActivityService,
+    );
 
     const business = await prisma.business.create({
       data: {

@@ -23,6 +23,7 @@ const google_sync_processor_1 = require("./jobs/google-sync.processor");
 const google_sync_constants_1 = require("./jobs/google-sync.constants");
 const messaging_module_1 = require("../messaging/messaging.module");
 const ai_module_1 = require("../ai/ai.module");
+const activity_module_1 = require("../activity/activity.module");
 let ReviewsModule = class ReviewsModule {
 };
 exports.ReviewsModule = ReviewsModule;
@@ -32,6 +33,7 @@ exports.ReviewsModule = ReviewsModule = __decorate([
             bullmq_1.BullModule.registerQueue({ name: review_reminders_constants_1.REVIEW_REMINDERS_QUEUE }, { name: google_sync_constants_1.GOOGLE_SYNC_QUEUE }),
             messaging_module_1.MessagingModule,
             ai_module_1.AiModule,
+            activity_module_1.ActivityModule,
         ],
         controllers: [reviews_controller_1.ReviewsController, public_review_controller_1.PublicReviewController],
         providers: [

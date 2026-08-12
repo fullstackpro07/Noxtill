@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
+import { ActivityService } from '../activity/activity.service';
 import { AppointmentsService } from './appointments.service';
 import { AppException } from '../common/filters/app.exception';
 
@@ -25,6 +26,7 @@ describe('AppointmentsService (BE-054)', () => {
   const reviewRequests = {
     scheduleSend: jest.fn().mockResolvedValue(undefined),
   };
+  const activity = { record: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -38,6 +40,7 @@ describe('AppointmentsService (BE-054)', () => {
     service = new AppointmentsService(
       tenantPrisma,
       reviewRequests as unknown as ReviewRequestsService,
+      activity as unknown as ActivityService,
     );
 
     const business = await prisma.business.create({

@@ -7,6 +7,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { CreditService } from './credit.service';
 import { CreditReminderService } from './credit-reminder.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { ActivityService } from '../activity/activity.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -39,10 +40,12 @@ describe('CreditReminderService (BE-031)', () => {
       tenantPrisma,
       cls as unknown as ClsService,
     );
+    const activity = { record: jest.fn().mockResolvedValue(undefined) };
     const creditService = new CreditService(
       tenantPrisma,
       cls as unknown as ClsService,
       auditService,
+      activity as unknown as ActivityService,
     );
     reminderService = new CreditReminderService(
       tenantPrisma,

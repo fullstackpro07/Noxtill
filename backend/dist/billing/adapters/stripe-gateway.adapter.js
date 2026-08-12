@@ -59,6 +59,16 @@ let StripeGatewayAdapter = StripeGatewayAdapter_1 = class StripeGatewayAdapter {
         }
         return { url: session.url, sessionRef: session.id };
     }
+    async refund(providerRef, amount) {
+        if (!this.client) {
+            throw new Error('Stripe is not configured');
+        }
+        const refund = await this.client.refunds.create({
+            payment_intent: providerRef,
+            amount: Math.round(amount * 100),
+        });
+        return { refundRef: refund.id };
+    }
 };
 exports.StripeGatewayAdapter = StripeGatewayAdapter;
 exports.StripeGatewayAdapter = StripeGatewayAdapter = StripeGatewayAdapter_1 = __decorate([

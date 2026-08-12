@@ -30,6 +30,7 @@ export declare class NightlyCloseService {
         publicReviewUrl: string | null;
         workingHours: import("generated/prisma/runtime/library").JsonValue;
         referralSettings: import("generated/prisma/runtime/library").JsonValue;
+        healthScoreWeights: import("generated/prisma/runtime/library").JsonValue;
         aiMonthlyCostCapUsd: import("generated/prisma/runtime/library").Decimal;
         aiRateLimitPerMinute: number;
         trialEndsAt: Date | null;

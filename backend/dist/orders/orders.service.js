@@ -18,6 +18,8 @@ const tenant_constants_1 = require("../common/tenancy/tenant.constants");
 const send_gate_service_1 = require("../messaging/send-gate.service");
 const review_requests_service_1 = require("../reviews/review-requests.service");
 const referrals_service_1 = require("../marketing/referrals.service");
+const activity_service_1 = require("../activity/activity.service");
+const cash_register_service_1 = require("../cash-register/cash-register.service");
 const review_token_util_1 = require("../reviews/review-token.util");
 const orders_constants_1 = require("./orders.constants");
 const order_totals_util_1 = require("./order-totals.util");
@@ -28,12 +30,32 @@ let OrdersService = class OrdersService {
     sendGate;
     reviewRequests;
     referrals;
-    constructor(tenantPrisma, cls, sendGate, reviewRequests, referrals) {
+    activity;
+    cashRegister;
+    constructor(tenantPrisma, cls, sendGate, reviewRequests, referrals, activity, cashRegister) {
         this.tenantPrisma = tenantPrisma;
         this.cls = cls;
         this.sendGate = sendGate;
         this.reviewRequests = reviewRequests;
         this.referrals = referrals;
+        this.activity = activity;
+        this.cashRegister = cashRegister;
+    }
+    async resolveCustomerId(tx, businessId, dto) {
+        if (dto.customerId)
+            return dto.customerId;
+        if (!dto.customerPhone)
+            return undefined;
+        const customer = await tx.customer.upsert({
+            where: { businessId_phone: { businessId, phone: dto.customerPhone } },
+            create: {
+                businessId,
+                phone: dto.customerPhone,
+                name: dto.customerName ?? dto.customerPhone,
+            },
+            update: {},
+        });
+        return customer.id;
     }
     async createSale(businessId, dto) {
         const actorUserId = this.cls.get(tenant_constants_1.CLS_KEY_USER_ID);
@@ -41,21 +63,7 @@ let OrdersService = class OrdersService {
             const business = await tx.business.findUniqueOrThrow({
                 where: { id: businessId },
             });
-            let customerId = dto.customerId;
-            if (!customerId && dto.customerPhone) {
-                const customer = await tx.customer.upsert({
-                    where: {
-                        businessId_phone: { businessId, phone: dto.customerPhone },
-                    },
-                    create: {
-                        businessId,
-                        phone: dto.customerPhone,
-                        name: dto.customerName ?? dto.customerPhone,
-                    },
-                    update: {},
-                });
-                customerId = customer.id;
-            }
+            const customerId = await this.resolveCustomerId(tx, businessId, dto);
             if (dto.payment.method === 'credit' && !customerId) {
                 throw new app_exception_1.AppException(orders_constants_1.ORDER_ERROR_CODES.CREDIT_REQUIRES_CUSTOMER, 'Credit sales require a customer', common_1.HttpStatus.BAD_REQUEST);
             }
@@ -189,9 +197,116 @@ let OrdersService = class OrdersService {
             }
             return { order, reviewToken, reviewCustomerId: customerId };
         });
+        await this.activity.record(businessId, {
+            type: 'sale',
+            description: `Sale #${order.orderNo} — ${Number(order.total)}`,
+            amount: Number(order.total),
+            entityType: 'Order',
+            entityId: order.id,
+            actorUserId,
+        });
+        if (dto.payment.method === 'cash') {
+            await this.cashRegister.recordSaleMovement(businessId, Number(order.total), order.id);
+        }
         if (reviewToken && reviewCustomerId) {
             await this.reviewRequests.scheduleSend(businessId, reviewCustomerId, reviewToken);
         }
+        return order;
+    }
+    async createDraft(businessId, dto) {
+        return this.tenantPrisma.client.$transaction(async (tx) => {
+            const business = await tx.business.findUniqueOrThrow({
+                where: { id: businessId },
+            });
+            const customerId = await this.resolveCustomerId(tx, businessId, dto);
+            const productIds = [...new Set(dto.items.map((i) => i.productId))];
+            const products = await tx.product.findMany({
+                where: { id: { in: productIds } },
+            });
+            const productMap = new Map(products.map((p) => [p.id, p]));
+            const itemsData = dto.items.map((item) => {
+                const product = productMap.get(item.productId);
+                if (!product) {
+                    throw new app_exception_1.AppException(orders_constants_1.ORDER_ERROR_CODES.PRODUCT_NOT_FOUND, `Product ${item.productId} not found`, common_1.HttpStatus.BAD_REQUEST);
+                }
+                return {
+                    productId: product.id,
+                    name: product.name,
+                    price: item.priceOverride ?? Number(product.sellingPrice),
+                    cost: Number(product.costPrice),
+                    qty: item.qty,
+                };
+            });
+            const discount = dto.discount ?? 0;
+            const { subtotal, tax, total, cogs } = (0, order_totals_util_1.computeOrderTotals)(itemsData, discount, Number(business.taxRate));
+            const [{ next: orderNo }] = await tx.$queryRaw `
+        SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${businessId}
+      `;
+            const order = await tx.order.create({
+                data: {
+                    businessId,
+                    orderNo,
+                    customerId,
+                    orderType: dto.orderType ?? 'counter',
+                    tableNo: dto.tableNo,
+                    staffUserId: dto.staffUserId,
+                    status: prisma_1.OrderStatus.draft,
+                    subtotal,
+                    tax,
+                    discount,
+                    total,
+                    cogs,
+                },
+            });
+            await tx.orderItem.createMany({
+                data: itemsData.map((item) => ({
+                    orderId: order.id,
+                    productId: item.productId,
+                    name: item.name,
+                    price: item.price,
+                    cost: item.cost,
+                    qty: item.qty,
+                })),
+            });
+            return tx.order.findUniqueOrThrow({
+                where: { id: order.id },
+                include: { items: true, customer: true },
+            });
+        });
+    }
+    async convertDraft(businessId, id, dto) {
+        const draft = await this.tenantPrisma.client.order.findUnique({
+            where: { id },
+            include: { items: true },
+        });
+        if (!draft ||
+            draft.businessId !== businessId ||
+            draft.status !== prisma_1.OrderStatus.draft) {
+            throw new common_1.NotFoundException('Draft order not found');
+        }
+        const saleDto = {
+            orderType: draft.orderType,
+            tableNo: draft.tableNo ?? undefined,
+            customerId: draft.customerId ?? undefined,
+            staffUserId: draft.staffUserId ?? undefined,
+            items: draft.items.map((item) => {
+                if (!item.productId) {
+                    throw new app_exception_1.AppException(orders_constants_1.ORDER_ERROR_CODES.PRODUCT_NOT_FOUND, `Draft order item ${item.id} has no product reference`, common_1.HttpStatus.BAD_REQUEST);
+                }
+                return {
+                    productId: item.productId,
+                    qty: item.qty,
+                    priceOverride: Number(item.price),
+                };
+            }),
+            discount: Number(draft.discount),
+            payment: dto.payment,
+        };
+        const order = await this.createSale(businessId, saleDto);
+        await this.tenantPrisma.client.orderItem.deleteMany({
+            where: { orderId: draft.id },
+        });
+        await this.tenantPrisma.client.order.delete({ where: { id: draft.id } });
         return order;
     }
     async updateStatus(businessId, orderId, nextStatus) {
@@ -221,10 +336,28 @@ let OrdersService = class OrdersService {
         }
         return updated;
     }
+    async splitBill(id, parts) {
+        const order = await this.tenantPrisma.client.order.findUnique({
+            where: { id },
+        });
+        if (!order) {
+            throw new common_1.NotFoundException('Order not found');
+        }
+        const total = Number(order.total);
+        const perShare = Math.floor((total / parts) * 100) / 100;
+        const shares = Array(parts).fill(perShare);
+        shares[0] = Math.round((total - perShare * (parts - 1)) * 100) / 100;
+        return { orderId: order.id, total, parts, shares };
+    }
     async findOne(id) {
         const order = await this.tenantPrisma.client.order.findUnique({
             where: { id },
-            include: { items: true, payments: true, creditEntries: true, customer: true },
+            include: {
+                items: true,
+                payments: true,
+                creditEntries: true,
+                customer: true,
+            },
         });
         if (!order) {
             throw new common_1.NotFoundException('Order not found');
@@ -235,7 +368,12 @@ let OrdersService = class OrdersService {
         return this.tenantPrisma.client.order.findMany({
             where: { status, isQuotation: false },
             orderBy: { createdAt: 'desc' },
-            include: { items: true, payments: true, creditEntries: true, customer: true },
+            include: {
+                items: true,
+                payments: true,
+                creditEntries: true,
+                customer: true,
+            },
         });
     }
 };
@@ -246,6 +384,8 @@ exports.OrdersService = OrdersService = __decorate([
         nestjs_cls_1.ClsService,
         send_gate_service_1.SendGateService,
         review_requests_service_1.ReviewRequestsService,
-        referrals_service_1.ReferralsService])
+        referrals_service_1.ReferralsService,
+        activity_service_1.ActivityService,
+        cash_register_service_1.CashRegisterService])
 ], OrdersService);
 //# sourceMappingURL=orders.service.js.map

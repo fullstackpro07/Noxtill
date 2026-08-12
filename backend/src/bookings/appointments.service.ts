@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
+import { ActivityService } from '../activity/activity.service';
 import { generateReviewToken } from '../reviews/review-token.util';
 import { QueryAppointmentsDto } from './dto/query-appointments.dto';
 import { RescheduleInternalAppointmentDto } from './dto/reschedule-internal-appointment.dto';
@@ -11,13 +12,18 @@ import {
   APPOINTMENT_STATUS_TRANSITIONS,
   BOOKING_ERROR_CODES,
 } from './bookings.constants';
-import { AppointmentSource, AppointmentStatus, ProductKind } from '../../generated/prisma';
+import {
+  AppointmentSource,
+  AppointmentStatus,
+  ProductKind,
+} from '../../generated/prisma';
 
 @Injectable()
 export class AppointmentsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly reviewRequests: ReviewRequestsService,
+    private readonly activity: ActivityService,
   ) {}
 
   findAll(query: QueryAppointmentsDto) {
@@ -79,6 +85,15 @@ export class AppointmentsService {
           sourceId: updated.id,
         },
       });
+      // Recorded before scheduleSend(): activity recording is fast and fail-fast by design and
+      // must not be gated behind the queue-scheduling call below, which retries indefinitely by
+      // BullMQ's own design and can block this request far longer (see orders.service.ts).
+      await this.activity.record(businessId, {
+        type: 'booking',
+        description: 'Appointment completed',
+        entityType: 'Appointment',
+        entityId: updated.id,
+      });
       await this.reviewRequests.scheduleSend(
         businessId,
         updated.customerId,
@@ -108,9 +123,9 @@ export class AppointmentsService {
     id: string,
     dto: RescheduleInternalAppointmentDto,
   ) {
-    const appointment = await this.tenantPrisma.client.appointment.findUnique(
-      { where: { id } },
-    );
+    const appointment = await this.tenantPrisma.client.appointment.findUnique({
+      where: { id },
+    });
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
     }

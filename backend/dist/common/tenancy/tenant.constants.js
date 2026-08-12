@@ -27,6 +27,16 @@ exports.TENANT_SCOPED_MODELS = new Set([
     'ProductFeedItem',
     'GmbPost',
     'Notification',
+    'HealthScoreSnapshot',
+    'ActivityEvent',
+    'AiInsight',
+    'ActionItemState',
+    'HeldSale',
+    'CashShift',
+    'CashMovement',
+    'VoiceSaleDraft',
+    'Table',
+    'Return',
 ]);
 exports.CLS_KEY_BUSINESS_ID = 'businessId';
 exports.CLS_KEY_USER_ID = 'userId';

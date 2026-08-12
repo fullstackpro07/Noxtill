@@ -38,7 +38,10 @@ let QuotaResetProcessor = QuotaResetProcessor_1 = class QuotaResetProcessor exte
         const monthStart = utcMonthStart(now);
         const due = await this.prisma.business.findMany({
             where: {
-                OR: [{ msgQuotaResetAt: null }, { msgQuotaResetAt: { lt: monthStart } }],
+                OR: [
+                    { msgQuotaResetAt: null },
+                    { msgQuotaResetAt: { lt: monthStart } },
+                ],
             },
         });
         for (const business of due) {

@@ -12,14 +12,15 @@ const ai_service_1 = require("./ai.service");
 const ai_controller_1 = require("./ai.controller");
 const claude_client_1 = require("./claude.client");
 const ai_infra_service_1 = require("./ai-infra.service");
+const speech_to_text_service_1 = require("./speech-to-text.service");
 let AiModule = class AiModule {
 };
 exports.AiModule = AiModule;
 exports.AiModule = AiModule = __decorate([
     (0, common_1.Module)({
         controllers: [ai_controller_1.AiController],
-        providers: [ai_service_1.AiService, claude_client_1.ClaudeClient, ai_infra_service_1.AiInfraService],
-        exports: [claude_client_1.ClaudeClient, ai_infra_service_1.AiInfraService],
+        providers: [ai_service_1.AiService, claude_client_1.ClaudeClient, ai_infra_service_1.AiInfraService, speech_to_text_service_1.SpeechToTextService],
+        exports: [claude_client_1.ClaudeClient, ai_infra_service_1.AiInfraService, speech_to_text_service_1.SpeechToTextService],
     })
 ], AiModule);
 //# sourceMappingURL=ai.module.js.map

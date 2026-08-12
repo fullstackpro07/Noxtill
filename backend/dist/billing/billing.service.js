@@ -58,6 +58,13 @@ let BillingService = class BillingService {
         });
         return { url: session.url };
     }
+    async refund(providerRef, amount, gatewayKey = 'stripe') {
+        const adapter = this.adapters[gatewayKey];
+        if (!adapter?.isConfigured) {
+            throw new app_exception_1.AppException(billing_constants_1.BILLING_ERROR_CODES.GATEWAY_NOT_CONFIGURED, `Payment gateway "${gatewayKey}" is not configured`, common_1.HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        return adapter.refund(providerRef, amount);
+    }
     async status(businessId) {
         const business = await this.prisma.business.findUniqueOrThrow({
             where: { id: businessId },

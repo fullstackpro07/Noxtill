@@ -38,5 +38,6 @@ import { TRIAL_EXPIRY_QUEUE, QUOTA_RESET_QUEUE } from './billing.constants';
     QuotaResetScheduler,
     QuotaResetProcessor,
   ],
+  exports: [BillingService],
 })
 export class BillingModule {}

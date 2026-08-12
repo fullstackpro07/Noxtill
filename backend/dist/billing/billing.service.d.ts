@@ -9,6 +9,7 @@ export declare class BillingService {
     createCheckout(businessId: string, dto: CreateCheckoutDto): Promise<{
         url: string;
     }>;
+    refund(providerRef: string, amount: number, gatewayKey?: string): Promise<import("./adapters/payment-gateway.adapter").RefundResult>;
     status(businessId: string): Promise<{
         planKey: string | null;
         planName: string | null;

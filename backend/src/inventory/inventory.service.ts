@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
+import { ActivityService } from '../activity/activity.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateWastageDto } from './dto/create-wastage.dto';
 import { INVENTORY_ERROR_CODES } from './inventory.constants';
@@ -9,7 +10,10 @@ import { ProductKind } from '../../generated/prisma';
 /** Inventory: purchases/wastage (BE-033), on-hand list + movement timeline (BE-034). */
 @Injectable()
 export class InventoryService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly activity: ActivityService,
+  ) {}
 
   async recordPurchase(businessId: string, dto: CreatePurchaseDto) {
     const product = await this.tenantPrisma.client.product.findUnique({
@@ -35,6 +39,13 @@ export class InventoryService {
         data: { stockQty: { increment: dto.qty }, costPrice: dto.unitCost },
       }),
     ]);
+
+    await this.activity.record(businessId, {
+      type: 'stock',
+      description: `Purchase: +${dto.qty} ${product.name}`,
+      entityType: 'StockMovement',
+      entityId: movement.id,
+    });
 
     return movement;
   }
@@ -71,6 +82,13 @@ export class InventoryService {
         data: { stockQty: { decrement: dto.qty } },
       }),
     ]);
+
+    await this.activity.record(businessId, {
+      type: 'stock',
+      description: `Wastage: -${dto.qty} ${product.name}`,
+      entityType: 'StockMovement',
+      entityId: movement.id,
+    });
 
     return movement;
   }
