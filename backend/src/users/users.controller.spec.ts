@@ -10,7 +10,7 @@ describe('UsersController', () => {
   const authUser: AuthenticatedUser = {
     sub: 'u1',
     businessId: 'b1',
-    role: 'owner' as AuthenticatedUser['role'],
+    role: 'owner',
   };
 
   beforeEach(async () => {

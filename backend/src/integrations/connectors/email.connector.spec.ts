@@ -8,7 +8,9 @@ describe('EmailConnector (BE-083)', () => {
   });
 
   it('has no external side effects for connect/disconnect since there is no per-business credential', async () => {
-    await expect(connector.handleCallback()).resolves.toEqual({ accessToken: '' });
+    await expect(connector.handleCallback()).resolves.toEqual({
+      accessToken: '',
+    });
     await expect(connector.disconnect()).resolves.toBeUndefined();
   });
 });

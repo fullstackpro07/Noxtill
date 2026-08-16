@@ -33,7 +33,12 @@ export class KeywordRankProcessor extends WorkerHost {
 
     for (const keyword of keywords) {
       try {
-        await this.checkOne(keyword.businessId, keyword.id, keyword.keyword, keyword.business.name);
+        await this.checkOne(
+          keyword.businessId,
+          keyword.id,
+          keyword.keyword,
+          keyword.business.name,
+        );
       } catch (error) {
         // One keyword's business/provider hiccup shouldn't abort the whole weekly batch for everyone else.
         this.logger.warn(
@@ -42,7 +47,9 @@ export class KeywordRankProcessor extends WorkerHost {
       }
     }
 
-    this.logger.debug(`Keyword rank check evaluated ${keywords.length} keyword(s)`);
+    this.logger.debug(
+      `Keyword rank check evaluated ${keywords.length} keyword(s)`,
+    );
   }
 
   /** Shared by the weekly job and the "check now" manual-trigger endpoint. */
@@ -54,7 +61,11 @@ export class KeywordRankProcessor extends WorkerHost {
   ): Promise<void> {
     const businessName =
       businessNameOverride ??
-      (await this.prisma.business.findUniqueOrThrow({ where: { id: businessId } })).name;
+      (
+        await this.prisma.business.findUniqueOrThrow({
+          where: { id: businessId },
+        })
+      ).name;
 
     const rank = await this.serpRank.fetchRank(keyword, businessName);
 

@@ -13,7 +13,9 @@ interface AccountZipJobData {
   userId: string;
 }
 
-function buildZipBuffer(entries: { name: string; buffer: Buffer }[]): Promise<Buffer> {
+function buildZipBuffer(
+  entries: { name: string; buffer: Buffer }[],
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const archive = new ZipArchive({ zlib: { level: 9 } });
     const chunks: Buffer[] = [];

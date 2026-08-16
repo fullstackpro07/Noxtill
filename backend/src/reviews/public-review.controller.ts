@@ -37,7 +37,10 @@ export class PublicReviewController {
   // scoped override rather than loosening CORS globally.
   @Public()
   @Get('reviews/widget/:biz')
-  async widget(@Param('biz') biz: string, @Res({ passthrough: true }) res: Response) {
+  async widget(
+    @Param('biz') biz: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     res.header('Access-Control-Allow-Origin', '*');
     return this.publicReviewService.getWidget(biz);
   }

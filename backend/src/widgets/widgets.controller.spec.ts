@@ -22,18 +22,24 @@ describe('WidgetsController', () => {
   });
 
   it('passes no days through when the query param is absent', () => {
-    controller.data('revenue_today');
-    expect(service.getWidgetData).toHaveBeenCalledWith('revenue_today', undefined);
+    void controller.data('revenue_today');
+    expect(service.getWidgetData).toHaveBeenCalledWith(
+      'revenue_today',
+      undefined,
+    );
   });
 
   it('parses a numeric days query param before delegating', () => {
-    controller.data('new_customers_month', '30');
-    expect(service.getWidgetData).toHaveBeenCalledWith('new_customers_month', 30);
+    void controller.data('new_customers_month', '30');
+    expect(service.getWidgetData).toHaveBeenCalledWith(
+      'new_customers_month',
+      30,
+    );
   });
 
   it('passes garbage days values through as NaN, leaving validation to the service', () => {
-    controller.data('new_customers_month', 'not-a-number');
-    const [, days] = service.getWidgetData.mock.calls[0];
+    void controller.data('new_customers_month', 'not-a-number');
+    const [, days] = service.getWidgetData.mock.calls[0] as [string, number];
     expect(Number.isNaN(days)).toBe(true);
   });
 });

@@ -15,7 +15,10 @@ export class WidgetsController {
   data(@Param('key') key: string, @Query('days') daysParam?: string) {
     // Left as `Number(...)` rather than a validated DTO — WidgetsService.getWidgetData rejects anything
     // outside WIDGET_RANGE_DAYS (including NaN from garbage input) with one consistent INVALID_RANGE error.
-    const days = daysParam === undefined ? undefined : (Number(daysParam) as WidgetRangeDays);
+    const days =
+      daysParam === undefined
+        ? undefined
+        : (Number(daysParam) as WidgetRangeDays);
     return this.widgetsService.getWidgetData(key, days);
   }
 }

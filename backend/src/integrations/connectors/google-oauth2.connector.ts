@@ -26,7 +26,8 @@ export abstract class GoogleOAuth2Connector implements Connector {
   constructor(protected readonly config: ConfigService) {}
 
   protected redirectUri(): string {
-    const backendUrl = this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
+    const backendUrl =
+      this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
     return `${backendUrl}/integrations/${this.provider}/callback`;
   }
 
@@ -49,7 +50,8 @@ export abstract class GoogleOAuth2Connector implements Connector {
       TOKEN_URL,
       new URLSearchParams({
         client_id: this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID') ?? '',
-        client_secret: this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET') ?? '',
+        client_secret:
+          this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET') ?? '',
         code,
         grant_type: 'authorization_code',
         redirect_uri: this.redirectUri(),
@@ -67,13 +69,17 @@ export abstract class GoogleOAuth2Connector implements Connector {
       TOKEN_URL,
       new URLSearchParams({
         client_id: this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID') ?? '',
-        client_secret: this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET') ?? '',
+        client_secret:
+          this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET') ?? '',
         refresh_token: tokens.refreshToken,
         grant_type: 'refresh_token',
       }).toString(),
       { headers: { 'content-type': 'application/x-www-form-urlencoded' } },
     );
-    return { ...this.mapTokenResponse(response.data), refreshToken: tokens.refreshToken };
+    return {
+      ...this.mapTokenResponse(response.data),
+      refreshToken: tokens.refreshToken,
+    };
   }
 
   abstract sync(tokens: OAuthTokens): Promise<unknown>;

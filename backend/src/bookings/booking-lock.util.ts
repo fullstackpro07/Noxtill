@@ -39,7 +39,9 @@ export async function assertSlotAvailable(
 
   const conflict = await tx.appointment.findFirst({
     where: {
-      ...(params.excludeAppointmentId ? { id: { not: params.excludeAppointmentId } } : {}),
+      ...(params.excludeAppointmentId
+        ? { id: { not: params.excludeAppointmentId } }
+        : {}),
       businessId: params.businessId,
       ...(params.staffId ? { staffUserId: params.staffId } : {}),
       status: { notIn: [AppointmentStatus.cancelled] },

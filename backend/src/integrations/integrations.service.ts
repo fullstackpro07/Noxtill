@@ -51,7 +51,10 @@ export class IntegrationsService {
     });
   }
 
-  async connect(businessId: string, provider: IntegrationProvider): Promise<ConnectResult> {
+  async connect(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<ConnectResult> {
     const connector = this.connectors.get(provider);
     const state = signPayload<StatePayload>(
       { businessId, provider },
@@ -112,18 +115,29 @@ export class IntegrationsService {
       );
       await this.tenantPrisma.client.integration.upsert({
         where: { businessId_provider: { businessId, provider } },
-        create: { businessId, provider, status: IntegrationStatus.needs_attention },
+        create: {
+          businessId,
+          provider,
+          status: IntegrationStatus.needs_attention,
+        },
         update: { status: IntegrationStatus.needs_attention },
       });
       return { businessId, ok: false };
     }
   }
 
-  async disconnect(businessId: string, provider: IntegrationProvider): Promise<void> {
+  async disconnect(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<void> {
     const connector = this.connectors.get(provider);
-    await connector.disconnect().catch((error: Error) =>
-      this.logger.warn(`disconnect() failed for provider=${provider}: ${error.message}`),
-    );
+    await connector
+      .disconnect()
+      .catch((error: Error) =>
+        this.logger.warn(
+          `disconnect() failed for provider=${provider}: ${error.message}`,
+        ),
+      );
     await this.tenantPrisma.client.integration.updateMany({
       where: { businessId, provider },
       data: { status: IntegrationStatus.not_connected, tokens: null },
@@ -131,7 +145,10 @@ export class IntegrationsService {
   }
 
   /** Decrypts a stored integration's tokens for use by a connector call (e.g. sync()). */
-  async getTokens(businessId: string, provider: IntegrationProvider): Promise<OAuthTokens | null> {
+  async getTokens(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<OAuthTokens | null> {
     const row = await this.tenantPrisma.client.integration.findUnique({
       where: { businessId_provider: { businessId, provider } },
     });

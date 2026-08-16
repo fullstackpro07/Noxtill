@@ -32,7 +32,11 @@ describe('ExportsService (INT-012)', () => {
   let prisma: PrismaService;
   let service: ExportsService;
   let businessId: string;
-  const s3 = { uploadAndSign: jest.fn().mockResolvedValue('https://signed.example/export.xlsx') };
+  const s3 = {
+    uploadAndSign: jest
+      .fn()
+      .mockResolvedValue('https://signed.example/export.xlsx'),
+  };
   const queue = { add: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
@@ -40,7 +44,10 @@ describe('ExportsService (INT-012)', () => {
     await prisma.$connect();
 
     const cls = new FakeClsService();
-    const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
     service = new ExportsService(
       tenantPrisma,
       s3 as unknown as S3Service,
@@ -54,13 +61,31 @@ describe('ExportsService (INT-012)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
     await prisma.customer.create({
-      data: { businessId, name: 'Export Customer', phone: `+1558${Date.now()}`, lifetimeSpend: 250 },
+      data: {
+        businessId,
+        name: 'Export Customer',
+        phone: `+1558${Date.now()}`,
+        lifetimeSpend: 250,
+      },
     });
     await prisma.product.create({
-      data: { businessId, kind: 'product', name: 'Export Widget', sku: 'EXP-1', stockQty: 3, lowStockThreshold: 5 },
+      data: {
+        businessId,
+        kind: 'product',
+        name: 'Export Widget',
+        sku: 'EXP-1',
+        stockQty: 3,
+        lowStockThreshold: 5,
+      },
     });
     await prisma.expense.create({
-      data: { businessId, description: 'Export Rent', category: 'rent', amount: 500, incurredOn: new Date() },
+      data: {
+        businessId,
+        description: 'Export Rent',
+        category: 'rent',
+        amount: 500,
+        incurredOn: new Date(),
+      },
     });
   });
 

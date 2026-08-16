@@ -8,7 +8,10 @@ import { GenerateQrPosterDto } from './dto/generate-qr-poster.dto';
 const MM_PER_INCH = 25.4;
 const PNG_DPI = 150;
 
-const PAGE_SIZE_MM: Record<GenerateQrPosterDto['format'], { width: number; height: number }> = {
+const PAGE_SIZE_MM: Record<
+  GenerateQrPosterDto['format'],
+  { width: number; height: number }
+> = {
   a5: { width: 148, height: 210 },
   a4: { width: 210, height: 297 },
   sticker: { width: 80, height: 80 },

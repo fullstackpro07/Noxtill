@@ -16,10 +16,16 @@ describe('GmbConnector (BE-084, via GoogleOAuth2Connector)', () => {
     const url = connector.authUrl('signed-state');
     const parsed = new URL(url);
 
-    expect(parsed.origin + parsed.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+    expect(parsed.origin + parsed.pathname).toBe(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+    );
     expect(parsed.searchParams.get('client_id')).toBe('test-client-id');
-    expect(parsed.searchParams.get('redirect_uri')).toBe('http://localhost:5000/api/v1/integrations/gmb/callback');
-    expect(parsed.searchParams.get('scope')).toBe('https://www.googleapis.com/auth/business.manage');
+    expect(parsed.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:5000/api/v1/integrations/gmb/callback',
+    );
+    expect(parsed.searchParams.get('scope')).toBe(
+      'https://www.googleapis.com/auth/business.manage',
+    );
     expect(parsed.searchParams.get('access_type')).toBe('offline');
     expect(parsed.searchParams.get('state')).toBe('signed-state');
   });
@@ -45,7 +51,9 @@ describe('GmbConnector (BE-084, via GoogleOAuth2Connector)', () => {
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockedAxios.get).toHaveBeenCalledWith(
       'https://mybusinessaccountmanagement.googleapis.com/v1/accounts',
-      expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer fake-token' },
+      }),
     );
   });
 });

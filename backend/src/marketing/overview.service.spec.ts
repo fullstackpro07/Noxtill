@@ -24,7 +24,10 @@ describe('MarketingOverviewService (BE-089)', () => {
     await prisma.$connect();
 
     const cls = new FakeClsService();
-    const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
     service = new MarketingOverviewService(tenantPrisma);
 
     const business = await prisma.business.create({
@@ -34,10 +37,22 @@ describe('MarketingOverviewService (BE-089)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
     await prisma.campaign.create({
-      data: { businessId, segment: 'all', templateKey: 'campaign', body: 'hi', sentCount: 10 },
+      data: {
+        businessId,
+        segment: 'all',
+        templateKey: 'campaign',
+        body: 'hi',
+        sentCount: 10,
+      },
     });
     await prisma.emailCampaign.create({
-      data: { businessId, subject: 'x', body: 'x', segment: 'all', sentCount: 5 },
+      data: {
+        businessId,
+        subject: 'x',
+        body: 'x',
+        segment: 'all',
+        sentCount: 5,
+      },
     });
     await prisma.adCampaign.create({
       data: {
@@ -62,15 +77,35 @@ describe('MarketingOverviewService (BE-089)', () => {
     const rows = await service.overview(businessId);
     const byChannel = new Map(rows.map((r) => [r.channel, r]));
 
-    expect(byChannel.get('WhatsApp')).toEqual({ channel: 'WhatsApp', spend: 0, results: 10, costPerResult: 0 });
-    expect(byChannel.get('Email')).toEqual({ channel: 'Email', spend: 0, results: 5, costPerResult: 0 });
+    expect(byChannel.get('WhatsApp')).toEqual({
+      channel: 'WhatsApp',
+      spend: 0,
+      results: 10,
+      costPerResult: 0,
+    });
+    expect(byChannel.get('Email')).toEqual({
+      channel: 'Email',
+      spend: 0,
+      results: 5,
+      costPerResult: 0,
+    });
     expect(byChannel.get('Google Ads')).toEqual({
       channel: 'Google Ads',
       spend: 100,
       results: 20,
       costPerResult: 5,
     });
-    expect(byChannel.get('Meta Ads')).toEqual({ channel: 'Meta Ads', spend: 0, results: 0, costPerResult: null });
-    expect(byChannel.get('TikTok Ads')).toEqual({ channel: 'TikTok Ads', spend: 0, results: 0, costPerResult: null });
+    expect(byChannel.get('Meta Ads')).toEqual({
+      channel: 'Meta Ads',
+      spend: 0,
+      results: 0,
+      costPerResult: null,
+    });
+    expect(byChannel.get('TikTok Ads')).toEqual({
+      channel: 'TikTok Ads',
+      spend: 0,
+      results: 0,
+      costPerResult: null,
+    });
   });
 });
