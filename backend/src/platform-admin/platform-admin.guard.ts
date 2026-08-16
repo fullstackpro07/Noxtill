@@ -11,7 +11,7 @@ import type { Request } from 'express';
  * Platform-admin endpoints (BE-072) sit outside the per-business RBAC
  * model entirely (owner/manager/staff, BE-008) — there's no "platform
  * admin" business role, so this is a separate shared-secret gate rather
- * than reusing RolesGuard. Requires `x-admin-key` to match
+ * than reusing CapabilitiesGuard. Requires `x-admin-key` to match
  * PLATFORM_ADMIN_KEY; if that env var isn't set, every request is refused
  * (fail closed, never fail open on a missing secret).
  */

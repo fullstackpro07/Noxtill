@@ -4,8 +4,8 @@ export declare class AttendanceService {
     constructor(tenantPrisma: TenantPrismaService);
     toggle(businessId: string, userId: string): Promise<{
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         staffUserId: string;
         checkIn: Date;
         checkOut: Date | null;

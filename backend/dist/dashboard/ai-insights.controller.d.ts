@@ -7,9 +7,9 @@ export declare class AiInsightsController {
     constructor(aiInsightsService: AiInsightsService);
     list(user: AuthenticatedUser, category?: AiInsightCategory, status?: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: import("../../generated/prisma").$Enums.AiInsightCategory;
         status: import("../../generated/prisma").$Enums.AiInsightStatus;
         observation: string;
@@ -17,9 +17,9 @@ export declare class AiInsightsController {
     }[]>;
     updateStatus(user: AuthenticatedUser, id: string, dto: UpdateInsightStatusDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: import("../../generated/prisma").$Enums.AiInsightCategory;
         status: import("../../generated/prisma").$Enums.AiInsightStatus;
         observation: string;

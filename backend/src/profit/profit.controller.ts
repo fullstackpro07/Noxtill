@@ -21,4 +21,9 @@ export class ProfitController {
   pnl(@Query() query: QueryPnlDto) {
     return this.profitService.pnl(query.month);
   }
+
+  @Get('bundle-suggestions')
+  bundleSuggestions() {
+    return this.profitService.bundleSuggestions();
+  }
 }

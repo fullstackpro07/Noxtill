@@ -55,6 +55,7 @@ const reports_module_1 = require("./reports/reports.module");
 const exports_module_1 = require("./exports/exports.module");
 const integrations_module_1 = require("./integrations/integrations.module");
 const activity_module_1 = require("./activity/activity.module");
+const roles_module_1 = require("./roles/roles.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -106,6 +107,7 @@ exports.AppModule = AppModule = __decorate([
             reports_module_1.ReportsModule,
             exports_module_1.ExportsModule,
             integrations_module_1.IntegrationsModule,
+            roles_module_1.RolesModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

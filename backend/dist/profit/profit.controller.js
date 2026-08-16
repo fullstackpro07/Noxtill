@@ -31,6 +31,9 @@ let ProfitController = class ProfitController {
     pnl(query) {
         return this.profitService.pnl(query.month);
     }
+    bundleSuggestions() {
+        return this.profitService.bundleSuggestions();
+    }
 };
 exports.ProfitController = ProfitController;
 __decorate([
@@ -53,6 +56,12 @@ __decorate([
     __metadata("design:paramtypes", [query_pnl_dto_1.QueryPnlDto]),
     __metadata("design:returntype", void 0)
 ], ProfitController.prototype, "pnl", null);
+__decorate([
+    (0, common_1.Get)('bundle-suggestions'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], ProfitController.prototype, "bundleSuggestions", null);
 exports.ProfitController = ProfitController = __decorate([
     (0, common_1.Controller)('profit'),
     __metadata("design:paramtypes", [profit_service_1.ProfitService])

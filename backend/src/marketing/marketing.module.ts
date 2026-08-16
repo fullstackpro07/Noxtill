@@ -16,9 +16,16 @@ import { KeywordRankScheduler } from './jobs/keyword-rank.scheduler';
 import { KeywordRankProcessor } from './jobs/keyword-rank.processor';
 import { GooglePlacesService } from './google-places.service';
 import { SerpRankService } from './serp-rank.service';
-import { COMPETITOR_SNAPSHOT_QUEUE, KEYWORD_RANK_QUEUE } from './marketing.constants';
+import {
+  COMPETITOR_SNAPSHOT_QUEUE,
+  KEYWORD_RANK_QUEUE,
+} from './marketing.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { CustomersModule } from '../customers/customers.module';
+import { CouponsService } from './coupons.service';
+import { CouponsController } from './coupons.controller';
+import { VouchersService } from './vouchers.service';
+import { VouchersController } from './vouchers.controller';
 
 @Module({
   imports: [
@@ -33,6 +40,8 @@ import { CustomersModule } from '../customers/customers.module';
     CompetitorsController,
     KeywordsController,
     OverviewController,
+    CouponsController,
+    VouchersController,
   ],
   providers: [
     CampaignsService,
@@ -46,7 +55,9 @@ import { CustomersModule } from '../customers/customers.module';
     KeywordRankProcessor,
     GooglePlacesService,
     SerpRankService,
+    CouponsService,
+    VouchersService,
   ],
-  exports: [ReferralsService],
+  exports: [ReferralsService, CouponsService, VouchersService],
 })
 export class MarketingModule {}

@@ -11,11 +11,13 @@ const common_1 = require("@nestjs/common");
 const activity_service_1 = require("./activity.service");
 const activity_controller_1 = require("./activity.controller");
 const activity_pubsub_service_1 = require("./activity-pubsub.service");
+const automations_module_1 = require("../marketing/automations/automations.module");
 let ActivityModule = class ActivityModule {
 };
 exports.ActivityModule = ActivityModule;
 exports.ActivityModule = ActivityModule = __decorate([
     (0, common_1.Module)({
+        imports: [automations_module_1.AutomationsModule],
         controllers: [activity_controller_1.ActivityController],
         providers: [activity_service_1.ActivityService, activity_pubsub_service_1.ActivityPubSubService],
         exports: [activity_service_1.ActivityService],

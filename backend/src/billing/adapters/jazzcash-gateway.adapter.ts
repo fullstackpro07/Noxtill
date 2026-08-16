@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   CheckoutSession,
   CreateCheckoutParams,
+  CreateSubscriptionCheckoutParams,
   PaymentGatewayAdapter,
   RefundResult,
 } from './payment-gateway.adapter';
@@ -56,6 +57,28 @@ export class JazzCashGatewayAdapter implements PaymentGatewayAdapter {
     }
     return Promise.reject(
       new Error('JazzCash refunds are not yet implemented'),
+    );
+  }
+
+  createSubscriptionCheckout(
+    params: CreateSubscriptionCheckoutParams,
+  ): Promise<CheckoutSession> {
+    void params;
+    if (!this.merchantId) {
+      throw new Error('JazzCash is not configured');
+    }
+    return Promise.reject(
+      new Error('JazzCash subscription checkout is not yet implemented'),
+    );
+  }
+
+  cancelSubscription(providerRef: string): Promise<void> {
+    void providerRef;
+    if (!this.merchantId) {
+      throw new Error('JazzCash is not configured');
+    }
+    return Promise.reject(
+      new Error('JazzCash subscription cancellation is not yet implemented'),
     );
   }
 }

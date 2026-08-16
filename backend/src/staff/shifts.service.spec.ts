@@ -1,0 +1,171 @@
+import { ClsService } from 'nestjs-cls';
+import { PrismaService } from '../prisma/prisma.service';
+import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_USER_ID,
+} from '../common/tenancy/tenant.constants';
+import { ShiftsService } from './shifts.service';
+import { AppException } from '../common/filters/app.exception';
+import { Role } from '../../generated/prisma';
+
+class FakeClsService {
+  private store: Record<string, unknown> = {};
+  get<T>(key: string): T {
+    return this.store[key] as T;
+  }
+  set(key: string, value: unknown) {
+    this.store[key] = value;
+  }
+}
+
+describe('ShiftsService (UPD-BE-031)', () => {
+  let prisma: PrismaService;
+  let service: ShiftsService;
+  let cls: FakeClsService;
+  let businessId: string;
+  let requesterUserId: string;
+  let requesterBusinessUserId: string;
+  let coveringUserId: string;
+  let coveringBusinessUserId: string;
+
+  beforeAll(async () => {
+    prisma = new PrismaService();
+    await prisma.$connect();
+
+    cls = new FakeClsService();
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    service = new ShiftsService(tenantPrisma, cls as unknown as ClsService);
+
+    const business = await prisma.business.create({
+      data: { name: 'Shifts Test Biz', slug: `shifts-test-${Date.now()}` },
+    });
+    businessId = business.id;
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+
+    const requesterUser = await prisma.user.create({
+      data: {
+        phone: `+1${Date.now()}1`,
+        name: 'Requester Staff',
+        passwordHash: 'test-hash',
+      },
+    });
+    requesterUserId = requesterUser.id;
+    const requesterBusinessUser = await prisma.businessUser.create({
+      data: { businessId, userId: requesterUser.id, role: Role.staff },
+    });
+    requesterBusinessUserId = requesterBusinessUser.id;
+
+    const coveringUser = await prisma.user.create({
+      data: {
+        phone: `+1${Date.now()}2`,
+        name: 'Covering Staff',
+        passwordHash: 'test-hash',
+      },
+    });
+    coveringUserId = coveringUser.id;
+    const coveringBusinessUser = await prisma.businessUser.create({
+      data: { businessId, userId: coveringUser.id, role: Role.staff },
+    });
+    coveringBusinessUserId = coveringBusinessUser.id;
+
+    cls.set(CLS_KEY_USER_ID, requesterUserId);
+  });
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { businessId } });
+    await prisma.staffShift.deleteMany({ where: { businessId } });
+    await prisma.businessUser.deleteMany({ where: { businessId } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [requesterUserId, coveringUserId] } },
+    });
+    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$disconnect();
+  });
+
+  it('creates, lists, updates, and deletes a real shift', async () => {
+    const shift = await service.create(businessId, {
+      staffUserId: requesterBusinessUserId,
+      startsAt: '2026-09-01T09:00:00.000Z',
+      endsAt: '2026-09-01T17:00:00.000Z',
+    });
+    expect(shift.status).toBe('scheduled');
+
+    const list = await service.list(requesterBusinessUserId);
+    expect(list.some((s) => s.id === shift.id)).toBe(true);
+
+    const updated = await service.update(shift.id, { status: 'completed' });
+    expect(updated.status).toBe('completed');
+
+    await service.remove(shift.id);
+    await expect(service.findOne(shift.id)).rejects.toThrow();
+  });
+
+  it('rejects findOne for an unknown shift', async () => {
+    await expect(service.findOne('not-a-real-id')).rejects.toThrow();
+  });
+
+  it('requests a swap, rejects a second concurrent request, then approves it and reassigns the shift', async () => {
+    const shift = await service.create(businessId, {
+      staffUserId: requesterBusinessUserId,
+      startsAt: '2026-09-02T09:00:00.000Z',
+      endsAt: '2026-09-02T17:00:00.000Z',
+    });
+
+    const requested = await service.requestSwap(businessId, shift.id, {
+      coveringUserId: coveringBusinessUserId,
+      reason: 'Doctor appointment',
+    });
+    expect(requested.swapStatus).toBe('pending');
+    expect(requested.swapRequestedByUserId).toBe(requesterBusinessUserId);
+
+    await expect(
+      service.requestSwap(businessId, shift.id, {}),
+    ).rejects.toBeInstanceOf(AppException);
+
+    const approved = await service.approveSwap(businessId, shift.id);
+    expect(approved.swapStatus).toBe('approved');
+    expect(approved.staffUserId).toBe(coveringBusinessUserId);
+
+    const audits = await prisma.auditLog.findMany({
+      where: { entityId: shift.id, entity: 'StaffShift' },
+    });
+    expect(audits).toHaveLength(1);
+
+    // No longer pending — a second approve attempt must fail.
+    await expect(
+      service.approveSwap(businessId, shift.id),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('rejects approving a swap request with no covering staff proposed yet', async () => {
+    const shift = await service.create(businessId, {
+      staffUserId: requesterBusinessUserId,
+      startsAt: '2026-09-03T09:00:00.000Z',
+      endsAt: '2026-09-03T17:00:00.000Z',
+    });
+    await service.requestSwap(businessId, shift.id, {});
+
+    await expect(
+      service.approveSwap(businessId, shift.id),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('rejects a swap request, leaving the shift with the original staff member', async () => {
+    const shift = await service.create(businessId, {
+      staffUserId: requesterBusinessUserId,
+      startsAt: '2026-09-04T09:00:00.000Z',
+      endsAt: '2026-09-04T17:00:00.000Z',
+    });
+    await service.requestSwap(businessId, shift.id, {
+      coveringUserId: coveringBusinessUserId,
+    });
+
+    const rejected = await service.rejectSwap(shift.id);
+    expect(rejected.swapStatus).toBe('rejected');
+    expect(rejected.staffUserId).toBe(requesterBusinessUserId);
+  });
+});

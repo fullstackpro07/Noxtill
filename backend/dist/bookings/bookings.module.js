@@ -11,9 +11,15 @@ const common_1 = require("@nestjs/common");
 const bullmq_1 = require("@nestjs/bullmq");
 const public_booking_service_1 = require("./public-booking.service");
 const appointments_service_1 = require("./appointments.service");
+const waitlist_service_1 = require("./waitlist.service");
+const queue_service_1 = require("./queue.service");
+const deposits_service_1 = require("./deposits.service");
 const public_booking_controller_1 = require("./public-booking.controller");
 const public_appointment_controller_1 = require("./public-appointment.controller");
 const appointments_controller_1 = require("./appointments.controller");
+const waitlist_controller_1 = require("./waitlist.controller");
+const queue_controller_1 = require("./queue.controller");
+const deposits_controller_1 = require("./deposits.controller");
 const booking_reminders_scheduler_1 = require("./jobs/booking-reminders.scheduler");
 const booking_reminders_processor_1 = require("./jobs/booking-reminders.processor");
 const booking_reminders_constants_1 = require("./jobs/booking-reminders.constants");
@@ -35,10 +41,16 @@ exports.BookingsModule = BookingsModule = __decorate([
             public_booking_controller_1.PublicBookingController,
             public_appointment_controller_1.PublicAppointmentController,
             appointments_controller_1.AppointmentsController,
+            waitlist_controller_1.WaitlistController,
+            queue_controller_1.QueueController,
+            deposits_controller_1.DepositsController,
         ],
         providers: [
             public_booking_service_1.PublicBookingService,
             appointments_service_1.AppointmentsService,
+            waitlist_service_1.WaitlistService,
+            queue_service_1.QueueService,
+            deposits_service_1.DepositsService,
             booking_reminders_scheduler_1.BookingRemindersScheduler,
             booking_reminders_processor_1.BookingRemindersProcessor,
         ],

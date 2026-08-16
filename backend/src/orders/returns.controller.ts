@@ -3,9 +3,10 @@ import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { RejectReturnDto } from './dto/reject-return.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { Role, ReturnStatus } from '../../generated/prisma';
+import { ReturnStatus } from '../../generated/prisma';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('returns')
 export class ReturnsController {
@@ -24,13 +25,13 @@ export class ReturnsController {
     return this.returnsService.list(user.businessId, status);
   }
 
-  @Roles(Role.owner, Role.manager)
+  @RequireCapability(CAPABILITIES.RETURNS_APPROVE)
   @Post(':id/approve')
   approve(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.returnsService.approve(user.businessId, id);
   }
 
-  @Roles(Role.owner, Role.manager)
+  @RequireCapability(CAPABILITIES.RETURNS_APPROVE)
   @Post(':id/reject')
   reject(
     @CurrentUser() user: AuthenticatedUser,

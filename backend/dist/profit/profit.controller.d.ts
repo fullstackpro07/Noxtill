@@ -40,4 +40,14 @@ export declare class ProfitController {
         totalExpenses: number;
         netProfit: number;
     }>;
+    bundleSuggestions(): Promise<{
+        productAId: string;
+        productBId: string;
+        nameA: string;
+        nameB: string;
+        togetherCount: number;
+        combinedPrice: number;
+        suggestedPrice: number;
+        pitch: string;
+    }[]>;
 }

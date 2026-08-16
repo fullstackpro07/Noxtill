@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import {
   CheckoutSession,
   CreateCheckoutParams,
+  CreateSubscriptionCheckoutParams,
   PaymentGatewayAdapter,
   RefundResult,
 } from './payment-gateway.adapter';
@@ -75,5 +76,44 @@ export class StripeGatewayAdapter implements PaymentGatewayAdapter {
       amount: Math.round(amount * 100),
     });
     return { refundRef: refund.id };
+  }
+
+  /**
+   * Deliberately does NOT set `businessId` anywhere — `client_reference_id` and the subscription
+   * metadata key are both the caller-supplied `referenceKey`/`referenceId` (e.g. `membershipId`),
+   * so this can never be picked up by `stripe-webhook.processor.ts`'s business-plan handlers,
+   * which only ever look for `businessId`.
+   */
+  async createSubscriptionCheckout(
+    params: CreateSubscriptionCheckoutParams,
+  ): Promise<CheckoutSession> {
+    if (!this.client) {
+      throw new Error('Stripe is not configured');
+    }
+
+    const session = await this.client.checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: params.priceRef, quantity: 1 }],
+      customer_email: params.customerEmail,
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      client_reference_id: params.referenceId,
+      subscription_data: {
+        metadata: { [params.referenceKey]: params.referenceId },
+      },
+    });
+
+    if (!session.url) {
+      throw new Error('Stripe did not return a checkout URL');
+    }
+
+    return { url: session.url, sessionRef: session.id };
+  }
+
+  async cancelSubscription(providerRef: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('Stripe is not configured');
+    }
+    await this.client.subscriptions.cancel(providerRef);
   }
 }

@@ -1,9 +1,12 @@
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AiInfraService } from '../ai/ai-infra.service';
 export declare class ProfitService {
     private readonly tenantPrisma;
     private readonly cls;
-    constructor(tenantPrisma: TenantPrismaService, cls: ClsService);
+    private readonly aiInfra;
+    private readonly logger;
+    constructor(tenantPrisma: TenantPrismaService, cls: ClsService, aiInfra: AiInfraService);
     byProduct(windowDays?: 30 | 90): Promise<{
         windowDays: 30 | 90;
         products: {
@@ -41,4 +44,15 @@ export declare class ProfitService {
         totalExpenses: number;
         netProfit: number;
     }>;
+    bundleSuggestions(): Promise<{
+        productAId: string;
+        productBId: string;
+        nameA: string;
+        nameB: string;
+        togetherCount: number;
+        combinedPrice: number;
+        suggestedPrice: number;
+        pitch: string;
+    }[]>;
+    private phrasePitches;
 }

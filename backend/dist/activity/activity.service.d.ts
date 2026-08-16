@@ -2,6 +2,7 @@ import { Observable } from 'rxjs';
 import type { MessageEvent } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { ActivityPubSubService } from './activity-pubsub.service';
+import { WorkflowTriggerService } from '../marketing/automations/workflow-trigger.service';
 import { ActivityEventType } from '../../generated/prisma';
 export interface RecordActivityEventInput {
     type: ActivityEventType;
@@ -24,8 +25,9 @@ interface ActivityEventPayload {
 export declare class ActivityService {
     private readonly tenantPrisma;
     private readonly pubsub;
+    private readonly workflowTrigger?;
     private readonly logger;
-    constructor(tenantPrisma: TenantPrismaService, pubsub: ActivityPubSubService);
+    constructor(tenantPrisma: TenantPrismaService, pubsub: ActivityPubSubService, workflowTrigger?: WorkflowTriggerService | undefined);
     record(businessId: string, input: RecordActivityEventInput): Promise<void>;
     getRecentHistory(businessId: string, limit?: number): Promise<ActivityEventPayload[]>;
     stream(businessId: string): Observable<MessageEvent>;

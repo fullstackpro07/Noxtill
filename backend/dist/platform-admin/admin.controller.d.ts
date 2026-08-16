@@ -9,8 +9,8 @@ export declare class AdminController {
     events(name?: string, limit?: string): Promise<{
         name: string;
         id: string;
-        createdAt: Date;
         businessId: string | null;
+        createdAt: Date;
         userId: string | null;
         properties: import("generated/prisma/runtime/library").JsonValue;
     }[]>;

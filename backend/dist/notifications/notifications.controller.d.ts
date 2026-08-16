@@ -6,8 +6,8 @@ export declare class NotificationsController {
     list(user: AuthenticatedUser): Promise<{
         link: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         userId: string;
         body: string;
         title: string;
@@ -16,8 +16,8 @@ export declare class NotificationsController {
     markRead(user: AuthenticatedUser, id: string): Promise<{
         link: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         userId: string;
         body: string;
         title: string;

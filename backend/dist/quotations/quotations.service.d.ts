@@ -9,9 +9,9 @@ export declare class QuotationsService {
             email: string | null;
             phone: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             address: string | null;
             birthday: Date | null;
             notes: string | null;
@@ -35,9 +35,9 @@ export declare class QuotationsService {
         }[];
     } & {
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         orderNo: number;
         customerId: string | null;
         orderType: import("../../generated/prisma").$Enums.OrderType;
@@ -50,12 +50,16 @@ export declare class QuotationsService {
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+        couponId: string | null;
+        couponDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
+        voucherId: string | null;
+        voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
     })[]>;
     create(businessId: string, dto: CreateQuotationDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         orderNo: number;
         customerId: string | null;
         orderType: import("../../generated/prisma").$Enums.OrderType;
@@ -68,12 +72,16 @@ export declare class QuotationsService {
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+        couponId: string | null;
+        couponDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
+        voucherId: string | null;
+        voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
     }>;
     convert(businessId: string, quotationId: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         orderNo: number;
         customerId: string | null;
         orderType: import("../../generated/prisma").$Enums.OrderType;
@@ -86,5 +94,9 @@ export declare class QuotationsService {
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+        couponId: string | null;
+        couponDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
+        voucherId: string | null;
+        voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
     }>;
 }

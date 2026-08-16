@@ -28,6 +28,10 @@ const serp_rank_service_1 = require("./serp-rank.service");
 const marketing_constants_1 = require("./marketing.constants");
 const messaging_module_1 = require("../messaging/messaging.module");
 const customers_module_1 = require("../customers/customers.module");
+const coupons_service_1 = require("./coupons.service");
+const coupons_controller_1 = require("./coupons.controller");
+const vouchers_service_1 = require("./vouchers.service");
+const vouchers_controller_1 = require("./vouchers.controller");
 let MarketingModule = class MarketingModule {
 };
 exports.MarketingModule = MarketingModule;
@@ -45,6 +49,8 @@ exports.MarketingModule = MarketingModule = __decorate([
             competitors_controller_1.CompetitorsController,
             keywords_controller_1.KeywordsController,
             overview_controller_1.OverviewController,
+            coupons_controller_1.CouponsController,
+            vouchers_controller_1.VouchersController,
         ],
         providers: [
             campaigns_service_1.CampaignsService,
@@ -58,8 +64,10 @@ exports.MarketingModule = MarketingModule = __decorate([
             keyword_rank_processor_1.KeywordRankProcessor,
             google_places_service_1.GooglePlacesService,
             serp_rank_service_1.SerpRankService,
+            coupons_service_1.CouponsService,
+            vouchers_service_1.VouchersService,
         ],
-        exports: [referrals_service_1.ReferralsService],
+        exports: [referrals_service_1.ReferralsService, coupons_service_1.CouponsService, vouchers_service_1.VouchersService],
     })
 ], MarketingModule);
 //# sourceMappingURL=marketing.module.js.map

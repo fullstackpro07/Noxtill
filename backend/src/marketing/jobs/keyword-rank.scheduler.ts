@@ -21,7 +21,9 @@ export class KeywordRankScheduler implements OnModuleInit {
         },
       )
       .catch((error: Error) =>
-        this.logger.error(`Failed to register keyword-rank tick: ${error.message}`),
+        this.logger.error(
+          `Failed to register keyword-rank tick: ${error.message}`,
+        ),
       );
   }
 }

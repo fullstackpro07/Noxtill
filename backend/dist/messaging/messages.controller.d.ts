@@ -9,13 +9,13 @@ export declare class MessagesController {
     test(user: AuthenticatedUser, dto: TestMessageDto): Promise<{
         locale: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
-        category: import("../../generated/prisma").$Enums.MessageCategory;
+        category: import("generated/prisma").$Enums.MessageCategory;
         customerId: string | null;
-        status: import("../../generated/prisma").$Enums.MessageStatus;
-        channel: import("../../generated/prisma").$Enums.MessageChannel;
+        status: import("generated/prisma").$Enums.MessageStatus;
+        channel: import("generated/prisma").$Enums.MessageChannel;
         templateKey: string;
         payload: import("generated/prisma/runtime/library").JsonValue;
         providerRef: string | null;
@@ -25,13 +25,13 @@ export declare class MessagesController {
     list(customerId: string): Promise<{
         locale: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
-        category: import("../../generated/prisma").$Enums.MessageCategory;
+        category: import("generated/prisma").$Enums.MessageCategory;
         customerId: string | null;
-        status: import("../../generated/prisma").$Enums.MessageStatus;
-        channel: import("../../generated/prisma").$Enums.MessageChannel;
+        status: import("generated/prisma").$Enums.MessageStatus;
+        channel: import("generated/prisma").$Enums.MessageChannel;
         templateKey: string;
         payload: import("generated/prisma/runtime/library").JsonValue;
         providerRef: string | null;

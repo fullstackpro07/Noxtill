@@ -155,14 +155,21 @@ describe('ReferralsService (BE-062)', () => {
 
   it('does nothing for a customer who was not referred', async () => {
     const organic = await prisma.customer.create({
-      data: { businessId, phone: `+1${Date.now()}6`, name: 'Organic Oscar', visitCount: 1 },
+      data: {
+        businessId,
+        phone: `+1${Date.now()}6`,
+        name: 'Organic Oscar',
+        visitCount: 1,
+      },
     });
 
     await prisma.$transaction((tx) =>
       service.issueRewardIfEligible(businessId, organic.id, tx),
     );
 
-    const refreshed = await prisma.customer.findUniqueOrThrow({ where: { id: organic.id } });
+    const refreshed = await prisma.customer.findUniqueOrThrow({
+      where: { id: organic.id },
+    });
     expect(refreshed.referralRewardedAt).toBeNull();
   });
 });

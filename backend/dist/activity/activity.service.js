@@ -15,14 +15,17 @@ const common_1 = require("@nestjs/common");
 const rxjs_1 = require("rxjs");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const activity_pubsub_service_1 = require("./activity-pubsub.service");
+const workflow_trigger_service_1 = require("../marketing/automations/workflow-trigger.service");
 const activity_constants_1 = require("./activity.constants");
 let ActivityService = ActivityService_1 = class ActivityService {
     tenantPrisma;
     pubsub;
+    workflowTrigger;
     logger = new common_1.Logger(ActivityService_1.name);
-    constructor(tenantPrisma, pubsub) {
+    constructor(tenantPrisma, pubsub, workflowTrigger) {
         this.tenantPrisma = tenantPrisma;
         this.pubsub = pubsub;
+        this.workflowTrigger = workflowTrigger;
     }
     async record(businessId, input) {
         try {
@@ -30,6 +33,14 @@ let ActivityService = ActivityService_1 = class ActivityService {
                 data: { businessId, ...input },
             });
             await this.pubsub.publish((0, activity_constants_1.activityChannel)(businessId), this.toPayload(event));
+            void this.workflowTrigger
+                ?.dispatch(businessId, input.type, {
+                description: input.description,
+                entityType: input.entityType,
+                entityId: input.entityId,
+                amount: input.amount,
+            })
+                .catch((error) => this.logger.warn(`Workflow dispatch failed for activity event (${input.type}) on business ${businessId}: ${error.message}`));
         }
         catch (error) {
             this.logger.warn(`Failed to record activity event (${input.type}) for business ${businessId}: ${error.message}`);
@@ -73,6 +84,7 @@ exports.ActivityService = ActivityService;
 exports.ActivityService = ActivityService = ActivityService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
-        activity_pubsub_service_1.ActivityPubSubService])
+        activity_pubsub_service_1.ActivityPubSubService,
+        workflow_trigger_service_1.WorkflowTriggerService])
 ], ActivityService);
 //# sourceMappingURL=activity.service.js.map

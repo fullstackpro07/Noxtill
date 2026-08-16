@@ -7,8 +7,8 @@ export declare class EventsService {
     record(dto: CreateEventDto): Prisma.Prisma__EventClient<{
         name: string;
         id: string;
-        createdAt: Date;
         businessId: string | null;
+        createdAt: Date;
         userId: string | null;
         properties: Prisma.JsonValue;
     }, never, import("generated/prisma/runtime/library").DefaultArgs, Prisma.PrismaClientOptions>;

@@ -33,6 +33,7 @@ export declare class NightlyCloseService {
         healthScoreWeights: import("generated/prisma/runtime/library").JsonValue;
         aiMonthlyCostCapUsd: import("generated/prisma/runtime/library").Decimal;
         aiRateLimitPerMinute: number;
+        overtimeThresholdHoursPerWeek: number;
         trialEndsAt: Date | null;
         stripeCustomerId: string | null;
         stripeSubscriptionId: string | null;

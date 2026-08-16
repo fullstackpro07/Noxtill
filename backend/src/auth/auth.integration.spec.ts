@@ -4,6 +4,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 
 describe('AuthService integration (BE-007)', () => {
   let prisma: PrismaService;
@@ -24,7 +25,12 @@ describe('AuthService integration (BE-007)', () => {
     });
     const jwt = new JwtService();
 
-    authService = new AuthService(prisma, jwt, config);
+    authService = new AuthService(
+      prisma,
+      jwt,
+      config,
+      new CapabilitiesService(prisma),
+    );
   });
 
   afterAll(async () => {

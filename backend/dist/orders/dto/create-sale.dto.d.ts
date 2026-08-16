@@ -17,5 +17,8 @@ export declare class CreateSaleDto {
     staffUserId?: string;
     items: SaleItemDto[];
     discount?: number;
+    couponCode?: string;
+    voucherCode?: string;
+    voucherAmount?: number;
     payment: SalePaymentDto;
 }

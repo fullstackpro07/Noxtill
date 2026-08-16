@@ -10,11 +10,13 @@ exports.ProfitModule = void 0;
 const common_1 = require("@nestjs/common");
 const profit_service_1 = require("./profit.service");
 const profit_controller_1 = require("./profit.controller");
+const ai_module_1 = require("../ai/ai.module");
 let ProfitModule = class ProfitModule {
 };
 exports.ProfitModule = ProfitModule;
 exports.ProfitModule = ProfitModule = __decorate([
     (0, common_1.Module)({
+        imports: [ai_module_1.AiModule],
         controllers: [profit_controller_1.ProfitController],
         providers: [profit_service_1.ProfitService],
         exports: [profit_service_1.ProfitService],

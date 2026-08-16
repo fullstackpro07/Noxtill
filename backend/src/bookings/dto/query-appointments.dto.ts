@@ -1,4 +1,4 @@
-import { IsISO8601, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsISO8601, IsOptional, IsString } from 'class-validator';
 
 export class QueryAppointmentsDto {
   @IsOptional()
@@ -12,4 +12,22 @@ export class QueryAppointmentsDto {
   @IsOptional()
   @IsString()
   staff?: string;
+
+  /** UPD-BE-020 — e.g. `GET /appointments?status=no_show`. */
+  @IsOptional()
+  @IsIn([
+    'requested',
+    'booked',
+    'confirmed',
+    'completed',
+    'no_show',
+    'cancelled',
+  ])
+  status?:
+    | 'requested'
+    | 'booked'
+    | 'confirmed'
+    | 'completed'
+    | 'no_show'
+    | 'cancelled';
 }

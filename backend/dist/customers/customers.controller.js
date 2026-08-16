@@ -20,8 +20,8 @@ const update_customer_dto_1 = require("./dto/update-customer.dto");
 const query_customers_dto_1 = require("./dto/query-customers.dto");
 const erase_customer_dto_1 = require("./dto/erase-customer.dto");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
-const prisma_1 = require("../../generated/prisma");
+const require_capability_decorator_1 = require("../common/decorators/require-capability.decorator");
+const capabilities_constants_1 = require("../common/capabilities/capabilities.constants");
 let CustomersController = class CustomersController {
     customersService;
     constructor(customersService) {
@@ -75,7 +75,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], CustomersController.prototype, "update", null);
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner, prisma_1.Role.manager),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.CUSTOMERS_ERASE),
     (0, common_1.Delete)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),

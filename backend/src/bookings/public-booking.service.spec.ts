@@ -1,5 +1,6 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { WaitlistService } from './waitlist.service';
 import { PublicBookingService } from './public-booking.service';
 import { AppException } from '../common/filters/app.exception';
 
@@ -21,6 +22,7 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
   let serviceProductId: string;
   const testDate = futureWednesday();
   const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
+  const waitlist = { tryAutoOffer: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -28,6 +30,7 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
     service = new PublicBookingService(
       prisma,
       sendGate as unknown as SendGateService,
+      waitlist as unknown as WaitlistService,
     );
 
     slug = `booking-test-${Date.now()}`;
@@ -140,7 +143,10 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
     });
 
     await expect(
-      service.reschedule(movable.rescheduleToken!, fixed.startsAt.toISOString()),
+      service.reschedule(
+        movable.rescheduleToken!,
+        fixed.startsAt.toISOString(),
+      ),
     ).rejects.toBeInstanceOf(AppException);
   });
 

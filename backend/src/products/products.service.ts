@@ -29,7 +29,8 @@ export class ProductsService {
           name: dto.name,
           category: dto.category,
           sku: dto.sku,
-          variations: (dto.variations ?? []) as unknown as Prisma.InputJsonValue,
+          variations: (dto.variations ??
+            []) as unknown as Prisma.InputJsonValue,
           costPrice: dto.costPrice,
           sellingPrice: dto.sellingPrice,
           stockQty: dto.stockQty ?? 0,

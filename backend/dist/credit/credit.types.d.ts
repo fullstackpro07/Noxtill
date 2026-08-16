@@ -10,14 +10,14 @@ export interface DebtorRow {
 export interface LedgerRow {
     id: string;
     date: Date;
-    kind: 'credit' | 'payment';
+    kind: 'credit' | 'payment' | 'write_off';
     amount: number;
     note: string | null;
     runningBalance: number;
 }
 export declare function buildLedgerRows(entries: {
     id: string;
-    kind: 'credit' | 'payment';
+    kind: 'credit' | 'payment' | 'write_off';
     amount: unknown;
     note: string | null;
     createdAt: Date;

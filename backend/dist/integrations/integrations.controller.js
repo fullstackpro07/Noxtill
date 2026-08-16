@@ -16,9 +16,10 @@ exports.IntegrationsController = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const integrations_service_1 = require("./integrations.service");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
+const require_capability_decorator_1 = require("../common/decorators/require-capability.decorator");
 const public_decorator_1 = require("../common/decorators/public.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
+const capabilities_constants_1 = require("../common/capabilities/capabilities.constants");
 const prisma_1 = require("../../generated/prisma");
 function parseProvider(value) {
     if (!Object.values(prisma_1.IntegrationProvider).includes(value)) {
@@ -65,7 +66,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], IntegrationsController.prototype, "list", null);
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner, prisma_1.Role.manager),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.INTEGRATIONS_MANAGE),
     (0, common_1.Post)(':provider/connect'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Param)('provider')),
@@ -74,7 +75,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], IntegrationsController.prototype, "connect", null);
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner, prisma_1.Role.manager),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.INTEGRATIONS_MANAGE),
     (0, common_1.Post)(':provider/disconnect'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Param)('provider')),

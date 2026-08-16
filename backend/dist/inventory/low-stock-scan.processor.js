@@ -15,17 +15,20 @@ const bullmq_1 = require("@nestjs/bullmq");
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const send_gate_service_1 = require("../messaging/send-gate.service");
+const workflow_trigger_service_1 = require("../marketing/automations/workflow-trigger.service");
 const low_stock_scan_constants_1 = require("./low-stock-scan.constants");
 const prisma_1 = require("../../generated/prisma");
 const ALERT_TEMPLATE_KEY = 'owner_alert';
 let LowStockScanProcessor = LowStockScanProcessor_1 = class LowStockScanProcessor extends bullmq_1.WorkerHost {
     prisma;
     sendGate;
+    workflowTrigger;
     logger = new common_1.Logger(LowStockScanProcessor_1.name);
-    constructor(prisma, sendGate) {
+    constructor(prisma, sendGate, workflowTrigger) {
         super();
         this.prisma = prisma;
         this.sendGate = sendGate;
+        this.workflowTrigger = workflowTrigger;
     }
     async process() {
         const businesses = await this.prisma.business.findMany({
@@ -69,6 +72,17 @@ let LowStockScanProcessor = LowStockScanProcessor_1 = class LowStockScanProcesso
                 alertBody: `${lowStockProducts.length} item(s) running low: ${itemList}${more}.`,
             },
         });
+        const description = `${lowStockProducts.length} item(s) running low: ${itemList}${more}.`;
+        const event = await this.prisma.activityEvent.create({
+            data: {
+                businessId,
+                type: prisma_1.ActivityEventType.low_stock,
+                description,
+            },
+        });
+        void this.workflowTrigger
+            .dispatch(businessId, event.type, { description })
+            .catch((error) => this.logger.warn(`Workflow dispatch failed for low_stock event ${event.id}: ${error.message}`));
     }
     async alreadyAlertedToday(businessId) {
         const startOfDay = new Date();
@@ -87,6 +101,7 @@ exports.LowStockScanProcessor = LowStockScanProcessor;
 exports.LowStockScanProcessor = LowStockScanProcessor = LowStockScanProcessor_1 = __decorate([
     (0, bullmq_1.Processor)(low_stock_scan_constants_1.LOW_STOCK_SCAN_QUEUE),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        send_gate_service_1.SendGateService])
+        send_gate_service_1.SendGateService,
+        workflow_trigger_service_1.WorkflowTriggerService])
 ], LowStockScanProcessor);
 //# sourceMappingURL=low-stock-scan.processor.js.map

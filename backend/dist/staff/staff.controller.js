@@ -20,9 +20,9 @@ const commissions_service_1 = require("./commissions.service");
 const create_staff_dto_1 = require("./dto/create-staff.dto");
 const update_staff_dto_1 = require("./dto/update-staff.dto");
 const query_commissions_dto_1 = require("./dto/query-commissions.dto");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
+const require_capability_decorator_1 = require("../common/decorators/require-capability.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
-const prisma_1 = require("../../generated/prisma");
+const capabilities_constants_1 = require("../common/capabilities/capabilities.constants");
 let StaffController = class StaffController {
     staffService;
     attendanceService;
@@ -68,7 +68,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], StaffController.prototype, "inbox", null);
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.STAFF_MANAGE),
     (0, common_1.Post)('staff'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
@@ -77,7 +77,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], StaffController.prototype, "create", null);
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.STAFF_MANAGE),
     (0, common_1.Patch)('staff/:id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
@@ -86,7 +86,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], StaffController.prototype, "update", null);
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.STAFF_MANAGE),
     (0, common_1.Delete)('staff/:id'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),

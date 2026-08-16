@@ -126,7 +126,12 @@ describe('StaffService (BE-056)', () => {
         data: { businessId, phone: `+1${Date.now()}`, name: 'Inbox Customer' },
       });
       const svc = await prisma.product.create({
-        data: { businessId, kind: 'service', name: 'Inbox Service', durationMin: 30 },
+        data: {
+          businessId,
+          kind: 'service',
+          name: 'Inbox Service',
+          durationMin: 30,
+        },
       });
       const lowStockProduct = await prisma.product.create({
         data: {
@@ -159,7 +164,12 @@ describe('StaffService (BE-056)', () => {
       });
       // A resolved complaint and a completed appointment must NOT show up.
       await prisma.privateFeedback.create({
-        data: { businessId, stars: 1, status: 'resolved', assignedTo: staffMember.id },
+        data: {
+          businessId,
+          stars: 1,
+          status: 'resolved',
+          assignedTo: staffMember.id,
+        },
       });
       const completedAppt = await prisma.appointment.create({
         data: {

@@ -6,25 +6,27 @@ export declare class InventoryController {
     private readonly inventoryService;
     constructor(inventoryService: InventoryService);
     recordPurchase(user: AuthenticatedUser, dto: CreatePurchaseDto): Promise<{
+        supplier: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         kind: import("generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
         unitCost: import("generated/prisma/runtime/library").Decimal | null;
-        supplier: string | null;
+        supplierId: string | null;
         reason: string | null;
     }>;
     recordWastage(user: AuthenticatedUser, dto: CreateWastageDto): Promise<{
+        supplier: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         kind: import("generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
         unitCost: import("generated/prisma/runtime/library").Decimal | null;
-        supplier: string | null;
+        supplierId: string | null;
         reason: string | null;
     }>;
     listInventory(): Promise<{
@@ -39,14 +41,15 @@ export declare class InventoryController {
         status: string;
     }[]>;
     getMovements(productId: string): Promise<{
+        supplier: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         kind: import("generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
         unitCost: import("generated/prisma/runtime/library").Decimal | null;
-        supplier: string | null;
+        supplierId: string | null;
         reason: string | null;
     }[]>;
 }

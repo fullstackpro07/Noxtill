@@ -10,8 +10,8 @@ export declare class NotificationsService {
     list(userId: string): Promise<{
         link: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         userId: string;
         body: string;
         title: string;
@@ -20,8 +20,8 @@ export declare class NotificationsService {
     create(businessId: string, userId: string, input: CreateNotificationInput): Promise<{
         link: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         userId: string;
         body: string;
         title: string;
@@ -30,8 +30,8 @@ export declare class NotificationsService {
     markRead(userId: string, id: string): Promise<{
         link: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         userId: string;
         body: string;
         title: string;

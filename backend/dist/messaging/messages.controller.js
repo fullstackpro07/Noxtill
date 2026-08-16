@@ -17,9 +17,9 @@ const common_1 = require("@nestjs/common");
 const send_gate_service_1 = require("./send-gate.service");
 const messages_service_1 = require("./messages.service");
 const test_message_dto_1 = require("./dto/test-message.dto");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
+const require_capability_decorator_1 = require("../common/decorators/require-capability.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
-const prisma_1 = require("../../generated/prisma");
+const capabilities_constants_1 = require("../common/capabilities/capabilities.constants");
 let MessagesController = class MessagesController {
     sendGate;
     messagesService;
@@ -42,7 +42,7 @@ let MessagesController = class MessagesController {
 };
 exports.MessagesController = MessagesController;
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.MESSAGING_SEND_TEST),
     (0, common_1.Post)('test'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),

@@ -4,8 +4,12 @@ import { ReviewRequestsService } from './review-requests.service';
 import { ReviewsService } from './reviews.service';
 import { PublicReviewService } from './public-review.service';
 import { QrPosterService } from './qr-poster.service';
+import { VideoTestimonialsService } from './video-testimonials.service';
+import { PublicVideoTestimonialService } from './public-video-testimonial.service';
 import { ReviewsController } from './reviews.controller';
 import { PublicReviewController } from './public-review.controller';
+import { VideoTestimonialsController } from './video-testimonials.controller';
+import { PublicVideoTestimonialController } from './public-video-testimonial.controller';
 import { ReviewRemindersScheduler } from './jobs/review-reminders.scheduler';
 import { ReviewRemindersProcessor } from './jobs/review-reminders.processor';
 import { REVIEW_REMINDERS_QUEUE } from './jobs/review-reminders.constants';
@@ -26,7 +30,12 @@ import { ActivityModule } from '../activity/activity.module';
     AiModule,
     ActivityModule,
   ],
-  controllers: [ReviewsController, PublicReviewController],
+  controllers: [
+    ReviewsController,
+    PublicReviewController,
+    VideoTestimonialsController,
+    PublicVideoTestimonialController,
+  ],
   providers: [
     ReviewRequestsService,
     ReviewsService,
@@ -36,6 +45,8 @@ import { ActivityModule } from '../activity/activity.module';
     ReviewRemindersProcessor,
     GoogleSyncScheduler,
     GoogleSyncProcessor,
+    VideoTestimonialsService,
+    PublicVideoTestimonialService,
   ],
   exports: [ReviewRequestsService],
 })

@@ -12,9 +12,9 @@ export declare class ExpensesController {
         client: {};
     }, {}>, "Expense", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
         description: string;
@@ -23,9 +23,9 @@ export declare class ExpensesController {
     }>;
     findAll(query: QueryExpensesDto): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
         description: string;
@@ -34,9 +34,9 @@ export declare class ExpensesController {
     }[]>;
     findOne(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
         description: string;
@@ -45,9 +45,9 @@ export declare class ExpensesController {
     }>;
     update(id: string, dto: UpdateExpenseDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: import("generated/prisma/runtime/library").Decimal;
         description: string;

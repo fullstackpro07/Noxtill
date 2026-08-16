@@ -46,7 +46,9 @@ let KeywordRankProcessor = KeywordRankProcessor_1 = class KeywordRankProcessor e
     }
     async checkOne(businessId, keywordId, keyword, businessNameOverride) {
         const businessName = businessNameOverride ??
-            (await this.prisma.business.findUniqueOrThrow({ where: { id: businessId } })).name;
+            (await this.prisma.business.findUniqueOrThrow({
+                where: { id: businessId },
+            })).name;
         const rank = await this.serpRank.fetchRank(keyword, businessName);
         await this.prisma.keywordRankSnapshot.create({
             data: { keywordId, rank },

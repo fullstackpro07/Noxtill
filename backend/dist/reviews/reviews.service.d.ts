@@ -13,8 +13,8 @@ export declare class ReviewsService {
     list(query: QueryReviewsDto): Promise<({
         source: "external";
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         stars: number;
         platform: string;
         externalId: string;
@@ -26,9 +26,9 @@ export declare class ReviewsService {
         source: "private";
         message: string | null;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.FeedbackStatus;
         stars: number;
@@ -39,9 +39,9 @@ export declare class ReviewsService {
     updateFeedback(id: string, dto: UpdateFeedbackDto): Promise<{
         message: string | null;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.FeedbackStatus;
         stars: number;
@@ -51,8 +51,8 @@ export declare class ReviewsService {
     }>;
     reply(id: string, replyText: string): Promise<{
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         stars: number;
         platform: string;
         externalId: string;
@@ -67,9 +67,9 @@ export declare class ReviewsService {
     replyToFeedback(id: string, message: string): Promise<{
         locale: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: import("../../generated/prisma").$Enums.MessageCategory;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.MessageStatus;

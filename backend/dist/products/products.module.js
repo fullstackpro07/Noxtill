@@ -10,14 +10,38 @@ exports.ProductsModule = void 0;
 const common_1 = require("@nestjs/common");
 const products_service_1 = require("./products.service");
 const products_import_service_1 = require("./products-import.service");
+const variants_service_1 = require("./variants.service");
+const bundles_service_1 = require("./bundles.service");
+const suppliers_service_1 = require("./suppliers.service");
+const pricing_service_1 = require("./pricing.service");
 const products_controller_1 = require("./products.controller");
+const variants_controller_1 = require("./variants.controller");
+const bundles_controller_1 = require("./bundles.controller");
+const suppliers_controller_1 = require("./suppliers.controller");
+const pricing_controller_1 = require("./pricing.controller");
+const activity_module_1 = require("../activity/activity.module");
+const ai_module_1 = require("../ai/ai.module");
 let ProductsModule = class ProductsModule {
 };
 exports.ProductsModule = ProductsModule;
 exports.ProductsModule = ProductsModule = __decorate([
     (0, common_1.Module)({
-        controllers: [products_controller_1.ProductsController],
-        providers: [products_service_1.ProductsService, products_import_service_1.ProductsImportService],
+        imports: [activity_module_1.ActivityModule, ai_module_1.AiModule],
+        controllers: [
+            bundles_controller_1.BundlesController,
+            pricing_controller_1.PricingController,
+            variants_controller_1.VariantsController,
+            suppliers_controller_1.SuppliersController,
+            products_controller_1.ProductsController,
+        ],
+        providers: [
+            products_service_1.ProductsService,
+            products_import_service_1.ProductsImportService,
+            variants_service_1.VariantsService,
+            bundles_service_1.BundlesService,
+            suppliers_service_1.SuppliersService,
+            pricing_service_1.PricingService,
+        ],
         exports: [products_service_1.ProductsService],
     })
 ], ProductsModule);

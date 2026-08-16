@@ -16,9 +16,9 @@ exports.BillingController = void 0;
 const common_1 = require("@nestjs/common");
 const billing_service_1 = require("./billing.service");
 const create_checkout_dto_1 = require("./dto/create-checkout.dto");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
+const require_capability_decorator_1 = require("../common/decorators/require-capability.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
-const prisma_1 = require("../../generated/prisma");
+const capabilities_constants_1 = require("../common/capabilities/capabilities.constants");
 let BillingController = class BillingController {
     billingService;
     constructor(billingService) {
@@ -40,7 +40,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], BillingController.prototype, "status", null);
 __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.BILLING_MANAGE),
     (0, common_1.Post)('checkout'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),

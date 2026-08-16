@@ -149,9 +149,9 @@ export class ReviewsService {
 
   /** Sends a direct reply to the customer who left this private feedback (BE-047 inbox drawer). */
   async replyToFeedback(id: string, message: string) {
-    const feedback = await this.tenantPrisma.client.privateFeedback.findUnique(
-      { where: { id } },
-    );
+    const feedback = await this.tenantPrisma.client.privateFeedback.findUnique({
+      where: { id },
+    });
     if (!feedback) {
       throw new AppException(
         REVIEWS_ERROR_CODES.REVIEW_NOT_FOUND,
@@ -182,9 +182,7 @@ export class ReviewsService {
     });
 
     const averageRating = external.length
-      ? round2(
-          external.reduce((sum, r) => sum + r.stars, 0) / external.length,
-        )
+      ? round2(external.reduce((sum, r) => sum + r.stars, 0) / external.length)
       : 0;
     const distribution = [5, 4, 3, 2, 1].map((stars) => ({
       stars,

@@ -4,12 +4,14 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { LocaleService } from '../common/localization/locale.service';
 import { ProfitService } from '../profit/profit.service';
+import { AiInfraService } from '../ai/ai-infra.service';
 import { CommissionsService } from '../staff/commissions.service';
 import type { PdfRendererService } from '../common/pdf/pdf-renderer.service';
 import type { S3Service } from '../common/storage/s3.service';
 import type { SendGateService } from '../messaging/send-gate.service';
 import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { SYSTEM_ROLE_CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { Role } from '../../generated/prisma';
 
 // puppeteer (pulled in transitively via PdfRendererService) is ESM-only and breaks ts-jest's
@@ -40,8 +42,14 @@ describe('ReportsService (INT-012)', () => {
   let staffBusinessUserId: string;
   const month = '2025-06';
 
-  const pdfRenderer = { renderPdf: jest.fn().mockResolvedValue(Buffer.from('pdf-bytes')) };
-  const s3 = { uploadAndSign: jest.fn().mockResolvedValue('https://signed.example/report') };
+  const pdfRenderer = {
+    renderPdf: jest
+      .fn<Promise<Buffer>, [string]>()
+      .mockResolvedValue(Buffer.from('pdf-bytes')),
+  };
+  const s3 = {
+    uploadAndSign: jest.fn().mockResolvedValue('https://signed.example/report'),
+  };
   const sendGate = { send: jest.fn().mockResolvedValue({ id: 'msg-1' }) };
 
   beforeAll(async () => {
@@ -49,13 +57,20 @@ describe('ReportsService (INT-012)', () => {
     await prisma.$connect();
 
     const cls = new FakeClsService();
-    const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
     service = new ReportsService(
       tenantPrisma,
       new LocaleService(),
       s3 as unknown as S3Service,
       pdfRenderer as unknown as PdfRendererService,
-      new ProfitService(tenantPrisma, cls as unknown as ClsService),
+      new ProfitService(
+        tenantPrisma,
+        cls as unknown as ClsService,
+        { complete: jest.fn() } as unknown as AiInfraService,
+      ),
       new CommissionsService(tenantPrisma),
       sendGate as unknown as SendGateService,
     );
@@ -67,7 +82,12 @@ describe('ReportsService (INT-012)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
     const ownerUser = await prisma.user.create({
-      data: { name: 'Report Owner', email: `report-owner-${Date.now()}@example.com`, phone: `+1555${Date.now()}`, passwordHash: 'x' },
+      data: {
+        name: 'Report Owner',
+        email: `report-owner-${Date.now()}@example.com`,
+        phone: `+1555${Date.now()}`,
+        passwordHash: 'x',
+      },
     });
     ownerUserId = ownerUser.id;
     const ownerLink = await prisma.businessUser.create({
@@ -76,16 +96,30 @@ describe('ReportsService (INT-012)', () => {
     ownerBusinessUserId = ownerLink.id;
 
     const staffUser = await prisma.user.create({
-      data: { name: 'Report Staff', email: `report-staff-${Date.now()}@example.com`, phone: `+1556${Date.now()}`, passwordHash: 'x' },
+      data: {
+        name: 'Report Staff',
+        email: `report-staff-${Date.now()}@example.com`,
+        phone: `+1556${Date.now()}`,
+        passwordHash: 'x',
+      },
     });
     staffUserId = staffUser.id;
     const staffLink = await prisma.businessUser.create({
-      data: { businessId, userId: staffUserId, role: Role.staff, commissionRule: { type: 'percent', value: 10 } },
+      data: {
+        businessId,
+        userId: staffUserId,
+        role: Role.staff,
+        commissionRule: { type: 'percent', value: 10 },
+      },
     });
     staffBusinessUserId = staffLink.id;
 
     const customer = await prisma.customer.create({
-      data: { businessId, name: 'Report Customer', phone: `+1557${Date.now()}` },
+      data: {
+        businessId,
+        name: 'Report Customer',
+        phone: `+1557${Date.now()}`,
+      },
     });
 
     const monthDate = new Date('2025-06-15T00:00:00Z');
@@ -128,12 +162,24 @@ describe('ReportsService (INT-012)', () => {
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.businessUser.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
-    await prisma.user.deleteMany({ where: { id: { in: [ownerUserId, staffUserId] } } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [ownerUserId, staffUserId] } },
+    });
     await prisma.$disconnect();
   });
 
-  const ownerAuth: AuthenticatedUser = { sub: '', businessId: '', role: Role.owner };
-  const staffAuth: AuthenticatedUser = { sub: '', businessId: '', role: Role.staff };
+  const ownerAuth: AuthenticatedUser = {
+    sub: '',
+    businessId: '',
+    role: Role.owner,
+    capabilities: SYSTEM_ROLE_CAPABILITIES[Role.owner],
+  };
+  const staffAuth: AuthenticatedUser = {
+    sub: '',
+    businessId: '',
+    role: Role.staff,
+    capabilities: SYSTEM_ROLE_CAPABILITIES[Role.staff],
+  };
 
   function asOwner(): AuthenticatedUser {
     return { ...ownerAuth, sub: ownerUserId, businessId };
@@ -150,39 +196,41 @@ describe('ReportsService (INT-012)', () => {
       expect.any(Buffer),
       'application/pdf',
     );
-    expect(pdfRenderer.renderPdf).toHaveBeenCalledWith(expect.stringContaining('150'));
+    expect(pdfRenderer.renderPdf).toHaveBeenCalledWith(
+      expect.stringContaining('150'),
+    );
   });
 
   it('generates the pnl report from real ProfitService data', async () => {
     await service.generate('pnl', month, asOwner());
-    const html = pdfRenderer.renderPdf.mock.calls[0][0] as string;
+    const html = pdfRenderer.renderPdf.mock.calls[0][0];
     expect(html).toContain('Profit');
   });
 
   it('sales report includes every order for an owner', async () => {
     await service.generate('sales', month, asOwner());
-    const html = pdfRenderer.renderPdf.mock.calls[0][0] as string;
+    const html = pdfRenderer.renderPdf.mock.calls[0][0];
     expect(html).toContain('#9001');
     expect(html).toContain('#9002');
   });
 
   it('sales report is auto-filtered to own orders for a staff caller', async () => {
     await service.generate('sales', month, asStaff());
-    const html = pdfRenderer.renderPdf.mock.calls[0][0] as string;
+    const html = pdfRenderer.renderPdf.mock.calls[0][0];
     expect(html).not.toContain('#9001');
     expect(html).toContain('#9002');
   });
 
   it('staff report is generated for an owner via real CommissionsService', async () => {
     await service.generate('staff', month, asOwner());
-    const html = pdfRenderer.renderPdf.mock.calls[0][0] as string;
+    const html = pdfRenderer.renderPdf.mock.calls[0][0];
     expect(html).toContain('Report Staff');
   });
 
   it('rejects a staff-role caller requesting the staff report', async () => {
-    await expect(service.generate('staff', month, asStaff())).rejects.toBeInstanceOf(
-      AppException,
-    );
+    await expect(
+      service.generate('staff', month, asStaff()),
+    ).rejects.toBeInstanceOf(AppException);
   });
 
   it('generates the reviews summary report', async () => {
@@ -196,7 +244,9 @@ describe('ReportsService (INT-012)', () => {
       expect.objectContaining({
         businessId,
         templateKey: 'report_ready',
-        variables: expect.objectContaining({ url: 'https://signed.example/report' }),
+        variables: expect.objectContaining({
+          url: 'https://signed.example/report',
+        }),
       }),
     );
   });

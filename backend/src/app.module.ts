@@ -46,6 +46,7 @@ import { ReportsModule } from './reports/reports.module';
 import { ExportsModule } from './exports/exports.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { ActivityModule } from './activity/activity.module';
+import { RolesModule } from './roles/roles.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { ActivityModule } from './activity/activity.module';
     ReportsModule,
     ExportsModule,
     IntegrationsModule,
+    RolesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

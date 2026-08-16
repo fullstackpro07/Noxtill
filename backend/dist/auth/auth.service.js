@@ -51,16 +51,19 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
 const common_2 = require("@nestjs/common");
 const slug_util_1 = require("../common/utils/slug.util");
+const capabilities_service_1 = require("../common/capabilities/capabilities.service");
 const prisma_1 = require("../../generated/prisma");
 const BCRYPT_ROUNDS = 10;
 let AuthService = class AuthService {
     prisma;
     jwt;
     config;
-    constructor(prisma, jwt, config) {
+    capabilities;
+    constructor(prisma, jwt, config, capabilities) {
         this.prisma = prisma;
         this.jwt = jwt;
         this.config = config;
+        this.capabilities = capabilities;
     }
     async signup(dto) {
         const identityFilters = [];
@@ -99,7 +102,7 @@ let AuthService = class AuthService {
             });
             return { user, business, businessUser };
         });
-        const tokens = await this.issueTokens(user.id, business.id, businessUser.role);
+        const tokens = await this.issueTokens(user.id, business.id, businessUser.role, businessUser.customRoleId);
         return { business, user: this.toPublicUser(user), ...tokens };
     }
     async login(dto) {
@@ -128,7 +131,7 @@ let AuthService = class AuthService {
         if (!businessUser) {
             throw new common_1.UnauthorizedException('No business associated with this account');
         }
-        const tokens = await this.issueTokens(user.id, businessUser.businessId, businessUser.role);
+        const tokens = await this.issueTokens(user.id, businessUser.businessId, businessUser.role, businessUser.customRoleId);
         return { user: this.toPublicUser(user), ...tokens };
     }
     async refresh(refreshToken) {
@@ -151,7 +154,13 @@ let AuthService = class AuthService {
         if (!matches) {
             throw new common_1.UnauthorizedException('Invalid refresh token');
         }
-        return this.issueTokens(payload.sub, payload.businessId, payload.role);
+        const businessUser = await this.prisma.businessUser.findFirst({
+            where: { userId: payload.sub, businessId: payload.businessId },
+        });
+        if (!businessUser) {
+            throw new common_1.UnauthorizedException('Invalid refresh token');
+        }
+        return this.issueTokens(payload.sub, payload.businessId, businessUser.role, businessUser.customRoleId);
     }
     async logout(userId) {
         await this.prisma.user.update({
@@ -173,8 +182,9 @@ let AuthService = class AuthService {
             },
         });
     }
-    async issueTokens(userId, businessId, role) {
-        const payload = { sub: userId, businessId, role };
+    async issueTokens(userId, businessId, role, customRoleId) {
+        const capabilities = await this.capabilities.resolve({ role, customRoleId });
+        const payload = { sub: userId, businessId, role, capabilities };
         const accessToken = await this.jwt.signAsync(payload, {
             secret: this.config.get('JWT_SECRET'),
             expiresIn: (this.config.get('JWT_ACCESS_TTL') ??
@@ -206,6 +216,7 @@ exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         jwt_1.JwtService,
-        config_1.ConfigService])
+        config_1.ConfigService,
+        capabilities_service_1.CapabilitiesService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

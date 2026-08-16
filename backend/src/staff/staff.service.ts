@@ -28,8 +28,8 @@ export interface InboxTask {
 const BCRYPT_ROUNDS = 10;
 
 /**
- * Staff CRUD (BE-056) — owner-only (enforced by @Roles(Role.owner) at the
- * controller). Inviting staff creates a real User account (a person may
+ * Staff CRUD (BE-056) — owner-only (enforced by @RequireCapability(CAPABILITIES.STAFF_MANAGE) at
+ * the controller). Inviting staff creates a real User account (a person may
  * already have one from another business, e.g. a contractor working two
  * shops) plus a BusinessUser row scoping their role/commission to this
  * business specifically.
@@ -60,7 +60,9 @@ export class StaffService {
     const [appointments, complaints, restockProducts] = await Promise.all([
       this.tenantPrisma.client.appointment.findMany({
         where: {
-          status: { in: [AppointmentStatus.booked, AppointmentStatus.confirmed] },
+          status: {
+            in: [AppointmentStatus.booked, AppointmentStatus.confirmed],
+          },
           startsAt: { lte: windowEnd },
         },
         include: { customer: true, service: true },
@@ -174,11 +176,24 @@ export class StaffService {
   async update(id: string, dto: UpdateStaffDto) {
     const existing = await this.loadNonOwner(id);
 
+    if (dto.customRoleId) {
+      // Tenant-scoped find — returns null (and thus 404s) for another business's custom role,
+      // same protection every other cross-tenant FK assignment in this codebase relies on.
+      const customRole = await this.tenantPrisma.client.customRole.findUnique(
+        { where: { id: dto.customRoleId } },
+      );
+      if (!customRole) {
+        throw new NotFoundException('Custom role not found');
+      }
+    }
+
     return this.tenantPrisma.client.businessUser.update({
       where: { id: existing.id },
       data: {
         role: dto.role,
         commissionRule: dto.commissionRule as Prisma.InputJsonValue | undefined,
+        customRoleId:
+          dto.customRoleId === undefined ? undefined : dto.customRoleId,
       },
       include: { user: true },
     });

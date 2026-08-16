@@ -13,8 +13,8 @@ export declare class KeywordsService {
     }[]>;
     create(businessId: string, dto: CreateTrackedKeywordDto): Promise<{
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         keyword: string;
     }>;
     remove(id: string): Promise<{

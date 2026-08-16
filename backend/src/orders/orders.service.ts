@@ -6,6 +6,9 @@ import { CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ReferralsService } from '../marketing/referrals.service';
+import { CouponsService } from '../marketing/coupons.service';
+import { VouchersService } from '../marketing/vouchers.service';
+import { LoyaltyService } from '../customers/loyalty.service';
 import { ActivityService } from '../activity/activity.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { generateReviewToken } from '../reviews/review-token.util';
@@ -48,6 +51,9 @@ export class OrdersService {
     private readonly sendGate: SendGateService,
     private readonly reviewRequests: ReviewRequestsService,
     private readonly referrals: ReferralsService,
+    private readonly coupons: CouponsService,
+    private readonly vouchers: VouchersService,
+    private readonly loyalty: LoyaltyService,
     private readonly activity: ActivityService,
     private readonly cashRegister: CashRegisterService,
   ) {}
@@ -130,12 +136,53 @@ export class OrdersService {
           };
         });
 
-        const discount = dto.discount ?? 0;
+        // Coupons (UPD-BE-029): validated/applied against the real pre-discount subtotal, before
+        // computeOrderTotals, so the discount it produces feeds into tax/total math like any
+        // other discount. Never trusts a client-supplied discount amount.
+        const rawSubtotal = itemsData.reduce(
+          (sum, item) => sum + item.price * item.qty,
+          0,
+        );
+
+        let couponId: string | undefined;
+        let couponDiscountAmount = 0;
+        if (dto.couponCode) {
+          const couponResult = await this.coupons.validateAndApply(
+            businessId,
+            dto.couponCode,
+            rawSubtotal,
+            customerId,
+            tx,
+          );
+          couponId = couponResult.couponId;
+          couponDiscountAmount = couponResult.discountAmount;
+        }
+
+        const discount = Math.min(
+          rawSubtotal,
+          (dto.discount ?? 0) + couponDiscountAmount,
+        );
         const { subtotal, tax, total, cogs } = computeOrderTotals(
           itemsData,
           discount,
           Number(business.taxRate),
         );
+
+        // Vouchers (UPD-BE-030): a payment method, not a discount — offsets the amount collected
+        // via payment/creditEntry below, never `total` itself.
+        let voucherId: string | undefined;
+        let voucherAmountApplied = 0;
+        if (dto.voucherCode) {
+          const voucherResult = await this.vouchers.validateAndApply(
+            businessId,
+            dto.voucherCode,
+            dto.voucherAmount ?? total,
+            total,
+            tx,
+          );
+          voucherId = voucherResult.voucherId;
+          voucherAmountApplied = voucherResult.amountApplied;
+        }
 
         const [{ next: orderNo }] = await tx.$queryRaw<{ next: number }[]>`
         SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${businessId}
@@ -155,6 +202,10 @@ export class OrdersService {
             discount,
             total,
             cogs,
+            couponId,
+            couponDiscountAmount: couponId ? couponDiscountAmount : undefined,
+            voucherId,
+            voucherAmountApplied: voucherId ? voucherAmountApplied : undefined,
           },
         });
 
@@ -187,13 +238,18 @@ export class OrdersService {
           }
         }
 
+        // A voucher offsets what's actually owed (like partial cash tendered) — the credit/payment
+        // record reflects the remaining balance, not the order's full total.
+        const amountDue =
+          Math.round((total - voucherAmountApplied) * 100) / 100;
+
         if (dto.payment.method === 'credit') {
           await tx.creditEntry.create({
             data: {
               businessId,
               customerId: customerId!,
               kind: 'credit',
-              amount: total,
+              amount: amountDue,
               note: dto.payment.note ?? 'Sale on credit',
               orderId: order.id,
             },
@@ -203,7 +259,7 @@ export class OrdersService {
             data: {
               orderId: order.id,
               method: dto.payment.method,
-              amount: dto.payment.amount ?? total,
+              amount: dto.payment.amount ?? amountDue,
             },
           });
         }
@@ -220,6 +276,12 @@ export class OrdersService {
           await this.referrals.issueRewardIfEligible(
             businessId,
             customerId,
+            tx,
+          );
+          await this.loyalty.issueStampIfEligible(
+            businessId,
+            customerId,
+            order.id,
             tx,
           );
         }

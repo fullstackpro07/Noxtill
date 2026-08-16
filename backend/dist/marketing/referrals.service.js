@@ -19,16 +19,22 @@ let ReferralsService = class ReferralsService {
         this.tenantPrisma = tenantPrisma;
     }
     async issueRewardIfEligible(businessId, customerId, tx) {
-        const customer = await tx.customer.findUnique({ where: { id: customerId } });
+        const customer = await tx.customer.findUnique({
+            where: { id: customerId },
+        });
         if (!customer ||
             !customer.referredByCustomerId ||
             customer.referralRewardedAt ||
             customer.visitCount !== 1) {
             return;
         }
-        const business = await tx.business.findUniqueOrThrow({ where: { id: businessId } });
+        const business = await tx.business.findUniqueOrThrow({
+            where: { id: businessId },
+        });
         const settings = business.referralSettings;
-        if (settings?.enabled && settings.rewardType === 'credit' && settings.rewardValue) {
+        if (settings?.enabled &&
+            settings.rewardType === 'credit' &&
+            settings.rewardValue) {
             await tx.creditEntry.create({
                 data: {
                     businessId,
@@ -78,7 +84,11 @@ let ReferralsService = class ReferralsService {
     async stats() {
         const referred = await this.tenantPrisma.client.customer.findMany({
             where: { referredByCustomerId: { not: null } },
-            select: { referredByCustomerId: true, visitCount: true, referralRewardedAt: true },
+            select: {
+                referredByCustomerId: true,
+                visitCount: true,
+                referralRewardedAt: true,
+            },
         });
         const converted = referred.filter((r) => r.visitCount >= 1).length;
         const rewardsIssued = referred.filter((r) => r.referralRewardedAt != null).length;

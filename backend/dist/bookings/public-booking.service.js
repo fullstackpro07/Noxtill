@@ -15,6 +15,7 @@ const crypto_1 = require("crypto");
 const prisma_service_1 = require("../prisma/prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
 const send_gate_service_1 = require("../messaging/send-gate.service");
+const waitlist_service_1 = require("./waitlist.service");
 const working_hours_util_1 = require("./working-hours.util");
 const bookings_constants_1 = require("./bookings.constants");
 const booking_lock_util_1 = require("./booking-lock.util");
@@ -23,9 +24,11 @@ const RESCHEDULE_TOKEN_BYTES = 16;
 let PublicBookingService = class PublicBookingService {
     prisma;
     sendGate;
-    constructor(prisma, sendGate) {
+    waitlist;
+    constructor(prisma, sendGate, waitlist) {
         this.prisma = prisma;
         this.sendGate = sendGate;
+        this.waitlist = waitlist;
     }
     async resolveBusiness(slug) {
         const business = await this.prisma.business.findUnique({ where: { slug } });
@@ -168,10 +171,17 @@ let PublicBookingService = class PublicBookingService {
     }
     async cancel(token) {
         const appointment = await this.loadByToken(token);
-        return this.prisma.appointment.update({
+        const updated = await this.prisma.appointment.update({
             where: { id: appointment.id },
             data: { status: prisma_1.AppointmentStatus.cancelled },
         });
+        await this.waitlist.tryAutoOffer(updated.businessId, {
+            serviceId: updated.serviceId,
+            staffUserId: updated.staffUserId,
+            startsAt: updated.startsAt,
+            endsAt: updated.endsAt,
+        });
+        return updated;
     }
     async loadByToken(token) {
         const appointment = await this.prisma.appointment.findUnique({
@@ -187,6 +197,7 @@ exports.PublicBookingService = PublicBookingService;
 exports.PublicBookingService = PublicBookingService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        send_gate_service_1.SendGateService])
+        send_gate_service_1.SendGateService,
+        waitlist_service_1.WaitlistService])
 ], PublicBookingService);
 //# sourceMappingURL=public-booking.service.js.map

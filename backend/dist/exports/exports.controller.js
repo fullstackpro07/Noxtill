@@ -15,9 +15,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ExportsController = void 0;
 const common_1 = require("@nestjs/common");
 const exports_service_1 = require("./exports.service");
-const roles_decorator_1 = require("../common/decorators/roles.decorator");
+const require_capability_decorator_1 = require("../common/decorators/require-capability.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
-const prisma_1 = require("../../generated/prisma");
+const capabilities_constants_1 = require("../common/capabilities/capabilities.constants");
 const exports_constants_1 = require("./exports.constants");
 let ExportsController = class ExportsController {
     exports;
@@ -51,7 +51,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], ExportsController.prototype, "accountZip", null);
 exports.ExportsController = ExportsController = __decorate([
-    (0, roles_decorator_1.Roles)(prisma_1.Role.owner),
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.EXPORTS_GENERATE),
     (0, common_1.Controller)('exports'),
     __metadata("design:paramtypes", [exports_service_1.ExportsService])
 ], ExportsController);

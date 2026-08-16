@@ -8,11 +8,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var ProfitService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProfitService = void 0;
 const common_1 = require("@nestjs/common");
 const nestjs_cls_1 = require("nestjs-cls");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
+const ai_infra_service_1 = require("../ai/ai-infra.service");
 const tenant_constants_1 = require("../common/tenancy/tenant.constants");
 const WEEKDAY_NAMES = [
     'Sunday',
@@ -25,15 +27,21 @@ const WEEKDAY_NAMES = [
 ];
 const LOW_MARGIN_THRESHOLD = 10;
 const TOP_PRODUCTS_COUNT = 3;
+const CO_PURCHASE_MIN_COUNT = 2;
+const BUNDLE_SUGGESTION_LIMIT = 5;
+const BUNDLE_DISCOUNT_RATE = 0.1;
 function round2(value) {
     return Math.round(value * 100) / 100;
 }
-let ProfitService = class ProfitService {
+let ProfitService = ProfitService_1 = class ProfitService {
     tenantPrisma;
     cls;
-    constructor(tenantPrisma, cls) {
+    aiInfra;
+    logger = new common_1.Logger(ProfitService_1.name);
+    constructor(tenantPrisma, cls, aiInfra) {
         this.tenantPrisma = tenantPrisma;
         this.cls = cls;
+        this.aiInfra = aiInfra;
     }
     async byProduct(windowDays = 30) {
         const businessId = this.cls.get(tenant_constants_1.CLS_KEY_BUSINESS_ID);
@@ -161,11 +169,98 @@ let ProfitService = class ProfitService {
             netProfit,
         };
     }
+    async bundleSuggestions() {
+        const businessId = this.cls.get(tenant_constants_1.CLS_KEY_BUSINESS_ID);
+        const [pairs, existingBundles] = await Promise.all([
+            this.tenantPrisma.client.$queryRaw `
+        SELECT a.product_id AS product_a, b.product_id AS product_b, pa.name AS name_a, pb.name AS name_b,
+               COUNT(DISTINCT a.order_id) AS together_count
+        FROM order_items a
+        JOIN order_items b ON a.order_id = b.order_id AND a.product_id < b.product_id
+        JOIN orders o ON o.id = a.order_id
+        JOIN products pa ON pa.id = a.product_id
+        JOIN products pb ON pb.id = b.product_id
+        WHERE o.business_id = ${businessId} AND o.status = 'completed' AND o.is_quotation = false
+        GROUP BY a.product_id, b.product_id, pa.name, pb.name
+        HAVING COUNT(DISTINCT a.order_id) >= ${CO_PURCHASE_MIN_COUNT}
+        ORDER BY together_count DESC
+        LIMIT ${BUNDLE_SUGGESTION_LIMIT * 3}
+      `,
+            this.tenantPrisma.client.bundle.findMany({
+                include: { items: true },
+            }),
+        ]);
+        const alreadyBundled = new Set(existingBundles.map((b) => [...b.items.map((i) => i.productId)].sort().join('|')));
+        const productIds = [
+            ...new Set(pairs.flatMap((p) => [p.product_a, p.product_b])),
+        ];
+        const products = await this.tenantPrisma.client.product.findMany({
+            where: { id: { in: productIds } },
+        });
+        const priceById = new Map(products.map((p) => [p.id, Number(p.sellingPrice)]));
+        const candidates = pairs
+            .filter((pair) => !alreadyBundled.has([pair.product_a, pair.product_b].sort().join('|')))
+            .slice(0, BUNDLE_SUGGESTION_LIMIT)
+            .map((pair) => {
+            const priceA = priceById.get(pair.product_a) ?? 0;
+            const priceB = priceById.get(pair.product_b) ?? 0;
+            const combinedPrice = round2(priceA + priceB);
+            const suggestedPrice = round2(combinedPrice * (1 - BUNDLE_DISCOUNT_RATE));
+            return {
+                productAId: pair.product_a,
+                productBId: pair.product_b,
+                nameA: pair.name_a,
+                nameB: pair.name_b,
+                togetherCount: Number(pair.together_count),
+                combinedPrice,
+                suggestedPrice,
+                pitch: `${pair.name_a} + ${pair.name_b} — bought together ${Number(pair.together_count)} times.`,
+            };
+        });
+        if (candidates.length === 0)
+            return [];
+        try {
+            const pitches = await this.phrasePitches(businessId, candidates);
+            return candidates.map((c, i) => ({ ...c, pitch: pitches[i] || c.pitch }));
+        }
+        catch (error) {
+            this.logger.warn(`Bundle-suggestion phrasing skipped for business ${businessId}: ${error.message}`);
+            return candidates;
+        }
+    }
+    async phrasePitches(businessId, candidates) {
+        const factLines = candidates
+            .map((c, i) => `${i + 1}. "${c.nameA}" + "${c.nameB}", bought together ${c.togetherCount} times, suggested bundle price ${c.suggestedPrice}`)
+            .join('\n');
+        const prompt = [
+            'You write short, upbeat one-sentence retail bundle pitches from real numbers a system has already computed.',
+            'Here are the numbered candidates:',
+            factLines,
+            'For each numbered candidate, write exactly one short sentence (max ~20 words) suggesting the bundle,',
+            'mentioning the suggested price already given.',
+            'Use ONLY the numbers already given — never introduce a new number or price of your own.',
+            'Reply with ONLY a JSON array of strings, one per candidate, in the same order. No other text.',
+        ].join('\n');
+        const raw = await this.aiInfra.complete(businessId, prompt);
+        const jsonStart = raw.indexOf('[');
+        const jsonEnd = raw.lastIndexOf(']');
+        if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
+            throw new Error('AI response had no JSON array');
+        }
+        const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+        if (!Array.isArray(parsed) ||
+            parsed.length !== candidates.length ||
+            !parsed.every((item) => typeof item === 'string' && item.trim().length > 0)) {
+            throw new Error('AI response array shape mismatch');
+        }
+        return parsed;
+    }
 };
 exports.ProfitService = ProfitService;
-exports.ProfitService = ProfitService = __decorate([
+exports.ProfitService = ProfitService = ProfitService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [tenant_prisma_service_1.TenantPrismaService,
-        nestjs_cls_1.ClsService])
+        nestjs_cls_1.ClsService,
+        ai_infra_service_1.AiInfraService])
 ], ProfitService);
 //# sourceMappingURL=profit.service.js.map

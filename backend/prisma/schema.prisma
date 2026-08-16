@@ -51,6 +51,22 @@ enum PaymentMethod {
 enum CreditEntryKind {
   credit
   payment
+  /// Write-off flow (UPD-BE-023) — reduces balance like `payment` (see `v_credit_balances`'s
+  /// `CASE WHEN kind = 'credit' THEN +amount ELSE -amount END`), but is a distinct, filterable
+  /// kind so a written-off debt is never confused with a real cash/card/online payment received.
+  write_off
+}
+
+enum InstallmentPlanStatus {
+  active
+  completed
+  cancelled
+}
+
+enum InstallmentStatus {
+  pending
+  paid
+  cancelled
 }
 
 enum ActivityEventType {
@@ -60,6 +76,39 @@ enum ActivityEventType {
   payment
   complaint
   stock
+  low_stock
+  customer_lapsed
+  credit_overdue
+  birthday
+}
+
+enum CouponType {
+  percentage
+  fixed
+}
+
+enum VoucherStatus {
+  active
+  redeemed
+  cancelled
+}
+
+/// Automations engine (UPD-BE-028) trigger keys — each maps from a real `ActivityEvent` write
+/// (see `ActivityService.record()` -> `WorkflowTriggerService.dispatch()`), never a placeholder.
+enum WorkflowTriggerKey {
+  sale
+  booking_completed
+  lapsed_customer
+  low_stock
+  review
+  credit_overdue
+  birthday
+}
+
+enum WorkflowRunStatus {
+  success
+  failed
+  skipped
 }
 
 enum CashShiftStatus {
@@ -133,6 +182,9 @@ enum ReturnRefundMethod {
 }
 
 enum AppointmentStatus {
+  /// Booking Requests (UPD-BE-016) — awaiting staff approve/decline; never set by the public
+  /// booking flow or walk-ins, which still go straight to `booked`/`confirmed` as before.
+  requested
   booked
   confirmed
   completed
@@ -144,6 +196,32 @@ enum AppointmentSource {
   link
   qr
   walk_in
+  /// Created by accepting a Waiting List offer (UPD-BE-017).
+  waitlist
+}
+
+enum WaitlistStatus {
+  waiting
+  offered
+  booked
+  expired
+  cancelled
+}
+
+enum QueueTokenStatus {
+  waiting
+  called
+  serving
+  served
+  skipped
+  cancelled
+}
+
+enum DepositStatus {
+  pending
+  captured
+  refunded
+  forfeited
 }
 
 enum MessageChannel {
@@ -174,6 +252,13 @@ enum FeedbackStatus {
   open
   assigned
   resolved
+}
+
+enum VideoTestimonialStatus {
+  requested
+  submitted
+  approved
+  rejected
 }
 
 enum StockMovementKind {
@@ -219,6 +304,23 @@ enum EmailEventType {
   open
   click
   unsub
+}
+
+enum LoyaltyProgramType {
+  punch_card
+  tier
+}
+
+enum MembershipStatus {
+  pending
+  active
+  cancelled
+  expired
+}
+
+enum BillingInterval {
+  monthly
+  yearly
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -327,6 +429,9 @@ model Business {
   aiMonthlyCostCapUsd Decimal @default(5.00) @map("ai_monthly_cost_cap_usd") @db.Decimal(8, 2)
   aiRateLimitPerMinute Int    @default(10) @map("ai_rate_limit_per_minute")
 
+  /// Timesheets (UPD-BE-032): weekly hours beyond this count as overtime for that week.
+  overtimeThresholdHoursPerWeek Int @default(40) @map("overtime_threshold_hours_per_week")
+
   parentId String?    @map("parent_id")
   parent   Business?  @relation("BusinessBranches", fields: [parentId], references: [id])
   branches Business[] @relation("BusinessBranches")
@@ -374,6 +479,31 @@ model Business {
   voiceSaleDrafts  VoiceSaleDraft[]
   tables           Table[]
   returns          Return[]
+  variantSets      VariantSet[]
+  bundles          Bundle[]
+  suppliers        Supplier[]
+  priceHistory     PriceHistory[]
+  waitlistEntries  WaitlistEntry[]
+  queueTokens      QueueToken[]
+  deposits         Deposit[]
+  installmentPlans InstallmentPlan[]
+  installments     Installment[]
+  creditShareLinks CreditShareLink[]
+  loyaltyPrograms  LoyaltyProgram[]
+  loyaltyMembers   LoyaltyMember[]
+  membershipPlans  MembershipPlan[]
+  memberships      Membership[]
+  memoryNotes      MemoryNote[]
+  videoTestimonials VideoTestimonial[]
+  coupons          Coupon[]
+  vouchers         Voucher[]
+  workflows        Workflow[]
+  workflowRuns     WorkflowRun[]
+  staffShifts      StaffShift[]
+  timeOff          TimeOff[]
+  timesheetApprovals TimesheetApproval[]
+  staffAdvances    StaffAdvance[]
+  customRoles      CustomRole[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -409,9 +539,20 @@ model BusinessUser {
   role           Role     @default(staff)
   commissionRule Json     @default("{}") @map("commission_rule")
 
-  attendance   Attendance[]
-  appointments Appointment[] @relation("StaffAppointments")
-  orders       Order[]
+  attendance     Attendance[]
+  appointments   Appointment[] @relation("StaffAppointments")
+  orders         Order[]
+  waitlistEntries WaitlistEntry[]
+  staffShifts    StaffShift[]
+  timeOff        TimeOff[]
+  timesheetApprovals TimesheetApproval[]
+  staffAdvances  StaffAdvance[]
+
+  /// Roles & Permissions matrix (UPD-BE-035). Null (the default for every existing/new
+  /// BusinessUser) means "use `role`'s fixed system capability set" — set only for a user
+  /// deliberately assigned a business-defined custom role instead.
+  customRoleId String?     @map("custom_role_id")
+  customRole   CustomRole? @relation(fields: [customRoleId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -478,6 +619,14 @@ model Customer {
   reviewRequests  ReviewRequest[]
   privateFeedback PrivateFeedback[]
   returns         Return[]
+  waitlistEntries WaitlistEntry[]
+  queueTokens     QueueToken[]
+  installmentPlans InstallmentPlan[]
+  creditShareLinks CreditShareLink[]
+  loyaltyMembers  LoyaltyMember[]
+  memberships     Membership[]
+  videoTestimonials VideoTestimonial[]
+  vouchers        Voucher[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -485,6 +634,140 @@ model Customer {
   @@unique([businessId, phone])
   @@index([businessId, name])
   @@map("customers")
+}
+
+/// Loyalty punch cards/tiers (UPD-BE-024). One business can run multiple programs (e.g. a punch
+/// card AND a spend-tier program at once); a customer can be a member of more than one.
+/// `stampsRequired`/`rewardDescription` only matter for `type: punch_card`; `tiers` (an ordered
+/// `[{name, minSpend}]` array) only matters for `type: tier` — tier is computed at read time
+/// from the customer's real `Customer.lifetimeSpend`, never stored/duplicated.
+model LoyaltyProgram {
+  id                String             @id @default(uuid())
+  businessId        String             @map("business_id")
+  business          Business           @relation(fields: [businessId], references: [id])
+  name              String
+  type              LoyaltyProgramType @default(punch_card)
+  stampsRequired    Int                @default(10) @map("stamps_required")
+  rewardDescription String?            @map("reward_description")
+  /// Tier thresholds for `type: tier`, e.g. `[{"name":"Silver","minSpend":100},{"name":"Gold","minSpend":500}]`.
+  tiers             Json               @default("[]")
+  active            Boolean            @default(true)
+
+  members LoyaltyMember[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("loyalty_programs")
+}
+
+model LoyaltyMember {
+  id            String         @id @default(uuid())
+  businessId    String         @map("business_id")
+  business      Business       @relation(fields: [businessId], references: [id])
+  programId     String         @map("program_id")
+  program       LoyaltyProgram @relation(fields: [programId], references: [id])
+  customerId    String         @map("customer_id")
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  /// Denormalized cache of `stamps.count(redeemed: false)` — kept in sync at issue/redeem time.
+  stampCount    Int            @default(0) @map("stamp_count")
+  redeemedCount Int            @default(0) @map("redeemed_count")
+
+  stamps Stamp[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([programId, customerId])
+  @@index([businessId, customerId])
+  @@map("loyalty_members")
+}
+
+/// One row per stamp actually issued — an audit trail of which sale (if any) earned it, not just a counter.
+model Stamp {
+  id       String        @id @default(uuid())
+  memberId String        @map("member_id")
+  member   LoyaltyMember @relation(fields: [memberId], references: [id])
+  orderId  String?       @map("order_id")
+  order    Order?        @relation(fields: [orderId], references: [id])
+  redeemed Boolean       @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([memberId])
+  @@map("stamps")
+}
+
+/// Membership plans (UPD-BE-025) — a customer-level recurring subscription, deliberately kept
+/// separate from the business's OWN Stripe billing plan (`Business.stripeSubscriptionId`/
+/// `stripe-webhook.controller.ts`). Online checkout uses a distinct `membershipId`-keyed Stripe
+/// metadata field (see `PaymentGatewayAdapter.createSubscriptionCheckout`) so it can never collide
+/// with — or corrupt — the business-plan webhook path, which is keyed on `businessId`.
+model MembershipPlan {
+  id            String          @id @default(uuid())
+  businessId    String          @map("business_id")
+  business      Business        @relation(fields: [businessId], references: [id])
+  name          String
+  price         Decimal         @db.Decimal(12, 2)
+  interval      BillingInterval @default(monthly)
+  benefits      String?
+  /// Set to enable real online (Stripe) checkout for this plan; without it, only `method: cash` enrollment works.
+  stripePriceId String?         @map("stripe_price_id")
+  active        Boolean         @default(true)
+
+  memberships Membership[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("membership_plans")
+}
+
+/// Status sync for online (Stripe) memberships is manual today (`POST /memberships/:id/activate`) —
+/// a disclosed gap, not a full webhook pipeline, to avoid touching the business-plan webhook path.
+/// Cash memberships go straight to `active` since no gateway is involved.
+model Membership {
+  id                   String           @id @default(uuid())
+  businessId           String           @map("business_id")
+  business             Business         @relation(fields: [businessId], references: [id])
+  planId               String           @map("plan_id")
+  plan                 MembershipPlan   @relation(fields: [planId], references: [id])
+  customerId           String           @map("customer_id")
+  customer             Customer         @relation(fields: [customerId], references: [id])
+  status               MembershipStatus @default(pending)
+  method               PaymentMethod    @default(cash)
+  stripeSubscriptionId String?          @unique @map("stripe_subscription_id")
+  currentPeriodEnd     DateTime?        @map("current_period_end")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, customerId])
+  @@map("memberships")
+}
+
+/// Business Memory notes (UPD-BE-026) — polymorphic, multi-row, timestamped notes, distinct from
+/// the existing single-scalar `Customer.notes`/`Supplier.notes` fields. `subjectType`/`subjectId`
+/// follow the same non-FK opaque-string convention as `ActivityEvent.entityType`/`entityId` and
+/// `AuditLog.entity`/`entityId` — `subjectType` is one of `customer|supplier|product|table`,
+/// validated against the real row at write time in the service layer, not by a DB constraint.
+model MemoryNote {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  subjectType  String   @map("subject_type")
+  subjectId    String   @map("subject_id")
+  body         String
+  pinned       Boolean  @default(false)
+  authorUserId String?  @map("author_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, subjectType, subjectId])
+  @@map("memory_notes")
 }
 
 model Product {
@@ -507,6 +790,12 @@ model Product {
   stockMovements   StockMovement[]
   appointments     Appointment[]
   productFeedItems ProductFeedItem[]
+  /// Set only when this product is the sellable, catalog-facing "face" of a bundle (UPD-BE-013).
+  bundle           Bundle?
+  bundleItems      BundleItem[]
+  priceHistory     PriceHistory[]
+  waitlistEntries  WaitlistEntry[]
+  queueTokens      QueueToken[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -537,10 +826,24 @@ model Order {
   staffUserId String?       @map("staff_user_id")
   staffUser   BusinessUser? @relation(fields: [staffUserId], references: [id])
 
+  /// Coupons (UPD-BE-029): set when a coupon code was applied at sale time. The discount amount
+  /// it contributed is broken out separately so `discount`/`total` stay the single source of
+  /// truth for accounting while this stays attributable/auditable.
+  couponId             String?  @map("coupon_id")
+  coupon               Coupon?  @relation(fields: [couponId], references: [id])
+  couponDiscountAmount Decimal? @map("coupon_discount_amount") @db.Decimal(10, 2)
+
+  /// Vouchers (UPD-BE-030): a voucher is a payment method, not a discount — it reduces the amount
+  /// collected via `payment`/`creditEntry`, never `total` itself.
+  voucherId            String?  @map("voucher_id")
+  voucher              Voucher? @relation(fields: [voucherId], references: [id])
+  voucherAmountApplied Decimal? @map("voucher_amount_applied") @db.Decimal(10, 2)
+
   items         OrderItem[]
   payments      Payment[]
   creditEntries CreditEntry[]
   returns       Return[]
+  stamps        Stamp[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -735,10 +1038,73 @@ model CreditEntry {
   orderId    String?         @map("order_id")
   order      Order?          @relation(fields: [orderId], references: [id])
 
+  /// Set when this entry is the payment record for a specific Installment (UPD-BE-021).
+  installment Installment?
+
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, customerId])
   @@map("credit_entries")
+}
+
+/// Instalment plans (UPD-BE-021) — schedules payment of an existing credit balance into fixed
+/// amounts/dates. Deliberately does NOT itself create new debt (no `CreditEntry` is written when a
+/// plan is created) — it only schedules how an already-owed balance gets paid down; each
+/// installment becomes a real `CreditEntry` (kind `payment`) only once actually paid.
+model InstallmentPlan {
+  id          String                @id @default(uuid())
+  businessId  String                @map("business_id")
+  business    Business              @relation(fields: [businessId], references: [id])
+  customerId  String                @map("customer_id")
+  customer    Customer              @relation(fields: [customerId], references: [id])
+  totalAmount Decimal               @map("total_amount") @db.Decimal(12, 2)
+  status      InstallmentPlanStatus @default(active)
+  note        String?
+
+  installments Installment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, customerId])
+  @@map("installment_plans")
+}
+
+model Installment {
+  id            String            @id @default(uuid())
+  businessId    String            @map("business_id")
+  business      Business          @relation(fields: [businessId], references: [id])
+  planId        String            @map("plan_id")
+  plan          InstallmentPlan   @relation(fields: [planId], references: [id])
+  seq           Int
+  amount        Decimal           @db.Decimal(12, 2)
+  dueDate       DateTime          @map("due_date") @db.Date
+  status        InstallmentStatus @default(pending)
+  paidAt        DateTime?         @map("paid_at")
+  creditEntryId String?           @unique @map("credit_entry_id")
+  creditEntry   CreditEntry?      @relation(fields: [creditEntryId], references: [id])
+
+  @@index([businessId, dueDate])
+  @@index([planId])
+  @@map("installments")
+}
+
+/// Transparent ledger links (UPD-BE-022) — a long-lived (no auto-expiry, unlike the 30-day
+/// review-request token), owner-revocable link a customer can use to check their own balance
+/// without logging in, reusing the same opaque-random-token pattern as `review-token.util.ts`.
+model CreditShareLink {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  customerId String   @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id])
+  token      String   @unique
+  revoked    Boolean  @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, customerId])
+  @@map("credit_share_links")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -762,12 +1128,86 @@ model Appointment {
   source          AppointmentSource @default(link)
   rescheduleToken String?           @unique @map("reschedule_token")
 
+  deposits Deposit[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId, startsAt])
   @@index([staffUserId, startsAt])
   @@map("appointments")
+}
+
+/// Waiting List (UPD-BE-017). A "matching" freed slot means: same service (and same staff, if the
+/// entry named one) as this waiting entry, checked automatically whenever an appointment is
+/// cancelled — see `WaitlistService.tryAutoOffer`, called from both the internal and public
+/// cancellation paths.
+model WaitlistEntry {
+  id            String         @id @default(uuid())
+  businessId    String         @map("business_id")
+  business      Business       @relation(fields: [businessId], references: [id])
+  customerId    String         @map("customer_id")
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  serviceId     String         @map("service_id")
+  service       Product        @relation(fields: [serviceId], references: [id])
+  staffUserId   String?        @map("staff_user_id")
+  staffUser     BusinessUser?  @relation(fields: [staffUserId], references: [id])
+  preferredFrom DateTime?      @map("preferred_from")
+  preferredTo   DateTime?      @map("preferred_to")
+  status        WaitlistStatus @default(waiting)
+
+  offeredStartsAt DateTime? @map("offered_starts_at")
+  offeredEndsAt   DateTime? @map("offered_ends_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, serviceId, status])
+  @@map("waitlist_entries")
+}
+
+/// Queue / Tokens (UPD-BE-018) — walk-in numbering, deliberately NOT tied to `Appointment`; a
+/// token is a simple "your turn" ticket, not a scheduled booking.
+model QueueToken {
+  id           String           @id @default(uuid())
+  businessId   String           @map("business_id")
+  business     Business         @relation(fields: [businessId], references: [id])
+  number       Int
+  customerId   String?          @map("customer_id")
+  customer     Customer?        @relation(fields: [customerId], references: [id])
+  customerName String?          @map("customer_name")
+  serviceId    String?          @map("service_id")
+  service      Product?         @relation(fields: [serviceId], references: [id])
+  status       QueueTokenStatus @default(waiting)
+  calledAt     DateTime?        @map("called_at")
+  servedAt     DateTime?        @map("served_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("queue_tokens")
+}
+
+/// Deposits (UPD-BE-019). Cash deposits are captured/refunded for real, immediately. Card/online
+/// capture is a disclosed, honest gap: `PaymentGatewayAdapter.createCheckoutSession` is hardcoded
+/// to Stripe *subscription*-mode checkout for billing plans and has no one-off-charge primitive to
+/// reuse — see `DepositsService.capture`.
+model Deposit {
+  id            String        @id @default(uuid())
+  businessId    String        @map("business_id")
+  business      Business      @relation(fields: [businessId], references: [id])
+  appointmentId String        @map("appointment_id")
+  appointment   Appointment   @relation(fields: [appointmentId], references: [id])
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod
+  status        DepositStatus @default(pending)
+  providerRef   String?       @map("provider_ref")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, appointmentId])
+  @@map("deposits")
 }
 
 model Message {
@@ -886,6 +1326,129 @@ model ExternalReview {
   @@map("external_reviews")
 }
 
+/// Video Testimonials (UPD-BE-027). `requested` -> `submitted` (customer uploads via the public,
+/// token-based flow — same `loadValid(token)` pattern as `public-review.service.ts`) -> `approved`
+/// or `rejected` (owner/manager only, mirroring `Return`'s pending/approved/rejected shape).
+/// `videoKey` is the raw S3 object key; a signed download URL is generated fresh on every read
+/// (never cached) since `S3Service.getSignedDownloadUrl` URLs expire after 24h.
+model VideoTestimonial {
+  id               String                 @id @default(uuid())
+  businessId       String                 @map("business_id")
+  business         Business               @relation(fields: [businessId], references: [id])
+  customerId       String?                @map("customer_id")
+  customer         Customer?              @relation(fields: [customerId], references: [id])
+  token            String                 @unique
+  status           VideoTestimonialStatus @default(requested)
+  videoKey         String?                @map("video_key")
+  caption          String?
+  approvedByUserId String?                @map("approved_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("video_testimonials")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UPD-BE-M9 — Marketing depth: Automations, Coupons, Vouchers
+// ─────────────────────────────────────────────────────────────────────────
+
+model Coupon {
+  id         String     @id @default(uuid())
+  businessId String     @map("business_id")
+  business   Business   @relation(fields: [businessId], references: [id])
+  code       String
+  type       CouponType
+  value      Decimal    @db.Decimal(10, 2)
+
+  minOrderAmount        Decimal? @map("min_order_amount") @db.Decimal(10, 2)
+  /// Caps the discount a percentage-type coupon can produce; ignored for fixed-type coupons.
+  maxDiscountAmount     Decimal? @map("max_discount_amount") @db.Decimal(10, 2)
+  usageLimit            Int?     @map("usage_limit")
+  usageLimitPerCustomer Int?     @map("usage_limit_per_customer")
+  usedCount             Int      @default(0) @map("used_count")
+
+  startsAt  DateTime? @map("starts_at")
+  expiresAt DateTime? @map("expires_at")
+  active    Boolean   @default(true)
+
+  orders Order[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code])
+  @@index([businessId, active])
+  @@map("coupons")
+}
+
+/// Vouchers (UPD-BE-030) — a store-credit-style balance issued once and redeemable across
+/// multiple sales until it hits zero, unlike a Coupon which is a single discount rule.
+model Voucher {
+  id           String        @id @default(uuid())
+  businessId   String        @map("business_id")
+  business     Business      @relation(fields: [businessId], references: [id])
+  code         String
+  customerId   String?       @map("customer_id")
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  initialValue Decimal       @map("initial_value") @db.Decimal(10, 2)
+  balance      Decimal       @db.Decimal(10, 2)
+  status       VoucherStatus @default(active)
+  expiresAt    DateTime?     @map("expires_at")
+
+  orders Order[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code])
+  @@index([businessId, status])
+  @@map("vouchers")
+}
+
+/// Automations engine (UPD-BE-028) — a workflow is one trigger + conditions + actions rule.
+/// `conditions`/`actions` are intentionally untyped JSON (small, evolving shapes) rather than
+/// their own relational tables, mirroring `Business.referralSettings`'s precedent for this kind
+/// of business-configurable-rule data.
+model Workflow {
+  id         String             @id @default(uuid())
+  businessId String             @map("business_id")
+  business   Business           @relation(fields: [businessId], references: [id])
+  name       String
+  triggerKey WorkflowTriggerKey @map("trigger_key")
+  /// `{ field: string; operator: 'eq'|'neq'|'gt'|'gte'|'lt'|'lte'|'contains'; value: string|number }[]`
+  conditions Json               @default("[]")
+  /// `{ type: 'send_customer_message'|'notify_owner'; messageBody: string }[]`
+  actions    Json               @default("[]")
+  active     Boolean            @default(true)
+
+  runs WorkflowRun[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, triggerKey, active])
+  @@map("workflows")
+}
+
+model WorkflowRun {
+  id         String            @id @default(uuid())
+  workflowId String            @map("workflow_id")
+  workflow   Workflow          @relation(fields: [workflowId], references: [id])
+  businessId String            @map("business_id")
+  business   Business          @relation(fields: [businessId], references: [id])
+  status     WorkflowRunStatus
+  context    Json
+  result     Json?
+  error      String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, workflowId, createdAt])
+  @@map("workflow_runs")
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // BE-004 — Inventory & finance
 // ─────────────────────────────────────────────────────────────────────────
@@ -899,13 +1462,121 @@ model StockMovement {
   kind       StockMovementKind
   qty        Int
   unitCost   Decimal?          @map("unit_cost") @db.Decimal(12, 2)
+  /// Free-text supplier name — kept for movements recorded before UPD-BE-014 formalized suppliers,
+  /// and as a fallback for anyone not yet using the Supplier directory.
   supplier   String?
+  /// Formal supplier reference (UPD-BE-014), set by supplier-driven purchases (quick-PO). Optional
+  /// and independent of `supplier` above — a movement may have either, both, or neither.
+  supplierId String?           @map("supplier_id")
+  supplierRef Supplier?        @relation(fields: [supplierId], references: [id])
   reason     String?
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, productId])
   @@map("stock_movements")
+}
+
+/// Reusable variant templates (UPD-BE-012) — e.g. a "Size" set with Small/Medium/Large options,
+/// defined once and applied to many products via `POST /variants/:id/apply`, which writes into
+/// the pre-existing informal `Product.variations` JSON field (unchanged shape, still consumed
+/// as-is at sale time) rather than replacing it — this is the formal *source*, not a new runtime
+/// representation products are read through.
+model VariantSet {
+  id         String          @id @default(uuid())
+  businessId String          @map("business_id")
+  business   Business        @relation(fields: [businessId], references: [id])
+  name       String
+  options    VariantOption[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, name])
+  @@map("variant_sets")
+}
+
+model VariantOption {
+  id            String     @id @default(uuid())
+  variantSetId  String     @map("variant_set_id")
+  variantSet    VariantSet @relation(fields: [variantSetId], references: [id])
+  name          String
+  priceOverride Decimal?   @map("price_override") @db.Decimal(12, 2)
+
+  @@index([variantSetId])
+  @@map("variant_options")
+}
+
+/// Bundles (UPD-BE-013). Every bundle has its own real, sellable `Product` row (kind `product`) —
+/// selling it decrements only the bundle's OWN stock, not each component's; components exist here
+/// purely to compute true rolled-up cost/margin and to drive `GET /profit/bundle-suggestions`.
+/// Cascading a bundle sale into per-component stock decrements is a deliberately out-of-scope,
+/// disclosed gap — this models "pre-kitted" bundles (built and stocked ahead of time), not
+/// build-on-demand ones.
+model Bundle {
+  id         String       @id @default(uuid())
+  businessId String       @map("business_id")
+  business   Business     @relation(fields: [businessId], references: [id])
+  productId  String       @unique @map("product_id")
+  product    Product      @relation(fields: [productId], references: [id])
+  items      BundleItem[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bundles")
+}
+
+model BundleItem {
+  id        String  @id @default(uuid())
+  bundleId  String  @map("bundle_id")
+  bundle    Bundle  @relation(fields: [bundleId], references: [id])
+  productId String  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+  qty       Int
+
+  @@index([bundleId])
+  @@map("bundle_items")
+}
+
+/// Formal supplier directory (UPD-BE-014) — until now a supplier was only ever a free-text field
+/// on `StockMovement` (see `supplier` above); this is the first real, addressable supplier entity.
+model Supplier {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  notes      String?
+
+  stockMovements StockMovement[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("suppliers")
+}
+
+/// Selling-price change log (UPD-BE-015) — written every time `Product.sellingPrice` changes via
+/// the bulk pricing tool, so a price change is always explainable after the fact.
+model PriceHistory {
+  id              String   @id @default(uuid())
+  businessId      String   @map("business_id")
+  business        Business @relation(fields: [businessId], references: [id])
+  productId       String   @map("product_id")
+  product         Product  @relation(fields: [productId], references: [id])
+  oldPrice        Decimal  @map("old_price") @db.Decimal(12, 2)
+  newPrice        Decimal  @map("new_price") @db.Decimal(12, 2)
+  changedByUserId String?  @map("changed_by_user_id")
+  note            String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, productId])
+  @@map("price_history")
 }
 
 model Expense {
@@ -938,6 +1609,146 @@ model Attendance {
 
   @@index([businessId, staffUserId])
   @@map("attendance")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UPD-BE-M10 — Staff depth: Shifts, Time Off, Timesheets, Advances
+// ─────────────────────────────────────────────────────────────────────────
+
+enum StaffShiftStatus {
+  scheduled
+  completed
+  cancelled
+}
+
+enum ShiftSwapStatus {
+  pending
+  approved
+  rejected
+}
+
+/// Roster (UPD-BE-031). Swap-request fields are embedded directly on the shift (a shift has at
+/// most one active swap request at a time) rather than a separate model — mirrors the plain,
+/// non-FK `approvedByUserId`-style reviewer-reference convention already used on `VideoTestimonial`.
+model StaffShift {
+  id          String           @id @default(uuid())
+  businessId  String           @map("business_id")
+  business    Business         @relation(fields: [businessId], references: [id])
+  staffUserId String           @map("staff_user_id")
+  staffUser   BusinessUser     @relation(fields: [staffUserId], references: [id])
+  startsAt    DateTime         @map("starts_at")
+  endsAt      DateTime         @map("ends_at")
+  status      StaffShiftStatus @default(scheduled)
+  note        String?
+
+  swapStatus             ShiftSwapStatus? @map("swap_status")
+  swapRequestedByUserId   String?         @map("swap_requested_by_user_id")
+  swapCoveringUserId      String?         @map("swap_covering_user_id")
+  swapReason              String?         @map("swap_reason")
+  swapReviewedByUserId    String?         @map("swap_reviewed_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, staffUserId, startsAt])
+  @@map("staff_shifts")
+}
+
+/// UPD-BE-031. Real code, deliberately simple: a request + owner/manager approve/reject, same
+/// shape as `Return`'s raise-then-approve pattern.
+model TimeOff {
+  id               String   @id @default(uuid())
+  businessId       String   @map("business_id")
+  business         Business @relation(fields: [businessId], references: [id])
+  staffUserId      String   @map("staff_user_id")
+  staffUser        BusinessUser @relation(fields: [staffUserId], references: [id])
+  startsAt         DateTime @map("starts_at")
+  endsAt           DateTime @map("ends_at")
+  reason           String?
+  approved         Boolean  @default(false)
+  reviewedByUserId String?  @map("reviewed_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, staffUserId])
+  @@map("time_off")
+}
+
+/// UPD-BE-032. Timesheets themselves are computed live from `Attendance`/`StaffShift`, never
+/// stored — this is only the persisted "has this staff member's month been approved" marker.
+model TimesheetApproval {
+  id               String       @id @default(uuid())
+  businessId       String       @map("business_id")
+  business         Business     @relation(fields: [businessId], references: [id])
+  staffUserId      String       @map("staff_user_id")
+  staffUser        BusinessUser @relation(fields: [staffUserId], references: [id])
+  /// "YYYY-MM", same convention as `CommissionsService.report(month)`.
+  month            String
+  approvedByUserId String?      @map("approved_by_user_id")
+  approvedAt       DateTime?    @map("approved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, staffUserId, month])
+  @@map("timesheet_approvals")
+}
+
+enum StaffAdvanceStatus {
+  outstanding
+  deducted
+  cancelled
+}
+
+/// UPD-BE-033. "Auto-deducted from the next commission payout" — since there's no persisted
+/// payout/mutation action anywhere in this codebase today (`CommissionsService.report()` is a
+/// read-only projection), Payroll Export (UPD-BE-034) is the one real place a payout is
+/// materialized, so that's where outstanding advances actually get netted and flipped to
+/// `deducted`, stamped with the month they were applied against.
+model StaffAdvance {
+  id              String             @id @default(uuid())
+  businessId      String             @map("business_id")
+  business        Business           @relation(fields: [businessId], references: [id])
+  staffUserId     String             @map("staff_user_id")
+  staffUser       BusinessUser       @relation(fields: [staffUserId], references: [id])
+  amount          Decimal            @db.Decimal(12, 2)
+  reason          String?
+  status          StaffAdvanceStatus @default(outstanding)
+  deductedInMonth String?            @map("deducted_in_month")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, staffUserId, status])
+  @@map("staff_advances")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UPD-BE-035 — Roles & Permissions matrix
+// ─────────────────────────────────────────────────────────────────────────
+
+/// A business-defined role: a named, chosen subset of the fixed capability vocabulary (see
+/// `common/capabilities/capabilities.constants.ts` — not modeled as its own table since
+/// capabilities are a fixed, code-level vocabulary tied to real routes, not user-editable data).
+/// The 3 system roles (owner/manager/staff) are never rows here — they're built-in defaults
+/// with a hardcoded capability set (`SYSTEM_ROLE_CAPABILITIES`) that exactly reproduces this
+/// codebase's real access model prior to this ticket, so assigning nobody a custom role changes
+/// nothing.
+model CustomRole {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  name         String
+  capabilities String[]
+
+  businessUsers BusinessUser[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, name])
+  @@map("custom_roles")
 }
 
 model Campaign {

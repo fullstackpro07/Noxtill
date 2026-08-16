@@ -48,7 +48,9 @@ describe('CompetitorsService (BE-063)', () => {
   });
 
   afterAll(async () => {
-    const competitors = await prisma.competitor.findMany({ where: { businessId } });
+    const competitors = await prisma.competitor.findMany({
+      where: { businessId },
+    });
     await prisma.competitorSnapshot.deleteMany({
       where: { competitorId: { in: competitors.map((c) => c.id) } },
     });
@@ -86,8 +88,18 @@ describe('CompetitorsService (BE-063)', () => {
     });
     await prisma.competitorSnapshot.createMany({
       data: [
-        { competitorId: competitor.id, rating: 4.2, reviewsCount: 100, capturedAt: new Date('2026-01-01') },
-        { competitorId: competitor.id, rating: 4.4, reviewsCount: 110, capturedAt: new Date('2026-01-08') },
+        {
+          competitorId: competitor.id,
+          rating: 4.2,
+          reviewsCount: 100,
+          capturedAt: new Date('2026-01-01'),
+        },
+        {
+          competitorId: competitor.id,
+          rating: 4.4,
+          reviewsCount: 110,
+          capturedAt: new Date('2026-01-08'),
+        },
       ],
     });
 
@@ -105,6 +117,9 @@ describe('CompetitorsService (BE-063)', () => {
 
     await service.triggerSnapshot(competitor.id);
 
-    expect(snapshotProcessor.snapshotOne).toHaveBeenCalledWith(competitor.id, 'trigger-test');
+    expect(snapshotProcessor.snapshotOne).toHaveBeenCalledWith(
+      competitor.id,
+      'trigger-test',
+    );
   });
 });

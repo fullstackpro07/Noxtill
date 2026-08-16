@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { Prisma } from '../../generated/prisma';
 export interface TokenPair {
     accessToken: string;
@@ -12,7 +13,8 @@ export declare class AuthService {
     private readonly prisma;
     private readonly jwt;
     private readonly config;
-    constructor(prisma: PrismaService, jwt: JwtService, config: ConfigService);
+    private readonly capabilities;
+    constructor(prisma: PrismaService, jwt: JwtService, config: ConfigService, capabilities: CapabilitiesService);
     signup(dto: SignupDto): Promise<{
         accessToken: string;
         refreshToken: string;
@@ -40,6 +42,7 @@ export declare class AuthService {
             healthScoreWeights: Prisma.JsonValue;
             aiMonthlyCostCapUsd: Prisma.Decimal;
             aiRateLimitPerMinute: number;
+            overtimeThresholdHoursPerWeek: number;
             trialEndsAt: Date | null;
             stripeCustomerId: string | null;
             stripeSubscriptionId: string | null;

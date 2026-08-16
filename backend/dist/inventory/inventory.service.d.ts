@@ -7,25 +7,27 @@ export declare class InventoryService {
     private readonly activity;
     constructor(tenantPrisma: TenantPrismaService, activity: ActivityService);
     recordPurchase(businessId: string, dto: CreatePurchaseDto): Promise<{
+        supplier: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         kind: import("../../generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
         unitCost: import("generated/prisma/runtime/library").Decimal | null;
-        supplier: string | null;
+        supplierId: string | null;
         reason: string | null;
     }>;
     recordWastage(businessId: string, dto: CreateWastageDto): Promise<{
+        supplier: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         kind: import("../../generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
         unitCost: import("generated/prisma/runtime/library").Decimal | null;
-        supplier: string | null;
+        supplierId: string | null;
         reason: string | null;
     }>;
     listInventory(): Promise<{
@@ -40,14 +42,15 @@ export declare class InventoryService {
         status: string;
     }[]>;
     getMovements(productId: string): Promise<{
+        supplier: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         kind: import("../../generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
         unitCost: import("generated/prisma/runtime/library").Decimal | null;
-        supplier: string | null;
+        supplierId: string | null;
         reason: string | null;
     }[]>;
 }

@@ -8,6 +8,7 @@ import { HttpStatus } from '@nestjs/common';
 import { slugify } from '../common/utils/slug.util';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { Prisma, Role } from '../../generated/prisma';
 
 export interface TokenPair {
@@ -23,6 +24,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly capabilities: CapabilitiesService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -77,6 +79,7 @@ export class AuthService {
       user.id,
       business.id,
       businessUser.role,
+      businessUser.customRoleId,
     );
     return { business, user: this.toPublicUser(user), ...tokens };
   }
@@ -123,6 +126,7 @@ export class AuthService {
       user.id,
       businessUser.businessId,
       businessUser.role,
+      businessUser.customRoleId,
     );
     return { user: this.toPublicUser(user), ...tokens };
   }
@@ -149,7 +153,21 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    return this.issueTokens(payload.sub, payload.businessId, payload.role);
+    // Re-fetched fresh (not trusted from the old token's payload) so a role or custom-role
+    // change picks up the real current capability set on the next refresh, not just re-login.
+    const businessUser = await this.prisma.businessUser.findFirst({
+      where: { userId: payload.sub, businessId: payload.businessId },
+    });
+    if (!businessUser) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return this.issueTokens(
+      payload.sub,
+      payload.businessId,
+      businessUser.role,
+      businessUser.customRoleId,
+    );
   }
 
   async logout(userId: string) {
@@ -180,8 +198,10 @@ export class AuthService {
     userId: string,
     businessId: string,
     role: Role,
+    customRoleId: string | null,
   ): Promise<TokenPair> {
-    const payload = { sub: userId, businessId, role };
+    const capabilities = await this.capabilities.resolve({ role, customRoleId });
+    const payload = { sub: userId, businessId, role, capabilities };
 
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('JWT_SECRET'),

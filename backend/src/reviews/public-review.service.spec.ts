@@ -201,9 +201,7 @@ describe('PublicReviewService (BE-046)', () => {
       })),
     });
 
-    await expect(
-      service.mintAnonymousLink(capBusiness.slug),
-    ).rejects.toThrow();
+    await expect(service.mintAnonymousLink(capBusiness.slug)).rejects.toThrow();
 
     await prisma.reviewRequest.deleteMany({
       where: { businessId: capBusiness.id },

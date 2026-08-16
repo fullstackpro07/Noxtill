@@ -36,7 +36,9 @@ let SerpRankService = SerpRankService_1 = class SerpRankService {
             });
         }
         catch (error) {
-            const message = axios_1.default.isAxiosError(error) ? error.response?.data : error.message;
+            const message = axios_1.default.isAxiosError(error)
+                ? error.response?.data
+                : error.message;
             this.logger.warn(`SERP rank lookup failed for "${keyword}": ${JSON.stringify(message)}`);
             return null;
         }

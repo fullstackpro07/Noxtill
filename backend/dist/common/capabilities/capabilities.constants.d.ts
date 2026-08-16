@@ -1,0 +1,22 @@
+import { Role } from '../../../generated/prisma';
+export declare const CAPABILITIES: {
+    readonly BILLING_MANAGE: "billing.manage";
+    readonly CREDIT_WRITE_OFF: "credit.write_off";
+    readonly EXPORTS_GENERATE: "exports.generate";
+    readonly MESSAGING_SEND_TEST: "messaging.send_test";
+    readonly STAFF_MANAGE: "staff.manage";
+    readonly PAYROLL_EXPORT: "payroll.export";
+    readonly ROLES_MANAGE: "roles.manage";
+    readonly CUSTOMERS_ERASE: "customers.erase";
+    readonly INTEGRATIONS_MANAGE: "integrations.manage";
+    readonly AUTOMATIONS_MANAGE: "automations.manage";
+    readonly COUPONS_MANAGE: "coupons.manage";
+    readonly VOUCHERS_MANAGE: "vouchers.manage";
+    readonly RETURNS_APPROVE: "returns.approve";
+    readonly PRICING_MANAGE: "pricing.manage";
+    readonly VIDEO_TESTIMONIALS_MODERATE: "video_testimonials.moderate";
+    readonly STAFF_MANAGE_SCHEDULE: "staff.manage_schedule";
+};
+export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
+export declare const ALL_CAPABILITIES: Capability[];
+export declare const SYSTEM_ROLE_CAPABILITIES: Record<Role, Capability[]>;

@@ -10,7 +10,9 @@ async function assertSlotAvailable(tx, params) {
     await tx.$executeRaw `SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
     const conflict = await tx.appointment.findFirst({
         where: {
-            ...(params.excludeAppointmentId ? { id: { not: params.excludeAppointmentId } } : {}),
+            ...(params.excludeAppointmentId
+                ? { id: { not: params.excludeAppointmentId } }
+                : {}),
             businessId: params.businessId,
             ...(params.staffId ? { staffUserId: params.staffId } : {}),
             status: { notIn: [prisma_1.AppointmentStatus.cancelled] },

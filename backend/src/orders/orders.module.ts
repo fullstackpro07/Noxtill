@@ -17,6 +17,7 @@ import { ActivityModule } from '../activity/activity.module';
 import { CashRegisterModule } from '../cash-register/cash-register.module';
 import { AiModule } from '../ai/ai.module';
 import { BillingModule } from '../billing/billing.module';
+import { CustomersModule } from '../customers/customers.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { BillingModule } from '../billing/billing.module';
     CashRegisterModule,
     AiModule,
     BillingModule,
+    CustomersModule,
   ],
   controllers: [
     OrdersController,

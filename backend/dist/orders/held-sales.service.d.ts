@@ -11,8 +11,8 @@ export declare class HeldSalesService {
     constructor(tenantPrisma: TenantPrismaService, cls: ClsService, ordersService: OrdersService);
     hold(businessId: string, dto: HoldSaleDto): Promise<{
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         note: string | null;
         cart: Prisma.JsonValue;
         heldByUserId: string | null;
@@ -21,17 +21,17 @@ export declare class HeldSalesService {
         cart: HoldSaleDto;
         estimatedTotal: number;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         note: string | null;
         heldByUserId: string | null;
     }[]>;
     discard(businessId: string, id: string): Promise<void>;
     resume(businessId: string, id: string, dto: ResumeHeldSaleDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         orderNo: number;
         customerId: string | null;
         orderType: import("../../generated/prisma").$Enums.OrderType;
@@ -44,5 +44,9 @@ export declare class HeldSalesService {
         cogs: Prisma.Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+        couponId: string | null;
+        couponDiscountAmount: Prisma.Decimal | null;
+        voucherId: string | null;
+        voucherAmountApplied: Prisma.Decimal | null;
     }>;
 }
