@@ -77,7 +77,9 @@ export class WebhooksController {
     if (!appSecret) {
       throw new ServiceUnavailableException('Meta webhook is not configured');
     }
-    if (!verifyMetaSignature(req.rawBody ?? Buffer.from(''), signature, appSecret)) {
+    if (
+      !verifyMetaSignature(req.rawBody ?? Buffer.from(''), signature, appSecret)
+    ) {
       throw new ForbiddenException('Invalid signature');
     }
 

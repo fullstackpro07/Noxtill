@@ -37,14 +37,23 @@ export class IntegrationsController {
 
   @Roles(Role.owner, Role.manager)
   @Post(':provider/connect')
-  connect(@CurrentUser() user: AuthenticatedUser, @Param('provider') provider: string) {
+  connect(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('provider') provider: string,
+  ) {
     return this.integrations.connect(user.businessId, parseProvider(provider));
   }
 
   @Roles(Role.owner, Role.manager)
   @Post(':provider/disconnect')
-  disconnect(@CurrentUser() user: AuthenticatedUser, @Param('provider') provider: string) {
-    return this.integrations.disconnect(user.businessId, parseProvider(provider));
+  disconnect(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('provider') provider: string,
+  ) {
+    return this.integrations.disconnect(
+      user.businessId,
+      parseProvider(provider),
+    );
   }
 
   /**
@@ -59,11 +68,16 @@ export class IntegrationsController {
     @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
     const parsedProvider = parseProvider(provider);
 
     try {
-      const { ok } = await this.integrations.handleCallback(parsedProvider, code, state);
+      const { ok } = await this.integrations.handleCallback(
+        parsedProvider,
+        code,
+        state,
+      );
       res.redirect(
         ok
           ? `${frontendUrl}/integrations?connected=${parsedProvider}`

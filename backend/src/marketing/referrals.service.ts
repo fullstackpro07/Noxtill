@@ -20,7 +20,10 @@ interface TxClient {
       referralRewardedAt: Date | null;
       visitCount: number;
     } | null>;
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
+    update(args: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }): Promise<unknown>;
   };
   business: {
     findUniqueOrThrow(args: { where: { id: string } }): Promise<{
@@ -62,7 +65,9 @@ export class ReferralsService {
     customerId: string,
     tx: TxClient,
   ): Promise<void> {
-    const customer = await tx.customer.findUnique({ where: { id: customerId } });
+    const customer = await tx.customer.findUnique({
+      where: { id: customerId },
+    });
     if (
       !customer ||
       !customer.referredByCustomerId ||
@@ -72,12 +77,20 @@ export class ReferralsService {
       return;
     }
 
-    const business = await tx.business.findUniqueOrThrow({ where: { id: businessId } });
-    const settings = business.referralSettings as unknown as
-      | { enabled?: boolean; rewardType?: 'credit' | 'discount'; rewardValue?: number }
-      | null;
+    const business = await tx.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    const settings = business.referralSettings as {
+      enabled?: boolean;
+      rewardType?: 'credit' | 'discount';
+      rewardValue?: number;
+    } | null;
 
-    if (settings?.enabled && settings.rewardType === 'credit' && settings.rewardValue) {
+    if (
+      settings?.enabled &&
+      settings.rewardType === 'credit' &&
+      settings.rewardValue
+    ) {
       await tx.creditEntry.create({
         data: {
           businessId,
@@ -137,10 +150,16 @@ export class ReferralsService {
   async stats() {
     const referred = await this.tenantPrisma.client.customer.findMany({
       where: { referredByCustomerId: { not: null } },
-      select: { referredByCustomerId: true, visitCount: true, referralRewardedAt: true },
+      select: {
+        referredByCustomerId: true,
+        visitCount: true,
+        referralRewardedAt: true,
+      },
     });
     const converted = referred.filter((r) => r.visitCount >= 1).length;
-    const rewardsIssued = referred.filter((r) => r.referralRewardedAt != null).length;
+    const rewardsIssued = referred.filter(
+      (r) => r.referralRewardedAt != null,
+    ).length;
 
     const countsByReferrer = new Map<string, number>();
     for (const row of referred) {

@@ -5,7 +5,8 @@ import { Connector, OAuthTokens } from '../connector.interface';
 import { IntegrationProvider } from '../../../generated/prisma';
 
 const AUTHORIZE_URL = 'https://business-api.tiktok.com/portal/auth';
-const TOKEN_URL = 'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/';
+const TOKEN_URL =
+  'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/';
 
 interface TikTokTokenEnvelope {
   code: number;
@@ -27,7 +28,8 @@ export class TikTokAdsConnector implements Connector {
   constructor(private readonly config: ConfigService) {}
 
   private redirectUri(): string {
-    const backendUrl = this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
+    const backendUrl =
+      this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
     return `${backendUrl}/integrations/tiktok_ads/callback`;
   }
 
@@ -51,8 +53,8 @@ export class TikTokAdsConnector implements Connector {
   }
 
   /** TikTok's Marketing API access tokens are long-lived with no refresh grant — a no-op by design, not a shortcut. */
-  async refreshToken(tokens: OAuthTokens): Promise<OAuthTokens> {
-    return tokens;
+  refreshToken(tokens: OAuthTokens): Promise<OAuthTokens> {
+    return Promise.resolve(tokens);
   }
 
   async sync(tokens: OAuthTokens): Promise<unknown> {

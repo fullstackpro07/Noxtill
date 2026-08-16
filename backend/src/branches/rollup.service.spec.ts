@@ -54,8 +54,18 @@ describe('RollupService (BE-059)', () => {
 
     await prisma.externalReview.createMany({
       data: [
-        { businessId: branchId, platform: 'google', externalId: `rollup-rev-1-${Date.now()}`, stars: 5 },
-        { businessId: branchId, platform: 'google', externalId: `rollup-rev-2-${Date.now()}`, stars: 3 },
+        {
+          businessId: branchId,
+          platform: 'google',
+          externalId: `rollup-rev-1-${Date.now()}`,
+          stars: 5,
+        },
+        {
+          businessId: branchId,
+          platform: 'google',
+          externalId: `rollup-rev-2-${Date.now()}`,
+          stars: 3,
+        },
       ],
     });
   });
@@ -83,7 +93,7 @@ describe('RollupService (BE-059)', () => {
     expect(fromBranch.totals.revenue).toBe(400);
   });
 
-  it('includes each branch\'s average review rating, null when it has none', async () => {
+  it("includes each branch's average review rating, null when it has none", async () => {
     const result = await service.dashboard(parentId);
     const branchRow = result.branches.find((b) => b.businessId === branchId)!;
     const parentRow = result.branches.find((b) => b.businessId === parentId)!;

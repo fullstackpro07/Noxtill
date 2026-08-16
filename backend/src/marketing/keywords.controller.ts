@@ -32,7 +32,10 @@ export class KeywordsController {
   }
 
   @Post(':id/check')
-  triggerCheck(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+  triggerCheck(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
     return this.keywordsService.triggerCheck(user.businessId, id);
   }
 }

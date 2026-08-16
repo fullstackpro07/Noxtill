@@ -37,6 +37,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxtill_test
       REDIS_URL: redis://localhost:6379
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
       JWT_SECRET: ci-only-secret-do-not-reuse-in-prod-please-32c
       JWT_REFRESH_SECRET: ci-only-refresh-secret-do-not-reuse-32chars
       JWT_ACCESS_TTL: 15m

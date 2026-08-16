@@ -27,7 +27,9 @@ describe('CompetitorSnapshotProcessor (BE-063)', () => {
   });
 
   afterAll(async () => {
-    const competitors = await prisma.competitor.findMany({ where: { businessId } });
+    const competitors = await prisma.competitor.findMany({
+      where: { businessId },
+    });
     await prisma.competitorSnapshot.deleteMany({
       where: { competitorId: { in: competitors.map((c) => c.id) } },
     });
@@ -55,7 +57,10 @@ describe('CompetitorSnapshotProcessor (BE-063)', () => {
     const competitor = await prisma.competitor.create({
       data: { businessId, platformRef: 'place-456' },
     });
-    googlePlaces.fetchPlaceSnapshot.mockResolvedValue({ rating: 4.6, reviewsCount: 210 });
+    googlePlaces.fetchPlaceSnapshot.mockResolvedValue({
+      rating: 4.6,
+      reviewsCount: 210,
+    });
 
     await processor.snapshotOne(competitor.id, competitor.platformRef);
 

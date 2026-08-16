@@ -113,10 +113,21 @@ describe('CreditService (BE-030)', () => {
 
   it('flags opted-out customers in the debtors list', async () => {
     const optedOutCustomer = await prisma.customer.create({
-      data: { businessId, phone: `+1${Date.now()}9`, name: 'Opted Out Ollie', optedOut: true },
+      data: {
+        businessId,
+        phone: `+1${Date.now()}9`,
+        name: 'Opted Out Ollie',
+        optedOut: true,
+      },
     });
     await prisma.creditEntry.create({
-      data: { businessId, customerId: optedOutCustomer.id, kind: 'credit', amount: 50, note: 'Opening balance' },
+      data: {
+        businessId,
+        customerId: optedOutCustomer.id,
+        kind: 'credit',
+        amount: 50,
+        note: 'Opening balance',
+      },
     });
 
     const debtors = await creditService.listDebtors();
@@ -129,9 +140,19 @@ describe('CreditService (BE-030)', () => {
       data: { businessId, phone: `+1${Date.now()}8`, name: 'Ledger Larry' },
     });
     await prisma.creditEntry.create({
-      data: { businessId, customerId: ledgerCustomer.id, kind: 'credit', amount: 100, note: 'Sale' },
+      data: {
+        businessId,
+        customerId: ledgerCustomer.id,
+        kind: 'credit',
+        amount: 100,
+        note: 'Sale',
+      },
     });
-    await creditService.recordPayment({ customerId: ledgerCustomer.id, amount: 40, method: 'cash' });
+    await creditService.recordPayment({
+      customerId: ledgerCustomer.id,
+      amount: 40,
+      method: 'cash',
+    });
 
     const ledger = await creditService.getLedger(ledgerCustomer.id);
     expect(ledger.balance).toBe(60);
