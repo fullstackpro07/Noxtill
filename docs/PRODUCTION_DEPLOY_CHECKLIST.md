@@ -103,24 +103,28 @@ to. A production deploy must replace every placeholder row before going live.
 - **Redis** 5+ (BullMQ requires ≥5.0.0 — confirmed live this ticket: the old bundled Windows Redis port on this dev machine reports as v3.0.504 and is incompatible; a real modern Redis is required, not just "any Redis binary").
 - **S3-compatible object storage** bucket, with a real access key pair.
 - **CI runner** with Postgres 16 + Redis 7 service-container support (GitHub Actions, as configured in `.github/workflows/ci.yml`).
-- **TLS/HTTPS termination** at the load balancer / reverse proxy / hosting platform — the application itself does not terminate TLS.
+- **Hostinger Node.js hosting** with Git-connected apps for backend (`noxtill.com`) and frontend (`app.noxtill.com`) — see [CICD.md](./CICD.md).
+- **TLS/HTTPS termination** at Hostinger — the application itself does not terminate TLS.
 - **A registered OAuth app per provider** actually being launched with (Google, Meta, TikTok) — each is a real account-creation step with that provider, not a deploy-time config value alone.
 
 ## 4. Deploy steps
 
-1. Provision Postgres, Redis, and an S3 bucket; populate every env var in §1 with real production values (never reuse this dev environment's self-issued secrets — `INTEGRATIONS_TOKEN_KEY`, `INTEGRATIONS_STATE_SECRET`, `EMAIL_UNSUBSCRIBE_SECRET`, `JWT_SECRET`, `JWT_REFRESH_SECRET` all need fresh values).
-2. Set `NODE_ENV=production` — this activates `validateEnv()`'s hard-fail behavior for weak JWT secrets at boot.
-3. Run `npx prisma migrate deploy` against the production database.
-4. Deploy the backend; confirm it boots (check logs for `validateEnv()` warnings/failures) and `GET /api/v1/` returns `200 "Hello World!"` as a basic liveness check.
-5. Deploy the frontend (`next build` + start), pointed at the real backend origin via its API base URL config.
-6. Update `CORS_ALLOWLIST` (backend) and `FRONTEND_URL`/`BACKEND_URL` (backend, for OAuth redirects) to the real production origins — do this *before* announcing the OAuth-based integrations as available, since a stale value silently breaks every provider's callback.
-7. Smoke-test the same core journey this ticket verified locally: signup → create a product → complete a sale → confirm it appears in the nightly-close aggregate → confirm a review-request token resolves on `/r/:token`.
-8. Confirm the CI pipeline is green on the deployed commit before considering the release final.
+Full pipeline (branch protection, Hostinger build settings, Prisma generate, smoke checks): **[CICD.md](./CICD.md)**.
+
+1. Provision Postgres, Redis, and an S3 bucket; populate every env var in §1 with real production values in hPanel (never reuse this dev environment's self-issued secrets — `INTEGRATIONS_TOKEN_KEY`, `INTEGRATIONS_STATE_SECRET`, `EMAIL_UNSUBSCRIBE_SECRET`, `JWT_SECRET`, `JWT_REFRESH_SECRET` all need fresh values).
+2. Set `NODE_ENV=production` on the Nest app — this activates `validateEnv()`'s hard-fail behavior for weak JWT secrets at boot.
+3. One-time / per-migration: run `npx prisma migrate deploy` against the production database (Hostinger’s Node build does not run migrations).
+4. Ensure GitHub `main` is protected so `backend` and `frontend` CI must pass before merge ([CICD.md](./CICD.md)).
+5. Merge to `main` — Hostinger auto-deploys Nest (`root_directory=backend` → `https://noxtill.com`) and Next (`root_directory=frontend` → `https://app.noxtill.com`).
+6. Confirm Nest boots (runtime logs / `validateEnv()`) and `GET https://noxtill.com/api/v1/` returns `200`. Confirm the app loads at `https://app.noxtill.com` with `NEXT_PUBLIC_API_URL=https://noxtill.com/api/v1`.
+7. Set `CORS_ALLOWLIST=https://app.noxtill.com`, `FRONTEND_URL=https://app.noxtill.com`, and `BACKEND_URL=https://noxtill.com` *before* announcing OAuth-based integrations.
+8. Smoke-test: signup → product → sale → nightly-close aggregate → review-request `/r/:token`.
+9. Confirm the CI run on the deployed commit was green before calling the release final.
 
 ## 5. Rollback
 
 - Database migrations are additive-only so far (no destructive migrations exist in this project's history) — a rollback of application code does not require a corresponding down-migration in the common case. If a future migration ever needs to be destructive, write and test its down-migration before shipping it.
-- Standard rollback path: redeploy the previous known-good backend/frontend build artifacts (container image tag or equivalent); no manual DB intervention needed unless the rolled-back release depended on a schema change the previous version doesn't understand, in which case restore from the most recent verified backup (§2's drill) rather than attempting a manual down-migration under time pressure.
+- Standard rollback path: in Hostinger **Deployments**, redeploy the previous known-good commit for the affected app, or revert on `main` (CI must pass again, then Hostinger rebuilds). Restore from the most recent verified backup (§2's drill) only if the rolled-back release depended on schema the previous version doesn't understand.
 - Because JWT secrets were rotated this ticket, note for any future secret rotation: rotating `JWT_SECRET`/`JWT_REFRESH_SECRET` invalidates every existing session immediately (expected, not a bug) — plan rotations for low-traffic windows and communicate them, since every logged-in user will be forced to log in again.
 
 ## 6. Known gaps at time of writing (disclosed, not silently carried forward)
@@ -157,21 +161,25 @@ Only Email is fully deep and live-ready today — it just needs the Postmark key
  Managed Redis, version ≥5.0 — confirmed this week the wrong version silently breaks BullMQ; don't reuse an old/legacy Redis instance
  Managed Postgres 14+ with the pg_trgm extension enabled (used for search/customer lookup)
  S3-compatible object storage bucket
- TLS/HTTPS termination at the load balancer or hosting platform (the app itself doesn't terminate TLS)
- CI runner capable of Postgres + Redis service containers (GitHub Actions config is already written — see below)
+ TLS/HTTPS termination at Hostinger (the app itself doesn't terminate TLS)
+ CI runner capable of Postgres + Redis service containers (GitHub Actions — see `.github/workflows/ci.yml` and [CICD.md](./CICD.md))
+ Hostinger Node.js Git apps for Nest (`noxtill.com` / `backend`) and Next (`app.noxtill.com` / `frontend`)
 4. Secrets to generate fresh for production (never reuse dev values)
  JWT_SECRET / JWT_REFRESH_SECRET — production boot will refuse to start if these are weak or placeholder, by design
  INTEGRATIONS_TOKEN_KEY — encrypts stored OAuth tokens at rest
  INTEGRATIONS_STATE_SECRET — signs the OAuth callback state param
  EMAIL_UNSUBSCRIBE_SECRET — signs unsubscribe links
 5. Config values that must point at real production URLs
- CORS_ALLOWLIST → real production frontend origin(s)
- FRONTEND_URL / BACKEND_URL → real production origins (used to build OAuth redirect URIs — must also be registered with each provider's app console, or every OAuth callback silently breaks)
+ CORS_ALLOWLIST → `https://app.noxtill.com`
+ FRONTEND_URL / BACKEND_URL → `https://app.noxtill.com` / `https://noxtill.com` (OAuth redirect URIs must also be registered with each provider)
  EMAIL_FROM_ADDRESS → a real verified sending domain
+ NEXT_PUBLIC_API_URL (frontend Hostinger env) → `https://noxtill.com/api/v1`
 6. Actions still to take
- Push .github/workflows/ci.yml to trigger a real CI run — built and believed correct, but has never actually executed (you held off on this last time, still pending)
- Run the backup/restore drill for real — the script is written but has never dry-run anywhere (no pg_dump/psql on this dev machine); it'll run for real the moment CI executes
- Smoke-test the core journey on the live deploy: signup → product → sale → nightly close → review request (same journey verified locally this week)
+ Protect `main` so CI jobs `backend` and `frontend` are required ([CICD.md](./CICD.md))
+ Create `app.noxtill.com` Hostinger Next.js Git app (root `frontend`) if not already done
+ Push / merge so `.github/workflows/ci.yml` and Prisma `postinstall`/`build` generate run on Hostinger
+ Run the backup/restore drill for real — the script is written but has never dry-run anywhere (no `pg_dump`/`psql` on this dev machine); it'll run for real the moment CI executes
+ Smoke-test the core journey on the live deploy: signup → product → sale → nightly close → review request
  Decide whether/when to build the deferred deep features for the 5 non-Email connectors (GMB posts, Google Ads campaign creation, Merchant feed sync, Meta creative rendering, TikTok slideshow generation) — their screens exist but stay mocked until each OAuth app is real
 Not blocking launch, but worth knowing
 Help-doc article URLs (HelpArticle.url, used by the AI assistant's citations) point at /help/[slug] pages that don't exist yet — citations render as plain text, not broken links, so this is cosmetic only.
