@@ -71,6 +71,9 @@ describe('QrPosterService', () => {
   });
 
   afterAll(async () => {
+    await prisma.healthScoreSnapshot.deleteMany({
+      where: { businessId },
+    });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
@@ -135,6 +138,9 @@ describe('QrPosterService', () => {
     expect(htmlArg).not.toContain('<script>alert(1)</script>');
     expect(htmlArg).toContain('&lt;script&gt;');
 
+    await prisma.healthScoreSnapshot.deleteMany({
+      where: { businessId: evilBusiness.id },
+    });
     await prisma.business.delete({ where: { id: evilBusiness.id } });
   }, 15_000);
 });

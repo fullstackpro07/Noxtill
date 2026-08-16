@@ -51,32 +51,38 @@ describe('QueueModule DLQ (BE-010)', () => {
     const app = moduleRef.createNestApplication();
     await app.init();
 
-    const queueService = moduleRef.get(QueueService);
-    const dlq = moduleRef.get<Queue>(getQueueToken(dlqName(DEMO_QUEUE)));
+    try {
+      const queueService = moduleRef.get(QueueService);
+      const dlq = moduleRef.get<Queue>(getQueueToken(dlqName(DEMO_QUEUE)));
 
-    const jobId = `dlq-test-${Date.now()}`;
-    await queueService.addDemoJob(
-      'forced-failure',
-      { shouldFail: true },
-      jobId,
-    );
+      const jobId = `dlq-test-${Date.now()}`;
+      // Production jobs use exponential 2s backoff (~30s for 5 attempts). Use a short fixed
+      // delay here so the suite proves DLQ wiring without making CI wait half a minute.
+      await queueService.addDemoJob(
+        'forced-failure',
+        { shouldFail: true },
+        jobId,
+        { backoff: { type: 'fixed', delay: 100 } },
+      );
 
-    const landed = await new Promise<boolean>((resolve) => {
-      const start = Date.now();
-      const interval = setInterval(() => {
-        void dlq.getJob(jobId).then((job) => {
-          if (job) {
-            clearInterval(interval);
-            resolve(true);
-          } else if (Date.now() - start > 20_000) {
-            clearInterval(interval);
-            resolve(false);
-          }
-        });
-      }, 500);
-    });
+      const landed = await new Promise<boolean>((resolve) => {
+        const start = Date.now();
+        const interval = setInterval(() => {
+          void dlq.getJob(jobId).then((job) => {
+            if (job) {
+              clearInterval(interval);
+              resolve(true);
+            } else if (Date.now() - start > 15_000) {
+              clearInterval(interval);
+              resolve(false);
+            }
+          });
+        }, 200);
+      });
 
-    expect(landed).toBe(true);
-    await app.close();
+      expect(landed).toBe(true);
+    } finally {
+      await app.close();
+    }
   }, 30_000);
 });
