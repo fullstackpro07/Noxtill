@@ -17,6 +17,7 @@ import { ActivityService } from '../activity/activity.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { BillingService } from '../billing/billing.service';
 import { AppException } from '../common/filters/app.exception';
+import { deleteCrossTestBusinessRows } from '../common/testing/cleanup-test-business';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -125,6 +126,7 @@ describe('ReturnsService (UPD-BE-011)', () => {
     await prisma.order.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
+    await deleteCrossTestBusinessRows(prisma, businessId);
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });

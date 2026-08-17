@@ -3,6 +3,7 @@ import { LocaleService } from '../../common/localization/locale.service';
 import { SendGateService } from '../../messaging/send-gate.service';
 import { ReviewRemindersProcessor } from './review-reminders.processor';
 import { generateReviewToken } from '../review-token.util';
+import { deleteCrossTestBusinessRows } from '../../common/testing/cleanup-test-business';
 
 describe('ReviewRemindersProcessor (BE-045)', () => {
   let prisma: PrismaService;
@@ -44,10 +45,13 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
   });
 
   afterAll(async () => {
-    await prisma.reviewRequest.deleteMany({ where: { businessId } });
-    await prisma.customer.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
-    await prisma.$disconnect();
+    if (businessId) {
+      await prisma.reviewRequest.deleteMany({ where: { businessId } });
+      await prisma.customer.deleteMany({ where: { businessId } });
+      await deleteCrossTestBusinessRows(prisma, businessId);
+      await prisma.business.delete({ where: { id: businessId } });
+    }
+    await prisma?.$disconnect();
   });
 
   it('sends the day-3 reminder once 3+ days old, never at the wrong hour, and stops at 2 reminders', async () => {
