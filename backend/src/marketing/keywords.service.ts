@@ -2,7 +2,10 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateTrackedKeywordDto } from './dto/create-tracked-keyword.dto';
-import { MARKETING_ERROR_CODES, MAX_TRACKED_KEYWORDS } from './marketing.constants';
+import {
+  MARKETING_ERROR_CODES,
+  MAX_TRACKED_KEYWORDS,
+} from './marketing.constants';
 import { KeywordRankProcessor } from './jobs/keyword-rank.processor';
 
 const HISTORY_CHECKS = 12;
@@ -75,13 +78,12 @@ export class KeywordsService {
       throw new NotFoundException('Tracked keyword not found');
     }
 
-    const snapshots = await this.tenantPrisma.client.keywordRankSnapshot.findMany(
-      {
+    const snapshots =
+      await this.tenantPrisma.client.keywordRankSnapshot.findMany({
         where: { keywordId: id },
         orderBy: { capturedAt: 'desc' },
         take: HISTORY_CHECKS,
-      },
-    );
+      });
 
     return snapshots
       .reverse()

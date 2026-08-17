@@ -9,24 +9,24 @@ export declare class HeldSalesController {
         cart: HoldSaleDto;
         estimatedTotal: number;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         note: string | null;
         heldByUserId: string | null;
     }[]>;
     hold(user: AuthenticatedUser, dto: HoldSaleDto): Promise<{
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         note: string | null;
         cart: import("generated/prisma/runtime/library").JsonValue;
         heldByUserId: string | null;
     }>;
     resume(user: AuthenticatedUser, id: string, dto: ResumeHeldSaleDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         orderNo: number;
         customerId: string | null;
         orderType: import("generated/prisma").$Enums.OrderType;
@@ -39,6 +39,10 @@ export declare class HeldSalesController {
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+        couponId: string | null;
+        couponDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
+        voucherId: string | null;
+        voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
     }>;
     discard(user: AuthenticatedUser, id: string): Promise<void>;
 }

@@ -8,9 +8,14 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiInfraService = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
+const axios_1 = __importDefault(require("axios"));
 const prisma_service_1 = require("../prisma/prisma.service");
 const app_exception_1 = require("../common/filters/app.exception");
 const claude_client_1 = require("./claude.client");
@@ -18,9 +23,11 @@ const ai_infra_constants_1 = require("./ai-infra.constants");
 let AiInfraService = class AiInfraService {
     prisma;
     claude;
-    constructor(prisma, claude) {
+    config;
+    constructor(prisma, claude, config) {
         this.prisma = prisma;
         this.claude = claude;
+        this.config = config;
     }
     async complete(businessId, prompt, temperature = 0) {
         const result = await this.createMessage(businessId, 'complete', {
@@ -29,6 +36,24 @@ let AiInfraService = class AiInfraService {
         });
         const text = result.content.find((block) => block.type === 'text')?.text;
         return text ?? '';
+    }
+    async generateImage(businessId, prompt) {
+        await this.checkGuardrails(businessId);
+        const response = await axios_1.default.post('https://api.openai.com/v1/images/generations', { prompt, n: 1, size: '1024x1024' }, {
+            headers: {
+                Authorization: `Bearer ${this.config.get('OPENAI_API_KEY') ?? ''}`,
+            },
+        });
+        await this.prisma.aiCallLog.create({
+            data: {
+                businessId,
+                kind: 'generate_image',
+                inputTokens: 0,
+                outputTokens: 0,
+                estimatedCostUsd: ai_infra_constants_1.IMAGE_GENERATION_COST_USD,
+            },
+        });
+        return { url: response.data.data[0].url };
     }
     async createMessage(businessId, kind, params, toolCalls) {
         await this.checkGuardrails(businessId);
@@ -92,6 +117,7 @@ exports.AiInfraService = AiInfraService;
 exports.AiInfraService = AiInfraService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        claude_client_1.ClaudeClient])
+        claude_client_1.ClaudeClient,
+        config_1.ConfigService])
 ], AiInfraService);
 //# sourceMappingURL=ai-infra.service.js.map

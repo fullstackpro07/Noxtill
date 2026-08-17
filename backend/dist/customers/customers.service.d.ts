@@ -13,9 +13,9 @@ export declare class CustomersService {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -33,9 +33,9 @@ export declare class CustomersService {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -52,9 +52,9 @@ export declare class CustomersService {
         privateFeedback: {
             message: string | null;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             customerId: string | null;
             status: import("../../generated/prisma").$Enums.FeedbackStatus;
             stars: number;
@@ -74,9 +74,9 @@ export declare class CustomersService {
             }[];
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             orderNo: number;
             customerId: string | null;
             orderType: import("../../generated/prisma").$Enums.OrderType;
@@ -89,15 +89,19 @@ export declare class CustomersService {
             cogs: Prisma.Decimal;
             isQuotation: boolean;
             staffUserId: string | null;
+            couponId: string | null;
+            couponDiscountAmount: Prisma.Decimal | null;
+            voucherId: string | null;
+            voucherAmountApplied: Prisma.Decimal | null;
         })[];
     } & {
         name: string;
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -115,9 +119,9 @@ export declare class CustomersService {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -135,9 +139,9 @@ export declare class CustomersService {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;

@@ -4,6 +4,9 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ActivityService } from '../activity/activity.service';
+import { SendGateService } from '../messaging/send-gate.service';
+import { WaitlistService } from './waitlist.service';
+import { DepositsService } from './deposits.service';
 import { AppointmentsService } from './appointments.service';
 import { AppException } from '../common/filters/app.exception';
 
@@ -27,6 +30,15 @@ describe('AppointmentsService (BE-054)', () => {
     scheduleSend: jest.fn().mockResolvedValue(undefined),
   };
   const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const sendGate = {
+    send: jest
+      .fn<Promise<void>, [Record<string, unknown>]>()
+      .mockResolvedValue(undefined),
+  };
+  const waitlist = { tryAutoOffer: jest.fn().mockResolvedValue(undefined) };
+  const deposits = {
+    forfeitForAppointment: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -41,6 +53,9 @@ describe('AppointmentsService (BE-054)', () => {
       tenantPrisma,
       reviewRequests as unknown as ReviewRequestsService,
       activity as unknown as ActivityService,
+      sendGate as unknown as SendGateService,
+      waitlist as unknown as WaitlistService,
+      deposits as unknown as DepositsService,
     );
 
     const business = await prisma.business.create({
@@ -65,6 +80,9 @@ describe('AppointmentsService (BE-054)', () => {
 
   afterEach(() => {
     reviewRequests.scheduleSend.mockClear();
+    sendGate.send.mockClear();
+    waitlist.tryAutoOffer.mockClear();
+    deposits.forfeitForAppointment.mockClear();
   });
 
   afterAll(async () => {
@@ -237,5 +255,206 @@ describe('AppointmentsService (BE-054)', () => {
         customerPhone: `+1${Date.now()}8`,
       }),
     ).rejects.toBeInstanceOf(AppException);
+  });
+
+  describe('Booking Requests (UPD-BE-016)', () => {
+    it('createRequest() creates an appointment awaiting approval, not booked/confirmed', async () => {
+      const requested = await service.createRequest(businessId, {
+        serviceId: serviceProductId,
+        startsAt: '2026-08-07T10:00:00Z',
+        customerName: 'Requester Rita',
+        customerPhone: `+1${Date.now()}7`,
+      });
+      expect(requested.status).toBe('requested');
+    });
+
+    it('approve() confirms the appointment and sends booking_confirm', async () => {
+      const requested = await service.createRequest(businessId, {
+        serviceId: serviceProductId,
+        startsAt: '2026-08-07T12:00:00Z',
+        customerName: 'Requester Approved',
+        customerPhone: `+1${Date.now()}6`,
+      });
+
+      const approved = await service.approve(businessId, requested.id);
+      expect(approved.status).toBe('confirmed');
+      expect(sendGate.send).toHaveBeenCalledWith(
+        expect.objectContaining({ templateKey: 'booking_confirm' }),
+      );
+    });
+
+    it('decline() cancels the appointment and sends booking_declined', async () => {
+      const requested = await service.createRequest(businessId, {
+        serviceId: serviceProductId,
+        startsAt: '2026-08-07T14:00:00Z',
+        customerName: 'Requester Declined',
+        customerPhone: `+1${Date.now()}5`,
+      });
+
+      const declined = await service.decline(businessId, requested.id, {
+        reason: 'Fully booked that day',
+      });
+      expect(declined.status).toBe('cancelled');
+      expect(sendGate.send).toHaveBeenCalledWith(
+        expect.objectContaining({ templateKey: 'booking_declined' }),
+      );
+      const [sentArgs] =
+        sendGate.send.mock.calls[sendGate.send.mock.calls.length - 1];
+      const variables = sentArgs.variables as Record<string, string>;
+      expect(variables.reason).toBe('Fully booked that day');
+    });
+
+    it('suggestAlternative() sends a proposal without changing the appointment status', async () => {
+      const requested = await service.createRequest(businessId, {
+        serviceId: serviceProductId,
+        startsAt: '2026-08-07T16:00:00Z',
+        customerName: 'Requester Alt',
+        customerPhone: `+1${Date.now()}4`,
+      });
+
+      const result = await service.suggestAlternative(
+        businessId,
+        requested.id,
+        {
+          startsAt: '2026-08-08T10:00:00Z',
+        },
+      );
+      expect(result.status).toBe('requested');
+      expect(sendGate.send).toHaveBeenCalledWith(
+        expect.objectContaining({ templateKey: 'booking_suggest_alternative' }),
+      );
+
+      const stillRequested = await prisma.appointment.findUniqueOrThrow({
+        where: { id: requested.id },
+      });
+      expect(stillRequested.status).toBe('requested');
+    });
+
+    it('rejects approve/decline/suggest-alternative on an appointment that is not requested', async () => {
+      const confirmed = await prisma.appointment.create({
+        data: {
+          businessId,
+          serviceId: serviceProductId,
+          customerId,
+          startsAt: new Date('2026-08-09T10:00:00Z'),
+          endsAt: new Date('2026-08-09T11:00:00Z'),
+          status: 'confirmed',
+        },
+      });
+
+      await expect(
+        service.approve(businessId, confirmed.id),
+      ).rejects.toBeInstanceOf(AppException);
+      await expect(
+        service.decline(businessId, confirmed.id, {}),
+      ).rejects.toBeInstanceOf(AppException);
+      await expect(
+        service.suggestAlternative(businessId, confirmed.id, {
+          startsAt: '2026-08-10T10:00:00Z',
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+  });
+
+  describe('cancellation/no-show hooks (UPD-BE-017/019)', () => {
+    it('cancelling an appointment triggers a best-effort waitlist auto-offer', async () => {
+      const appointment = await prisma.appointment.create({
+        data: {
+          businessId,
+          serviceId: serviceProductId,
+          customerId,
+          startsAt: new Date('2026-08-11T10:00:00Z'),
+          endsAt: new Date('2026-08-11T11:00:00Z'),
+          status: 'confirmed',
+        },
+      });
+
+      await service.updateStatus(businessId, appointment.id, 'cancelled');
+
+      expect(waitlist.tryAutoOffer).toHaveBeenCalledWith(
+        businessId,
+        expect.objectContaining({ serviceId: serviceProductId }),
+      );
+    });
+
+    it('marking no_show forfeits any deposit tied to the appointment', async () => {
+      const appointment = await prisma.appointment.create({
+        data: {
+          businessId,
+          serviceId: serviceProductId,
+          customerId,
+          startsAt: new Date('2026-08-12T10:00:00Z'),
+          endsAt: new Date('2026-08-12T11:00:00Z'),
+          status: 'confirmed',
+        },
+      });
+
+      await service.updateStatus(businessId, appointment.id, 'no_show');
+
+      expect(deposits.forfeitForAppointment).toHaveBeenCalledWith(
+        appointment.id,
+      );
+    });
+  });
+
+  describe('No-Shows reporting (UPD-BE-020)', () => {
+    it('computes a real overall no-show rate and monthly trend from completed/no_show appointments', async () => {
+      await prisma.appointment.create({
+        data: {
+          businessId,
+          serviceId: serviceProductId,
+          customerId,
+          startsAt: new Date('2026-07-15T10:00:00Z'),
+          endsAt: new Date('2026-07-15T11:00:00Z'),
+          status: 'completed',
+        },
+      });
+      await prisma.appointment.create({
+        data: {
+          businessId,
+          serviceId: serviceProductId,
+          customerId,
+          startsAt: new Date('2026-07-16T10:00:00Z'),
+          endsAt: new Date('2026-07-16T11:00:00Z'),
+          status: 'no_show',
+        },
+      });
+
+      const report = await service.noShowReport(businessId, 12);
+      const julyRow = report.trend.find((r) => r.month === '2026-07');
+      expect(julyRow).toBeDefined();
+      expect(julyRow!.total).toBeGreaterThanOrEqual(2);
+      expect(julyRow!.noShows).toBeGreaterThanOrEqual(1);
+      expect(report.overallRate).toBeGreaterThan(0);
+    });
+
+    it('flags a repeat offender once the same customer has 2+ no-shows', async () => {
+      const repeatCustomer = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}3`,
+          name: 'Repeat Offender',
+        },
+      });
+      for (let i = 0; i < 2; i++) {
+        await prisma.appointment.create({
+          data: {
+            businessId,
+            serviceId: serviceProductId,
+            customerId: repeatCustomer.id,
+            startsAt: new Date(`2026-07-2${i}T10:00:00Z`),
+            endsAt: new Date(`2026-07-2${i}T11:00:00Z`),
+            status: 'no_show',
+          },
+        });
+      }
+
+      const report = await service.noShowReport(businessId, 12);
+      expect(
+        report.repeatOffenders.some(
+          (o) => o.customerId === repeatCustomer.id && o.noShowCount >= 2,
+        ),
+      ).toBe(true);
+    });
   });
 });

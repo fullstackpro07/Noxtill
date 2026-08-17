@@ -8,8 +8,8 @@ export declare class ReviewRequestsService {
     create(businessId: string, dto: CreateReviewRequestDto): Promise<{
         message: string | null;
         id: string;
-        createdAt: Date;
         businessId: string;
+        createdAt: Date;
         customerId: string | null;
         source: string;
         token: string;

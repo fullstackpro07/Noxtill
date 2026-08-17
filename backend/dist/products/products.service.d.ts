@@ -14,9 +14,9 @@ export declare class ProductsService {
     create(dto: CreateProductDto): Promise<{
         name: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         kind: import("../../generated/prisma").$Enums.ProductKind;
         category: string | null;
         sku: string | null;
@@ -31,9 +31,9 @@ export declare class ProductsService {
     findAll(query: ProductQuery): import("generated/prisma/runtime/library").PrismaPromise<{
         name: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         kind: import("../../generated/prisma").$Enums.ProductKind;
         category: string | null;
         sku: string | null;
@@ -48,9 +48,9 @@ export declare class ProductsService {
     findOne(id: string): Promise<{
         name: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         kind: import("../../generated/prisma").$Enums.ProductKind;
         category: string | null;
         sku: string | null;
@@ -65,9 +65,9 @@ export declare class ProductsService {
     update(id: string, dto: UpdateProductDto): Promise<{
         name: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         kind: import("../../generated/prisma").$Enums.ProductKind;
         category: string | null;
         sku: string | null;
@@ -82,9 +82,9 @@ export declare class ProductsService {
     deactivate(id: string): Promise<{
         name: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         kind: import("../../generated/prisma").$Enums.ProductKind;
         category: string | null;
         sku: string | null;

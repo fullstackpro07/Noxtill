@@ -1,8 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AiInfraService } from '../ai/ai-infra.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
-import { HourlyRow, ProductProfitRow, WeekdayRow } from './profit.types';
+import {
+  CoPurchaseRow,
+  HourlyRow,
+  ProductProfitRow,
+  WeekdayRow,
+} from './profit.types';
 
 const WEEKDAY_NAMES = [
   'Sunday',
@@ -15,6 +21,10 @@ const WEEKDAY_NAMES = [
 ];
 const LOW_MARGIN_THRESHOLD = 10;
 const TOP_PRODUCTS_COUNT = 3;
+const CO_PURCHASE_MIN_COUNT = 2;
+const BUNDLE_SUGGESTION_LIMIT = 5;
+/** Deterministic, not AI-decided — a modest incentive to buy the pair together. */
+const BUNDLE_DISCOUNT_RATE = 0.1;
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -23,9 +33,12 @@ function round2(value: number): number {
 /** Profit & Loss analytics (BE-036/BE-037), computed from completed, non-quotation orders. */
 @Injectable()
 export class ProfitService {
+  private readonly logger = new Logger(ProfitService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly cls: ClsService,
+    private readonly aiInfra: AiInfraService,
   ) {}
 
   async byProduct(windowDays: 30 | 90 = 30) {
@@ -177,5 +190,137 @@ export class ProfitService {
       totalExpenses,
       netProfit,
     };
+  }
+
+  /**
+   * Bundle suggestions (UPD-BE-013) — grounded entirely in real co-purchase data: which product
+   * pairs actually get bought together, and how often. The AI is only ever asked to phrase a
+   * short pitch for pairs the system has already found and priced (`suggestedPrice` is a plain
+   * deterministic formula below, never something the AI is asked to invent) — same
+   * facts-then-phrase pattern as `AiInsightsService.phraseObservations`, with the same
+   * graceful-degradation fallback if the AI call fails.
+   */
+  async bundleSuggestions() {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+
+    const [pairs, existingBundles] = await Promise.all([
+      this.tenantPrisma.client.$queryRaw<CoPurchaseRow[]>`
+        SELECT a.product_id AS product_a, b.product_id AS product_b, pa.name AS name_a, pb.name AS name_b,
+               COUNT(DISTINCT a.order_id) AS together_count
+        FROM order_items a
+        JOIN order_items b ON a.order_id = b.order_id AND a.product_id < b.product_id
+        JOIN orders o ON o.id = a.order_id
+        JOIN products pa ON pa.id = a.product_id
+        JOIN products pb ON pb.id = b.product_id
+        WHERE o.business_id = ${businessId} AND o.status = 'completed' AND o.is_quotation = false
+        GROUP BY a.product_id, b.product_id, pa.name, pb.name
+        HAVING COUNT(DISTINCT a.order_id) >= ${CO_PURCHASE_MIN_COUNT}
+        ORDER BY together_count DESC
+        LIMIT ${BUNDLE_SUGGESTION_LIMIT * 3}
+      `,
+      this.tenantPrisma.client.bundle.findMany({
+        include: { items: true },
+      }),
+    ]);
+
+    const alreadyBundled = new Set(
+      existingBundles.map((b) =>
+        [...b.items.map((i) => i.productId)].sort().join('|'),
+      ),
+    );
+
+    const productIds = [
+      ...new Set(pairs.flatMap((p) => [p.product_a, p.product_b])),
+    ];
+    const products = await this.tenantPrisma.client.product.findMany({
+      where: { id: { in: productIds } },
+    });
+    const priceById = new Map(
+      products.map((p) => [p.id, Number(p.sellingPrice)]),
+    );
+
+    const candidates = pairs
+      .filter(
+        (pair) =>
+          !alreadyBundled.has(
+            [pair.product_a, pair.product_b].sort().join('|'),
+          ),
+      )
+      .slice(0, BUNDLE_SUGGESTION_LIMIT)
+      .map((pair) => {
+        const priceA = priceById.get(pair.product_a) ?? 0;
+        const priceB = priceById.get(pair.product_b) ?? 0;
+        const combinedPrice = round2(priceA + priceB);
+        const suggestedPrice = round2(
+          combinedPrice * (1 - BUNDLE_DISCOUNT_RATE),
+        );
+        return {
+          productAId: pair.product_a,
+          productBId: pair.product_b,
+          nameA: pair.name_a,
+          nameB: pair.name_b,
+          togetherCount: Number(pair.together_count),
+          combinedPrice,
+          suggestedPrice,
+          pitch: `${pair.name_a} + ${pair.name_b} — bought together ${Number(pair.together_count)} times.`,
+        };
+      });
+
+    if (candidates.length === 0) return [];
+
+    try {
+      const pitches = await this.phrasePitches(businessId, candidates);
+      return candidates.map((c, i) => ({ ...c, pitch: pitches[i] || c.pitch }));
+    } catch (error) {
+      this.logger.warn(
+        `Bundle-suggestion phrasing skipped for business ${businessId}: ${(error as Error).message}`,
+      );
+      return candidates;
+    }
+  }
+
+  private async phrasePitches(
+    businessId: string,
+    candidates: {
+      nameA: string;
+      nameB: string;
+      togetherCount: number;
+      suggestedPrice: number;
+    }[],
+  ): Promise<string[]> {
+    const factLines = candidates
+      .map(
+        (c, i) =>
+          `${i + 1}. "${c.nameA}" + "${c.nameB}", bought together ${c.togetherCount} times, suggested bundle price ${c.suggestedPrice}`,
+      )
+      .join('\n');
+
+    const prompt = [
+      'You write short, upbeat one-sentence retail bundle pitches from real numbers a system has already computed.',
+      'Here are the numbered candidates:',
+      factLines,
+      'For each numbered candidate, write exactly one short sentence (max ~20 words) suggesting the bundle,',
+      'mentioning the suggested price already given.',
+      'Use ONLY the numbers already given — never introduce a new number or price of your own.',
+      'Reply with ONLY a JSON array of strings, one per candidate, in the same order. No other text.',
+    ].join('\n');
+
+    const raw = await this.aiInfra.complete(businessId, prompt);
+    const jsonStart = raw.indexOf('[');
+    const jsonEnd = raw.lastIndexOf(']');
+    if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
+      throw new Error('AI response had no JSON array');
+    }
+    const parsed: unknown = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length !== candidates.length ||
+      !parsed.every(
+        (item) => typeof item === 'string' && item.trim().length > 0,
+      )
+    ) {
+      throw new Error('AI response array shape mismatch');
+    }
+    return parsed as string[];
   }
 }

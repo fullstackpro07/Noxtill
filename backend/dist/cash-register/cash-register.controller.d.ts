@@ -9,11 +9,11 @@ export declare class CashRegisterController {
     getCurrentShift(user: AuthenticatedUser): Promise<({
         movements: {
             id: string;
-            createdAt: Date;
-            type: import("generated/prisma").$Enums.CashMovementType;
             businessId: string;
+            createdAt: Date;
             amount: import("generated/prisma/runtime/library").Decimal;
             note: string | null;
+            type: import("generated/prisma").$Enums.CashMovementType;
             shiftId: string;
             recordedByUserId: string | null;
         }[];
@@ -32,11 +32,11 @@ export declare class CashRegisterController {
     openShift(user: AuthenticatedUser, dto: OpenShiftDto): Promise<{
         movements: {
             id: string;
-            createdAt: Date;
-            type: import("generated/prisma").$Enums.CashMovementType;
             businessId: string;
+            createdAt: Date;
             amount: import("generated/prisma/runtime/library").Decimal;
             note: string | null;
+            type: import("generated/prisma").$Enums.CashMovementType;
             shiftId: string;
             recordedByUserId: string | null;
         }[];
@@ -66,11 +66,11 @@ export declare class CashRegisterController {
     }>;
     recordMovement(user: AuthenticatedUser, dto: RecordCashMovementDto): Promise<{
         id: string;
-        createdAt: Date;
-        type: import("generated/prisma").$Enums.CashMovementType;
         businessId: string;
+        createdAt: Date;
         amount: import("generated/prisma/runtime/library").Decimal;
         note: string | null;
+        type: import("generated/prisma").$Enums.CashMovementType;
         shiftId: string;
         recordedByUserId: string | null;
     }>;

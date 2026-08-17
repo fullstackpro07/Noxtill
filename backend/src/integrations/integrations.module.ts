@@ -9,6 +9,9 @@ import { MerchantCenterConnector } from './connectors/merchant-center.connector'
 import { MetaAdsConnector } from './connectors/meta-ads.connector';
 import { TikTokAdsConnector } from './connectors/tiktok-ads.connector';
 import { EmailConnector } from './connectors/email.connector';
+import { BingPlacesConnector } from './connectors/bing-places.connector';
+import { YelpConnector } from './connectors/yelp.connector';
+import { AppleBusinessConnectConnector } from './connectors/apple-business-connect.connector';
 import { EmailCampaignsModule } from './email/email-campaigns.module';
 
 @Module({
@@ -24,7 +27,15 @@ import { EmailCampaignsModule } from './email/email-campaigns.module';
     MetaAdsConnector,
     TikTokAdsConnector,
     EmailConnector,
+    BingPlacesConnector,
+    YelpConnector,
+    AppleBusinessConnectConnector,
   ],
-  exports: [IntegrationsService],
+  exports: [
+    IntegrationsService,
+    ConnectorRegistry,
+    TokenCipherService,
+    GmbConnector,
+  ],
 })
 export class IntegrationsModule {}

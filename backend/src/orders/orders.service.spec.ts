@@ -6,6 +6,9 @@ import { OrdersService } from './orders.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ReferralsService } from '../marketing/referrals.service';
+import { CouponsService } from '../marketing/coupons.service';
+import { VouchersService } from '../marketing/vouchers.service';
+import { LoyaltyService } from '../customers/loyalty.service';
 import { ActivityService } from '../activity/activity.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { AppException } from '../common/filters/app.exception';
@@ -33,6 +36,15 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
   const referrals = {
     issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
   };
+  const coupons = {
+    validateAndApply: jest.fn(),
+  };
+  const vouchers = {
+    validateAndApply: jest.fn(),
+  };
+  const loyalty = {
+    issueStampIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
   const activity = { record: jest.fn().mockResolvedValue(undefined) };
   const cashRegister = {
     recordSaleMovement: jest.fn().mockResolvedValue(undefined),
@@ -53,6 +65,9 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
       sendGate as unknown as SendGateService,
       reviewRequests as unknown as ReviewRequestsService,
       referrals as unknown as ReferralsService,
+      coupons as unknown as CouponsService,
+      vouchers as unknown as VouchersService,
+      loyalty as unknown as LoyaltyService,
       activity as unknown as ActivityService,
       cashRegister as unknown as CashRegisterService,
     );
@@ -83,6 +98,8 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
   afterEach(() => {
     sendGate.send.mockClear();
     reviewRequests.scheduleSend.mockClear();
+    coupons.validateAndApply.mockClear();
+    vouchers.validateAndApply.mockClear();
   });
 
   afterAll(async () => {
@@ -92,6 +109,8 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
     await prisma.payment.deleteMany({ where: { order: { businessId } } });
     await prisma.orderItem.deleteMany({ where: { order: { businessId } } });
     await prisma.order.deleteMany({ where: { businessId } });
+    await prisma.coupon.deleteMany({ where: { businessId } });
+    await prisma.voucher.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
@@ -153,6 +172,111 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
       customer.id,
       expect.any(String),
     );
+
+    // UPD-BE-024: the loyalty stamp-issuance hook runs inside the same transaction as every
+    // other post-sale customer effect (referrals, review requests) — confirms the wiring, not
+    // just LoyaltyService's own logic (already covered in loyalty.service.spec.ts).
+    expect(loyalty.issueStampIfEligible).toHaveBeenCalledWith(
+      businessId,
+      customer.id,
+      order.id,
+      expect.anything(),
+    );
+  });
+
+  it('applies a coupon discount via CouponsService and stores couponId/couponDiscountAmount (UPD-BE-029 wiring)', async () => {
+    // Dedicated product, so this test's stock decrement doesn't disturb the shared `productId`
+    // stock count the other tests in this file depend on running in order.
+    const wiringProduct = await prisma.product.create({
+      data: {
+        businessId,
+        kind: 'product',
+        name: 'Coupon Wiring Widget',
+        costPrice: 40,
+        sellingPrice: 100,
+        stockQty: 5,
+      },
+    });
+    const coupon = await prisma.coupon.create({
+      data: {
+        businessId,
+        code: `WIRING-${Date.now()}`,
+        type: 'fixed',
+        value: 20,
+      },
+    });
+    coupons.validateAndApply.mockResolvedValueOnce({
+      couponId: coupon.id,
+      discountAmount: 20,
+    });
+
+    const order = await ordersService.createSale(businessId, {
+      items: [{ productId: wiringProduct.id, qty: 1 }], // subtotal 100
+      couponCode: coupon.code,
+      payment: { method: 'cash' },
+    });
+
+    expect(coupons.validateAndApply).toHaveBeenCalledWith(
+      businessId,
+      coupon.code,
+      100,
+      undefined,
+      expect.anything(),
+    );
+    expect(Number(order.discount)).toBe(20);
+    expect(order.couponId).toBe(coupon.id);
+    expect(Number(order.couponDiscountAmount)).toBe(20);
+    // subtotal 100, discount 20 -> taxable 80, tax 10% = 8, total = 88
+    expect(Number(order.total)).toBe(88);
+  });
+
+  it('applies a voucher toward payment (not the total) via VouchersService (UPD-BE-030 wiring)', async () => {
+    const wiringProduct = await prisma.product.create({
+      data: {
+        businessId,
+        kind: 'product',
+        name: 'Voucher Wiring Widget',
+        costPrice: 40,
+        sellingPrice: 100,
+        stockQty: 5,
+      },
+    });
+    const voucher = await prisma.voucher.create({
+      data: {
+        businessId,
+        code: `WIRING-${Date.now()}`,
+        initialValue: 50,
+        balance: 50,
+      },
+    });
+    vouchers.validateAndApply.mockResolvedValueOnce({
+      voucherId: voucher.id,
+      amountApplied: 50,
+    });
+
+    const order = await ordersService.createSale(businessId, {
+      items: [{ productId: wiringProduct.id, qty: 1 }], // subtotal 100, tax 10 -> total 110
+      voucherCode: voucher.code,
+      voucherAmount: 50,
+      payment: { method: 'cash' },
+    });
+
+    expect(vouchers.validateAndApply).toHaveBeenCalledWith(
+      businessId,
+      voucher.code,
+      50,
+      110,
+      expect.anything(),
+    );
+    expect(order.voucherId).toBe(voucher.id);
+    expect(Number(order.voucherAmountApplied)).toBe(50);
+    expect(Number(order.total)).toBe(110); // a voucher is a payment method, not a discount
+
+    const payments = await prisma.payment.findMany({
+      where: { orderId: order.id },
+    });
+    expect(payments).toHaveLength(1);
+    expect(Number(payments[0].amount)).toBe(60); // 110 total - 50 voucher = 60 collected via cash
   });
 
   it('rolls back the entire transaction on insufficient stock (no partial rows)', async () => {
@@ -198,6 +322,15 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
   const referrals = {
     issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
   };
+  const coupons = {
+    validateAndApply: jest.fn(),
+  };
+  const vouchers = {
+    validateAndApply: jest.fn(),
+  };
+  const loyalty = {
+    issueStampIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
   const activity = { record: jest.fn().mockResolvedValue(undefined) };
   const cashRegister = {
     recordSaleMovement: jest.fn().mockResolvedValue(undefined),
@@ -218,6 +351,9 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
       sendGate as unknown as SendGateService,
       reviewRequests as unknown as ReviewRequestsService,
       referrals as unknown as ReferralsService,
+      coupons as unknown as CouponsService,
+      vouchers as unknown as VouchersService,
+      loyalty as unknown as LoyaltyService,
       activity as unknown as ActivityService,
       cashRegister as unknown as CashRegisterService,
     );

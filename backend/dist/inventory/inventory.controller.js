@@ -15,13 +15,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryController = void 0;
 const common_1 = require("@nestjs/common");
 const inventory_service_1 = require("./inventory.service");
+const stock_count_service_1 = require("./stock-count.service");
 const create_purchase_dto_1 = require("./dto/create-purchase.dto");
 const create_wastage_dto_1 = require("./dto/create-wastage.dto");
+const create_stock_count_dto_1 = require("./dto/create-stock-count.dto");
+const require_capability_decorator_1 = require("../common/decorators/require-capability.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
+const capabilities_constants_1 = require("../common/capabilities/capabilities.constants");
+const prisma_1 = require("../../generated/prisma");
 let InventoryController = class InventoryController {
     inventoryService;
-    constructor(inventoryService) {
+    stockCountService;
+    constructor(inventoryService, stockCountService) {
         this.inventoryService = inventoryService;
+        this.stockCountService = stockCountService;
     }
     recordPurchase(user, dto) {
         return this.inventoryService.recordPurchase(user.businessId, dto);
@@ -34,6 +41,18 @@ let InventoryController = class InventoryController {
     }
     getMovements(productId) {
         return this.inventoryService.getMovements(productId);
+    }
+    createStockCount(user, dto) {
+        return this.stockCountService.create(user.businessId, user.sub, dto);
+    }
+    listStockCounts(status) {
+        return this.stockCountService.list(status);
+    }
+    findStockCount(id) {
+        return this.stockCountService.findOne(id);
+    }
+    applyStockCount(user, id) {
+        return this.stockCountService.apply(user.businessId, id, user.sub);
     }
 };
 exports.InventoryController = InventoryController;
@@ -66,8 +85,40 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "getMovements", null);
+__decorate([
+    (0, common_1.Post)('stock/counts'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, create_stock_count_dto_1.CreateStockCountDto]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "createStockCount", null);
+__decorate([
+    (0, common_1.Get)('stock/counts'),
+    __param(0, (0, common_1.Query)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "listStockCounts", null);
+__decorate([
+    (0, common_1.Get)('stock/counts/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "findStockCount", null);
+__decorate([
+    (0, require_capability_decorator_1.RequireCapability)(capabilities_constants_1.CAPABILITIES.STOCK_COUNTS_APPLY),
+    (0, common_1.Post)('stock/counts/:id/apply'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], InventoryController.prototype, "applyStockCount", null);
 exports.InventoryController = InventoryController = __decorate([
     (0, common_1.Controller)(),
-    __metadata("design:paramtypes", [inventory_service_1.InventoryService])
+    __metadata("design:paramtypes", [inventory_service_1.InventoryService,
+        stock_count_service_1.StockCountService])
 ], InventoryController);
 //# sourceMappingURL=inventory.controller.js.map

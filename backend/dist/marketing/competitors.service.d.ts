@@ -7,18 +7,18 @@ export declare class CompetitorsService {
     constructor(tenantPrisma: TenantPrismaService, snapshotProcessor: CompetitorSnapshotProcessor);
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         platformRef: string;
         lastRating: import("generated/prisma/runtime/library").Decimal | null;
         lastReviewsCount: number | null;
     }[]>;
     create(businessId: string, dto: CreateCompetitorDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         platformRef: string;
         lastRating: import("generated/prisma/runtime/library").Decimal | null;
         lastReviewsCount: number | null;
@@ -33,9 +33,9 @@ export declare class CompetitorsService {
     }[]>;
     triggerSnapshot(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         platformRef: string;
         lastRating: import("generated/prisma/runtime/library").Decimal | null;
         lastReviewsCount: number | null;

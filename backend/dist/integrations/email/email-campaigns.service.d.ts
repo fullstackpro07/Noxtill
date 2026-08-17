@@ -10,9 +10,9 @@ export declare class EmailCampaignsService {
     constructor(tenantPrisma: TenantPrismaService, segments: SegmentsService, config: ConfigService);
     create(businessId: string, dto: CreateEmailCampaignDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         scheduledFor: Date | null;
         segment: string;
         body: string;
@@ -21,9 +21,9 @@ export declare class EmailCampaignsService {
     }>;
     list(businessId: string): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         scheduledFor: Date | null;
         segment: string;
         body: string;

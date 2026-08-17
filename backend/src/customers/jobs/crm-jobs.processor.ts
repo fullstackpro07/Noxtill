@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LocaleService } from '../../common/localization/locale.service';
 import { SendGateService } from '../../messaging/send-gate.service';
+import { WorkflowTriggerService } from '../../marketing/automations/workflow-trigger.service';
 import {
   BIRTHDAY_LOCAL_HOUR,
   CRM_JOBS_QUEUE,
@@ -11,6 +12,7 @@ import {
   TAG_RULES_LOCAL_HOUR,
   VIP_LIFETIME_SPEND_THRESHOLD,
 } from './crm-jobs.constants';
+import { ActivityEventType } from '../../../generated/prisma';
 
 interface CrmTickJobData {
   /** ISO timestamp override, used only by tests to make "current local hour" deterministic. */
@@ -30,6 +32,7 @@ export class CrmJobsProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly locale: LocaleService,
     private readonly sendGate: SendGateService,
+    private readonly workflowTrigger: WorkflowTriggerService,
   ) {
     super();
   }
@@ -68,6 +71,8 @@ export class CrmJobsProcessor extends WorkerHost {
         const shouldBeLapsed =
           !customer.lastVisitAt || customer.lastVisitAt < lapsedCutoff;
 
+        const newlyLapsed = shouldBeLapsed && !customer.tags.includes('Lapsed');
+
         let tags = customer.tags;
         tags = shouldBeVip
           ? Array.from(new Set([...tags, 'VIP']))
@@ -84,6 +89,31 @@ export class CrmJobsProcessor extends WorkerHost {
             where: { id: customer.id },
             data: { tags },
           });
+        }
+
+        // Automations engine (UPD-BE-028) lapsed_customer trigger — only on the transition into
+        // Lapsed, not every hourly tick a customer remains lapsed.
+        if (newlyLapsed) {
+          const event = await this.prisma.activityEvent.create({
+            data: {
+              businessId: business.id,
+              type: ActivityEventType.customer_lapsed,
+              description: `${customer.name} hasn't visited in ${LAPSED_DAYS}+ days`,
+              entityType: 'Customer',
+              entityId: customer.id,
+            },
+          });
+          void this.workflowTrigger
+            .dispatch(business.id, event.type, {
+              description: event.description,
+              entityType: event.entityType,
+              entityId: event.entityId,
+            })
+            .catch((error: Error) =>
+              this.logger.warn(
+                `Workflow dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
+              ),
+            );
         }
       }
     }
@@ -134,6 +164,29 @@ export class CrmJobsProcessor extends WorkerHost {
             },
           })
           .catch(() => undefined);
+
+        // Automations engine (UPD-BE-028) birthday trigger — recorded regardless of whether the
+        // built-in greeting send above succeeded, since it's a real fact about the customer.
+        const event = await this.prisma.activityEvent.create({
+          data: {
+            businessId: business.id,
+            type: ActivityEventType.birthday,
+            description: `${customer.name}'s birthday`,
+            entityType: 'Customer',
+            entityId: customer.id,
+          },
+        });
+        void this.workflowTrigger
+          .dispatch(business.id, event.type, {
+            description: event.description,
+            entityType: event.entityType,
+            entityId: event.entityId,
+          })
+          .catch((error: Error) =>
+            this.logger.warn(
+              `Workflow dispatch failed for birthday event ${event.id}: ${error.message}`,
+            ),
+          );
       }
     }
 

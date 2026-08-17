@@ -21,7 +21,8 @@ export class GoogleAdsConnector extends GoogleOAuth2Connector {
       {
         headers: {
           Authorization: `Bearer ${tokens.accessToken}`,
-          'developer-token': this.config.get<string>('GOOGLE_ADS_DEVELOPER_TOKEN') ?? '',
+          'developer-token':
+            this.config.get<string>('GOOGLE_ADS_DEVELOPER_TOKEN') ?? '',
         },
       },
     );

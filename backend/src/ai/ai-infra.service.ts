@@ -1,4 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import {
@@ -10,6 +12,7 @@ import {
   AI_ERROR_CODES,
   HAIKU_INPUT_COST_PER_TOKEN,
   HAIKU_OUTPUT_COST_PER_TOKEN,
+  IMAGE_GENERATION_COST_USD,
   RATE_LIMIT_WINDOW_MS,
 } from './ai-infra.constants';
 import { Prisma } from '../../generated/prisma';
@@ -30,6 +33,7 @@ export class AiInfraService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly claude: ClaudeClient,
+    private readonly config: ConfigService,
   ) {}
 
   async complete(
@@ -43,6 +47,43 @@ export class AiInfraService {
     });
     const text = result.content.find((block) => block.type === 'text')?.text;
     return text ?? '';
+  }
+
+  /**
+   * AI Content Studio image generation (UPD-BE-048) — no image-generation capability existed
+   * anywhere in this codebase before this ticket (confirmed by research); Claude/Anthropic has no
+   * image-generation API, so this calls OpenAI's Images API instead, the one new external
+   * provider this ticket introduces (`OPENAI_API_KEY`, disclosed placeholder). Runs through the
+   * exact same rate-limit/cost-cap guardrails as `complete()`, just priced as a flat per-image
+   * cost rather than per-token.
+   */
+  async generateImage(
+    businessId: string | undefined,
+    prompt: string,
+  ): Promise<{ url: string }> {
+    await this.checkGuardrails(businessId);
+
+    const response = await axios.post<{ data: { url: string }[] }>(
+      'https://api.openai.com/v1/images/generations',
+      { prompt, n: 1, size: '1024x1024' },
+      {
+        headers: {
+          Authorization: `Bearer ${this.config.get<string>('OPENAI_API_KEY') ?? ''}`,
+        },
+      },
+    );
+
+    await this.prisma.aiCallLog.create({
+      data: {
+        businessId,
+        kind: 'generate_image',
+        inputTokens: 0,
+        outputTokens: 0,
+        estimatedCostUsd: IMAGE_GENERATION_COST_USD,
+      },
+    });
+
+    return { url: response.data.data[0].url };
   }
 
   /** Runs the same guardrails as `complete`, but exposes the full response (content blocks, tool_use, etc). */

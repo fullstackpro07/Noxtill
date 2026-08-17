@@ -49,7 +49,10 @@ class GoogleOAuth2Connector {
             refresh_token: tokens.refreshToken,
             grant_type: 'refresh_token',
         }).toString(), { headers: { 'content-type': 'application/x-www-form-urlencoded' } });
-        return { ...this.mapTokenResponse(response.data), refreshToken: tokens.refreshToken };
+        return {
+            ...this.mapTokenResponse(response.data),
+            refreshToken: tokens.refreshToken,
+        };
     }
     async disconnect() {
     }

@@ -15,8 +15,14 @@ const nestjs_cls_1 = require("nestjs-cls");
 const tenant_prisma_service_1 = require("../common/tenancy/tenant-prisma.service");
 const audit_service_1 = require("../common/audit/audit.service");
 const activity_service_1 = require("../activity/activity.service");
+const app_exception_1 = require("../common/filters/app.exception");
 const tenant_constants_1 = require("../common/tenancy/tenant.constants");
 const credit_types_1 = require("./credit.types");
+const credit_constants_1 = require("./credit.constants");
+const review_token_util_1 = require("../reviews/review-token.util");
+function round2(value) {
+    return Math.round(value * 100) / 100;
+}
 let CreditService = class CreditService {
     tenantPrisma;
     cls;
@@ -109,6 +115,122 @@ let CreditService = class CreditService {
             entityId: entry.id,
         });
         return { entry, balanceBefore: before, balanceAfter: after };
+    }
+    async createInstallmentPlan(customerId, dto) {
+        const customer = await this.tenantPrisma.client.customer.findUnique({
+            where: { id: customerId },
+        });
+        if (!customer) {
+            throw new common_1.NotFoundException('Customer not found');
+        }
+        const sum = round2(dto.installments.reduce((s, i) => s + i.amount, 0));
+        if (sum !== round2(dto.totalAmount)) {
+            throw new app_exception_1.AppException(credit_constants_1.CREDIT_ERROR_CODES.PLAN_AMOUNT_MISMATCH, `Instalment amounts sum to ${sum}, which doesn't match totalAmount ${dto.totalAmount}`, common_1.HttpStatus.BAD_REQUEST);
+        }
+        return this.tenantPrisma.client.installmentPlan.create({
+            data: {
+                businessId: customer.businessId,
+                customerId,
+                totalAmount: dto.totalAmount,
+                note: dto.note,
+                installments: {
+                    create: dto.installments.map((line, i) => ({
+                        businessId: customer.businessId,
+                        seq: i + 1,
+                        amount: line.amount,
+                        dueDate: new Date(line.dueDate),
+                    })),
+                },
+            },
+            include: { installments: { orderBy: { seq: 'asc' } } },
+        });
+    }
+    listInstallmentPlans(customerId) {
+        return this.tenantPrisma.client.installmentPlan.findMany({
+            where: { customerId },
+            orderBy: { createdAt: 'desc' },
+            include: { installments: { orderBy: { seq: 'asc' } } },
+        });
+    }
+    async writeOff(customerId, dto) {
+        if (dto.confirm !== credit_constants_1.WRITE_OFF_CONFIRM_PHRASE) {
+            throw new app_exception_1.AppException(credit_constants_1.CREDIT_ERROR_CODES.WRITE_OFF_CONFIRMATION_MISMATCH, `Type "${credit_constants_1.WRITE_OFF_CONFIRM_PHRASE}" exactly to confirm this irreversible action`, common_1.HttpStatus.BAD_REQUEST);
+        }
+        const customer = await this.tenantPrisma.client.customer.findUnique({
+            where: { id: customerId },
+        });
+        if (!customer) {
+            throw new common_1.NotFoundException('Customer not found');
+        }
+        const before = await this.getBalance(customerId);
+        if (dto.amount > before) {
+            throw new app_exception_1.AppException(credit_constants_1.CREDIT_ERROR_CODES.WRITE_OFF_EXCEEDS_BALANCE, `Cannot write off ${dto.amount} — outstanding balance is only ${before}`, common_1.HttpStatus.BAD_REQUEST);
+        }
+        const businessId = customer.businessId;
+        const entry = await this.tenantPrisma.client.creditEntry.create({
+            data: {
+                businessId,
+                customerId,
+                kind: 'write_off',
+                amount: dto.amount,
+                note: dto.reason,
+            },
+        });
+        const after = await this.getBalance(customerId);
+        await this.auditService.log({
+            entity: 'CreditEntry',
+            entityId: entry.id,
+            action: 'credit.write_off',
+            before: { balance: before },
+            after: { balance: after, entry, reason: dto.reason },
+        });
+        await this.activity.record(businessId, {
+            type: 'payment',
+            description: `Wrote off ${dto.amount} for ${customer.name}: ${dto.reason}`,
+            amount: dto.amount,
+            entityType: 'CreditEntry',
+            entityId: entry.id,
+        });
+        return { entry, balanceBefore: before, balanceAfter: after };
+    }
+    async createShareLink(customerId) {
+        const customer = await this.tenantPrisma.client.customer.findUnique({
+            where: { id: customerId },
+        });
+        if (!customer) {
+            throw new common_1.NotFoundException('Customer not found');
+        }
+        const existing = await this.tenantPrisma.client.creditShareLink.findFirst({
+            where: { customerId, revoked: false },
+        });
+        if (existing) {
+            return existing;
+        }
+        return this.tenantPrisma.client.creditShareLink.create({
+            data: {
+                businessId: customer.businessId,
+                customerId,
+                token: (0, review_token_util_1.generateReviewToken)(),
+            },
+        });
+    }
+    listShareLinks(customerId) {
+        return this.tenantPrisma.client.creditShareLink.findMany({
+            where: { customerId },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+    async revokeShareLink(id) {
+        const link = await this.tenantPrisma.client.creditShareLink.findUnique({
+            where: { id },
+        });
+        if (!link) {
+            throw new common_1.NotFoundException('Share link not found');
+        }
+        return this.tenantPrisma.client.creditShareLink.update({
+            where: { id },
+            data: { revoked: true },
+        });
     }
 };
 exports.CreditService = CreditService;

@@ -15,7 +15,9 @@ describe('GoogleAdsConnector (BE-085)', () => {
 
   it('requests the Google Ads scope, distinct from GMB/Merchant Center', () => {
     const url = new URL(connector.authUrl('state'));
-    expect(url.searchParams.get('scope')).toBe('https://www.googleapis.com/auth/adwords');
+    expect(url.searchParams.get('scope')).toBe(
+      'https://www.googleapis.com/auth/adwords',
+    );
   });
 
   it("sync() calls the real listAccessibleCustomers endpoint with a developer-token header (Google Ads' own quirk)", async () => {
@@ -25,7 +27,10 @@ describe('GoogleAdsConnector (BE-085)', () => {
     expect(mockedAxios.get).toHaveBeenCalledWith(
       'https://googleads.googleapis.com/v17/customers:listAccessibleCustomers',
       expect.objectContaining({
-        headers: { Authorization: 'Bearer fake-token', 'developer-token': 'dev-token' },
+        headers: {
+          Authorization: 'Bearer fake-token',
+          'developer-token': 'dev-token',
+        },
       }),
     );
   });

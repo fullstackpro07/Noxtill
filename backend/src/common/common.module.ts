@@ -3,19 +3,20 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { TenancyGuard } from './tenancy/tenancy.guard';
-import { RolesGuard } from './guards/roles.guard';
+import { CapabilitiesGuard } from './guards/capabilities.guard';
 import { BusinessThrottlerGuard } from './guards/business-throttler.guard';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { AuditInterceptor } from './interceptors/audit.interceptor';
 import { AuditService } from './audit/audit.service';
 import { WebhookIdempotencyService } from './webhooks/webhook-idempotency.service';
+import { CapabilitiesService } from './capabilities/capabilities.service';
 
 /**
- * Wires the global request pipeline in guard-execution order (BE-006/008/009/013):
+ * Wires the global request pipeline in guard-execution order (BE-006/008/009/013/UPD-BE-035):
  * 1. BusinessThrottlerGuard — reject spam before doing any auth work
  * 2. JwtAuthGuard            — verify the token, populate request.user (bypassed by @Public())
  * 3. TenancyGuard            — bind businessId/userId/role into CLS from request.user
- * 4. RolesGuard              — enforce @Roles(...) route gates
+ * 4. CapabilitiesGuard       — enforce @RequireCapability(...) route gates
  * Then AuditInterceptor (no-ops without @Audited(...)) and HttpExceptionFilter
  * normalize every response/error.
  */
@@ -25,13 +26,14 @@ import { WebhookIdempotencyService } from './webhooks/webhook-idempotency.servic
   providers: [
     AuditService,
     WebhookIdempotencyService,
+    CapabilitiesService,
     { provide: APP_GUARD, useClass: BusinessThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenancyGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: CapabilitiesGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
-  exports: [AuditService, WebhookIdempotencyService],
+  exports: [AuditService, WebhookIdempotencyService, CapabilitiesService],
 })
 export class CommonModule {}

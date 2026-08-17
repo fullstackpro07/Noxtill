@@ -10,11 +10,11 @@ export declare class CashRegisterService {
     getCurrentShift(businessId: string): Promise<({
         movements: {
             id: string;
-            createdAt: Date;
-            type: import("../../generated/prisma").$Enums.CashMovementType;
             businessId: string;
+            createdAt: Date;
             amount: import("generated/prisma/runtime/library").Decimal;
             note: string | null;
+            type: import("../../generated/prisma").$Enums.CashMovementType;
             shiftId: string;
             recordedByUserId: string | null;
         }[];
@@ -33,11 +33,11 @@ export declare class CashRegisterService {
     openShift(businessId: string, dto: OpenShiftDto): Promise<{
         movements: {
             id: string;
-            createdAt: Date;
-            type: import("../../generated/prisma").$Enums.CashMovementType;
             businessId: string;
+            createdAt: Date;
             amount: import("generated/prisma/runtime/library").Decimal;
             note: string | null;
+            type: import("../../generated/prisma").$Enums.CashMovementType;
             shiftId: string;
             recordedByUserId: string | null;
         }[];
@@ -67,11 +67,11 @@ export declare class CashRegisterService {
     }>;
     recordMovement(businessId: string, dto: RecordCashMovementDto): Promise<{
         id: string;
-        createdAt: Date;
-        type: import("../../generated/prisma").$Enums.CashMovementType;
         businessId: string;
+        createdAt: Date;
         amount: import("generated/prisma/runtime/library").Decimal;
         note: string | null;
+        type: import("../../generated/prisma").$Enums.CashMovementType;
         shiftId: string;
         recordedByUserId: string | null;
     }>;

@@ -5,10 +5,14 @@ import { MerchantCenterConnector } from './connectors/merchant-center.connector'
 import { MetaAdsConnector } from './connectors/meta-ads.connector';
 import { TikTokAdsConnector } from './connectors/tiktok-ads.connector';
 import { EmailConnector } from './connectors/email.connector';
+import { BingPlacesConnector } from './connectors/bing-places.connector';
+import { YelpConnector } from './connectors/yelp.connector';
+import { AppleBusinessConnectConnector } from './connectors/apple-business-connect.connector';
 import { IntegrationProvider } from '../../generated/prisma';
 export declare class ConnectorRegistry {
     private readonly byProvider;
-    constructor(gmb: GmbConnector, googleAds: GoogleAdsConnector, merchant: MerchantCenterConnector, metaAds: MetaAdsConnector, tiktokAds: TikTokAdsConnector, email: EmailConnector);
+    constructor(gmb: GmbConnector, googleAds: GoogleAdsConnector, merchant: MerchantCenterConnector, metaAds: MetaAdsConnector, tiktokAds: TikTokAdsConnector, email: EmailConnector, bingPlaces: BingPlacesConnector, yelp: YelpConnector, appleBusinessConnect: AppleBusinessConnectConnector);
     get(provider: IntegrationProvider): Connector;
     all(): IntegrationProvider[];
+    directoryProviders(): IntegrationProvider[];
 }

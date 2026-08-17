@@ -176,13 +176,13 @@ describe('ReviewsService (BE-047)', () => {
       data: { businessId, customerId, stars: 2, message: 'Slow service' },
     });
 
-    await reviewsService.replyToFeedback(feedback.id, "Sorry about that!");
+    await reviewsService.replyToFeedback(feedback.id, 'Sorry about that!');
     expect(sendGate.send).toHaveBeenCalledWith(
       expect.objectContaining({
         businessId,
         customerId,
         templateKey: 'feedback_reply',
-        variables: { message: "Sorry about that!" },
+        variables: { message: 'Sorry about that!' },
       }),
     );
   });

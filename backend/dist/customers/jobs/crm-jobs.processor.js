@@ -16,17 +16,21 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const locale_service_1 = require("../../common/localization/locale.service");
 const send_gate_service_1 = require("../../messaging/send-gate.service");
+const workflow_trigger_service_1 = require("../../marketing/automations/workflow-trigger.service");
 const crm_jobs_constants_1 = require("./crm-jobs.constants");
+const prisma_1 = require("../../../generated/prisma");
 let CrmJobsProcessor = CrmJobsProcessor_1 = class CrmJobsProcessor extends bullmq_1.WorkerHost {
     prisma;
     locale;
     sendGate;
+    workflowTrigger;
     logger = new common_1.Logger(CrmJobsProcessor_1.name);
-    constructor(prisma, locale, sendGate) {
+    constructor(prisma, locale, sendGate, workflowTrigger) {
         super();
         this.prisma = prisma;
         this.locale = locale;
         this.sendGate = sendGate;
+        this.workflowTrigger = workflowTrigger;
     }
     async process(job) {
         const now = job.data?.now ? new Date(job.data.now) : new Date();
@@ -52,6 +56,7 @@ let CrmJobsProcessor = CrmJobsProcessor_1 = class CrmJobsProcessor extends bullm
             for (const customer of customers) {
                 const shouldBeVip = Number(customer.lifetimeSpend) >= crm_jobs_constants_1.VIP_LIFETIME_SPEND_THRESHOLD;
                 const shouldBeLapsed = !customer.lastVisitAt || customer.lastVisitAt < lapsedCutoff;
+                const newlyLapsed = shouldBeLapsed && !customer.tags.includes('Lapsed');
                 let tags = customer.tags;
                 tags = shouldBeVip
                     ? Array.from(new Set([...tags, 'VIP']))
@@ -65,6 +70,24 @@ let CrmJobsProcessor = CrmJobsProcessor_1 = class CrmJobsProcessor extends bullm
                         where: { id: customer.id },
                         data: { tags },
                     });
+                }
+                if (newlyLapsed) {
+                    const event = await this.prisma.activityEvent.create({
+                        data: {
+                            businessId: business.id,
+                            type: prisma_1.ActivityEventType.customer_lapsed,
+                            description: `${customer.name} hasn't visited in ${crm_jobs_constants_1.LAPSED_DAYS}+ days`,
+                            entityType: 'Customer',
+                            entityId: customer.id,
+                        },
+                    });
+                    void this.workflowTrigger
+                        .dispatch(business.id, event.type, {
+                        description: event.description,
+                        entityType: event.entityType,
+                        entityId: event.entityId,
+                    })
+                        .catch((error) => this.logger.warn(`Workflow dispatch failed for customer_lapsed event ${event.id}: ${error.message}`));
                 }
             }
         }
@@ -106,6 +129,22 @@ let CrmJobsProcessor = CrmJobsProcessor_1 = class CrmJobsProcessor extends bullm
                     },
                 })
                     .catch(() => undefined);
+                const event = await this.prisma.activityEvent.create({
+                    data: {
+                        businessId: business.id,
+                        type: prisma_1.ActivityEventType.birthday,
+                        description: `${customer.name}'s birthday`,
+                        entityType: 'Customer',
+                        entityId: customer.id,
+                    },
+                });
+                void this.workflowTrigger
+                    .dispatch(business.id, event.type, {
+                    description: event.description,
+                    entityType: event.entityType,
+                    entityId: event.entityId,
+                })
+                    .catch((error) => this.logger.warn(`Workflow dispatch failed for birthday event ${event.id}: ${error.message}`));
             }
         }
         this.logger.debug(`Birthday greetings evaluated for ${businesses.length} business(es)`);
@@ -116,6 +155,7 @@ exports.CrmJobsProcessor = CrmJobsProcessor = CrmJobsProcessor_1 = __decorate([
     (0, bullmq_1.Processor)(crm_jobs_constants_1.CRM_JOBS_QUEUE),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         locale_service_1.LocaleService,
-        send_gate_service_1.SendGateService])
+        send_gate_service_1.SendGateService,
+        workflow_trigger_service_1.WorkflowTriggerService])
 ], CrmJobsProcessor);
 //# sourceMappingURL=crm-jobs.processor.js.map

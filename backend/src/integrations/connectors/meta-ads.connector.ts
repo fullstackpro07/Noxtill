@@ -27,7 +27,8 @@ export class MetaAdsConnector implements Connector {
   constructor(private readonly config: ConfigService) {}
 
   private redirectUri(): string {
-    const backendUrl = this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
+    const backendUrl =
+      this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
     return `${backendUrl}/integrations/meta_ads/callback`;
   }
 
@@ -68,9 +69,12 @@ export class MetaAdsConnector implements Connector {
   }
 
   async sync(tokens: OAuthTokens): Promise<unknown> {
-    const response = await axios.get('https://graph.facebook.com/v19.0/me/adaccounts', {
-      params: { access_token: tokens.accessToken },
-    });
+    const response = await axios.get(
+      'https://graph.facebook.com/v19.0/me/adaccounts',
+      {
+        params: { access_token: tokens.accessToken },
+      },
+    );
     return response.data;
   }
 

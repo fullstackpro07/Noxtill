@@ -69,7 +69,9 @@ let StaffService = class StaffService {
         const [appointments, complaints, restockProducts] = await Promise.all([
             this.tenantPrisma.client.appointment.findMany({
                 where: {
-                    status: { in: [prisma_1.AppointmentStatus.booked, prisma_1.AppointmentStatus.confirmed] },
+                    status: {
+                        in: [prisma_1.AppointmentStatus.booked, prisma_1.AppointmentStatus.confirmed],
+                    },
                     startsAt: { lte: windowEnd },
                 },
                 include: { customer: true, service: true },
@@ -162,11 +164,18 @@ let StaffService = class StaffService {
     }
     async update(id, dto) {
         const existing = await this.loadNonOwner(id);
+        if (dto.customRoleId) {
+            const customRole = await this.tenantPrisma.client.customRole.findUnique({ where: { id: dto.customRoleId } });
+            if (!customRole) {
+                throw new common_1.NotFoundException('Custom role not found');
+            }
+        }
         return this.tenantPrisma.client.businessUser.update({
             where: { id: existing.id },
             data: {
                 role: dto.role,
                 commissionRule: dto.commissionRule,
+                customRoleId: dto.customRoleId === undefined ? undefined : dto.customRoleId,
             },
             include: { user: true },
         });

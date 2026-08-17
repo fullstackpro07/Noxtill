@@ -1,16 +1,35 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { RollupService } from './rollup.service';
 import { BranchAdvisorService } from './branch-advisor.service';
+import { BranchManagementService } from './branch-management.service';
 import { BranchAdvisorDto } from './dto/branch-advisor.dto';
+import { CreateBranchDto } from './dto/create-branch.dto';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller()
 export class BranchesController {
   constructor(
     private readonly rollupService: RollupService,
     private readonly branchAdvisorService: BranchAdvisorService,
+    private readonly branchManagementService: BranchManagementService,
   ) {}
+
+  @RequireCapability(CAPABILITIES.BRANCHES_MANAGE)
+  @Post('branches')
+  createBranch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateBranchDto,
+  ) {
+    return this.branchManagementService.create(user.businessId, dto);
+  }
+
+  @Get('branches')
+  listBranches(@CurrentUser() user: AuthenticatedUser) {
+    return this.branchManagementService.list(user.businessId);
+  }
 
   @Get('rollup/dashboard')
   dashboard(

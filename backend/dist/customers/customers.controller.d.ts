@@ -12,9 +12,9 @@ export declare class CustomersController {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -32,9 +32,9 @@ export declare class CustomersController {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -51,11 +51,11 @@ export declare class CustomersController {
         privateFeedback: {
             message: string | null;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             customerId: string | null;
-            status: import("../../generated/prisma").$Enums.FeedbackStatus;
+            status: import("generated/prisma").$Enums.FeedbackStatus;
             stars: number;
             reviewRequestId: string | null;
             assignedTo: string | null;
@@ -73,14 +73,14 @@ export declare class CustomersController {
             }[];
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             orderNo: number;
             customerId: string | null;
-            orderType: import("../../generated/prisma").$Enums.OrderType;
+            orderType: import("generated/prisma").$Enums.OrderType;
             tableNo: string | null;
-            status: import("../../generated/prisma").$Enums.OrderStatus;
+            status: import("generated/prisma").$Enums.OrderStatus;
             subtotal: import("generated/prisma/runtime/library").Decimal;
             tax: import("generated/prisma/runtime/library").Decimal;
             discount: import("generated/prisma/runtime/library").Decimal;
@@ -88,15 +88,19 @@ export declare class CustomersController {
             cogs: import("generated/prisma/runtime/library").Decimal;
             isQuotation: boolean;
             staffUserId: string | null;
+            couponId: string | null;
+            couponDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
+            voucherId: string | null;
+            voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
         })[];
     } & {
         name: string;
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -114,9 +118,9 @@ export declare class CustomersController {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;
@@ -134,9 +138,9 @@ export declare class CustomersController {
         email: string | null;
         phone: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         address: string | null;
         birthday: Date | null;
         notes: string | null;

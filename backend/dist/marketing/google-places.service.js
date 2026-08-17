@@ -33,7 +33,9 @@ let GooglePlacesService = GooglePlacesService_1 = class GooglePlacesService {
             },
         });
         const { status, result } = response.data;
-        if (status !== 'OK' || result?.rating == null || result.user_ratings_total == null) {
+        if (status !== 'OK' ||
+            result?.rating == null ||
+            result.user_ratings_total == null) {
             this.logger.debug(`Google Places lookup for ${placeId} returned status=${status}`);
             return null;
         }

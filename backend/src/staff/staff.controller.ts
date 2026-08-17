@@ -14,10 +14,10 @@ import { CommissionsService } from './commissions.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { QueryCommissionsDto } from './dto/query-commissions.dto';
-import { Roles } from '../common/decorators/roles.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { Role } from '../../generated/prisma';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller()
 export class StaffController {
@@ -37,19 +37,19 @@ export class StaffController {
     return this.staffService.inbox();
   }
 
-  @Roles(Role.owner)
+  @RequireCapability(CAPABILITIES.STAFF_MANAGE)
   @Post('staff')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateStaffDto) {
     return this.staffService.create(user.businessId, dto);
   }
 
-  @Roles(Role.owner)
+  @RequireCapability(CAPABILITIES.STAFF_MANAGE)
   @Patch('staff/:id')
   update(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
     return this.staffService.update(id, dto);
   }
 
-  @Roles(Role.owner)
+  @RequireCapability(CAPABILITIES.STAFF_MANAGE)
   @Delete('staff/:id')
   remove(@Param('id') id: string) {
     return this.staffService.remove(id);

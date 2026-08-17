@@ -9,6 +9,7 @@ import { MessageDeadLetterListener } from './message-dead-letter.listener';
 import { MessagesService } from './messages.service';
 import { MessagesController } from './messages.controller';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { SettingsModule } from '../settings/settings.module';
 import { MESSAGES_QUEUE } from './messaging.constants';
 import { dlqName } from '../common/queue/queue.constants';
 
@@ -19,6 +20,7 @@ import { dlqName } from '../common/queue/queue.constants';
       { name: dlqName(MESSAGES_QUEUE) },
     ),
     WhatsappModule,
+    SettingsModule,
   ],
   controllers: [MessagesController],
   providers: [

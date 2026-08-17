@@ -8,7 +8,7 @@ export interface ChannelOverviewRow {
 export declare class MarketingOverviewService {
     private readonly tenantPrisma;
     constructor(tenantPrisma: TenantPrismaService);
-    overview(businessId: string): Promise<ChannelOverviewRow[]>;
+    overview(): Promise<ChannelOverviewRow[]>;
     private toRow;
     private label;
 }

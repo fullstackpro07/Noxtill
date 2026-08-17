@@ -14,9 +14,9 @@ export declare class PublicOrderingService {
         products: {
             name: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             kind: import("../../generated/prisma").$Enums.ProductKind;
             category: string | null;
             sku: string | null;
@@ -31,9 +31,9 @@ export declare class PublicOrderingService {
     }>;
     createOrder(slug: string, dto: CreatePublicOrderDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         orderNo: number;
         customerId: string | null;
         orderType: import("../../generated/prisma").$Enums.OrderType;
@@ -46,5 +46,9 @@ export declare class PublicOrderingService {
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+        couponId: string | null;
+        couponDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
+        voucherId: string | null;
+        voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
     }>;
 }

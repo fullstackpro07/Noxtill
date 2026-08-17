@@ -50,10 +50,19 @@ let IntegrationsService = IntegrationsService_1 = class IntegrationsService {
         const state = (0, signed_token_util_1.signPayload)({ businessId, provider }, this.stateSecret());
         const url = connector.authUrl(state);
         if (!url) {
+            const tokens = await connector.handleCallback('');
             await this.tenantPrisma.client.integration.upsert({
                 where: { businessId_provider: { businessId, provider } },
-                create: { businessId, provider, status: prisma_1.IntegrationStatus.connected },
-                update: { status: prisma_1.IntegrationStatus.connected },
+                create: {
+                    businessId,
+                    provider,
+                    status: prisma_1.IntegrationStatus.connected,
+                    tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+                },
+                update: {
+                    status: prisma_1.IntegrationStatus.connected,
+                    tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+                },
             });
             return { connected: true };
         }
@@ -87,7 +96,11 @@ let IntegrationsService = IntegrationsService_1 = class IntegrationsService {
             this.logger.warn(`OAuth callback failed for provider=${provider}: ${error.message}`);
             await this.tenantPrisma.client.integration.upsert({
                 where: { businessId_provider: { businessId, provider } },
-                create: { businessId, provider, status: prisma_1.IntegrationStatus.needs_attention },
+                create: {
+                    businessId,
+                    provider,
+                    status: prisma_1.IntegrationStatus.needs_attention,
+                },
                 update: { status: prisma_1.IntegrationStatus.needs_attention },
             });
             return { businessId, ok: false };
@@ -95,7 +108,9 @@ let IntegrationsService = IntegrationsService_1 = class IntegrationsService {
     }
     async disconnect(businessId, provider) {
         const connector = this.connectors.get(provider);
-        await connector.disconnect().catch((error) => this.logger.warn(`disconnect() failed for provider=${provider}: ${error.message}`));
+        await connector
+            .disconnect()
+            .catch((error) => this.logger.warn(`disconnect() failed for provider=${provider}: ${error.message}`));
         await this.tenantPrisma.client.integration.updateMany({
             where: { businessId, provider },
             data: { status: prisma_1.IntegrationStatus.not_connected, tokens: null },

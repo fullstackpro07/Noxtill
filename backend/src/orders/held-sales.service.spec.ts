@@ -7,6 +7,9 @@ import { HeldSalesService } from './held-sales.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ReferralsService } from '../marketing/referrals.service';
+import { CouponsService } from '../marketing/coupons.service';
+import { VouchersService } from '../marketing/vouchers.service';
+import { LoyaltyService } from '../customers/loyalty.service';
 import { ActivityService } from '../activity/activity.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 
@@ -47,6 +50,11 @@ describe('HeldSalesService (UPD-BE-005)', () => {
       {
         issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
       } as unknown as ReferralsService,
+      { validateAndApply: jest.fn() } as unknown as CouponsService,
+      { validateAndApply: jest.fn() } as unknown as VouchersService,
+      {
+        issueStampIfEligible: jest.fn().mockResolvedValue(undefined),
+      } as unknown as LoyaltyService,
       {
         record: jest.fn().mockResolvedValue(undefined),
       } as unknown as ActivityService,

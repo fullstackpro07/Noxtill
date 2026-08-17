@@ -8,11 +8,41 @@ import { HttpStatus } from '@nestjs/common';
 import { slugify } from '../common/utils/slug.util';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
+import { SessionsService } from './sessions.service';
+import { TwoFactorService } from './two-factor.service';
+import {
+  PENDING_2FA_TTL_MINUTES,
+  TWO_FACTOR_ERROR_CODES,
+} from './two-factor.constants';
 import { Prisma, Role } from '../../generated/prisma';
 
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+}
+
+interface RequestMeta {
+  userAgent?: string;
+  ipAddress?: string;
+}
+
+export interface PublicUser {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+}
+
+/** A real, fully-authenticated login. */
+export interface LoginSuccess extends TokenPair {
+  user: PublicUser;
+}
+
+/** 2FA is enabled — a real code was just sent, exchange it via `verifyTwoFactorLogin`. */
+export interface Pending2fa {
+  pending2fa: true;
+  tempToken: string;
 }
 
 const BCRYPT_ROUNDS = 10;
@@ -23,9 +53,12 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly capabilities: CapabilitiesService,
+    private readonly sessions: SessionsService,
+    private readonly twoFactor: TwoFactorService,
   ) {}
 
-  async signup(dto: SignupDto) {
+  async signup(dto: SignupDto, meta: RequestMeta = {}) {
     const identityFilters: Prisma.UserWhereInput[] = [];
     if (dto.email) identityFilters.push({ email: dto.email });
     if (dto.phone) identityFilters.push({ phone: dto.phone });
@@ -77,11 +110,16 @@ export class AuthService {
       user.id,
       business.id,
       businessUser.role,
+      businessUser.customRoleId,
+      meta,
     );
     return { business, user: this.toPublicUser(user), ...tokens };
   }
 
-  async login(dto: LoginDto) {
+  async login(
+    dto: LoginDto,
+    meta: RequestMeta = {},
+  ): Promise<LoginSuccess | Pending2fa> {
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ email: dto.emailOrPhone }, { phone: dto.emailOrPhone }] },
     });
@@ -119,16 +157,138 @@ export class AuthService {
       );
     }
 
+    if (user.twoFactorEnabled) {
+      if (!user.phone) {
+        throw new AppException(
+          TWO_FACTOR_ERROR_CODES.NO_IDENTITY,
+          '2FA is enabled but this account has no phone number to send a code to',
+          HttpStatus.CONFLICT,
+        );
+      }
+      await this.twoFactor.generateAndSend(
+        user.id,
+        businessUser.businessId,
+        user.phone,
+      );
+      const tempToken = await this.issuePendingTwoFactorToken(user.id);
+      return { pending2fa: true as const, tempToken };
+    }
+
     const tokens = await this.issueTokens(
       user.id,
       businessUser.businessId,
       businessUser.role,
+      businessUser.customRoleId,
+      meta,
     );
     return { user: this.toPublicUser(user), ...tokens };
   }
 
+  /** Completes a 2FA-gated login — exchanges a real, verified code + pending token for real tokens. */
+  async verifyTwoFactorLogin(
+    tempToken: string,
+    code: string,
+    meta: RequestMeta = {},
+  ): Promise<LoginSuccess> {
+    let payload: { sub: string; pending2fa: boolean };
+    try {
+      payload = await this.jwt.verifyAsync(tempToken, {
+        secret: this.pendingTwoFactorSecret(),
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'Invalid or expired verification session — log in again',
+      );
+    }
+    if (!payload.pending2fa) {
+      throw new UnauthorizedException(
+        'Invalid or expired verification session — log in again',
+      );
+    }
+
+    await this.twoFactor.verify(payload.sub, code);
+
+    const businessUser = await this.prisma.businessUser.findFirst({
+      where: { userId: payload.sub },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!businessUser) {
+      throw new UnauthorizedException(
+        'No business associated with this account',
+      );
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: payload.sub },
+    });
+
+    const tokens = await this.issueTokens(
+      user.id,
+      businessUser.businessId,
+      businessUser.role,
+      businessUser.customRoleId,
+      meta,
+    );
+    return { user: this.toPublicUser(user), ...tokens };
+  }
+
+  async enableTwoFactor(userId: string, businessId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+    if (user.twoFactorEnabled) {
+      throw new AppException(
+        TWO_FACTOR_ERROR_CODES.ALREADY_ENABLED,
+        '2FA is already enabled',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (!user.phone) {
+      throw new AppException(
+        TWO_FACTOR_ERROR_CODES.NO_IDENTITY,
+        'A phone number is required to enable WhatsApp 2FA',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.twoFactor.generateAndSend(userId, businessId, user.phone);
+    return { sent: true };
+  }
+
+  async confirmTwoFactor(userId: string, code: string) {
+    await this.twoFactor.verify(userId, code);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: true },
+    });
+    return { enabled: true };
+  }
+
+  async disableTwoFactor(userId: string, password: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      throw new AppException(
+        TWO_FACTOR_ERROR_CODES.WRONG_PASSWORD,
+        'Incorrect password',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: false },
+    });
+    return { enabled: false };
+  }
+
   async refresh(refreshToken: string): Promise<TokenPair> {
-    let payload: { sub: string; businessId: string; role: Role };
+    let payload: {
+      sub: string;
+      businessId: string;
+      role: Role;
+      sessionId?: string;
+    };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
@@ -137,26 +297,57 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+    if (!payload.sessionId) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    const validHash = await this.sessions.verifyRefreshToken(
+      payload.sessionId,
+      refreshToken,
+    );
+    if (!validHash) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Re-fetched fresh (not trusted from the old token's payload) so a role or custom-role
+    // change picks up the real current capability set on the next refresh, not just re-login.
+    const businessUser = await this.prisma.businessUser.findFirst({
+      where: { userId: payload.sub, businessId: payload.businessId },
     });
-    if (!user?.refreshTokenHash) {
+    if (!businessUser) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const matches = await bcrypt.compare(refreshToken, user.refreshTokenHash);
-    if (!matches) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+    const capabilities = await this.capabilities.resolve({
+      role: businessUser.role,
+      customRoleId: businessUser.customRoleId,
+    });
+    const newPayload = {
+      sub: payload.sub,
+      businessId: payload.businessId,
+      role: businessUser.role,
+      capabilities,
+      sessionId: payload.sessionId,
+    };
 
-    return this.issueTokens(payload.sub, payload.businessId, payload.role);
+    const accessToken = await this.jwt.signAsync(newPayload, {
+      secret: this.config.get<string>('JWT_SECRET'),
+      expiresIn: (this.config.get<string>('JWT_ACCESS_TTL') ??
+        '15m') as unknown as number,
+    });
+    const newRefreshToken = await this.jwt.signAsync(newPayload, {
+      secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+      expiresIn: (this.config.get<string>('JWT_REFRESH_TTL') ??
+        '7d') as unknown as number,
+    });
+    await this.sessions.setRefreshTokenHash(payload.sessionId, newRefreshToken);
+
+    return { accessToken, refreshToken: newRefreshToken };
   }
 
-  async logout(userId: string) {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshTokenHash: null },
-    });
+  /** Revokes only the session the caller is currently using — every other device stays logged in. */
+  async logout(sessionId?: string) {
+    if (!sessionId) return;
+    await this.sessions.revoke(sessionId);
   }
 
   private async registerFailedAttempt(userId: string, currentAttempts: number) {
@@ -180,8 +371,30 @@ export class AuthService {
     userId: string,
     businessId: string,
     role: Role,
+    customRoleId: string | null,
+    meta: RequestMeta = {},
   ): Promise<TokenPair> {
-    const payload = { sub: userId, businessId, role };
+    const capabilities = await this.capabilities.resolve({
+      role,
+      customRoleId,
+    });
+
+    // Created first (with a placeholder hash) so its real id can be embedded in the token
+    // payload before the refresh token — which needs that same id — is even signed.
+    const session = await this.sessions.create(
+      userId,
+      businessId,
+      meta.userAgent,
+      meta.ipAddress,
+    );
+
+    const payload = {
+      sub: userId,
+      businessId,
+      role,
+      capabilities,
+      sessionId: session.id,
+    };
 
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('JWT_SECRET'),
@@ -195,13 +408,25 @@ export class AuthService {
         '7d') as unknown as number,
     });
 
-    const refreshTokenHash = await bcrypt.hash(refreshToken, BCRYPT_ROUNDS);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshTokenHash },
-    });
+    await this.sessions.setRefreshTokenHash(session.id, refreshToken);
 
     return { accessToken, refreshToken };
+  }
+
+  private async issuePendingTwoFactorToken(userId: string): Promise<string> {
+    return this.jwt.signAsync(
+      { sub: userId, pending2fa: true },
+      {
+        secret: this.pendingTwoFactorSecret(),
+        expiresIn: `${PENDING_2FA_TTL_MINUTES}m`,
+      },
+    );
+  }
+
+  /** Deliberately distinct from `JWT_SECRET` (derived, not a new required env var) so a pending-2FA
+   * token can never pass the normal `JwtStrategy`'s verification and reach a real protected route. */
+  private pendingTwoFactorSecret(): string {
+    return `${this.config.get<string>('JWT_SECRET')}:pending2fa`;
   }
 
   private toPublicUser(user: {

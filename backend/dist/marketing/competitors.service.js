@@ -62,9 +62,7 @@ let CompetitorsService = class CompetitorsService {
             orderBy: { capturedAt: 'desc' },
             take: HISTORY_WEEKS,
         });
-        return snapshots
-            .reverse()
-            .map((s) => ({
+        return snapshots.reverse().map((s) => ({
             rating: Number(s.rating),
             reviewsCount: s.reviewsCount,
             capturedAt: s.capturedAt.toISOString(),

@@ -3,6 +3,7 @@ import { Observable, concat, map } from 'rxjs';
 import type { MessageEvent } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { ActivityPubSubService } from './activity-pubsub.service';
+import { WorkflowTriggerService } from '../marketing/automations/workflow-trigger.service';
 import {
   activityChannel,
   ACTIVITY_HISTORY_BACKFILL,
@@ -42,6 +43,7 @@ export class ActivityService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly pubsub: ActivityPubSubService,
+    private readonly workflowTrigger?: WorkflowTriggerService,
   ) {}
 
   /**
@@ -60,6 +62,22 @@ export class ActivityService {
         activityChannel(businessId),
         this.toPayload(event),
       );
+
+      // Automations engine (UPD-BE-028): deliberately fire-and-forget, never awaited — a
+      // workflow's actions go through SendGateService, which can itself hang on an unreachable
+      // message queue, and that must never block the real mutation that already succeeded.
+      void this.workflowTrigger
+        ?.dispatch(businessId, input.type, {
+          description: input.description,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          amount: input.amount,
+        })
+        .catch((error: Error) =>
+          this.logger.warn(
+            `Workflow dispatch failed for activity event (${input.type}) on business ${businessId}: ${error.message}`,
+          ),
+        );
     } catch (error) {
       this.logger.warn(
         `Failed to record activity event (${input.type}) for business ${businessId}: ${(error as Error).message}`,

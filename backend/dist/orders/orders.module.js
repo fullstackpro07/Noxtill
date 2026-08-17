@@ -26,6 +26,8 @@ const activity_module_1 = require("../activity/activity.module");
 const cash_register_module_1 = require("../cash-register/cash-register.module");
 const ai_module_1 = require("../ai/ai.module");
 const billing_module_1 = require("../billing/billing.module");
+const customers_module_1 = require("../customers/customers.module");
+const settings_module_1 = require("../settings/settings.module");
 let OrdersModule = class OrdersModule {
 };
 exports.OrdersModule = OrdersModule;
@@ -39,6 +41,8 @@ exports.OrdersModule = OrdersModule = __decorate([
             cash_register_module_1.CashRegisterModule,
             ai_module_1.AiModule,
             billing_module_1.BillingModule,
+            customers_module_1.CustomersModule,
+            settings_module_1.SettingsModule,
         ],
         controllers: [
             orders_controller_1.OrdersController,

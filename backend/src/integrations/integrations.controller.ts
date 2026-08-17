@@ -10,11 +10,12 @@ import {
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { IntegrationsService } from './integrations.service';
-import { Roles } from '../common/decorators/roles.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { IntegrationProvider, Role } from '../../generated/prisma';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
+import { IntegrationProvider } from '../../generated/prisma';
 
 function parseProvider(value: string): IntegrationProvider {
   if (!(Object.values(IntegrationProvider) as string[]).includes(value)) {
@@ -35,16 +36,25 @@ export class IntegrationsController {
     return this.integrations.list(user.businessId);
   }
 
-  @Roles(Role.owner, Role.manager)
+  @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)
   @Post(':provider/connect')
-  connect(@CurrentUser() user: AuthenticatedUser, @Param('provider') provider: string) {
+  connect(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('provider') provider: string,
+  ) {
     return this.integrations.connect(user.businessId, parseProvider(provider));
   }
 
-  @Roles(Role.owner, Role.manager)
+  @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)
   @Post(':provider/disconnect')
-  disconnect(@CurrentUser() user: AuthenticatedUser, @Param('provider') provider: string) {
-    return this.integrations.disconnect(user.businessId, parseProvider(provider));
+  disconnect(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('provider') provider: string,
+  ) {
+    return this.integrations.disconnect(
+      user.businessId,
+      parseProvider(provider),
+    );
   }
 
   /**
@@ -59,11 +69,16 @@ export class IntegrationsController {
     @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
     const parsedProvider = parseProvider(provider);
 
     try {
-      const { ok } = await this.integrations.handleCallback(parsedProvider, code, state);
+      const { ok } = await this.integrations.handleCallback(
+        parsedProvider,
+        code,
+        state,
+      );
       res.redirect(
         ok
           ? `${frontendUrl}/integrations?connected=${parsedProvider}`

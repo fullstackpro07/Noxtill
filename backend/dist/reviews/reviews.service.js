@@ -119,7 +119,9 @@ let ReviewsService = class ReviewsService {
         return { draft };
     }
     async replyToFeedback(id, message) {
-        const feedback = await this.tenantPrisma.client.privateFeedback.findUnique({ where: { id } });
+        const feedback = await this.tenantPrisma.client.privateFeedback.findUnique({
+            where: { id },
+        });
         if (!feedback) {
             throw new app_exception_1.AppException(REVIEWS_ERROR_CODES.REVIEW_NOT_FOUND, 'Feedback not found', common_1.HttpStatus.NOT_FOUND);
         }

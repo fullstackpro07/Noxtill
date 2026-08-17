@@ -11,9 +11,9 @@ export declare class PublicBookingController {
     listServices(biz: string): Promise<{
         name: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         kind: import("generated/prisma").$Enums.ProductKind;
         category: string | null;
         sku: string | null;
@@ -30,9 +30,9 @@ export declare class PublicBookingController {
     }>;
     createBooking(biz: string, dto: CreatePublicBookingDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;

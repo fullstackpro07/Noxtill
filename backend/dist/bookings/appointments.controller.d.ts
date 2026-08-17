@@ -4,6 +4,9 @@ import { QueryAppointmentsDto } from './dto/query-appointments.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { RescheduleInternalAppointmentDto } from './dto/reschedule-internal-appointment.dto';
 import { CreateWalkInAppointmentDto } from './dto/create-walk-in-appointment.dto';
+import { CreateAppointmentRequestDto } from './dto/create-appointment-request.dto';
+import { DeclineAppointmentRequestDto } from './dto/decline-appointment-request.dto';
+import { SuggestAlternativeDto } from './dto/suggest-alternative.dto';
 export declare class AppointmentsController {
     private readonly appointmentsService;
     constructor(appointmentsService: AppointmentsService);
@@ -13,9 +16,9 @@ export declare class AppointmentsController {
             email: string | null;
             phone: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             address: string | null;
             birthday: Date | null;
             notes: string | null;
@@ -31,9 +34,9 @@ export declare class AppointmentsController {
         service: {
             name: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             kind: import("generated/prisma").$Enums.ProductKind;
             category: string | null;
             sku: string | null;
@@ -51,27 +54,28 @@ export declare class AppointmentsController {
                 email: string | null;
                 phone: string | null;
                 id: string;
+                createdAt: Date;
+                updatedAt: Date;
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
-                createdAt: Date;
-                updatedAt: Date;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            businessId: string;
-            userId: string;
+            customRoleId: string | null;
         }) | null;
     } & {
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;
@@ -82,15 +86,30 @@ export declare class AppointmentsController {
         source: import("generated/prisma").$Enums.AppointmentSource;
         rescheduleToken: string | null;
     })[]>;
+    noShowReport(user: AuthenticatedUser, months?: string): Promise<{
+        months: number;
+        overallRate: number;
+        trend: {
+            month: string;
+            total: number;
+            noShows: number;
+            rate: number;
+        }[];
+        repeatOffenders: {
+            customerId: string;
+            name: string;
+            noShowCount: number;
+        }[];
+    }>;
     createWalkIn(user: AuthenticatedUser, dto: CreateWalkInAppointmentDto): Promise<{
         customer: {
             name: string;
             email: string | null;
             phone: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             address: string | null;
             birthday: Date | null;
             notes: string | null;
@@ -106,9 +125,9 @@ export declare class AppointmentsController {
         service: {
             name: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             kind: import("generated/prisma").$Enums.ProductKind;
             category: string | null;
             sku: string | null;
@@ -126,27 +145,167 @@ export declare class AppointmentsController {
                 email: string | null;
                 phone: string | null;
                 id: string;
+                createdAt: Date;
+                updatedAt: Date;
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
-                createdAt: Date;
-                updatedAt: Date;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            businessId: string;
-            userId: string;
+            customRoleId: string | null;
         }) | null;
     } & {
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        customerId: string;
+        status: import("generated/prisma").$Enums.AppointmentStatus;
+        staffUserId: string | null;
+        serviceId: string;
+        startsAt: Date;
+        endsAt: Date;
+        depositPaid: import("generated/prisma/runtime/library").Decimal;
+        source: import("generated/prisma").$Enums.AppointmentSource;
+        rescheduleToken: string | null;
+    }>;
+    createRequest(user: AuthenticatedUser, dto: CreateAppointmentRequestDto): Promise<{
+        customer: {
+            name: string;
+            email: string | null;
+            phone: string;
+            id: string;
+            businessId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            address: string | null;
+            birthday: Date | null;
+            notes: string | null;
+            tags: string[];
+            consentMarketing: boolean;
+            optedOut: boolean;
+            lifetimeSpend: import("generated/prisma/runtime/library").Decimal;
+            visitCount: number;
+            lastVisitAt: Date | null;
+            referredByCustomerId: string | null;
+            referralRewardedAt: Date | null;
+        };
+        service: {
+            name: string;
+            id: string;
+            businessId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            kind: import("generated/prisma").$Enums.ProductKind;
+            category: string | null;
+            sku: string | null;
+            variations: import("generated/prisma/runtime/library").JsonValue;
+            costPrice: import("generated/prisma/runtime/library").Decimal;
+            sellingPrice: import("generated/prisma/runtime/library").Decimal;
+            stockQty: number;
+            lowStockThreshold: number;
+            durationMin: number | null;
+            active: boolean;
+        };
+        staffUser: ({
+            user: {
+                name: string;
+                email: string | null;
+                phone: string | null;
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                passwordHash: string;
+                failedLoginAttempts: number;
+                lockedUntil: Date | null;
+                twoFactorEnabled: boolean;
+            };
+        } & {
+            id: string;
+            businessId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            role: import("generated/prisma").$Enums.Role;
+            commissionRule: import("generated/prisma/runtime/library").JsonValue;
+            customRoleId: string | null;
+        }) | null;
+    } & {
+        id: string;
         businessId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        customerId: string;
+        status: import("generated/prisma").$Enums.AppointmentStatus;
+        staffUserId: string | null;
+        serviceId: string;
+        startsAt: Date;
+        endsAt: Date;
+        depositPaid: import("generated/prisma/runtime/library").Decimal;
+        source: import("generated/prisma").$Enums.AppointmentSource;
+        rescheduleToken: string | null;
+    }>;
+    approve(user: AuthenticatedUser, id: string): Promise<{
+        id: string;
+        businessId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        customerId: string;
+        status: import("generated/prisma").$Enums.AppointmentStatus;
+        staffUserId: string | null;
+        serviceId: string;
+        startsAt: Date;
+        endsAt: Date;
+        depositPaid: import("generated/prisma/runtime/library").Decimal;
+        source: import("generated/prisma").$Enums.AppointmentSource;
+        rescheduleToken: string | null;
+    }>;
+    decline(user: AuthenticatedUser, id: string, dto: DeclineAppointmentRequestDto): Promise<{
+        id: string;
+        businessId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        customerId: string;
+        status: import("generated/prisma").$Enums.AppointmentStatus;
+        staffUserId: string | null;
+        serviceId: string;
+        startsAt: Date;
+        endsAt: Date;
+        depositPaid: import("generated/prisma/runtime/library").Decimal;
+        source: import("generated/prisma").$Enums.AppointmentSource;
+        rescheduleToken: string | null;
+    }>;
+    suggestAlternative(user: AuthenticatedUser, id: string, dto: SuggestAlternativeDto): Promise<{
+        service: {
+            name: string;
+            id: string;
+            businessId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            kind: import("generated/prisma").$Enums.ProductKind;
+            category: string | null;
+            sku: string | null;
+            variations: import("generated/prisma/runtime/library").JsonValue;
+            costPrice: import("generated/prisma/runtime/library").Decimal;
+            sellingPrice: import("generated/prisma/runtime/library").Decimal;
+            stockQty: number;
+            lowStockThreshold: number;
+            durationMin: number | null;
+            active: boolean;
+        };
+    } & {
+        id: string;
+        businessId: string;
+        createdAt: Date;
+        updatedAt: Date;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;
@@ -159,9 +318,9 @@ export declare class AppointmentsController {
     }>;
     updateStatus(user: AuthenticatedUser, id: string, dto: UpdateAppointmentStatusDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;
@@ -178,9 +337,9 @@ export declare class AppointmentsController {
             email: string | null;
             phone: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             address: string | null;
             birthday: Date | null;
             notes: string | null;
@@ -196,9 +355,9 @@ export declare class AppointmentsController {
         service: {
             name: string;
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             kind: import("generated/prisma").$Enums.ProductKind;
             category: string | null;
             sku: string | null;
@@ -216,27 +375,28 @@ export declare class AppointmentsController {
                 email: string | null;
                 phone: string | null;
                 id: string;
+                createdAt: Date;
+                updatedAt: Date;
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
-                createdAt: Date;
-                updatedAt: Date;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            businessId: string;
-            userId: string;
+            customRoleId: string | null;
         }) | null;
     } & {
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;

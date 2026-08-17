@@ -18,6 +18,7 @@ const template_registry_service_1 = require("./templates/template-registry.servi
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
 const sms_service_1 = require("./channels/sms.service");
 const email_service_1 = require("./channels/email.service");
+const terminology_service_1 = require("../settings/terminology.service");
 const messaging_constants_1 = require("./messaging.constants");
 const prisma_1 = require("../../generated/prisma");
 let MessageWorkerProcessor = MessageWorkerProcessor_1 = class MessageWorkerProcessor extends bullmq_1.WorkerHost {
@@ -26,14 +27,16 @@ let MessageWorkerProcessor = MessageWorkerProcessor_1 = class MessageWorkerProce
     whatsapp;
     sms;
     email;
+    terminology;
     logger = new common_1.Logger(MessageWorkerProcessor_1.name);
-    constructor(prisma, templates, whatsapp, sms, email) {
+    constructor(prisma, templates, whatsapp, sms, email, terminology) {
         super();
         this.prisma = prisma;
         this.templates = templates;
         this.whatsapp = whatsapp;
         this.sms = sms;
         this.email = email;
+        this.terminology = terminology;
     }
     async process(job) {
         const message = await this.prisma.message.findUniqueOrThrow({
@@ -41,11 +44,12 @@ let MessageWorkerProcessor = MessageWorkerProcessor_1 = class MessageWorkerProce
         });
         const payload = message.payload;
         const rendered = this.templates.render(message.templateKey, message.locale, payload);
+        const text = await this.terminology.applyToText(message.businessId, rendered.text);
         const to = payload.__to;
         const sender = this.pickSender(message.channel);
         const result = await sender.send({
             to,
-            text: rendered.text,
+            text,
             templateKey: message.templateKey,
             locale: message.locale,
             businessId: message.businessId,
@@ -75,6 +79,7 @@ exports.MessageWorkerProcessor = MessageWorkerProcessor = MessageWorkerProcessor
         template_registry_service_1.TemplateRegistryService,
         whatsapp_service_1.WhatsappService,
         sms_service_1.SmsService,
-        email_service_1.EmailService])
+        email_service_1.EmailService,
+        terminology_service_1.TerminologyService])
 ], MessageWorkerProcessor);
 //# sourceMappingURL=message-worker.processor.js.map

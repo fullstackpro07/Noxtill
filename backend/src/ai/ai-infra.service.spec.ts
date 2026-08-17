@@ -1,7 +1,12 @@
+import axios from 'axios';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from './ai-infra.service';
 import { ClaudeClient, CreateMessageResult } from './claude.client';
 import { AppException } from '../common/filters/app.exception';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 function fakeResult(
   overrides: Partial<CreateMessageResult> = {},
@@ -24,7 +29,12 @@ describe('AiInfraService (BE-075)', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    service = new AiInfraService(prisma, claude as unknown as ClaudeClient);
+    const config = new ConfigService({ OPENAI_API_KEY: 'test-openai-key' });
+    service = new AiInfraService(
+      prisma,
+      claude as unknown as ClaudeClient,
+      config,
+    );
 
     const business = await prisma.business.create({
       data: {
@@ -106,5 +116,58 @@ describe('AiInfraService (BE-075)', () => {
     expect(logs.length).toBeGreaterThan(0);
 
     await prisma.aiCallLog.deleteMany({ where: { businessId: null } });
+  });
+
+  it('generateImage() calls the real OpenAI Images API and logs a flat per-image cost (UPD-BE-048)', async () => {
+    // A dedicated business — the earlier tests in this file already exhaust `businessId`'s
+    // 2-per-minute rate limit, and the window is real (60s), so reusing it here would be flaky.
+    const imageBusiness = await prisma.business.create({
+      data: { name: 'AI Image Test Biz', slug: `ai-image-test-${Date.now()}` },
+    });
+
+    mockedAxios.post.mockResolvedValue({
+      data: { data: [{ url: 'https://example.com/generated.png' }] },
+    });
+
+    const result = await service.generateImage(
+      imageBusiness.id,
+      'a red bicycle',
+    );
+    expect(result.url).toBe('https://example.com/generated.png');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/images/generations',
+      expect.objectContaining({ prompt: 'a red bicycle' }),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer test-openai-key' },
+      }),
+    );
+
+    const logs = await prisma.aiCallLog.findMany({
+      where: { businessId: imageBusiness.id, kind: 'generate_image' },
+    });
+    expect(logs).toHaveLength(1);
+    expect(Number(logs[0].estimatedCostUsd)).toBeCloseTo(0.04);
+
+    await prisma.aiCallLog.deleteMany({
+      where: { businessId: imageBusiness.id },
+    });
+    await prisma.business.delete({ where: { id: imageBusiness.id } });
+  });
+
+  it('generateImage() still enforces the rate limit before calling OpenAI', async () => {
+    const rateLimitedBusiness = await prisma.business.create({
+      data: {
+        name: 'AI Image Rate Limit Test Biz',
+        slug: `ai-image-rate-${Date.now()}`,
+        aiRateLimitPerMinute: 0,
+      },
+    });
+
+    await expect(
+      service.generateImage(rateLimitedBusiness.id, 'anything'),
+    ).rejects.toBeInstanceOf(AppException);
+
+    await prisma.business.delete({ where: { id: rateLimitedBusiness.id } });
   });
 });

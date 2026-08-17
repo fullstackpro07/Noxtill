@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { CheckoutSession, CreateCheckoutParams, PaymentGatewayAdapter, RefundResult } from './payment-gateway.adapter';
+import { CheckoutSession, CreateCheckoutParams, CreateSubscriptionCheckoutParams, PaymentGatewayAdapter, RefundResult } from './payment-gateway.adapter';
 export declare class JazzCashGatewayAdapter implements PaymentGatewayAdapter {
     private readonly config;
     readonly key = "jazzcash";
@@ -9,4 +9,6 @@ export declare class JazzCashGatewayAdapter implements PaymentGatewayAdapter {
     get isConfigured(): boolean;
     createCheckoutSession(params: CreateCheckoutParams): Promise<CheckoutSession>;
     refund(providerRef: string, amount: number): Promise<RefundResult>;
+    createSubscriptionCheckout(params: CreateSubscriptionCheckoutParams): Promise<CheckoutSession>;
+    cancelSubscription(providerRef: string): Promise<void>;
 }

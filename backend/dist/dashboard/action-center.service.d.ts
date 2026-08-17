@@ -26,32 +26,32 @@ export declare class ActionCenterService {
     }>;
     complete(businessId: string, id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.ActionItemType;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
+        type: import("../../generated/prisma").$Enums.ActionItemType;
         snoozedUntil: Date | null;
     }>;
     dismiss(businessId: string, id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.ActionItemType;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
+        type: import("../../generated/prisma").$Enums.ActionItemType;
         snoozedUntil: Date | null;
     }>;
     snooze(businessId: string, id: string, dto: SnoozeActionItemDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.ActionItemType;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
+        type: import("../../generated/prisma").$Enums.ActionItemType;
         snoozedUntil: Date | null;
     }>;
     private setStatus;

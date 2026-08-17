@@ -3,6 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TEMPLATE_REGISTRY = void 0;
 const prisma_1 = require("../../../generated/prisma");
 exports.TEMPLATE_REGISTRY = {
+    otp_code: {
+        key: 'otp_code',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: 'Your verification code is {{code}}. It expires in {{ttlMinutes}} minutes. Never share this code.',
+        },
+    },
     booking_confirm: {
         key: 'booking_confirm',
         category: prisma_1.MessageCategory.utility,
@@ -15,6 +22,34 @@ exports.TEMPLATE_REGISTRY = {
         category: prisma_1.MessageCategory.utility,
         locales: {
             en: 'Reminder: {{customerName}}, your {{serviceName}} appointment is at {{dateTime}}.',
+        },
+    },
+    booking_declined: {
+        key: 'booking_declined',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: 'Sorry, your requested {{serviceName}} booking could not be confirmed. {{reason}}',
+        },
+    },
+    booking_suggest_alternative: {
+        key: 'booking_suggest_alternative',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: 'Your requested {{serviceName}} time isn’t available. Would {{dateTime}} work instead?',
+        },
+    },
+    waitlist_offer: {
+        key: 'waitlist_offer',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: 'Good news! A {{serviceName}} slot just opened up at {{dateTime}}. Reply to claim it.',
+        },
+    },
+    queue_called: {
+        key: 'queue_called',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: 'It’s your turn! Token #{{number}}, please come to the counter now.',
         },
     },
     order_status: {
@@ -80,8 +115,29 @@ exports.TEMPLATE_REGISTRY = {
             en: '{{message}}',
         },
     },
+    video_testimonial_request: {
+        key: 'video_testimonial_request',
+        category: prisma_1.MessageCategory.marketing,
+        locales: {
+            en: 'Hi {{customerName}}, would you record a short video testimonial for {{businessName}}? {{uploadUrl}}',
+        },
+    },
     campaign: {
         key: 'campaign',
+        category: prisma_1.MessageCategory.marketing,
+        locales: {
+            en: '{{body}}',
+        },
+    },
+    voucher_issued: {
+        key: 'voucher_issued',
+        category: prisma_1.MessageCategory.marketing,
+        locales: {
+            en: 'Hi {{customerName}}, you\'ve received a gift voucher worth {{amount}}! Code: {{code}}',
+        },
+    },
+    automation_message: {
+        key: 'automation_message',
         category: prisma_1.MessageCategory.marketing,
         locales: {
             en: '{{body}}',

@@ -69,6 +69,32 @@ let StripeGatewayAdapter = StripeGatewayAdapter_1 = class StripeGatewayAdapter {
         });
         return { refundRef: refund.id };
     }
+    async createSubscriptionCheckout(params) {
+        if (!this.client) {
+            throw new Error('Stripe is not configured');
+        }
+        const session = await this.client.checkout.sessions.create({
+            mode: 'subscription',
+            line_items: [{ price: params.priceRef, quantity: 1 }],
+            customer_email: params.customerEmail,
+            success_url: params.successUrl,
+            cancel_url: params.cancelUrl,
+            client_reference_id: params.referenceId,
+            subscription_data: {
+                metadata: { [params.referenceKey]: params.referenceId },
+            },
+        });
+        if (!session.url) {
+            throw new Error('Stripe did not return a checkout URL');
+        }
+        return { url: session.url, sessionRef: session.id };
+    }
+    async cancelSubscription(providerRef) {
+        if (!this.client) {
+            throw new Error('Stripe is not configured');
+        }
+        await this.client.subscriptions.cancel(providerRef);
+    }
 };
 exports.StripeGatewayAdapter = StripeGatewayAdapter;
 exports.StripeGatewayAdapter = StripeGatewayAdapter = StripeGatewayAdapter_1 = __decorate([

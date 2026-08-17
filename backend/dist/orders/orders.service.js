@@ -18,6 +18,9 @@ const tenant_constants_1 = require("../common/tenancy/tenant.constants");
 const send_gate_service_1 = require("../messaging/send-gate.service");
 const review_requests_service_1 = require("../reviews/review-requests.service");
 const referrals_service_1 = require("../marketing/referrals.service");
+const coupons_service_1 = require("../marketing/coupons.service");
+const vouchers_service_1 = require("../marketing/vouchers.service");
+const loyalty_service_1 = require("../customers/loyalty.service");
 const activity_service_1 = require("../activity/activity.service");
 const cash_register_service_1 = require("../cash-register/cash-register.service");
 const review_token_util_1 = require("../reviews/review-token.util");
@@ -30,14 +33,20 @@ let OrdersService = class OrdersService {
     sendGate;
     reviewRequests;
     referrals;
+    coupons;
+    vouchers;
+    loyalty;
     activity;
     cashRegister;
-    constructor(tenantPrisma, cls, sendGate, reviewRequests, referrals, activity, cashRegister) {
+    constructor(tenantPrisma, cls, sendGate, reviewRequests, referrals, coupons, vouchers, loyalty, activity, cashRegister) {
         this.tenantPrisma = tenantPrisma;
         this.cls = cls;
         this.sendGate = sendGate;
         this.reviewRequests = reviewRequests;
         this.referrals = referrals;
+        this.coupons = coupons;
+        this.vouchers = vouchers;
+        this.loyalty = loyalty;
         this.activity = activity;
         this.cashRegister = cashRegister;
     }
@@ -92,8 +101,23 @@ let OrdersService = class OrdersService {
                     kind: product.kind,
                 };
             });
-            const discount = dto.discount ?? 0;
+            const rawSubtotal = itemsData.reduce((sum, item) => sum + item.price * item.qty, 0);
+            let couponId;
+            let couponDiscountAmount = 0;
+            if (dto.couponCode) {
+                const couponResult = await this.coupons.validateAndApply(businessId, dto.couponCode, rawSubtotal, customerId, tx);
+                couponId = couponResult.couponId;
+                couponDiscountAmount = couponResult.discountAmount;
+            }
+            const discount = Math.min(rawSubtotal, (dto.discount ?? 0) + couponDiscountAmount);
             const { subtotal, tax, total, cogs } = (0, order_totals_util_1.computeOrderTotals)(itemsData, discount, Number(business.taxRate));
+            let voucherId;
+            let voucherAmountApplied = 0;
+            if (dto.voucherCode) {
+                const voucherResult = await this.vouchers.validateAndApply(businessId, dto.voucherCode, dto.voucherAmount ?? total, total, tx);
+                voucherId = voucherResult.voucherId;
+                voucherAmountApplied = voucherResult.amountApplied;
+            }
             const [{ next: orderNo }] = await tx.$queryRaw `
         SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${businessId}
       `;
@@ -111,6 +135,10 @@ let OrdersService = class OrdersService {
                     discount,
                     total,
                     cogs,
+                    couponId,
+                    couponDiscountAmount: couponId ? couponDiscountAmount : undefined,
+                    voucherId,
+                    voucherAmountApplied: voucherId ? voucherAmountApplied : undefined,
                 },
             });
             await tx.orderItem.createMany({
@@ -140,13 +168,14 @@ let OrdersService = class OrdersService {
                     });
                 }
             }
+            const amountDue = Math.round((total - voucherAmountApplied) * 100) / 100;
             if (dto.payment.method === 'credit') {
                 await tx.creditEntry.create({
                     data: {
                         businessId,
                         customerId: customerId,
                         kind: 'credit',
-                        amount: total,
+                        amount: amountDue,
                         note: dto.payment.note ?? 'Sale on credit',
                         orderId: order.id,
                     },
@@ -157,7 +186,7 @@ let OrdersService = class OrdersService {
                     data: {
                         orderId: order.id,
                         method: dto.payment.method,
-                        amount: dto.payment.amount ?? total,
+                        amount: dto.payment.amount ?? amountDue,
                     },
                 });
             }
@@ -171,6 +200,7 @@ let OrdersService = class OrdersService {
                     },
                 });
                 await this.referrals.issueRewardIfEligible(businessId, customerId, tx);
+                await this.loyalty.issueStampIfEligible(businessId, customerId, order.id, tx);
             }
             await tx.auditLog.create({
                 data: {
@@ -385,6 +415,9 @@ exports.OrdersService = OrdersService = __decorate([
         send_gate_service_1.SendGateService,
         review_requests_service_1.ReviewRequestsService,
         referrals_service_1.ReferralsService,
+        coupons_service_1.CouponsService,
+        vouchers_service_1.VouchersService,
+        loyalty_service_1.LoyaltyService,
         activity_service_1.ActivityService,
         cash_register_service_1.CashRegisterService])
 ], OrdersService);

@@ -10,8 +10,8 @@ export declare class BusinessTypesService {
         createdAt: Date;
         updatedAt: Date;
         key: string;
-        categoryId: string;
         label: string;
+        categoryId: string;
         labelOverrides: import("generated/prisma/runtime/library").JsonValue;
         widgetOverrides: import("generated/prisma/runtime/library").JsonValue;
         aiGenerated: boolean;
@@ -21,8 +21,8 @@ export declare class BusinessTypesService {
         createdAt: Date;
         updatedAt: Date;
         key: string;
-        categoryId: string;
         label: string;
+        categoryId: string;
         labelOverrides: import("generated/prisma/runtime/library").JsonValue;
         widgetOverrides: import("generated/prisma/runtime/library").JsonValue;
         aiGenerated: boolean;

@@ -45,7 +45,9 @@ describe('KeywordsService (BE-063 extension)', () => {
   });
 
   afterAll(async () => {
-    const keywords = await prisma.trackedKeyword.findMany({ where: { businessId } });
+    const keywords = await prisma.trackedKeyword.findMany({
+      where: { businessId },
+    });
     await prisma.keywordRankSnapshot.deleteMany({
       where: { keywordId: { in: keywords.map((k) => k.id) } },
     });
@@ -81,7 +83,9 @@ describe('KeywordsService (BE-063 extension)', () => {
     const list = await service.list();
     await service.remove(list[0].id);
 
-    const created = await service.create(businessId, { keyword: 'replacement' });
+    const created = await service.create(businessId, {
+      keyword: 'replacement',
+    });
     expect(created.keyword).toBe('replacement');
   });
 
@@ -110,7 +114,11 @@ describe('KeywordsService (BE-063 extension)', () => {
 
     await service.triggerCheck(businessId, keyword.id);
 
-    expect(rankProcessor.checkOne).toHaveBeenCalledWith(businessId, keyword.id, 'trigger-test');
+    expect(rankProcessor.checkOne).toHaveBeenCalledWith(
+      businessId,
+      keyword.id,
+      'trigger-test',
+    );
   });
 
   it('lists the latest rank per keyword', async () => {

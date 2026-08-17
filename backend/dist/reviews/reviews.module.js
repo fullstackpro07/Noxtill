@@ -13,8 +13,12 @@ const review_requests_service_1 = require("./review-requests.service");
 const reviews_service_1 = require("./reviews.service");
 const public_review_service_1 = require("./public-review.service");
 const qr_poster_service_1 = require("./qr-poster.service");
+const video_testimonials_service_1 = require("./video-testimonials.service");
+const public_video_testimonial_service_1 = require("./public-video-testimonial.service");
 const reviews_controller_1 = require("./reviews.controller");
 const public_review_controller_1 = require("./public-review.controller");
+const video_testimonials_controller_1 = require("./video-testimonials.controller");
+const public_video_testimonial_controller_1 = require("./public-video-testimonial.controller");
 const review_reminders_scheduler_1 = require("./jobs/review-reminders.scheduler");
 const review_reminders_processor_1 = require("./jobs/review-reminders.processor");
 const review_reminders_constants_1 = require("./jobs/review-reminders.constants");
@@ -35,7 +39,12 @@ exports.ReviewsModule = ReviewsModule = __decorate([
             ai_module_1.AiModule,
             activity_module_1.ActivityModule,
         ],
-        controllers: [reviews_controller_1.ReviewsController, public_review_controller_1.PublicReviewController],
+        controllers: [
+            reviews_controller_1.ReviewsController,
+            public_review_controller_1.PublicReviewController,
+            video_testimonials_controller_1.VideoTestimonialsController,
+            public_video_testimonial_controller_1.PublicVideoTestimonialController,
+        ],
         providers: [
             review_requests_service_1.ReviewRequestsService,
             reviews_service_1.ReviewsService,
@@ -45,6 +54,8 @@ exports.ReviewsModule = ReviewsModule = __decorate([
             review_reminders_processor_1.ReviewRemindersProcessor,
             google_sync_scheduler_1.GoogleSyncScheduler,
             google_sync_processor_1.GoogleSyncProcessor,
+            video_testimonials_service_1.VideoTestimonialsService,
+            public_video_testimonial_service_1.PublicVideoTestimonialService,
         ],
         exports: [review_requests_service_1.ReviewRequestsService],
     })

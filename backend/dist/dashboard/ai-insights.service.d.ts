@@ -13,9 +13,9 @@ export declare class AiInsightsService {
     constructor(tenantPrisma: TenantPrismaService, aiInfra: AiInfraService);
     list(businessId: string, category?: AiInsightCategory, status?: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: import("../../generated/prisma").$Enums.AiInsightCategory;
         status: import("../../generated/prisma").$Enums.AiInsightStatus;
         observation: string;
@@ -23,9 +23,9 @@ export declare class AiInsightsService {
     }[]>;
     setStatus(businessId: string, id: string, status: 'actioned' | 'dismissed'): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: import("../../generated/prisma").$Enums.AiInsightCategory;
         status: import("../../generated/prisma").$Enums.AiInsightStatus;
         observation: string;

@@ -2,8 +2,9 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { WorkflowTriggerService } from '../marketing/automations/workflow-trigger.service';
 import { LOW_STOCK_SCAN_QUEUE } from './low-stock-scan.constants';
-import { Role } from '../../generated/prisma';
+import { ActivityEventType, Role } from '../../generated/prisma';
 
 interface LowStockProductRow {
   id: string;
@@ -28,6 +29,7 @@ export class LowStockScanProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
+    private readonly workflowTrigger: WorkflowTriggerService,
   ) {
     super();
   }
@@ -83,6 +85,25 @@ export class LowStockScanProcessor extends WorkerHost {
         alertBody: `${lowStockProducts.length} item(s) running low: ${itemList}${more}.`,
       },
     });
+
+    // Automations engine (UPD-BE-028) low_stock trigger — this is a background job with no
+    // CLS-bound tenant context, so it writes the ActivityEvent directly (not via ActivityService)
+    // and dispatches fire-and-forget, same pattern as CreditOverdueScanProcessor.
+    const description = `${lowStockProducts.length} item(s) running low: ${itemList}${more}.`;
+    const event = await this.prisma.activityEvent.create({
+      data: {
+        businessId,
+        type: ActivityEventType.low_stock,
+        description,
+      },
+    });
+    void this.workflowTrigger
+      .dispatch(businessId, event.type, { description })
+      .catch((error: Error) =>
+        this.logger.warn(
+          `Workflow dispatch failed for low_stock event ${event.id}: ${error.message}`,
+        ),
+      );
   }
 
   private async alreadyAlertedToday(businessId: string): Promise<boolean> {

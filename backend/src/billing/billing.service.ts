@@ -2,7 +2,10 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
-import { PaymentGatewayAdapter } from './adapters/payment-gateway.adapter';
+import {
+  CreateSubscriptionCheckoutParams,
+  PaymentGatewayAdapter,
+} from './adapters/payment-gateway.adapter';
 import { StripeGatewayAdapter } from './adapters/stripe-gateway.adapter';
 import { JazzCashGatewayAdapter } from './adapters/jazzcash-gateway.adapter';
 import { BILLING_ERROR_CODES } from './billing.constants';
@@ -93,6 +96,39 @@ export class BillingService {
       );
     }
     return adapter.refund(providerRef, amount);
+  }
+
+  /**
+   * Subject-agnostic subscription checkout (UPD-BE-025 Memberships) — reuses the same adapter map
+   * as `createCheckout`/`refund`, but through `createSubscriptionCheckout`, which never touches
+   * `businessId` (see that method's doc comment on `PaymentGatewayAdapter`), so a membership
+   * subscription can never be mistaken for the business's own Stripe plan.
+   */
+  async createSubscriptionCheckout(
+    params: CreateSubscriptionCheckoutParams,
+    gatewayKey = 'stripe',
+  ) {
+    const adapter = this.adapters[gatewayKey];
+    if (!adapter?.isConfigured) {
+      throw new AppException(
+        BILLING_ERROR_CODES.GATEWAY_NOT_CONFIGURED,
+        `Payment gateway "${gatewayKey}" is not configured`,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return adapter.createSubscriptionCheckout(params);
+  }
+
+  async cancelSubscription(providerRef: string, gatewayKey = 'stripe') {
+    const adapter = this.adapters[gatewayKey];
+    if (!adapter?.isConfigured) {
+      throw new AppException(
+        BILLING_ERROR_CODES.GATEWAY_NOT_CONFIGURED,
+        `Payment gateway "${gatewayKey}" is not configured`,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return adapter.cancelSubscription(providerRef);
   }
 
   /**

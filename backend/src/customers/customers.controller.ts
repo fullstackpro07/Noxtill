@@ -14,9 +14,9 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
 import { EraseCustomerDto } from './dto/erase-customer.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { Role } from '../../generated/prisma';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('customers')
 export class CustomersController {
@@ -46,7 +46,7 @@ export class CustomersController {
   }
 
   /** GDPR erasure (spec §6) — owner/manager only, matching "manager = all but billing/plan/role-changes/full-exports". */
-  @Roles(Role.owner, Role.manager)
+  @RequireCapability(CAPABILITIES.CUSTOMERS_ERASE)
   @Delete(':id')
   erase(@Param('id') id: string, @Body() dto: EraseCustomerDto) {
     return this.customersService.erase(id, dto.confirm);

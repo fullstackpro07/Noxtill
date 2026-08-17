@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
-import { Roles } from '../common/decorators/roles.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { Role } from '../../generated/prisma';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('billing')
 export class BillingController {
@@ -15,7 +15,7 @@ export class BillingController {
     return this.billingService.status(user.businessId);
   }
 
-  @Roles(Role.owner)
+  @RequireCapability(CAPABILITIES.BILLING_MANAGE)
   @Post('checkout')
   checkout(
     @CurrentUser() user: AuthenticatedUser,

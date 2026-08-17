@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { SendGateService } from '../messaging/send-gate.service';
+import { WaitlistService } from './waitlist.service';
 import { CreatePublicBookingDto } from './dto/create-public-booking.dto';
 import { QuerySlotsDto } from './dto/query-slots.dto';
 import { computeAvailableSlots, WorkingHours } from './working-hours.util';
@@ -25,6 +26,7 @@ export class PublicBookingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
+    private readonly waitlist: WaitlistService,
   ) {}
 
   private async resolveBusiness(slug: string) {
@@ -197,10 +199,22 @@ export class PublicBookingService {
 
   async cancel(token: string) {
     const appointment = await this.loadByToken(token);
-    return this.prisma.appointment.update({
+    const updated = await this.prisma.appointment.update({
       where: { id: appointment.id },
       data: { status: AppointmentStatus.cancelled },
     });
+
+    // Waiting List (UPD-BE-017): best-effort, never throws — see WaitlistService.tryAutoOffer.
+    // No CLS context here (public, unauthenticated route) — tryAutoOffer scopes explicitly by
+    // the businessId passed below, so this is safe without it.
+    await this.waitlist.tryAutoOffer(updated.businessId, {
+      serviceId: updated.serviceId,
+      staffUserId: updated.staffUserId,
+      startsAt: updated.startsAt,
+      endsAt: updated.endsAt,
+    });
+
+    return updated;
   }
 
   private async loadByToken(token: string) {

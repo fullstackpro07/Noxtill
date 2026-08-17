@@ -13,9 +13,9 @@ export declare class VoiceSaleController {
     }>;
     confirm(user: AuthenticatedUser, id: string, dto: CreateSaleDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         orderNo: number;
         customerId: string | null;
         orderType: import("generated/prisma").$Enums.OrderType;
@@ -28,5 +28,9 @@ export declare class VoiceSaleController {
         cogs: import("generated/prisma/runtime/library").Decimal;
         isQuotation: boolean;
         staffUserId: string | null;
+        couponId: string | null;
+        couponDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
+        voucherId: string | null;
+        voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
     }>;
 }

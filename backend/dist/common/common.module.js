@@ -12,12 +12,13 @@ const core_1 = require("@nestjs/core");
 const throttler_1 = require("@nestjs/throttler");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
 const tenancy_guard_1 = require("./tenancy/tenancy.guard");
-const roles_guard_1 = require("./guards/roles.guard");
+const capabilities_guard_1 = require("./guards/capabilities.guard");
 const business_throttler_guard_1 = require("./guards/business-throttler.guard");
 const http_exception_filter_1 = require("./filters/http-exception.filter");
 const audit_interceptor_1 = require("./interceptors/audit.interceptor");
 const audit_service_1 = require("./audit/audit.service");
 const webhook_idempotency_service_1 = require("./webhooks/webhook-idempotency.service");
+const capabilities_service_1 = require("./capabilities/capabilities.service");
 let CommonModule = class CommonModule {
 };
 exports.CommonModule = CommonModule;
@@ -28,14 +29,15 @@ exports.CommonModule = CommonModule = __decorate([
         providers: [
             audit_service_1.AuditService,
             webhook_idempotency_service_1.WebhookIdempotencyService,
+            capabilities_service_1.CapabilitiesService,
             { provide: core_1.APP_GUARD, useClass: business_throttler_guard_1.BusinessThrottlerGuard },
             { provide: core_1.APP_GUARD, useClass: jwt_auth_guard_1.JwtAuthGuard },
             { provide: core_1.APP_GUARD, useClass: tenancy_guard_1.TenancyGuard },
-            { provide: core_1.APP_GUARD, useClass: roles_guard_1.RolesGuard },
+            { provide: core_1.APP_GUARD, useClass: capabilities_guard_1.CapabilitiesGuard },
             { provide: core_1.APP_INTERCEPTOR, useClass: audit_interceptor_1.AuditInterceptor },
             { provide: core_1.APP_FILTER, useClass: http_exception_filter_1.HttpExceptionFilter },
         ],
-        exports: [audit_service_1.AuditService, webhook_idempotency_service_1.WebhookIdempotencyService],
+        exports: [audit_service_1.AuditService, webhook_idempotency_service_1.WebhookIdempotencyService, capabilities_service_1.CapabilitiesService],
     })
 ], CommonModule);
 //# sourceMappingURL=common.module.js.map

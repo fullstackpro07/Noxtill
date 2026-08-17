@@ -30,7 +30,8 @@ let ProductsService = class ProductsService {
                     name: dto.name,
                     category: dto.category,
                     sku: dto.sku,
-                    variations: (dto.variations ?? []),
+                    variations: (dto.variations ??
+                        []),
                     costPrice: dto.costPrice,
                     sellingPrice: dto.sellingPrice,
                     stockQty: dto.stockQty ?? 0,

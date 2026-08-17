@@ -15,6 +15,7 @@ class QueryAppointmentsDto {
     from;
     to;
     staff;
+    status;
 }
 exports.QueryAppointmentsDto = QueryAppointmentsDto;
 __decorate([
@@ -32,4 +33,16 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], QueryAppointmentsDto.prototype, "staff", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)([
+        'requested',
+        'booked',
+        'confirmed',
+        'completed',
+        'no_show',
+        'cancelled',
+    ]),
+    __metadata("design:type", String)
+], QueryAppointmentsDto.prototype, "status", void 0);
 //# sourceMappingURL=query-appointments.dto.js.map

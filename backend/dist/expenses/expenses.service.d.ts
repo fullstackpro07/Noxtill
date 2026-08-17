@@ -15,9 +15,9 @@ export declare class ExpensesService {
         client: {};
     }, {}>, "Expense", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: Prisma.Decimal;
         description: string;
@@ -26,9 +26,9 @@ export declare class ExpensesService {
     }>;
     findAll(query: QueryExpensesDto): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: Prisma.Decimal;
         description: string;
@@ -37,9 +37,9 @@ export declare class ExpensesService {
     }[]>;
     findOne(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: Prisma.Decimal;
         description: string;
@@ -48,9 +48,9 @@ export declare class ExpensesService {
     }>;
     update(id: string, dto: UpdateExpenseDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: string;
         amount: Prisma.Decimal;
         description: string;

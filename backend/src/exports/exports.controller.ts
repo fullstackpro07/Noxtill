@@ -1,13 +1,13 @@
 import { BadRequestException, Controller, Get, Param, Post } from '@nestjs/common';
 import { ExportsService } from './exports.service';
-import { Roles } from '../common/decorators/roles.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { Role } from '../../generated/prisma';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { isExportKind } from './exports.constants';
 
 /** All routes owner-only — full-account exports are excluded from managers per the spec's RBAC rule. */
-@Roles(Role.owner)
+@RequireCapability(CAPABILITIES.EXPORTS_GENERATE)
 @Controller('exports')
 export class ExportsController {
   constructor(private readonly exports: ExportsService) {}

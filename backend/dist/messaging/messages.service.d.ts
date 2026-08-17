@@ -5,9 +5,9 @@ export declare class MessagesService {
     listByCustomer(customerId: string): Promise<{
         locale: string;
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         category: import("generated/prisma").$Enums.MessageCategory;
         customerId: string | null;
         status: import("generated/prisma").$Enums.MessageStatus;

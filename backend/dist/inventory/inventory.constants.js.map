@@ -1,1 +1,1 @@
-{"version":3,"file":"inventory.constants.js","sourceRoot":"","sources":["../../src/inventory/inventory.constants.ts"],"names":[],"mappings":";;;AAAa,QAAA,qBAAqB,GAAG;IACnC,iBAAiB,EAAE,mBAAmB;IACtC,kBAAkB,EAAE,oBAAoB;CAChC,CAAC"}
+{"version":3,"file":"inventory.constants.js","sourceRoot":"","sources":["../../src/inventory/inventory.constants.ts"],"names":[],"mappings":";;;AAAa,QAAA,qBAAqB,GAAG;IACnC,iBAAiB,EAAE,mBAAmB;IACtC,kBAAkB,EAAE,oBAAoB;CAChC,CAAC;AAEE,QAAA,uBAAuB,GAAG;IACrC,cAAc,EAAE,4BAA4B;IAC5C,eAAe,EAAE,6BAA6B;CACtC,CAAC"}

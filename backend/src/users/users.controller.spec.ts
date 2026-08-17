@@ -11,6 +11,7 @@ describe('UsersController', () => {
     sub: 'u1',
     businessId: 'b1',
     role: 'owner' as AuthenticatedUser['role'],
+    capabilities: [],
   };
 
   beforeEach(async () => {

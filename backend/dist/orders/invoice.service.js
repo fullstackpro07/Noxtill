@@ -16,18 +16,21 @@ const locale_service_1 = require("../common/localization/locale.service");
 const s3_service_1 = require("../common/storage/s3.service");
 const pdf_renderer_service_1 = require("../common/pdf/pdf-renderer.service");
 const send_gate_service_1 = require("../messaging/send-gate.service");
+const terminology_service_1 = require("../settings/terminology.service");
 let InvoiceService = class InvoiceService {
     tenantPrisma;
     locale;
     s3;
     sendGate;
     pdfRenderer;
-    constructor(tenantPrisma, locale, s3, sendGate, pdfRenderer) {
+    terminology;
+    constructor(tenantPrisma, locale, s3, sendGate, pdfRenderer, terminology) {
         this.tenantPrisma = tenantPrisma;
         this.locale = locale;
         this.s3 = s3;
         this.sendGate = sendGate;
         this.pdfRenderer = pdfRenderer;
+        this.terminology = terminology;
     }
     async generate(businessId, orderId, send = false) {
         const [order, business] = await Promise.all([
@@ -39,7 +42,8 @@ let InvoiceService = class InvoiceService {
                 where: { id: businessId },
             }),
         ]);
-        const html = this.renderHtml(order, business);
+        const terms = await this.terminology.getArea(businessId, 'pdf');
+        const html = this.renderHtml(order, business, terms);
         const pdfBuffer = await this.pdfRenderer.renderPdf(html);
         const key = `invoices/${businessId}/${order.id}.pdf`;
         const url = await this.s3.uploadAndSign(key, pdfBuffer, 'application/pdf');
@@ -59,7 +63,7 @@ let InvoiceService = class InvoiceService {
         }
         return { url };
     }
-    renderHtml(order, business) {
+    renderHtml(order, business, terms) {
         const rows = order.items
             .map((item) => `
           <tr>
@@ -77,24 +81,24 @@ let InvoiceService = class InvoiceService {
             <h1 style="margin:0;">${business.name}</h1>
           </div>
           <div style="padding:24px;">
-            <p><strong>Order #${order.orderNo}</strong> — ${new Date(order.createdAt).toLocaleDateString()}</p>
+            <p><strong>${terms.orderNumber}${order.orderNo}</strong> — ${new Date(order.createdAt).toLocaleDateString()}</p>
             ${order.customer ? `<p>${order.customer.name} · ${order.customer.phone}</p>` : ''}
             <table style="width:100%; border-collapse:collapse; margin-top:16px;">
               <thead>
                 <tr style="border-bottom:2px solid #D8D0BF;">
-                  <th style="text-align:left;">Item</th>
-                  <th>Qty</th>
-                  <th style="text-align:right;">Price</th>
-                  <th style="text-align:right;">Total</th>
+                  <th style="text-align:left;">${terms.item}</th>
+                  <th>${terms.qty}</th>
+                  <th style="text-align:right;">${terms.price}</th>
+                  <th style="text-align:right;">${terms.total}</th>
                 </tr>
               </thead>
               <tbody>${rows}</tbody>
             </table>
             <div style="margin-top:16px; text-align:right;">
-              <p>Subtotal: ${this.locale.formatCurrency(Number(order.subtotal), business)}</p>
+              <p>${terms.subtotal}: ${this.locale.formatCurrency(Number(order.subtotal), business)}</p>
               <p>${business.taxLabel}: ${this.locale.formatCurrency(Number(order.tax), business)}</p>
-              <p>Discount: -${this.locale.formatCurrency(Number(order.discount), business)}</p>
-              <h3>Total: ${this.locale.formatCurrency(Number(order.total), business)}</h3>
+              <p>${terms.discount}: -${this.locale.formatCurrency(Number(order.discount), business)}</p>
+              <h3>${terms.total}: ${this.locale.formatCurrency(Number(order.total), business)}</h3>
             </div>
             <p style="margin-top:32px;">Thank you for your business!</p>
           </div>
@@ -110,6 +114,7 @@ exports.InvoiceService = InvoiceService = __decorate([
         locale_service_1.LocaleService,
         s3_service_1.S3Service,
         send_gate_service_1.SendGateService,
-        pdf_renderer_service_1.PdfRendererService])
+        pdf_renderer_service_1.PdfRendererService,
+        terminology_service_1.TerminologyService])
 ], InvoiceService);
 //# sourceMappingURL=invoice.service.js.map

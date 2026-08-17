@@ -10,7 +10,10 @@ export class EmailCampaignsController {
   constructor(private readonly emailCampaigns: EmailCampaignsService) {}
 
   @Post('campaigns')
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateEmailCampaignDto) {
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateEmailCampaignDto,
+  ) {
     return this.emailCampaigns.create(user.businessId, dto);
   }
 

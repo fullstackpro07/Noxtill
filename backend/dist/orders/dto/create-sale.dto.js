@@ -63,6 +63,9 @@ class CreateSaleDto {
     staffUserId;
     items;
     discount;
+    couponCode;
+    voucherCode;
+    voucherAmount;
     payment;
 }
 exports.CreateSaleDto = CreateSaleDto;
@@ -108,6 +111,22 @@ __decorate([
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], CreateSaleDto.prototype, "discount", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateSaleDto.prototype, "couponCode", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateSaleDto.prototype, "voucherCode", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0.01),
+    __metadata("design:type", Number)
+], CreateSaleDto.prototype, "voucherAmount", void 0);
 __decorate([
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => SalePaymentDto),

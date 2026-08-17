@@ -23,7 +23,7 @@ let MarketingOverviewService = class MarketingOverviewService {
     constructor(tenantPrisma) {
         this.tenantPrisma = tenantPrisma;
     }
-    async overview(businessId) {
+    async overview() {
         const [whatsapp, email, adCampaigns] = await Promise.all([
             this.tenantPrisma.client.campaign.aggregate({
                 _sum: { sentCount: true },

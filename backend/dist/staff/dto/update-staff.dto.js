@@ -14,6 +14,7 @@ const class_validator_1 = require("class-validator");
 class UpdateStaffDto {
     role;
     commissionRule;
+    customRoleId;
 }
 exports.UpdateStaffDto = UpdateStaffDto;
 __decorate([
@@ -26,4 +27,9 @@ __decorate([
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], UpdateStaffDto.prototype, "commissionRule", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", Object)
+], UpdateStaffDto.prototype, "customRoleId", void 0);
 //# sourceMappingURL=update-staff.dto.js.map

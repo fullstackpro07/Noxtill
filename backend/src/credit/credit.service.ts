@@ -1,11 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { ActivityService } from '../activity/activity.service';
+import { AppException } from '../common/filters/app.exception';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { RecordPaymentDto } from './dto/record-payment.dto';
+import { CreateInstallmentPlanDto } from './dto/create-installment-plan.dto';
+import { WriteOffCreditDto } from './dto/write-off-credit.dto';
 import { DebtorRow, buildLedgerRows } from './credit.types';
+import {
+  CREDIT_ERROR_CODES,
+  WRITE_OFF_CONFIRM_PHRASE,
+} from './credit.constants';
+import { generateReviewToken } from '../reviews/review-token.util';
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 /** Credit ledger (BE-030): debtors list from v_credit_balances + record-payment. */
 @Injectable()
@@ -114,5 +126,167 @@ export class CreditService {
     });
 
     return { entry, balanceBefore: before, balanceAfter: after };
+  }
+
+  /**
+   * Instalment plans (UPD-BE-021). Deliberately writes NO `CreditEntry` here — a plan only
+   * schedules how an existing balance gets paid down; each line becomes a real ledger entry only
+   * once `InstallmentsService.pay()` actually marks it paid. `totalAmount` must equal the sum of
+   * the line amounts, which catches data-entry mistakes without needing to also cross-check the
+   * live balance (a plan may legitimately be created ahead of the debt it covers).
+   */
+  async createInstallmentPlan(
+    customerId: string,
+    dto: CreateInstallmentPlanDto,
+  ) {
+    const customer = await this.tenantPrisma.client.customer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const sum = round2(dto.installments.reduce((s, i) => s + i.amount, 0));
+    if (sum !== round2(dto.totalAmount)) {
+      throw new AppException(
+        CREDIT_ERROR_CODES.PLAN_AMOUNT_MISMATCH,
+        `Instalment amounts sum to ${sum}, which doesn't match totalAmount ${dto.totalAmount}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return this.tenantPrisma.client.installmentPlan.create({
+      data: {
+        businessId: customer.businessId,
+        customerId,
+        totalAmount: dto.totalAmount,
+        note: dto.note,
+        installments: {
+          create: dto.installments.map((line, i) => ({
+            businessId: customer.businessId,
+            seq: i + 1,
+            amount: line.amount,
+            dueDate: new Date(line.dueDate),
+          })),
+        },
+      },
+      include: { installments: { orderBy: { seq: 'asc' } } },
+    });
+  }
+
+  listInstallmentPlans(customerId: string) {
+    return this.tenantPrisma.client.installmentPlan.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+      include: { installments: { orderBy: { seq: 'asc' } } },
+    });
+  }
+
+  /**
+   * Write-off (UPD-BE-023) — owner-only (enforced at the controller), irreversible, capped at the
+   * customer's current real balance, and gated behind a typed confirmation phrase. Reuses the
+   * exact same before/after-balance + audit-log + activity-record shape as `recordPayment`, just
+   * with `kind: 'write_off'` so it's never confused with a real payment received.
+   */
+  async writeOff(customerId: string, dto: WriteOffCreditDto) {
+    if (dto.confirm !== WRITE_OFF_CONFIRM_PHRASE) {
+      throw new AppException(
+        CREDIT_ERROR_CODES.WRITE_OFF_CONFIRMATION_MISMATCH,
+        `Type "${WRITE_OFF_CONFIRM_PHRASE}" exactly to confirm this irreversible action`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const customer = await this.tenantPrisma.client.customer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const before = await this.getBalance(customerId);
+    if (dto.amount > before) {
+      throw new AppException(
+        CREDIT_ERROR_CODES.WRITE_OFF_EXCEEDS_BALANCE,
+        `Cannot write off ${dto.amount} — outstanding balance is only ${before}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const businessId = customer.businessId;
+    const entry = await this.tenantPrisma.client.creditEntry.create({
+      data: {
+        businessId,
+        customerId,
+        kind: 'write_off',
+        amount: dto.amount,
+        note: dto.reason,
+      },
+    });
+
+    const after = await this.getBalance(customerId);
+
+    await this.auditService.log({
+      entity: 'CreditEntry',
+      entityId: entry.id,
+      action: 'credit.write_off',
+      before: { balance: before },
+      after: { balance: after, entry, reason: dto.reason },
+    });
+
+    await this.activity.record(businessId, {
+      type: 'payment',
+      description: `Wrote off ${dto.amount} for ${customer.name}: ${dto.reason}`,
+      amount: dto.amount,
+      entityType: 'CreditEntry',
+      entityId: entry.id,
+    });
+
+    return { entry, balanceBefore: before, balanceAfter: after };
+  }
+
+  /** Transparent ledger links (UPD-BE-022) — reuses one active link per customer rather than minting a new one on every call. */
+  async createShareLink(customerId: string) {
+    const customer = await this.tenantPrisma.client.customer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const existing = await this.tenantPrisma.client.creditShareLink.findFirst({
+      where: { customerId, revoked: false },
+    });
+    if (existing) {
+      return existing;
+    }
+
+    return this.tenantPrisma.client.creditShareLink.create({
+      data: {
+        businessId: customer.businessId,
+        customerId,
+        token: generateReviewToken(),
+      },
+    });
+  }
+
+  listShareLinks(customerId: string) {
+    return this.tenantPrisma.client.creditShareLink.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async revokeShareLink(id: string) {
+    const link = await this.tenantPrisma.client.creditShareLink.findUnique({
+      where: { id },
+    });
+    if (!link) {
+      throw new NotFoundException('Share link not found');
+    }
+    return this.tenantPrisma.client.creditShareLink.update({
+      where: { id },
+      data: { revoked: true },
+    });
   }
 }

@@ -73,6 +73,19 @@ export class CreateSaleDto {
   @Min(0)
   discount?: number;
 
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
+
+  @IsOptional()
+  @IsString()
+  voucherCode?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  voucherAmount?: number;
+
   @ValidateNested()
   @Type(() => SalePaymentDto)
   payment!: SalePaymentDto;
