@@ -140,7 +140,7 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     key: 'voucher_issued',
     category: MessageCategory.marketing,
     locales: {
-      en: 'Hi {{customerName}}, you\'ve received a gift voucher worth {{amount}}! Code: {{code}}',
+      en: "Hi {{customerName}}, you've received a gift voucher worth {{amount}}! Code: {{code}}",
     },
   },
   automation_message: {

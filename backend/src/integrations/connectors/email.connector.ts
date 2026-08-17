@@ -17,14 +17,17 @@ export class EmailConnector implements Connector {
     return null;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- not an OAuth provider; no code exchange
   async handleCallback(): Promise<OAuthTokens> {
     return { accessToken: '' };
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- shared Postmark account, nothing to refresh
   async refreshToken(tokens: OAuthTokens): Promise<OAuthTokens> {
     return tokens;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- enabling the channel is the whole "sync"
   async sync(): Promise<unknown> {
     return { status: 'ok' };
   }

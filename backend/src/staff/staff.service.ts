@@ -179,9 +179,9 @@ export class StaffService {
     if (dto.customRoleId) {
       // Tenant-scoped find — returns null (and thus 404s) for another business's custom role,
       // same protection every other cross-tenant FK assignment in this codebase relies on.
-      const customRole = await this.tenantPrisma.client.customRole.findUnique(
-        { where: { id: dto.customRoleId } },
-      );
+      const customRole = await this.tenantPrisma.client.customRole.findUnique({
+        where: { id: dto.customRoleId },
+      });
       if (!customRole) {
         throw new NotFoundException('Custom role not found');
       }

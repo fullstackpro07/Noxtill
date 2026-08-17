@@ -42,18 +42,19 @@ export class ReportsService {
     authUser: AuthenticatedUser,
   ): Promise<{ url: string }> {
     const resolvedMonth = month ?? currentMonth();
-    const business = await this.tenantPrisma.client.business.findUniqueOrThrow(
-      { where: { id: authUser.businessId } },
-    );
-    const businessUser =
-      await this.tenantPrisma.client.businessUser.findUnique({
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: authUser.businessId },
+    });
+    const businessUser = await this.tenantPrisma.client.businessUser.findUnique(
+      {
         where: {
           businessId_userId: {
             businessId: authUser.businessId,
             userId: authUser.sub,
           },
         },
-      });
+      },
+    );
 
     const bodyHtml = await this.buildBody(
       kind,
@@ -155,7 +156,10 @@ export class ReportsService {
     `;
   }
 
-  private async buildPnl(month: string, business: BusinessInfo): Promise<string> {
+  private async buildPnl(
+    month: string,
+    business: BusinessInfo,
+  ): Promise<string> {
     const pnl = await this.profitService.pnl(month);
 
     const expenseRows = pnl.expenses
@@ -252,16 +256,18 @@ export class ReportsService {
         where: { createdAt: { gte: start, lt: end } },
       }),
       this.tenantPrisma.client.reviewRequest.count({
-        where: { createdAt: { gte: start, lt: end }, respondedAt: { not: null } },
+        where: {
+          createdAt: { gte: start, lt: end },
+          respondedAt: { not: null },
+        },
       }),
     ]);
 
     const avgRating = reviewAgg._avg.stars
       ? round2(Number(reviewAgg._avg.stars))
       : null;
-    const responseRate = requestsTotal > 0
-      ? round2((requestsResponded / requestsTotal) * 100)
-      : 0;
+    const responseRate =
+      requestsTotal > 0 ? round2((requestsResponded / requestsTotal) * 100) : 0;
 
     return `
       <h2>Reviews — ${month}</h2>

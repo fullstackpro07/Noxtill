@@ -1,4 +1,10 @@
-import { BadRequestException, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { ExportsService } from './exports.service';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -13,7 +19,10 @@ export class ExportsController {
   constructor(private readonly exports: ExportsService) {}
 
   @Get(':kind')
-  generate(@CurrentUser() user: AuthenticatedUser, @Param('kind') kind: string) {
+  generate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('kind') kind: string,
+  ) {
     if (!isExportKind(kind)) {
       throw new BadRequestException(`Unknown export kind: ${kind}`);
     }

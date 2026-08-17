@@ -25,7 +25,11 @@ export class PdfRendererService {
       await page.setContent(html, { waitUntil: 'load' });
       const pdf = await page.pdf(
         pageSize
-          ? { width: pageSize.width, height: pageSize.height, printBackground: true }
+          ? {
+              width: pageSize.width,
+              height: pageSize.height,
+              printBackground: true,
+            }
           : { format: 'A4' },
       );
       return Buffer.from(pdf);

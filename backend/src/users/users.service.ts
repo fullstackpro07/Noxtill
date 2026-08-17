@@ -34,13 +34,20 @@ export class UsersService {
     // the frontend to match "assigned to me" against Appointment.staffUserId / PrivateFeedback.assignedTo.
     const businessUser = await this.prisma.businessUser.findUnique({
       where: {
-        businessId_userId: { businessId: authUser.businessId, userId: authUser.sub },
+        businessId_userId: {
+          businessId: authUser.businessId,
+          userId: authUser.sub,
+        },
       },
       select: { id: true },
     });
 
     return {
-      user: { ...user, role: authUser.role, businessUserId: businessUser?.id ?? null },
+      user: {
+        ...user,
+        role: authUser.role,
+        businessUserId: businessUser?.id ?? null,
+      },
       business,
     };
   }

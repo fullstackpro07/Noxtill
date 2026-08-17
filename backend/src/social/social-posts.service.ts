@@ -9,10 +9,7 @@ import { SocialConnectorRegistry } from './connectors/social-connector-registry'
 import { MediaLibraryService } from './media-library.service';
 import { CreateSocialPostDto } from './dto/social-post.dto';
 import { SOCIAL_ERROR_CODES, SOCIAL_PUBLISH_QUEUE } from './social.constants';
-import {
-  SocialPostStatus,
-  SocialPostTargetStatus,
-} from '@prisma/client';
+import { SocialPostStatus, SocialPostTargetStatus } from '@prisma/client';
 
 /**
  * Content Calendar + Create Post (UPD-BE-046). `executePublish()` is the real per-target fan-out

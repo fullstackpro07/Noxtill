@@ -1,7 +1,4 @@
-import {
-  ActivityEventType,
-  WorkflowTriggerKey,
-} from '@prisma/client';
+import { ActivityEventType, WorkflowTriggerKey } from '@prisma/client';
 
 /**
  * Maps a real `ActivityEvent` write to the automation trigger it represents, or `null` if this

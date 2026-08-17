@@ -39,7 +39,11 @@ describe('Core journey (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     app.setGlobalPrefix('api/v1');
     await app.init();
@@ -58,8 +62,12 @@ describe('Core journey (e2e)', () => {
         .findMany({ where: { businessId }, select: { id: true } })
         .then((orders) =>
           Promise.all([
-            prisma.orderItem.deleteMany({ where: { orderId: { in: orders.map((o) => o.id) } } }),
-            prisma.payment.deleteMany({ where: { orderId: { in: orders.map((o) => o.id) } } }),
+            prisma.orderItem.deleteMany({
+              where: { orderId: { in: orders.map((o) => o.id) } },
+            }),
+            prisma.payment.deleteMany({
+              where: { orderId: { in: orders.map((o) => o.id) } },
+            }),
           ]),
         );
       await prisma.reviewRequest.deleteMany({ where: { businessId } });
@@ -68,7 +76,9 @@ describe('Core journey (e2e)', () => {
       await prisma.customer.deleteMany({ where: { businessId } });
       await prisma.product.deleteMany({ where: { businessId } });
       await prisma.businessUser.deleteMany({ where: { businessId } });
-      await prisma.business.delete({ where: { id: businessId } }).catch(() => undefined);
+      await prisma.business
+        .delete({ where: { id: businessId } })
+        .catch(() => undefined);
     }
     await closeApp(app);
   }, 10_000);
@@ -76,13 +86,22 @@ describe('Core journey (e2e)', () => {
   it('signup: creates a real business + owner + tokens', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
-      .send({ businessName: `Journey E2E Biz ${Date.now()}`, name: 'Journey Owner', email, password })
+      .send({
+        businessName: `Journey E2E Biz ${Date.now()}`,
+        name: 'Journey Owner',
+        email,
+        password,
+      })
       .expect(201);
 
-    expect(res.body.accessToken).toBeDefined();
-    expect(res.body.business.id).toBeDefined();
-    accessToken = res.body.accessToken;
-    businessId = res.body.business.id;
+    const signup = res.body as {
+      accessToken: string;
+      business: { id: string };
+    };
+    expect(signup.accessToken).toBeDefined();
+    expect(signup.business.id).toBeDefined();
+    accessToken = signup.accessToken;
+    businessId = signup.business.id;
   });
 
   let productId: string;
@@ -91,11 +110,18 @@ describe('Core journey (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/products')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ kind: 'product', name: 'Journey Test Widget', sellingPrice: 25, costPrice: 10, stockQty: 10 })
+      .send({
+        kind: 'product',
+        name: 'Journey Test Widget',
+        sellingPrice: 25,
+        costPrice: 10,
+        stockQty: 10,
+      })
       .expect(201);
 
-    expect(res.body.id).toBeDefined();
-    productId = res.body.id;
+    const product = res.body as { id: string };
+    expect(product.id).toBeDefined();
+    productId = product.id;
   });
 
   let orderId: string;
@@ -112,24 +138,26 @@ describe('Core journey (e2e)', () => {
       })
       .expect(201);
 
-    expect(res.body.id).toBeDefined();
-    expect(res.body.status).toBe('completed');
-    orderId = res.body.id;
+    const sale = res.body as { id: string; status: string };
+    expect(sale.id).toBeDefined();
+    expect(sale.status).toBe('completed');
+    orderId = sale.id;
 
     // The queue call is best-effort/non-transactional in the real code path — give it a tick.
     await new Promise((r) => setTimeout(r, 50));
     expect(messagesQueueAddSpy).toHaveBeenCalled();
   });
 
-  it('nightly close: today\'s real sale appears in the day aggregate', async () => {
+  it("nightly close: today's real sale appears in the day aggregate", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const res = await request(app.getHttpServer())
       .get(`/api/v1/day/${today}`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
-    expect(res.body.ordersCount).toBeGreaterThanOrEqual(1);
-    expect(res.body.revenue).toBeGreaterThanOrEqual(25);
+    const day = res.body as { ordersCount: number; revenue: number };
+    expect(day.ordersCount).toBeGreaterThanOrEqual(1);
+    expect(day.revenue).toBeGreaterThanOrEqual(25);
   });
 
   it('review request: a real ReviewRequest row was created for the completed sale', async () => {

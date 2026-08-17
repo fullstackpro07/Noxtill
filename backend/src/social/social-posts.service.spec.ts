@@ -8,6 +8,7 @@ import type { S3Service } from '../common/storage/s3.service';
 import type { SocialAccountsService } from './social-accounts.service';
 import type { SocialConnectorRegistry } from './connectors/social-connector-registry';
 import type { MediaLibraryService } from './media-library.service';
+import type { Queue } from 'bullmq';
 import {
   SocialPlatform,
   SocialPostStatus,
@@ -68,7 +69,7 @@ describe('SocialPostsService (UPD-BE-046)', () => {
       connectors as unknown as SocialConnectorRegistry,
       mediaLibrary as unknown as MediaLibraryService,
 
-      queue as any,
+      queue as unknown as Queue,
     );
 
     const business = await prisma.business.create({

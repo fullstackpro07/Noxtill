@@ -240,6 +240,7 @@ describe('ReportsService (INT-012)', () => {
 
   it('send() generates the PDF then pushes it to the caller via the real send-gate template', async () => {
     await service.send('monthly', month, asOwner());
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment -- jest's expect.objectContaining types as `any` */
     expect(sendGate.send).toHaveBeenCalledWith(
       expect.objectContaining({
         businessId,
@@ -249,5 +250,6 @@ describe('ReportsService (INT-012)', () => {
         }),
       }),
     );
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment */
   });
 });

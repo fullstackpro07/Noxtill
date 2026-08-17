@@ -27,21 +27,35 @@ describe('ActionCenterService (UPD-BE-004)', () => {
     await prisma.$connect();
 
     const cls = new FakeClsService();
-    const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
     service = new ActionCenterService(tenantPrisma);
 
     const business = await prisma.business.create({
-      data: { name: 'Action Center Test Biz', slug: `action-center-test-${Date.now()}` },
+      data: {
+        name: 'Action Center Test Biz',
+        slug: `action-center-test-${Date.now()}`,
+      },
     });
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
     const [ownerUser, staffUser] = await Promise.all([
       prisma.user.create({
-        data: { name: 'Owner', email: `owner-${Date.now()}@example.com`, passwordHash: 'x' },
+        data: {
+          name: 'Owner',
+          email: `owner-${Date.now()}@example.com`,
+          passwordHash: 'x',
+        },
       }),
       prisma.user.create({
-        data: { name: 'Staff', email: `staff-${Date.now()}@example.com`, passwordHash: 'x' },
+        data: {
+          name: 'Staff',
+          email: `staff-${Date.now()}@example.com`,
+          passwordHash: 'x',
+        },
       }),
     ]);
     const [assignedStaff, otherStaff] = await Promise.all([
@@ -103,7 +117,12 @@ describe('ActionCenterService (UPD-BE-004)', () => {
       data: { businessId, customerId: customer.id, stars: 1, status: 'open' },
     });
     await prisma.privateFeedback.create({
-      data: { businessId, customerId: customer.id, stars: 1, status: 'resolved' },
+      data: {
+        businessId,
+        customerId: customer.id,
+        stars: 1,
+        status: 'resolved',
+      },
     });
 
     const result = await service.list(businessId, Role.owner, null, {});
@@ -135,7 +154,12 @@ describe('ActionCenterService (UPD-BE-004)', () => {
 
   it('surfaces an unreplied external review and excludes replied ones', async () => {
     const unreplied = await prisma.externalReview.create({
-      data: { businessId, platform: 'google', externalId: 'r-unreplied', stars: 2 },
+      data: {
+        businessId,
+        platform: 'google',
+        externalId: 'r-unreplied',
+        stars: 2,
+      },
     });
     await prisma.externalReview.create({
       data: {
@@ -149,23 +173,33 @@ describe('ActionCenterService (UPD-BE-004)', () => {
     });
 
     const result = await service.list(businessId, Role.owner, null, {});
-    const reviewItems = result.items.filter((i) => i.type === 'unreplied_review');
+    const reviewItems = result.items.filter(
+      (i) => i.type === 'unreplied_review',
+    );
     expect(reviewItems).toHaveLength(1);
     expect(reviewItems[0].id).toBe(`unreplied_review:${unreplied.id}`);
   });
 
   it('filters by type and priority query params', async () => {
-    const stockOnly = await service.list(businessId, Role.owner, null, { type: 'low_stock' });
+    const stockOnly = await service.list(businessId, Role.owner, null, {
+      type: 'low_stock',
+    });
     expect(stockOnly.items.every((i) => i.type === 'low_stock')).toBe(true);
 
-    const urgentOnly = await service.list(businessId, Role.owner, null, { priority: 'urgent' });
+    const urgentOnly = await service.list(businessId, Role.owner, null, {
+      priority: 'urgent',
+    });
     expect(urgentOnly.items.every((i) => i.priority === 'urgent')).toBe(true);
   });
 
   describe('staff RBAC', () => {
     it('shows a staff caller only complaints assigned to them, nothing else', async () => {
       const customer = await prisma.customer.create({
-        data: { businessId, name: 'Assigned Complainer', phone: '+10000000022' },
+        data: {
+          businessId,
+          name: 'Assigned Complainer',
+          phone: '+10000000022',
+        },
       });
       await prisma.privateFeedback.create({
         data: {
@@ -177,11 +211,21 @@ describe('ActionCenterService (UPD-BE-004)', () => {
         },
       });
 
-      const result = await service.list(businessId, Role.staff, assignedStaffId, {});
+      const result = await service.list(
+        businessId,
+        Role.staff,
+        assignedStaffId,
+        {},
+      );
       expect(result.items.every((i) => i.type === 'complaint')).toBe(true);
       expect(result.items.length).toBeGreaterThan(0);
 
-      const otherResult = await service.list(businessId, Role.staff, otherStaffId, {});
+      const otherResult = await service.list(
+        businessId,
+        Role.staff,
+        otherStaffId,
+        {},
+      );
       expect(otherResult.items.every((i) => i.type === 'complaint')).toBe(true);
       // otherStaffId has no complaints assigned to them specifically.
       const assignedToOther = otherResult.items.filter((i) =>
@@ -193,30 +237,40 @@ describe('ActionCenterService (UPD-BE-004)', () => {
 
   describe('complete/dismiss/snooze', () => {
     it('a completed item never resurfaces, and counts toward completedThisWeek', async () => {
-      const before = await service.list(businessId, Role.owner, null, { type: 'low_stock' });
+      const before = await service.list(businessId, Role.owner, null, {
+        type: 'low_stock',
+      });
       const target = before.items[0];
       expect(target).toBeDefined();
 
       await service.complete(businessId, target.id);
 
-      const after = await service.list(businessId, Role.owner, null, { type: 'low_stock' });
+      const after = await service.list(businessId, Role.owner, null, {
+        type: 'low_stock',
+      });
       expect(after.items.find((i) => i.id === target.id)).toBeUndefined();
       expect(after.counts.completedThisWeek).toBeGreaterThan(0);
     });
 
     it('a dismissed item never resurfaces', async () => {
-      const before = await service.list(businessId, Role.owner, null, { type: 'overdue_credit' });
+      const before = await service.list(businessId, Role.owner, null, {
+        type: 'overdue_credit',
+      });
       const target = before.items[0];
       expect(target).toBeDefined();
 
       await service.dismiss(businessId, target.id);
 
-      const after = await service.list(businessId, Role.owner, null, { type: 'overdue_credit' });
+      const after = await service.list(businessId, Role.owner, null, {
+        type: 'overdue_credit',
+      });
       expect(after.items.find((i) => i.id === target.id)).toBeUndefined();
     });
 
     it('a snoozed item is hidden until its snooze expires, then reappears', async () => {
-      const before = await service.list(businessId, Role.owner, null, { type: 'unreplied_review' });
+      const before = await service.list(businessId, Role.owner, null, {
+        type: 'unreplied_review',
+      });
       const target = before.items[0];
       expect(target).toBeDefined();
 
@@ -225,12 +279,20 @@ describe('ActionCenterService (UPD-BE-004)', () => {
       const duringSnooze = await service.list(businessId, Role.owner, null, {
         type: 'unreplied_review',
       });
-      expect(duringSnooze.items.find((i) => i.id === target.id)).toBeUndefined();
+      expect(
+        duringSnooze.items.find((i) => i.id === target.id),
+      ).toBeUndefined();
 
       // Force the snooze into the past to simulate expiry without waiting a real hour.
       const [type, entityId] = target.id.split(':');
       await prisma.actionItemState.update({
-        where: { businessId_type_entityId: { businessId, type: type as never, entityId } },
+        where: {
+          businessId_type_entityId: {
+            businessId,
+            type: type as never,
+            entityId,
+          },
+        },
         data: { snoozedUntil: new Date(Date.now() - 1000) },
       });
 
@@ -242,7 +304,10 @@ describe('ActionCenterService (UPD-BE-004)', () => {
 
     it('throws for an id with a type that does not exist', async () => {
       await expect(
-        service.complete(businessId, 'not_a_real_type:00000000-0000-0000-0000-000000000000'),
+        service.complete(
+          businessId,
+          'not_a_real_type:00000000-0000-0000-0000-000000000000',
+        ),
       ).rejects.toThrow();
     });
   });
