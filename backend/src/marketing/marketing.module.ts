@@ -16,7 +16,10 @@ import { KeywordRankScheduler } from './jobs/keyword-rank.scheduler';
 import { KeywordRankProcessor } from './jobs/keyword-rank.processor';
 import { GooglePlacesService } from './google-places.service';
 import { SerpRankService } from './serp-rank.service';
-import { COMPETITOR_SNAPSHOT_QUEUE, KEYWORD_RANK_QUEUE } from './marketing.constants';
+import {
+  COMPETITOR_SNAPSHOT_QUEUE,
+  KEYWORD_RANK_QUEUE,
+} from './marketing.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { CustomersModule } from '../customers/customers.module';
 

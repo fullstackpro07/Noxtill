@@ -11,7 +11,10 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    processor = new KeywordRankProcessor(prisma, serpRank as unknown as SerpRankService);
+    processor = new KeywordRankProcessor(
+      prisma,
+      serpRank as unknown as SerpRankService,
+    );
 
     const business = await prisma.business.create({
       data: { name: 'Rank Test Biz', slug: `rank-test-${Date.now()}` },
@@ -24,7 +27,9 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
   });
 
   afterAll(async () => {
-    const keywords = await prisma.trackedKeyword.findMany({ where: { businessId } });
+    const keywords = await prisma.trackedKeyword.findMany({
+      where: { businessId },
+    });
     await prisma.keywordRankSnapshot.deleteMany({
       where: { keywordId: { in: keywords.map((k) => k.id) } },
     });
@@ -39,7 +44,12 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     });
     serpRank.fetchRank.mockResolvedValue(null);
 
-    await processor.checkOne(businessId, keyword.id, keyword.keyword, 'Rank Test Biz');
+    await processor.checkOne(
+      businessId,
+      keyword.id,
+      keyword.keyword,
+      'Rank Test Biz',
+    );
 
     const snapshots = await prisma.keywordRankSnapshot.findMany({
       where: { keywordId: keyword.id },
@@ -54,7 +64,12 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     });
     serpRank.fetchRank.mockResolvedValue(4);
 
-    await processor.checkOne(businessId, keyword.id, keyword.keyword, 'Rank Test Biz');
+    await processor.checkOne(
+      businessId,
+      keyword.id,
+      keyword.keyword,
+      'Rank Test Biz',
+    );
 
     const snapshots = await prisma.keywordRankSnapshot.findMany({
       where: { keywordId: keyword.id },

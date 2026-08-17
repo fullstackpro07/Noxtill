@@ -60,7 +60,9 @@ export class StaffService {
     const [appointments, complaints, restockProducts] = await Promise.all([
       this.tenantPrisma.client.appointment.findMany({
         where: {
-          status: { in: [AppointmentStatus.booked, AppointmentStatus.confirmed] },
+          status: {
+            in: [AppointmentStatus.booked, AppointmentStatus.confirmed],
+          },
           startsAt: { lte: windowEnd },
         },
         include: { customer: true, service: true },

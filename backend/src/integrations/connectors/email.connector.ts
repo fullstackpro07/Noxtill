@@ -17,19 +17,20 @@ export class EmailConnector implements Connector {
     return null;
   }
 
-  async handleCallback(): Promise<OAuthTokens> {
-    return { accessToken: '' };
+  handleCallback(): Promise<OAuthTokens> {
+    return Promise.resolve({ accessToken: '' });
   }
 
-  async refreshToken(tokens: OAuthTokens): Promise<OAuthTokens> {
-    return tokens;
+  refreshToken(tokens: OAuthTokens): Promise<OAuthTokens> {
+    return Promise.resolve(tokens);
   }
 
-  async sync(): Promise<unknown> {
-    return { status: 'ok' };
+  sync(): Promise<unknown> {
+    return Promise.resolve({ status: 'ok' });
   }
 
-  async disconnect(): Promise<void> {
+  disconnect(): Promise<void> {
     // Nothing external to revoke — the shared platform Postmark account isn't per-business.
+    return Promise.resolve();
   }
 }

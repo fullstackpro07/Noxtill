@@ -248,7 +248,10 @@ describe('AssistantService (BE-074)', () => {
     );
     claude.streamMessage.mockResolvedValueOnce(finalTurn());
 
-    const result = await service.chat(businessId, 'How does the frobnicator work?');
+    const result = await service.chat(
+      businessId,
+      'How does the frobnicator work?',
+    );
     const output = result.toolCalls[0].output as {
       found: boolean;
       passages: { title: string; url: string }[];
@@ -274,7 +277,10 @@ describe('AssistantService (BE-074)', () => {
     );
     claude.streamMessage.mockResolvedValueOnce(finalTurn());
 
-    const result = await service.chat(businessId, 'zzqx unrelated nonsense topic');
+    const result = await service.chat(
+      businessId,
+      'zzqx unrelated nonsense topic',
+    );
     expect(result.toolCalls[0].output).toEqual({ found: false });
   });
 
@@ -333,7 +339,7 @@ describe('AssistantService (BE-074)', () => {
       await prisma.product.delete({ where: { id: productId } });
     });
 
-    it("reflects a real appointment starting today", async () => {
+    it('reflects a real appointment starting today', async () => {
       claude.streamMessage.mockResolvedValueOnce(
         toolUseTurnFor('tool_5', 'get_todays_bookings', '{}'),
       );

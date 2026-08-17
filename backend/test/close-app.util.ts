@@ -8,6 +8,12 @@ import { INestApplication } from '@nestjs/common';
  * swept up by Jest's `forceExit` (test/jest-e2e.json). In CI, where Redis is a real service
  * container, `app.close()` itself resolves well inside the grace period.
  */
-export async function closeApp(app: INestApplication, graceMs = 3_000): Promise<void> {
-  await Promise.race([app.close(), new Promise((resolve) => setTimeout(resolve, graceMs))]);
+export async function closeApp(
+  app: INestApplication,
+  graceMs = 3_000,
+): Promise<void> {
+  await Promise.race([
+    app.close(),
+    new Promise((resolve) => setTimeout(resolve, graceMs)),
+  ]);
 }

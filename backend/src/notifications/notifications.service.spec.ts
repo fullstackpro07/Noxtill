@@ -26,21 +26,35 @@ describe('NotificationsService (INT-012)', () => {
     await prisma.$connect();
 
     const cls = new FakeClsService();
-    const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
     service = new NotificationsService(tenantPrisma);
 
     const business = await prisma.business.create({
-      data: { name: 'Notifications Test Biz', slug: `notifications-test-${Date.now()}` },
+      data: {
+        name: 'Notifications Test Biz',
+        slug: `notifications-test-${Date.now()}`,
+      },
     });
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
     const userA = await prisma.user.create({
-      data: { name: 'User A', email: `notif-a-${Date.now()}@example.com`, passwordHash: 'x' },
+      data: {
+        name: 'User A',
+        email: `notif-a-${Date.now()}@example.com`,
+        passwordHash: 'x',
+      },
     });
     userAId = userA.id;
     const userB = await prisma.user.create({
-      data: { name: 'User B', email: `notif-b-${Date.now()}@example.com`, passwordHash: 'x' },
+      data: {
+        name: 'User B',
+        email: `notif-b-${Date.now()}@example.com`,
+        passwordHash: 'x',
+      },
     });
     userBId = userB.id;
   });
@@ -63,7 +77,10 @@ describe('NotificationsService (INT-012)', () => {
   });
 
   it("list() only returns the calling user's own notifications, not another user's", async () => {
-    await service.create(businessId, userBId, { title: 'For B only', body: 'x' });
+    await service.create(businessId, userBId, {
+      title: 'For B only',
+      body: 'x',
+    });
 
     const listA = await service.list(userAId);
     const listB = await service.list(userBId);
@@ -73,13 +90,19 @@ describe('NotificationsService (INT-012)', () => {
   });
 
   it('markRead() flips the read flag for the owning user', async () => {
-    const created = await service.create(businessId, userAId, { title: 'Mark me', body: 'x' });
+    const created = await service.create(businessId, userAId, {
+      title: 'Mark me',
+      body: 'x',
+    });
     const updated = await service.markRead(userAId, created.id);
     expect(updated.read).toBe(true);
   });
 
   it("markRead() rejects a user trying to mark another user's notification", async () => {
-    const created = await service.create(businessId, userAId, { title: 'Not yours', body: 'x' });
+    const created = await service.create(businessId, userAId, {
+      title: 'Not yours',
+      body: 'x',
+    });
     await expect(service.markRead(userBId, created.id)).rejects.toThrow();
   });
 });

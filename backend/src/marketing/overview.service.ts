@@ -26,6 +26,8 @@ export class MarketingOverviewService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
   async overview(businessId: string): Promise<ChannelOverviewRow[]> {
+    // Tenant scoping comes from CLS via TenantPrismaService; businessId is kept for the public API.
+    void businessId;
     const [whatsapp, email, adCampaigns] = await Promise.all([
       this.tenantPrisma.client.campaign.aggregate({
         _sum: { sentCount: true },
@@ -56,12 +58,17 @@ export class MarketingOverviewService {
     return rows;
   }
 
-  private toRow(channel: string, spend: number, results: number): ChannelOverviewRow {
+  private toRow(
+    channel: string,
+    spend: number,
+    results: number,
+  ): ChannelOverviewRow {
     return {
       channel,
       spend,
       results,
-      costPerResult: results > 0 ? Math.round((spend / results) * 100) / 100 : null,
+      costPerResult:
+        results > 0 ? Math.round((spend / results) * 100) / 100 : null,
     };
   }
 

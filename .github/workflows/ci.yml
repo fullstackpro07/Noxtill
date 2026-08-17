@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -33,6 +37,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxtill_test
       REDIS_URL: redis://localhost:6379
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
       JWT_SECRET: ci-only-secret-do-not-reuse-in-prod-please-32c
       JWT_REFRESH_SECRET: ci-only-refresh-secret-do-not-reuse-32chars
       JWT_ACCESS_TTL: 15m
@@ -49,7 +55,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -91,7 +97,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 

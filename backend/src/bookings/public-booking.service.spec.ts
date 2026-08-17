@@ -140,7 +140,10 @@ describe('PublicBookingService (BE-051/052/053/055)', () => {
     });
 
     await expect(
-      service.reschedule(movable.rescheduleToken!, fixed.startsAt.toISOString()),
+      service.reschedule(
+        movable.rescheduleToken!,
+        fixed.startsAt.toISOString(),
+      ),
     ).rejects.toBeInstanceOf(AppException);
   });
 

@@ -94,7 +94,10 @@ describe('WidgetsService (BE-067)', () => {
 
     beforeAll(async () => {
       const business = await prisma.business.create({
-        data: { name: 'Widgets Range Test Biz', slug: `widgets-range-test-${Date.now()}` },
+        data: {
+          name: 'Widgets Range Test Biz',
+          slug: `widgets-range-test-${Date.now()}`,
+        },
       });
       rangeBusinessId = business.id;
 
@@ -110,27 +113,47 @@ describe('WidgetsService (BE-067)', () => {
     });
 
     afterAll(async () => {
-      await prisma.customer.deleteMany({ where: { businessId: rangeBusinessId } });
+      await prisma.customer.deleteMany({
+        where: { businessId: rangeBusinessId },
+      });
       await prisma.business.delete({ where: { id: rangeBusinessId } });
     });
 
     it('excludes a customer created 10 days ago from a 7-day window', async () => {
       const cls = new FakeClsService();
       cls.set(CLS_KEY_BUSINESS_ID, rangeBusinessId);
-      const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
-      const scopedService = new WidgetsService(tenantPrisma, cls as unknown as ClsService);
+      const tenantPrisma = new TenantPrismaService(
+        prisma,
+        cls as unknown as ClsService,
+      );
+      const scopedService = new WidgetsService(
+        tenantPrisma,
+        cls as unknown as ClsService,
+      );
 
-      const result = await scopedService.getWidgetData('new_customers_month', 7);
+      const result = await scopedService.getWidgetData(
+        'new_customers_month',
+        7,
+      );
       expect(result).toEqual({ count: 0 });
     });
 
     it('includes the same customer in a 30-day window', async () => {
       const cls = new FakeClsService();
       cls.set(CLS_KEY_BUSINESS_ID, rangeBusinessId);
-      const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
-      const scopedService = new WidgetsService(tenantPrisma, cls as unknown as ClsService);
+      const tenantPrisma = new TenantPrismaService(
+        prisma,
+        cls as unknown as ClsService,
+      );
+      const scopedService = new WidgetsService(
+        tenantPrisma,
+        cls as unknown as ClsService,
+      );
 
-      const result = await scopedService.getWidgetData('new_customers_month', 30);
+      const result = await scopedService.getWidgetData(
+        'new_customers_month',
+        30,
+      );
       expect(result).toEqual({ count: 1 });
     });
 
