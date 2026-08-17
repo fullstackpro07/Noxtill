@@ -59,16 +59,16 @@ export declare class AppointmentsController {
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
             businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            userId: string;
             customRoleId: string | null;
         }) | null;
     } & {
@@ -150,16 +150,16 @@ export declare class AppointmentsController {
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
             businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            userId: string;
             customRoleId: string | null;
         }) | null;
     } & {
@@ -226,16 +226,16 @@ export declare class AppointmentsController {
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
             businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            userId: string;
             customRoleId: string | null;
         }) | null;
     } & {
@@ -380,16 +380,16 @@ export declare class AppointmentsController {
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
             businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            userId: string;
             customRoleId: string | null;
         }) | null;
     } & {

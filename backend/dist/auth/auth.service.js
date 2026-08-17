@@ -52,6 +52,9 @@ const app_exception_1 = require("../common/filters/app.exception");
 const common_2 = require("@nestjs/common");
 const slug_util_1 = require("../common/utils/slug.util");
 const capabilities_service_1 = require("../common/capabilities/capabilities.service");
+const sessions_service_1 = require("./sessions.service");
+const two_factor_service_1 = require("./two-factor.service");
+const two_factor_constants_1 = require("./two-factor.constants");
 const prisma_1 = require("../../generated/prisma");
 const BCRYPT_ROUNDS = 10;
 let AuthService = class AuthService {
@@ -59,13 +62,17 @@ let AuthService = class AuthService {
     jwt;
     config;
     capabilities;
-    constructor(prisma, jwt, config, capabilities) {
+    sessions;
+    twoFactor;
+    constructor(prisma, jwt, config, capabilities, sessions, twoFactor) {
         this.prisma = prisma;
         this.jwt = jwt;
         this.config = config;
         this.capabilities = capabilities;
+        this.sessions = sessions;
+        this.twoFactor = twoFactor;
     }
-    async signup(dto) {
+    async signup(dto, meta = {}) {
         const identityFilters = [];
         if (dto.email)
             identityFilters.push({ email: dto.email });
@@ -102,10 +109,10 @@ let AuthService = class AuthService {
             });
             return { user, business, businessUser };
         });
-        const tokens = await this.issueTokens(user.id, business.id, businessUser.role, businessUser.customRoleId);
+        const tokens = await this.issueTokens(user.id, business.id, businessUser.role, businessUser.customRoleId, meta);
         return { business, user: this.toPublicUser(user), ...tokens };
     }
-    async login(dto) {
+    async login(dto, meta = {}) {
         const user = await this.prisma.user.findFirst({
             where: { OR: [{ email: dto.emailOrPhone }, { phone: dto.emailOrPhone }] },
         });
@@ -131,8 +138,78 @@ let AuthService = class AuthService {
         if (!businessUser) {
             throw new common_1.UnauthorizedException('No business associated with this account');
         }
-        const tokens = await this.issueTokens(user.id, businessUser.businessId, businessUser.role, businessUser.customRoleId);
+        if (user.twoFactorEnabled) {
+            if (!user.phone) {
+                throw new app_exception_1.AppException(two_factor_constants_1.TWO_FACTOR_ERROR_CODES.NO_IDENTITY, '2FA is enabled but this account has no phone number to send a code to', common_2.HttpStatus.CONFLICT);
+            }
+            await this.twoFactor.generateAndSend(user.id, businessUser.businessId, user.phone);
+            const tempToken = await this.issuePendingTwoFactorToken(user.id);
+            return { pending2fa: true, tempToken };
+        }
+        const tokens = await this.issueTokens(user.id, businessUser.businessId, businessUser.role, businessUser.customRoleId, meta);
         return { user: this.toPublicUser(user), ...tokens };
+    }
+    async verifyTwoFactorLogin(tempToken, code, meta = {}) {
+        let payload;
+        try {
+            payload = await this.jwt.verifyAsync(tempToken, {
+                secret: this.pendingTwoFactorSecret(),
+            });
+        }
+        catch {
+            throw new common_1.UnauthorizedException('Invalid or expired verification session — log in again');
+        }
+        if (!payload.pending2fa) {
+            throw new common_1.UnauthorizedException('Invalid or expired verification session — log in again');
+        }
+        await this.twoFactor.verify(payload.sub, code);
+        const businessUser = await this.prisma.businessUser.findFirst({
+            where: { userId: payload.sub },
+            orderBy: { createdAt: 'asc' },
+        });
+        if (!businessUser) {
+            throw new common_1.UnauthorizedException('No business associated with this account');
+        }
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: payload.sub },
+        });
+        const tokens = await this.issueTokens(user.id, businessUser.businessId, businessUser.role, businessUser.customRoleId, meta);
+        return { user: this.toPublicUser(user), ...tokens };
+    }
+    async enableTwoFactor(userId, businessId) {
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: userId },
+        });
+        if (user.twoFactorEnabled) {
+            throw new app_exception_1.AppException(two_factor_constants_1.TWO_FACTOR_ERROR_CODES.ALREADY_ENABLED, '2FA is already enabled', common_2.HttpStatus.CONFLICT);
+        }
+        if (!user.phone) {
+            throw new app_exception_1.AppException(two_factor_constants_1.TWO_FACTOR_ERROR_CODES.NO_IDENTITY, 'A phone number is required to enable WhatsApp 2FA', common_2.HttpStatus.BAD_REQUEST);
+        }
+        await this.twoFactor.generateAndSend(userId, businessId, user.phone);
+        return { sent: true };
+    }
+    async confirmTwoFactor(userId, code) {
+        await this.twoFactor.verify(userId, code);
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { twoFactorEnabled: true },
+        });
+        return { enabled: true };
+    }
+    async disableTwoFactor(userId, password) {
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: userId },
+        });
+        const valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) {
+            throw new app_exception_1.AppException(two_factor_constants_1.TWO_FACTOR_ERROR_CODES.WRONG_PASSWORD, 'Incorrect password', common_2.HttpStatus.UNAUTHORIZED);
+        }
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { twoFactorEnabled: false },
+        });
+        return { enabled: false };
     }
     async refresh(refreshToken) {
         let payload;
@@ -144,14 +221,11 @@ let AuthService = class AuthService {
         catch {
             throw new common_1.UnauthorizedException('Invalid refresh token');
         }
-        const user = await this.prisma.user.findUnique({
-            where: { id: payload.sub },
-        });
-        if (!user?.refreshTokenHash) {
+        if (!payload.sessionId) {
             throw new common_1.UnauthorizedException('Invalid refresh token');
         }
-        const matches = await bcrypt.compare(refreshToken, user.refreshTokenHash);
-        if (!matches) {
+        const validHash = await this.sessions.verifyRefreshToken(payload.sessionId, refreshToken);
+        if (!validHash) {
             throw new common_1.UnauthorizedException('Invalid refresh token');
         }
         const businessUser = await this.prisma.businessUser.findFirst({
@@ -160,13 +234,34 @@ let AuthService = class AuthService {
         if (!businessUser) {
             throw new common_1.UnauthorizedException('Invalid refresh token');
         }
-        return this.issueTokens(payload.sub, payload.businessId, businessUser.role, businessUser.customRoleId);
-    }
-    async logout(userId) {
-        await this.prisma.user.update({
-            where: { id: userId },
-            data: { refreshTokenHash: null },
+        const capabilities = await this.capabilities.resolve({
+            role: businessUser.role,
+            customRoleId: businessUser.customRoleId,
         });
+        const newPayload = {
+            sub: payload.sub,
+            businessId: payload.businessId,
+            role: businessUser.role,
+            capabilities,
+            sessionId: payload.sessionId,
+        };
+        const accessToken = await this.jwt.signAsync(newPayload, {
+            secret: this.config.get('JWT_SECRET'),
+            expiresIn: (this.config.get('JWT_ACCESS_TTL') ??
+                '15m'),
+        });
+        const newRefreshToken = await this.jwt.signAsync(newPayload, {
+            secret: this.config.get('JWT_REFRESH_SECRET'),
+            expiresIn: (this.config.get('JWT_REFRESH_TTL') ??
+                '7d'),
+        });
+        await this.sessions.setRefreshTokenHash(payload.sessionId, newRefreshToken);
+        return { accessToken, refreshToken: newRefreshToken };
+    }
+    async logout(sessionId) {
+        if (!sessionId)
+            return;
+        await this.sessions.revoke(sessionId);
     }
     async registerFailedAttempt(userId, currentAttempts) {
         const maxAttempts = Number(this.config.get('LOGIN_MAX_ATTEMPTS') ?? 5);
@@ -182,9 +277,19 @@ let AuthService = class AuthService {
             },
         });
     }
-    async issueTokens(userId, businessId, role, customRoleId) {
-        const capabilities = await this.capabilities.resolve({ role, customRoleId });
-        const payload = { sub: userId, businessId, role, capabilities };
+    async issueTokens(userId, businessId, role, customRoleId, meta = {}) {
+        const capabilities = await this.capabilities.resolve({
+            role,
+            customRoleId,
+        });
+        const session = await this.sessions.create(userId, businessId, meta.userAgent, meta.ipAddress);
+        const payload = {
+            sub: userId,
+            businessId,
+            role,
+            capabilities,
+            sessionId: session.id,
+        };
         const accessToken = await this.jwt.signAsync(payload, {
             secret: this.config.get('JWT_SECRET'),
             expiresIn: (this.config.get('JWT_ACCESS_TTL') ??
@@ -195,12 +300,17 @@ let AuthService = class AuthService {
             expiresIn: (this.config.get('JWT_REFRESH_TTL') ??
                 '7d'),
         });
-        const refreshTokenHash = await bcrypt.hash(refreshToken, BCRYPT_ROUNDS);
-        await this.prisma.user.update({
-            where: { id: userId },
-            data: { refreshTokenHash },
-        });
+        await this.sessions.setRefreshTokenHash(session.id, refreshToken);
         return { accessToken, refreshToken };
+    }
+    async issuePendingTwoFactorToken(userId) {
+        return this.jwt.signAsync({ sub: userId, pending2fa: true }, {
+            secret: this.pendingTwoFactorSecret(),
+            expiresIn: `${two_factor_constants_1.PENDING_2FA_TTL_MINUTES}m`,
+        });
+    }
+    pendingTwoFactorSecret() {
+        return `${this.config.get('JWT_SECRET')}:pending2fa`;
     }
     toPublicUser(user) {
         return {
@@ -217,6 +327,8 @@ exports.AuthService = AuthService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         jwt_1.JwtService,
         config_1.ConfigService,
-        capabilities_service_1.CapabilitiesService])
+        capabilities_service_1.CapabilitiesService,
+        sessions_service_1.SessionsService,
+        two_factor_service_1.TwoFactorService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

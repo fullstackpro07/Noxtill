@@ -47,6 +47,8 @@ import { ExportsModule } from './exports/exports.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { ActivityModule } from './activity/activity.module';
 import { RolesModule } from './roles/roles.module';
+import { ListingsModule } from './listings/listings.module';
+import { SocialModule } from './social/social.module';
 
 @Module({
   imports: [
@@ -96,6 +98,8 @@ import { RolesModule } from './roles/roles.module';
     ExportsModule,
     IntegrationsModule,
     RolesModule,
+    ListingsModule,
+    SocialModule,
   ],
   controllers: [AppController],
   providers: [AppService],

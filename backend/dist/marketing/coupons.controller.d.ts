@@ -10,10 +10,10 @@ export declare class CouponsController {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("generated/prisma").$Enums.CouponType;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
@@ -27,10 +27,10 @@ export declare class CouponsController {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("generated/prisma").$Enums.CouponType;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
@@ -44,10 +44,10 @@ export declare class CouponsController {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("generated/prisma").$Enums.CouponType;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
@@ -61,10 +61,10 @@ export declare class CouponsController {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("generated/prisma").$Enums.CouponType;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;

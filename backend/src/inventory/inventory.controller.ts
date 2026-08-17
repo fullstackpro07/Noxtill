@@ -1,13 +1,21 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
+import { StockCountService } from './stock-count.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateWastageDto } from './dto/create-wastage.dto';
+import { CreateStockCountDto } from './dto/create-stock-count.dto';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
+import { StockCountStatus } from '../../generated/prisma';
 
 @Controller()
 export class InventoryController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(
+    private readonly inventoryService: InventoryService,
+    private readonly stockCountService: StockCountService,
+  ) {}
 
   @Post('inventory/purchases')
   recordPurchase(
@@ -33,5 +41,32 @@ export class InventoryController {
   @Get('inventory/:product/movements')
   getMovements(@Param('product') productId: string) {
     return this.inventoryService.getMovements(productId);
+  }
+
+  @Post('stock/counts')
+  createStockCount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateStockCountDto,
+  ) {
+    return this.stockCountService.create(user.businessId, user.sub, dto);
+  }
+
+  @Get('stock/counts')
+  listStockCounts(@Query('status') status?: StockCountStatus) {
+    return this.stockCountService.list(status);
+  }
+
+  @Get('stock/counts/:id')
+  findStockCount(@Param('id') id: string) {
+    return this.stockCountService.findOne(id);
+  }
+
+  @RequireCapability(CAPABILITIES.STOCK_COUNTS_APPLY)
+  @Post('stock/counts/:id/apply')
+  applyStockCount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.stockCountService.apply(user.businessId, id, user.sub);
   }
 }

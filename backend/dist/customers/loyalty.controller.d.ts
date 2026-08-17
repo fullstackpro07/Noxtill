@@ -15,8 +15,8 @@ export declare class LoyaltyController {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("generated/prisma").$Enums.LoyaltyProgramType;
         active: boolean;
+        type: import("generated/prisma").$Enums.LoyaltyProgramType;
         stampsRequired: number;
         rewardDescription: string | null;
         tiers: import("generated/prisma/runtime/library").JsonValue;
@@ -27,8 +27,8 @@ export declare class LoyaltyController {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("generated/prisma").$Enums.LoyaltyProgramType;
         active: boolean;
+        type: import("generated/prisma").$Enums.LoyaltyProgramType;
         stampsRequired: number;
         rewardDescription: string | null;
         tiers: import("generated/prisma/runtime/library").JsonValue;

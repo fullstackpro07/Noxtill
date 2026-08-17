@@ -142,7 +142,11 @@ let EmailCampaignsService = EmailCampaignsService_1 = class EmailCampaignsServic
                 },
             });
             await this.tenantPrisma.client.emailEvent.create({
-                data: { emailCampaignId: campaignId, recipient: email, type: prisma_1.EmailEventType.sent },
+                data: {
+                    emailCampaignId: campaignId,
+                    recipient: email,
+                    type: prisma_1.EmailEventType.sent,
+                },
             });
             return true;
         }

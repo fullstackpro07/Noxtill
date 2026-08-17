@@ -19,6 +19,13 @@ exports.CAPABILITIES = {
     PRICING_MANAGE: 'pricing.manage',
     VIDEO_TESTIMONIALS_MODERATE: 'video_testimonials.moderate',
     STAFF_MANAGE_SCHEDULE: 'staff.manage_schedule',
+    STOCK_TRANSFERS_APPROVE: 'stock_transfers.approve',
+    BRANCHES_MANAGE: 'branches.manage',
+    STOCK_COUNTS_APPLY: 'stock_counts.apply',
+    LABELS_MANAGE: 'labels.manage',
+    OPTIONS_MANAGE: 'options.manage',
+    LISTINGS_MANAGE: 'listings.manage',
+    SOCIAL_MANAGE: 'social.manage',
 };
 exports.ALL_CAPABILITIES = Object.values(exports.CAPABILITIES);
 const OWNER_AND_MANAGER_CAPABILITIES = [
@@ -31,6 +38,12 @@ const OWNER_AND_MANAGER_CAPABILITIES = [
     exports.CAPABILITIES.PRICING_MANAGE,
     exports.CAPABILITIES.VIDEO_TESTIMONIALS_MODERATE,
     exports.CAPABILITIES.STAFF_MANAGE_SCHEDULE,
+    exports.CAPABILITIES.STOCK_TRANSFERS_APPROVE,
+    exports.CAPABILITIES.STOCK_COUNTS_APPLY,
+    exports.CAPABILITIES.LABELS_MANAGE,
+    exports.CAPABILITIES.OPTIONS_MANAGE,
+    exports.CAPABILITIES.LISTINGS_MANAGE,
+    exports.CAPABILITIES.SOCIAL_MANAGE,
 ];
 exports.SYSTEM_ROLE_CAPABILITIES = {
     [prisma_1.Role.owner]: exports.ALL_CAPABILITIES,

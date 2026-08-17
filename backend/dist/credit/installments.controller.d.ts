@@ -38,9 +38,9 @@ export declare class InstallmentsController {
     } & {
         id: string;
         businessId: string;
-        planId: string;
         status: import("generated/prisma").$Enums.InstallmentStatus;
         amount: import("generated/prisma/runtime/library").Decimal;
+        planId: string;
         seq: number;
         dueDate: Date;
         paidAt: Date | null;
@@ -62,9 +62,9 @@ export declare class InstallmentsController {
             creditEntryId: string;
             id: string;
             businessId: string;
-            planId: string;
             status: import("generated/prisma").$Enums.InstallmentStatus;
             amount: import("generated/prisma/runtime/library").Decimal;
+            planId: string;
             seq: number;
             dueDate: Date;
             paidAt: Date | null;

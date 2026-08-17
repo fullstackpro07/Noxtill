@@ -18,6 +18,7 @@ const message_dead_letter_listener_1 = require("./message-dead-letter.listener")
 const messages_service_1 = require("./messages.service");
 const messages_controller_1 = require("./messages.controller");
 const whatsapp_module_1 = require("../whatsapp/whatsapp.module");
+const settings_module_1 = require("../settings/settings.module");
 const messaging_constants_1 = require("./messaging.constants");
 const queue_constants_1 = require("../common/queue/queue.constants");
 let MessagingModule = class MessagingModule {
@@ -28,6 +29,7 @@ exports.MessagingModule = MessagingModule = __decorate([
         imports: [
             bullmq_1.BullModule.registerQueue({ name: messaging_constants_1.MESSAGES_QUEUE }, { name: (0, queue_constants_1.dlqName)(messaging_constants_1.MESSAGES_QUEUE) }),
             whatsapp_module_1.WhatsappModule,
+            settings_module_1.SettingsModule,
         ],
         controllers: [messages_controller_1.MessagesController],
         providers: [

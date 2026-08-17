@@ -1,0 +1,63 @@
+import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { SocialAccountsService } from './social-accounts.service';
+import { SocialConnectorRegistry } from './connectors/social-connector-registry';
+import { SocialInboxFetchItem } from './connectors/social-connector.interface';
+import { SocialInboxStatus, SocialPlatform } from '../../generated/prisma';
+export declare class SocialInboxService {
+    private readonly tenantPrisma;
+    private readonly prisma;
+    private readonly accounts;
+    private readonly connectors;
+    constructor(tenantPrisma: TenantPrismaService, prisma: PrismaService, accounts: SocialAccountsService, connectors: SocialConnectorRegistry);
+    list(businessId: string, status?: SocialInboxStatus): import("generated/prisma/runtime/library").PrismaPromise<{
+        id: string;
+        businessId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        kind: import("../../generated/prisma").$Enums.SocialInboxKind;
+        status: import("../../generated/prisma").$Enums.SocialInboxStatus;
+        platform: import("../../generated/prisma").$Enums.SocialPlatform;
+        externalId: string;
+        text: string;
+        repliedAt: Date | null;
+        authorName: string | null;
+        postExternalId: string | null;
+        repliedText: string | null;
+        receivedAt: Date;
+    }[]>;
+    ingest(platform: SocialPlatform, externalAccountId: string, item: SocialInboxFetchItem): Promise<void>;
+    reply(businessId: string, id: string, text: string): Promise<{
+        id: string;
+        businessId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        kind: import("../../generated/prisma").$Enums.SocialInboxKind;
+        status: import("../../generated/prisma").$Enums.SocialInboxStatus;
+        platform: import("../../generated/prisma").$Enums.SocialPlatform;
+        externalId: string;
+        text: string;
+        repliedAt: Date | null;
+        authorName: string | null;
+        postExternalId: string | null;
+        repliedText: string | null;
+        receivedAt: Date;
+    }>;
+    markRead(businessId: string, id: string): Promise<{
+        id: string;
+        businessId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        kind: import("../../generated/prisma").$Enums.SocialInboxKind;
+        status: import("../../generated/prisma").$Enums.SocialInboxStatus;
+        platform: import("../../generated/prisma").$Enums.SocialPlatform;
+        externalId: string;
+        text: string;
+        repliedAt: Date | null;
+        authorName: string | null;
+        postExternalId: string | null;
+        repliedText: string | null;
+        receivedAt: Date;
+    }>;
+    private find;
+}

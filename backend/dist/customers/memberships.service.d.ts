@@ -42,11 +42,11 @@ export declare class MembershipsService {
             businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            stripeSubscriptionId: string | null;
-            planId: string;
             customerId: string;
             status: import("../../generated/prisma").$Enums.MembershipStatus;
             method: import("../../generated/prisma").$Enums.PaymentMethod;
+            planId: string;
+            stripeSubscriptionId: string | null;
             currentPeriodEnd: Date | null;
         };
         checkoutUrl: string | null;
@@ -89,11 +89,11 @@ export declare class MembershipsService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        stripeSubscriptionId: string | null;
-        planId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.MembershipStatus;
         method: import("../../generated/prisma").$Enums.PaymentMethod;
+        planId: string;
+        stripeSubscriptionId: string | null;
         currentPeriodEnd: Date | null;
     })[]>;
     activate(id: string): Promise<{
@@ -101,11 +101,11 @@ export declare class MembershipsService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        stripeSubscriptionId: string | null;
-        planId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.MembershipStatus;
         method: import("../../generated/prisma").$Enums.PaymentMethod;
+        planId: string;
+        stripeSubscriptionId: string | null;
         currentPeriodEnd: Date | null;
     }>;
     cancel(id: string): Promise<{
@@ -113,11 +113,11 @@ export declare class MembershipsService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        stripeSubscriptionId: string | null;
-        planId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.MembershipStatus;
         method: import("../../generated/prisma").$Enums.PaymentMethod;
+        planId: string;
+        stripeSubscriptionId: string | null;
         currentPeriodEnd: Date | null;
     }>;
     private findPlan;

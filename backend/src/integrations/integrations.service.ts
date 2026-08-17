@@ -51,7 +51,10 @@ export class IntegrationsService {
     });
   }
 
-  async connect(businessId: string, provider: IntegrationProvider): Promise<ConnectResult> {
+  async connect(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<ConnectResult> {
     const connector = this.connectors.get(provider);
     const state = signPayload<StatePayload>(
       { businessId, provider },
@@ -60,11 +63,25 @@ export class IntegrationsService {
     const url = connector.authUrl(state);
 
     if (!url) {
-      // Non-OAuth provider (email) — nothing to redirect to, connect directly.
+      // Non-OAuth provider (email, apple_business_connect) — nothing to redirect to, connect
+      // directly. Still exchanges via `handleCallback()` and stores whatever real tokens it
+      // returns (e.g. Apple's pre-provisioned server-to-server API key) — a fix for a real gap:
+      // this branch used to connect without ever storing tokens, so `getTokens()` always came
+      // back `null` for a non-OAuth provider and any real `pushListing()` call silently
+      // no-op'd even once a real credential was configured.
+      const tokens = await connector.handleCallback('');
       await this.tenantPrisma.client.integration.upsert({
         where: { businessId_provider: { businessId, provider } },
-        create: { businessId, provider, status: IntegrationStatus.connected },
-        update: { status: IntegrationStatus.connected },
+        create: {
+          businessId,
+          provider,
+          status: IntegrationStatus.connected,
+          tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+        },
+        update: {
+          status: IntegrationStatus.connected,
+          tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+        },
       });
       return { connected: true };
     }
@@ -112,18 +129,29 @@ export class IntegrationsService {
       );
       await this.tenantPrisma.client.integration.upsert({
         where: { businessId_provider: { businessId, provider } },
-        create: { businessId, provider, status: IntegrationStatus.needs_attention },
+        create: {
+          businessId,
+          provider,
+          status: IntegrationStatus.needs_attention,
+        },
         update: { status: IntegrationStatus.needs_attention },
       });
       return { businessId, ok: false };
     }
   }
 
-  async disconnect(businessId: string, provider: IntegrationProvider): Promise<void> {
+  async disconnect(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<void> {
     const connector = this.connectors.get(provider);
-    await connector.disconnect().catch((error: Error) =>
-      this.logger.warn(`disconnect() failed for provider=${provider}: ${error.message}`),
-    );
+    await connector
+      .disconnect()
+      .catch((error: Error) =>
+        this.logger.warn(
+          `disconnect() failed for provider=${provider}: ${error.message}`,
+        ),
+      );
     await this.tenantPrisma.client.integration.updateMany({
       where: { businessId, provider },
       data: { status: IntegrationStatus.not_connected, tokens: null },
@@ -131,7 +159,10 @@ export class IntegrationsService {
   }
 
   /** Decrypts a stored integration's tokens for use by a connector call (e.g. sync()). */
-  async getTokens(businessId: string, provider: IntegrationProvider): Promise<OAuthTokens | null> {
+  async getTokens(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<OAuthTokens | null> {
     const row = await this.tenantPrisma.client.integration.findUnique({
       where: { businessId_provider: { businessId, provider } },
     });

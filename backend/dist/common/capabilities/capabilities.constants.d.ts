@@ -16,6 +16,13 @@ export declare const CAPABILITIES: {
     readonly PRICING_MANAGE: "pricing.manage";
     readonly VIDEO_TESTIMONIALS_MODERATE: "video_testimonials.moderate";
     readonly STAFF_MANAGE_SCHEDULE: "staff.manage_schedule";
+    readonly STOCK_TRANSFERS_APPROVE: "stock_transfers.approve";
+    readonly BRANCHES_MANAGE: "branches.manage";
+    readonly STOCK_COUNTS_APPLY: "stock_counts.apply";
+    readonly LABELS_MANAGE: "labels.manage";
+    readonly OPTIONS_MANAGE: "options.manage";
+    readonly LISTINGS_MANAGE: "listings.manage";
+    readonly SOCIAL_MANAGE: "social.manage";
 };
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
 export declare const ALL_CAPABILITIES: Capability[];

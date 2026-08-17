@@ -11,9 +11,9 @@ export declare class CashRegisterController {
             id: string;
             businessId: string;
             createdAt: Date;
-            type: import("generated/prisma").$Enums.CashMovementType;
             amount: import("generated/prisma/runtime/library").Decimal;
             note: string | null;
+            type: import("generated/prisma").$Enums.CashMovementType;
             shiftId: string;
             recordedByUserId: string | null;
         }[];
@@ -34,9 +34,9 @@ export declare class CashRegisterController {
             id: string;
             businessId: string;
             createdAt: Date;
-            type: import("generated/prisma").$Enums.CashMovementType;
             amount: import("generated/prisma/runtime/library").Decimal;
             note: string | null;
+            type: import("generated/prisma").$Enums.CashMovementType;
             shiftId: string;
             recordedByUserId: string | null;
         }[];
@@ -68,9 +68,9 @@ export declare class CashRegisterController {
         id: string;
         businessId: string;
         createdAt: Date;
-        type: import("generated/prisma").$Enums.CashMovementType;
         amount: import("generated/prisma/runtime/library").Decimal;
         note: string | null;
+        type: import("generated/prisma").$Enums.CashMovementType;
         shiftId: string;
         recordedByUserId: string | null;
     }>;

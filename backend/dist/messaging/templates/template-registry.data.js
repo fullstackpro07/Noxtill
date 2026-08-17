@@ -3,6 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TEMPLATE_REGISTRY = void 0;
 const prisma_1 = require("../../../generated/prisma");
 exports.TEMPLATE_REGISTRY = {
+    otp_code: {
+        key: 'otp_code',
+        category: prisma_1.MessageCategory.utility,
+        locales: {
+            en: 'Your verification code is {{code}}. It expires in {{ttlMinutes}} minutes. Never share this code.',
+        },
+    },
     booking_confirm: {
         key: 'booking_confirm',
         category: prisma_1.MessageCategory.utility,

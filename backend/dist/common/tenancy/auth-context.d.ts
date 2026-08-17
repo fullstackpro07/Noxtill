@@ -6,6 +6,7 @@ export interface AuthenticatedUser {
     businessId: string;
     role: Role;
     capabilities: Capability[];
+    sessionId?: string;
 }
 export type RequestWithUser = Request & {
     user?: AuthenticatedUser;

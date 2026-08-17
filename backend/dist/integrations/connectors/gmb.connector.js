@@ -28,6 +28,39 @@ let GmbConnector = class GmbConnector extends google_oauth2_connector_1.GoogleOA
         const response = await axios_1.default.get('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', { headers: { Authorization: `Bearer ${tokens.accessToken}` } });
         return response.data;
     }
+    async listLocations(tokens, accountName) {
+        const response = await axios_1.default.get(`https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations`, {
+            params: { readMask: 'name,title,storefrontAddress' },
+            headers: { Authorization: `Bearer ${tokens.accessToken}` },
+        });
+        return response.data;
+    }
+    async pushListing(tokens, listing, meta) {
+        const locationId = meta.locationId;
+        if (!locationId) {
+            throw new Error('No GMB location selected for this business — connect a location before syncing (not yet built: this ticket ships the connector call, not a location-picker UI)');
+        }
+        const response = await axios_1.default.patch(`https://mybusinessbusinessinformation.googleapis.com/v1/locations/${locationId}`, {
+            title: listing.name,
+            phoneNumbers: listing.phone
+                ? { primaryPhone: listing.phone }
+                : undefined,
+            websiteUri: listing.website ?? undefined,
+            storefrontAddress: {
+                addressLines: [listing.addressLine1, listing.addressLine2].filter((line) => Boolean(line)),
+                locality: listing.city ?? undefined,
+                administrativeArea: listing.state ?? undefined,
+                postalCode: listing.postalCode ?? undefined,
+                regionCode: listing.country ?? undefined,
+            },
+        }, {
+            params: {
+                updateMask: 'title,phoneNumbers,websiteUri,storefrontAddress',
+            },
+            headers: { Authorization: `Bearer ${tokens.accessToken}` },
+        });
+        return response.data;
+    }
 };
 exports.GmbConnector = GmbConnector;
 exports.GmbConnector = GmbConnector = __decorate([

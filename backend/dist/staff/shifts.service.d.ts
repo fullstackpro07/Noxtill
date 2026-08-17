@@ -39,16 +39,16 @@ export declare class ShiftsService {
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
             businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("../../generated/prisma").$Enums.Role;
             commissionRule: Prisma.JsonValue;
-            userId: string;
             customRoleId: string | null;
         };
     } & {
@@ -79,16 +79,16 @@ export declare class ShiftsService {
                 passwordHash: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
+                twoFactorEnabled: boolean;
             };
         } & {
             id: string;
             businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("../../generated/prisma").$Enums.Role;
             commissionRule: Prisma.JsonValue;
-            userId: string;
             customRoleId: string | null;
         };
     } & {

@@ -24,16 +24,16 @@ export declare class StaffService {
             passwordHash: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
-            refreshTokenHash: string | null;
+            twoFactorEnabled: boolean;
         };
     } & {
         id: string;
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        userId: string;
         role: import("../../generated/prisma").$Enums.Role;
         commissionRule: Prisma.JsonValue;
-        userId: string;
         customRoleId: string | null;
     })[]>;
     inbox(): Promise<InboxTask[]>;
@@ -49,15 +49,15 @@ export declare class StaffService {
             passwordHash: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
-            refreshTokenHash: string | null;
+            twoFactorEnabled: boolean;
         };
         id: string;
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        userId: string;
         role: import("../../generated/prisma").$Enums.Role;
         commissionRule: Prisma.JsonValue;
-        userId: string;
         customRoleId: string | null;
     }>;
     update(id: string, dto: UpdateStaffDto): Promise<{
@@ -71,16 +71,16 @@ export declare class StaffService {
             passwordHash: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
-            refreshTokenHash: string | null;
+            twoFactorEnabled: boolean;
         };
     } & {
         id: string;
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        userId: string;
         role: import("../../generated/prisma").$Enums.Role;
         commissionRule: Prisma.JsonValue;
-        userId: string;
         customRoleId: string | null;
     }>;
     remove(id: string): Promise<{

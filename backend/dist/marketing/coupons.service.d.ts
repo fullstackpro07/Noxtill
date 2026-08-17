@@ -49,10 +49,10 @@ export declare class CouponsService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("../../generated/prisma").$Enums.CouponType;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;
@@ -66,10 +66,10 @@ export declare class CouponsService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("../../generated/prisma").$Enums.CouponType;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;
@@ -83,10 +83,10 @@ export declare class CouponsService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("../../generated/prisma").$Enums.CouponType;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;
@@ -100,10 +100,10 @@ export declare class CouponsService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.CouponType;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        type: import("../../generated/prisma").$Enums.CouponType;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;

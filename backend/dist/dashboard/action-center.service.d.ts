@@ -29,9 +29,9 @@ export declare class ActionCenterService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.ActionItemType;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
+        type: import("../../generated/prisma").$Enums.ActionItemType;
         snoozedUntil: Date | null;
     }>;
     dismiss(businessId: string, id: string): Promise<{
@@ -39,9 +39,9 @@ export declare class ActionCenterService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.ActionItemType;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
+        type: import("../../generated/prisma").$Enums.ActionItemType;
         snoozedUntil: Date | null;
     }>;
     snooze(businessId: string, id: string, dto: SnoozeActionItemDto): Promise<{
@@ -49,9 +49,9 @@ export declare class ActionCenterService {
         businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        type: import("../../generated/prisma").$Enums.ActionItemType;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
+        type: import("../../generated/prisma").$Enums.ActionItemType;
         snoozedUntil: Date | null;
     }>;
     private setStatus;

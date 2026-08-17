@@ -10,7 +10,10 @@ exports.BranchesModule = void 0;
 const common_1 = require("@nestjs/common");
 const rollup_service_1 = require("./rollup.service");
 const branch_advisor_service_1 = require("./branch-advisor.service");
+const branch_management_service_1 = require("./branch-management.service");
 const branches_controller_1 = require("./branches.controller");
+const stock_transfers_service_1 = require("./stock-transfers.service");
+const stock_transfers_controller_1 = require("./stock-transfers.controller");
 const ai_module_1 = require("../ai/ai.module");
 let BranchesModule = class BranchesModule {
 };
@@ -18,8 +21,13 @@ exports.BranchesModule = BranchesModule;
 exports.BranchesModule = BranchesModule = __decorate([
     (0, common_1.Module)({
         imports: [ai_module_1.AiModule],
-        controllers: [branches_controller_1.BranchesController],
-        providers: [rollup_service_1.RollupService, branch_advisor_service_1.BranchAdvisorService],
+        controllers: [branches_controller_1.BranchesController, stock_transfers_controller_1.StockTransfersController],
+        providers: [
+            rollup_service_1.RollupService,
+            branch_advisor_service_1.BranchAdvisorService,
+            branch_management_service_1.BranchManagementService,
+            stock_transfers_service_1.StockTransfersService,
+        ],
         exports: [rollup_service_1.RollupService],
     })
 ], BranchesModule);

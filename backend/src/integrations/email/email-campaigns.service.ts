@@ -50,7 +50,12 @@ export class EmailCampaignsService {
 
     let sentCount = 0;
     for (const recipient of eligible) {
-      const sent = await this.sendOne(businessId, campaign.id, dto, recipient.email);
+      const sent = await this.sendOne(
+        businessId,
+        campaign.id,
+        dto,
+        recipient.email,
+      );
       if (sent) sentCount += 1;
     }
 
@@ -112,7 +117,10 @@ export class EmailCampaignsService {
 
   /** Verifies a signed unsubscribe link and records the suppression. Public — no auth available at this point. */
   async unsubscribe(token: string): Promise<{ ok: boolean }> {
-    const payload = verifyPayload<UnsubscribePayload>(token, this.unsubscribeSecret());
+    const payload = verifyPayload<UnsubscribePayload>(
+      token,
+      this.unsubscribeSecret(),
+    );
     if (!payload) {
       throw new AppException(
         'INVALID_UNSUBSCRIBE_TOKEN',
@@ -130,7 +138,10 @@ export class EmailCampaignsService {
     return { ok: true };
   }
 
-  private async isSuppressed(businessId: string, email: string): Promise<boolean> {
+  private async isSuppressed(
+    businessId: string,
+    email: string,
+  ): Promise<boolean> {
     const priorUnsub = await this.tenantPrisma.client.emailEvent.findFirst({
       where: {
         type: EmailEventType.unsub,
@@ -151,7 +162,8 @@ export class EmailCampaignsService {
       { email, businessId, campaignId },
       this.unsubscribeSecret(),
     );
-    const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
     const unsubscribeLink = `${frontendUrl}/unsubscribe?token=${unsubscribeToken}`;
     const textBody = `${dto.body}\n\n---\nUnsubscribe: ${unsubscribeLink}`;
 
@@ -168,12 +180,17 @@ export class EmailCampaignsService {
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            'X-Postmark-Server-Token': this.config.get<string>('EMAIL_PROVIDER_KEY') ?? '',
+            'X-Postmark-Server-Token':
+              this.config.get<string>('EMAIL_PROVIDER_KEY') ?? '',
           },
         },
       );
       await this.tenantPrisma.client.emailEvent.create({
-        data: { emailCampaignId: campaignId, recipient: email, type: EmailEventType.sent },
+        data: {
+          emailCampaignId: campaignId,
+          recipient: email,
+          type: EmailEventType.sent,
+        },
       });
       return true;
     } catch (error) {

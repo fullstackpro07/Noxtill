@@ -20,11 +20,11 @@ export declare class UsersController {
             id: string;
             slug: string;
             timezone: string;
+            parentId: string | null;
             branches: {
                 name: string;
                 id: string;
             }[];
-            parentId: string | null;
         };
     }>;
 }

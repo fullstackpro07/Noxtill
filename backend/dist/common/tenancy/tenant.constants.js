@@ -62,6 +62,22 @@ exports.TENANT_SCOPED_MODELS = new Set([
     'TimesheetApproval',
     'StaffAdvance',
     'CustomRole',
+    'StockCount',
+    'LabelOverride',
+    'OptionSet',
+    'Session',
+    'MasterListing',
+    'ListingSyncLog',
+    'Citation',
+    'GmbPhoto',
+    'GmbQna',
+    'GmbInsightsSnapshot',
+    'SocialAccount',
+    'MediaAsset',
+    'SocialPost',
+    'SocialInboxItem',
+    'SocialAnalyticsSnapshot',
+    'SocialSettings',
 ]);
 exports.CLS_KEY_BUSINESS_ID = 'businessId';
 exports.CLS_KEY_USER_ID = 'userId';

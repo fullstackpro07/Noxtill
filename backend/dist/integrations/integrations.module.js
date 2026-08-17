@@ -18,6 +18,9 @@ const merchant_center_connector_1 = require("./connectors/merchant-center.connec
 const meta_ads_connector_1 = require("./connectors/meta-ads.connector");
 const tiktok_ads_connector_1 = require("./connectors/tiktok-ads.connector");
 const email_connector_1 = require("./connectors/email.connector");
+const bing_places_connector_1 = require("./connectors/bing-places.connector");
+const yelp_connector_1 = require("./connectors/yelp.connector");
+const apple_business_connect_connector_1 = require("./connectors/apple-business-connect.connector");
 const email_campaigns_module_1 = require("./email/email-campaigns.module");
 let IntegrationsModule = class IntegrationsModule {
 };
@@ -36,8 +39,16 @@ exports.IntegrationsModule = IntegrationsModule = __decorate([
             meta_ads_connector_1.MetaAdsConnector,
             tiktok_ads_connector_1.TikTokAdsConnector,
             email_connector_1.EmailConnector,
+            bing_places_connector_1.BingPlacesConnector,
+            yelp_connector_1.YelpConnector,
+            apple_business_connect_connector_1.AppleBusinessConnectConnector,
         ],
-        exports: [integrations_service_1.IntegrationsService],
+        exports: [
+            integrations_service_1.IntegrationsService,
+            connector_registry_1.ConnectorRegistry,
+            token_cipher_service_1.TokenCipherService,
+            gmb_connector_1.GmbConnector,
+        ],
     })
 ], IntegrationsModule);
 //# sourceMappingURL=integrations.module.js.map
