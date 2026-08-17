@@ -7,13 +7,13 @@ export declare class TimeOffService {
     constructor(tenantPrisma: TenantPrismaService, cls: ClsService);
     create(businessId: string, dto: CreateTimeOffDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         staffUserId: string;
+        reason: string | null;
         startsAt: Date;
         endsAt: Date;
-        reason: string | null;
         approved: boolean;
         reviewedByUserId: string | null;
     }>;
@@ -21,71 +21,71 @@ export declare class TimeOffService {
         staffUser: {
             user: {
                 id: string;
+                name: string;
+                createdAt: Date;
+                updatedAt: Date;
                 email: string | null;
                 phone: string | null;
                 passwordHash: string;
-                name: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
                 twoFactorEnabled: boolean;
-                createdAt: Date;
-                updatedAt: Date;
             };
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
-            businessId: string;
-            userId: string;
             customRoleId: string | null;
         };
     } & {
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         staffUserId: string;
+        reason: string | null;
         startsAt: Date;
         endsAt: Date;
-        reason: string | null;
         approved: boolean;
         reviewedByUserId: string | null;
     })[]>;
     approve(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         staffUserId: string;
+        reason: string | null;
         startsAt: Date;
         endsAt: Date;
-        reason: string | null;
         approved: boolean;
         reviewedByUserId: string | null;
     }>;
     reject(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         staffUserId: string;
+        reason: string | null;
         startsAt: Date;
         endsAt: Date;
-        reason: string | null;
         approved: boolean;
         reviewedByUserId: string | null;
     }>;
     findOne(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         staffUserId: string;
+        reason: string | null;
         startsAt: Date;
         endsAt: Date;
-        reason: string | null;
         approved: boolean;
         reviewedByUserId: string | null;
     }>;

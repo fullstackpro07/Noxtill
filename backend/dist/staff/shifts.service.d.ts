@@ -13,9 +13,9 @@ export declare class ShiftsService {
         client: {};
     }, {}>, "StaffShift", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.StaffShiftStatus;
         staffUserId: string;
         note: string | null;
@@ -31,31 +31,31 @@ export declare class ShiftsService {
         staffUser: {
             user: {
                 id: string;
+                name: string;
+                createdAt: Date;
+                updatedAt: Date;
                 email: string | null;
                 phone: string | null;
                 passwordHash: string;
-                name: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
                 twoFactorEnabled: boolean;
-                createdAt: Date;
-                updatedAt: Date;
             };
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("../../generated/prisma").$Enums.Role;
             commissionRule: Prisma.JsonValue;
-            businessId: string;
-            userId: string;
             customRoleId: string | null;
         };
     } & {
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.StaffShiftStatus;
         staffUserId: string;
         note: string | null;
@@ -71,31 +71,31 @@ export declare class ShiftsService {
         staffUser: {
             user: {
                 id: string;
+                name: string;
+                createdAt: Date;
+                updatedAt: Date;
                 email: string | null;
                 phone: string | null;
                 passwordHash: string;
-                name: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
                 twoFactorEnabled: boolean;
-                createdAt: Date;
-                updatedAt: Date;
             };
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            userId: string;
             role: import("../../generated/prisma").$Enums.Role;
             commissionRule: Prisma.JsonValue;
-            businessId: string;
-            userId: string;
             customRoleId: string | null;
         };
     } & {
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.StaffShiftStatus;
         staffUserId: string;
         note: string | null;
@@ -109,9 +109,9 @@ export declare class ShiftsService {
     }>;
     update(id: string, dto: UpdateShiftDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.StaffShiftStatus;
         staffUserId: string;
         note: string | null;
@@ -126,9 +126,9 @@ export declare class ShiftsService {
     remove(id: string): Promise<void>;
     requestSwap(businessId: string, id: string, dto: RequestShiftSwapDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.StaffShiftStatus;
         staffUserId: string;
         note: string | null;
@@ -142,9 +142,9 @@ export declare class ShiftsService {
     }>;
     approveSwap(businessId: string, id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.StaffShiftStatus;
         staffUserId: string;
         note: string | null;
@@ -158,9 +158,9 @@ export declare class ShiftsService {
     }>;
     rejectSwap(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        businessId: string;
         status: import("../../generated/prisma").$Enums.StaffShiftStatus;
         staffUserId: string;
         note: string | null;

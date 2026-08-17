@@ -1,1 +1,0 @@
-export declare const STRIPE_WEBHOOK_QUEUE = "stripe-webhook";

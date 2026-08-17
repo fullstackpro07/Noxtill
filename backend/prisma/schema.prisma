@@ -267,6 +267,17 @@ enum StockMovementKind {
   wastage
   adjustment
   return
+  transfer_out
+  transfer_in
+}
+
+enum StockTransferStatus {
+  pending
+  approved
+  shipped
+  received
+  rejected
+  cancelled
 }
 
 enum ImportSource {
@@ -290,6 +301,69 @@ enum IntegrationProvider {
   merchant
   meta_ads
   tiktok_ads
+  bing_places
+  apple_business_connect
+  yelp
+}
+
+enum GmbPostStatus {
+  draft
+  published
+  failed
+}
+
+/// Social Media Management (UPD-BE-M15) — the 15 platforms this milestone covers. 11 are real
+/// OAuth2 (facebook, instagram, twitter, linkedin, tiktok, youtube, pinterest, snapchat, threads,
+/// reddit, tumblr); 4 are token/bot-credential based, no user-facing OAuth flow (telegram,
+/// discord, wechat, line) — same real-vs-non-OAuth split as UPD-BE-041's directory connectors.
+enum SocialPlatform {
+  facebook
+  instagram
+  twitter
+  linkedin
+  tiktok
+  youtube
+  pinterest
+  snapchat
+  threads
+  reddit
+  tumblr
+  telegram
+  discord
+  wechat
+  line
+}
+
+enum SocialAccountStatus {
+  not_connected
+  connected
+  needs_attention
+}
+
+enum SocialPostStatus {
+  draft
+  scheduled
+  publishing
+  published
+  partially_failed
+  failed
+}
+
+enum SocialPostTargetStatus {
+  pending
+  published
+  failed
+}
+
+enum SocialInboxKind {
+  comment
+  dm
+}
+
+enum SocialInboxStatus {
+  unread
+  read
+  replied
 }
 
 enum IntegrationStatus {
@@ -503,7 +577,25 @@ model Business {
   timeOff          TimeOff[]
   timesheetApprovals TimesheetApproval[]
   staffAdvances    StaffAdvance[]
+  stockTransfersOut StockTransfer[] @relation("StockTransferSource")
+  stockTransfersIn  StockTransfer[] @relation("StockTransferDest")
+  stockCounts       StockCount[]
   customRoles      CustomRole[]
+  labelOverrides   LabelOverride[]
+  optionSets       OptionSet[]
+  sessions         Session[]
+  masterListing    MasterListing?
+  listingSyncLogs  ListingSyncLog[]
+  citations        Citation[]
+  gmbPhotos        GmbPhoto[]
+  gmbQnas          GmbQna[]
+  gmbInsightsSnapshots GmbInsightsSnapshot[]
+  socialAccounts   SocialAccount[]
+  mediaAssets      MediaAsset[]
+  socialPosts      SocialPost[]
+  socialInboxItems SocialInboxItem[]
+  socialAnalyticsSnapshots SocialAnalyticsSnapshot[]
+  socialSettings   SocialSettings?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -519,15 +611,60 @@ model User {
   name                String
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until")
-  refreshTokenHash    String?   @map("refresh_token_hash")
+  /// UPD-BE-040: WhatsApp-OTP two-factor. Replaces the old single `refreshTokenHash` column —
+  /// each login now creates its own `Session` row instead of overwriting one shared hash, which
+  /// also fixes the pre-existing "logging in on a second device silently kills the first" bug.
+  twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
 
   businessUsers BusinessUser[]
   notifications Notification[]
+  sessions      Session[]
+  twoFactorCodes TwoFactorCode[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+/// UPD-BE-040. One row per real login — replaces the single `User.refreshTokenHash` column so a
+/// user can hold multiple concurrent sessions (one per device) and revoke them individually.
+/// `businessId` is carried directly since a session is scoped to the one business the JWT was
+/// issued for, same as the JWT payload itself.
+model Session {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  user             User      @relation(fields: [userId], references: [id])
+  businessId       String    @map("business_id")
+  business         Business  @relation(fields: [businessId], references: [id])
+  refreshTokenHash String    @map("refresh_token_hash")
+  userAgent        String?   @map("user_agent")
+  ipAddress        String?   @map("ip_address")
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at")
+  revokedAt        DateTime? @map("revoked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([businessId])
+  @@map("sessions")
+}
+
+/// UPD-BE-040. A short-lived, single-use WhatsApp-delivered code — used both to confirm 2FA
+/// enrollment and to complete a 2FA-gated login. Never stores the raw code, only its hash.
+model TwoFactorCode {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id])
+  codeHash   String    @map("code_hash")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  attempts   Int       @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("two_factor_codes")
 }
 
 model BusinessUser {
@@ -796,6 +933,8 @@ model Product {
   priceHistory     PriceHistory[]
   waitlistEntries  WaitlistEntry[]
   queueTokens      QueueToken[]
+  stockTransferItems StockTransferItem[]
+  stockCountLines  StockCountLine[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1477,6 +1616,101 @@ model StockMovement {
   @@map("stock_movements")
 }
 
+/// Stock Transfers (UPD-BE-036) — deliberately EXCLUDED from `TENANT_SCOPED_MODELS`. A transfer
+/// inherently spans two businesses (source and destination branch); `TenantPrismaService`'s CLS
+/// scoping would force every query to just the caller's own business, so `StockTransfersService`
+/// uses the raw `PrismaService` throughout with explicit `sourceBusinessId`/`destBusinessId`
+/// checks — same pattern as `RollupService`, the only other code that reads across branches.
+model StockTransfer {
+  id               String              @id @default(uuid())
+  sourceBusinessId String              @map("source_business_id")
+  sourceBusiness   Business            @relation("StockTransferSource", fields: [sourceBusinessId], references: [id])
+  destBusinessId   String              @map("dest_business_id")
+  destBusiness     Business            @relation("StockTransferDest", fields: [destBusinessId], references: [id])
+  status           StockTransferStatus @default(pending)
+  note             String?
+
+  requestedByUserId String? @map("requested_by_user_id")
+  approvedByUserId  String? @map("approved_by_user_id")
+  shippedByUserId   String? @map("shipped_by_user_id")
+  receivedByUserId  String? @map("received_by_user_id")
+
+  items StockTransferItem[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sourceBusinessId, status])
+  @@index([destBusinessId, status])
+  @@map("stock_transfers")
+}
+
+/// References only the SOURCE branch's product — the destination-branch product is resolved
+/// dynamically by matching SKU at approve()/receive() time, since branches don't share product
+/// identity (see `Product.businessId`, a hard per-business scalar).
+model StockTransferItem {
+  id              String        @id @default(uuid())
+  transferId      String        @map("transfer_id")
+  transfer        StockTransfer @relation(fields: [transferId], references: [id])
+  sourceProductId String        @map("source_product_id")
+  sourceProduct   Product       @relation(fields: [sourceProductId], references: [id])
+  qty             Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("stock_transfer_items")
+}
+
+enum StockCountStatus {
+  draft
+  applied
+}
+
+/// Stock Count (UPD-BE-037) — a physical count is entered as a `draft` (lines snapshot the
+/// expected/counted/variance at the moment of entry, purely for preview), and only
+/// `apply()` actually moves stock: it re-derives variance against the live `Product.stockQty`
+/// at that moment (not the stale creation-time snapshot, in case real sales/other movements
+/// happened in between) and writes one real `StockMovement` (kind `adjustment`) per line that
+/// still has a nonzero variance. Same "approval is the one moment real stock moves" shape as
+/// `Return`/`StockTransfer`.
+model StockCount {
+  id         String           @id @default(uuid())
+  businessId String           @map("business_id")
+  business   Business         @relation(fields: [businessId], references: [id])
+  status     StockCountStatus @default(draft)
+  note       String?
+
+  createdByUserId String?   @map("created_by_user_id")
+  appliedByUserId String?   @map("applied_by_user_id")
+  appliedAt       DateTime? @map("applied_at")
+
+  lines StockCountLine[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("stock_counts")
+}
+
+model StockCountLine {
+  id           String     @id @default(uuid())
+  stockCountId String     @map("stock_count_id")
+  stockCount   StockCount @relation(fields: [stockCountId], references: [id])
+  productId    String     @map("product_id")
+  product      Product    @relation(fields: [productId], references: [id])
+  /// Snapshot of `Product.stockQty` at creation time — preview only, re-derived live at apply().
+  expectedQty  Int        @map("expected_qty")
+  countedQty   Int        @map("counted_qty")
+  /// countedQty - expectedQty, snapshotted at creation time — the authoritative variance is
+  /// recomputed against live stock inside apply(), never trusted from this stored value.
+  variance     Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("stock_count_lines")
+}
+
 /// Reusable variant templates (UPD-BE-012) — e.g. a "Size" set with Small/Medium/Large options,
 /// defined once and applied to many products via `POST /variants/:id/apply`, which writes into
 /// the pre-existing informal `Product.variations` JSON field (unchanged shape, still consumed
@@ -1749,6 +1983,62 @@ model CustomRole {
 
   @@unique([businessId, name])
   @@map("custom_roles")
+}
+
+/// Terminology Engine (UPD-BE-038) — one row per overridden term. `area` scopes the same `key`
+/// to render differently across surfaces (e.g. `general` for WhatsApp messages via
+/// `{{term:key}}`, `pdf` for generated documents) — a business can rename "Customer" to "Client"
+/// everywhere via `general`, or override just the invoice's wording via `pdf` without touching
+/// WhatsApp copy. Real defaults live in code (`DEFAULT_TERMS`), not the database — a row here
+/// only exists once a business actually overrides that term.
+model LabelOverride {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  area       String
+  key        String
+  value      String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, area, key])
+  @@map("label_overrides")
+}
+
+/// Custom Options manager (UPD-BE-039) — net-new (no prior `CRUD /options/:setKey` existed to
+/// generalize, confirmed by research). `setKey` is a free string a business chooses when creating
+/// a set (e.g. "product_category") — not yet wired as validation on `Product.category`/
+/// `Expense.category`'s free-text columns; this is the standalone list-management feature itself.
+model OptionSet {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  setKey     String   @map("set_key")
+  label      String
+
+  options Option[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, setKey])
+  @@map("option_sets")
+}
+
+model Option {
+  id          String    @id @default(uuid())
+  optionSetId String    @map("option_set_id")
+  optionSet   OptionSet @relation(fields: [optionSetId], references: [id])
+  value       String
+  sortOrder   Int       @default(0) @map("sort_order")
+  hidden      Boolean   @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([optionSetId])
+  @@map("options")
 }
 
 model Campaign {
@@ -2034,20 +2324,290 @@ model ProductFeedItem {
 }
 
 model GmbPost {
-  id           String    @id @default(uuid())
-  businessId   String    @map("business_id")
-  business     Business  @relation(fields: [businessId], references: [id])
+  id           String        @id @default(uuid())
+  businessId   String        @map("business_id")
+  business     Business      @relation(fields: [businessId], references: [id])
   text         String
-  photoUrl     String?   @map("photo_url")
-  buttonType   String?   @map("button_type")
-  scheduledFor DateTime? @map("scheduled_for")
-  externalId   String?   @map("external_id")
+  photoUrl     String?       @map("photo_url")
+  buttonType   String?       @map("button_type")
+  scheduledFor DateTime?     @map("scheduled_for")
+  externalId   String?       @map("external_id")
+  /// UPD-BE-042: draft until `publish()` pushes it to the real GMB Local Posts API; `failed` when
+  /// that push errors (e.g. no connected/real Google credentials in this environment).
+  status       GmbPostStatus @default(draft)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("gmb_posts")
+}
+
+/// Master Business Record (UPD-BE-041) — the single canonical NAP (name/address/phone) + profile
+/// record `POST /listings/sync` pushes out to every connected directory-type integration (gmb,
+/// bing_places, apple_business_connect, yelp). One row per business, created on first `PATCH`.
+model MasterListing {
+  id            String   @id @default(uuid())
+  businessId    String   @unique @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  name          String
+  phone         String?
+  website       String?
+  addressLine1  String?  @map("address_line1")
+  addressLine2  String?  @map("address_line2")
+  city          String?
+  state         String?
+  postalCode    String?  @map("postal_code")
+  country       String?
+  /// Free-form category tags, e.g. `["Restaurant", "Pizza"]`.
+  categories    Json     @default("[]")
+  description   String?
+  /// Same shape as `Business.workingHours` — kept separate since the listing's published hours
+  /// can legitimately differ from the operational hours used for booking/POS logic.
+  hours         Json     @default("{}")
+  logoUrl       String?  @map("logo_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("master_listings")
+}
+
+/// UPD-BE-044: one row per real push attempt to a directory provider (`POST /listings/sync`),
+/// surfaced via `GET /listings/sync-log`.
+model ListingSyncLog {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  provider   IntegrationProvider
+  status     String
+  message    String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, provider, createdAt])
+  @@map("listing_sync_logs")
+}
+
+/// UPD-BE-044 Citation Audit — a snapshot of `MasterListing`'s fields at the moment they were last
+/// successfully pushed to `provider`. Auditing (`GET /seo/citations`) compares this snapshot
+/// against the *current* `MasterListing` to flag "this directory is stale relative to our own
+/// records" — a deliberate scope decision, not a live pull of the directory's real current data
+/// (none of the 4 directory providers have a real sandbox credential in this environment).
+model Citation {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  provider   IntegrationProvider
+  snapshot   Json
+  syncedAt   DateTime            @map("synced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, provider])
+  @@map("citations")
+}
+
+/// UPD-BE-042 GMB photo gallery entry. `url` is assumed already-uploaded (existing generic upload
+/// endpoints elsewhere in the app follow this same "client already has a URL" convention) — this
+/// ticket doesn't add a new S3 upload path, a disclosed scope boundary.
+model GmbPhoto {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  url        String
+  category   String?
+  externalId String?  @map("external_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("gmb_photos")
+}
+
+/// UPD-BE-042 GMB Q&A. Questions arrive FROM real Google users — `syncQuestions()` pulls them via
+/// a real GMB Q&A API call (requires a connected `gmb` integration with a real location selected);
+/// rows aren't created directly by a business.
+model GmbQna {
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  business   Business  @relation(fields: [businessId], references: [id])
+  question   String
+  answer     String?
+  externalId String?   @unique @map("external_id")
+  answeredAt DateTime? @map("answered_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("gmb_qnas")
+}
+
+/// UPD-BE-042 GMB Performance-API daily metrics snapshot — one row per business per day, written
+/// by the nightly `GmbInsightsProcessor` (and the on-demand `POST /listings/gmb/insights/pull`).
+model GmbInsightsSnapshot {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id])
+  date              DateTime @db.Date
+  views             Int      @default(0)
+  searches          Int      @default(0)
+  calls             Int      @default(0)
+  directionRequests Int      @default(0) @map("direction_requests")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, date])
+  @@map("gmb_insights_snapshots")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UPD-BE-M15 — Social Media Management
+// ─────────────────────────────────────────────────────────────────────────
+
+/// UPD-BE-045 Connected Accounts. Parallel to `Integration` (which is scoped to ads/directory
+/// providers) rather than reusing it — social accounts have their own domain (posting/inbox/
+/// analytics) even though the OAuth mechanics are similar.
+model SocialAccount {
+  id                  String              @id @default(uuid())
+  businessId          String              @map("business_id")
+  business            Business            @relation(fields: [businessId], references: [id])
+  platform            SocialPlatform
+  status              SocialAccountStatus @default(not_connected)
+  tokens              String?
+  meta                Json                @default("{}")
+  externalAccountId   String?             @map("external_account_id")
+  externalAccountName String?             @map("external_account_name")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, platform])
+  @@map("social_accounts")
+}
+
+/// UPD-BE-047 Media Library. `key` is an S3 object key (never a raw URL — resolved to a 24h
+/// signed URL lazily on read, same convention as every other S3-backed model).
+model MediaAsset {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  key        String
+  type       String
+  source     String
+  prompt     String?
+  tags       Json     @default("[]")
+  usageCount Int      @default(0) @map("usage_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("media_assets")
+}
+
+/// UPD-BE-046 Content Calendar + Create Post. `mediaKeys` snapshots the S3 keys used at publish
+/// time (not a live FK to MediaAsset — a post's media shouldn't change retroactively if the
+/// library asset is later edited/deleted).
+model SocialPost {
+  id              String           @id @default(uuid())
+  businessId      String           @map("business_id")
+  business        Business         @relation(fields: [businessId], references: [id])
+  caption         String
+  mediaKeys       Json             @default("[]")
+  scheduledFor    DateTime?        @map("scheduled_for")
+  status          SocialPostStatus @default(draft)
+  createdByUserId String?          @map("created_by_user_id")
+
+  targets SocialPostTarget[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("social_posts")
+}
+
+/// One row per platform a `SocialPost` targets — the real per-target publish outcome (some
+/// platforms can succeed while others fail on the same post). Excluded from `TENANT_SCOPED_MODELS`
+/// — scoped transitively via `SocialPost`, same precedent as `StockCountLine`/`ReturnItem`.
+model SocialPostTarget {
+  id           String                  @id @default(uuid())
+  socialPostId String                  @map("social_post_id")
+  socialPost   SocialPost              @relation(fields: [socialPostId], references: [id])
+  platform     SocialPlatform
+  status       SocialPostTargetStatus  @default(pending)
+  externalId   String?                 @map("external_id")
+  errorMessage String?                 @map("error_message")
+  publishedAt  DateTime?               @map("published_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([socialPostId, platform])
+  @@map("social_post_targets")
+}
+
+/// UPD-BE-049 Social Inbox. `externalId` is the platform's own comment/DM id — the
+/// `(businessId, platform, externalId)` unique constraint is what makes webhook ingestion
+/// idempotent at the row level, on top of the shared `WebhookEvent` gate.
+model SocialInboxItem {
+  id             String             @id @default(uuid())
+  businessId     String             @map("business_id")
+  business       Business           @relation(fields: [businessId], references: [id])
+  platform       SocialPlatform
+  externalId     String             @map("external_id")
+  kind           SocialInboxKind
+  authorName     String?            @map("author_name")
+  text           String
+  postExternalId String?            @map("post_external_id")
+  status         SocialInboxStatus  @default(unread)
+  repliedText    String?            @map("replied_text")
+  repliedAt      DateTime?          @map("replied_at")
+  receivedAt     DateTime           @map("received_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, platform, externalId])
+  @@index([businessId, status])
+  @@map("social_inbox_items")
+}
+
+/// UPD-BE-050 Social Analytics — one row per business per platform per day, written by the
+/// nightly insights-pull job (same shape as `GmbInsightsSnapshot`).
+model SocialAnalyticsSnapshot {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  platform    SocialPlatform
+  date        DateTime @db.Date
+  followers   Int      @default(0)
+  reach       Int      @default(0)
+  engagement  Int      @default(0)
+  impressions Int      @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, platform, date])
+  @@map("social_analytics_snapshots")
+}
+
+/// UPD-BE-051 Social Settings — one row per business (upsert-on-write, same pattern as
+/// `MasterListing`).
+model SocialSettings {
+  id            String   @id @default(uuid())
+  businessId    String   @unique @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  autoPostRules Json     @default("{}") @map("auto_post_rules")
+  hashtagSets   Json     @default("{}") @map("hashtag_sets")
+  brandVoice    String?  @map("brand_voice")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("social_settings")
 }
 
 // ─────────────────────────────────────────────────────────────────────────

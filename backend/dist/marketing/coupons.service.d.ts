@@ -45,13 +45,13 @@ export declare class CouponsService {
     constructor(tenantPrisma: TenantPrismaService);
     create(businessId: string, dto: CreateCouponDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        expiresAt: Date | null;
         type: import("../../generated/prisma").$Enums.CouponType;
-        businessId: string;
         active: boolean;
         startsAt: Date | null;
-        expiresAt: Date | null;
         code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
@@ -62,13 +62,13 @@ export declare class CouponsService {
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        expiresAt: Date | null;
         type: import("../../generated/prisma").$Enums.CouponType;
-        businessId: string;
         active: boolean;
         startsAt: Date | null;
-        expiresAt: Date | null;
         code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
@@ -79,13 +79,13 @@ export declare class CouponsService {
     }[]>;
     findOne(id: string): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        expiresAt: Date | null;
         type: import("../../generated/prisma").$Enums.CouponType;
-        businessId: string;
         active: boolean;
         startsAt: Date | null;
-        expiresAt: Date | null;
         code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
@@ -96,13 +96,13 @@ export declare class CouponsService {
     }>;
     update(id: string, dto: UpdateCouponDto): Promise<{
         id: string;
+        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        expiresAt: Date | null;
         type: import("../../generated/prisma").$Enums.CouponType;
-        businessId: string;
         active: boolean;
         startsAt: Date | null;
-        expiresAt: Date | null;
         code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;

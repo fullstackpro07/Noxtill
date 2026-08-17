@@ -8,6 +8,13 @@ import { TemplateDefinition } from './template.types';
  * translated, the registry falls back to `en` when a locale is missing.
  */
 export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
+  otp_code: {
+    key: 'otp_code',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Your verification code is {{code}}. It expires in {{ttlMinutes}} minutes. Never share this code.',
+    },
+  },
   booking_confirm: {
     key: 'booking_confirm',
     category: MessageCategory.utility,

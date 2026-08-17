@@ -1,8 +1,0 @@
-export declare const MESSAGES_QUEUE = "messages";
-export declare const MESSAGE_ERROR_CODES: {
-    readonly CUSTOMER_NOT_FOUND: "CUSTOMER_NOT_FOUND";
-    readonly CUSTOMER_OPTED_OUT: "CUSTOMER_OPTED_OUT";
-    readonly QUOTA_EXCEEDED: "QUOTA_EXCEEDED";
-    readonly TEMPLATE_NOT_FOUND: "TEMPLATE_NOT_FOUND";
-    readonly NO_CHANNEL_AVAILABLE: "NO_CHANNEL_AVAILABLE";
-};

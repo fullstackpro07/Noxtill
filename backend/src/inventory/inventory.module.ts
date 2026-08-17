@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { InventoryService } from './inventory.service';
+import { StockCountService } from './stock-count.service';
 import { InventoryController } from './inventory.controller';
 import { LowStockScanScheduler } from './low-stock-scan.scheduler';
 import { LowStockScanProcessor } from './low-stock-scan.processor';
@@ -17,7 +18,12 @@ import { AutomationsModule } from '../marketing/automations/automations.module';
     AutomationsModule,
   ],
   controllers: [InventoryController],
-  providers: [InventoryService, LowStockScanScheduler, LowStockScanProcessor],
+  providers: [
+    InventoryService,
+    StockCountService,
+    LowStockScanScheduler,
+    LowStockScanProcessor,
+  ],
   exports: [InventoryService],
 })
 export class InventoryModule {}

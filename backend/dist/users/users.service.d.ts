@@ -8,9 +8,9 @@ export declare class UsersService {
             role: import("generated/prisma").$Enums.Role;
             businessUserId: string | null;
             id: string;
+            name: string;
             email: string | null;
             phone: string | null;
-            name: string;
         };
         business: {
             id: string;
@@ -20,11 +20,11 @@ export declare class UsersService {
             timezone: string;
             locale: string;
             country: string | null;
+            parentId: string | null;
             branches: {
                 id: string;
                 name: string;
             }[];
-            parentId: string | null;
         };
     }>;
 }

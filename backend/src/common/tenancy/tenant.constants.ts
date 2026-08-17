@@ -67,6 +67,22 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'TimesheetApproval',
   'StaffAdvance',
   'CustomRole',
+  'StockCount',
+  'LabelOverride',
+  'OptionSet',
+  'Session',
+  'MasterListing',
+  'ListingSyncLog',
+  'Citation',
+  'GmbPhoto',
+  'GmbQna',
+  'GmbInsightsSnapshot',
+  'SocialAccount',
+  'MediaAsset',
+  'SocialPost',
+  'SocialInboxItem',
+  'SocialAnalyticsSnapshot',
+  'SocialSettings',
 ]);
 
 export const CLS_KEY_BUSINESS_ID = 'businessId';

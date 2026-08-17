@@ -7,6 +7,7 @@ import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { SmsService } from './channels/sms.service';
 import { EmailService } from './channels/email.service';
 import { ChannelSender } from './channels/channel-sender.interface';
+import { TerminologyService } from '../settings/terminology.service';
 import { MESSAGES_QUEUE } from './messaging.constants';
 import { MessageChannel } from '../../generated/prisma';
 
@@ -31,6 +32,7 @@ export class MessageWorkerProcessor extends WorkerHost {
     private readonly whatsapp: WhatsappService,
     private readonly sms: SmsService,
     private readonly email: EmailService,
+    private readonly terminology: TerminologyService,
   ) {
     super();
   }
@@ -46,12 +48,19 @@ export class MessageWorkerProcessor extends WorkerHost {
       message.locale,
       payload,
     );
+    // Terminology Engine (UPD-BE-038) — a universal post-processing pass over every outgoing
+    // WhatsApp message, regardless of which template produced it. No-ops (skips the DB lookup
+    // entirely) for the many templates that don't reference any `{{term:...}}` placeholder.
+    const text = await this.terminology.applyToText(
+      message.businessId,
+      rendered.text,
+    );
     const to = payload.__to;
 
     const sender = this.pickSender(message.channel);
     const result = await sender.send({
       to,
-      text: rendered.text,
+      text,
       templateKey: message.templateKey,
       locale: message.locale,
       businessId: message.businessId,

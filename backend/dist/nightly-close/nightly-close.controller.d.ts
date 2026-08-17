@@ -10,7 +10,10 @@ export declare class NightlyCloseController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
+        msgQuota: number;
         slug: string;
+        typeId: string | null;
+        planId: string | null;
         currency: string;
         timezone: string;
         locale: string;
@@ -19,7 +22,6 @@ export declare class NightlyCloseController {
         nightlyCloseTime: string;
         taxLabel: string;
         taxRate: import("generated/prisma/runtime/library").Decimal;
-        msgQuota: number;
         msgUsed: number;
         branding: import("generated/prisma/runtime/library").JsonValue;
         dashboardConfig: import("generated/prisma/runtime/library").JsonValue;
@@ -30,12 +32,10 @@ export declare class NightlyCloseController {
         aiMonthlyCostCapUsd: import("generated/prisma/runtime/library").Decimal;
         aiRateLimitPerMinute: number;
         overtimeThresholdHoursPerWeek: number;
+        parentId: string | null;
         trialEndsAt: Date | null;
         stripeCustomerId: string | null;
         stripeSubscriptionId: string | null;
         msgQuotaResetAt: Date | null;
-        typeId: string | null;
-        planId: string | null;
-        parentId: string | null;
     }>;
 }

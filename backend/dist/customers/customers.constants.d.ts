@@ -1,4 +1,0 @@
-export declare const CUSTOMER_ERROR_CODES: {
-    readonly INVALID_PHONE: "INVALID_PHONE";
-    readonly CONFIRMATION_MISMATCH: "CONFIRMATION_MISMATCH";
-};

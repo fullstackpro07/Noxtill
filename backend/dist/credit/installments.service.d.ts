@@ -10,14 +10,14 @@ export declare class InstallmentsService {
         plan: {
             customer: {
                 id: string;
-                email: string | null;
-                phone: string;
+                businessId: string;
                 name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                businessId: string;
-                birthday: Date | null;
+                email: string | null;
+                phone: string;
                 address: string | null;
+                birthday: Date | null;
                 notes: string | null;
                 tags: string[];
                 consentMarketing: boolean;
@@ -30,9 +30,9 @@ export declare class InstallmentsService {
             };
         } & {
             id: string;
+            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            businessId: string;
             customerId: string;
             status: import("../../generated/prisma").$Enums.InstallmentPlanStatus;
             note: string | null;
@@ -40,8 +40,8 @@ export declare class InstallmentsService {
         };
     } & {
         id: string;
-        planId: string;
         businessId: string;
+        planId: string;
         status: import("../../generated/prisma").$Enums.InstallmentStatus;
         amount: import("generated/prisma/runtime/library").Decimal;
         seq: number;
@@ -52,20 +52,20 @@ export declare class InstallmentsService {
     pay(businessId: string, id: string): Promise<{
         entry: {
             id: string;
-            createdAt: Date;
             businessId: string;
+            createdAt: Date;
             customerId: string;
+            orderId: string | null;
+            method: import("../../generated/prisma").$Enums.PaymentMethod | null;
             kind: import("../../generated/prisma").$Enums.CreditEntryKind;
             amount: import("generated/prisma/runtime/library").Decimal;
-            method: import("../../generated/prisma").$Enums.PaymentMethod | null;
             note: string | null;
-            orderId: string | null;
         };
         installment: {
             creditEntryId: string;
             id: string;
-            planId: string;
             businessId: string;
+            planId: string;
             status: import("../../generated/prisma").$Enums.InstallmentStatus;
             amount: import("generated/prisma/runtime/library").Decimal;
             seq: number;

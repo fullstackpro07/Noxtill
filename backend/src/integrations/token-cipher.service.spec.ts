@@ -4,7 +4,9 @@ import { TokenCipherService } from './token-cipher.service';
 
 describe('TokenCipherService (BE-082)', () => {
   const key = randomBytes(32).toString('base64');
-  const service = new TokenCipherService(new ConfigService({ INTEGRATIONS_TOKEN_KEY: key }));
+  const service = new TokenCipherService(
+    new ConfigService({ INTEGRATIONS_TOKEN_KEY: key }),
+  );
 
   it('round-trips plaintext through encrypt/decrypt', () => {
     const plaintext = JSON.stringify({ accessToken: 'secret-token-value' });
@@ -20,13 +22,17 @@ describe('TokenCipherService (BE-082)', () => {
 
   it('throws if the encryption key is not configured', () => {
     const unconfigured = new TokenCipherService(new ConfigService({}));
-    expect(() => unconfigured.encrypt('x')).toThrow('INTEGRATIONS_TOKEN_KEY is not configured');
+    expect(() => unconfigured.encrypt('x')).toThrow(
+      'INTEGRATIONS_TOKEN_KEY is not configured',
+    );
   });
 
   it('fails to decrypt with a different key (authenticated encryption catches tampering)', () => {
     const encrypted = service.encrypt('some-token');
     const otherService = new TokenCipherService(
-      new ConfigService({ INTEGRATIONS_TOKEN_KEY: randomBytes(32).toString('base64') }),
+      new ConfigService({
+        INTEGRATIONS_TOKEN_KEY: randomBytes(32).toString('base64'),
+      }),
     );
     expect(() => otherService.decrypt(encrypted)).toThrow();
   });
