@@ -73,8 +73,15 @@ describe('QrPosterService', () => {
   });
 
   afterAll(async () => {
-    await prisma.business.delete({ where: { id: businessId } });
-    await prisma.$disconnect();
+    if (businessId) {
+      // Sibling processor specs (health-score snapshot, AI insights, CRM jobs) iterate every
+      // business in the shared test DB and can write child rows against this one mid-run.
+      await prisma.healthScoreSnapshot.deleteMany({ where: { businessId } });
+      await prisma.aiInsight.deleteMany({ where: { businessId } });
+      await prisma.activityEvent.deleteMany({ where: { businessId } });
+      await prisma.business.delete({ where: { id: businessId } });
+    }
+    await prisma?.$disconnect();
   });
 
   // Real QR encoding (`toDataURL`) is CPU-bound and can occasionally cross the default 5s budget
@@ -139,6 +146,15 @@ describe('QrPosterService', () => {
     expect(htmlArg).not.toContain('<script>alert(1)</script>');
     expect(htmlArg).toContain('&lt;script&gt;');
 
+    await prisma.healthScoreSnapshot.deleteMany({
+      where: { businessId: evilBusiness.id },
+    });
+    await prisma.aiInsight.deleteMany({
+      where: { businessId: evilBusiness.id },
+    });
+    await prisma.activityEvent.deleteMany({
+      where: { businessId: evilBusiness.id },
+    });
     await prisma.business.delete({ where: { id: evilBusiness.id } });
   }, 15_000);
 });

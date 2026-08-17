@@ -55,28 +55,34 @@ describe('QueueModule DLQ (BE-010)', () => {
     const dlq = moduleRef.get<Queue>(getQueueToken(dlqName(DEMO_QUEUE)));
 
     const jobId = `dlq-test-${Date.now()}`;
-    await queueService.addDemoJob(
-      'forced-failure',
-      { shouldFail: true },
-      jobId,
-    );
+    try {
+      // Production backoff is 2s exponential × 5 attempts (~30s). Keep all 5 attempts
+      // but use a short fixed delay so this spec proves DLQ routing, not the clock.
+      await queueService.addDemoJob(
+        'forced-failure',
+        { shouldFail: true },
+        jobId,
+        { backoff: { type: 'fixed', delay: 50 } },
+      );
 
-    const landed = await new Promise<boolean>((resolve) => {
-      const start = Date.now();
-      const interval = setInterval(() => {
-        void dlq.getJob(jobId).then((job) => {
-          if (job) {
-            clearInterval(interval);
-            resolve(true);
-          } else if (Date.now() - start > 20_000) {
-            clearInterval(interval);
-            resolve(false);
-          }
-        });
-      }, 500);
-    });
+      const landed = await new Promise<boolean>((resolve) => {
+        const start = Date.now();
+        const interval = setInterval(() => {
+          void dlq.getJob(jobId).then((job) => {
+            if (job) {
+              clearInterval(interval);
+              resolve(true);
+            } else if (Date.now() - start > 10_000) {
+              clearInterval(interval);
+              resolve(false);
+            }
+          });
+        }, 100);
+      });
 
-    expect(landed).toBe(true);
-    await app.close();
+      expect(landed).toBe(true);
+    } finally {
+      await app.close();
+    }
   }, 30_000);
 });
