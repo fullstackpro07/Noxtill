@@ -31,50 +31,50 @@ export declare class VouchersService {
     private readonly sendGate;
     constructor(tenantPrisma: TenantPrismaService, sendGate: SendGateService);
     issue(businessId: string, dto: IssueVoucherDto): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VoucherStatus;
         expiresAt: Date | null;
+        code: string;
         initialValue: Prisma.Decimal;
         balance: Prisma.Decimal;
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VoucherStatus;
         expiresAt: Date | null;
+        code: string;
         initialValue: Prisma.Decimal;
         balance: Prisma.Decimal;
     }[]>;
     findOne(id: string): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VoucherStatus;
         expiresAt: Date | null;
+        code: string;
         initialValue: Prisma.Decimal;
         balance: Prisma.Decimal;
     }>;
     cancel(id: string): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VoucherStatus;
         expiresAt: Date | null;
+        code: string;
         initialValue: Prisma.Decimal;
         balance: Prisma.Decimal;
     }>;

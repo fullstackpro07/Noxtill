@@ -11,9 +11,9 @@ export declare class AdvancesController {
         client: {};
     }, {}>, "StaffAdvance", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.StaffAdvanceStatus;
         staffUserId: string;
         amount: import("generated/prisma/runtime/library").Decimal;
@@ -22,9 +22,9 @@ export declare class AdvancesController {
     }>;
     list(staffUserId: string): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.StaffAdvanceStatus;
         staffUserId: string;
         amount: import("generated/prisma/runtime/library").Decimal;
@@ -33,9 +33,9 @@ export declare class AdvancesController {
     }[]>;
     update(advanceId: string, dto: UpdateAdvanceDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.StaffAdvanceStatus;
         staffUserId: string;
         amount: import("generated/prisma/runtime/library").Decimal;
@@ -44,9 +44,9 @@ export declare class AdvancesController {
     }>;
     cancel(advanceId: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.StaffAdvanceStatus;
         staffUserId: string;
         amount: import("generated/prisma/runtime/library").Decimal;

@@ -6,46 +6,46 @@ export declare class DepositsService {
     constructor(tenantPrisma: TenantPrismaService);
     create(businessId: string, dto: CreateDepositDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.DepositStatus;
+        providerRef: string | null;
         amount: Prisma.Decimal;
         method: import("../../generated/prisma").$Enums.PaymentMethod;
-        providerRef: string | null;
         appointmentId: string;
     }>;
     list(appointmentId?: string): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.DepositStatus;
+        providerRef: string | null;
         amount: Prisma.Decimal;
         method: import("../../generated/prisma").$Enums.PaymentMethod;
-        providerRef: string | null;
         appointmentId: string;
     }[]>;
     capture(businessId: string, id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.DepositStatus;
+        providerRef: string | null;
         amount: Prisma.Decimal;
         method: import("../../generated/prisma").$Enums.PaymentMethod;
-        providerRef: string | null;
         appointmentId: string;
     }>;
     refund(businessId: string, id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.DepositStatus;
+        providerRef: string | null;
         amount: Prisma.Decimal;
         method: import("../../generated/prisma").$Enums.PaymentMethod;
-        providerRef: string | null;
         appointmentId: string;
     }>;
     forfeitForAppointment(appointmentId: string): Promise<void>;

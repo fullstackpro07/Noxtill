@@ -7,22 +7,22 @@ export declare class UsersController {
         user: {
             role: import("generated/prisma").$Enums.Role;
             businessUserId: string | null;
-            name: string;
+            id: string;
             email: string | null;
             phone: string | null;
-            id: string;
+            name: string;
         };
         business: {
-            name: string;
-            country: string | null;
-            currency: string;
-            locale: string;
             id: string;
+            name: string;
             slug: string;
+            currency: string;
             timezone: string;
+            locale: string;
+            country: string | null;
             branches: {
-                name: string;
                 id: string;
+                name: string;
             }[];
             parentId: string | null;
         };

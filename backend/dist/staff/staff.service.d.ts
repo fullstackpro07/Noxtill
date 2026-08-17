@@ -15,24 +15,24 @@ export declare class StaffService {
     constructor(tenantPrisma: TenantPrismaService);
     list(): import("generated/prisma/runtime/library").PrismaPromise<({
         user: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string | null;
-            id: string;
-            createdAt: Date;
-            updatedAt: Date;
             passwordHash: string;
+            name: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
-            refreshTokenHash: string | null;
+            twoFactorEnabled: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         role: import("../../generated/prisma").$Enums.Role;
         commissionRule: Prisma.JsonValue;
+        businessId: string;
         userId: string;
         customRoleId: string | null;
     })[]>;
@@ -40,46 +40,46 @@ export declare class StaffService {
     create(businessId: string, dto: CreateStaffDto): Promise<{
         tempPassword: string | undefined;
         user: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string | null;
-            id: string;
-            createdAt: Date;
-            updatedAt: Date;
             passwordHash: string;
+            name: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
-            refreshTokenHash: string | null;
+            twoFactorEnabled: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         };
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         role: import("../../generated/prisma").$Enums.Role;
         commissionRule: Prisma.JsonValue;
+        businessId: string;
         userId: string;
         customRoleId: string | null;
     }>;
     update(id: string, dto: UpdateStaffDto): Promise<{
         user: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string | null;
-            id: string;
-            createdAt: Date;
-            updatedAt: Date;
             passwordHash: string;
+            name: string;
             failedLoginAttempts: number;
             lockedUntil: Date | null;
-            refreshTokenHash: string | null;
+            twoFactorEnabled: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         role: import("../../generated/prisma").$Enums.Role;
         commissionRule: Prisma.JsonValue;
+        businessId: string;
         userId: string;
         customRoleId: string | null;
     }>;

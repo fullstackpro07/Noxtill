@@ -16,15 +16,15 @@ export declare class WaitlistService {
     constructor(tenantPrisma: TenantPrismaService, sendGate: SendGateService);
     join(businessId: string, dto: CreateWaitlistEntryDto): Promise<{
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -36,13 +36,14 @@ export declare class WaitlistService {
             referralRewardedAt: Date | null;
         };
         service: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("../../generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("../../generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: Prisma.JsonValue;
             costPrice: Prisma.Decimal;
@@ -50,13 +51,12 @@ export declare class WaitlistService {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.WaitlistStatus;
         staffUserId: string | null;
@@ -68,15 +68,15 @@ export declare class WaitlistService {
     }>;
     list(status?: WaitlistStatus): import("generated/prisma/runtime/library").PrismaPromise<({
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -88,13 +88,14 @@ export declare class WaitlistService {
             referralRewardedAt: Date | null;
         };
         service: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("../../generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("../../generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: Prisma.JsonValue;
             costPrice: Prisma.Decimal;
@@ -102,13 +103,12 @@ export declare class WaitlistService {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.WaitlistStatus;
         staffUserId: string | null;
@@ -120,13 +120,14 @@ export declare class WaitlistService {
     })[]>;
     offer(businessId: string, id: string, dto: OfferWaitlistEntryDto): Promise<{
         service: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("../../generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("../../generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: Prisma.JsonValue;
             costPrice: Prisma.Decimal;
@@ -134,13 +135,12 @@ export declare class WaitlistService {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.WaitlistStatus;
         staffUserId: string | null;
@@ -152,15 +152,15 @@ export declare class WaitlistService {
     }>;
     accept(businessId: string, id: string): Promise<{
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -172,13 +172,14 @@ export declare class WaitlistService {
             referralRewardedAt: Date | null;
         };
         service: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("../../generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("../../generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: Prisma.JsonValue;
             costPrice: Prisma.Decimal;
@@ -186,13 +187,12 @@ export declare class WaitlistService {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;
@@ -205,9 +205,9 @@ export declare class WaitlistService {
     }>;
     cancel(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.WaitlistStatus;
         staffUserId: string | null;

@@ -14,13 +14,14 @@ export declare class PublicBookingService {
         branding: import("generated/prisma/runtime/library").JsonValue;
     }>;
     listServices(slug: string): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("../../generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("../../generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: import("generated/prisma/runtime/library").JsonValue;
         costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -28,16 +29,15 @@ export declare class PublicBookingService {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }[]>;
     getSlots(slug: string, query: QuerySlotsDto): Promise<{
         slots: string[];
     }>;
     createBooking(slug: string, dto: CreatePublicBookingDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;
@@ -50,9 +50,9 @@ export declare class PublicBookingService {
     }>;
     reschedule(token: string, startsAt: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;
@@ -65,9 +65,9 @@ export declare class PublicBookingService {
     }>;
     cancel(token: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("../../generated/prisma").$Enums.AppointmentStatus;
         staffUserId: string | null;

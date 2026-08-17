@@ -9,8 +9,8 @@ export declare class InventoryService {
     recordPurchase(businessId: string, dto: CreatePurchaseDto): Promise<{
         supplier: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         kind: import("../../generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
@@ -21,8 +21,8 @@ export declare class InventoryService {
     recordWastage(businessId: string, dto: CreateWastageDto): Promise<{
         supplier: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         kind: import("../../generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;
@@ -44,8 +44,8 @@ export declare class InventoryService {
     getMovements(productId: string): Promise<{
         supplier: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         kind: import("../../generated/prisma").$Enums.StockMovementKind;
         productId: string;
         qty: number;

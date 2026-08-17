@@ -13,69 +13,70 @@ export declare class VariantsService {
         client: {};
     }, {}>, "VariantSet", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
         options: {
-            name: string;
             id: string;
+            name: string;
             variantSetId: string;
             priceOverride: Prisma.Decimal | null;
         }[];
     } & {
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
     }>;
     findAll(): import("generated/prisma/runtime/library").PrismaPromise<({
         options: {
-            name: string;
             id: string;
+            name: string;
             variantSetId: string;
             priceOverride: Prisma.Decimal | null;
         }[];
     } & {
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
     })[]>;
     findOne(id: string): Promise<{
         options: {
-            name: string;
             id: string;
+            name: string;
             variantSetId: string;
             priceOverride: Prisma.Decimal | null;
         }[];
     } & {
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
     }>;
     update(id: string, dto: UpdateVariantSetDto): Promise<{
         options: {
-            name: string;
             id: string;
+            name: string;
             variantSetId: string;
             priceOverride: Prisma.Decimal | null;
         }[];
     } & {
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
     }>;
     remove(id: string): Promise<void>;
     apply(id: string, dto: ApplyVariantSetDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("../../generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("../../generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: Prisma.JsonValue;
         costPrice: Prisma.Decimal;
@@ -83,6 +84,5 @@ export declare class VariantsService {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }[]>;
 }

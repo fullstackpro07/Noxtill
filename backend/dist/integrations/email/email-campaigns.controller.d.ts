@@ -6,9 +6,9 @@ export declare class EmailCampaignsController {
     constructor(emailCampaigns: EmailCampaignsService);
     create(user: AuthenticatedUser, dto: CreateEmailCampaignDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         scheduledFor: Date | null;
         segment: string;
         body: string;
@@ -17,9 +17,9 @@ export declare class EmailCampaignsController {
     }>;
     list(user: AuthenticatedUser): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         scheduledFor: Date | null;
         segment: string;
         body: string;

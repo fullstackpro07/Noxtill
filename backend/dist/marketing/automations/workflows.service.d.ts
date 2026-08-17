@@ -10,44 +10,44 @@ export declare class WorkflowsService {
         query: {};
         client: {};
     }, {}>, "Workflow", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         active: boolean;
         triggerKey: import("../../../generated/prisma").$Enums.WorkflowTriggerKey;
         conditions: Prisma.JsonValue;
         actions: Prisma.JsonValue;
     }>;
     list(triggerKey?: WorkflowTriggerKey): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         active: boolean;
         triggerKey: import("../../../generated/prisma").$Enums.WorkflowTriggerKey;
         conditions: Prisma.JsonValue;
         actions: Prisma.JsonValue;
     }[]>;
     findOne(id: string): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         active: boolean;
         triggerKey: import("../../../generated/prisma").$Enums.WorkflowTriggerKey;
         conditions: Prisma.JsonValue;
         actions: Prisma.JsonValue;
     }>;
     update(id: string, dto: UpdateWorkflowDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         active: boolean;
         triggerKey: import("../../../generated/prisma").$Enums.WorkflowTriggerKey;
         conditions: Prisma.JsonValue;
@@ -57,9 +57,9 @@ export declare class WorkflowsService {
     listRuns(workflowId: string): Promise<{
         error: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
         result: Prisma.JsonValue | null;
+        businessId: string;
         status: import("../../../generated/prisma").$Enums.WorkflowRunStatus;
         workflowId: string;
         context: Prisma.JsonValue;

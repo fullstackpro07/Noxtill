@@ -8,9 +8,9 @@ export declare class MemoryNotesService {
     constructor(tenantPrisma: TenantPrismaService, cls: ClsService);
     create(dto: CreateMemoryNoteDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         body: string;
         subjectType: string;
         subjectId: string;
@@ -19,9 +19,9 @@ export declare class MemoryNotesService {
     }>;
     list(subjectType: string, subjectId: string): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         body: string;
         subjectType: string;
         subjectId: string;
@@ -30,9 +30,9 @@ export declare class MemoryNotesService {
     }[]>;
     update(id: string, dto: UpdateMemoryNoteDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         body: string;
         subjectType: string;
         subjectId: string;

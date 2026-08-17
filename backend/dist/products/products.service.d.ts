@@ -12,13 +12,14 @@ export declare class ProductsService {
     private readonly tenantPrisma;
     constructor(tenantPrisma: TenantPrismaService);
     create(dto: CreateProductDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("../../generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("../../generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: Prisma.JsonValue;
         costPrice: Prisma.Decimal;
@@ -26,16 +27,16 @@ export declare class ProductsService {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
     findAll(query: ProductQuery): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("../../generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("../../generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: Prisma.JsonValue;
         costPrice: Prisma.Decimal;
@@ -43,16 +44,16 @@ export declare class ProductsService {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }[]>;
     findOne(id: string): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("../../generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("../../generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: Prisma.JsonValue;
         costPrice: Prisma.Decimal;
@@ -60,16 +61,16 @@ export declare class ProductsService {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
     update(id: string, dto: UpdateProductDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("../../generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("../../generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: Prisma.JsonValue;
         costPrice: Prisma.Decimal;
@@ -77,16 +78,16 @@ export declare class ProductsService {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
     deactivate(id: string): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("../../generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("../../generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: Prisma.JsonValue;
         costPrice: Prisma.Decimal;
@@ -94,7 +95,6 @@ export declare class ProductsService {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
     private mapDuplicateSkuError;
 }

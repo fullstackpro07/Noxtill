@@ -10,15 +10,15 @@ export declare class NightlyCloseService {
     composeDayData(businessId: string, date: Date): Promise<NightlyCloseData>;
     composeAndSend(businessId: string, date?: Date): Promise<void>;
     updateSettings(businessId: string, time?: string, channel?: 'whatsapp' | 'sms' | 'email'): Promise<{
-        name: string;
-        country: string | null;
-        currency: string;
-        locale: string;
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         slug: string;
+        currency: string;
         timezone: string;
+        locale: string;
+        country: string | null;
         channelPref: import("../../generated/prisma").$Enums.MessageChannel;
         nightlyCloseTime: string;
         taxLabel: string;

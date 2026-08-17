@@ -6,9 +6,9 @@ export declare class TimeOffController {
     constructor(timeOff: TimeOffService);
     create(user: AuthenticatedUser, dto: CreateTimeOffDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         staffUserId: string;
         startsAt: Date;
         endsAt: Date;
@@ -19,32 +19,32 @@ export declare class TimeOffController {
     list(staffUserId?: string): import("generated/prisma/runtime/library").PrismaPromise<({
         staffUser: {
             user: {
-                name: string;
+                id: string;
                 email: string | null;
                 phone: string | null;
-                id: string;
-                createdAt: Date;
-                updatedAt: Date;
                 passwordHash: string;
+                name: string;
                 failedLoginAttempts: number;
                 lockedUntil: Date | null;
-                refreshTokenHash: string | null;
+                twoFactorEnabled: boolean;
+                createdAt: Date;
+                updatedAt: Date;
             };
         } & {
             id: string;
-            businessId: string;
             createdAt: Date;
             updatedAt: Date;
             role: import("generated/prisma").$Enums.Role;
             commissionRule: import("generated/prisma/runtime/library").JsonValue;
+            businessId: string;
             userId: string;
             customRoleId: string | null;
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         staffUserId: string;
         startsAt: Date;
         endsAt: Date;
@@ -54,9 +54,9 @@ export declare class TimeOffController {
     })[]>;
     approve(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         staffUserId: string;
         startsAt: Date;
         endsAt: Date;
@@ -66,9 +66,9 @@ export declare class TimeOffController {
     }>;
     reject(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         staffUserId: string;
         startsAt: Date;
         endsAt: Date;

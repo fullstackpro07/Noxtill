@@ -12,8 +12,8 @@ export declare class KeywordsController {
     }[]>;
     create(user: AuthenticatedUser, dto: CreateTrackedKeywordDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         keyword: string;
     }>;
     remove(id: string): Promise<{

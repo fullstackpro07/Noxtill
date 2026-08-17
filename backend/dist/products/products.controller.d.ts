@@ -9,13 +9,14 @@ export declare class ProductsController {
     private readonly productsImportService;
     constructor(productsService: ProductsService, productsImportService: ProductsImportService);
     create(dto: CreateProductDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: import("generated/prisma/runtime/library").JsonValue;
         costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -23,17 +24,17 @@ export declare class ProductsController {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
     import(user: AuthenticatedUser, file?: Express.Multer.File): Promise<import("./products-import.service").ImportSummary>;
     findAll(query: QueryProductsDto): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: import("generated/prisma/runtime/library").JsonValue;
         costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -41,16 +42,16 @@ export declare class ProductsController {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }[]>;
     findOne(id: string): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: import("generated/prisma/runtime/library").JsonValue;
         costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -58,16 +59,16 @@ export declare class ProductsController {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
     update(id: string, dto: UpdateProductDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: import("generated/prisma/runtime/library").JsonValue;
         costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -75,16 +76,16 @@ export declare class ProductsController {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
     deactivate(id: string): Promise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        kind: import("generated/prisma").$Enums.ProductKind;
+        businessId: string;
+        active: boolean;
         category: string | null;
+        kind: import("generated/prisma").$Enums.ProductKind;
         sku: string | null;
         variations: import("generated/prisma/runtime/library").JsonValue;
         costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -92,6 +93,5 @@ export declare class ProductsController {
         stockQty: number;
         lowStockThreshold: number;
         durationMin: number | null;
-        active: boolean;
     }>;
 }

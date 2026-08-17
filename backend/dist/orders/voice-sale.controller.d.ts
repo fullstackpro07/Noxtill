@@ -13,14 +13,14 @@ export declare class VoiceSaleController {
     }>;
     confirm(user: AuthenticatedUser, id: string, dto: CreateSaleDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        orderNo: number;
+        businessId: string;
         customerId: string | null;
+        status: import("generated/prisma").$Enums.OrderStatus;
+        orderNo: number;
         orderType: import("generated/prisma").$Enums.OrderType;
         tableNo: string | null;
-        status: import("generated/prisma").$Enums.OrderStatus;
         subtotal: import("generated/prisma/runtime/library").Decimal;
         tax: import("generated/prisma/runtime/library").Decimal;
         discount: import("generated/prisma/runtime/library").Decimal;

@@ -7,8 +7,8 @@ export declare class QueueController {
     join(user: AuthenticatedUser, dto: JoinQueueDto): Promise<{
         number: number;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("generated/prisma").$Enums.QueueTokenStatus;
         serviceId: string | null;
@@ -18,15 +18,15 @@ export declare class QueueController {
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<({
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -38,13 +38,14 @@ export declare class QueueController {
             referralRewardedAt: Date | null;
         } | null;
         service: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: import("generated/prisma/runtime/library").JsonValue;
             costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -52,13 +53,12 @@ export declare class QueueController {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         } | null;
     } & {
         number: number;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("generated/prisma").$Enums.QueueTokenStatus;
         serviceId: string | null;
@@ -69,8 +69,8 @@ export declare class QueueController {
     call(user: AuthenticatedUser, id: string): Promise<{
         number: number;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("generated/prisma").$Enums.QueueTokenStatus;
         serviceId: string | null;
@@ -81,8 +81,8 @@ export declare class QueueController {
     serve(id: string): Promise<{
         number: number;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("generated/prisma").$Enums.QueueTokenStatus;
         serviceId: string | null;
@@ -93,8 +93,8 @@ export declare class QueueController {
     skip(id: string): Promise<{
         number: number;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("generated/prisma").$Enums.QueueTokenStatus;
         serviceId: string | null;

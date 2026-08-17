@@ -26,30 +26,30 @@ export declare class ActionCenterController {
     }>;
     complete(user: AuthenticatedUser, id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("../../generated/prisma").$Enums.ActionItemType;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
         snoozedUntil: Date | null;
     }>;
     dismiss(user: AuthenticatedUser, id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("../../generated/prisma").$Enums.ActionItemType;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
         snoozedUntil: Date | null;
     }>;
     snooze(user: AuthenticatedUser, id: string, dto: SnoozeActionItemDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("../../generated/prisma").$Enums.ActionItemType;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.ActionItemStatus;
         entityId: string;
         snoozedUntil: Date | null;

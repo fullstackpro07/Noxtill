@@ -12,9 +12,9 @@ export declare class TablesService {
         openedAt: Date | null;
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -25,9 +25,9 @@ export declare class TablesService {
     create(businessId: string, dto: CreateTableDto): Promise<{
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -38,9 +38,9 @@ export declare class TablesService {
     update(businessId: string, id: string, dto: UpdateTableDto): Promise<{
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -51,9 +51,9 @@ export declare class TablesService {
     openTable(businessId: string, id: string): Promise<{
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -67,9 +67,9 @@ export declare class TablesService {
         openedAt: Date | null;
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -83,9 +83,9 @@ export declare class TablesService {
         openedAt: Date | null;
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("../../generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;

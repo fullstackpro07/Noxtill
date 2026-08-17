@@ -11,11 +11,11 @@ export declare class MembershipsController {
         query: {};
         client: {};
     }, {}>, "MembershipPlan", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         active: boolean;
         price: import("generated/prisma/runtime/library").Decimal;
         interval: import("generated/prisma").$Enums.BillingInterval;
@@ -23,11 +23,11 @@ export declare class MembershipsController {
         stripePriceId: string | null;
     }>;
     listPlans(): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         active: boolean;
         price: import("generated/prisma/runtime/library").Decimal;
         interval: import("generated/prisma").$Enums.BillingInterval;
@@ -37,11 +37,11 @@ export declare class MembershipsController {
     create(user: AuthenticatedUser, dto: CreateMembershipDto): Promise<{
         membership: {
             id: string;
-            businessId: string;
             createdAt: Date;
             updatedAt: Date;
             stripeSubscriptionId: string | null;
             planId: string;
+            businessId: string;
             customerId: string;
             status: import("generated/prisma").$Enums.MembershipStatus;
             method: import("generated/prisma").$Enums.PaymentMethod;
@@ -51,11 +51,11 @@ export declare class MembershipsController {
     }>;
     list(customerId?: string): import("generated/prisma/runtime/library").PrismaPromise<({
         plan: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             active: boolean;
             price: import("generated/prisma/runtime/library").Decimal;
             interval: import("generated/prisma").$Enums.BillingInterval;
@@ -63,15 +63,15 @@ export declare class MembershipsController {
             stripePriceId: string | null;
         };
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -84,11 +84,11 @@ export declare class MembershipsController {
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         stripeSubscriptionId: string | null;
         planId: string;
+        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.MembershipStatus;
         method: import("generated/prisma").$Enums.PaymentMethod;
@@ -96,11 +96,11 @@ export declare class MembershipsController {
     })[]>;
     activate(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         stripeSubscriptionId: string | null;
         planId: string;
+        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.MembershipStatus;
         method: import("generated/prisma").$Enums.PaymentMethod;
@@ -108,11 +108,11 @@ export declare class MembershipsController {
     }>;
     cancel(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         stripeSubscriptionId: string | null;
         planId: string;
+        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.MembershipStatus;
         method: import("generated/prisma").$Enums.PaymentMethod;

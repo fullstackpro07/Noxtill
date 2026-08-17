@@ -5,13 +5,14 @@ export declare class BundlesController {
     constructor(bundlesService: BundlesService);
     create(dto: CreateBundleDto): Promise<{
         product: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: import("generated/prisma/runtime/library").JsonValue;
             costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -19,17 +20,17 @@ export declare class BundlesController {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
         items: ({
             product: {
-                name: string;
                 id: string;
-                businessId: string;
+                name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                kind: import("generated/prisma").$Enums.ProductKind;
+                businessId: string;
+                active: boolean;
                 category: string | null;
+                kind: import("generated/prisma").$Enums.ProductKind;
                 sku: string | null;
                 variations: import("generated/prisma/runtime/library").JsonValue;
                 costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -37,7 +38,6 @@ export declare class BundlesController {
                 stockQty: number;
                 lowStockThreshold: number;
                 durationMin: number | null;
-                active: boolean;
             };
         } & {
             id: string;
@@ -47,20 +47,21 @@ export declare class BundlesController {
         })[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         productId: string;
     }>;
     findAll(): import("generated/prisma/runtime/library").PrismaPromise<({
         product: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: import("generated/prisma/runtime/library").JsonValue;
             costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -68,17 +69,17 @@ export declare class BundlesController {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
         items: ({
             product: {
-                name: string;
                 id: string;
-                businessId: string;
+                name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                kind: import("generated/prisma").$Enums.ProductKind;
+                businessId: string;
+                active: boolean;
                 category: string | null;
+                kind: import("generated/prisma").$Enums.ProductKind;
                 sku: string | null;
                 variations: import("generated/prisma/runtime/library").JsonValue;
                 costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -86,7 +87,6 @@ export declare class BundlesController {
                 stockQty: number;
                 lowStockThreshold: number;
                 durationMin: number | null;
-                active: boolean;
             };
         } & {
             id: string;
@@ -96,20 +96,21 @@ export declare class BundlesController {
         })[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         productId: string;
     })[]>;
     findOne(id: string): Promise<{
         product: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: import("generated/prisma/runtime/library").JsonValue;
             costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -117,17 +118,17 @@ export declare class BundlesController {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
         items: ({
             product: {
-                name: string;
                 id: string;
-                businessId: string;
+                name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                kind: import("generated/prisma").$Enums.ProductKind;
+                businessId: string;
+                active: boolean;
                 category: string | null;
+                kind: import("generated/prisma").$Enums.ProductKind;
                 sku: string | null;
                 variations: import("generated/prisma/runtime/library").JsonValue;
                 costPrice: import("generated/prisma/runtime/library").Decimal;
@@ -135,7 +136,6 @@ export declare class BundlesController {
                 stockQty: number;
                 lowStockThreshold: number;
                 durationMin: number | null;
-                active: boolean;
             };
         } & {
             id: string;
@@ -145,9 +145,9 @@ export declare class BundlesController {
         })[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         productId: string;
     }>;
     remove(id: string): Promise<void>;

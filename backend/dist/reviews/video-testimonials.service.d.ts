@@ -13,27 +13,27 @@ export declare class VideoTestimonialsService {
     constructor(tenantPrisma: TenantPrismaService, sendGate: SendGateService, activity: ActivityService, s3: S3Service);
     request(businessId: string, dto: RequestVideoTestimonialDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        token: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VideoTestimonialStatus;
-        token: string;
         approvedByUserId: string | null;
         videoKey: string | null;
         caption: string | null;
     }>;
     list(status?: VideoTestimonialStatus): Promise<({
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -46,12 +46,12 @@ export declare class VideoTestimonialsService {
         } | null;
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        token: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VideoTestimonialStatus;
-        token: string;
         approvedByUserId: string | null;
         videoKey: string | null;
         caption: string | null;
@@ -60,12 +60,12 @@ export declare class VideoTestimonialsService {
     })[]>;
     findOne(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        token: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VideoTestimonialStatus;
-        token: string;
         approvedByUserId: string | null;
         videoKey: string | null;
         caption: string | null;
@@ -74,12 +74,12 @@ export declare class VideoTestimonialsService {
     }>;
     approve(id: string, actorUserId?: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        token: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VideoTestimonialStatus;
-        token: string;
         approvedByUserId: string | null;
         videoKey: string | null;
         caption: string | null;
@@ -88,12 +88,12 @@ export declare class VideoTestimonialsService {
     }>;
     reject(id: string, dto: RejectVideoTestimonialDto, actorUserId?: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        token: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.VideoTestimonialStatus;
-        token: string;
         approvedByUserId: string | null;
         videoKey: string | null;
         caption: string | null;

@@ -8,11 +8,11 @@ export declare class ReviewRequestsService {
     create(businessId: string, dto: CreateReviewRequestDto): Promise<{
         message: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
+        token: string;
         customerId: string | null;
         source: string;
-        token: string;
         sourceId: string | null;
         stars: number | null;
         routedTo: import("generated/prisma").$Enums.ReviewRoute | null;

@@ -13,9 +13,9 @@ export declare class TablesController {
         openedAt: Date | null;
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -26,9 +26,9 @@ export declare class TablesController {
     create(user: AuthenticatedUser, dto: CreateTableDto): Promise<{
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -39,9 +39,9 @@ export declare class TablesController {
     update(user: AuthenticatedUser, id: string, dto: UpdateTableDto): Promise<{
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -52,9 +52,9 @@ export declare class TablesController {
     open(user: AuthenticatedUser, id: string): Promise<{
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -68,9 +68,9 @@ export declare class TablesController {
         openedAt: Date | null;
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;
@@ -84,9 +84,9 @@ export declare class TablesController {
         openedAt: Date | null;
         number: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         status: import("generated/prisma").$Enums.TableStatus;
         floor: string | null;
         posX: number | null;

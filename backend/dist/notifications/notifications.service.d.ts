@@ -8,33 +8,33 @@ export declare class NotificationsService {
     private readonly tenantPrisma;
     constructor(tenantPrisma: TenantPrismaService);
     list(userId: string): Promise<{
-        link: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         userId: string;
+        link: string | null;
+        read: boolean;
         body: string;
         title: string;
-        read: boolean;
     }[]>;
     create(businessId: string, userId: string, input: CreateNotificationInput): Promise<{
-        link: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         userId: string;
+        link: string | null;
+        read: boolean;
         body: string;
         title: string;
-        read: boolean;
     }>;
     markRead(userId: string, id: string): Promise<{
-        link: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         userId: string;
+        link: string | null;
+        read: boolean;
         body: string;
         title: string;
-        read: boolean;
     }>;
 }

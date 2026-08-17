@@ -15,8 +15,8 @@ export declare class PricingController {
     }>;
     priceHistory(id: string): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         note: string | null;
         productId: string;
         oldPrice: import("generated/prisma/runtime/library").Decimal;

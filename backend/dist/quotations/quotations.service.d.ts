@@ -5,15 +5,15 @@ export declare class QuotationsService {
     constructor(tenantPrisma: TenantPrismaService);
     findAll(): import("generated/prisma/runtime/library").PrismaPromise<({
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -25,8 +25,8 @@ export declare class QuotationsService {
             referralRewardedAt: Date | null;
         } | null;
         items: {
-            name: string;
             id: string;
+            name: string;
             orderId: string;
             productId: string | null;
             qty: number;
@@ -35,14 +35,14 @@ export declare class QuotationsService {
         }[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        orderNo: number;
+        businessId: string;
         customerId: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        orderNo: number;
         orderType: import("../../generated/prisma").$Enums.OrderType;
         tableNo: string | null;
-        status: import("../../generated/prisma").$Enums.OrderStatus;
         subtotal: import("generated/prisma/runtime/library").Decimal;
         tax: import("generated/prisma/runtime/library").Decimal;
         discount: import("generated/prisma/runtime/library").Decimal;
@@ -57,14 +57,14 @@ export declare class QuotationsService {
     })[]>;
     create(businessId: string, dto: CreateQuotationDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        orderNo: number;
+        businessId: string;
         customerId: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        orderNo: number;
         orderType: import("../../generated/prisma").$Enums.OrderType;
         tableNo: string | null;
-        status: import("../../generated/prisma").$Enums.OrderStatus;
         subtotal: import("generated/prisma/runtime/library").Decimal;
         tax: import("generated/prisma/runtime/library").Decimal;
         discount: import("generated/prisma/runtime/library").Decimal;
@@ -79,14 +79,14 @@ export declare class QuotationsService {
     }>;
     convert(businessId: string, quotationId: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        orderNo: number;
+        businessId: string;
         customerId: string | null;
+        status: import("../../generated/prisma").$Enums.OrderStatus;
+        orderNo: number;
         orderType: import("../../generated/prisma").$Enums.OrderType;
         tableNo: string | null;
-        status: import("../../generated/prisma").$Enums.OrderStatus;
         subtotal: import("generated/prisma/runtime/library").Decimal;
         tax: import("generated/prisma/runtime/library").Decimal;
         discount: import("generated/prisma/runtime/library").Decimal;

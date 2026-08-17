@@ -22,9 +22,9 @@ export declare class TimesheetsController {
         client: {};
     }, {}>, "TimesheetApproval", "upsert", never> & import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         staffUserId: string;
         approvedByUserId: string | null;
         month: string;

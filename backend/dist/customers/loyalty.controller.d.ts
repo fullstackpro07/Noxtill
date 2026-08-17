@@ -10,24 +10,24 @@ export declare class LoyaltyController {
         query: {};
         client: {};
     }, {}>, "LoyaltyProgram", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("generated/prisma").$Enums.LoyaltyProgramType;
+        businessId: string;
         active: boolean;
         stampsRequired: number;
         rewardDescription: string | null;
         tiers: import("generated/prisma/runtime/library").JsonValue;
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("generated/prisma").$Enums.LoyaltyProgramType;
+        businessId: string;
         active: boolean;
         stampsRequired: number;
         rewardDescription: string | null;
@@ -35,9 +35,9 @@ export declare class LoyaltyController {
     }[]>;
     enroll(id: string, dto: EnrollLoyaltyMemberDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         programId: string;
         stampCount: number;
@@ -45,15 +45,15 @@ export declare class LoyaltyController {
     }>;
     listMembers(id: string): Promise<({
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -66,9 +66,9 @@ export declare class LoyaltyController {
         };
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         programId: string;
         stampCount: number;
@@ -76,9 +76,9 @@ export declare class LoyaltyController {
     })[]>;
     redeem(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         programId: string;
         stampCount: number;

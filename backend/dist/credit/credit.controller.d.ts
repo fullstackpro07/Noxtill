@@ -30,10 +30,10 @@ export declare class CreditController {
     recordPayment(dto: RecordPaymentDto): Promise<{
         entry: {
             id: string;
-            businessId: string;
             createdAt: Date;
-            kind: import("generated/prisma").$Enums.CreditEntryKind;
+            businessId: string;
             customerId: string;
+            kind: import("generated/prisma").$Enums.CreditEntryKind;
             amount: import("generated/prisma/runtime/library").Decimal;
             method: import("generated/prisma").$Enums.PaymentMethod | null;
             note: string | null;
@@ -49,8 +49,8 @@ export declare class CreditController {
     createInstallmentPlan(customerId: string, dto: CreateInstallmentPlanDto): Promise<{
         installments: {
             id: string;
-            businessId: string;
             planId: string;
+            businessId: string;
             status: import("generated/prisma").$Enums.InstallmentStatus;
             amount: import("generated/prisma/runtime/library").Decimal;
             seq: number;
@@ -60,9 +60,9 @@ export declare class CreditController {
         }[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.InstallmentPlanStatus;
         note: string | null;
@@ -71,8 +71,8 @@ export declare class CreditController {
     listInstallmentPlans(customerId: string): import("generated/prisma/runtime/library").PrismaPromise<({
         installments: {
             id: string;
-            businessId: string;
             planId: string;
+            businessId: string;
             status: import("generated/prisma").$Enums.InstallmentStatus;
             amount: import("generated/prisma/runtime/library").Decimal;
             seq: number;
@@ -82,9 +82,9 @@ export declare class CreditController {
         }[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string;
         status: import("generated/prisma").$Enums.InstallmentPlanStatus;
         note: string | null;
@@ -92,35 +92,35 @@ export declare class CreditController {
     })[]>;
     createShareLink(customerId: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
-        customerId: string;
+        businessId: string;
         token: string;
+        customerId: string;
         revoked: boolean;
     }>;
     listShareLinks(customerId: string): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
-        customerId: string;
+        businessId: string;
         token: string;
+        customerId: string;
         revoked: boolean;
     }[]>;
     revokeShareLink(id: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
-        customerId: string;
+        businessId: string;
         token: string;
+        customerId: string;
         revoked: boolean;
     }>;
     writeOff(customerId: string, dto: WriteOffCreditDto): Promise<{
         entry: {
             id: string;
-            businessId: string;
             createdAt: Date;
-            kind: import("generated/prisma").$Enums.CreditEntryKind;
+            businessId: string;
             customerId: string;
+            kind: import("generated/prisma").$Enums.CreditEntryKind;
             amount: import("generated/prisma/runtime/library").Decimal;
             method: import("generated/prisma").$Enums.PaymentMethod | null;
             note: string | null;

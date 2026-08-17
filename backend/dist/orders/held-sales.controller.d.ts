@@ -9,29 +9,29 @@ export declare class HeldSalesController {
         cart: HoldSaleDto;
         estimatedTotal: number;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         note: string | null;
         heldByUserId: string | null;
     }[]>;
     hold(user: AuthenticatedUser, dto: HoldSaleDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         note: string | null;
         cart: import("generated/prisma/runtime/library").JsonValue;
         heldByUserId: string | null;
     }>;
     resume(user: AuthenticatedUser, id: string, dto: ResumeHeldSaleDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        orderNo: number;
+        businessId: string;
         customerId: string | null;
+        status: import("generated/prisma").$Enums.OrderStatus;
+        orderNo: number;
         orderType: import("generated/prisma").$Enums.OrderType;
         tableNo: string | null;
-        status: import("generated/prisma").$Enums.OrderStatus;
         subtotal: import("generated/prisma/runtime/library").Decimal;
         tax: import("generated/prisma/runtime/library").Decimal;
         discount: import("generated/prisma/runtime/library").Decimal;

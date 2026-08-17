@@ -6,36 +6,36 @@ export declare class CustomRolesController {
     constructor(customRoles: CustomRolesService);
     listCapabilities(): import("../common/capabilities/capabilities.constants").Capability[];
     create(user: AuthenticatedUser, dto: CreateCustomRoleDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
-        capabilities: string[];
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        capabilities: string[];
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
         id: string;
-        businessId: string;
-        capabilities: string[];
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        capabilities: string[];
     }[]>;
     findOne(id: string): Promise<{
-        name: string;
         id: string;
-        businessId: string;
-        capabilities: string[];
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        capabilities: string[];
     }>;
     update(id: string, dto: UpdateCustomRoleDto): Promise<{
-        name: string;
         id: string;
-        businessId: string;
-        capabilities: string[];
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
+        capabilities: string[];
     }>;
     remove(id: string): Promise<void>;
 }

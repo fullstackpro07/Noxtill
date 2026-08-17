@@ -44,15 +44,15 @@ export declare class CouponsService {
     private readonly tenantPrisma;
     constructor(tenantPrisma: TenantPrismaService);
     create(businessId: string, dto: CreateCouponDto): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("../../generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;
@@ -61,15 +61,15 @@ export declare class CouponsService {
         usedCount: number;
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("../../generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;
@@ -78,15 +78,15 @@ export declare class CouponsService {
         usedCount: number;
     }[]>;
     findOne(id: string): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("../../generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;
@@ -95,15 +95,15 @@ export declare class CouponsService {
         usedCount: number;
     }>;
     update(id: string, dto: UpdateCouponDto): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("../../generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: Prisma.Decimal;
         minOrderAmount: Prisma.Decimal | null;
         maxDiscountAmount: Prisma.Decimal | null;

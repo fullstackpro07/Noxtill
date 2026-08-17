@@ -14,46 +14,46 @@ export declare class SuppliersService {
         query: {};
         client: {};
     }, {}>, "Supplier", "create", never> & import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string | null;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string | null;
         notes: string | null;
     }>;
     findAll(): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string | null;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string | null;
         notes: string | null;
     }[]>;
     findOne(id: string): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string | null;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string | null;
         notes: string | null;
     }>;
     update(id: string, dto: UpdateSupplierDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string | null;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string | null;
         notes: string | null;
     }>;

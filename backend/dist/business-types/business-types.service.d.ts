@@ -9,10 +9,10 @@ export declare class BusinessTypesService {
         id: string;
         createdAt: Date;
         updatedAt: Date;
+        labelOverrides: import("generated/prisma/runtime/library").JsonValue;
         key: string;
         categoryId: string;
         label: string;
-        labelOverrides: import("generated/prisma/runtime/library").JsonValue;
         widgetOverrides: import("generated/prisma/runtime/library").JsonValue;
         aiGenerated: boolean;
     }[]>;
@@ -20,10 +20,10 @@ export declare class BusinessTypesService {
         id: string;
         createdAt: Date;
         updatedAt: Date;
+        labelOverrides: import("generated/prisma/runtime/library").JsonValue;
         key: string;
         categoryId: string;
         label: string;
-        labelOverrides: import("generated/prisma/runtime/library").JsonValue;
         widgetOverrides: import("generated/prisma/runtime/library").JsonValue;
         aiGenerated: boolean;
     }>;

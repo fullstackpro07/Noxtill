@@ -20,17 +20,17 @@ export declare class ReportsService {
         url: string;
     }>;
     send(kind: ReportKind, month: string | undefined, authUser: AuthenticatedUser): Promise<{
-        locale: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        category: import("../../generated/prisma").$Enums.MessageCategory;
+        locale: string;
+        businessId: string;
         customerId: string | null;
-        status: import("../../generated/prisma").$Enums.MessageStatus;
         channel: import("../../generated/prisma").$Enums.MessageChannel;
+        category: import("../../generated/prisma").$Enums.MessageCategory;
         templateKey: string;
         payload: import("generated/prisma/runtime/library").JsonValue;
+        status: import("../../generated/prisma").$Enums.MessageStatus;
         providerRef: string | null;
         scheduledFor: Date | null;
         campaignId: string | null;

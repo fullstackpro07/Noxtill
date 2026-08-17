@@ -6,9 +6,9 @@ export declare class MemoryNotesController {
     constructor(memoryNotesService: MemoryNotesService);
     create(dto: CreateMemoryNoteDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         body: string;
         subjectType: string;
         subjectId: string;
@@ -17,9 +17,9 @@ export declare class MemoryNotesController {
     }>;
     list(subjectType: string, subjectId: string): import("generated/prisma/runtime/library").PrismaPromise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         body: string;
         subjectType: string;
         subjectId: string;
@@ -28,9 +28,9 @@ export declare class MemoryNotesController {
     }[]>;
     update(id: string, dto: UpdateMemoryNoteDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         body: string;
         subjectType: string;
         subjectId: string;

@@ -6,13 +6,14 @@ export declare class BundlesService {
     constructor(tenantPrisma: TenantPrismaService);
     create(dto: CreateBundleDto): Promise<{
         product: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("../../generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("../../generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: Prisma.JsonValue;
             costPrice: Prisma.Decimal;
@@ -20,17 +21,17 @@ export declare class BundlesService {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
         items: ({
             product: {
-                name: string;
                 id: string;
-                businessId: string;
+                name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                kind: import("../../generated/prisma").$Enums.ProductKind;
+                businessId: string;
+                active: boolean;
                 category: string | null;
+                kind: import("../../generated/prisma").$Enums.ProductKind;
                 sku: string | null;
                 variations: Prisma.JsonValue;
                 costPrice: Prisma.Decimal;
@@ -38,7 +39,6 @@ export declare class BundlesService {
                 stockQty: number;
                 lowStockThreshold: number;
                 durationMin: number | null;
-                active: boolean;
             };
         } & {
             id: string;
@@ -48,20 +48,21 @@ export declare class BundlesService {
         })[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         productId: string;
     }>;
     findAll(): import("generated/prisma/runtime/library").PrismaPromise<({
         product: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("../../generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("../../generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: Prisma.JsonValue;
             costPrice: Prisma.Decimal;
@@ -69,17 +70,17 @@ export declare class BundlesService {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
         items: ({
             product: {
-                name: string;
                 id: string;
-                businessId: string;
+                name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                kind: import("../../generated/prisma").$Enums.ProductKind;
+                businessId: string;
+                active: boolean;
                 category: string | null;
+                kind: import("../../generated/prisma").$Enums.ProductKind;
                 sku: string | null;
                 variations: Prisma.JsonValue;
                 costPrice: Prisma.Decimal;
@@ -87,7 +88,6 @@ export declare class BundlesService {
                 stockQty: number;
                 lowStockThreshold: number;
                 durationMin: number | null;
-                active: boolean;
             };
         } & {
             id: string;
@@ -97,20 +97,21 @@ export declare class BundlesService {
         })[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         productId: string;
     })[]>;
     findOne(id: string): Promise<{
         product: {
-            name: string;
             id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            kind: import("../../generated/prisma").$Enums.ProductKind;
+            businessId: string;
+            active: boolean;
             category: string | null;
+            kind: import("../../generated/prisma").$Enums.ProductKind;
             sku: string | null;
             variations: Prisma.JsonValue;
             costPrice: Prisma.Decimal;
@@ -118,17 +119,17 @@ export declare class BundlesService {
             stockQty: number;
             lowStockThreshold: number;
             durationMin: number | null;
-            active: boolean;
         };
         items: ({
             product: {
-                name: string;
                 id: string;
-                businessId: string;
+                name: string;
                 createdAt: Date;
                 updatedAt: Date;
-                kind: import("../../generated/prisma").$Enums.ProductKind;
+                businessId: string;
+                active: boolean;
                 category: string | null;
+                kind: import("../../generated/prisma").$Enums.ProductKind;
                 sku: string | null;
                 variations: Prisma.JsonValue;
                 costPrice: Prisma.Decimal;
@@ -136,7 +137,6 @@ export declare class BundlesService {
                 stockQty: number;
                 lowStockThreshold: number;
                 durationMin: number | null;
-                active: boolean;
             };
         } & {
             id: string;
@@ -146,9 +146,9 @@ export declare class BundlesService {
         })[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         productId: string;
     }>;
     remove(id: string): Promise<void>;

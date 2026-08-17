@@ -15,11 +15,11 @@ export declare class ReviewsController {
     createRequest(user: AuthenticatedUser, dto: CreateReviewRequestDto): Promise<{
         message: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
+        token: string;
         customerId: string | null;
         source: string;
-        token: string;
         sourceId: string | null;
         stars: number | null;
         routedTo: import("generated/prisma").$Enums.ReviewRoute | null;
@@ -29,8 +29,8 @@ export declare class ReviewsController {
     list(query: QueryReviewsDto): Promise<({
         source: "external";
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         stars: number;
         platform: string;
         externalId: string;
@@ -42,9 +42,9 @@ export declare class ReviewsController {
         source: "private";
         message: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("generated/prisma").$Enums.FeedbackStatus;
         stars: number;
@@ -77,8 +77,8 @@ export declare class ReviewsController {
     }>;
     reply(id: string, replyText: string): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
+        businessId: string;
         stars: number;
         platform: string;
         externalId: string;
@@ -93,9 +93,9 @@ export declare class ReviewsController {
     updateFeedback(id: string, dto: UpdateFeedbackDto): Promise<{
         message: string | null;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("generated/prisma").$Enums.FeedbackStatus;
         stars: number;
@@ -104,17 +104,17 @@ export declare class ReviewsController {
         resolutionNote: string | null;
     }>;
     replyToFeedback(id: string, dto: ReplyFeedbackDto): Promise<{
-        locale: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
-        category: import("generated/prisma").$Enums.MessageCategory;
+        locale: string;
+        businessId: string;
         customerId: string | null;
-        status: import("generated/prisma").$Enums.MessageStatus;
         channel: import("generated/prisma").$Enums.MessageChannel;
+        category: import("generated/prisma").$Enums.MessageCategory;
         templateKey: string;
         payload: import("generated/prisma/runtime/library").JsonValue;
+        status: import("generated/prisma").$Enums.MessageStatus;
         providerRef: string | null;
         scheduledFor: Date | null;
         campaignId: string | null;

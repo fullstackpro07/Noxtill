@@ -16,9 +16,9 @@ export declare class ReturnsController {
         }[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.ReturnStatus;
         orderId: string;
@@ -31,15 +31,15 @@ export declare class ReturnsController {
     }>;
     list(user: AuthenticatedUser, status?: ReturnStatus): Promise<({
         customer: {
-            name: string;
+            id: string;
             email: string | null;
             phone: string;
-            id: string;
-            businessId: string;
+            name: string;
             createdAt: Date;
             updatedAt: Date;
-            address: string | null;
+            businessId: string;
             birthday: Date | null;
+            address: string | null;
             notes: string | null;
             tags: string[];
             consentMarketing: boolean;
@@ -52,14 +52,14 @@ export declare class ReturnsController {
         } | null;
         order: {
             id: string;
-            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            orderNo: number;
+            businessId: string;
             customerId: string | null;
+            status: import("../../generated/prisma").$Enums.OrderStatus;
+            orderNo: number;
             orderType: import("../../generated/prisma").$Enums.OrderType;
             tableNo: string | null;
-            status: import("../../generated/prisma").$Enums.OrderStatus;
             subtotal: import("generated/prisma/runtime/library").Decimal;
             tax: import("generated/prisma/runtime/library").Decimal;
             discount: import("generated/prisma/runtime/library").Decimal;
@@ -81,9 +81,9 @@ export declare class ReturnsController {
         }[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.ReturnStatus;
         orderId: string;
@@ -104,9 +104,9 @@ export declare class ReturnsController {
         }[];
     } & {
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.ReturnStatus;
         orderId: string;
@@ -119,9 +119,9 @@ export declare class ReturnsController {
     }>;
     reject(user: AuthenticatedUser, id: string, dto: RejectReturnDto): Promise<{
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         customerId: string | null;
         status: import("../../generated/prisma").$Enums.ReturnStatus;
         orderId: string;

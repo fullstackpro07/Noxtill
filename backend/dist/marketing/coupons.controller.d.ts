@@ -5,15 +5,15 @@ export declare class CouponsController {
     private readonly coupons;
     constructor(coupons: CouponsService);
     create(user: AuthenticatedUser, dto: CreateCouponDto): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
@@ -22,15 +22,15 @@ export declare class CouponsController {
         usedCount: number;
     }>;
     list(): import("generated/prisma/runtime/library").PrismaPromise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
@@ -39,15 +39,15 @@ export declare class CouponsController {
         usedCount: number;
     }[]>;
     findOne(id: string): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;
@@ -56,15 +56,15 @@ export declare class CouponsController {
         usedCount: number;
     }>;
     update(id: string, dto: UpdateCouponDto): Promise<{
-        code: string;
         id: string;
-        businessId: string;
         createdAt: Date;
         updatedAt: Date;
         type: import("generated/prisma").$Enums.CouponType;
+        businessId: string;
         active: boolean;
         startsAt: Date | null;
         expiresAt: Date | null;
+        code: string;
         value: import("generated/prisma/runtime/library").Decimal;
         minOrderAmount: import("generated/prisma/runtime/library").Decimal | null;
         maxDiscountAmount: import("generated/prisma/runtime/library").Decimal | null;

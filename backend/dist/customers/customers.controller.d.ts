@@ -8,15 +8,15 @@ export declare class CustomersController {
     private readonly customersService;
     constructor(customersService: CustomersService);
     create(user: AuthenticatedUser, dto: CreateCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        address: string | null;
+        businessId: string;
         birthday: Date | null;
+        address: string | null;
         notes: string | null;
         tags: string[];
         consentMarketing: boolean;
@@ -28,15 +28,15 @@ export declare class CustomersController {
         referralRewardedAt: Date | null;
     }>;
     findAll(query: QueryCustomersDto): import("generated/prisma/runtime/library").PrismaPromise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        address: string | null;
+        businessId: string;
         birthday: Date | null;
+        address: string | null;
         notes: string | null;
         tags: string[];
         consentMarketing: boolean;
@@ -51,9 +51,9 @@ export declare class CustomersController {
         privateFeedback: {
             message: string | null;
             id: string;
-            businessId: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             customerId: string | null;
             status: import("generated/prisma").$Enums.FeedbackStatus;
             stars: number;
@@ -63,8 +63,8 @@ export declare class CustomersController {
         }[];
         orders: ({
             items: {
-                name: string;
                 id: string;
+                name: string;
                 orderId: string;
                 productId: string | null;
                 qty: number;
@@ -73,14 +73,14 @@ export declare class CustomersController {
             }[];
         } & {
             id: string;
-            businessId: string;
             createdAt: Date;
             updatedAt: Date;
-            orderNo: number;
+            businessId: string;
             customerId: string | null;
+            status: import("generated/prisma").$Enums.OrderStatus;
+            orderNo: number;
             orderType: import("generated/prisma").$Enums.OrderType;
             tableNo: string | null;
-            status: import("generated/prisma").$Enums.OrderStatus;
             subtotal: import("generated/prisma/runtime/library").Decimal;
             tax: import("generated/prisma/runtime/library").Decimal;
             discount: import("generated/prisma/runtime/library").Decimal;
@@ -94,15 +94,15 @@ export declare class CustomersController {
             voucherAmountApplied: import("generated/prisma/runtime/library").Decimal | null;
         })[];
     } & {
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        address: string | null;
+        businessId: string;
         birthday: Date | null;
+        address: string | null;
         notes: string | null;
         tags: string[];
         consentMarketing: boolean;
@@ -114,15 +114,15 @@ export declare class CustomersController {
         referralRewardedAt: Date | null;
     }>;
     update(id: string, dto: UpdateCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        address: string | null;
+        businessId: string;
         birthday: Date | null;
+        address: string | null;
         notes: string | null;
         tags: string[];
         consentMarketing: boolean;
@@ -134,15 +134,15 @@ export declare class CustomersController {
         referralRewardedAt: Date | null;
     }>;
     erase(id: string, dto: EraseCustomerDto): Promise<{
-        name: string;
+        id: string;
         email: string | null;
         phone: string;
-        id: string;
-        businessId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        address: string | null;
+        businessId: string;
         birthday: Date | null;
+        address: string | null;
         notes: string | null;
         tags: string[];
         consentMarketing: boolean;
