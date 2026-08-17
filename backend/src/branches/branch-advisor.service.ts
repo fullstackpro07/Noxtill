@@ -41,7 +41,7 @@ export class BranchAdvisorService {
     const rows = await this.tenantPrisma.client.$queryRaw<DailyCloseRow[]>`
       SELECT close_date, orders_count, revenue, gross_profit
       FROM v_daily_close
-      WHERE business_id = ${businessId} AND close_date >= now() - interval '30 days'
+      WHERE business_id = ${businessId} AND close_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
       ORDER BY close_date ASC
     `;
 

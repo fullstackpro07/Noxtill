@@ -18,10 +18,13 @@ export interface SlotLockTx {
 
 /**
  * Serializes concurrent bookings/reschedules for the same staff-or-service + time slot with a
- * Postgres advisory transaction lock, then re-checks for a conflicting appointment inside the
+ * MySQL row lock (`SELECT ... FOR UPDATE` on a dedicated `slot_locks` row, upserted first via
+ * `INSERT ... ON DUPLICATE KEY UPDATE`), then re-checks for a conflicting appointment inside the
  * transaction — whichever caller grabs the lock first wins, the loser sees a real conflict on its
- * own re-check and throws a 409, never a duplicate booking. Callers must invoke this inside their
- * own `$transaction`.
+ * own re-check and throws a 409, never a duplicate booking. InnoDB holds the row lock until
+ * COMMIT/ROLLBACK, giving the same transaction-scoped mutex semantics Postgres's
+ * `pg_advisory_xact_lock` provided (see `SlotLock` in schema.prisma). Callers must invoke this
+ * inside their own `$transaction`.
  */
 export async function assertSlotAvailable(
   tx: SlotLockTx,
@@ -35,7 +38,8 @@ export async function assertSlotAvailable(
   },
 ): Promise<void> {
   const lockKey = `${params.businessId}:${params.staffId ?? params.serviceId}:${params.startsAt.toISOString()}`;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+  await tx.$executeRaw`INSERT INTO slot_locks (lock_key) VALUES (${lockKey}) ON DUPLICATE KEY UPDATE lock_key = lock_key`;
+  await tx.$executeRaw`SELECT lock_key FROM slot_locks WHERE lock_key = ${lockKey} FOR UPDATE`;
 
   const conflict = await tx.appointment.findFirst({
     where: {

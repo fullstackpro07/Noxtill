@@ -119,10 +119,13 @@ export class AppointmentsService {
       const customer = await this.tenantPrisma.client.customer.findUnique({
         where: { id: updated.customerId },
       });
-      if (customer && !customer.tags.includes('No-show')) {
+      // MySQL migration: `tags` is a JSON column now (Prisma's MySQL connector has no native
+      // array column type), hence the explicit `string[]` read.
+      const customerTags = (customer?.tags as string[] | null) ?? [];
+      if (customer && !customerTags.includes('No-show')) {
         await this.tenantPrisma.client.customer.update({
           where: { id: updated.customerId },
-          data: { tags: [...customer.tags, 'No-show'] },
+          data: { tags: [...customerTags, 'No-show'] },
         });
       }
       // Deposits (UPD-BE-019): forfeits any captured deposit tied to this appointment.
@@ -400,9 +403,9 @@ export class AppointmentsService {
     const rows = await this.tenantPrisma.client.$queryRaw<
       { month: string; total: bigint; no_shows: bigint }[]
     >`
-      SELECT to_char(date_trunc('month', starts_at), 'YYYY-MM') AS month,
+      SELECT DATE_FORMAT(starts_at, '%Y-%m') AS month,
              COUNT(*) AS total,
-             COUNT(*) FILTER (WHERE status = 'no_show') AS no_shows
+             SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) AS no_shows
       FROM appointments
       WHERE business_id = ${businessId} AND starts_at >= ${since}
         AND status IN ('completed', 'no_show')

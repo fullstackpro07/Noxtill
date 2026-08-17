@@ -71,9 +71,12 @@ export class CrmJobsProcessor extends WorkerHost {
         const shouldBeLapsed =
           !customer.lastVisitAt || customer.lastVisitAt < lapsedCutoff;
 
-        const newlyLapsed = shouldBeLapsed && !customer.tags.includes('Lapsed');
+        // MySQL migration: `tags` is a JSON column now (`Prisma.JsonValue`), not a native array —
+        // read it as `string[]` explicitly.
+        const currentTags = (customer.tags as string[] | null) ?? [];
+        const newlyLapsed = shouldBeLapsed && !currentTags.includes('Lapsed');
 
-        let tags = customer.tags;
+        let tags = currentTags;
         tags = shouldBeVip
           ? Array.from(new Set([...tags, 'VIP']))
           : tags.filter((t) => t !== 'VIP');
@@ -82,8 +85,8 @@ export class CrmJobsProcessor extends WorkerHost {
           : tags.filter((t) => t !== 'Lapsed');
 
         if (
-          tags.length !== customer.tags.length ||
-          tags.some((t, i) => t !== customer.tags[i])
+          tags.length !== currentTags.length ||
+          tags.some((t, i) => t !== currentTags[i])
         ) {
           await this.prisma.customer.update({
             where: { id: customer.id },

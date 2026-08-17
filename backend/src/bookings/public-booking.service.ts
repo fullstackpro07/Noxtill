@@ -15,8 +15,8 @@ const RESCHEDULE_TOKEN_BYTES = 16;
 
 /**
  * Public booking flow (BE-051/052/053/055) — no auth, resolved by business
- * slug. Concurrent bookings for the same slot are serialized with a
- * Postgres advisory transaction lock keyed on (staff-or-service, startsAt):
+ * slug. Concurrent bookings for the same slot are serialized with a MySQL
+ * row lock (see `booking-lock.util.ts`) keyed on (staff-or-service, startsAt):
  * whichever request grabs the lock first re-checks for a conflicting
  * appointment inside the transaction and wins; the loser sees a real
  * conflict on its own re-check and gets a 409, never a duplicate booking.

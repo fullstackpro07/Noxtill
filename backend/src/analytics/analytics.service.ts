@@ -28,7 +28,7 @@ interface CampaignRow {
   segment: string;
   sent_count: number;
   delivered: bigint;
-  read: bigint;
+  read_count: bigint;
   failed: bigint;
 }
 
@@ -178,9 +178,9 @@ export class AnalyticsService {
     const rows = await this.tenantPrisma.client.$queryRaw<CampaignRow[]>`
       SELECT
         c.id, c.segment, c.sent_count,
-        COUNT(*) FILTER (WHERE m.status = 'delivered') AS delivered,
-        COUNT(*) FILTER (WHERE m.status = 'read') AS read,
-        COUNT(*) FILTER (WHERE m.status = 'failed') AS failed
+        SUM(CASE WHEN m.status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+        SUM(CASE WHEN m.status = 'read' THEN 1 ELSE 0 END) AS read_count,
+        SUM(CASE WHEN m.status = 'failed' THEN 1 ELSE 0 END) AS failed
       FROM campaigns c
       LEFT JOIN messages m ON m.campaign_id = c.id
       WHERE c.business_id = ${businessId}
@@ -193,7 +193,7 @@ export class AnalyticsService {
       segment: r.segment,
       sent: r.sent_count,
       delivered: Number(r.delivered),
-      read: Number(r.read),
+      read: Number(r.read_count),
       failed: Number(r.failed),
     }));
   }

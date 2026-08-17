@@ -46,7 +46,7 @@ export class CreditService {
       balance: Number(row.balance),
       lastEntryAt: row.last_entry_at,
       daysOutstanding: row.days_outstanding,
-      optedOutOfReminders: row.opted_out,
+      optedOutOfReminders: Boolean(row.opted_out),
     }));
   }
 

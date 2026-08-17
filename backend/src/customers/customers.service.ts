@@ -40,18 +40,18 @@ export class CustomersService {
         notes: dto.notes,
         tags: dto.tags ?? [],
         consentMarketing: dto.consentMarketing ?? true,
-      } as Prisma.CustomerUncheckedCreateInput,
+      } as unknown as Prisma.CustomerUncheckedCreateInput,
     });
   }
 
   findAll(query: QueryCustomersDto) {
+    // MySQL migration: `tags` is a JSON array now (Prisma's MySQL connector has no native array
+    // column type), so the array-contains check uses the Json filter API instead of the old
+    // scalar-list `has` operator.
     const where: Prisma.CustomerWhereInput = {
-      tags: query.tag ? { has: query.tag } : undefined,
+      tags: query.tag ? { array_contains: [query.tag] } : undefined,
       OR: query.q
-        ? [
-            { name: { contains: query.q, mode: 'insensitive' } },
-            { phone: { contains: query.q } },
-          ]
+        ? [{ name: { contains: query.q } }, { phone: { contains: query.q } }]
         : undefined,
     };
 

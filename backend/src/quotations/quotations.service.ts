@@ -73,9 +73,12 @@ export class QuotationsService {
         Number(business.taxRate),
       );
 
-      const [{ next: orderNo }] = await tx.$queryRaw<{ next: number }[]>`
+      const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
         SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${businessId}
       `;
+      // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
+      // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
+      const orderNo = Number(orderNoRaw);
 
       const quotation = await tx.order.create({
         data: {
@@ -119,9 +122,12 @@ export class QuotationsService {
         throw new NotFoundException('Quotation not found');
       }
 
-      const [{ next: orderNo }] = await tx.$queryRaw<{ next: number }[]>`
+      const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
         SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${businessId}
       `;
+      // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
+      // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
+      const orderNo = Number(orderNoRaw);
 
       const order = await tx.order.create({
         data: {

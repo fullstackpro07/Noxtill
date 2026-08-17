@@ -91,14 +91,16 @@ export class ProfitService {
 
     const [hourlyRows, weekdayRows] = await Promise.all([
       this.tenantPrisma.client.$queryRaw<HourlyRow[]>`
-        SELECT EXTRACT(HOUR FROM created_at)::int AS hour, SUM(total) AS revenue
+        SELECT HOUR(created_at) AS hour, SUM(total) AS revenue
         FROM orders
         WHERE business_id = ${businessId} AND status = 'completed' AND is_quotation = false
         GROUP BY hour
         ORDER BY hour
       `,
+      // MySQL's DAYOFWEEK() returns 1=Sunday..7=Saturday; the -1 keeps the existing
+      // 0=Sunday..6=Saturday indexing that WEEKDAY_NAMES (and Postgres's old EXTRACT(DOW...)) used.
       this.tenantPrisma.client.$queryRaw<WeekdayRow[]>`
-        SELECT EXTRACT(DOW FROM created_at)::int AS dow, SUM(total) AS revenue
+        SELECT DAYOFWEEK(created_at) - 1 AS dow, SUM(total) AS revenue
         FROM orders
         WHERE business_id = ${businessId} AND status = 'completed' AND is_quotation = false
         GROUP BY dow

@@ -15,7 +15,10 @@ interface DebtorRow {
   days_outstanding: number;
 }
 
-const SHEET_COLUMNS: Record<ExportKind, { header: string; key: string; width: number }[]> = {
+const SHEET_COLUMNS: Record<
+  ExportKind,
+  { header: string; key: string; width: number }[]
+> = {
   sales: [
     { header: 'Order #', key: 'orderNo', width: 10 },
     { header: 'Date', key: 'date', width: 14 },
@@ -90,7 +93,10 @@ export class ExportsService {
     return { queued: true };
   }
 
-  async generateXlsx(businessId: string, kind: ExportKind): Promise<{ url: string }> {
+  async generateXlsx(
+    businessId: string,
+    kind: ExportKind,
+  ): Promise<{ url: string }> {
     const buffer = await this.buildXlsxBuffer(businessId, kind);
     const key = `exports/${businessId}/${kind}-${Date.now()}.xlsx`;
     const url = await this.s3.uploadAndSign(
@@ -155,15 +161,21 @@ export class ExportsService {
       name: c.name,
       phone: c.phone,
       email: c.email ?? '',
-      tags: c.tags.join(', '),
+      // MySQL migration: `tags` is a JSON column now (Prisma's MySQL connector has no native
+      // array column type), hence the explicit `string[]` read.
+      tags: ((c.tags as string[] | null) ?? []).join(', '),
       lifetimeSpend: Number(c.lifetimeSpend),
       visitCount: c.visitCount,
-      lastVisitAt: c.lastVisitAt ? c.lastVisitAt.toISOString().slice(0, 10) : '',
+      lastVisitAt: c.lastVisitAt
+        ? c.lastVisitAt.toISOString().slice(0, 10)
+        : '',
       optedOut: c.optedOut ? 'Yes' : 'No',
     }));
   }
 
-  private async fetchCreditRows(businessId: string): Promise<Record<string, unknown>[]> {
+  private async fetchCreditRows(
+    businessId: string,
+  ): Promise<Record<string, unknown>[]> {
     const rows = await this.tenantPrisma.client.$queryRaw<DebtorRow[]>`
       SELECT v.customer_id, c.name, c.phone, v.balance, v.last_entry_at, v.days_outstanding
       FROM v_credit_balances v
@@ -176,7 +188,9 @@ export class ExportsService {
       phone: r.phone,
       balance: Number(r.balance),
       daysOutstanding: r.days_outstanding,
-      lastEntryAt: r.last_entry_at ? new Date(r.last_entry_at).toISOString().slice(0, 10) : '',
+      lastEntryAt: r.last_entry_at
+        ? new Date(r.last_entry_at).toISOString().slice(0, 10)
+        : '',
     }));
   }
 

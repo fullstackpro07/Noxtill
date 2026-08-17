@@ -20,7 +20,7 @@ Current repo state at time of writing: `backend/` is a NestJS scaffold with empt
 
 ---
 
-## Phase 1 — Backend (NestJS + Prisma + PostgreSQL + BullMQ/Redis)
+## Phase 1 — Backend (NestJS + Prisma + MySQL + BullMQ/Redis)
 
 ### Milestone BE-M0 — Foundation & Infra
 *Nothing else can be trusted until this milestone is done correctly.*
@@ -152,7 +152,7 @@ Current repo state at time of writing: `backend/` is a NestJS scaffold with empt
 | BE-067 | Widget registry + `GET /widgets/registry`, `GET /widgets/:key` (25-30 widgets, 60s cache) | BE-001 | Each widget independently fetchable and cacheable |
 | BE-068 | `GET/PUT /dashboard/config` + `GET /dashboard/today` aggregate | BE-067 | Config JSON round-trips; aggregate hydrates first paint in one call |
 | BE-069 | `GET /business-types?q` + `POST /business-types/ai-map` (Claude) | BE-075 | AI-mapped type persists with `ai_generated=true` |
-| BE-070 | `GET /search?q` (pg_trgm, tenant-scoped, grouped, 150ms budget) | BE-002,003 | Query across customers/orders/products/bookings/reviews/credit/expenses returns grouped results under budget |
+| BE-070 | `GET /search?q` (MySQL FULLTEXT, tenant-scoped, grouped, 150ms budget) | BE-002,003 | Query across customers/orders/products/bookings/reviews/credit/expenses returns grouped results under budget |
 | BE-071 | `GET /analytics/*` (kpis, revenue-series, cohorts, campaigns, staff, channels) | BE-025,061 | Cohort retention numbers match seed-data expectation |
 | BE-072 | `POST /events` instrumentation + `GET /admin/*` platform endpoints | BE-001 | Admin-only guard enforced; events recorded for activation funnel |
 

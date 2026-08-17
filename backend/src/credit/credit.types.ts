@@ -5,7 +5,10 @@ export interface DebtorRow {
   balance: string;
   last_entry_at: Date;
   days_outstanding: number;
-  opted_out: boolean;
+  // MySQL migration: a raw SQL query's Boolean column comes back as a JS `number` (0/1, MySQL's
+  // native TINYINT(1) representation) — mysql2 doesn't coerce it to a real boolean the way
+  // Prisma's typed model API does. Callers must wrap this in `Boolean(...)`.
+  opted_out: number;
 }
 
 export interface LedgerRow {

@@ -31,6 +31,8 @@ export class CapabilitiesService {
       return SYSTEM_ROLE_CAPABILITIES[businessUser.role];
     }
 
-    return customRole.capabilities as Capability[];
+    // MySQL migration: `capabilities` is a JSON column now (Prisma's MySQL connector has no
+    // native array column type), hence the double cast through `unknown`.
+    return customRole.capabilities as unknown as Capability[];
   }
 }

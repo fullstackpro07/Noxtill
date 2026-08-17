@@ -22,16 +22,19 @@ export class QueueService {
 
   async join(businessId: string, dto: JoinQueueDto) {
     const [{ next }] = await this.tenantPrisma.client.$queryRaw<
-      { next: number }[]
+      { next: bigint }[]
     >`
       SELECT COALESCE(MAX(number), 0) + 1 AS next FROM queue_tokens
       WHERE business_id = ${businessId} AND created_at >= ${todayStart()}
     `;
+    // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
+    // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
+    const nextNumber = Number(next);
 
     return this.tenantPrisma.client.queueToken.create({
       data: {
         businessId,
-        number: next,
+        number: nextNumber,
         customerId: dto.customerId,
         customerName: dto.customerName,
         serviceId: dto.serviceId,

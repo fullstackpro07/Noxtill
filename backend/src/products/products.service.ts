@@ -50,10 +50,7 @@ export class ProductsService {
       category: query.category,
       active: query.active,
       OR: query.q
-        ? [
-            { name: { contains: query.q, mode: 'insensitive' } },
-            { sku: { contains: query.q, mode: 'insensitive' } },
-          ]
+        ? [{ name: { contains: query.q } }, { sku: { contains: query.q } }]
         : undefined,
     };
 

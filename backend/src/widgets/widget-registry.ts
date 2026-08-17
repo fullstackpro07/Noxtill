@@ -415,7 +415,7 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     category: 'sales',
     async resolve({ tenantPrisma }) {
       const count = await tenantPrisma.client.customer.count({
-        where: { tags: { has: 'Lapsed' } },
+        where: { tags: { array_contains: ['Lapsed'] } },
       });
       return { count };
     },
@@ -426,7 +426,7 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     category: 'sales',
     async resolve({ tenantPrisma }) {
       const count = await tenantPrisma.client.customer.count({
-        where: { tags: { has: 'VIP' } },
+        where: { tags: { array_contains: ['VIP'] } },
       });
       return { count };
     },

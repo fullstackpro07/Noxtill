@@ -18,14 +18,17 @@ export class SegmentsService {
     return { key, count: members.length, members };
   }
 
+  // MySQL migration: `tags` is a JSON array now (Prisma's MySQL connector has no native array
+  // column type), so every tag-membership check uses the Json filter API's `array_contains`
+  // instead of the old scalar-list `has` operator.
   private whereForKey(key: string): Prisma.CustomerWhereInput {
     switch (key) {
       case 'all':
         return {};
       case 'vip':
-        return { tags: { has: 'VIP' } };
+        return { tags: { array_contains: ['VIP'] } };
       case 'lapsed':
-        return { tags: { has: 'Lapsed' } };
+        return { tags: { array_contains: ['Lapsed'] } };
       case 'new': {
         const since = new Date(
           Date.now() - NEW_CUSTOMER_WINDOW_DAYS * 24 * 60 * 60 * 1000,
@@ -33,7 +36,7 @@ export class SegmentsService {
         return { createdAt: { gte: since } };
       }
       default:
-        return { tags: { has: key } };
+        return { tags: { array_contains: [key] } };
     }
   }
 }

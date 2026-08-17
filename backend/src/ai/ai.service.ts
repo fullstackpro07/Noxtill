@@ -38,12 +38,12 @@ export class AiService {
     const history = await this.tenantPrisma.client.$queryRaw<
       MonthlyHistoryRow[]
     >`
-      SELECT to_char(o.created_at, 'YYYY-MM') AS month, SUM(oi.qty) AS units, SUM(oi.price * oi.qty) AS revenue
+      SELECT DATE_FORMAT(o.created_at, '%Y-%m') AS month, SUM(oi.qty) AS units, SUM(oi.price * oi.qty) AS revenue
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
       WHERE oi.product_id = ${dto.productId}
         AND o.status = 'completed' AND o.is_quotation = false
-        AND o.created_at >= now() - interval '6 months'
+        AND o.created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
       GROUP BY month
       ORDER BY month
     `;

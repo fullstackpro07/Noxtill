@@ -54,7 +54,7 @@ export class NightlyCloseService {
     ] = await Promise.all([
       this.prisma.$queryRaw<
         DailyCloseRow[]
-      >`SELECT * FROM v_daily_close WHERE business_id = ${businessId} AND close_date = ${dateStr}::date`,
+      >`SELECT * FROM v_daily_close WHERE business_id = ${businessId} AND close_date = DATE(${dateStr})`,
       this.prisma.appointment.count({
         where: {
           businessId,

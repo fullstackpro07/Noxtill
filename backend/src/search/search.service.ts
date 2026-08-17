@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
+import { buildFulltextBooleanQuery } from '../common/utils/mysql-fulltext.util';
 
 const RESULTS_PER_GROUP = 5;
-const TRIGRAM_SIMILARITY_THRESHOLD = 0.2;
 
 interface CustomerRow {
   id: string;
@@ -32,10 +32,16 @@ interface CreditRow {
 }
 
 /**
- * Cross-entity search (BE-070). Every group runs as its own trigram-indexed
- * query in parallel (Promise.all) rather than one giant UNION — that's what
- * keeps this fast even as each entity table grows independently, well
- * within the 150ms budget for typical tenant-sized data.
+ * Cross-entity search (BE-070). Every group runs as its own FULLTEXT-indexed query in parallel
+ * (Promise.all) rather than one giant UNION — that's what keeps this fast even as each entity
+ * table grows independently, well within the 150ms budget for typical tenant-sized data.
+ *
+ * MySQL migration: was built on Postgres's `pg_trgm` `similarity()` (fuzzy/typo-tolerant), which
+ * has no MySQL equivalent. Rewritten on MySQL's native `MATCH() AGAINST() IN BOOLEAN MODE` against
+ * the `@@fulltext` indexes on `Customer.name`/`Product.name`/`HelpArticle` — real relevance-ranked
+ * search, not a downgrade to plain substring matching, but a disclosed behavior change: boolean
+ * mode is not typo-tolerant the way trigram similarity was, and (per `innodb_ft_min_token_size`
+ * in local MySQL config) ignores tokens shorter than the configured minimum.
  */
 @Injectable()
 export class SearchService {
@@ -47,19 +53,31 @@ export class SearchService {
   async search(query: string) {
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
     const client = this.tenantPrisma.client;
+    const booleanQuery = buildFulltextBooleanQuery(query);
+
+    if (!booleanQuery) {
+      return {
+        customers: [],
+        products: [],
+        orders: [],
+        appointments: [],
+        credit: [],
+      };
+    }
 
     const [customers, products, orders, appointments, credit] =
       await Promise.all([
         client.$queryRaw<CustomerRow[]>`
         SELECT id, name, phone FROM customers
-        WHERE business_id = ${businessId} AND (similarity(name, ${query}) > ${TRIGRAM_SIMILARITY_THRESHOLD} OR phone ILIKE ${'%' + query + '%'})
-        ORDER BY similarity(name, ${query}) DESC
+        WHERE business_id = ${businessId}
+          AND (MATCH(name) AGAINST(${booleanQuery} IN BOOLEAN MODE) OR phone LIKE ${'%' + query + '%'})
+        ORDER BY MATCH(name) AGAINST(${booleanQuery} IN BOOLEAN MODE) DESC
         LIMIT ${RESULTS_PER_GROUP}
       `,
         client.$queryRaw<ProductRow[]>`
         SELECT id, name FROM products
-        WHERE business_id = ${businessId} AND similarity(name, ${query}) > ${TRIGRAM_SIMILARITY_THRESHOLD}
-        ORDER BY similarity(name, ${query}) DESC
+        WHERE business_id = ${businessId} AND MATCH(name) AGAINST(${booleanQuery} IN BOOLEAN MODE)
+        ORDER BY MATCH(name) AGAINST(${booleanQuery} IN BOOLEAN MODE) DESC
         LIMIT ${RESULTS_PER_GROUP}
       `,
         /^\d+$/.test(query)
@@ -74,7 +92,8 @@ export class SearchService {
         FROM appointments a
         JOIN products p ON p.id = a.service_id
         JOIN customers c ON c.id = a.customer_id
-        WHERE a.business_id = ${businessId} AND (similarity(c.name, ${query}) > ${TRIGRAM_SIMILARITY_THRESHOLD} OR similarity(p.name, ${query}) > ${TRIGRAM_SIMILARITY_THRESHOLD})
+        WHERE a.business_id = ${businessId}
+          AND (MATCH(c.name) AGAINST(${booleanQuery} IN BOOLEAN MODE) OR MATCH(p.name) AGAINST(${booleanQuery} IN BOOLEAN MODE))
         ORDER BY a.starts_at DESC
         LIMIT ${RESULTS_PER_GROUP}
       `,
@@ -82,8 +101,8 @@ export class SearchService {
         SELECT v.customer_id, c.name, v.balance
         FROM v_credit_balances v
         JOIN customers c ON c.id = v.customer_id
-        WHERE v.business_id = ${businessId} AND v.balance > 0 AND similarity(c.name, ${query}) > ${TRIGRAM_SIMILARITY_THRESHOLD}
-        ORDER BY similarity(c.name, ${query}) DESC
+        WHERE v.business_id = ${businessId} AND v.balance > 0 AND MATCH(c.name) AGAINST(${booleanQuery} IN BOOLEAN MODE)
+        ORDER BY MATCH(c.name) AGAINST(${booleanQuery} IN BOOLEAN MODE) DESC
         LIMIT ${RESULTS_PER_GROUP}
       `,
       ]);

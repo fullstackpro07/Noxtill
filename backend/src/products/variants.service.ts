@@ -1,9 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { CreateVariantSetDto } from './dto/create-variant-set.dto';
+import {
+  CreateVariantSetDto,
+  VariantOptionInputDto,
+} from './dto/create-variant-set.dto';
 import { UpdateVariantSetDto } from './dto/update-variant-set.dto';
 import { ApplyVariantSetDto } from './dto/apply-variant-set.dto';
 import { Prisma } from '../../generated/prisma';
+
+/** Stamps each option with its array position as `sortOrder` — see `VariantOption.sortOrder`'s doc comment for why this is needed on MySQL. */
+function withSortOrder(options: VariantOptionInputDto[]) {
+  return options.map((option, index) => ({ ...option, sortOrder: index }));
+}
 
 interface VariationOption {
   name: string;
@@ -29,23 +37,23 @@ export class VariantsService {
     return this.tenantPrisma.client.variantSet.create({
       data: {
         name: dto.name,
-        options: { create: dto.options },
+        options: { create: withSortOrder(dto.options) },
       } as Prisma.VariantSetUncheckedCreateInput,
-      include: { options: true },
+      include: { options: { orderBy: { sortOrder: 'asc' } } },
     });
   }
 
   findAll() {
     return this.tenantPrisma.client.variantSet.findMany({
       orderBy: { name: 'asc' },
-      include: { options: true },
+      include: { options: { orderBy: { sortOrder: 'asc' } } },
     });
   }
 
   async findOne(id: string) {
     const set = await this.tenantPrisma.client.variantSet.findUnique({
       where: { id },
-      include: { options: true },
+      include: { options: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!set) {
       throw new NotFoundException('Variant set not found');
@@ -63,9 +71,11 @@ export class VariantsService {
         where: { id },
         data: {
           name: dto.name,
-          options: dto.options ? { create: dto.options } : undefined,
+          options: dto.options
+            ? { create: withSortOrder(dto.options) }
+            : undefined,
         },
-        include: { options: true },
+        include: { options: { orderBy: { sortOrder: 'asc' } } },
       });
     });
   }

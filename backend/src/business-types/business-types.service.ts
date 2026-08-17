@@ -33,7 +33,7 @@ export class BusinessTypesService {
       return this.prisma.businessType.findMany({ orderBy: { label: 'asc' } });
     }
     return this.prisma.businessType.findMany({
-      where: { label: { contains: query, mode: 'insensitive' } },
+      where: { label: { contains: query } },
       orderBy: { label: 'asc' },
     });
   }

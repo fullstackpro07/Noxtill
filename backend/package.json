@@ -45,6 +45,7 @@
     "libphonenumber-js": "^1.13.9",
     "mammoth": "^1.12.0",
     "multer": "^2.2.0",
+    "mysql2": "^3.23.3",
     "nestjs-cls": "^6.2.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

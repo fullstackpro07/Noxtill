@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AskHelpDto } from './help.dto';
+import { buildFulltextBooleanQuery } from '../common/utils/mysql-fulltext.util';
 
 const TOP_K = 3;
-const RELEVANCE_THRESHOLD = 0.3;
 export const HELP_NOT_FOUND_MESSAGE =
   "I couldn't find anything about that in the help docs — try rephrasing, or contact support.";
 
@@ -17,24 +17,35 @@ export interface RetrievedRow {
 }
 
 /**
- * Shared retrieval primitive (BE-073) reused by both `/help/ask` and the
- * assistant's `search_help_docs` tool (BE-074) — trigram hybrid over
- * `help_articles` (title similarity weighted higher than body similarity)
- * rather than embeddings, since the corpus is small enough that a vector
- * store would be pure overhead.
+ * Shared retrieval primitive (BE-073) reused by both `/help/ask` and the assistant's
+ * `search_help_docs` tool (BE-074) — MySQL native full-text search over `help_articles` (title
+ * match weighted 2x over body match) rather than embeddings, since the corpus is small enough
+ * that a vector store would be pure overhead.
+ *
+ * MySQL migration: was Postgres `pg_trgm` `similarity()` (fuzzy/typo-tolerant, score in [0,1]),
+ * with results filtered by a tuned `RELEVANCE_THRESHOLD`. MySQL's `MATCH...AGAINST` boolean-mode
+ * relevance score has no fixed range, so there's no equivalent fixed threshold to port — instead,
+ * `IN BOOLEAN MODE` with a required (`+`) prefix-wildcard (`*`) term per word is the filter itself
+ * (only genuinely matching rows are returned at all), and `ORDER BY score DESC LIMIT` picks the
+ * best of those.
  */
 export async function retrieveHelpPassages(
   prisma: PrismaService,
   question: string,
 ): Promise<RetrievedRow[]> {
-  const rows = await prisma.$queryRaw<RetrievedRow[]>`
+  // requireAll=false: a natural-language question's words are mostly conversational filler that
+  // won't appear verbatim in the target article — see buildFulltextBooleanQuery's doc comment.
+  const booleanQuery = buildFulltextBooleanQuery(question, false);
+  if (!booleanQuery) return [];
+
+  return prisma.$queryRaw<RetrievedRow[]>`
     SELECT slug, title, url, body,
-           (similarity(title, ${question}) * 2 + similarity(body, ${question})) AS score
+           (MATCH(title) AGAINST(${booleanQuery} IN BOOLEAN MODE) * 2 + MATCH(body) AGAINST(${booleanQuery} IN BOOLEAN MODE)) AS score
     FROM help_articles
+    WHERE MATCH(title) AGAINST(${booleanQuery} IN BOOLEAN MODE) OR MATCH(body) AGAINST(${booleanQuery} IN BOOLEAN MODE)
     ORDER BY score DESC
     LIMIT ${TOP_K}
   `;
-  return rows.filter((r) => Number(r.score) > RELEVANCE_THRESHOLD);
 }
 
 /**

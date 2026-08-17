@@ -16,7 +16,7 @@ to. A production deploy must replace every placeholder row before going live.
 
 | Var | Status here | Notes |
 |---|---|---|
-| `DATABASE_URL` | Populated (local Postgres) | Production: managed Postgres 14+ connection string. |
+| `DATABASE_URL` | Populated (local MySQL) | Production: managed MySQL 8.0+ connection string. |
 | `JWT_SECRET` | Populated (real 32-byte random) | Regenerated this ticket; was an 11-char dev placeholder. Boot-time `validateEnv()` in `main.ts` refuses to start in `NODE_ENV=production` if this is missing, short, or a known placeholder. |
 | `JWT_REFRESH_SECRET` | Populated (real 32-byte random) | Same validation as above. |
 | `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` | Populated (`15m` / `7d`) | No change needed for production. |
@@ -93,22 +93,22 @@ to. A production deploy must replace every placeholder row before going live.
 | Helmet / CORS / HTTPS | **Verified clean, pre-existing** | `main.ts` already applies helmet and a CORS allowlist (`CORS_ALLOWLIST` env var); HTTPS termination is an infra/hosting-platform concern, not application code — see §3 below. |
 | No-PII logging | **Fixed** | Four log lines (`whatsapp.service.ts`, `sms.service.ts`, `email.service.ts`, `email-campaigns.service.ts`) printed raw customer phone numbers/emails at debug/warn level. All four now log only `providerRef`/status, matching the already-correct pattern in `message-worker.processor.ts`. |
 | Rate limiting / brute-force lockout | **Verified clean, pre-existing** | `BusinessThrottlerGuard` globally applied (keyed by businessId); `User.failedLoginAttempts`/`lockedUntil` actively enforced in `auth.service.ts`. |
-| Backup + restore drill in CI | **Built** | `backend/scripts/backup-restore-drill.sh` (real `pg_dump -Fc` / `pg_restore`, verified via a deterministic canary-row count, not just exit codes) wired as a CI job step in `.github/workflows/ci.yml` against the CI Postgres service container. Not locally dry-run in this dev environment — no `pg_dump`/`psql`/`pg_restore` client tools are on this machine's `PATH`. |
-| CI pipeline | **Built** | `.github/workflows/ci.yml` — Postgres 16 + Redis 7 service containers, lint + `tsc --noEmit` + unit tests + the new real e2e suite (backend), lint + `tsc --noEmit` + build (frontend). Not yet pushed/triggered on the real remote — see §5. |
-| Real e2e regression suite | **Built and green** | `backend/test/journey.e2e-spec.ts` drives the real signup→product→sale→nightly-close→review-request journey against the real (local) Postgres via a full `AppModule` boot + `supertest`. Passes locally (`2 suites / 6 tests`, ~7s). |
+| Backup + restore drill in CI | **Built** | `backend/scripts/backup-restore-drill.sh` (real `mysqldump` / `mysql` restore, verified via a deterministic canary-row count, not just exit codes) wired as a CI job step in `.github/workflows/ci.yml` against the CI MySQL service container. Not locally dry-run in this dev environment — no `mysqldump`/`mysql` client tools are on this machine's `PATH`. |
+| CI pipeline | **Built** | `.github/workflows/ci.yml` — MySQL 8.0 + Redis 7 service containers, lint + `tsc --noEmit` + unit tests + the new real e2e suite (backend), lint + `tsc --noEmit` + build (frontend). Not yet pushed/triggered on the real remote — see §5. |
+| Real e2e regression suite | **Built and green** | `backend/test/journey.e2e-spec.ts` drives the real signup→product→sale→nightly-close→review-request journey against the real (local) MySQL via a full `AppModule` boot + `supertest`. Passes locally (`2 suites / 6 tests`, ~7s). |
 
 ## 3. Infrastructure requirements
 
-- **Postgres** 14+ (schema uses standard Prisma-generated DDL, trigram indexes via `pg_trgm` — confirm the extension is enabled on the target instance).
+- **MySQL** 8.0+ (schema uses standard Prisma-generated DDL; native `FULLTEXT` indexes power search/customer lookup — see `docs/DATABASE.md`; confirm `innodb_ft_min_token_size` is lowered from the 4-char default on the target instance so short product codes/names stay searchable).
 - **Redis** 5+ (BullMQ requires ≥5.0.0 — confirmed live this ticket: the old bundled Windows Redis port on this dev machine reports as v3.0.504 and is incompatible; a real modern Redis is required, not just "any Redis binary").
 - **S3-compatible object storage** bucket, with a real access key pair.
-- **CI runner** with Postgres 16 + Redis 7 service-container support (GitHub Actions, as configured in `.github/workflows/ci.yml`).
+- **CI runner** with MySQL + Redis 7 service-container support (GitHub Actions, as configured in `.github/workflows/ci.yml`).
 - **TLS/HTTPS termination** at the load balancer / reverse proxy / hosting platform — the application itself does not terminate TLS.
 - **A registered OAuth app per provider** actually being launched with (Google, Meta, TikTok) — each is a real account-creation step with that provider, not a deploy-time config value alone.
 
 ## 4. Deploy steps
 
-1. Provision Postgres, Redis, and an S3 bucket; populate every env var in §1 with real production values (never reuse this dev environment's self-issued secrets — `INTEGRATIONS_TOKEN_KEY`, `INTEGRATIONS_STATE_SECRET`, `EMAIL_UNSUBSCRIBE_SECRET`, `JWT_SECRET`, `JWT_REFRESH_SECRET` all need fresh values).
+1. Provision MySQL, Redis, and an S3 bucket; populate every env var in §1 with real production values (never reuse this dev environment's self-issued secrets — `INTEGRATIONS_TOKEN_KEY`, `INTEGRATIONS_STATE_SECRET`, `EMAIL_UNSUBSCRIBE_SECRET`, `JWT_SECRET`, `JWT_REFRESH_SECRET` all need fresh values).
 2. Set `NODE_ENV=production` — this activates `validateEnv()`'s hard-fail behavior for weak JWT secrets at boot.
 3. Run `npx prisma migrate deploy` against the production database.
 4. Deploy the backend; confirm it boots (check logs for `validateEnv()` warnings/failures) and `GET /api/v1/` returns `200 "Hello World!"` as a basic liveness check.
@@ -126,7 +126,7 @@ to. A production deploy must replace every placeholder row before going live.
 ## 6. Known gaps at time of writing (disclosed, not silently carried forward)
 
 - No Redis is reachable in this local dev environment, so BullMQ-dependent live checks (message sends completing, campaign fan-out, exports) were verified up to the point of enqueueing — real code, real DB writes, blocked only by the missing local Redis. The real e2e suite mocks the queue call specifically to prove the rest of the journey end-to-end despite this.
-- The CI pipeline and backup/restore drill are built and believed correct (standard, well-established `pg_dump`/`pg_restore`/GitHub Actions service-container patterns) but have not yet been observed running green, since that requires pushing `.github/workflows/ci.yml` to the real `origin` remote to trigger a real Actions run — a shared-visibility action requiring separate user confirmation, not bundled into this ticket's own completion.
+- The CI pipeline and backup/restore drill are built and believed correct (standard, well-established `mysqldump`/`mysql`/GitHub Actions service-container patterns) but have not yet been observed running green, since that requires pushing `.github/workflows/ci.yml` to the real `origin` remote to trigger a real Actions run — a shared-visibility action requiring separate user confirmation, not bundled into this ticket's own completion.
 - 5 of the 6 Module 18 integration connectors (everything except Email) have real, correctly-shaped OAuth flow code but cannot complete a live connection in any environment without a real registered developer app with Google/Meta/TikTok — an account-creation step outside this project's code, not a code gap.
 
 
@@ -155,10 +155,10 @@ Only Email is fully deep and live-ready today — it just needs the Postmark key
 
 3. Infrastructure to provision
  Managed Redis, version ≥5.0 — confirmed this week the wrong version silently breaks BullMQ; don't reuse an old/legacy Redis instance
- Managed Postgres 14+ with the pg_trgm extension enabled (used for search/customer lookup)
+ Managed MySQL 8.0+ with `innodb_ft_min_token_size` lowered from its 4-char default (used by the native FULLTEXT search/customer lookup — see `docs/DATABASE.md`)
  S3-compatible object storage bucket
  TLS/HTTPS termination at the load balancer or hosting platform (the app itself doesn't terminate TLS)
- CI runner capable of Postgres + Redis service containers (GitHub Actions config is already written — see below)
+ CI runner capable of MySQL + Redis service containers (GitHub Actions config is already written — see below)
 4. Secrets to generate fresh for production (never reuse dev values)
  JWT_SECRET / JWT_REFRESH_SECRET — production boot will refuse to start if these are weak or placeholder, by design
  INTEGRATIONS_TOKEN_KEY — encrypts stored OAuth tokens at rest
@@ -170,7 +170,7 @@ Only Email is fully deep and live-ready today — it just needs the Postmark key
  EMAIL_FROM_ADDRESS → a real verified sending domain
 6. Actions still to take
  Push .github/workflows/ci.yml to trigger a real CI run — built and believed correct, but has never actually executed (you held off on this last time, still pending)
- Run the backup/restore drill for real — the script is written but has never dry-run anywhere (no pg_dump/psql on this dev machine); it'll run for real the moment CI executes
+ Run the backup/restore drill for real — the script is written but has never dry-run anywhere (no mysqldump/mysql client on this dev machine); it'll run for real the moment CI executes
  Smoke-test the core journey on the live deploy: signup → product → sale → nightly close → review request (same journey verified locally this week)
  Decide whether/when to build the deferred deep features for the 5 non-Email connectors (GMB posts, Google Ads campaign creation, Merchant feed sync, Meta creative rendering, TikTok slideshow generation) — their screens exist but stay mocked until each OAuth app is real
 Not blocking launch, but worth knowing

@@ -58,7 +58,7 @@ export class RollupService {
              SUM(revenue) AS revenue,
              SUM(gross_profit) AS gross_profit
       FROM v_daily_close
-      WHERE business_id IN (${Prisma.join(ids)}) AND close_date >= ${since.toISOString().slice(0, 10)}::date
+      WHERE business_id IN (${Prisma.join(ids)}) AND close_date >= DATE(${since.toISOString().slice(0, 10)})
       GROUP BY business_id
     `;
     const byBusiness = new Map(rows.map((r) => [r.business_id, r]));
@@ -107,12 +107,12 @@ export class RollupService {
 
     const rows = await this.prisma.$queryRaw<WeeklyAgg[]>`
       SELECT business_id,
-             date_trunc('week', close_date) AS week_start,
+             DATE_SUB(close_date, INTERVAL WEEKDAY(close_date) DAY) AS week_start,
              SUM(orders_count) AS orders_count,
              SUM(revenue) AS revenue,
              SUM(gross_profit) AS gross_profit
       FROM v_daily_close
-      WHERE business_id IN (${Prisma.join(ids)}) AND close_date >= ${since.toISOString().slice(0, 10)}::date
+      WHERE business_id IN (${Prisma.join(ids)}) AND close_date >= DATE(${since.toISOString().slice(0, 10)})
       GROUP BY business_id, week_start
       ORDER BY week_start ASC
     `;
