@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
@@ -37,28 +36,9 @@ function validateEnv(): void {
   }
 }
 
-/**
- * Hostinger git deploys run `npm run build` in a fresh version directory. Putting
- * `prisma migrate deploy` in that script made every deploy authenticate against MySQL
- * at compile time (P1000 when the panel password was stale) and made people edit
- * `.env` inside `hbuilds/versions/...`, which is wiped on the next git build.
- * Apply pending migrations at process start instead, when the Node.js panel env is live.
- */
-function applyPendingMigrations(): void {
-  if (process.env.PRISMA_MIGRATE_ON_BOOT === 'false') return;
-  const onHostinger = process.cwd().includes('hbuilds');
-  const shouldMigrate =
-    onHostinger ||
-    process.env.NODE_ENV === 'production' ||
-    process.env.PRISMA_MIGRATE_ON_BOOT === 'true';
-  if (!shouldMigrate) return;
-  execSync('npx prisma migrate deploy', { stdio: 'inherit', env: process.env });
-}
-
 async function bootstrap() {
   resolveDatabaseUrl();
   validateEnv();
-  applyPendingMigrations();
 
   // rawBody is needed to verify webhook signatures (Meta/Stripe HMAC) against the exact bytes sent.
   const app = await NestFactory.create(AppModule, { rawBody: true });
