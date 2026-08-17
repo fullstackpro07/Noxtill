@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SYSTEM_ROLE_CAPABILITIES, Capability } from './capabilities.constants';
-import { Role } from '../../../generated/prisma';
+import { Role } from '@prisma/client';
 
 /**
  * Resolves a `BusinessUser`'s effective capability set (UPD-BE-035) — called at login/signup

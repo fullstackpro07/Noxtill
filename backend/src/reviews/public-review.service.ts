@@ -5,7 +5,7 @@ import { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import { generateReviewToken } from './review-token.util';
-import { ReviewRoute, Role } from '../../generated/prisma';
+import { ReviewRoute, Role } from '@prisma/client';
 
 const TOKEN_EXPIRY_DAYS = 30;
 /** Defense-in-depth against a distributed (multi-IP) abuser — the per-IP throttle on the mint endpoint can't catch this alone. */

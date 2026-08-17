@@ -7,7 +7,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
 import { CUSTOMER_ERROR_CODES } from './customers.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /** Customers CRUD, search, and GDPR erasure (BE-040). */
 @Injectable()

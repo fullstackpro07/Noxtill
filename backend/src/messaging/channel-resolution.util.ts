@@ -1,4 +1,4 @@
-import { MessageChannel } from '../../generated/prisma';
+import { MessageChannel } from '@prisma/client';
 
 export interface ContactInfo {
   phone?: string | null;

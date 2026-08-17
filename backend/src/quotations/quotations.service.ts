@@ -4,7 +4,7 @@ import { AppException } from '../common/filters/app.exception';
 import { computeOrderTotals } from '../orders/order-totals.util';
 import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
-import { OrderStatus } from '../../generated/prisma';
+import { OrderStatus } from '@prisma/client';
 
 /**
  * Quotations (BE-028): same Order/OrderItem tables as sales (isQuotation=true,

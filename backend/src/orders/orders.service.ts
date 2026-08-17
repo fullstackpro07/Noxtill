@@ -20,7 +20,7 @@ import {
   ORDER_STATUS_TRANSITIONS,
 } from './orders.constants';
 import { computeOrderTotals } from './order-totals.util';
-import { OrderStatus, Prisma, ProductKind } from '../../generated/prisma';
+import { OrderStatus, Prisma, ProductKind } from '@prisma/client';
 
 /**
  * Narrow shape of the transaction client actually used by `resolveCustomerId` — the tenant-scoped

@@ -13,7 +13,7 @@ import {
   MARKETING_QUIET_DAYS,
   SALES_NOTABLE_DELTA_PERCENT,
 } from './dashboard.constants';
-import { AiInsightCategory } from '../../generated/prisma';
+import { AiInsightCategory } from '@prisma/client';
 
 interface CategoryFact {
   category: AiInsightCategory;

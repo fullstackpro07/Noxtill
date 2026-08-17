@@ -1,5 +1,5 @@
 import { ORDER_STATUS_TRANSITIONS } from './orders.constants';
-import { OrderStatus } from '../../generated/prisma';
+import { OrderStatus } from '@prisma/client';
 
 describe('ORDER_STATUS_TRANSITIONS (BE-026 flow guard)', () => {
   it('allows the standard forward flow', () => {

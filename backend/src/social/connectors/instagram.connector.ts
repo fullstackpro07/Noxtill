@@ -14,7 +14,7 @@ import {
   SocialPublishPayload,
   SocialPublishResult,
 } from './social-connector.interface';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 const GRAPH = 'https://graph.facebook.com/v19.0';
 

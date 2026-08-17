@@ -8,7 +8,7 @@ import { CommissionsService } from '../staff/commissions.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { OrderStatus, Role } from '../../generated/prisma';
+import { OrderStatus, Role } from '@prisma/client';
 import {
   ReportKind,
   REPORT_LABELS,

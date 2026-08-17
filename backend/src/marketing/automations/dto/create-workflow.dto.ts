@@ -5,7 +5,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import { WorkflowTriggerKey } from '../../../../generated/prisma';
+import { WorkflowTriggerKey } from '@prisma/client';
 
 const TRIGGER_KEYS = Object.values(WorkflowTriggerKey);
 

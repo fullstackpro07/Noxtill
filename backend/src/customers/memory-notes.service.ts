@@ -9,7 +9,7 @@ import {
   MemoryNoteSubjectType,
   MEMORY_NOTE_ERROR_CODES,
 } from './memory-notes.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /**
  * Business Memory notes (UPD-BE-026) — polymorphic, multi-row, timestamped notes attached to a

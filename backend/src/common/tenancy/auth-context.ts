@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { Role } from '../../../generated/prisma';
+import { Role } from '@prisma/client';
 import type { Capability } from '../capabilities/capabilities.constants';
 
 /** Shape of `request.user` once JwtAuthGuard has verified the access token. */

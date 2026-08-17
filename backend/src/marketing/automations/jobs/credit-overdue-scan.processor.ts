@@ -6,7 +6,7 @@ import { CREDIT_OVERDUE_SCAN_QUEUE } from '../workflows.constants';
 import {
   ActivityEventType,
   InstallmentStatus,
-} from '../../../../generated/prisma';
+} from '@prisma/client';
 
 /**
  * Hourly overdue-installment scan — the real detector behind the `credit_overdue` automation

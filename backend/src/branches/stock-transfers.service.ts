@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
 import { STOCK_TRANSFER_ERROR_CODES } from './stock-transfers.constants';
-import { StockMovementKind, StockTransferStatus } from '../../generated/prisma';
+import { StockMovementKind, StockTransferStatus } from '@prisma/client';
 
 /**
  * Narrow shape actually used by `resolveDestProduct` — satisfied structurally by both the raw

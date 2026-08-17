@@ -8,7 +8,7 @@ import {
   ProductKind,
   StockCountStatus,
   StockMovementKind,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 /**
  * Stock Count (UPD-BE-037). `create()` is a draft — it snapshots expected/counted/variance for

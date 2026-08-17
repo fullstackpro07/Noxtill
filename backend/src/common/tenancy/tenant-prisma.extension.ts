@@ -1,4 +1,4 @@
-import { Prisma } from '../../../generated/prisma';
+import { Prisma } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
 import { CLS_KEY_BUSINESS_ID, TENANT_SCOPED_MODELS } from './tenant.constants';
 

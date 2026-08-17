@@ -12,7 +12,7 @@ import {
 } from './workflow-condition.util';
 import { buildTriggerContext } from './workflow-context.util';
 import { mapActivityEventToTriggerKey } from './workflow-trigger-map.util';
-import { Prisma, WorkflowTriggerKey } from '../../../generated/prisma';
+import { Prisma, WorkflowTriggerKey } from '@prisma/client';
 
 /** Automations engine (UPD-BE-028) — authoring/CRUD half. Real dispatch lives in `WorkflowTriggerService`. */
 @Injectable()

@@ -12,7 +12,7 @@ import { SOCIAL_ERROR_CODES, SOCIAL_PUBLISH_QUEUE } from './social.constants';
 import {
   SocialPostStatus,
   SocialPostTargetStatus,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 /**
  * Content Calendar + Create Post (UPD-BE-046). `executePublish()` is the real per-target fan-out

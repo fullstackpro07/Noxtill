@@ -10,7 +10,7 @@ import {
   SocialAccountStatus,
   SocialInboxStatus,
   SocialPlatform,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 /**
  * Social Inbox (UPD-BE-049). `ingest()` is called from `SocialWebhookProcessor` with no CLS-bound

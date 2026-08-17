@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
-import { Prisma } from '../../../generated/prisma';
+import { Prisma } from '@prisma/client';
 import { TenantPrismaService } from '../tenancy/tenant-prisma.service';
 import {
   CLS_KEY_BUSINESS_ID,

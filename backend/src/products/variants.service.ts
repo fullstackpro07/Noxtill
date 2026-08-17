@@ -6,7 +6,7 @@ import {
 } from './dto/create-variant-set.dto';
 import { UpdateVariantSetDto } from './dto/update-variant-set.dto';
 import { ApplyVariantSetDto } from './dto/apply-variant-set.dto';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /** Stamps each option with its array position as `sortOrder` — see `VariantOption.sortOrder`'s doc comment for why this is needed on MySQL. */
 function withSortOrder(options: VariantOptionInputDto[]) {

@@ -3,7 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { Prisma, ProductKind } from '../../generated/prisma';
+import { Prisma, ProductKind } from '@prisma/client';
 
 export interface ProductQuery {
   q?: string;

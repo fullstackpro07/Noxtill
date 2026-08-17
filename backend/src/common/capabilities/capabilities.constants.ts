@@ -1,4 +1,4 @@
-import { Role } from '../../../generated/prisma';
+import { Role } from '@prisma/client';
 
 /**
  * Roles & Permissions matrix (UPD-BE-035) — the fixed capability vocabulary. Each key here is a

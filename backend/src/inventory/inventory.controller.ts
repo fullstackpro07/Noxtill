@@ -8,7 +8,7 @@ import { RequireCapability } from '../common/decorators/require-capability.decor
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { StockCountStatus } from '../../generated/prisma';
+import { StockCountStatus } from '@prisma/client';
 
 @Controller()
 export class InventoryController {

@@ -6,7 +6,7 @@ import { IntegrationsService } from '../integrations/integrations.service';
 import { GmbConnector } from '../integrations/connectors/gmb.connector';
 import { CreateGmbPhotoDto, CreateGmbPostDto } from './dto/gmb.dto';
 import { LISTING_ERROR_CODES } from './listings.constants';
-import { GmbPostStatus, IntegrationProvider } from '../../generated/prisma';
+import { GmbPostStatus, IntegrationProvider } from '@prisma/client';
 
 interface GmbQuestionsListResponse {
   questions?: { name: string; text: string }[];

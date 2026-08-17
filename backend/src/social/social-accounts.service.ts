@@ -7,7 +7,7 @@ import { TokenCipherService } from '../integrations/token-cipher.service';
 import { signPayload, verifyPayload } from '../integrations/signed-token.util';
 import { SocialOAuthTokens } from './connectors/social-connector.interface';
 import { SOCIAL_ERROR_CODES } from './social.constants';
-import { SocialAccountStatus, SocialPlatform } from '../../generated/prisma';
+import { SocialAccountStatus, SocialPlatform } from '@prisma/client';
 
 interface StatePayload {
   businessId: string;

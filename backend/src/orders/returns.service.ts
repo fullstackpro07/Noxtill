@@ -12,7 +12,7 @@ import {
   ProductKind,
   ReturnStatus,
   StockMovementKind,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 /**
  * Returns & Refunds (UPD-BE-011). A return is raised (any role) then approved/rejected

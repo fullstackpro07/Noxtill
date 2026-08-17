@@ -3,7 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenancyGuard } from './tenancy.guard';
 import { CLS_KEY_BUSINESS_ID } from './tenant.constants';
-import { Role } from '../../../generated/prisma';
+import { Role } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

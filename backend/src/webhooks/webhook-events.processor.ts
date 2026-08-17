@@ -4,7 +4,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWindowService } from '../whatsapp/whatsapp-window.service';
 import { WEBHOOK_EVENTS_QUEUE } from './webhooks.constants';
-import { MessageStatus } from '../../generated/prisma';
+import { MessageStatus } from '@prisma/client';
 
 const META_STATUS_MAP: Record<string, MessageStatus> = {
   sent: MessageStatus.sent,

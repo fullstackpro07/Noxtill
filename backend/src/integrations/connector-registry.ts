@@ -9,7 +9,7 @@ import { EmailConnector } from './connectors/email.connector';
 import { BingPlacesConnector } from './connectors/bing-places.connector';
 import { YelpConnector } from './connectors/yelp.connector';
 import { AppleBusinessConnectConnector } from './connectors/apple-business-connect.connector';
-import { IntegrationProvider } from '../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 @Injectable()
 export class ConnectorRegistry {

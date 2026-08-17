@@ -12,7 +12,7 @@ import {
   SocialPlatform,
   SocialPostStatus,
   SocialPostTargetStatus,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

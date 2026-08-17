@@ -1,4 +1,4 @@
-import { OrderStatus } from '../../generated/prisma';
+import { OrderStatus } from '@prisma/client';
 
 /** Valid forward transitions (spec §4.3 "flow guard"). Cancelled is reachable from any non-terminal state. */
 export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {

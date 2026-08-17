@@ -3,7 +3,7 @@ import { AiInsightsService } from './ai-insights.service';
 import { UpdateInsightStatusDto } from './dto/update-insight-status.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { AiInsightCategory } from '../../generated/prisma';
+import { AiInsightCategory } from '@prisma/client';
 
 @Controller('ai/insights')
 export class AiInsightsController {

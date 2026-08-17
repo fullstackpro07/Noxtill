@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Connector, OAuthTokens } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 /**
  * Email connector (BE-083) — not an OAuth provider at all. Postmark/SES have no consumer-facing

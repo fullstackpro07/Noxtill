@@ -5,7 +5,7 @@ import {
   ActivityEventType,
   Role,
   WorkflowTriggerKey,
-} from '../../../generated/prisma';
+} from '@prisma/client';
 
 describe('WorkflowTriggerService (UPD-BE-028)', () => {
   let prisma: PrismaService;

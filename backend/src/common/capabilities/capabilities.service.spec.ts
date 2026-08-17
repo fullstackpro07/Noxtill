@@ -4,7 +4,7 @@ import {
   CAPABILITIES,
   SYSTEM_ROLE_CAPABILITIES,
 } from './capabilities.constants';
-import { Role } from '../../../generated/prisma';
+import { Role } from '@prisma/client';
 
 describe('CapabilitiesService (UPD-BE-035)', () => {
   let prisma: PrismaService;

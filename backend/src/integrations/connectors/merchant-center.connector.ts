@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { GoogleOAuth2Connector } from './google-oauth2.connector';
 import { OAuthTokens } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 /** Google Merchant Center connector (BE-086), via the Content API for Shopping. */
 @Injectable()

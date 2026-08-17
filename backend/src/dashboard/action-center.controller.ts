@@ -8,7 +8,7 @@ import {
   ActionItemPriority,
   ActionItemType,
   Role,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 @Controller('actions')
 export class ActionCenterController {

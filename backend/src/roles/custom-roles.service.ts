@@ -7,7 +7,7 @@ import {
 } from './dto/create-custom-role.dto';
 import { CUSTOM_ROLE_ERROR_CODES } from './roles.constants';
 import { ALL_CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /**
  * Custom roles (UPD-BE-035) — a business-defined name + capability subset. System roles

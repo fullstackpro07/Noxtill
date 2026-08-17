@@ -9,7 +9,7 @@ import { QuerySlotsDto } from './dto/query-slots.dto';
 import { computeAvailableSlots, WorkingHours } from './working-hours.util';
 import { BOOKING_ERROR_CODES } from './bookings.constants';
 import { assertSlotAvailable } from './booking-lock.util';
-import { AppointmentStatus, ProductKind } from '../../generated/prisma';
+import { AppointmentStatus, ProductKind } from '@prisma/client';
 
 const RESCHEDULE_TOKEN_BYTES = 16;
 

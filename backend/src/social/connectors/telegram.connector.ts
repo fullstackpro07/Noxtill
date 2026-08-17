@@ -10,7 +10,7 @@ import {
   SocialPublishPayload,
   SocialPublishResult,
 } from './social-connector.interface';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 /** Telegram Bot API — the business submits their own Bot Token (from @BotFather), verified via `getMe`. */
 @Injectable()

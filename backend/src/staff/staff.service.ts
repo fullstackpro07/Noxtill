@@ -12,7 +12,7 @@ import {
   Prisma,
   ProductKind,
   Role,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 const INBOX_APPOINTMENT_WINDOW_DAYS = 14;
 

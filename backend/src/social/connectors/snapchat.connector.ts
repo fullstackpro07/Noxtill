@@ -14,7 +14,7 @@ import {
   SocialPublishPayload,
   SocialPublishResult,
 } from './social-connector.interface';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 const ADS_API = 'https://adsapi.snapchat.com/v1';
 

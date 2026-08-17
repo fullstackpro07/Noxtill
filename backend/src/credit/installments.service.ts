@@ -7,7 +7,7 @@ import { CREDIT_ERROR_CODES } from './credit.constants';
 import {
   InstallmentPlanStatus,
   InstallmentStatus,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 function todayEnd(): Date {
   const d = new Date();

@@ -8,7 +8,7 @@ import { GmbManagementService } from './gmb-management.service';
 import { GmbConnector } from '../integrations/connectors/gmb.connector';
 import { AppException } from '../common/filters/app.exception';
 import type { IntegrationsService } from '../integrations/integrations.service';
-import { IntegrationProvider, IntegrationStatus } from '../../generated/prisma';
+import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;

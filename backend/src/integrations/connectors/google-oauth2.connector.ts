@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Connector, OAuthTokens } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';

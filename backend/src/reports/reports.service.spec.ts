@@ -12,7 +12,7 @@ import type { SendGateService } from '../messaging/send-gate.service';
 import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { SYSTEM_ROLE_CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 // puppeteer (pulled in transitively via PdfRendererService) is ESM-only and breaks ts-jest's
 // per-file CommonJS transform — same issue already worked around in qr-poster.service.spec.ts.

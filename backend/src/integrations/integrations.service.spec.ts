@@ -7,7 +7,7 @@ import { IntegrationsService } from './integrations.service';
 import { TokenCipherService } from './token-cipher.service';
 import { ConnectorRegistry } from './connector-registry';
 import { AppException } from '../common/filters/app.exception';
-import { IntegrationProvider, IntegrationStatus } from '../../generated/prisma';
+import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

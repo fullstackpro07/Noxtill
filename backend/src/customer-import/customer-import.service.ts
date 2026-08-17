@@ -19,7 +19,7 @@ import {
   RawImportRow,
   StagedImportRow,
 } from './customer-import.types';
-import { Customer, ImportSource, Prisma } from '../../generated/prisma';
+import { Customer, ImportSource, Prisma } from '@prisma/client';
 
 function detectSource(file: ImportFile): ImportSource {
   const name = file.originalname.toLowerCase();

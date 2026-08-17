@@ -4,7 +4,7 @@ import { AppException } from '../common/filters/app.exception';
 import { computeOrderTotals } from '../orders/order-totals.util';
 import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
-import { OrderStatus } from '../../generated/prisma';
+import { OrderStatus } from '@prisma/client';
 
 /**
  * Public online-ordering / dine-in endpoints (BE-029). No auth — the

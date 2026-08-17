@@ -5,7 +5,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { SocialAnalyticsService } from './social-analytics.service';
 import type { SocialAccountsService } from './social-accounts.service';
 import type { SocialConnectorRegistry } from './connectors/social-connector-registry';
-import { SocialPlatform } from '../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

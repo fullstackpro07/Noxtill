@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { AppException } from '../common/filters/app.exception';
 import { BOOKING_ERROR_CODES } from './bookings.constants';
-import { AppointmentStatus } from '../../generated/prisma';
+import { AppointmentStatus } from '@prisma/client';
 
 /**
  * Minimal shape both the raw `PrismaService` transaction client and the tenant-extended

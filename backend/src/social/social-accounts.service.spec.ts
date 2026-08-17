@@ -7,7 +7,7 @@ import { SocialAccountsService } from './social-accounts.service';
 import { TokenCipherService } from '../integrations/token-cipher.service';
 import { AppException } from '../common/filters/app.exception';
 import type { SocialConnectorRegistry } from './connectors/social-connector-registry';
-import { SocialAccountStatus, SocialPlatform } from '../../generated/prisma';
+import { SocialAccountStatus, SocialPlatform } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

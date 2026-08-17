@@ -4,7 +4,7 @@ import { ActivityService } from '../activity/activity.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { QuickPurchaseOrderDto } from './dto/quick-purchase-order.dto';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /** Suppliers (UPD-BE-014) — formalizes what was previously only a free-text field on StockMovement. */
 @Injectable()

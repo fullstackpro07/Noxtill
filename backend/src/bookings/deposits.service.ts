@@ -3,7 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateDepositDto } from './dto/create-deposit.dto';
 import { DEPOSIT_ERROR_CODES } from './bookings.constants';
-import { DepositStatus, Prisma } from '../../generated/prisma';
+import { DepositStatus, Prisma } from '@prisma/client';
 
 /**
  * Deposits (UPD-BE-019). Cash deposits are captured/refunded for real, immediately, with

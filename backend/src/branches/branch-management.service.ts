@@ -9,7 +9,7 @@ import {
   BRANCH_ERROR_CODES,
   BRANCH_TEMP_PASSWORD_BYTES,
 } from './branches.constants';
-import { Prisma, Role } from '../../generated/prisma';
+import { Prisma, Role } from '@prisma/client';
 
 const BCRYPT_ROUNDS = 10;
 

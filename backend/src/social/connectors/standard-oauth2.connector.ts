@@ -6,7 +6,7 @@ import {
   SocialInboxReplyTarget,
   SocialOAuthTokens,
 } from './social-connector.interface';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 export interface StandardOAuth2Config {
   authorizeUrl: string;

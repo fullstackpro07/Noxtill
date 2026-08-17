@@ -1,4 +1,4 @@
-import { MessageCategory } from '../../../generated/prisma';
+import { MessageCategory } from '@prisma/client';
 
 export interface TemplateDefinition {
   key: string;

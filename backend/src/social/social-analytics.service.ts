@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { SocialAccountsService } from './social-accounts.service';
 import { SocialConnectorRegistry } from './connectors/social-connector-registry';
-import { SocialPlatform } from '../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 /** Social Analytics (UPD-BE-050) — same shape as `GmbManagementService.pullInsights()`. */
 @Injectable()

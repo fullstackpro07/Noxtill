@@ -1,4 +1,4 @@
-import { IntegrationProvider } from '../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 export interface OAuthTokens {
   accessToken: string;

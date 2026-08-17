@@ -6,7 +6,7 @@ import {
   MessageStatus,
   OrderStatus,
   Role,
-} from '../../generated/prisma';
+} from '@prisma/client';
 import { WidgetCategory } from './widgets.constants';
 
 export interface WidgetContext {

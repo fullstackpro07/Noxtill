@@ -15,7 +15,7 @@ import {
   PRICING_ERROR_CODES,
   TARGET_MARGIN_RATE,
 } from './pricing.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

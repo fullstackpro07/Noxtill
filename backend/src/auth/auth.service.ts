@@ -15,7 +15,7 @@ import {
   PENDING_2FA_TTL_MINUTES,
   TWO_FACTOR_ERROR_CODES,
 } from './two-factor.constants';
-import { Prisma, Role } from '../../generated/prisma';
+import { Prisma, Role } from '@prisma/client';
 
 export interface TokenPair {
   accessToken: string;

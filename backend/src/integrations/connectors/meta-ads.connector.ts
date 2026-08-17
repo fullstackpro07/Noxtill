@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Connector, OAuthTokens } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 const AUTHORIZE_URL = 'https://www.facebook.com/v19.0/dialog/oauth';
 const TOKEN_URL = 'https://graph.facebook.com/v19.0/oauth/access_token';

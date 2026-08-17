@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { SocialPlatform } from '../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 /** Same "validate the route param against the real enum" convention as `IntegrationsController.parseProvider`. */
 export function parseSocialPlatform(value: string): SocialPlatform {

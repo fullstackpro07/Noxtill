@@ -6,7 +6,7 @@ import { OrdersService } from './orders.service';
 import { HoldSaleDto } from './dto/hold-sale.dto';
 import { ResumeHeldSaleDto } from './dto/resume-held-sale.dto';
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

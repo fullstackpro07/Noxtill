@@ -22,7 +22,7 @@ import {
   AppointmentSource,
   AppointmentStatus,
   ProductKind,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

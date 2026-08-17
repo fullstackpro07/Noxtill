@@ -17,7 +17,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { GenerateInvoiceDto } from './dto/generate-invoice.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { OrderStatus } from '../../generated/prisma';
+import { OrderStatus } from '@prisma/client';
 
 @Controller()
 export class OrdersController {

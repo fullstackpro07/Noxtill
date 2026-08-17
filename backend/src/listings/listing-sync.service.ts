@@ -5,7 +5,7 @@ import { IntegrationsService } from '../integrations/integrations.service';
 import { ConnectorRegistry } from '../integrations/connector-registry';
 import { MasterListingService } from './master-listing.service';
 import { LISTING_ERROR_CODES } from './listings.constants';
-import { IntegrationStatus, Prisma } from '../../generated/prisma';
+import { IntegrationStatus, Prisma } from '@prisma/client';
 
 const RECENT_SYNC_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const NAP_FIELDS = [

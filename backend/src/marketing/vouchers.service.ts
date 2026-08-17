@@ -8,7 +8,7 @@ import {
   VOUCHER_ERROR_CODES,
   VOUCHER_ISSUED_TEMPLATE_KEY,
 } from './vouchers.constants';
-import { Prisma, Voucher, VoucherStatus } from '../../generated/prisma';
+import { Prisma, Voucher, VoucherStatus } from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

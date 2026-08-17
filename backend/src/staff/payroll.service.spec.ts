@@ -6,7 +6,7 @@ import { PayrollService } from './payroll.service';
 import { CommissionsService } from './commissions.service';
 import { TimesheetsService } from './timesheets.service';
 import { S3Service } from '../common/storage/s3.service';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

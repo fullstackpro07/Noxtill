@@ -16,7 +16,7 @@ import {
   AppointmentStatus,
   Prisma,
   WaitlistStatus,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 interface FreedSlot {
   serviceId: string;

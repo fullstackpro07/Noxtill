@@ -1,6 +1,6 @@
 import { NotFoundException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 import {
   BRANCH_COMPARE_DEFAULT_WEEKS,
   BRANCH_ROLLUP_DEFAULT_DAYS,

@@ -5,7 +5,7 @@ import { RejectReturnDto } from './dto/reject-return.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { ReturnStatus } from '../../generated/prisma';
+import { ReturnStatus } from '@prisma/client';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('returns')

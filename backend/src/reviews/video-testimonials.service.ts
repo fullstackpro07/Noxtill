@@ -8,7 +8,7 @@ import { generateReviewToken } from './review-token.util';
 import { RequestVideoTestimonialDto } from './dto/request-video-testimonial.dto';
 import { RejectVideoTestimonialDto } from './dto/reject-video-testimonial.dto';
 import { VIDEO_TESTIMONIAL_ERROR_CODES } from './video-testimonials.constants';
-import { VideoTestimonialStatus } from '../../generated/prisma';
+import { VideoTestimonialStatus } from '@prisma/client';
 
 /**
  * Video Testimonials (UPD-BE-027) — authenticated (staff-facing) half of the flow: request a

@@ -8,7 +8,7 @@ import {
   CAMPAIGN_TEMPLATE_KEY,
   MARKETING_ERROR_CODES,
 } from './marketing.constants';
-import { MessageStatus, Prisma } from '../../generated/prisma';
+import { MessageStatus, Prisma } from '@prisma/client';
 
 /**
  * Campaign builder (BE-061): resolves a segment (reusing SegmentsService,

@@ -6,7 +6,7 @@ import { GOOGLE_SYNC_QUEUE } from './google-sync.constants';
 import {
   IntegrationProvider,
   IntegrationStatus,
-} from '../../../generated/prisma';
+} from '@prisma/client';
 
 interface GmbFetchedReview {
   externalId: string;

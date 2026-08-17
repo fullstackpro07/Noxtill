@@ -3,7 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { UpdateReferralSettingsDto } from './dto/update-referral-settings.dto';
 import { RedeemReferralDto } from './dto/redeem-referral.dto';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /**
  * Minimal shape both the raw PrismaService transaction client and the tenant-extended

@@ -7,7 +7,7 @@ import {
   SOCIAL_WEBHOOK_QUEUE,
 } from '../social.constants';
 import { SocialInboxFetchItem } from '../connectors/social-connector.interface';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 interface MetaFamilyEntry {
   id?: string;

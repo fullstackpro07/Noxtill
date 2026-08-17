@@ -6,7 +6,7 @@ import { AppException } from '../common/filters/app.exception';
 import { TemplateRegistryService } from './templates/template-registry.service';
 import { resolveChannel } from './channel-resolution.util';
 import { MESSAGE_ERROR_CODES, MESSAGES_QUEUE } from './messaging.constants';
-import { Message, Prisma } from '../../generated/prisma';
+import { Message, Prisma } from '@prisma/client';
 
 export interface SendGateParams {
   businessId: string;

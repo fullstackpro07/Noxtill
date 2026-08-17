@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { AppointmentStatus, OrderStatus } from '../../generated/prisma';
+import { AppointmentStatus, OrderStatus } from '@prisma/client';
 
 interface PercentRule {
   type: 'percent';

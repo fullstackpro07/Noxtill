@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { GoogleOAuth2Connector } from './google-oauth2.connector';
 import { MasterListingData, OAuthTokens } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 /** Google My Business connector (BE-084). Scope grants read/write over the business's own listings. */
 @Injectable()
