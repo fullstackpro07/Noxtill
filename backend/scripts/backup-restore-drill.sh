@@ -31,7 +31,7 @@ trap cleanup EXIT
 
 echo "==> Inserting a canary row into '${MYSQL_DATABASE}.businesses' (slug=${CANARY_SLUG})"
 "${MYSQL[@]}" -D "$MYSQL_DATABASE" -e \
-  "INSERT INTO businesses (id, name, slug, created_at, updated_at) VALUES (UUID(), 'Backup Drill Canary', '${CANARY_SLUG}', NOW(), NOW());"
+  "INSERT INTO businesses (id, name, slug, branding, dashboard_config, working_hours, referral_settings, health_score_weights, created_at, updated_at) VALUES (UUID(), 'Backup Drill Canary', '${CANARY_SLUG}', CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), NOW(), NOW());"
 
 echo "==> mysqldump ${MYSQL_DATABASE} -> ${DUMP_FILE}"
 mysqldump --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --single-transaction --routines "$MYSQL_DATABASE" >"$DUMP_FILE"
