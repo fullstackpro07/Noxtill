@@ -13,7 +13,7 @@ import { RejectVideoTestimonialDto } from './dto/reject-video-testimonial.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { VideoTestimonialStatus } from '../../generated/prisma';
+import { VideoTestimonialStatus } from '@prisma/client';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('video-testimonials')

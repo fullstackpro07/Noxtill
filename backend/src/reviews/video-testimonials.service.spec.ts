@@ -7,7 +7,7 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { ActivityService } from '../activity/activity.service';
 import { S3Service } from '../common/storage/s3.service';
 import { AppException } from '../common/filters/app.exception';
-import { VideoTestimonialStatus } from '../../generated/prisma';
+import { VideoTestimonialStatus } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

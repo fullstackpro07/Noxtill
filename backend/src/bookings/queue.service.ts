@@ -4,7 +4,7 @@ import { AppException } from '../common/filters/app.exception';
 import { SendGateService } from '../messaging/send-gate.service';
 import { JoinQueueDto } from './dto/join-queue.dto';
 import { QUEUE_ERROR_CODES } from './bookings.constants';
-import { QueueTokenStatus } from '../../generated/prisma';
+import { QueueTokenStatus } from '@prisma/client';
 
 function todayStart(): Date {
   const d = new Date();

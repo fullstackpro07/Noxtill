@@ -6,7 +6,7 @@ import { ConnectorRegistry } from './connector-registry';
 import { TokenCipherService } from './token-cipher.service';
 import { signPayload, verifyPayload } from './signed-token.util';
 import { OAuthTokens } from './connector.interface';
-import { IntegrationProvider, IntegrationStatus } from '../../generated/prisma';
+import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 
 interface StatePayload {
   businessId: string;

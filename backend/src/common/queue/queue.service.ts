@@ -36,8 +36,13 @@ export class QueueService {
     });
   }
 
-  async addDemoJob(jobName: string, data: DemoJobData, idempotencyKey: string) {
-    return this.addJob(this.demoQueue, jobName, data, idempotencyKey);
+  async addDemoJob(
+    jobName: string,
+    data: DemoJobData,
+    idempotencyKey: string,
+    opts: JobsOptions = {},
+  ) {
+    return this.addJob(this.demoQueue, jobName, data, idempotencyKey, opts);
   }
 
   get demo() {

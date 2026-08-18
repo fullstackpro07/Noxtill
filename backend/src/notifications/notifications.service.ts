@@ -39,9 +39,11 @@ export class NotificationsService {
   }
 
   async markRead(userId: string, id: string) {
-    const notification = await this.tenantPrisma.client.notification.findUnique({
-      where: { id },
-    });
+    const notification = await this.tenantPrisma.client.notification.findUnique(
+      {
+        where: { id },
+      },
+    );
     if (!notification || notification.userId !== userId) {
       throw new NotFoundException('Notification not found');
     }

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
-import { OrderStatus } from '../../generated/prisma';
+import { OrderStatus } from '@prisma/client';
 
 const COHORT_MONTHS_BACK = 6;
 const COHORT_RELATIVE_MONTHS = 6;

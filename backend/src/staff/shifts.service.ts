@@ -9,7 +9,7 @@ import {
   UpdateShiftDto,
 } from './dto/create-shift.dto';
 import { SHIFT_ERROR_CODES } from './shifts.constants';
-import { Prisma, ShiftSwapStatus } from '../../generated/prisma';
+import { Prisma, ShiftSwapStatus } from '@prisma/client';
 
 /**
  * Roster (UPD-BE-031). A shift's swap-request fields live on the shift itself (one active

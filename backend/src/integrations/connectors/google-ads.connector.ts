@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { GoogleOAuth2Connector } from './google-oauth2.connector';
 import { OAuthTokens } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 /** Google Ads connector (BE-085). Every Google Ads API call needs a developer token header in addition to the OAuth bearer token — a real quirk of this API, not shared by GMB/Merchant Center. */
 @Injectable()

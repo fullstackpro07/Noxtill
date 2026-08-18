@@ -4,7 +4,7 @@ import { Workbook } from 'exceljs';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { S3Service } from '../common/storage/s3.service';
 import { validateUploadedFile } from '../common/utils/file-validation.util';
-import { Prisma, ProductKind } from '../../generated/prisma';
+import { Prisma, ProductKind } from '@prisma/client';
 
 export interface UploadedFile {
   buffer: Buffer;

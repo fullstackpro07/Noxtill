@@ -7,7 +7,7 @@ import { MoveTableDto } from './dto/move-table.dto';
 import { MergeTablesDto } from './dto/merge-tables.dto';
 import { computeOrderTotals } from './order-totals.util';
 import { ACTIVE_ORDER_STATUSES, TABLE_ERROR_CODES } from './tables.constants';
-import { OrderStatus, TableStatus } from '../../generated/prisma';
+import { OrderStatus, TableStatus } from '@prisma/client';
 
 /**
  * Tables / restaurant floor mode (UPD-BE-010). `Table` is deliberately not a foreign key on

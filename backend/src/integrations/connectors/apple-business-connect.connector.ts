@@ -6,7 +6,7 @@ import {
   MasterListingData,
   OAuthTokens,
 } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 /**
  * Apple Business Connect connector (UPD-BE-043) — unlike Bing Places/Yelp, Apple has no standard

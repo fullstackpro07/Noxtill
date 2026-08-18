@@ -3,10 +3,7 @@ import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GOOGLE_SYNC_QUEUE } from './google-sync.constants';
-import {
-  IntegrationProvider,
-  IntegrationStatus,
-} from '../../../generated/prisma';
+import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 
 interface GmbFetchedReview {
   externalId: string;

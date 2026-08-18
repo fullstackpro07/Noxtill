@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { CapabilitiesGuard } from './capabilities.guard';
 import { CAPABILITIES } from '../capabilities/capabilities.constants';
 import type { AuthenticatedUser } from '../tenancy/auth-context';
-import { Role } from '../../../generated/prisma';
+import { Role } from '@prisma/client';
 
 function makeContext(user: AuthenticatedUser | undefined): ExecutionContext {
   return {

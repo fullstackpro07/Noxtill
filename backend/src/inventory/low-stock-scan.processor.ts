@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { WorkflowTriggerService } from '../marketing/automations/workflow-trigger.service';
 import { LOW_STOCK_SCAN_QUEUE } from './low-stock-scan.constants';
-import { ActivityEventType, Role } from '../../generated/prisma';
+import { ActivityEventType, Role } from '@prisma/client';
 
 interface LowStockProductRow {
   id: string;

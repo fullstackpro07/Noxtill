@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 const NEW_CUSTOMER_WINDOW_DAYS = 30;
 

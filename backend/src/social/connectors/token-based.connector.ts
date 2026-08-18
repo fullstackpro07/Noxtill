@@ -4,7 +4,7 @@ import {
   SocialInboxReplyTarget,
   SocialOAuthTokens,
 } from './social-connector.interface';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 /**
  * Base for the 4 token/bot-credential platforms (telegram, discord, wechat, line) — no

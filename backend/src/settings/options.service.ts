@@ -8,7 +8,7 @@ import {
   UpdateOptionDto,
 } from './dto/option-set.dto';
 import { OPTION_ERROR_CODES } from './options.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /**
  * Custom Options manager (UPD-BE-039) — net-new (no prior `CRUD /options/:setKey` existed to

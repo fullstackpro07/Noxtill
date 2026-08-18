@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { resolveDatabaseUrl } from './prisma/resolve-database-url';
 
 const MIN_SECRET_LENGTH = 22; // spec §6
 const PLACEHOLDER_SECRETS = new Set(['your-secret', 'your-refresh-secret']);
@@ -36,6 +37,7 @@ function validateEnv(): void {
 }
 
 async function bootstrap() {
+  resolveDatabaseUrl();
   validateEnv();
 
   // rawBody is needed to verify webhook signatures (Meta/Stripe HMAC) against the exact bytes sent.

@@ -8,7 +8,7 @@ import {
   ActionItemType,
   FeedbackStatus,
   Role,
-} from '../../generated/prisma';
+} from '@prisma/client';
 
 interface RawActionItem {
   type: ActionItemType;

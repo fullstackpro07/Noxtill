@@ -49,7 +49,10 @@ export class WidgetsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    if (days !== undefined && !(WIDGET_RANGE_DAYS as readonly number[]).includes(days)) {
+    if (
+      days !== undefined &&
+      !(WIDGET_RANGE_DAYS as readonly number[]).includes(days)
+    ) {
       throw new AppException(
         WIDGET_ERROR_CODES.INVALID_RANGE,
         `days must be one of ${WIDGET_RANGE_DAYS.join(', ')}`,

@@ -5,7 +5,7 @@ import { BillingService } from '../billing/billing.service';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { MEMBERSHIP_ERROR_CODES } from './memberships.constants';
-import { MembershipStatus, Prisma } from '../../generated/prisma';
+import { MembershipStatus, Prisma } from '@prisma/client';
 
 /**
  * Membership plans (UPD-BE-025) — a customer-level recurring subscription, separate from the

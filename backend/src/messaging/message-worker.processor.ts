@@ -9,7 +9,7 @@ import { EmailService } from './channels/email.service';
 import { ChannelSender } from './channels/channel-sender.interface';
 import { TerminologyService } from '../settings/terminology.service';
 import { MESSAGES_QUEUE } from './messaging.constants';
-import { MessageChannel } from '../../generated/prisma';
+import { MessageChannel } from '@prisma/client';
 
 interface SendJobData {
   messageId: string;

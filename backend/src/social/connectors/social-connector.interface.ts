@@ -1,4 +1,4 @@
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 export interface SocialOAuthTokens {
   accessToken: string;

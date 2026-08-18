@@ -10,7 +10,7 @@ import {
   SocialPublishPayload,
   SocialPublishResult,
 } from './social-connector.interface';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 const API = 'https://api.weixin.qq.com/cgi-bin';
 

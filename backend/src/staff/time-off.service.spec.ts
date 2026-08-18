@@ -6,7 +6,7 @@ import {
   CLS_KEY_USER_ID,
 } from '../common/tenancy/tenant.constants';
 import { TimeOffService } from './time-off.service';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

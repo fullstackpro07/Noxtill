@@ -5,7 +5,7 @@ import { ActivityService } from '../activity/activity.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateWastageDto } from './dto/create-wastage.dto';
 import { INVENTORY_ERROR_CODES } from './inventory.constants';
-import { ProductKind } from '../../generated/prisma';
+import { ProductKind } from '@prisma/client';
 
 /** Inventory: purchases/wastage (BE-033), on-hand list + movement timeline (BE-034). */
 @Injectable()

@@ -7,7 +7,7 @@ import {
   MAX_VIDEO_SIZE_BYTES,
   VIDEO_TESTIMONIAL_TOKEN_EXPIRY_DAYS,
 } from './video-testimonials.constants';
-import { VideoTestimonialStatus } from '../../generated/prisma';
+import { VideoTestimonialStatus } from '@prisma/client';
 
 const EXTENSION_BY_MIME: Record<string, string> = {
   'video/mp4': 'mp4',

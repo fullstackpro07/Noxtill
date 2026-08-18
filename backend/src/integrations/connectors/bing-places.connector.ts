@@ -6,7 +6,7 @@ import {
   MasterListingData,
   OAuthTokens,
 } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 const AUTHORIZE_URL =
   'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';

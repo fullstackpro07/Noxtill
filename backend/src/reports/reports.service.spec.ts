@@ -12,7 +12,7 @@ import type { SendGateService } from '../messaging/send-gate.service';
 import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { SYSTEM_ROLE_CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 // puppeteer (pulled in transitively via PdfRendererService) is ESM-only and breaks ts-jest's
 // per-file CommonJS transform — same issue already worked around in qr-poster.service.spec.ts.
@@ -240,6 +240,7 @@ describe('ReportsService (INT-012)', () => {
 
   it('send() generates the PDF then pushes it to the caller via the real send-gate template', async () => {
     await service.send('monthly', month, asOwner());
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment -- jest's expect.objectContaining types as `any` */
     expect(sendGate.send).toHaveBeenCalledWith(
       expect.objectContaining({
         businessId,
@@ -249,5 +250,6 @@ describe('ReportsService (INT-012)', () => {
         }),
       }),
     );
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment */
   });
 });

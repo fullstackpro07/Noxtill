@@ -15,7 +15,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { IntegrationProvider } from '../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 function parseProvider(value: string): IntegrationProvider {
   if (!(Object.values(IntegrationProvider) as string[]).includes(value)) {

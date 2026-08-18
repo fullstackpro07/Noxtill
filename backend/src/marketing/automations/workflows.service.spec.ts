@@ -8,7 +8,7 @@ import {
   ActivityEventType,
   WorkflowRunStatus,
   WorkflowTriggerKey,
-} from '../../../generated/prisma';
+} from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

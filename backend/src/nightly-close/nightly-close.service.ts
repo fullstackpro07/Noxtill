@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocaleService } from '../common/localization/locale.service';
 import { SendGateService } from '../messaging/send-gate.service';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 import {
   DailyCloseRow,
   LowStockRow,

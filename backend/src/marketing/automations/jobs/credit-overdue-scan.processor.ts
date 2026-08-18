@@ -3,10 +3,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WorkflowTriggerService } from '../workflow-trigger.service';
 import { CREDIT_OVERDUE_SCAN_QUEUE } from '../workflows.constants';
-import {
-  ActivityEventType,
-  InstallmentStatus,
-} from '../../../../generated/prisma';
+import { ActivityEventType, InstallmentStatus } from '@prisma/client';
 
 /**
  * Hourly overdue-installment scan — the real detector behind the `credit_overdue` automation

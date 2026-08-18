@@ -6,7 +6,7 @@ import { SegmentsService } from '../../customers/segments.service';
 import { AppException } from '../../common/filters/app.exception';
 import { signPayload, verifyPayload } from '../signed-token.util';
 import { CreateEmailCampaignDto } from './dto/create-email-campaign.dto';
-import { EmailEventType, Prisma } from '../../../generated/prisma';
+import { EmailEventType, Prisma } from '@prisma/client';
 
 interface UnsubscribePayload {
   email: string;

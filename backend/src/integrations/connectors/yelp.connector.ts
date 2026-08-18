@@ -6,7 +6,7 @@ import {
   MasterListingData,
   OAuthTokens,
 } from '../connector.interface';
-import { IntegrationProvider } from '../../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 const AUTHORIZE_URL = 'https://www.yelp.com/oauth2/authorize';
 const TOKEN_URL = 'https://api.yelp.com/oauth2/token';

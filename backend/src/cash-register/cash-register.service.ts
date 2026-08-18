@@ -10,7 +10,7 @@ import {
   CASH_REGISTER_ERROR_CODES,
   VARIANCE_NOTE_THRESHOLD,
 } from './cash-register.constants';
-import { CashMovementType, CashShiftStatus } from '../../generated/prisma';
+import { CashMovementType, CashShiftStatus } from '@prisma/client';
 
 /**
  * Cash Register (UPD-BE-006). One open shift per business at a time — checked explicitly before

@@ -15,7 +15,7 @@ describe('UsersService', () => {
   const authUser: AuthenticatedUser = {
     sub: 'u1',
     businessId: 'b1',
-    role: 'owner' as AuthenticatedUser['role'],
+    role: 'owner',
     capabilities: [],
   };
 
@@ -77,7 +77,12 @@ describe('UsersService', () => {
   });
 
   it('throws NotFoundException when the business row is gone', async () => {
-    prisma.user.findUnique.mockResolvedValue({ id: 'u1', name: 'Amara Osei', email: null, phone: null });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      name: 'Amara Osei',
+      email: null,
+      phone: null,
+    });
     prisma.business.findUnique.mockResolvedValue(null);
 
     await expect(service.me(authUser)).rejects.toThrow(NotFoundException);

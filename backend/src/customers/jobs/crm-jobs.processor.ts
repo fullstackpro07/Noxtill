@@ -12,7 +12,7 @@ import {
   TAG_RULES_LOCAL_HOUR,
   VIP_LIFETIME_SPEND_THRESHOLD,
 } from './crm-jobs.constants';
-import { ActivityEventType } from '../../../generated/prisma';
+import { ActivityEventType } from '@prisma/client';
 
 interface CrmTickJobData {
   /** ISO timestamp override, used only by tests to make "current local hour" deterministic. */

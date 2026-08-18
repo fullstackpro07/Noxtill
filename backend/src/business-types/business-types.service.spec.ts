@@ -75,7 +75,9 @@ describe('BusinessTypesService (BE-069)', () => {
   });
 
   it('wraps a Claude failure as a clean AI_UNAVAILABLE error instead of a raw 500', async () => {
-    aiInfra.complete.mockRejectedValue(new Error('x-api-key header is required'));
+    aiInfra.complete.mockRejectedValue(
+      new Error('x-api-key header is required'),
+    );
 
     await expect(
       service.aiMap({ description: 'We wash and groom dogs' }),

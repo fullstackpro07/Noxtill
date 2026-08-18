@@ -7,7 +7,7 @@ import {
 } from '../common/tenancy/tenant.constants';
 import { ShiftsService } from './shifts.service';
 import { AppException } from '../common/filters/app.exception';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

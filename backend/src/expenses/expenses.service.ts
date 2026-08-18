@@ -4,7 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 function monthBounds(month: string): { start: Date; end: Date } {
   const [year, mon] = month.split('-').map(Number);

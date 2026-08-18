@@ -9,7 +9,7 @@ import {
   ALLOWED_VOICE_AUDIO_MIME_TYPES,
   MAX_VOICE_AUDIO_SIZE_BYTES,
 } from './voice-sale.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 export interface ParsedVoiceItem {
   productName: string;

@@ -45,7 +45,11 @@ describe('AccountZipProcessor (INT-012)', () => {
       Promise.resolve(Buffer.from(`fake-xlsx-bytes-${kind}`)),
     ),
   };
-  const s3 = { uploadAndSign: jest.fn().mockResolvedValue('https://signed.example/account.zip') };
+  const s3 = {
+    uploadAndSign: jest
+      .fn()
+      .mockResolvedValue('https://signed.example/account.zip'),
+  };
   const notifications = { create: jest.fn().mockResolvedValue(undefined) };
 
   let processor: AccountZipProcessor;
@@ -66,13 +70,22 @@ describe('AccountZipProcessor (INT-012)', () => {
       data: { businessId: 'biz-1', userId: 'user-1' },
     } as never);
 
-    expect(exportsService.buildXlsxBuffer).toHaveBeenCalledTimes(EXPORT_KINDS.length);
+    expect(exportsService.buildXlsxBuffer).toHaveBeenCalledTimes(
+      EXPORT_KINDS.length,
+    );
     for (const kind of EXPORT_KINDS) {
-      expect(exportsService.buildXlsxBuffer).toHaveBeenCalledWith('biz-1', kind);
+      expect(exportsService.buildXlsxBuffer).toHaveBeenCalledWith(
+        'biz-1',
+        kind,
+      );
     }
 
     expect(s3.uploadAndSign).toHaveBeenCalledTimes(1);
-    const [key, zipBuffer, contentType] = s3.uploadAndSign.mock.calls[0] as [string, Buffer, string];
+    const [key, zipBuffer, contentType] = s3.uploadAndSign.mock.calls[0] as [
+      string,
+      Buffer,
+      string,
+    ];
     expect(key).toContain('exports/biz-1/account-');
     expect(contentType).toBe('application/zip');
     // Every kind's fake xlsx bytes must have made it into the assembled archive stream.

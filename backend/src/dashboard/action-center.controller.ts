@@ -4,11 +4,7 @@ import { SnoozeActionItemDto } from './dto/snooze-action-item.dto';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import {
-  ActionItemPriority,
-  ActionItemType,
-  Role,
-} from '../../generated/prisma';
+import { ActionItemPriority, ActionItemType, Role } from '@prisma/client';
 
 @Controller('actions')
 export class ActionCenterController {

@@ -2,7 +2,7 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantPrismaService } from './tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from './tenant.constants';
-import { Prisma } from '../../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /** Minimal stand-in for ClsService: enough for the extension's `cls.get()` calls. */
 class FakeClsService {

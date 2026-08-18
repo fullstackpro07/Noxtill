@@ -13,7 +13,7 @@ import { RequireCapability } from '../common/decorators/require-capability.decor
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { SocialPostStatus } from '../../generated/prisma';
+import { SocialPostStatus } from '@prisma/client';
 
 /** Content Calendar + Create Post (UPD-BE-046) — `GET /social/posts` (optionally filtered by status) serves as the calendar's data source; there's no separate `/content-calendar` model to duplicate. */
 @Controller()

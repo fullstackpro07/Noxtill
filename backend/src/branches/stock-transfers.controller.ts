@@ -16,7 +16,7 @@ import { RequireCapability } from '../common/decorators/require-capability.decor
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { StockTransferStatus } from '../../generated/prisma';
+import { StockTransferStatus } from '@prisma/client';
 
 @Controller('stock-transfers')
 export class StockTransfersController {

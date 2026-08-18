@@ -3,7 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateCouponDto, UpdateCouponDto } from './dto/create-coupon.dto';
 import { COUPON_ERROR_CODES } from './coupons.constants';
-import { CouponType, Prisma } from '../../generated/prisma';
+import { CouponType, Prisma } from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

@@ -5,7 +5,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { StockCountService } from './stock-count.service';
 import { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
-import { StockCountStatus } from '../../generated/prisma';
+import { StockCountStatus } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

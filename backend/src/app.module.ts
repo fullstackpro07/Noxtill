@@ -52,7 +52,10 @@ import { SocialModule } from './social/social.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ['.env', '../.env'],
+    }),
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
     PrismaModule,
     CommonModule,

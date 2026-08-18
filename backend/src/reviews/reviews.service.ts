@@ -7,7 +7,7 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { QueryReviewsDto } from './dto/query-reviews.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
-import { ExternalReview, PrivateFeedback } from '../../generated/prisma';
+import { ExternalReview, PrivateFeedback } from '@prisma/client';
 
 const REVIEWS_ERROR_CODES = {
   REVIEW_NOT_FOUND: 'reviews.not_found',

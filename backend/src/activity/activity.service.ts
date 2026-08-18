@@ -8,7 +8,7 @@ import {
   activityChannel,
   ACTIVITY_HISTORY_BACKFILL,
 } from './activity.constants';
-import { ActivityEventType } from '../../generated/prisma';
+import { ActivityEventType } from '@prisma/client';
 
 export interface RecordActivityEventInput {
   type: ActivityEventType;

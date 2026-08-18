@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SocialAnalyticsService } from '../social-analytics.service';
 import { SOCIAL_ANALYTICS_QUEUE } from '../social.constants';
-import { SocialAccountStatus } from '../../../generated/prisma';
+import { SocialAccountStatus } from '@prisma/client';
 
 /** Nightly social analytics pull (UPD-BE-050) — loops every connected `SocialAccount`, catch-and-continue per row, same convention as `GmbInsightsProcessor`/`LowStockScanProcessor`. */
 @Processor(SOCIAL_ANALYTICS_QUEUE)

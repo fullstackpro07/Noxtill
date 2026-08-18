@@ -30,7 +30,7 @@ export class DeadLetterListener implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
   ) {}
 
-  onModuleInit() {
+  async onModuleInit() {
     this.events = new QueueEvents(DEMO_QUEUE, {
       connection: {
         host: this.config.get<string>('REDIS_HOST', 'localhost'),
@@ -41,6 +41,7 @@ export class DeadLetterListener implements OnModuleInit, OnModuleDestroy {
     this.events.on('failed', ({ jobId, failedReason }) => {
       void this.moveToDlqIfExhausted(jobId, failedReason);
     });
+    await this.events.waitUntilReady();
   }
 
   private async moveToDlqIfExhausted(

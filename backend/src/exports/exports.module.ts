@@ -7,7 +7,10 @@ import { EXPORTS_QUEUE } from './exports.constants';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: EXPORTS_QUEUE }), NotificationsModule],
+  imports: [
+    BullModule.registerQueue({ name: EXPORTS_QUEUE }),
+    NotificationsModule,
+  ],
   controllers: [ExportsController],
   providers: [ExportsService, AccountZipProcessor],
 })

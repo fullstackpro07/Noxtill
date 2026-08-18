@@ -5,7 +5,7 @@ import { S3Service } from '../common/storage/s3.service';
 import { CommissionsService } from './commissions.service';
 import { TimesheetsService } from './timesheets.service';
 import { PAYROLL_COLUMNS, PAYROLL_SHEET_TITLE } from './payroll.constants';
-import { Role, StaffAdvanceStatus } from '../../generated/prisma';
+import { Role, StaffAdvanceStatus } from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

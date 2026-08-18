@@ -15,7 +15,7 @@ import {
   IMAGE_GENERATION_COST_USD,
   RATE_LIMIT_WINDOW_MS,
 } from './ai-infra.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /**
  * Shared AI infra (BE-075) — every AI feature in the product (what-if,

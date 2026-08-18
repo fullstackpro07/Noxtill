@@ -14,7 +14,7 @@ import {
   Prisma,
   Role,
   WorkflowRunStatus,
-} from '../../../generated/prisma';
+} from '@prisma/client';
 
 /**
  * Automations engine (UPD-BE-028) trigger dispatch — real, synchronous, in-process (deliberately

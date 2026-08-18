@@ -1,4 +1,4 @@
-import { AppointmentStatus } from '../../generated/prisma';
+import { AppointmentStatus } from '@prisma/client';
 
 /** Valid forward transitions (same flow-guard pattern as ORDER_STATUS_TRANSITIONS). */
 export const APPOINTMENT_STATUS_TRANSITIONS: Record<

@@ -6,7 +6,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 export class CreateSocialPostDto {
   @IsString()

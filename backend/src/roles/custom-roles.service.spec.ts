@@ -5,7 +5,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { CustomRolesService } from './custom-roles.service';
 import { AppException } from '../common/filters/app.exception';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

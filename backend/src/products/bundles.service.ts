@@ -1,7 +1,7 @@
 import { NotFoundException, Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CreateBundleDto } from './dto/create-bundle.dto';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;

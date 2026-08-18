@@ -6,7 +6,7 @@ import {
   DEFAULT_HEALTH_SCORE_WEIGHTS,
   HEALTH_SCORE_WINDOW_WEEKS,
 } from './dashboard.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 export type HealthScoreWeights = Record<
   'ratingTrend' | 'repeatCustomerRate' | 'margin' | 'creditRecovery',

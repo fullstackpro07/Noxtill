@@ -7,7 +7,7 @@ import { ListingSyncService } from './listing-sync.service';
 import { AppException } from '../common/filters/app.exception';
 import type { IntegrationsService } from '../integrations/integrations.service';
 import type { ConnectorRegistry } from '../integrations/connector-registry';
-import { IntegrationProvider, IntegrationStatus } from '../../generated/prisma';
+import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};

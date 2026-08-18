@@ -13,7 +13,7 @@ import { RequireCapability } from '../common/decorators/require-capability.decor
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
-import { SocialInboxStatus } from '../../generated/prisma';
+import { SocialInboxStatus } from '@prisma/client';
 
 @Controller('social/inbox')
 export class SocialInboxController {

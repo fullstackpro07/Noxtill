@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { IntegrationProvider } from '../../generated/prisma';
+import { IntegrationProvider } from '@prisma/client';
 
 export interface ChannelOverviewRow {
   channel: string;

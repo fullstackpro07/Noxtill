@@ -1,4 +1,4 @@
-import { WorkflowTriggerKey } from '../../../generated/prisma';
+import { WorkflowTriggerKey } from '@prisma/client';
 
 export interface TriggerEvent {
   description: string;

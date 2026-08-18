@@ -3,7 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateAdvanceDto, UpdateAdvanceDto } from './dto/create-advance.dto';
 import { ADVANCE_ERROR_CODES } from './advances.constants';
-import { StaffAdvanceStatus } from '../../generated/prisma';
+import { StaffAdvanceStatus } from '@prisma/client';
 
 /**
  * Advances (UPD-BE-033). "Auto-deducted from the next commission payout" is real, but happens at

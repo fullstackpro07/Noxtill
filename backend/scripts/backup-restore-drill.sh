@@ -15,7 +15,9 @@ set -euo pipefail
 : "${MYSQL_DATABASE:?MYSQL_DATABASE is required}"
 export MYSQL_PWD="${MYSQL_PASSWORD:-}"
 
-MYSQL=(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER")
+# `--protocol=TCP` is required: `mysql -h localhost` prefers the Unix socket, which does not
+# exist on the GitHub Actions runner (the MySQL service is a container published on TCP 3306).
+MYSQL=(mysql --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER")
 RESTORE_DB="${MYSQL_DATABASE}_restore_drill"
 DUMP_FILE="$(mktemp -t noxtill-backup-drill-XXXXXX).sql"
 CANARY_SLUG="backup-drill-canary-$(date +%s)"
@@ -29,10 +31,10 @@ trap cleanup EXIT
 
 echo "==> Inserting a canary row into '${MYSQL_DATABASE}.businesses' (slug=${CANARY_SLUG})"
 "${MYSQL[@]}" -D "$MYSQL_DATABASE" -e \
-  "INSERT INTO businesses (id, name, slug, created_at, updated_at) VALUES (UUID(), 'Backup Drill Canary', '${CANARY_SLUG}', NOW(), NOW());"
+  "INSERT INTO businesses (id, name, slug, branding, dashboard_config, working_hours, referral_settings, health_score_weights, created_at, updated_at) VALUES (UUID(), 'Backup Drill Canary', '${CANARY_SLUG}', CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), NOW(), NOW());"
 
 echo "==> mysqldump ${MYSQL_DATABASE} -> ${DUMP_FILE}"
-mysqldump -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --single-transaction --routines "$MYSQL_DATABASE" >"$DUMP_FILE"
+mysqldump --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --single-transaction --routines "$MYSQL_DATABASE" >"$DUMP_FILE"
 
 echo "==> Creating a fresh database for the restore drill: ${RESTORE_DB}"
 "${MYSQL[@]}" -e "DROP DATABASE IF EXISTS \`${RESTORE_DB}\`;"

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 function monthBounds(month: string): { start: Date; end: Date } {
   const [year, mon] = month.split('-').map(Number);

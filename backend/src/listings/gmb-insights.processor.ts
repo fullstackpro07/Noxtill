@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GmbManagementService } from './gmb-management.service';
 import { GMB_INSIGHTS_QUEUE } from './listings.constants';
-import { IntegrationProvider, IntegrationStatus } from '../../generated/prisma';
+import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 
 /**
  * Nightly GMB insights pull (UPD-BE-042) — for every business with a connected `gmb` integration.

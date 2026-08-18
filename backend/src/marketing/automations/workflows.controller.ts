@@ -16,7 +16,7 @@ import {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequireCapability } from '../../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../../common/tenancy/auth-context';
-import { WorkflowTriggerKey } from '../../../generated/prisma';
+import { WorkflowTriggerKey } from '@prisma/client';
 import { CAPABILITIES } from '../../common/capabilities/capabilities.constants';
 
 @Controller('workflows')

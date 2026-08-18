@@ -14,6 +14,7 @@ jest.mock('../common/pdf/pdf-renderer.service', () => ({
 }));
 
 import { QrPosterService } from './qr-poster.service';
+import { deleteCrossTestBusinessRows } from '../common/testing/cleanup-test-business';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -73,8 +74,11 @@ describe('QrPosterService', () => {
   });
 
   afterAll(async () => {
-    await prisma.business.delete({ where: { id: businessId } });
-    await prisma.$disconnect();
+    if (businessId) {
+      await deleteCrossTestBusinessRows(prisma, businessId);
+      await prisma.business.delete({ where: { id: businessId } });
+    }
+    await prisma?.$disconnect();
   });
 
   // Real QR encoding (`toDataURL`) is CPU-bound and can occasionally cross the default 5s budget
@@ -139,6 +143,7 @@ describe('QrPosterService', () => {
     expect(htmlArg).not.toContain('<script>alert(1)</script>');
     expect(htmlArg).toContain('&lt;script&gt;');
 
+    await deleteCrossTestBusinessRows(prisma, evilBusiness.id);
     await prisma.business.delete({ where: { id: evilBusiness.id } });
   }, 15_000);
 });

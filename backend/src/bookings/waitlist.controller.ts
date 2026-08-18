@@ -4,7 +4,7 @@ import { CreateWaitlistEntryDto } from './dto/create-waitlist-entry.dto';
 import { OfferWaitlistEntryDto } from './dto/offer-waitlist-entry.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { WaitlistStatus } from '../../generated/prisma';
+import { WaitlistStatus } from '@prisma/client';
 
 @Controller('waitlist')
 export class WaitlistController {

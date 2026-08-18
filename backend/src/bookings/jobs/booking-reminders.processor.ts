@@ -8,7 +8,7 @@ import {
   BOOKING_REMINDER_HOUR_OFFSETS,
   BOOKING_REMINDER_WINDOW_MIN,
 } from './booking-reminders.constants';
-import { AppointmentStatus } from '../../../generated/prisma';
+import { AppointmentStatus } from '@prisma/client';
 
 interface BookingRemindersJobData {
   /** ISO timestamp override, used only by tests to make "now" deterministic. */

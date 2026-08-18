@@ -15,7 +15,7 @@ import { TelegramConnector } from './telegram.connector';
 import { DiscordConnector } from './discord.connector';
 import { WechatConnector } from './wechat.connector';
 import { LineConnector } from './line.connector';
-import { SocialPlatform } from '../../../generated/prisma';
+import { SocialPlatform } from '@prisma/client';
 
 const OAUTH_PLATFORMS = new Set<SocialPlatform>([
   SocialPlatform.facebook,

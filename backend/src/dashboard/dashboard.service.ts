@@ -3,7 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { WidgetsService } from '../widgets/widgets.service';
 import { UpdateDashboardConfigDto } from './dto/update-dashboard-config.dto';
 import { DASHBOARD_TODAY_WIDGET_KEYS } from './dashboard.constants';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '@prisma/client';
 
 /** Dashboard layout + first-paint aggregate (BE-068). */
 @Injectable()

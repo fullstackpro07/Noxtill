@@ -1,11 +1,7 @@
 import { PrismaService } from '../../prisma/prisma.service';
 import { WorkflowTriggerService } from './workflow-trigger.service';
 import { SendGateService } from '../../messaging/send-gate.service';
-import {
-  ActivityEventType,
-  Role,
-  WorkflowTriggerKey,
-} from '../../../generated/prisma';
+import { ActivityEventType, Role, WorkflowTriggerKey } from '@prisma/client';
 
 describe('WorkflowTriggerService (UPD-BE-028)', () => {
   let prisma: PrismaService;

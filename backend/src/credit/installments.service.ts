@@ -4,10 +4,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
 import { CREDIT_ERROR_CODES } from './credit.constants';
-import {
-  InstallmentPlanStatus,
-  InstallmentStatus,
-} from '../../generated/prisma';
+import { InstallmentPlanStatus, InstallmentStatus } from '@prisma/client';
 
 function todayEnd(): Date {
   const d = new Date();
