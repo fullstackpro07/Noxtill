@@ -59,7 +59,7 @@ import { SocialModule } from './social/social.module';
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
     PrismaModule,
     CommonModule,
-    QueueModule,
+    QueueModule.forRoot(),
     StorageModule,
     LocalizationModule,
     PdfModule,

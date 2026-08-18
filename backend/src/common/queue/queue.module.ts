@@ -1,34 +1,72 @@
-import { Global, Module } from '@nestjs/common';
+import { DynamicModule, Global, Injectable, Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq';
-import { DEMO_QUEUE, dlqName } from './queue.constants';
+import { BullModule, InjectQueue } from '@nestjs/bullmq';
+import { Queue, JobsOptions } from 'bullmq';
+import {
+  DEFAULT_JOB_OPTIONS,
+  DemoJobData,
+  DEMO_QUEUE,
+  dlqName,
+} from './queue.constants';
 import { QueueService } from './queue.service';
 import { DemoProcessor } from './demo.processor';
 import { DeadLetterListener } from './dead-letter.listener';
 
-/**
- * Build an ioredis-compatible connection config from environment variables.
- *
- * Priority:
- *  1. REDIS_URL  — full URL (e.g. rediss://:<password>@host:port  from Upstash)
- *  2. REDIS_HOST + REDIS_PORT — explicit host/port pair
- *  3. Fallback: localhost:6379
- *
- * Socket timeouts are set so a missing/unreachable Redis instance fails fast
- * instead of blocking NestJS module init for 30+ seconds.
- */
+export { QueueService, dlqName };
+
+// ---------------------------------------------------------------------------
+// No-op stub — used when Redis is not configured.
+// Satisfies the QueueService injection token without opening any connections.
+// ---------------------------------------------------------------------------
+@Injectable()
+class NoOpQueueService {
+  private readonly logger = new Logger('QueueService');
+
+  private warn() {
+    this.logger.warn(
+      'Redis is not configured (REDIS_URL / REDIS_HOST missing). ' +
+        'Queue operations are disabled.',
+    );
+  }
+
+  async addJob<T>(
+    _queue: unknown,
+    _jobName: string,
+    _data: T,
+    _idempotencyKey: string,
+    _opts: JobsOptions = {},
+  ) {
+    this.warn();
+    return null;
+  }
+
+  async addDemoJob(
+    _jobName: string,
+    _data: DemoJobData,
+    _idempotencyKey: string,
+    _opts: JobsOptions = {},
+  ) {
+    this.warn();
+    return null;
+  }
+
+  get demo(): Queue | null {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Real QueueService — only instantiated when BullMQ is fully loaded.
+// ---------------------------------------------------------------------------
+// (imported from queue.service.ts, kept as-is)
+
+// ---------------------------------------------------------------------------
+// Helper: build ioredis connection options from env vars.
+// ---------------------------------------------------------------------------
 function buildRedisConnection(config: ConfigService): object {
   const redisUrl = config.get<string>('REDIS_URL');
 
-  // retryStrategy: () => null  — stop retrying immediately on connection failure
-  //                               (prevents infinite ETIMEDOUT loops)
-  // lazyConnect: true           — don't open the TCP socket during module init;
-  //                               connect only when the first Redis command is issued.
-  //                               This lets NestJS reach app.listen() within Hostinger's
-  //                               3-second startup window even if Redis is unreachable.
   const sharedOptions = {
-    lazyConnect: true,
-    retryStrategy: () => null,
     maxRetriesPerRequest: null, // required by BullMQ
     enableReadyCheck: false,
     connectTimeout: 5000,
@@ -53,22 +91,52 @@ function buildRedisConnection(config: ConfigService): object {
   };
 }
 
+// ---------------------------------------------------------------------------
+// QueueModule — returns a DynamicModule with or without BullMQ depending on
+// whether Redis is configured in the environment.
+// ---------------------------------------------------------------------------
 @Global()
-@Module({
-  imports: [
-    BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: buildRedisConnection(config),
-      }),
-    }),
-    BullModule.registerQueue(
-      { name: DEMO_QUEUE },
-      { name: dlqName(DEMO_QUEUE) },
-    ),
-  ],
-  providers: [QueueService, DemoProcessor, DeadLetterListener],
-  exports: [QueueService, BullModule],
-})
-export class QueueModule {}
+@Module({})
+export class QueueModule {
+  static forRoot(): DynamicModule {
+    const redisAvailable = !!(
+      process.env.REDIS_URL || process.env.REDIS_HOST
+    );
+
+    if (!redisAvailable) {
+      // ── No Redis configured: return a zero-connection stub ──────────────
+      return {
+        module: QueueModule,
+        global: true,
+        providers: [
+          {
+            provide: QueueService,
+            useClass: NoOpQueueService,
+          },
+        ],
+        exports: [QueueService],
+      };
+    }
+
+    // ── Redis is configured: load the full BullMQ stack ──────────────────
+    return {
+      module: QueueModule,
+      global: true,
+      imports: [
+        BullModule.forRootAsync({
+          imports: [ConfigModule],
+          inject: [ConfigService],
+          useFactory: (config: ConfigService) => ({
+            connection: buildRedisConnection(config),
+          }),
+        }),
+        BullModule.registerQueue(
+          { name: DEMO_QUEUE },
+          { name: dlqName(DEMO_QUEUE) },
+        ),
+      ],
+      providers: [QueueService, DemoProcessor, DeadLetterListener],
+      exports: [QueueService, BullModule],
+    };
+  }
+}
