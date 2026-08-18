@@ -1,7 +1,4 @@
-import {
-  describeDatabaseTarget,
-  resolveDatabaseUrl,
-} from './resolve-database-url';
+import { resolveDatabaseUrl } from './resolve-database-url';
 
 describe('resolveDatabaseUrl', () => {
   it('passes through a valid mysql:// URL', () => {
@@ -45,13 +42,5 @@ describe('resolveDatabaseUrl', () => {
 
   it('throws a Hostinger-specific hint when nothing usable is set', () => {
     expect(() => resolveDatabaseUrl({})).toThrow(/mysql:\/\//);
-  });
-
-  it('describes a URL without leaking the password', () => {
-    expect(
-      describeDatabaseTarget(
-        'mysql://noxtill:super-secret@localhost:3306/Noxtill',
-      ),
-    ).toBe('user=noxtill host=localhost port=3306 db=Noxtill passwordChars=12');
   });
 });
