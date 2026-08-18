@@ -31,9 +31,7 @@ export class PrismaService
       await this.$connect();
     } catch (error) {
       this.logger.error(
-        `Prisma connect failed (${describeDatabaseTarget(process.env.DATABASE_URL ?? '')}). ` +
-          'MySQL rejected the password from Node.js Environment variables. ' +
-          'Changing it under Databases does not update DATABASE_URL — edit that value in the website dashboard sidebar, Save (that redeploys), then confirm passwordChars matches the new password length.',
+        `Prisma connect failed (${describeDatabaseTarget(process.env.DATABASE_URL ?? '')})`,
       );
       throw error;
     }
