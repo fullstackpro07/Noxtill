@@ -6,6 +6,46 @@ import { QueueService } from './queue.service';
 import { DemoProcessor } from './demo.processor';
 import { DeadLetterListener } from './dead-letter.listener';
 
+/**
+ * Build an ioredis-compatible connection config from environment variables.
+ *
+ * Priority:
+ *  1. REDIS_URL  — full URL (e.g. rediss://:<password>@host:port  from Upstash)
+ *  2. REDIS_HOST + REDIS_PORT — explicit host/port pair
+ *  3. Fallback: localhost:6379
+ *
+ * Socket timeouts are set so a missing/unreachable Redis instance fails fast
+ * instead of blocking NestJS module init for 30+ seconds.
+ */
+function buildRedisConnection(config: ConfigService): object {
+  const redisUrl = config.get<string>('REDIS_URL');
+
+  if (redisUrl) {
+    const parsed = new URL(redisUrl);
+    return {
+      host: parsed.hostname,
+      port: Number(parsed.port) || 6379,
+      password: parsed.password || undefined,
+      tls: parsed.protocol === 'rediss:' ? {} : undefined,
+      // Fail fast so the app still starts even if Redis is briefly unavailable
+      connectTimeout: 5000,
+      commandTimeout: 5000,
+      maxRetriesPerRequest: null, // required by BullMQ
+      enableReadyCheck: false,
+    };
+  }
+
+  return {
+    host: config.get<string>('REDIS_HOST', 'localhost'),
+    port: Number(config.get('REDIS_PORT', 6379)),
+    password: config.get<string>('REDIS_PASSWORD') || undefined,
+    connectTimeout: 5000,
+    commandTimeout: 5000,
+    maxRetriesPerRequest: null, // required by BullMQ
+    enableReadyCheck: false,
+  };
+}
+
 @Global()
 @Module({
   imports: [
@@ -13,10 +53,7 @@ import { DeadLetterListener } from './dead-letter.listener';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: Number(config.get('REDIS_PORT', 6379)),
-        },
+        connection: buildRedisConnection(config),
       }),
     }),
     BullModule.registerQueue(
