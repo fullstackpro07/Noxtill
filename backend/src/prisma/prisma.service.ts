@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   describeDatabaseTarget,
@@ -21,15 +26,10 @@ export class PrismaService
     super({ datasources: { db: { url: resolveDatabaseUrl() } } });
   }
 
-  async onModuleInit() {
-    try {
-      await this.$connect();
-    } catch (error) {
-      this.logger.error(
-        `Prisma connect failed (${describeDatabaseTarget(process.env.DATABASE_URL ?? '')})`,
-      );
-      throw error;
-    }
+  onModuleInit() {
+    this.logger.log(
+      `Prisma datasource ${describeDatabaseTarget(process.env.DATABASE_URL ?? '')}`,
+    );
   }
 
   async onModuleDestroy() {
