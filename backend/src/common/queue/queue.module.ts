@@ -20,6 +20,20 @@ import { DeadLetterListener } from './dead-letter.listener';
 function buildRedisConnection(config: ConfigService): object {
   const redisUrl = config.get<string>('REDIS_URL');
 
+  // retryStrategy: () => null  — stop retrying immediately on connection failure
+  //                               (prevents infinite ETIMEDOUT loops)
+  // lazyConnect: true           — don't open the TCP socket during module init;
+  //                               connect only when the first Redis command is issued.
+  //                               This lets NestJS reach app.listen() within Hostinger's
+  //                               3-second startup window even if Redis is unreachable.
+  const sharedOptions = {
+    lazyConnect: true,
+    retryStrategy: () => null,
+    maxRetriesPerRequest: null, // required by BullMQ
+    enableReadyCheck: false,
+    connectTimeout: 5000,
+  };
+
   if (redisUrl) {
     const parsed = new URL(redisUrl);
     return {
@@ -27,11 +41,7 @@ function buildRedisConnection(config: ConfigService): object {
       port: Number(parsed.port) || 6379,
       password: parsed.password || undefined,
       tls: parsed.protocol === 'rediss:' ? {} : undefined,
-      // Fail fast so the app still starts even if Redis is briefly unavailable
-      connectTimeout: 5000,
-      commandTimeout: 5000,
-      maxRetriesPerRequest: null, // required by BullMQ
-      enableReadyCheck: false,
+      ...sharedOptions,
     };
   }
 
@@ -39,10 +49,7 @@ function buildRedisConnection(config: ConfigService): object {
     host: config.get<string>('REDIS_HOST', 'localhost'),
     port: Number(config.get('REDIS_PORT', 6379)),
     password: config.get<string>('REDIS_PASSWORD') || undefined,
-    connectTimeout: 5000,
-    commandTimeout: 5000,
-    maxRetriesPerRequest: null, // required by BullMQ
-    enableReadyCheck: false,
+    ...sharedOptions,
   };
 }
 
