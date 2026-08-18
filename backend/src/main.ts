@@ -1,7 +1,4 @@
-import { createServer } from 'node:http';
-import express from 'express';
 import { NestFactory } from '@nestjs/core';
-import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -39,27 +36,12 @@ function validateEnv(): void {
   }
 }
 
-const port = Number(process.env.PORT ?? 3000);
-const expressApp = express();
-const httpServer = createServer(expressApp);
-
-// Hostinger kills the process if listen() is not called within 3s. Nest's
-// create()/init() runs Prisma + seed upserts first, so bind the port immediately
-// and attach Nest to this same Express instance afterward.
-httpServer.listen(port);
-
 async function bootstrap() {
   resolveDatabaseUrl();
   validateEnv();
 
   // rawBody is needed to verify webhook signatures (Meta/Stripe HMAC) against the exact bytes sent.
-  const app = await NestFactory.create(
-    AppModule,
-    new ExpressAdapter(expressApp),
-    {
-      rawBody: true,
-    },
-  );
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.use(helmet());
 
@@ -77,7 +59,7 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('api/v1');
-  app.enableShutdownHooks();
-  await app.init();
+
+  await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();

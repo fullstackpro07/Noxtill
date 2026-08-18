@@ -26,10 +26,17 @@ export class PrismaService
     super({ datasources: { db: { url: resolveDatabaseUrl() } } });
   }
 
-  onModuleInit() {
-    this.logger.log(
-      `Prisma datasource ${describeDatabaseTarget(process.env.DATABASE_URL ?? '')}`,
-    );
+  async onModuleInit() {
+    try {
+      await this.$connect();
+    } catch (error) {
+      this.logger.error(
+        `Prisma connect failed (${describeDatabaseTarget(process.env.DATABASE_URL ?? '')}). ` +
+          'MySQL rejected the password from Node.js Environment variables. ' +
+          'Changing it under Databases does not update DATABASE_URL — edit that value in the website dashboard sidebar, Save (that redeploys), then confirm passwordChars matches the new password length.',
+      );
+      throw error;
+    }
   }
 
   async onModuleDestroy() {
