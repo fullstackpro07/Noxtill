@@ -52,6 +52,16 @@ function isMysqlUrl(url: string): boolean {
   return url.startsWith('mysql://');
 }
 
+export function describeDatabaseTarget(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const db = parsed.pathname.replace(/^\//, '') || '(none)';
+    return `user=${parsed.username} host=${parsed.hostname} port=${parsed.port || '3306'} db=${db} passwordChars=${parsed.password.length}`;
+  } catch {
+    return 'DATABASE_URL could not be parsed (check for unescaped @ : / in the password)';
+  }
+}
+
 function describeInvalid(url: string): string {
   if (!url) {
     return 'It is currently empty or unset.';

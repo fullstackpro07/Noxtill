@@ -1,6 +1,9 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { resolveDatabaseUrl } from './resolve-database-url';
+import {
+  describeDatabaseTarget,
+  resolveDatabaseUrl,
+} from './resolve-database-url';
 
 /**
  * Raw, unscoped Prisma client. Only inject this directly for platform-admin
@@ -12,12 +15,21 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  private readonly logger = new Logger(PrismaService.name);
+
   constructor() {
     super({ datasources: { db: { url: resolveDatabaseUrl() } } });
   }
 
   async onModuleInit() {
-    await this.$connect();
+    try {
+      await this.$connect();
+    } catch (error) {
+      this.logger.error(
+        `Prisma connect failed (${describeDatabaseTarget(process.env.DATABASE_URL ?? '')})`,
+      );
+      throw error;
+    }
   }
 
   async onModuleDestroy() {
