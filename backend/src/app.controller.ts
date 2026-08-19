@@ -12,4 +12,19 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  /**
+   * Public health check endpoint — accessible at GET /api/v1/health.
+   * Used by Hostinger's uptime monitoring and load balancers.
+   * Returns 200 immediately without any DB/Redis I/O so it always responds fast.
+   */
+  @Public()
+  @Get('health')
+  health(): object {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+    };
+  }
 }
