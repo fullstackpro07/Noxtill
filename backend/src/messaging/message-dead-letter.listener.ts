@@ -41,16 +41,25 @@ export class MessageDeadLetterListener
   ) {}
 
   onModuleInit() {
+    const tlsRaw = this.config.get<string>('REDIS_TLS', '');
+    const tlsEnabled = tlsRaw === 'true' || tlsRaw === '1' || tlsRaw === 'yes';
     this.events = new QueueEvents(MESSAGES_QUEUE, {
       connection: {
         host: this.config.get<string>('REDIS_HOST', 'localhost'),
         port: Number(this.config.get('REDIS_PORT', 6379)),
+        username: this.config.get<string>('REDIS_USERNAME') || undefined,
+        password: this.config.get<string>('REDIS_PASSWORD') || undefined,
+        tls: tlsEnabled ? {} : undefined,
+        enableReadyCheck: false,
+        maxRetriesPerRequest: null,
       },
     });
 
     this.events.on('failed', ({ jobId, failedReason }) => {
       void this.moveToDlqIfExhausted(jobId, failedReason);
     });
+    // Do NOT await waitUntilReady() — blocks NestJS onModuleInit past Hostinger's
+    // 3-second startup window. Events will start firing once connection is ready.
   }
 
   private async moveToDlqIfExhausted(

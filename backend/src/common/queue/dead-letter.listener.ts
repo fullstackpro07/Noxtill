@@ -30,18 +30,26 @@ export class DeadLetterListener implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
+    const tlsRaw = this.config.get<string>('REDIS_TLS', '');
+    const tlsEnabled = tlsRaw === 'true' || tlsRaw === '1' || tlsRaw === 'yes';
     this.events = new QueueEvents(DEMO_QUEUE, {
       connection: {
         host: this.config.get<string>('REDIS_HOST', 'localhost'),
         port: Number(this.config.get('REDIS_PORT', 6379)),
+        username: this.config.get<string>('REDIS_USERNAME') || undefined,
+        password: this.config.get<string>('REDIS_PASSWORD') || undefined,
+        tls: tlsEnabled ? {} : undefined,
+        enableReadyCheck: false,
+        maxRetriesPerRequest: null,
       },
     });
 
     this.events.on('failed', ({ jobId, failedReason }) => {
       void this.moveToDlqIfExhausted(jobId, failedReason);
     });
-    await this.events.waitUntilReady();
+    // Do NOT await waitUntilReady() — it blocks NestJS onModuleInit and prevents
+    // app.listen() from being called within Hostinger's 3-second startup window.
   }
 
   private async moveToDlqIfExhausted(
