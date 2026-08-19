@@ -1,7 +1,11 @@
 import { useAuthStore } from "@/store/auth-store";
 import { useBranchContextStore } from "@/store/branch-context-store";
 
-export const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api/v1";
+export const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined"
+    ? "/api/v1"
+    : process.env.INTERNAL_BACKEND_URL || "http://127.0.0.1:5000/api/v1");
 
 interface ApiErrorBody {
   error?: {

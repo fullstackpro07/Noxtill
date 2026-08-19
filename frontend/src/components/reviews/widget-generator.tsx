@@ -11,7 +11,11 @@ import { toast } from "@/lib/toast";
 type WidgetTheme = "light" | "dark";
 type WidgetLayout = "badge" | "carousel" | "grid";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api/v1";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined"
+    ? "/api/v1"
+    : process.env.INTERNAL_BACKEND_URL || "http://127.0.0.1:5000/api/v1");
 
 export function WidgetGenerator({ businessSlug }: { businessSlug: string }) {
   const [theme, setTheme] = useState<WidgetTheme>("light");
