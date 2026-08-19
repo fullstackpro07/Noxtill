@@ -58,7 +58,13 @@ export class BusinessTypesSeedService implements OnModuleInit {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async onModuleInit() {
+  onModuleInit() {
+    // Run in background — do NOT await. Awaiting DB queries in onModuleInit
+    // blocks NestJS bootstrap past Hostinger's 3-second listen() deadline.
+    void this.seed();
+  }
+
+  private async seed() {
     try {
       for (const category of CATEGORIES) {
         const cat = await this.prisma.businessCategory.upsert({

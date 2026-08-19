@@ -18,7 +18,13 @@ export class StripeSyncService implements OnModuleInit {
     private readonly stripeAdapter: StripeGatewayAdapter,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
+    // Run in background — do NOT await. Stripe API calls in onModuleInit
+    // block NestJS bootstrap past Hostinger's 3-second listen() deadline.
+    void this.sync();
+  }
+
+  private async sync() {
     if (!this.stripeAdapter.isConfigured || !this.stripeAdapter.stripe) {
       return;
     }

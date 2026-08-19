@@ -79,7 +79,14 @@ export class HelpArticlesSeedService implements OnModuleInit {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async onModuleInit() {
+  onModuleInit() {
+    // Run in background — do NOT await here. Awaiting DB queries in onModuleInit
+    // blocks NestJS bootstrap and prevents app.listen() from being called within
+    // Hostinger's 3-second startup window.
+    void this.seed();
+  }
+
+  private async seed() {
     try {
       for (const article of ARTICLES) {
         await this.prisma.helpArticle.upsert({
