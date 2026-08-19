@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pencil, Plus, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import { SkeletonCard } from "@/components/shared/skeleton";
 import { AlertStack } from "./alert-stack";
 import { LatestReviewCard } from "./latest-review-card";
@@ -12,10 +13,16 @@ import { WidgetGridView } from "./widget-grid-view";
 import { WidgetGridCustomize } from "./widget-grid-customize";
 import { AddWidgetDrawer } from "./add-widget-drawer";
 import { NewBusinessEmptyState } from "./new-business-empty-state";
+import { HealthScoreCard } from "./health-score-card";
+import { LiveActivityFeed } from "./live-activity-feed";
+import { AiInsightsFeed } from "./ai-insights-feed";
+import { ActionCenter } from "./action-center";
 import { useDashboardStore } from "@/store/dashboard-store";
 import { useWidgetData } from "@/hooks/use-widget-data";
 import { fetchDashboardConfig, saveDashboardConfig } from "@/lib/widgets-api";
 import { toast } from "@/lib/toast";
+
+type DashboardTab = "overview" | "health-score" | "activity" | "insights" | "actions";
 
 export function DashboardView({ currency, businessName }: { currency: string; businessName: string }) {
   const layout = useDashboardStore((s) => s.layout);
@@ -27,6 +34,7 @@ export function DashboardView({ currency, businessName }: { currency: string; bu
   const cancelCustomize = useDashboardStore((s) => s.cancelCustomize);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<DashboardTab>("overview");
 
   // Hydrates the layout from the server's saved dashboard config, if one exists — server wins over whatever's locally cached.
   const { data: serverConfig } = useQuery({
@@ -106,26 +114,50 @@ export function DashboardView({ currency, businessName }: { currency: string; bu
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <RangeDropdown />
-            <Button variant="outline" size="sm" onClick={enterCustomize}>
-              <Pencil className="h-4 w-4" aria-hidden />
-              Customize
-            </Button>
-          </div>
+          tab === "overview" && (
+            <div className="flex items-center gap-2">
+              <RangeDropdown />
+              <Button variant="outline" size="sm" onClick={enterCustomize}>
+                <Pencil className="h-4 w-4" aria-hidden />
+                Customize
+              </Button>
+            </div>
+          )
         )}
       </div>
 
-      {!isCustomizing && <AlertStack />}
+      {!isCustomizing && (
+        <Tabs
+          items={[
+            { key: "overview", label: "Overview" },
+            { key: "health-score", label: "Health score" },
+            { key: "activity", label: "Activity" },
+            { key: "insights", label: "AI insights" },
+            { key: "actions", label: "Actions" },
+          ]}
+          value={tab}
+          onChange={(k) => setTab(k as DashboardTab)}
+          className="mb-5 w-full max-w-xl"
+        />
+      )}
 
       {isCustomizing ? (
         <WidgetGridCustomize currency={currency} />
       ) : (
         <>
-          <div className="mb-3 max-w-sm">
-            <LatestReviewCard />
-          </div>
-          <WidgetGridView layout={layout} currency={currency} range={range} />
+          {tab === "overview" && (
+            <>
+              <AlertStack />
+              <div className="mb-3 max-w-sm">
+                <LatestReviewCard />
+              </div>
+              <WidgetGridView layout={layout} currency={currency} range={range} />
+            </>
+          )}
+          {tab === "health-score" && <HealthScoreCard />}
+          {tab === "activity" && <LiveActivityFeed />}
+          {tab === "insights" && <AiInsightsFeed />}
+          {tab === "actions" && <ActionCenter />}
         </>
       )}
 
