@@ -2,6 +2,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LocaleService } from '../../common/localization/locale.service';
 import { SendGateService } from '../../messaging/send-gate.service';
 import { WorkflowTriggerService } from '../../marketing/automations/workflow-trigger.service';
+import { OutboundWebhookDispatchService } from '../../integrations/automation/outbound-webhook-dispatch.service';
 import { CrmJobsProcessor } from './crm-jobs.processor';
 import { VIP_LIFETIME_SPEND_THRESHOLD } from './crm-jobs.constants';
 
@@ -11,6 +12,9 @@ describe('CrmJobsProcessor (BE-041)', () => {
   let businessId: string;
   const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
   const workflowTrigger = { dispatch: jest.fn().mockResolvedValue(undefined) };
+  const outboundWebhookDispatch = {
+    dispatch: jest.fn().mockResolvedValue(undefined),
+  };
 
   // UTC business, so "local hour" == UTC hour — makes the fixed `now` below deterministic.
   const midnightUtc = new Date('2026-03-01T00:00:00Z');
@@ -24,6 +28,7 @@ describe('CrmJobsProcessor (BE-041)', () => {
       new LocaleService(),
       sendGate as unknown as SendGateService,
       workflowTrigger as unknown as WorkflowTriggerService,
+      outboundWebhookDispatch as unknown as OutboundWebhookDispatchService,
     );
 
     const business = await prisma.business.create({

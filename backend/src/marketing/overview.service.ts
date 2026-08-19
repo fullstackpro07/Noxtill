@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AD_PROVIDERS } from '../ads/ads.constants';
 import { IntegrationProvider } from '@prisma/client';
 
 export interface ChannelOverviewRow {
@@ -9,17 +10,11 @@ export interface ChannelOverviewRow {
   costPerResult: number | null;
 }
 
-const AD_PROVIDERS: IntegrationProvider[] = [
-  IntegrationProvider.google_ads,
-  IntegrationProvider.meta_ads,
-  IntegrationProvider.tiktok_ads,
-];
-
 /**
  * Cross-channel marketing overview (BE-089). Real aggregation over data that genuinely exists —
- * WhatsApp campaigns (BE-061) and email campaigns (BE-083) will show real numbers once sent; the
- * 3 ad-spend channels will honestly read zero until a real OAuth connection exists to create
- * campaigns against (deliberately deferred this ticket, see plan).
+ * WhatsApp campaigns (BE-061) and email campaigns (BE-083) will show real numbers once sent; each
+ * ad-spend channel (UPD-BE-069's now-9-provider set, shared from `ads/ads.constants.ts`) honestly
+ * reads zero until a real OAuth connection exists to create campaigns against.
  */
 @Injectable()
 export class MarketingOverviewService {
@@ -78,6 +73,18 @@ export class MarketingOverviewService {
         return 'Meta Ads';
       case IntegrationProvider.tiktok_ads:
         return 'TikTok Ads';
+      case IntegrationProvider.linkedin_ads:
+        return 'LinkedIn Ads';
+      case IntegrationProvider.pinterest_ads:
+        return 'Pinterest Ads';
+      case IntegrationProvider.snapchat_ads:
+        return 'Snapchat Ads';
+      case IntegrationProvider.microsoft_ads:
+        return 'Microsoft Ads';
+      case IntegrationProvider.amazon_ads:
+        return 'Amazon Ads';
+      case IntegrationProvider.reddit_ads:
+        return 'Reddit Ads';
       default:
         return provider;
     }

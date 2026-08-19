@@ -54,22 +54,27 @@ export class IntegrationsService {
   async connect(
     businessId: string,
     provider: IntegrationProvider,
+    params: Record<string, string> = {},
   ): Promise<ConnectResult> {
     const connector = this.connectors.get(provider);
     const state = signPayload<StatePayload>(
       { businessId, provider },
       this.stateSecret(),
     );
-    const url = connector.authUrl(state);
+    const url = connector.authUrl(state, params);
 
     if (!url) {
-      // Non-OAuth provider (email, apple_business_connect) — nothing to redirect to, connect
-      // directly. Still exchanges via `handleCallback()` and stores whatever real tokens it
-      // returns (e.g. Apple's pre-provisioned server-to-server API key) — a fix for a real gap:
-      // this branch used to connect without ever storing tokens, so `getTokens()` always came
-      // back `null` for a non-OAuth provider and any real `pushListing()` call silently
-      // no-op'd even once a real credential was configured.
-      const tokens = await connector.handleCallback('');
+      // Non-OAuth provider (email, apple_business_connect, and — UPD-BE-073 — WooCommerce's
+      // manual store-URL/consumer-key/consumer-secret entry) — nothing to redirect to, connect
+      // directly. `params` (the connect request body) is forwarded as `rawQuery` so a connector
+      // like WooCommerce's can read the credentials the merchant just typed in. Still exchanges
+      // via `handleCallback()` and stores whatever real tokens it returns (e.g. Apple's
+      // pre-provisioned server-to-server API key) — a fix for a real gap: this branch used to
+      // connect without ever storing tokens, so `getTokens()` always came back `null` for a
+      // non-OAuth provider and any real `pushListing()` call silently no-op'd even once a real
+      // credential was configured.
+      const tokens = await connector.handleCallback('', params);
+      const meta = tokens.providerMeta;
       await this.tenantPrisma.client.integration.upsert({
         where: { businessId_provider: { businessId, provider } },
         create: {
@@ -77,10 +82,12 @@ export class IntegrationsService {
           provider,
           status: IntegrationStatus.connected,
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+          ...(meta ? { meta } : {}),
         },
         update: {
           status: IntegrationStatus.connected,
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+          ...(meta ? { meta } : {}),
         },
       });
       return { connected: true };
@@ -94,6 +101,7 @@ export class IntegrationsService {
     provider: IntegrationProvider,
     code: string,
     state: string,
+    rawQuery: Record<string, string> = {},
   ): Promise<{ businessId: string; ok: boolean }> {
     const payload = verifyPayload<StatePayload>(state, this.stateSecret());
     if (!payload || payload.provider !== provider) {
@@ -108,7 +116,8 @@ export class IntegrationsService {
     const connector = this.connectors.get(provider);
 
     try {
-      const tokens = await connector.handleCallback(code);
+      const tokens = await connector.handleCallback(code, rawQuery);
+      const meta = tokens.providerMeta;
       await this.tenantPrisma.client.integration.upsert({
         where: { businessId_provider: { businessId, provider } },
         create: {
@@ -116,10 +125,12 @@ export class IntegrationsService {
           provider,
           status: IntegrationStatus.connected,
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+          ...(meta ? { meta } : {}),
         },
         update: {
           status: IntegrationStatus.connected,
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
+          ...(meta ? { meta } : {}),
         },
       });
       return { businessId, ok: true };
@@ -145,8 +156,11 @@ export class IntegrationsService {
     provider: IntegrationProvider,
   ): Promise<void> {
     const connector = this.connectors.get(provider);
+    // Fetched before revoking so a real revoke call (QuickBooks, Xero) has a token to send —
+    // most connectors ignore this argument entirely (their `disconnect()` is a documented no-op).
+    const tokens = await this.getTokens(businessId, provider);
     await connector
-      .disconnect()
+      .disconnect(tokens ?? undefined)
       .catch((error: Error) =>
         this.logger.warn(
           `disconnect() failed for provider=${provider}: ${error.message}`,

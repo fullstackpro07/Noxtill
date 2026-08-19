@@ -89,6 +89,19 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'PhoneNumber',
   'PhoneCall',
   'DigitizerAlias',
+  'Rider',
+  'Delivery',
+  'Route',
+  'DeliveryZone',
+  'AdCreative',
+  'AdAudience',
+  'AdLead',
+  'AccountingMapping',
+  'OutboundWebhook',
+  'ReviewSentimentTheme',
+  'RecurringObligation',
+  'SeoHeatmapPoint',
+  'ApiKey',
 ]);
 
 export const CLS_KEY_BUSINESS_ID = 'businessId';

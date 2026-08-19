@@ -16,6 +16,10 @@ import { REVIEW_REMINDERS_QUEUE } from './jobs/review-reminders.constants';
 import { GoogleSyncScheduler } from './jobs/google-sync.scheduler';
 import { GoogleSyncProcessor } from './jobs/google-sync.processor';
 import { GOOGLE_SYNC_QUEUE } from './jobs/google-sync.constants';
+import { SentimentAnalysisService } from './sentiment-analysis.service';
+import { SentimentAnalysisScheduler } from './jobs/sentiment-analysis.scheduler';
+import { SentimentAnalysisProcessor } from './jobs/sentiment-analysis.processor';
+import { SENTIMENT_ANALYSIS_QUEUE } from './sentiment-analysis.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { AiModule } from '../ai/ai.module';
 import { ActivityModule } from '../activity/activity.module';
@@ -25,6 +29,7 @@ import { ActivityModule } from '../activity/activity.module';
     BullModule.registerQueue(
       { name: REVIEW_REMINDERS_QUEUE },
       { name: GOOGLE_SYNC_QUEUE },
+      { name: SENTIMENT_ANALYSIS_QUEUE },
     ),
     MessagingModule,
     AiModule,
@@ -47,6 +52,9 @@ import { ActivityModule } from '../activity/activity.module';
     GoogleSyncProcessor,
     VideoTestimonialsService,
     PublicVideoTestimonialService,
+    SentimentAnalysisService,
+    SentimentAnalysisScheduler,
+    SentimentAnalysisProcessor,
   ],
   exports: [ReviewRequestsService],
 })

@@ -52,6 +52,14 @@ import { SocialModule } from './social/social.module';
 import { CompetitiveModule } from './competitive/competitive.module';
 import { VoiceModule } from './voice/voice.module';
 import { DigitizerModule } from './digitizer/digitizer.module';
+import { DeliveryModule } from './delivery/delivery.module';
+import { AdsModule } from './ads/ads.module';
+import { AccountingModule } from './integrations/accounting/accounting.module';
+import { EcommerceModule } from './integrations/ecommerce/ecommerce.module';
+import { AutomationModule as OutboundWebhookAutomationModule } from './integrations/automation/automation.module';
+import { IntegrationDirectoryModule } from './integrations/directory/integration-directory.module';
+import { DeveloperModule } from './developer/developer.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -109,6 +117,14 @@ import { DigitizerModule } from './digitizer/digitizer.module';
     CompetitiveModule,
     VoiceModule,
     DigitizerModule,
+    DeliveryModule,
+    AdsModule,
+    AccountingModule,
+    EcommerceModule,
+    OutboundWebhookAutomationModule,
+    IntegrationDirectoryModule,
+    DeveloperModule,
+    AuditLogModule,
   ],
   controllers: [AppController],
   providers: [AppService],

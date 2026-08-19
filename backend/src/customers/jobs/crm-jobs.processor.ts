@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LocaleService } from '../../common/localization/locale.service';
 import { SendGateService } from '../../messaging/send-gate.service';
 import { WorkflowTriggerService } from '../../marketing/automations/workflow-trigger.service';
+import { OutboundWebhookDispatchService } from '../../integrations/automation/outbound-webhook-dispatch.service';
 import {
   BIRTHDAY_LOCAL_HOUR,
   CRM_JOBS_QUEUE,
@@ -33,6 +34,7 @@ export class CrmJobsProcessor extends WorkerHost {
     private readonly locale: LocaleService,
     private readonly sendGate: SendGateService,
     private readonly workflowTrigger: WorkflowTriggerService,
+    private readonly outboundWebhookDispatch: OutboundWebhookDispatchService,
   ) {
     super();
   }
@@ -117,6 +119,17 @@ export class CrmJobsProcessor extends WorkerHost {
                 `Workflow dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
               ),
             );
+          void this.outboundWebhookDispatch
+            .dispatch(business.id, event.type, {
+              description: event.description,
+              entityType: event.entityType,
+              entityId: event.entityId,
+            })
+            .catch((error: Error) =>
+              this.logger.warn(
+                `Outbound webhook dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
+              ),
+            );
         }
       }
     }
@@ -188,6 +201,17 @@ export class CrmJobsProcessor extends WorkerHost {
           .catch((error: Error) =>
             this.logger.warn(
               `Workflow dispatch failed for birthday event ${event.id}: ${error.message}`,
+            ),
+          );
+        void this.outboundWebhookDispatch
+          .dispatch(business.id, event.type, {
+            description: event.description,
+            entityType: event.entityType,
+            entityId: event.entityId,
+          })
+          .catch((error: Error) =>
+            this.logger.warn(
+              `Outbound webhook dispatch failed for birthday event ${event.id}: ${error.message}`,
             ),
           );
       }

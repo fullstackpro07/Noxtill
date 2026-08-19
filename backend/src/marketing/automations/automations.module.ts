@@ -7,11 +7,13 @@ import { CreditOverdueScanScheduler } from './jobs/credit-overdue-scan.scheduler
 import { CreditOverdueScanProcessor } from './jobs/credit-overdue-scan.processor';
 import { CREDIT_OVERDUE_SCAN_QUEUE } from './workflows.constants';
 import { MessagingModule } from '../../messaging/messaging.module';
+import { AutomationModule as OutboundWebhookAutomationModule } from '../../integrations/automation/automation.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: CREDIT_OVERDUE_SCAN_QUEUE }),
     MessagingModule,
+    OutboundWebhookAutomationModule,
   ],
   controllers: [WorkflowsController],
   providers: [

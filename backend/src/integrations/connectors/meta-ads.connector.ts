@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { Connector, OAuthTokens } from '../connector.interface';
+import {
+  Connector,
+  CreateCampaignParams,
+  CreateCampaignResult,
+  OAuthTokens,
+} from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
 const AUTHORIZE_URL = 'https://www.facebook.com/v19.0/dialog/oauth';
@@ -81,6 +86,40 @@ export class MetaAdsConnector implements Connector {
   async disconnect(): Promise<void> {
     // Real revocation: DELETE https://graph.facebook.com/v19.0/me/permissions — left as a
     // documented no-op, same reasoning as GoogleOAuth2Connector.disconnect().
+  }
+
+  /** `meta.adAccountId` (a real ad account id, e.g. from a prior `sync()` selection) is required — Meta campaigns always belong to one specific ad account. */
+  async createCampaign(
+    tokens: OAuthTokens,
+    params: CreateCampaignParams,
+    meta: Record<string, unknown>,
+  ): Promise<CreateCampaignResult> {
+    const adAccountId = meta.adAccountId as string | undefined;
+    if (!adAccountId) {
+      throw new Error('No Meta ad account selected for this business');
+    }
+    const response = await axios.post<{ id: string }>(
+      `https://graph.facebook.com/v19.0/act_${adAccountId}/campaigns`,
+      {
+        name: params.name,
+        objective: this.mapGoalToObjective(params.goal),
+        status: 'PAUSED',
+        special_ad_categories: [],
+        access_token: tokens.accessToken,
+      },
+    );
+    return { externalId: response.data.id };
+  }
+
+  private mapGoalToObjective(goal: string): string {
+    const known: Record<string, string> = {
+      traffic: 'OUTCOME_TRAFFIC',
+      leads: 'OUTCOME_LEADS',
+      awareness: 'OUTCOME_AWARENESS',
+      sales: 'OUTCOME_SALES',
+      engagement: 'OUTCOME_ENGAGEMENT',
+    };
+    return known[goal.toLowerCase()] ?? 'OUTCOME_TRAFFIC';
   }
 
   private mapTokenResponse(data: MetaTokenResponse): OAuthTokens {

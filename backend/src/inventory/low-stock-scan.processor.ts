@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { WorkflowTriggerService } from '../marketing/automations/workflow-trigger.service';
+import { OutboundWebhookDispatchService } from '../integrations/automation/outbound-webhook-dispatch.service';
 import { LOW_STOCK_SCAN_QUEUE } from './low-stock-scan.constants';
 import { ActivityEventType, Role } from '@prisma/client';
 
@@ -30,6 +31,7 @@ export class LowStockScanProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
     private readonly workflowTrigger: WorkflowTriggerService,
+    private readonly outboundWebhookDispatch: OutboundWebhookDispatchService,
   ) {
     super();
   }
@@ -102,6 +104,14 @@ export class LowStockScanProcessor extends WorkerHost {
       .catch((error: Error) =>
         this.logger.warn(
           `Workflow dispatch failed for low_stock event ${event.id}: ${error.message}`,
+        ),
+      );
+    // Automation Platforms (UPD-BE-074) — same real trigger, same fire-and-forget reasoning.
+    void this.outboundWebhookDispatch
+      .dispatch(businessId, event.type, { description })
+      .catch((error: Error) =>
+        this.logger.warn(
+          `Outbound webhook dispatch failed for low_stock event ${event.id}: ${error.message}`,
         ),
       );
   }

@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { Connector, OAuthTokens } from '../connector.interface';
+import {
+  Connector,
+  CreateCampaignParams,
+  CreateCampaignResult,
+  OAuthTokens,
+} from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
 const AUTHORIZE_URL = 'https://business-api.tiktok.com/portal/auth';
@@ -12,6 +17,12 @@ interface TikTokTokenEnvelope {
   code: number;
   message: string;
   data: { access_token: string; advertiser_ids: string[]; scope: number[] };
+}
+
+interface TikTokCampaignEnvelope {
+  code: number;
+  message: string;
+  data: { campaign_id: string };
 }
 
 /**
@@ -75,5 +86,41 @@ export class TikTokAdsConnector implements Connector {
   async disconnect(): Promise<void> {
     // TikTok's Marketing API has no token-revocation endpoint — clearing the stored token
     // (handled by IntegrationsService) is the only real action available here.
+  }
+
+  /** `meta.advertiserId` (a real TikTok advertiser id, e.g. from a prior `sync()` selection) is required. */
+  async createCampaign(
+    tokens: OAuthTokens,
+    params: CreateCampaignParams,
+    meta: Record<string, unknown>,
+  ): Promise<CreateCampaignResult> {
+    const advertiserId = meta.advertiserId as string | undefined;
+    if (!advertiserId) {
+      throw new Error('No TikTok advertiser selected for this business');
+    }
+    const response = await axios.post<TikTokCampaignEnvelope>(
+      'https://business-api.tiktok.com/open_api/v1.3/campaign/create/',
+      {
+        advertiser_id: advertiserId,
+        campaign_name: params.name,
+        objective_type: this.mapGoalToObjective(params.goal),
+        budget_mode: 'BUDGET_MODE_DAY',
+        budget: params.dailyBudget,
+        operation_status: 'DISABLE', // paused — never launches spend without explicit activation
+      },
+      { headers: { 'Access-Token': tokens.accessToken } },
+    );
+    return { externalId: String(response.data.data.campaign_id) };
+  }
+
+  private mapGoalToObjective(goal: string): string {
+    const known: Record<string, string> = {
+      traffic: 'TRAFFIC',
+      leads: 'LEAD_GENERATION',
+      awareness: 'REACH',
+      sales: 'PRODUCT_SALES',
+      engagement: 'ENGAGEMENT',
+    };
+    return known[goal.toLowerCase()] ?? 'TRAFFIC';
   }
 }

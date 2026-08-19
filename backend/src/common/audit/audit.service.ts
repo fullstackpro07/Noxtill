@@ -15,6 +15,17 @@ export interface AuditLogParams {
   after?: unknown;
 }
 
+export interface AuditLogQuery {
+  entity?: string;
+  entityId?: string;
+  actorUserId?: string;
+  action?: string;
+  from?: Date;
+  to?: Date;
+  page?: number;
+  pageSize?: number;
+}
+
 /**
  * Append-only audit trail (BE-009). Every financial mutation (sale, payment,
  * credit entry, refund, delete, import batch, export) must call this. The
@@ -53,5 +64,40 @@ export class AuditService {
             : (params.after as Prisma.InputJsonValue),
       },
     });
+  }
+
+  /** Activity Log (UPD-BE-079) — real query/filter over the append-only audit trail `log()` writes. */
+  async list(businessId: string, query: AuditLogQuery = {}) {
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const pageSize =
+      query.pageSize && query.pageSize > 0 ? Math.min(query.pageSize, 200) : 50;
+
+    const where: Prisma.AuditLogWhereInput = {
+      businessId,
+      ...(query.entity ? { entity: query.entity } : {}),
+      ...(query.entityId ? { entityId: query.entityId } : {}),
+      ...(query.actorUserId ? { actorUserId: query.actorUserId } : {}),
+      ...(query.action ? { action: query.action } : {}),
+      ...(query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: query.from } : {}),
+              ...(query.to ? { lte: query.to } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.tenantPrisma.client.auditLog.count({ where }),
+      this.tenantPrisma.client.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return { total, page, pageSize, rows };
   }
 }

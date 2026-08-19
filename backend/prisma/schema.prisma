@@ -314,6 +314,27 @@ enum IntegrationProvider {
   bing_places
   apple_business_connect
   yelp
+  /// UPD-BE-069 unified Advertising — extends the ad-platform set beyond the original 3.
+  linkedin_ads
+  pinterest_ads
+  snapchat_ads
+  microsoft_ads
+  amazon_ads
+  reddit_ads
+  /// UPD-BE-072 Accounting Sync.
+  quickbooks
+  xero
+  /// UPD-BE-073 E-commerce Sync.
+  shopify
+  woocommerce
+  /// UPD-BE-074 Automation Platforms — not registered in `ConnectorRegistry` (no OAuth flow;
+  /// connection is a REST-Hook-style webhook subscription instead, see `OutboundWebhook`).
+  zapier
+  make
+  n8n
+  /// UPD-BE-081 Developer & API — a business's own outbound webhook subscriptions, reusing the
+  /// exact same `OutboundWebhook`/delivery pipeline as the automation platforms above.
+  developer
 }
 
 enum GmbPostStatus {
@@ -612,6 +633,19 @@ model Business {
   phoneNumber              PhoneNumber?
   phoneCalls               PhoneCall[]
   digitizerAliases         DigitizerAlias[]
+  riders                   Rider[]
+  deliveries               Delivery[]
+  routes                   Route[]
+  deliveryZones            DeliveryZone[]
+  adCreatives              AdCreative[]
+  adAudiences              AdAudience[]
+  adLeads                  AdLead[]
+  accountingMappings       AccountingMapping[]
+  outboundWebhooks         OutboundWebhook[]
+  reviewSentimentThemes    ReviewSentimentTheme[]
+  recurringObligations     RecurringObligation[]
+  seoHeatmapPoints         SeoHeatmapPoint[]
+  apiKeys                  ApiKey[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -999,16 +1033,30 @@ model Order {
   voucher              Voucher? @relation(fields: [voucherId], references: [id])
   voucherAmountApplied Decimal? @map("voucher_amount_applied") @db.Decimal(10, 2)
 
+  /// E-commerce Sync (UPD-BE-073): set only for an order pulled in from a connected e-commerce
+  /// platform — a real order this business's POS never rang up directly. NULL for every ordinary
+  /// POS/booking/online order, which is why MySQL allowing multiple NULLs in a unique index is
+  /// exactly what this constraint needs (only e-commerce-sourced orders are deduplicated by it).
+  externalId       String?              @map("external_id")
+  externalProvider IntegrationProvider? @map("external_provider")
+
+  /// Accounting Sync (UPD-BE-072): set once this order has been pushed as a real invoice to the
+  /// business's connected accounting provider — the guard against re-pushing the same order.
+  accountingSyncedAt   DateTime? @map("accounting_synced_at")
+  accountingExternalId String?   @map("accounting_external_id")
+
   items         OrderItem[]
   payments      Payment[]
   creditEntries CreditEntry[]
   returns       Return[]
   stamps        Stamp[]
+  delivery      Delivery?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([businessId, orderNo])
+  @@unique([businessId, externalProvider, externalId])
   @@index([businessId, status])
   @@map("orders")
 }
@@ -1500,6 +1548,26 @@ model ExternalReview {
   @@map("external_reviews")
 }
 
+/// Sentiment Analysis (UPD-BE-076) — one row per recurring theme found in a business's real
+/// review text, regenerated daily (old rows for the business are cleared and replaced, not
+/// accumulated — this is a current-state snapshot, not a history log). `exampleQuote` is always a
+/// real, verbatim substring of an actual review's text, verified before being stored — never an
+/// AI paraphrase — same "never fabricate" discipline as `AiInsight.sourceFigure`.
+model ReviewSentimentTheme {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  theme        String
+  sentiment    String
+  exampleQuote String   @map("example_quote") @db.Text
+  reviewCount  Int      @map("review_count")
+
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  @@index([businessId, generatedAt])
+  @@map("review_sentiment_themes")
+}
+
 /// Video Testimonials (UPD-BE-027). `requested` -> `submitted` (customer uploads via the public,
 /// token-based flow — same `loadValid(token)` pattern as `public-review.service.ts`) -> `approved`
 /// or `rejected` (owner/manager only, mirroring `Return`'s pending/approved/rejected shape).
@@ -1930,6 +1998,80 @@ model Expense {
 
   @@index([businessId, incurredOn])
   @@map("expenses")
+}
+
+enum RecurringObligationFrequency {
+  weekly
+  biweekly
+  monthly
+  quarterly
+  yearly
+}
+
+/// Cash Flow forecasting (UPD-BE-078) — a real, schedulable future obligation (rent, payroll,
+/// loan repayment, subscription), distinct from `Expense.recurring` (a historical tag on an
+/// already-incurred cost with no forward schedule). `nextDueDate` advances by `frequency` each
+/// time the forecast walks past it — see `CashForecastService`.
+model RecurringObligation {
+  id          String                       @id @default(uuid())
+  businessId  String                       @map("business_id")
+  business    Business                     @relation(fields: [businessId], references: [id])
+  name        String
+  amount      Decimal                      @db.Decimal(12, 2)
+  frequency   RecurringObligationFrequency
+  nextDueDate DateTime                     @map("next_due_date") @db.Date
+  category    String?
+  active      Boolean                      @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, active])
+  @@map("recurring_obligations")
+}
+
+/// SEO Heatmap (UPD-BE-080) — one real local-pack rank check at one real grid point around the
+/// business's geocoded address, for one keyword. `scanId` groups every point from the same
+/// `POST /seo/heatmap/scan` run (their individual `scannedAt` timestamps can differ by seconds).
+model SeoHeatmapPoint {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  scanId     String   @map("scan_id")
+  keyword    String
+  lat        Float
+  lng        Float
+  /// NULL = the business did not appear in the local pack results at this point — never a fabricated rank.
+  rank       Int?
+
+  scannedAt DateTime @default(now()) @map("scanned_at")
+
+  @@index([businessId, keyword, scanId])
+  @@map("seo_heatmap_points")
+}
+
+/// Developer & API (UPD-BE-081) — a real bearer credential distinct from the JWT session tokens
+/// issued at login: `keyHash` is a SHA-256 digest (never the plaintext secret, shown to the owner
+/// exactly once at creation); `keyPrefix` is a safe, non-secret slice kept for the key list UI to
+/// identify which key is which. `scopes` are real `CAPABILITIES` strings — `JwtAuthGuard` resolves
+/// a `Bearer ntk_...` request straight to these scopes as its `AuthenticatedUser.capabilities`,
+/// so every existing `@RequireCapability(...)` route gate already enforces them, no separate
+/// authorization path needed.
+model ApiKey {
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  business   Business  @relation(fields: [businessId], references: [id])
+  name       String
+  keyHash    String    @unique @map("key_hash")
+  keyPrefix  String    @map("key_prefix")
+  scopes     Json      @default("[]")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("api_keys")
 }
 
 model Attendance {
@@ -2427,13 +2569,143 @@ model DigitizerAlias {
   @@map("digitizer_aliases")
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// UPD-BE-M19 — Delivery & Riders
+// ─────────────────────────────────────────────────────────────────────────
+
+model Rider {
+  id             String      @id @default(uuid())
+  businessId     String      @map("business_id")
+  business       Business    @relation(fields: [businessId], references: [id])
+  name           String
+  phone          String
+  status         RiderStatus @default(active)
+  /// Last GPS fix pushed by the rider's own device (UPD-BE-065 live tracking) — null until their first check-in.
+  lastLat        Decimal?    @map("last_lat") @db.Decimal(9, 6)
+  lastLng        Decimal?    @map("last_lng") @db.Decimal(9, 6)
+  lastLocationAt DateTime?   @map("last_location_at")
+
+  deliveries Delivery[]
+  routes     Route[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("riders")
+}
+
+enum RiderStatus {
+  active
+  inactive
+}
+
+/// One per delivery order (UPD-BE-065), 1:1 with the `Order` it fulfills. `routeSequence` is this
+/// delivery's stop position within its `Route`, when it has one — a real ordering column (not
+/// implicit array order), same MySQL-row-ordering-safety reasoning as `VariantOption.sortOrder`.
+model Delivery {
+  id                String         @id @default(uuid())
+  businessId        String         @map("business_id")
+  business          Business       @relation(fields: [businessId], references: [id])
+  orderId           String         @unique @map("order_id")
+  order             Order          @relation(fields: [orderId], references: [id])
+  riderId           String?        @map("rider_id")
+  rider             Rider?         @relation(fields: [riderId], references: [id])
+  status            DeliveryStatus @default(unassigned)
+  addressLine       String         @map("address_line") @db.Text
+  lat               Decimal?       @db.Decimal(9, 6)
+  lng               Decimal?       @db.Decimal(9, 6)
+  routeId           String?        @map("route_id")
+  route             Route?         @relation(fields: [routeId], references: [id])
+  routeSequence     Int?           @map("route_sequence")
+  proofSignatureKey String?        @map("proof_signature_key")
+  proofPhotoKey     String?        @map("proof_photo_key")
+  proofLat          Decimal?       @map("proof_lat") @db.Decimal(9, 6)
+  proofLng          Decimal?       @map("proof_lng") @db.Decimal(9, 6)
+  proofAt           DateTime?      @map("proof_at")
+  assignedAt        DateTime?      @map("assigned_at")
+  deliveredAt       DateTime?      @map("delivered_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("deliveries")
+}
+
+enum DeliveryStatus {
+  unassigned
+  assigned
+  picked_up
+  en_route
+  delivered
+  failed
+}
+
+/// Multi-stop rider route (UPD-BE-066) — `POST /routes/:id/optimise` reorders its deliveries'
+/// `routeSequence` via nearest-neighbour, real straight-line distance always available, refined by
+/// a real maps/geocoding provider when `MAPS_PROVIDER_API_KEY` is configured (disclosed gap otherwise).
+model Route {
+  id         String      @id @default(uuid())
+  businessId String      @map("business_id")
+  business   Business    @relation(fields: [businessId], references: [id])
+  riderId    String?     @map("rider_id")
+  rider      Rider?      @relation(fields: [riderId], references: [id])
+  status     RouteStatus @default(planned)
+
+  deliveries Delivery[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("routes")
+}
+
+enum RouteStatus {
+  planned
+  in_progress
+  completed
+}
+
+/// Delivery charge rules by zone (UPD-BE-068) — a thin settings CRUD, not wired into POS pricing
+/// by this ticket (that's a distinct future integration, out of this ticket's own scope).
+model DeliveryZone {
+  id                  String             @id @default(uuid())
+  businessId          String             @map("business_id")
+  business            Business           @relation(fields: [businessId], references: [id])
+  name                String
+  chargeType          DeliveryChargeType @map("charge_type")
+  flatAmount          Decimal?           @map("flat_amount") @db.Decimal(10, 2)
+  perKmAmount         Decimal?           @map("per_km_amount") @db.Decimal(10, 2)
+  freeAboveOrderValue Decimal?           @map("free_above_order_value") @db.Decimal(10, 2)
+  active              Boolean            @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("delivery_zones")
+}
+
+enum DeliveryChargeType {
+  flat
+  by_distance
+  by_order_value
+}
+
 model Integration {
   id         String              @id @default(uuid())
   businessId String              @map("business_id")
   business   Business            @relation(fields: [businessId], references: [id])
   provider   IntegrationProvider
   status     IntegrationStatus   @default(not_connected)
-  tokens     String?
+  /// `@db.Text` (UPD-BE-072 bug fix): a real encrypted `{accessToken, refreshToken, expiresAt,
+  /// providerMeta}` blob routinely exceeds MySQL's default VARCHAR(191) once AES-256-GCM + base64
+  /// overhead is applied — a real Google/Meta access+refresh token pair alone is often 200+ chars
+  /// each. Found live: WooCommerce's connect flow overflowed the column and failed with a real
+  /// Prisma P2000 error.
+  tokens     String?             @db.Text
   meta       Json                @default("{}")
 
   adCampaigns AdCampaign[]
@@ -2458,11 +2730,144 @@ model AdCampaign {
   externalId    String?             @map("external_id")
   stats         Json                @default("{}")
 
+  creatives AdCreative[]
+  leads     AdLead[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("ad_campaigns")
+}
+
+/// Ad Creatives (UPD-BE-070) — `sourceReviewId` is set when this creative was built from a real
+/// customer review (the "review-to-ad" flow the ticket calls out, reusing Meta's proven creative
+/// render path from v1 INT-013).
+model AdCreative {
+  id             String              @id @default(uuid())
+  businessId     String              @map("business_id")
+  business       Business            @relation(fields: [businessId], references: [id])
+  campaignId     String?             @map("campaign_id")
+  campaign       AdCampaign?         @relation(fields: [campaignId], references: [id])
+  provider       IntegrationProvider
+  headline       String
+  body           String              @db.Text
+  mediaKey       String?             @map("media_key")
+  sourceReviewId String?             @map("source_review_id")
+  externalId     String?             @map("external_id")
+  status         String              @default("draft")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("ad_creatives")
+}
+
+/// Ad Audiences (UPD-BE-070) — `segmentKey` links back to the existing CRM segment
+/// (`SegmentsService`) this audience was built from, when it was; a consent check (excluding
+/// opted-out customers) always runs before sync, real either way.
+model AdAudience {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  provider   IntegrationProvider
+  name       String
+  segmentKey String?             @map("segment_key")
+  size       Int                 @default(0)
+  externalId String?             @map("external_id")
+  status     String              @default("local")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("ad_audiences")
+}
+
+/// Lead Inbox (UPD-BE-071) — one row per real lead-gen form submission, ingested via each
+/// provider's real lead webhook (reuses the idempotent-webhook pattern from `webhooks/`).
+model AdLead {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  campaignId String?             @map("campaign_id")
+  campaign   AdCampaign?         @relation(fields: [campaignId], references: [id])
+  provider   IntegrationProvider
+  name       String?
+  email      String?
+  phone      String?
+  formData   Json                @default("{}") @map("form_data")
+  externalId String              @map("external_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, externalId])
+  @@index([businessId])
+  @@map("ad_leads")
+}
+
+/// Accounting Sync (UPD-BE-072) — maps a local product category (NULL = catch-all default) to a
+/// real external account/tax code so a pushed invoice line always resolves to something the
+/// provider accepts, rather than guessing.
+model AccountingMapping {
+  id                  String              @id @default(uuid())
+  businessId          String              @map("business_id")
+  business            Business            @relation(fields: [businessId], references: [id])
+  provider            IntegrationProvider
+  productCategory     String?             @map("product_category")
+  externalAccountCode String              @map("external_account_code")
+  externalTaxCode     String?             @map("external_tax_code")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, provider, productCategory])
+  @@map("accounting_mappings")
+}
+
+/// Automation Platforms (UPD-BE-074) — a real REST-Hook-style subscription: the automation
+/// platform (Zapier/Make/n8n) registers `targetUrl` against one real `WorkflowTriggerKey` — the
+/// same refined trigger taxonomy the Automations engine (UPD-BE-028) already dispatches on, via
+/// the same `mapActivityEventToTriggerKey()` call site. `secret` HMAC-signs every delivery so the
+/// receiving platform can verify it really came from Noxtill.
+model OutboundWebhook {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  provider   IntegrationProvider
+  triggerKey WorkflowTriggerKey  @map("trigger_key")
+  targetUrl  String              @map("target_url") @db.Text
+  secret     String
+  active     Boolean             @default(true)
+
+  deliveries OutboundWebhookDelivery[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, provider])
+  @@index([businessId, triggerKey, active])
+  @@map("outbound_webhooks")
+}
+
+/// One real delivery attempt log row per dispatched event (UPD-BE-074) — `attempts`/`status` are
+/// updated by the BullMQ processor on every try, giving real retry/backoff visibility rather than
+/// a fire-and-forget POST with no record of what happened.
+model OutboundWebhookDelivery {
+  id             String          @id @default(uuid())
+  webhookId      String          @map("webhook_id")
+  webhook        OutboundWebhook @relation(fields: [webhookId], references: [id])
+  payload        Json
+  status         String          @default("pending")
+  attempts       Int             @default(0)
+  lastAttemptAt  DateTime?       @map("last_attempt_at")
+  responseStatus Int?            @map("response_status")
+  error          String?         @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([webhookId, createdAt])
+  @@map("outbound_webhook_deliveries")
 }
 
 model EmailCampaign {
@@ -2666,7 +3071,8 @@ model SocialAccount {
   business            Business            @relation(fields: [businessId], references: [id])
   platform            SocialPlatform
   status              SocialAccountStatus @default(not_connected)
-  tokens              String?
+  /// `@db.Text` — same real overflow risk and fix as `Integration.tokens` (UPD-BE-072 bug fix).
+  tokens              String?             @db.Text
   meta                Json                @default("{}")
   externalAccountId   String?             @map("external_account_id")
   externalAccountName String?             @map("external_account_name")

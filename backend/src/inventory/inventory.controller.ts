@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { StockCountService } from './stock-count.service';
+import { ReorderSuggestionsService } from './reorder-suggestions.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { CreateWastageDto } from './dto/create-wastage.dto';
 import { CreateStockCountDto } from './dto/create-stock-count.dto';
@@ -15,6 +16,7 @@ export class InventoryController {
   constructor(
     private readonly inventoryService: InventoryService,
     private readonly stockCountService: StockCountService,
+    private readonly reorderSuggestions: ReorderSuggestionsService,
   ) {}
 
   @Post('inventory/purchases')
@@ -41,6 +43,11 @@ export class InventoryController {
   @Get('inventory/:product/movements')
   getMovements(@Param('product') productId: string) {
     return this.inventoryService.getMovements(productId);
+  }
+
+  @Get('stock/reorder-suggestions')
+  reorderSuggestionsList(@CurrentUser() user: AuthenticatedUser) {
+    return this.reorderSuggestions.list(user.businessId);
   }
 
   @Post('stock/counts')

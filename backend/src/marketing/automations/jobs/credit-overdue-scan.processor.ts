@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WorkflowTriggerService } from '../workflow-trigger.service';
+import { OutboundWebhookDispatchService } from '../../../integrations/automation/outbound-webhook-dispatch.service';
 import { CREDIT_OVERDUE_SCAN_QUEUE } from '../workflows.constants';
 import { ActivityEventType, InstallmentStatus } from '@prisma/client';
 
@@ -20,6 +21,7 @@ export class CreditOverdueScanProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly workflowTrigger: WorkflowTriggerService,
+    private readonly outboundWebhookDispatch: OutboundWebhookDispatchService,
   ) {
     super();
   }
@@ -72,6 +74,18 @@ export class CreditOverdueScanProcessor extends WorkerHost {
         .catch((error: Error) =>
           this.logger.warn(
             `Workflow dispatch failed for credit_overdue event ${event.id}: ${error.message}`,
+          ),
+        );
+      void this.outboundWebhookDispatch
+        .dispatch(businessId, event.type, {
+          description: event.description,
+          entityType: event.entityType,
+          entityId: event.entityId,
+          amount: event.amount ? Number(event.amount) : undefined,
+        })
+        .catch((error: Error) =>
+          this.logger.warn(
+            `Outbound webhook dispatch failed for credit_overdue event ${event.id}: ${error.message}`,
           ),
         );
     }

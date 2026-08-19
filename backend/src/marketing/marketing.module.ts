@@ -27,6 +27,9 @@ import { CouponsService } from './coupons.service';
 import { CouponsController } from './coupons.controller';
 import { VouchersService } from './vouchers.service';
 import { VouchersController } from './vouchers.controller';
+import { SeoHeatmapService } from './seo-heatmap.service';
+import { SeoHeatmapController } from './seo-heatmap.controller';
+import { ListingsModule } from '../listings/listings.module';
 
 @Module({
   imports: [
@@ -34,6 +37,7 @@ import { VouchersController } from './vouchers.controller';
     BullModule.registerQueue({ name: KEYWORD_RANK_QUEUE }),
     MessagingModule,
     CustomersModule,
+    ListingsModule,
   ],
   controllers: [
     CampaignsController,
@@ -43,6 +47,7 @@ import { VouchersController } from './vouchers.controller';
     OverviewController,
     CouponsController,
     VouchersController,
+    SeoHeatmapController,
   ],
   providers: [
     CampaignsService,
@@ -59,6 +64,7 @@ import { VouchersController } from './vouchers.controller';
     MetaAdLibraryService,
     CouponsService,
     VouchersService,
+    SeoHeatmapService,
   ],
   exports: [ReferralsService, CouponsService, VouchersService],
 })

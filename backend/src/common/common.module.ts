@@ -10,6 +10,7 @@ import { AuditInterceptor } from './interceptors/audit.interceptor';
 import { AuditService } from './audit/audit.service';
 import { WebhookIdempotencyService } from './webhooks/webhook-idempotency.service';
 import { CapabilitiesService } from './capabilities/capabilities.service';
+import { ApiKeyAuthService } from '../developer/api-key-auth.service';
 
 /**
  * Wires the global request pipeline in guard-execution order (BE-006/008/009/013/UPD-BE-035):
@@ -27,6 +28,7 @@ import { CapabilitiesService } from './capabilities/capabilities.service';
     AuditService,
     WebhookIdempotencyService,
     CapabilitiesService,
+    ApiKeyAuthService,
     { provide: APP_GUARD, useClass: BusinessThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenancyGuard },
@@ -34,6 +36,11 @@ import { CapabilitiesService } from './capabilities/capabilities.service';
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
-  exports: [AuditService, WebhookIdempotencyService, CapabilitiesService],
+  exports: [
+    AuditService,
+    WebhookIdempotencyService,
+    CapabilitiesService,
+    ApiKeyAuthService,
+  ],
 })
 export class CommonModule {}

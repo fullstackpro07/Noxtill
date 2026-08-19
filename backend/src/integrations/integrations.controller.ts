@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   Param,
@@ -15,11 +16,23 @@ import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
+import { AUTOMATION_PROVIDERS } from './automation/automation.constants';
 import { IntegrationProvider } from '@prisma/client';
 
+/**
+ * Automation platforms (zapier/make/n8n, UPD-BE-074) are real `IntegrationProvider` values but
+ * connect via a REST-Hook-style `OutboundWebhook` subscription (`/integrations/automation/webhooks`),
+ * not this OAuth framework — rejected here with a clear 400 rather than letting
+ * `ConnectorRegistry.get()` throw an opaque error for a provider it was never registered for.
+ */
 function parseProvider(value: string): IntegrationProvider {
   if (!(Object.values(IntegrationProvider) as string[]).includes(value)) {
     throw new BadRequestException(`Unknown integration provider: ${value}`);
+  }
+  if ((AUTOMATION_PROVIDERS as string[]).includes(value)) {
+    throw new BadRequestException(
+      `${value} connects via POST /integrations/automation/webhooks, not this endpoint`,
+    );
   }
   return value as IntegrationProvider;
 }
@@ -41,8 +54,13 @@ export class IntegrationsController {
   connect(
     @CurrentUser() user: AuthenticatedUser,
     @Param('provider') provider: string,
+    @Body() body: Record<string, string> = {},
   ) {
-    return this.integrations.connect(user.businessId, parseProvider(provider));
+    return this.integrations.connect(
+      user.businessId,
+      parseProvider(provider),
+      body,
+    );
   }
 
   @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)
@@ -67,6 +85,7 @@ export class IntegrationsController {
     @Param('provider') provider: string,
     @Query('code') code: string,
     @Query('state') state: string,
+    @Query() rawQuery: Record<string, string>,
     @Res() res: Response,
   ) {
     const frontendUrl =
@@ -78,6 +97,7 @@ export class IntegrationsController {
         parsedProvider,
         code,
         state,
+        rawQuery,
       );
       res.redirect(
         ok

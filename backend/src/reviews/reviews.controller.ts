@@ -10,6 +10,7 @@ import {
 import { ReviewsService } from './reviews.service';
 import { ReviewRequestsService } from './review-requests.service';
 import { QrPosterService } from './qr-poster.service';
+import { SentimentAnalysisService } from './sentiment-analysis.service';
 import { CreateReviewRequestDto } from './dto/create-review-request.dto';
 import { QueryReviewsDto } from './dto/query-reviews.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
@@ -24,6 +25,7 @@ export class ReviewsController {
     private readonly reviewsService: ReviewsService,
     private readonly reviewRequests: ReviewRequestsService,
     private readonly qrPoster: QrPosterService,
+    private readonly sentimentAnalysis: SentimentAnalysisService,
   ) {}
 
   @Post('reviews/requests')
@@ -42,6 +44,11 @@ export class ReviewsController {
   @Get('reviews/summary')
   summary() {
     return this.reviewsService.getSummary();
+  }
+
+  @Get('reviews/sentiment')
+  sentiment(@CurrentUser() user: AuthenticatedUser) {
+    return this.sentimentAnalysis.list(user.businessId);
   }
 
   @Post('reviews/qr-poster')

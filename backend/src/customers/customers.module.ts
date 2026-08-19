@@ -16,6 +16,7 @@ import { CRM_JOBS_QUEUE } from './jobs/crm-jobs.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { BillingModule } from '../billing/billing.module';
 import { AutomationsModule } from '../marketing/automations/automations.module';
+import { AutomationModule as OutboundWebhookAutomationModule } from '../integrations/automation/automation.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AutomationsModule } from '../marketing/automations/automations.module';
     MessagingModule,
     BillingModule,
     AutomationsModule,
+    OutboundWebhookAutomationModule,
   ],
   controllers: [
     CustomersController,
