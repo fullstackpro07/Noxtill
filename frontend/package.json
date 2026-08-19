@@ -6,8 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "build:frontend": "next build",
+    "build:backend": "next build",
     "start": "next start",
     "start:frontend": "next start",
+    "start:backend": "next start",
     "lint": "eslint"
   },
   "dependencies": {
