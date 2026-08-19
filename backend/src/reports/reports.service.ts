@@ -62,6 +62,7 @@ export class ReportsService {
       business,
       authUser.role,
       businessUser?.id,
+      authUser.businessId,
     );
     const html = this.renderHtml(REPORT_LABELS[kind], business, bodyHtml);
     const pdf = await this.pdfRenderer.renderPdf(html);
@@ -97,12 +98,13 @@ export class ReportsService {
     business: BusinessInfo,
     role: Role,
     businessUserId: string | undefined,
+    businessId: string,
   ): Promise<string> {
     switch (kind) {
       case 'monthly':
         return this.buildMonthly(month, business);
       case 'pnl':
-        return this.buildPnl(month, business);
+        return this.buildPnl(businessId, month, business);
       case 'sales':
         return this.buildSales(month, business, role, businessUserId);
       case 'staff':
@@ -157,10 +159,11 @@ export class ReportsService {
   }
 
   private async buildPnl(
+    businessId: string,
     month: string,
     business: BusinessInfo,
   ): Promise<string> {
-    const pnl = await this.profitService.pnl(month);
+    const pnl = await this.profitService.pnl(businessId, month);
 
     const expenseRows = pnl.expenses
       .map(

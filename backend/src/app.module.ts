@@ -49,6 +49,9 @@ import { ActivityModule } from './activity/activity.module';
 import { RolesModule } from './roles/roles.module';
 import { ListingsModule } from './listings/listings.module';
 import { SocialModule } from './social/social.module';
+import { CompetitiveModule } from './competitive/competitive.module';
+import { VoiceModule } from './voice/voice.module';
+import { DigitizerModule } from './digitizer/digitizer.module';
 
 @Module({
   imports: [
@@ -103,6 +106,9 @@ import { SocialModule } from './social/social.module';
     RolesModule,
     ListingsModule,
     SocialModule,
+    CompetitiveModule,
+    VoiceModule,
+    DigitizerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -6,6 +6,7 @@ import { CompetitorsService } from './competitors.service';
 import { AppException } from '../common/filters/app.exception';
 import { MAX_COMPETITORS } from './marketing.constants';
 import type { CompetitorSnapshotProcessor } from './jobs/competitor-snapshot.processor';
+import type { MetaAdLibraryService } from './meta-ad-library.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -22,6 +23,7 @@ describe('CompetitorsService (BE-063)', () => {
   let service: CompetitorsService;
   let businessId: string;
   const snapshotProcessor = { snapshotOne: jest.fn() };
+  const adLibrary = { fetchAds: jest.fn() };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -35,6 +37,7 @@ describe('CompetitorsService (BE-063)', () => {
     service = new CompetitorsService(
       tenantPrisma,
       snapshotProcessor as unknown as CompetitorSnapshotProcessor,
+      adLibrary as unknown as MetaAdLibraryService,
     );
 
     const business = await prisma.business.create({

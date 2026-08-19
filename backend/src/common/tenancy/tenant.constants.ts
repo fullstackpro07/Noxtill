@@ -83,6 +83,12 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'SocialInboxItem',
   'SocialAnalyticsSnapshot',
   'SocialSettings',
+  'VisibilityScoreSnapshot',
+  'CompetitiveOpportunity',
+  'CompetitiveSettings',
+  'PhoneNumber',
+  'PhoneCall',
+  'DigitizerAlias',
 ]);
 
 export const CLS_KEY_BUSINESS_ID = 'businessId';

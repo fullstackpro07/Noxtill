@@ -174,7 +174,7 @@ describe('ProfitService (BE-036/BE-037)', () => {
 
   it('computes P&L for the current month: revenue - cogs - expenses = net', async () => {
     const month = new Date().toISOString().slice(0, 7);
-    const pnl = await profitService.pnl(month);
+    const pnl = await profitService.pnl(businessId, month);
 
     // Includes the two Gadget/Gadget Case co-purchase orders seeded above (18 revenue, 5 cogs each).
     expect(pnl.revenue).toBe(236);

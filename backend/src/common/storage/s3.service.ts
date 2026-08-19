@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -64,5 +65,12 @@ export class S3Service {
   ): Promise<string> {
     await this.upload(key, body, contentType);
     return this.getSignedDownloadUrl(key);
+  }
+
+  /** Used by retention/purge jobs (e.g. UPD-BE-059's voice recording retention) — permanent, not a soft-delete. */
+  async delete(key: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
   }
 }

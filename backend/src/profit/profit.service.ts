@@ -151,8 +151,16 @@ export class ProfitService {
     return `${pct}% of sales happen between ${bestWindowStart}:00–${end}:00.${slowestNote}`;
   }
 
-  /** GET /profit/pnl?month — revenue − COGS − expenses (by category) = net (BE-037). */
-  async pnl(month: string) {
+  /**
+   * GET /profit/pnl?month — revenue − COGS − expenses (by category) = net (BE-037).
+   * `businessId` is taken as an explicit parameter (unlike this service's other methods, which
+   * read it from CLS) because `HealthScoreService.marginRaw()` calls this from
+   * `HealthScoreSnapshotProcessor`'s weekly background job — a context with no bound CLS. Without
+   * an explicit businessId here, the tenant-scoping Prisma extension fails open (see
+   * `tenant-prisma.extension.ts`'s documented behavior for background jobs) and this would
+   * aggregate revenue across every business in the database, not just the one being scored.
+   */
+  async pnl(businessId: string, month: string) {
     const [year, mon] = month.split('-').map(Number);
     const start = new Date(Date.UTC(year, mon - 1, 1));
     const end = new Date(Date.UTC(year, mon, 1));
@@ -160,6 +168,7 @@ export class ProfitService {
     const [orderTotals, expensesByCategory] = await Promise.all([
       this.tenantPrisma.client.order.aggregate({
         where: {
+          businessId,
           status: 'completed',
           isQuotation: false,
           createdAt: { gte: start, lt: end },
@@ -168,7 +177,7 @@ export class ProfitService {
       }),
       this.tenantPrisma.client.expense.groupBy({
         by: ['category'],
-        where: { incurredOn: { gte: start, lt: end } },
+        where: { businessId, incurredOn: { gte: start, lt: end } },
         _sum: { amount: true },
       }),
     ]);

@@ -4,6 +4,8 @@ import axios from 'axios';
 
 const ANTHROPIC_API_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-3-5-haiku-20241022'; // fast/cheap tier per spec §14
+/** claude-3-5-haiku has no image input support — UPD-BE-060 (AI Photo Digitizer) needs a vision-capable model; still the fast/cheap tier, just the vision-capable one. */
+export const VISION_MODEL = 'claude-3-haiku-20240307';
 const DEFAULT_MAX_TOKENS = 1024;
 
 export interface AnthropicContentBlock {
@@ -14,6 +16,12 @@ export interface AnthropicContentBlock {
   input?: Record<string, unknown>;
   tool_use_id?: string;
   content?: string;
+  /** Present when `type` is `'image'` (UPD-BE-060, AI Photo Digitizer) — real Claude Vision input. */
+  source?: {
+    type: 'base64';
+    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    data: string;
+  };
 }
 
 export interface AnthropicMessage {
@@ -33,6 +41,8 @@ export interface CreateMessageParams {
   tools?: AnthropicTool[];
   temperature?: number;
   maxTokens?: number;
+  /** Defaults to the fast/cheap text model — pass `VISION_MODEL` for image-input calls. */
+  model?: string;
 }
 
 export interface CreateMessageResult {
@@ -88,7 +98,7 @@ export class ClaudeClient {
     const response = await axios.post<AnthropicResponseBody>(
       'https://api.anthropic.com/v1/messages',
       {
-        model: DEFAULT_MODEL,
+        model: params.model ?? DEFAULT_MODEL,
         max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
         temperature: params.temperature ?? 0,
         system: params.system,

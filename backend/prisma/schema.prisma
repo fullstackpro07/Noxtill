@@ -137,6 +137,13 @@ enum AiInsightStatus {
   dismissed
 }
 
+enum CompetitiveOpportunityKind {
+  keyword
+  review
+  listing
+  social
+}
+
 /// Real, currently-backed Action Center types (UPD-BE-004). "Failed payment" and "Expiring
 /// warranty" are in the spec's filter list but have no underlying data model anywhere yet (no
 /// PaymentStatus/warranty concept exists) — disclosed scope gap, not implemented until one does.
@@ -197,6 +204,8 @@ enum AppointmentSource {
   walk_in
   /// Created by accepting a Waiting List offer (UPD-BE-017).
   waitlist
+  /// Booked live during an AI Phone Receptionist call (UPD-BE-058).
+  phone
 }
 
 enum WaitlistStatus {
@@ -284,6 +293,8 @@ enum ImportSource {
   xlsx
   text
   docx
+  /// AI Photo Digitizer (UPD-BE-060) — a scanned photo, extracted via Claude Vision.
+  photo
 }
 
 enum ImportStatus {
@@ -595,6 +606,12 @@ model Business {
   socialInboxItems         SocialInboxItem[]
   socialAnalyticsSnapshots SocialAnalyticsSnapshot[]
   socialSettings           SocialSettings?
+  visibilityScoreSnapshots VisibilityScoreSnapshot[]
+  competitiveOpportunities CompetitiveOpportunity[]
+  competitiveSettings      CompetitiveSettings?
+  phoneNumber              PhoneNumber?
+  phoneCalls               PhoneCall[]
+  digitizerAliases         DigitizerAlias[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1271,7 +1288,8 @@ model Appointment {
   source          AppointmentSource @default(link)
   rescheduleToken String?           @unique @map("reschedule_token")
 
-  deposits Deposit[]
+  deposits   Deposit[]
+  phoneCalls PhoneCall[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1504,6 +1522,67 @@ model VideoTestimonial {
 
   @@index([businessId, status])
   @@map("video_testimonials")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UPD-BE-M17 — AI Phone Receptionist
+// ─────────────────────────────────────────────────────────────────────────
+
+/// One provisioned Twilio Voice number per business (UPD-BE-056). Twilio's own inbound-call
+/// webhook carries the dialed `To` number, not any businessId — this table is the lookup from
+/// that number back to the owning business.
+model PhoneNumber {
+  id            String   @id @default(uuid())
+  businessId    String   @unique @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  twilioSid     String   @map("twilio_sid")
+  phoneNumber   String   @unique @map("phone_number")
+  provisionedAt DateTime @default(now()) @map("provisioned_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("phone_numbers")
+}
+
+/// One row per inbound call (UPD-BE-057/058/059). `transcript` is the full turn-by-turn
+/// conversation (`[{speaker, text, at}]`) — always read/written as one whole per call, so a Json
+/// column matches this app's established "embedded array read as a unit" convention (see
+/// `Order.variations`) rather than a child table. `recordingKey` is our own S3 copy of Twilio's
+/// recording, not Twilio's own URL — kept for as long as `RECORDING_RETENTION_DAYS`, then purged
+/// by the daily retention job alongside the row itself.
+model PhoneCall {
+  id            String           @id @default(uuid())
+  businessId    String           @map("business_id")
+  business      Business         @relation(fields: [businessId], references: [id])
+  callSid       String           @unique @map("call_sid")
+  fromNumber    String           @map("from_number")
+  status        PhoneCallStatus  @default(in_progress)
+  outcome       PhoneCallOutcome @default(none)
+  transcript    Json             @default("[]")
+  recordingKey  String?          @map("recording_key")
+  appointmentId String?          @map("appointment_id")
+  appointment   Appointment?     @relation(fields: [appointmentId], references: [id])
+  startedAt     DateTime         @default(now()) @map("started_at")
+  endedAt       DateTime?        @map("ended_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, status, startedAt])
+  @@map("phone_calls")
+}
+
+enum PhoneCallStatus {
+  in_progress
+  completed
+  missed
+  transferred
+}
+
+enum PhoneCallOutcome {
+  none
+  booking
+  message
+  transfer
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2092,6 +2171,10 @@ model Competitor {
   platformRef      String   @map("platform_ref")
   lastRating       Decimal? @map("last_rating") @db.Decimal(2, 1)
   lastReviewsCount Int?     @map("last_reviews_count")
+  /// Facebook Page ID (UPD-BE-053) — optional, only needed for `GET /competitors/:id/ads`'s Meta
+  /// Ad Library lookup. Left unset, that endpoint returns an empty, honestly-disclosed result
+  /// rather than guessing a page from the Google-Place-based `platformRef`.
+  metaPageId       String?  @map("meta_page_id")
 
   snapshots CompetitorSnapshot[]
 
@@ -2220,6 +2303,64 @@ model KeywordRankSnapshot {
   @@map("keyword_rank_snapshots")
 }
 
+/// Weekly Visibility Score history (UPD-BE-052) — same shape as `HealthScoreSnapshot`: each
+/// component stored as its 0-100 raw score (equal-quarter weighting, no per-business customization
+/// unlike the Health Score) plus the summed 0-100 total.
+model VisibilityScoreSnapshot {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  listingScore Decimal  @map("listing_score") @db.Decimal(5, 2)
+  reviewScore  Decimal  @map("review_score") @db.Decimal(5, 2)
+  seoScore     Decimal  @map("seo_score") @db.Decimal(5, 2)
+  socialScore  Decimal  @map("social_score") @db.Decimal(5, 2)
+  totalScore   Decimal  @map("total_score") @db.Decimal(5, 2)
+  capturedAt   DateTime @default(now()) @map("captured_at")
+
+  @@index([businessId, capturedAt])
+  @@map("visibility_score_snapshots")
+}
+
+/// Competitive Insights gap analysis (UPD-BE-054) — one row per detected gap, generated weekly
+/// (and via a manual "refresh now") by `CompetitiveOpportunitiesService`. `evidence` is always the
+/// real, deterministically-computed fact (mirrors `AiInsight.sourceFigure`); `recommendation` is
+/// the AI-phrased action built ONLY from that evidence, falling back to the evidence text itself
+/// if the AI call fails — never a fabricated figure either way.
+model CompetitiveOpportunity {
+  id             String                     @id @default(uuid())
+  businessId     String                     @map("business_id")
+  business       Business                   @relation(fields: [businessId], references: [id])
+  kind           CompetitiveOpportunityKind
+  evidence       String                     @db.Text
+  /// What the evidence is about — a keyword string, a directory provider name, or a social
+  /// platform — so the frontend can deep-link the opportunity to its real source screen.
+  evidenceRef    String?                    @map("evidence_ref")
+  recommendation String?                    @db.Text
+  dismissed      Boolean                    @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, dismissed, createdAt])
+  @@map("competitive_opportunities")
+}
+
+/// Competitive Settings (UPD-BE-055) — one row per business (upsert-on-write, same pattern as
+/// `SocialSettings`/`MasterListing`).
+model CompetitiveSettings {
+  id                        String   @id @default(uuid())
+  businessId                String   @unique @map("business_id")
+  business                  Business @relation(fields: [businessId], references: [id])
+  scanFrequencyDays         Int      @default(7) @map("scan_frequency_days")
+  keywordRankAlertThreshold Int      @default(10) @map("keyword_rank_alert_threshold")
+  reviewFreshnessAlertDays  Int      @default(14) @map("review_freshness_alert_days")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("competitive_settings")
+}
+
 model AuditLog {
   id          String   @id @default(uuid())
   businessId  String   @map("business_id")
@@ -2250,16 +2391,40 @@ model ImportBatch {
   counts        Json         @default("{}")
   /**
    * Staged, normalized rows with a per-row action (create/update/skip) — powers preview + confirm/execute.
+   * For `source = photo` (UPD-BE-060), each row is instead a `DigitizerRow`
+   * (`{id, destination, data, confidence, corrected, action}`) — a different shape sharing this
+   * same stage-then-commit column, addressed individually via `PATCH /digitizer/rows/:id`.
    */
   rows          Json         @default("[]")
   errorsFileUrl String?      @map("errors_file_url")
   contentHash   String       @map("content_hash")
+  /// UPD-BE-060: which digitizer scanner type produced this batch — null for every non-photo source.
+  scannerType   String?      @map("scanner_type")
+  /// UPD-BE-060: S3 key of the original uploaded photo — null for every non-photo source.
+  imageKey      String?      @map("image_key")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([businessId, contentHash])
   @@map("import_batches")
+}
+
+/// AI Photo Digitizer learned aliases (UPD-BE-063) — when an owner corrects a vision-extracted
+/// name during review, that correction is remembered per-business and applied automatically to
+/// future scans' raw extraction output before staging, so a recurring misread only needs fixing once.
+model DigitizerAlias {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  rawText       String   @map("raw_text")
+  correctedText String   @map("corrected_text")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, rawText])
+  @@map("digitizer_aliases")
 }
 
 model Integration {

@@ -190,7 +190,12 @@ export class AppointmentsService {
 
   /** Walk-in booking (internal only — no public counterpart) — customer is already present, so it
    * skips straight to "confirmed" and doesn't send a booking_confirm message. */
-  async createWalkIn(businessId: string, dto: CreateWalkInAppointmentDto) {
+  /** `source` defaults to `walk_in`; the AI Phone Receptionist (UPD-BE-058) passes `phone` to reuse this exact slot-locked create path for calls that end in a real booking. */
+  async createWalkIn(
+    businessId: string,
+    dto: CreateWalkInAppointmentDto,
+    source: AppointmentSource = AppointmentSource.walk_in,
+  ) {
     const service = await this.tenantPrisma.client.product.findFirst({
       where: { id: dto.serviceId, kind: ProductKind.service },
     });
@@ -237,7 +242,7 @@ export class AppointmentsService {
           startsAt,
           endsAt,
           status: AppointmentStatus.confirmed,
-          source: AppointmentSource.walk_in,
+          source,
         },
         include: {
           service: true,

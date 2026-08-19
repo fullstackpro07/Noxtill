@@ -50,6 +50,13 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       en: 'Good news! A {{serviceName}} slot just opened up at {{dateTime}}. Reply to claim it.',
     },
   },
+  missed_call: {
+    key: 'missed_call',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Sorry we missed your call to {{businessName}}! Reply here and we’ll help you right away.',
+    },
+  },
   queue_called: {
     key: 'queue_called',
     category: MessageCategory.utility,

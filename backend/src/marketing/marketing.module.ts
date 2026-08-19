@@ -16,6 +16,7 @@ import { KeywordRankScheduler } from './jobs/keyword-rank.scheduler';
 import { KeywordRankProcessor } from './jobs/keyword-rank.processor';
 import { GooglePlacesService } from './google-places.service';
 import { SerpRankService } from './serp-rank.service';
+import { MetaAdLibraryService } from './meta-ad-library.service';
 import {
   COMPETITOR_SNAPSHOT_QUEUE,
   KEYWORD_RANK_QUEUE,
@@ -55,6 +56,7 @@ import { VouchersController } from './vouchers.controller';
     KeywordRankProcessor,
     GooglePlacesService,
     SerpRankService,
+    MetaAdLibraryService,
     CouponsService,
     VouchersService,
   ],

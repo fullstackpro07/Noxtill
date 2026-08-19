@@ -33,6 +33,8 @@ export const CAPABILITIES = {
   OPTIONS_MANAGE: 'options.manage',
   LISTINGS_MANAGE: 'listings.manage',
   SOCIAL_MANAGE: 'social.manage',
+  COMPETITIVE_MANAGE: 'competitive.manage',
+  VOICE_MANAGE: 'voice.manage',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -55,6 +57,8 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.OPTIONS_MANAGE,
   CAPABILITIES.LISTINGS_MANAGE,
   CAPABILITIES.SOCIAL_MANAGE,
+  CAPABILITIES.COMPETITIVE_MANAGE,
+  CAPABILITIES.VOICE_MANAGE,
 ];
 
 /**

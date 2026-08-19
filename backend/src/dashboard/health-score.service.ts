@@ -111,7 +111,7 @@ export class HealthScoreService {
       await Promise.all([
         this.ratingTrendRaw(businessId, since),
         this.repeatCustomerRateRaw(businessId),
-        this.marginRaw(),
+        this.marginRaw(businessId),
         this.creditRecoveryRaw(businessId, since),
       ]);
 
@@ -171,10 +171,13 @@ export class HealthScoreService {
    * app's existing "margin under 10% is a red flag" convention used on the Products/Profit screens,
    * so a business right at that red-flag line scores a middling ~40, not a false-healthy number.
    */
-  private async marginRaw(): Promise<number> {
+  private async marginRaw(businessId: string): Promise<number> {
     const now = new Date();
     const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-    const { revenue, netProfit } = await this.profitService.pnl(month);
+    const { revenue, netProfit } = await this.profitService.pnl(
+      businessId,
+      month,
+    );
     if (revenue <= 0) return 0;
     const marginPercent = (netProfit / revenue) * 100;
     return round2(clamp((marginPercent / 25) * 100, 0, 100));
