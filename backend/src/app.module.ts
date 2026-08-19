@@ -62,7 +62,7 @@ import { DigitizerModule } from './digitizer/digitizer.module';
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
     PrismaModule,
     CommonModule,
-    QueueModule,
+    QueueModule.forRoot(),
     StorageModule,
     LocalizationModule,
     PdfModule,
