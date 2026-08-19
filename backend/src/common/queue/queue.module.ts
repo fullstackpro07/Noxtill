@@ -1,13 +1,14 @@
-import { DynamicModule, Global, Injectable, Logger, Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BullModule, InjectQueue } from '@nestjs/bullmq';
-import { Queue, JobsOptions } from 'bullmq';
 import {
-  DEFAULT_JOB_OPTIONS,
-  DemoJobData,
-  DEMO_QUEUE,
-  dlqName,
-} from './queue.constants';
+  DynamicModule,
+  Global,
+  Injectable,
+  Logger,
+  Module,
+} from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
+import { Queue, JobsOptions } from 'bullmq';
+import { DemoJobData, DEMO_QUEUE, dlqName } from './queue.constants';
 import { QueueService } from './queue.service';
 import { DemoProcessor } from './demo.processor';
 import { DeadLetterListener } from './dead-letter.listener';
@@ -29,36 +30,31 @@ class NoOpQueueService {
     );
   }
 
-  async addJob<T>(
+  addJob<T>(
     _queue: unknown,
     _jobName: string,
     _data: T,
     _idempotencyKey: string,
-    _opts: JobsOptions = {},
-  ) {
+    _opts?: JobsOptions,
+  ): Promise<null> {
     this.warn();
-    return null;
+    return Promise.resolve(null);
   }
 
-  async addDemoJob(
+  addDemoJob(
     _jobName: string,
     _data: DemoJobData,
     _idempotencyKey: string,
-    _opts: JobsOptions = {},
-  ) {
+    _opts?: JobsOptions,
+  ): Promise<null> {
     this.warn();
-    return null;
+    return Promise.resolve(null);
   }
 
   get demo(): Queue | null {
     return null;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Real QueueService — only instantiated when BullMQ is fully loaded.
-// ---------------------------------------------------------------------------
-// (imported from queue.service.ts, kept as-is)
 
 // ---------------------------------------------------------------------------
 // Helper: build ioredis connection options from env vars.
@@ -88,8 +84,7 @@ function buildRedisConnection(config: ConfigService): object {
   // ── Individual env vars path ─────────────────────────────────────────────
   // Supports: REDIS_HOST, REDIS_PORT, REDIS_USERNAME, REDIS_PASSWORD, REDIS_TLS
   const tlsRaw = config.get<string>('REDIS_TLS', '');
-  const tlsEnabled =
-    tlsRaw === 'true' || tlsRaw === '1' || tlsRaw === 'yes';
+  const tlsEnabled = tlsRaw === 'true' || tlsRaw === '1' || tlsRaw === 'yes';
 
   return {
     host: config.get<string>('REDIS_HOST', 'localhost'),
@@ -109,9 +104,7 @@ function buildRedisConnection(config: ConfigService): object {
 @Module({})
 export class QueueModule {
   static forRoot(): DynamicModule {
-    const redisAvailable = !!(
-      process.env.REDIS_URL || process.env.REDIS_HOST
-    );
+    const redisAvailable = !!(process.env.REDIS_URL || process.env.REDIS_HOST);
 
     if (!redisAvailable) {
       // ── No Redis configured: return a zero-connection stub ──────────────
