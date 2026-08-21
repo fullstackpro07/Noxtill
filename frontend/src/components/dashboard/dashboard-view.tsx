@@ -17,12 +17,14 @@ import { HealthScoreCard } from "./health-score-card";
 import { LiveActivityFeed } from "./live-activity-feed";
 import { AiInsightsFeed } from "./ai-insights-feed";
 import { ActionCenter } from "./action-center";
+import { TodayBusinessView } from "./today-business-view";
+import { NightlyCloseView } from "./nightly-close-view";
 import { useDashboardStore } from "@/store/dashboard-store";
 import { useWidgetData } from "@/hooks/use-widget-data";
 import { fetchDashboardConfig, saveDashboardConfig } from "@/lib/widgets-api";
 import { toast } from "@/lib/toast";
 
-type DashboardTab = "overview" | "health-score" | "activity" | "insights" | "actions";
+type DashboardTab = "overview" | "today" | "health-score" | "activity" | "insights" | "actions" | "nightly-close";
 
 export function DashboardView({ currency, businessName }: { currency: string; businessName: string }) {
   const layout = useDashboardStore((s) => s.layout);
@@ -130,14 +132,16 @@ export function DashboardView({ currency, businessName }: { currency: string; bu
         <Tabs
           items={[
             { key: "overview", label: "Overview" },
+            { key: "today", label: "Today's business" },
             { key: "health-score", label: "Health score" },
             { key: "activity", label: "Activity" },
             { key: "insights", label: "AI insights" },
             { key: "actions", label: "Actions" },
+            { key: "nightly-close", label: "Nightly Close" },
           ]}
           value={tab}
           onChange={(k) => setTab(k as DashboardTab)}
-          className="mb-5 w-full max-w-xl"
+          className="mb-5 w-full max-w-3xl"
         />
       )}
 
@@ -154,10 +158,12 @@ export function DashboardView({ currency, businessName }: { currency: string; bu
               <WidgetGridView layout={layout} currency={currency} range={range} />
             </>
           )}
+          {tab === "today" && <TodayBusinessView />}
           {tab === "health-score" && <HealthScoreCard />}
           {tab === "activity" && <LiveActivityFeed />}
           {tab === "insights" && <AiInsightsFeed />}
           {tab === "actions" && <ActionCenter />}
+          {tab === "nightly-close" && <NightlyCloseView />}
         </>
       )}
 

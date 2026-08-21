@@ -12,7 +12,13 @@ export class CashRegisterController {
 
   @Get('cash/shift/current')
   getCurrentShift(@CurrentUser() user: AuthenticatedUser) {
-    return this.cashRegisterService.getCurrentShift(user.businessId);
+    return this.cashRegisterService.getCurrentShift(user.businessId, user.role);
+  }
+
+  /** UPD-FE-007e: shift history for the Shift Closing screen. */
+  @Get('cash/shifts')
+  listShifts(@CurrentUser() user: AuthenticatedUser) {
+    return this.cashRegisterService.listShifts(user.businessId, user.role);
   }
 
   @Post('cash/shift/open')

@@ -21,6 +21,13 @@ export const HEALTH_SCORE_SNAPSHOT_QUEUE = 'health-score-snapshot';
 /** How many weeks of trailing data feed each component's raw 0-100 performance calc. */
 export const HEALTH_SCORE_WINDOW_WEEKS = 12;
 
+/** UPD-BE-001e: `range` on GET /health-score is months, matching the screen's 3/6/12 period filter. */
+export const HEALTH_SCORE_ALLOWED_PERIOD_MONTHS = [3, 6, 12] as const;
+export const HEALTH_SCORE_DEFAULT_PERIOD_MONTHS = 3;
+
+/** Under this many days since signup, a low score is more likely "not enough data yet" than real. */
+export const HEALTH_SCORE_MIN_BUSINESS_AGE_DAYS = 14;
+
 export const AI_INSIGHTS_QUEUE = 'ai-insights';
 
 /** UPD-BE-003: a week-over-week revenue swing under this magnitude isn't worth surfacing. */

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocaleService } from '../common/localization/locale.service';
 import { SendGateService } from '../messaging/send-gate.service';
-import { Role } from '@prisma/client';
+import { MessageChannel, Role } from '@prisma/client';
 import {
   DailyCloseRow,
   LowStockRow,
@@ -100,6 +100,7 @@ export class NightlyCloseService {
     };
   }
 
+  /** UPD-BE-083: every attempt is logged (upserted per business+date), success or failure, so a failed delivery is visible rather than silently absent from history. */
   async composeAndSend(
     businessId: string,
     date: Date = new Date(),
@@ -107,7 +108,7 @@ export class NightlyCloseService {
     const business = await this.prisma.business.findUniqueOrThrow({
       where: { id: businessId },
     });
-    const data = await this.composeDayData(businessId, date);
+    const closeDate = new Date(date.toISOString().slice(0, 10));
 
     const owner = await this.prisma.businessUser.findFirst({
       where: { businessId, role: Role.owner },
@@ -115,31 +116,116 @@ export class NightlyCloseService {
     });
     if (!owner) return;
 
-    const alerts: string[] = [];
-    if (data.lowStockProducts.length > 0)
-      alerts.push(`${data.lowStockProducts.length} low-stock item(s)`);
-    if (data.openFeedbackCount > 0)
-      alerts.push(`${data.openFeedbackCount} open complaint(s)`);
-    if (data.appointmentsTomorrowCount > 0)
-      alerts.push(`${data.appointmentsTomorrowCount} booking(s) tomorrow`);
+    try {
+      const data = await this.composeDayData(businessId, date);
 
-    await this.sendGate.send({
-      businessId,
-      templateKey: 'nightly_close',
-      to: {
-        phone: owner.user.phone ?? undefined,
-        email: owner.user.email ?? undefined,
-      },
-      variables: {
-        businessName: data.businessName,
-        dateLabel: data.dateLabel,
-        ordersCount: String(data.ordersCount),
-        revenue: this.locale.formatCurrency(data.revenue, business),
-        grossProfit: this.locale.formatCurrency(data.grossProfit, business),
-        alertsSummary: alerts.length ? `${alerts.join(', ')}. ` : '',
-        deepLink: `/day/${date.toISOString().slice(0, 10)}`,
-      },
+      const alerts: string[] = [];
+      if (data.lowStockProducts.length > 0)
+        alerts.push(`${data.lowStockProducts.length} low-stock item(s)`);
+      if (data.openFeedbackCount > 0)
+        alerts.push(`${data.openFeedbackCount} open complaint(s)`);
+      if (data.appointmentsTomorrowCount > 0)
+        alerts.push(`${data.appointmentsTomorrowCount} booking(s) tomorrow`);
+
+      await this.sendGate.send({
+        businessId,
+        templateKey: 'nightly_close',
+        to: {
+          phone: owner.user.phone ?? undefined,
+          email: owner.user.email ?? undefined,
+        },
+        variables: {
+          businessName: data.businessName,
+          dateLabel: data.dateLabel,
+          ordersCount: String(data.ordersCount),
+          revenue: this.locale.formatCurrency(data.revenue, business),
+          grossProfit: this.locale.formatCurrency(data.grossProfit, business),
+          alertsSummary: alerts.length ? `${alerts.join(', ')}. ` : '',
+          deepLink: `/day/${date.toISOString().slice(0, 10)}`,
+        },
+      });
+
+      await this.logDelivery(
+        businessId,
+        closeDate,
+        business.channelPref,
+        'sent',
+      );
+    } catch (error) {
+      await this.logDelivery(
+        businessId,
+        closeDate,
+        business.channelPref,
+        'failed',
+        (error as Error).message,
+      );
+      throw error;
+    }
+  }
+
+  private async logDelivery(
+    businessId: string,
+    closeDate: Date,
+    channel: MessageChannel,
+    status: 'sent' | 'failed',
+    error?: string,
+  ): Promise<void> {
+    await this.prisma.nightlyCloseLog.upsert({
+      where: { businessId_closeDate: { businessId, closeDate } },
+      create: { businessId, closeDate, channel, status, error },
+      update: { channel, status, error: error ?? null },
     });
+  }
+
+  /** UPD-BE-083: real preview — composes tonight's close without sending it. */
+  preview(businessId: string): Promise<NightlyCloseData> {
+    return this.composeDayData(businessId, new Date());
+  }
+
+  /** UPD-BE-083: "Send test now" — bypasses the schedule and sends immediately. */
+  testSend(businessId: string): Promise<void> {
+    return this.composeAndSend(businessId, new Date());
+  }
+
+  /** UPD-BE-083: history table — real per-day sales/profit joined with the real delivery log. */
+  async getHistory(
+    businessId: string,
+    filters: { from?: Date; to?: Date; status?: 'sent' | 'failed' } = {},
+  ) {
+    const logs = await this.prisma.nightlyCloseLog.findMany({
+      where: {
+        businessId,
+        ...(filters.from || filters.to
+          ? {
+              closeDate: {
+                ...(filters.from ? { gte: filters.from } : {}),
+                ...(filters.to ? { lte: filters.to } : {}),
+              },
+            }
+          : {}),
+        ...(filters.status ? { status: filters.status } : {}),
+      },
+      orderBy: { closeDate: 'desc' },
+      take: 90,
+    });
+
+    return Promise.all(
+      logs.map(async (log) => {
+        const data = await this.composeDayData(businessId, log.closeDate);
+        return {
+          date: log.closeDate,
+          sales: data.ordersCount,
+          revenue: data.revenue,
+          profit: data.grossProfit,
+          newReviews: data.newReviewsCount,
+          bookingsTomorrow: data.appointmentsTomorrowCount,
+          creditRecovered: data.creditPaymentsTodayTotal,
+          deliveryStatus: log.status,
+          deliveryError: log.error,
+          channel: log.channel,
+        };
+      }),
+    );
   }
 
   async updateSettings(

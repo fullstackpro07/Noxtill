@@ -183,4 +183,31 @@ describe('HeldSalesService (UPD-BE-005)', () => {
     await prisma.heldSale.delete({ where: { id: foreignHold.id } });
     await prisma.business.delete({ where: { id: other.id } });
   });
+
+  it("discardOlderThanToday() removes only real holds from before today, leaving today's alone", async () => {
+    const yesterday = await prisma.heldSale.create({
+      data: {
+        businessId,
+        cart: { items: [{ productId, qty: 1 }] },
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    });
+    const today = await heldSalesService.hold(businessId, {
+      items: [{ productId, qty: 1 }],
+    });
+
+    const result = await heldSalesService.discardOlderThanToday(businessId);
+    expect(result.count).toBeGreaterThanOrEqual(1);
+
+    const oldStillThere = await prisma.heldSale.findUnique({
+      where: { id: yesterday.id },
+    });
+    const todayStillThere = await prisma.heldSale.findUnique({
+      where: { id: today.id },
+    });
+    expect(oldStillThere).toBeNull();
+    expect(todayStillThere).not.toBeNull();
+
+    await heldSalesService.discard(businessId, today.id);
+  });
 });

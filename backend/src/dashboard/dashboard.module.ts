@@ -19,6 +19,7 @@ import { ProfitModule } from '../profit/profit.module';
 import { AiModule } from '../ai/ai.module';
 import { ActionCenterService } from './action-center.service';
 import { ActionCenterController } from './action-center.controller';
+import { TodayBusinessService } from './today-business.service';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ActionCenterController } from './action-center.controller';
     AiInsightsScheduler,
     AiInsightsProcessor,
     ActionCenterService,
+    TodayBusinessService,
   ],
 })
 export class DashboardModule {}

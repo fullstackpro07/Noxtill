@@ -37,6 +37,7 @@ export const CAPABILITIES = {
   VOICE_MANAGE: 'voice.manage',
   DELIVERY_MANAGE: 'delivery.manage',
   ADS_MANAGE: 'ads.manage',
+  HEALTH_SCORE_MANAGE: 'health_score.manage',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];

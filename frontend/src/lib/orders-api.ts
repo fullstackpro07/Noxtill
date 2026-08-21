@@ -23,7 +23,7 @@ interface RawCustomer {
   phone: string;
 }
 
-interface RawOrder {
+export interface RawOrder {
   id: string;
   orderNo: number;
   customer: RawCustomer | null;
@@ -59,7 +59,7 @@ export interface LiveOrder {
   createdAt: string;
 }
 
-function toLiveOrder(raw: RawOrder): LiveOrder {
+export function toLiveOrder(raw: RawOrder): LiveOrder {
   return {
     id: raw.id,
     orderNo: raw.orderNo,
@@ -93,6 +93,7 @@ export interface CreateSaleInput {
   customerId?: string;
   customerPhone?: string;
   customerName?: string;
+  staffUserId?: string;
   items: SaleLineInput[];
   discount?: number;
   payment: { method: "cash" | "card" | "online" | "credit"; amount?: number; note?: string };

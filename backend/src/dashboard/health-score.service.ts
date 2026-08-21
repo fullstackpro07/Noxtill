@@ -4,6 +4,9 @@ import { ProfitService } from '../profit/profit.service';
 import { AppException } from '../common/filters/app.exception';
 import {
   DEFAULT_HEALTH_SCORE_WEIGHTS,
+  HEALTH_SCORE_ALLOWED_PERIOD_MONTHS,
+  HEALTH_SCORE_DEFAULT_PERIOD_MONTHS,
+  HEALTH_SCORE_MIN_BUSINESS_AGE_DAYS,
   HEALTH_SCORE_WINDOW_WEEKS,
 } from './dashboard.constants';
 import { Prisma } from '@prisma/client';
@@ -12,6 +15,49 @@ export type HealthScoreWeights = Record<
   'ratingTrend' | 'repeatCustomerRate' | 'margin' | 'creditRecovery',
   number
 >;
+
+export type HealthScoreComponents = HealthScoreWeights;
+
+export interface HealthScoreChangeLogEntry {
+  date: Date;
+  oldScore: number;
+  newScore: number;
+  oldWeights: Prisma.JsonValue;
+  newWeights: Prisma.JsonValue;
+}
+
+export interface HealthScoreHistoryEntry {
+  capturedAt: Date;
+  totalScore: number;
+  ratingTrend: number;
+  repeatCustomerRate: number;
+  margin: number;
+  creditRecovery: number;
+}
+
+/** UPD-BE-001e: a business under 14 days old gets an honest "still building" status, never a misleadingly low real score. */
+export interface HealthScoreBuilding {
+  building: true;
+  message: string;
+  daysUntilReady: number;
+  score: null;
+  components: null;
+  weights: HealthScoreWeights;
+  history: [];
+  changeLog: [];
+}
+
+export interface HealthScoreReady {
+  building: false;
+  score: number;
+  components: HealthScoreComponents;
+  weights: HealthScoreWeights;
+  periodMonths: number;
+  history: HealthScoreHistoryEntry[];
+  changeLog: HealthScoreChangeLogEntry[];
+}
+
+export type HealthScoreResult = HealthScoreBuilding | HealthScoreReady;
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -45,9 +91,11 @@ export class HealthScoreService {
     return { ...DEFAULT_HEALTH_SCORE_WEIGHTS, ...(stored ?? {}) };
   }
 
+  /** UPD-BE-001e: logs the before/after score alongside the weight change itself, so "what changed" is answerable without recomputing history. */
   async updateWeights(
     businessId: string,
     weights: HealthScoreWeights,
+    changedByUserId?: string,
   ): Promise<HealthScoreWeights> {
     const total = Object.values(weights).reduce((sum, w) => sum + w, 0);
     if (Math.round(total) !== 100) {
@@ -57,39 +105,94 @@ export class HealthScoreService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    const oldWeights = await this.getWeights(businessId);
+    const raw = await this.computeRawComponents(businessId);
+    const oldScore = this.totalScore(this.weightComponents(raw, oldWeights));
+    const newScore = this.totalScore(this.weightComponents(raw, weights));
+
     await this.tenantPrisma.client.business.update({
       where: { id: businessId },
       data: { healthScoreWeights: weights as Prisma.InputJsonValue },
     });
+    await this.tenantPrisma.client.healthScoreWeightChange.create({
+      data: {
+        businessId,
+        oldWeights: oldWeights as unknown as Prisma.InputJsonValue,
+        newWeights: weights as unknown as Prisma.InputJsonValue,
+        oldScore,
+        newScore,
+        changedByUserId,
+      },
+    });
+
     return weights;
   }
 
-  async getScore(businessId: string, range?: string) {
-    const weeks = range
-      ? Number(range) || HEALTH_SCORE_WINDOW_WEEKS
-      : HEALTH_SCORE_WINDOW_WEEKS;
+  async getScore(
+    businessId: string,
+    periodMonthsRaw?: string,
+  ): Promise<HealthScoreResult> {
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { createdAt: true },
+    });
+    // Clamped to 0: a freshly-created business can otherwise compute a tiny *negative* age
+    // (DB-clock vs. app-clock skew — `createdAt` is set by MySQL's own clock, not this process's),
+    // which would silently push `daysUntilReady` past the real 14-day window.
+    const businessAgeDays = Math.max(
+      0,
+      Math.floor(
+        (Date.now() - business.createdAt.getTime()) / (24 * 60 * 60 * 1000),
+      ),
+    );
+    if (businessAgeDays < HEALTH_SCORE_MIN_BUSINESS_AGE_DAYS) {
+      return {
+        building: true,
+        message: 'Building your score — check back in a few days.',
+        daysUntilReady: HEALTH_SCORE_MIN_BUSINESS_AGE_DAYS - businessAgeDays,
+        score: null,
+        components: null,
+        weights: await this.getWeights(businessId),
+        history: [],
+        changeLog: [],
+      };
+    }
+
+    const requestedMonths = periodMonthsRaw ? Number(periodMonthsRaw) : null;
+    const months =
+      requestedMonths &&
+      (HEALTH_SCORE_ALLOWED_PERIOD_MONTHS as readonly number[]).includes(
+        requestedMonths,
+      )
+        ? requestedMonths
+        : HEALTH_SCORE_DEFAULT_PERIOD_MONTHS;
+    const weeks = Math.round((months * 52) / 12);
+
     const weights = await this.getWeights(businessId);
     const raw = await this.computeRawComponents(businessId);
     const components = this.weightComponents(raw, weights);
-    const score = round2(
-      components.ratingTrend +
-        components.repeatCustomerRate +
-        components.margin +
-        components.creditRecovery,
-    );
+    const score = this.totalScore(components);
 
-    const history = await this.tenantPrisma.client.healthScoreSnapshot.findMany(
-      {
+    const [history, changeLog] = await Promise.all([
+      this.tenantPrisma.client.healthScoreSnapshot.findMany({
         where: { businessId },
         orderBy: { capturedAt: 'desc' },
         take: weeks,
-      },
-    );
+      }),
+      this.tenantPrisma.client.healthScoreWeightChange.findMany({
+        where: { businessId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
 
     return {
+      building: false,
       score,
       components,
       weights,
+      periodMonths: months,
       history: history.reverse().map((row) => ({
         capturedAt: row.capturedAt,
         totalScore: Number(row.totalScore),
@@ -98,7 +201,28 @@ export class HealthScoreService {
         margin: Number(row.marginScore),
         creditRecovery: Number(row.creditRecoveryScore),
       })),
+      changeLog: changeLog.map((row) => ({
+        date: row.createdAt,
+        oldScore: Number(row.oldScore),
+        newScore: Number(row.newScore),
+        oldWeights: row.oldWeights,
+        newWeights: row.newWeights,
+      })),
     };
+  }
+
+  private totalScore(components: {
+    ratingTrend: number;
+    repeatCustomerRate: number;
+    margin: number;
+    creditRecovery: number;
+  }): number {
+    return round2(
+      components.ratingTrend +
+        components.repeatCustomerRate +
+        components.margin +
+        components.creditRecovery,
+    );
   }
 
   /** Each raw sub-score is 0-100, independent of weighting — shared by getScore() and the weekly snapshot job. */

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, X, ListChecks } from "lucide-react";
+import { CheckCircle2, Clock, X, ListChecks, CheckCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownTrigger, DropdownContent, DropdownItem } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorBanner } from "@/components/shared/error-states";
@@ -14,6 +15,7 @@ import { SkeletonRow } from "@/components/shared/skeleton";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { formatRelativeTime } from "@/lib/format";
+import { useNow } from "@/hooks/use-now";
 import {
   ACTION_ITEM_TYPE_LABEL,
   completeAction,
@@ -33,16 +35,24 @@ const PRIORITY_DOT: Record<ActionItemPriority, string> = {
   low: "bg-fg-faint",
 };
 const SNOOZE_LABEL: Record<SnoozeDuration, string> = { "1h": "1 hour", tomorrow: "Tomorrow", next_week: "Next week" };
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function ActionCenter() {
   const [priority, setPriority] = useState<ActionItemPriority | "all">("all");
   const [type, setType] = useState<ActionItemType | "all">("all");
+  const [confirmMarkAllRead, setConfirmMarkAllRead] = useState(false);
   const queryClient = useQueryClient();
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["action-center", priority, type],
     queryFn: () => fetchActions({ priority: priority === "all" ? undefined : priority, type: type === "all" ? undefined : type }),
   });
+
+  const now = useNow();
+  const todayCount = useMemo(() => {
+    if (!data) return 0;
+    return data.items.filter((item) => now - new Date(item.occurredAt).getTime() < DAY_MS).length;
+  }, [data, now]);
 
   function onMutationError(err: unknown) {
     toast.error(err instanceof ApiError ? err.message : "Couldn't update this — please try again.");
@@ -56,6 +66,18 @@ export function ActionCenter() {
   const snoozeMutation = useMutation({
     mutationFn: ({ id, duration }: { id: string; duration: SnoozeDuration }) => snoozeAction(id, duration),
     onSuccess: onMutationSuccess,
+    onError: onMutationError,
+  });
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      const items = data?.items ?? [];
+      await Promise.all(items.map((item) => snoozeAction(item.id, "tomorrow")));
+    },
+    onSuccess: () => {
+      onMutationSuccess();
+      toast.success("Marked all read — they'll resurface tomorrow if still open.");
+      setConfirmMarkAllRead(false);
+    },
     onError: onMutationError,
   });
 
@@ -80,21 +102,22 @@ export function ActionCenter() {
               </option>
             ))}
           </Select>
+          {data && data.items.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setConfirmMarkAllRead(true)}>
+              <CheckCheck className="h-3.5 w-3.5" aria-hidden />
+              Mark all read
+            </Button>
+          )}
         </div>
       </CardHeader>
 
       <CardContent>
         {data && (
-          <div className="mb-4 flex gap-4 text-sm text-fg-muted">
-            <span>
-              <span className="font-semibold tabular-nums text-destructive">{data.counts.urgent}</span> urgent
-            </span>
-            <span>
-              <span className="font-semibold tabular-nums text-fg">{data.counts.open}</span> open
-            </span>
-            <span>
-              <span className="font-semibold tabular-nums text-whatsapp">{data.counts.completedThisWeek}</span> completed this week
-            </span>
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <StatCard label="Urgent" value={data.counts.urgent} tone="text-destructive" />
+            <StatCard label="Today" value={todayCount} tone="text-fg" />
+            <StatCard label="Open" value={data.counts.open} tone="text-fg" />
+            <StatCard label="Completed this week" value={data.counts.completedThisWeek} tone="text-whatsapp" />
           </div>
         )}
 
@@ -127,7 +150,33 @@ export function ActionCenter() {
           </ul>
         )}
       </CardContent>
+
+      <Dialog
+        open={confirmMarkAllRead}
+        onClose={() => setConfirmMarkAllRead(false)}
+        title="Mark all read?"
+        description={`This snoozes all ${data?.items.length ?? 0} visible item(s) until tomorrow — anything still open will resurface then. Nothing is dismissed permanently.`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmMarkAllRead(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => markAllReadMutation.mutate()} disabled={markAllReadMutation.isPending}>
+              {markAllReadMutation.isPending ? "Marking…" : "Mark all read"}
+            </Button>
+          </>
+        }
+      />
     </Card>
+  );
+}
+
+function StatCard({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface-2/40 px-3.5 py-2.5">
+      <p className={`font-display text-xl font-bold tabular-nums ${tone}`}>{value}</p>
+      <p className="text-xs text-fg-muted">{label}</p>
+    </div>
   );
 }
 

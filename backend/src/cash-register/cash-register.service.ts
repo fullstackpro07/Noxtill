@@ -10,7 +10,7 @@ import {
   CASH_REGISTER_ERROR_CODES,
   VARIANCE_NOTE_THRESHOLD,
 } from './cash-register.constants';
-import { CashMovementType, CashShiftStatus } from '@prisma/client';
+import { CashMovementType, CashShiftStatus, Role } from '@prisma/client';
 
 /**
  * Cash Register (UPD-BE-006). One open shift per business at a time — checked explicitly before
@@ -24,11 +24,18 @@ export class CashRegisterService {
     private readonly cls: ClsService,
   ) {}
 
-  async getCurrentShift(businessId: string) {
-    return this.tenantPrisma.client.cashShift.findFirst({
+  /**
+   * UPD-FE-006e: staff can record movements but must never see the drawer's variance —
+   * `role` is optional only so every existing background/internal caller (which never passed
+   * one) keeps working unchanged; any caller that omits it gets the full (non-staff) view.
+   */
+  async getCurrentShift(businessId: string, role?: Role) {
+    const shift = await this.tenantPrisma.client.cashShift.findFirst({
       where: { businessId, status: CashShiftStatus.open },
       include: { movements: { orderBy: { createdAt: 'asc' } } },
     });
+    if (!shift || role !== Role.staff) return shift;
+    return this.stripVariance(shift);
   }
 
   async openShift(businessId: string, dto: OpenShiftDto) {
@@ -171,6 +178,33 @@ export class CashRegisterService {
       0,
     );
     return Math.round(total * 100) / 100;
+  }
+
+  /** UPD-FE-007e: shift history for Shift Closing's denomination/variance table — staff-safe-stripped like `getCurrentShift`. */
+  async listShifts(businessId: string, role?: Role, take = 30) {
+    const shifts = await this.tenantPrisma.client.cashShift.findMany({
+      where: { businessId, status: CashShiftStatus.closed },
+      include: { movements: { orderBy: { createdAt: 'asc' } } },
+      orderBy: { closedAt: 'desc' },
+      take,
+    });
+    if (role !== Role.staff) return shifts;
+    return shifts.map((shift) => this.stripVariance(shift));
+  }
+
+  /** UPD-FE-006e/007e: staff must never see the drawer's variance fields. */
+  private stripVariance<
+    T extends {
+      countedCash: unknown;
+      variance: unknown;
+      varianceNote: unknown;
+    },
+  >(shift: T): Omit<T, 'countedCash' | 'variance' | 'varianceNote'> {
+    const safe: Partial<T> = { ...shift };
+    delete safe.countedCash;
+    delete safe.variance;
+    delete safe.varianceNote;
+    return safe as Omit<T, 'countedCash' | 'variance' | 'varianceNote'>;
   }
 
   private async requireOpenShift(businessId: string) {

@@ -310,3 +310,20 @@ h1, h2, h3, h4, .font-display {
     scroll-behavior: auto !important;
   }
 }
+
+/* Client-side print views (e.g. Shift Closing's report) mark their printable root with
+   data-print-root — everything else on the page is hidden so only that content prints. */
+@media print {
+  body:has([data-print-root]) > * {
+    visibility: hidden;
+  }
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible;
+  }
+  [data-print-root] {
+    position: fixed;
+    inset: 0;
+    padding: 24px;
+  }
+}

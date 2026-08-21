@@ -646,6 +646,8 @@ model Business {
   recurringObligations     RecurringObligation[]
   seoHeatmapPoints         SeoHeatmapPoint[]
   apiKeys                  ApiKey[]
+  nightlyCloseLogs         NightlyCloseLog[]
+  healthScoreWeightChanges HealthScoreWeightChange[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2074,6 +2076,26 @@ model ApiKey {
   @@map("api_keys")
 }
 
+/// Nightly Close history (UPD-BE-083) — one row per real send attempt, written by
+/// `NightlyCloseService.composeAndSend()` regardless of outcome, so a failed delivery is visible
+/// rather than silently absent. `@@unique([businessId, closeDate])` makes a same-day retry
+/// (the processor's own idempotency-keyed re-run) an update, not a duplicate history row.
+model NightlyCloseLog {
+  id         String         @id @default(uuid())
+  businessId String         @map("business_id")
+  business   Business       @relation(fields: [businessId], references: [id])
+  closeDate  DateTime       @map("close_date") @db.Date
+  channel    MessageChannel
+  status     String
+  error      String?        @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, closeDate])
+  @@index([businessId, createdAt])
+  @@map("nightly_close_logs")
+}
+
 model Attendance {
   id          String       @id @default(uuid())
   businessId  String       @map("business_id")
@@ -2356,6 +2378,26 @@ model HealthScoreSnapshot {
 
   @@index([businessId, capturedAt])
   @@map("health_score_snapshots")
+}
+
+/// Business Health Score, weight-change log (UPD-BE-001e) — one row per real
+/// `PATCH /health-score/weights` call, capturing the score immediately before and after so "what
+/// changed" is answerable without recomputing history. Distinct from `HealthScoreSnapshot`, which
+/// is a plain weekly time series with no notion of *why* the score moved.
+model HealthScoreWeightChange {
+  id              String   @id @default(uuid())
+  businessId      String   @map("business_id")
+  business        Business @relation(fields: [businessId], references: [id])
+  oldWeights      Json     @map("old_weights")
+  newWeights      Json     @map("new_weights")
+  oldScore        Decimal  @map("old_score") @db.Decimal(5, 2)
+  newScore        Decimal  @map("new_score") @db.Decimal(5, 2)
+  changedByUserId String?  @map("changed_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("health_score_weight_changes")
 }
 
 /// Live Activity feed (UPD-BE-002) — a permanent event log written by every real mutation point

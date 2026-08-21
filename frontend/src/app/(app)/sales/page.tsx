@@ -1,9 +1,9 @@
 "use client";
 
-import { PosView } from "@/components/pos/pos-view";
+import { SalesView } from "@/components/pos/sales-view";
 import { useSession } from "@/lib/session";
 
 export default function SalesPage() {
   const session = useSession();
-  return <PosView currency={session.business.currency} />;
+  return <SalesView currency={session.business.currency} />;
 }

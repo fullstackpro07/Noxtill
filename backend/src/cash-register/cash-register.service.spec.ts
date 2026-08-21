@@ -7,6 +7,7 @@ import {
 } from '../common/tenancy/tenant.constants';
 import { CashRegisterService } from './cash-register.service';
 import { VARIANCE_NOTE_THRESHOLD } from './cash-register.constants';
+import { Role } from '@prisma/client';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -141,6 +142,43 @@ describe('CashRegisterService (UPD-BE-006/UPD-BE-007)', () => {
       });
       expect(result.status).toBe('closed');
       expect(result.varianceNote).toContain('miscounted');
+    });
+  });
+
+  describe('staff-safe views (UPD-FE-006e/007e)', () => {
+    it('getCurrentShift() strips variance fields entirely for staff, not just nulls them', async () => {
+      await service.openShift(businessId, { openingFloat: 100 });
+      const staffView = await service.getCurrentShift(businessId, Role.staff);
+      expect(staffView).not.toHaveProperty('variance');
+      expect(staffView).not.toHaveProperty('countedCash');
+      expect(staffView).not.toHaveProperty('varianceNote');
+
+      const ownerView = await service.getCurrentShift(businessId, Role.owner);
+      expect(ownerView).toHaveProperty('variance');
+    });
+
+    it('listShifts() strips real variance data for staff but not for owner/manager', async () => {
+      await service.openShift(businessId, { openingFloat: 100 });
+      await service.reconcile(businessId, {
+        countedCash: 130,
+        note: 'Real till count for this test.',
+      });
+
+      const staffHistory = await service.listShifts(businessId, Role.staff);
+      expect(staffHistory.length).toBeGreaterThan(0);
+      expect(staffHistory[0]).not.toHaveProperty('variance');
+      expect(staffHistory[0]).not.toHaveProperty('varianceNote');
+
+      const ownerHistory = (await service.listShifts(
+        businessId,
+        Role.owner,
+      )) as unknown as {
+        variance: unknown;
+        varianceNote: string | null;
+      }[];
+      expect(ownerHistory.length).toBeGreaterThan(0);
+      expect(Number(ownerHistory[0].variance)).toBe(30);
+      expect(ownerHistory[0].varianceNote).toContain('Real till count');
     });
   });
 });

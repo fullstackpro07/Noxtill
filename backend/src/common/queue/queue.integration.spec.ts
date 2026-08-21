@@ -45,7 +45,10 @@ describe('QueueModule DLQ (BE-010)', () => {
     }
 
     const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true }), QueueModule],
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
+        QueueModule.forRoot(),
+      ],
     }).compile();
 
     const app = moduleRef.createNestApplication();

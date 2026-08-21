@@ -10,6 +10,8 @@ import { HeldSalesController } from './held-sales.controller';
 import { VoiceSaleController } from './voice-sale.controller';
 import { TablesController } from './tables.controller';
 import { ReturnsController } from './returns.controller';
+import { SalesHistoryService } from './sales-history.service';
+import { SalesHistoryController } from './sales-history.controller';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ReviewsModule } from '../reviews/reviews.module';
 import { MarketingModule } from '../marketing/marketing.module';
@@ -38,6 +40,7 @@ import { SettingsModule } from '../settings/settings.module';
     VoiceSaleController,
     TablesController,
     ReturnsController,
+    SalesHistoryController,
   ],
   providers: [
     OrdersService,
@@ -46,6 +49,7 @@ import { SettingsModule } from '../settings/settings.module';
     VoiceSaleService,
     TablesService,
     ReturnsService,
+    SalesHistoryService,
   ],
   exports: [OrdersService, InvoiceService],
 })

@@ -82,6 +82,16 @@ export class HeldSalesService {
     await this.tenantPrisma.client.heldSale.delete({ where: { id } });
   }
 
+  /** UPD-FE-005e: "Discard all older than today" bulk action. */
+  async discardOlderThanToday(businessId: string): Promise<{ count: number }> {
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const result = await this.tenantPrisma.client.heldSale.deleteMany({
+      where: { businessId, createdAt: { lt: startOfToday } },
+    });
+    return { count: result.count };
+  }
+
   async resume(businessId: string, id: string, dto: ResumeHeldSaleDto) {
     const held = await this.tenantPrisma.client.heldSale.findUnique({
       where: { id },

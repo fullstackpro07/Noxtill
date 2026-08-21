@@ -95,5 +95,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, options:
   }
 
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+
+  // Express's res.send(null) — what a Nest controller triggers by returning a bare `null`
+  // (e.g. "no open shift") — sends an empty 200 body with no Content-Type, not JSON `null`.
+  // res.json() throws on that empty body, so read as text first and only parse if non-empty.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }

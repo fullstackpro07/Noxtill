@@ -9,6 +9,9 @@ import { Skeleton } from "@/components/shared/skeleton";
 import { InlineError } from "@/components/shared/error-states";
 import { fetchProducts } from "@/lib/products-api";
 import { createSale, type CreateSaleInput } from "@/lib/orders-api";
+import { holdSale } from "@/lib/held-sales-api";
+import { VoiceSaleRecorder } from "@/components/pos/voice-sale-recorder";
+import { useSession } from "@/lib/session";
 import { searchCustomers, fetchDebtors } from "@/lib/customers-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
@@ -53,6 +56,8 @@ function CartPanel({
   onPaymentMethodChange,
   onConfirm,
   confirming,
+  onHold,
+  holding,
   total,
 }: {
   cart: CartLine[];
@@ -67,6 +72,8 @@ function CartPanel({
   onPaymentMethodChange: (m: PaymentMethod) => void;
   onConfirm: () => void;
   confirming: boolean;
+  onHold: () => void;
+  holding: boolean;
   total: number;
 }) {
   return (
@@ -167,15 +174,21 @@ function CartPanel({
           <span className="font-display text-xl font-bold text-fg">{formatCurrency(total, currency)}</span>
         </div>
 
-        <Button className="w-full" size="lg" disabled={cart.length === 0 || confirming} onClick={onConfirm}>
-          {confirming ? "Recording…" : "Confirm sale"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" disabled={cart.length === 0 || holding} onClick={onHold}>
+            {holding ? "Holding…" : "Hold"}
+          </Button>
+          <Button className="flex-1" size="lg" disabled={cart.length === 0 || confirming} onClick={onConfirm}>
+            {confirming ? "Recording…" : "Confirm sale"}
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
 
 export function PosView({ currency }: { currency: string }) {
+  const session = useSession();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [barcodeQuery, setBarcodeQuery] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
@@ -231,6 +244,25 @@ export function PosView({ currency }: { currency: string }) {
     },
   });
 
+  const holdMutation = useMutation({
+    mutationFn: () =>
+      holdSale({
+        items: cart.map((l) => ({ productId: l.productId, qty: l.qty })),
+        ...(session.user.businessUserId ? { staffUserId: session.user.businessUserId } : {}),
+        ...(customer ? { customerId: customer.id } : customerQuery.trim() ? { customerPhone: customerQuery.trim() } : {}),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["held-sales"] });
+      toast.success("Sale held — find it in the Held Sales tab.");
+      setCart([]);
+      setCustomerQuery("");
+      setMobileCartOpen(false);
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't hold this sale — please try again.");
+    },
+  });
+
   const total = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
 
   function addToCart(productId: string) {
@@ -272,6 +304,7 @@ export function PosView({ currency }: { currency: string }) {
     saleMutation.mutate({
       items: cart.map((l) => ({ productId: l.productId, qty: l.qty })),
       payment: { method: paymentMethod === "wallet" ? "online" : paymentMethod },
+      ...(session.user.businessUserId ? { staffUserId: session.user.businessUserId } : {}),
       ...(customer ? { customerId: customer.id } : customerQuery.trim() ? { customerPhone: customerQuery.trim() } : {}),
     });
   }
@@ -282,14 +315,17 @@ export function PosView({ currency }: { currency: string }) {
         <div className="flex min-h-0 flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h1 className="font-display text-2xl font-bold text-fg">Fast Sale</h1>
-            <form onSubmit={handleBarcodeSubmit} className="w-56">
-              <Input
-                value={barcodeQuery}
-                onChange={(e) => setBarcodeQuery(e.target.value)}
-                placeholder="Scan or type SKU…"
-                leadingSlot={<Barcode className="h-4 w-4" aria-hidden />}
-              />
-            </form>
+            <div className="flex items-center gap-2">
+              <form onSubmit={handleBarcodeSubmit} className="w-56">
+                <Input
+                  value={barcodeQuery}
+                  onChange={(e) => setBarcodeQuery(e.target.value)}
+                  placeholder="Scan or type SKU…"
+                  leadingSlot={<Barcode className="h-4 w-4" aria-hidden />}
+                />
+              </form>
+              <VoiceSaleRecorder currency={currency} />
+            </div>
           </div>
 
           {productsError ? (
@@ -326,6 +362,8 @@ export function PosView({ currency }: { currency: string }) {
             onPaymentMethodChange={setPaymentMethod}
             onConfirm={handleConfirm}
             confirming={saleMutation.isPending}
+            onHold={() => holdMutation.mutate()}
+            holding={holdMutation.isPending}
             total={total}
           />
         </div>
@@ -371,6 +409,8 @@ export function PosView({ currency }: { currency: string }) {
               onPaymentMethodChange={setPaymentMethod}
               onConfirm={handleConfirm}
               confirming={saleMutation.isPending}
+              onHold={() => holdMutation.mutate()}
+              holding={holdMutation.isPending}
               total={total}
             />
           </div>
