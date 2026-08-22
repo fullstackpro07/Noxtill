@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { PRODUCT_CATEGORIES, marginPercent, type Product, type ProductKind, type ProductVariation } from "@/lib/products";
+import { marginPercent, type Product, type ProductKind, type ProductVariation } from "@/lib/products";
 import { createProduct, updateProduct } from "@/lib/products-api";
+import { fetchStaffList } from "@/lib/staff-api";
+import { fetchCategories } from "@/lib/categories-api";
 import { ApiError } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
@@ -16,7 +18,7 @@ import { toast } from "@/lib/toast";
 function emptyDraft(): Omit<Product, "id" | "active"> {
   return {
     name: "",
-    category: PRODUCT_CATEGORIES[0],
+    category: "",
     kind: "product",
     price: 0,
     costPrice: 0,
@@ -49,9 +51,89 @@ export function ProductFormDrawer({
   return createPortal(<ProductFormPanel key={product?.id ?? "new"} product={product} onClose={onClose} />, document.body);
 }
 
+/** Services, formal fields (UPD-BE-087) — eligible-staff multi-select, buffer before/after, deposit toggle+amount. */
+function ServiceFormalFields({
+  draft,
+  setDraft,
+}: {
+  draft: Omit<Product, "id" | "active">;
+  setDraft: React.Dispatch<React.SetStateAction<Omit<Product, "id" | "active">>>;
+}) {
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60 * 1000 });
+  const eligible = draft.eligibleStaffIds ?? [];
+
+  function toggleStaff(id: string) {
+    setDraft((d) => {
+      const current = d.eligibleStaffIds ?? [];
+      return { ...d, eligibleStaffIds: current.includes(id) ? current.filter((s) => s !== id) : [...current, id] };
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4 border-t border-border pt-4">
+      <div>
+        <p className="mb-1.5 text-sm font-medium text-fg">Eligible staff</p>
+        <p className="mb-2 text-xs text-fg-faint">Leave all unchecked to allow any staff member to perform this service.</p>
+        {!staff || staff.length === 0 ? (
+          <p className="text-xs text-fg-faint">No staff on your roster yet.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {staff.map((s) => (
+              <label key={s.id} className="flex items-center gap-2 text-sm text-fg">
+                <input type="checkbox" checked={eligible.includes(s.id)} onChange={() => toggleStaff(s.id)} />
+                {s.name}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Buffer before (min)"
+          type="number"
+          min={0}
+          value={draft.bufferBeforeMin ?? 0}
+          onChange={(e) => setDraft((d) => ({ ...d, bufferBeforeMin: Number(e.target.value) }))}
+        />
+        <Input
+          label="Buffer after (min)"
+          type="number"
+          min={0}
+          value={draft.bufferAfterMin ?? 0}
+          onChange={(e) => setDraft((d) => ({ ...d, bufferAfterMin: Number(e.target.value) }))}
+        />
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 text-sm font-medium text-fg">
+          <input
+            type="checkbox"
+            checked={draft.depositRequired ?? false}
+            onChange={(e) => setDraft((d) => ({ ...d, depositRequired: e.target.checked }))}
+          />
+          Require a deposit to book
+        </label>
+        {draft.depositRequired && (
+          <Input
+            label="Deposit amount"
+            type="number"
+            min={0}
+            step="0.01"
+            className="mt-2"
+            value={draft.depositAmount ?? 0}
+            onChange={(e) => setDraft((d) => ({ ...d, depositAmount: Number(e.target.value) }))}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProductFormPanel({ product, onClose }: { product: Product | null; onClose: () => void }) {
   const [draft, setDraft] = useState<Omit<Product, "id" | "active">>(() => product ?? emptyDraft());
   const queryClient = useQueryClient();
+  const { data: categories } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, staleTime: 5 * 60 * 1000 });
 
   const margin = marginPercent(draft.price, draft.costPrice);
   const marginTone = margin < 10 ? "text-destructive" : margin < 30 ? "text-accent-foreground" : "text-whatsapp";
@@ -125,12 +207,16 @@ function ProductFormPanel({ product, onClose }: { product: Product | null; onClo
 
             <Select
               label="Category"
-              value={draft.category}
-              onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
+              value={draft.categoryId ?? ""}
+              onChange={(e) => {
+                const cat = categories?.find((c) => c.id === e.target.value);
+                setDraft((d) => ({ ...d, categoryId: e.target.value || undefined, category: cat?.name ?? "" }));
+              }}
             >
-              {PRODUCT_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              <option value="">No category</option>
+              {(categories ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </Select>
@@ -157,14 +243,17 @@ function ProductFormPanel({ product, onClose }: { product: Product | null; onClo
             <p className={cn("text-sm font-medium", marginTone)}>Margin: {margin.toFixed(1)}%</p>
 
             {draft.kind === "service" ? (
-              <Input
-                label="Duration (minutes)"
-                type="number"
-                min={5}
-                step={5}
-                value={draft.durationMinutes ?? 30}
-                onChange={(e) => setDraft((d) => ({ ...d, durationMinutes: Number(e.target.value) }))}
-              />
+              <>
+                <Input
+                  label="Duration (minutes)"
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={draft.durationMinutes ?? 30}
+                  onChange={(e) => setDraft((d) => ({ ...d, durationMinutes: Number(e.target.value) }))}
+                />
+                <ServiceFormalFields draft={draft} setDraft={setDraft} />
+              </>
             ) : (
               <div className="grid grid-cols-2 gap-4">
                 <Input

@@ -2,7 +2,10 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TemplateRegistryService } from './templates/template-registry.service';
+import {
+  TemplateRegistryService,
+  substituteTemplateVariables,
+} from './templates/template-registry.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { SmsService } from './channels/sms.service';
 import { EmailService } from './channels/email.service';
@@ -43,17 +46,19 @@ export class MessageWorkerProcessor extends WorkerHost {
     });
 
     const payload = message.payload as Record<string, string>;
-    const rendered = this.templates.render(
-      message.templateKey,
-      message.locale,
-      payload,
-    );
+    // Real custom wording (UPD-BE-092 fix-it) takes priority over the fixed registry copy when
+    // set — WhatsApp's own adapter already ignores this text and falls back to `templateKey`
+    // outside its 24h window (see `WhatsappService.send`), so no extra gating is needed here.
+    const renderedText = message.customBody
+      ? substituteTemplateVariables(message.customBody, payload)
+      : this.templates.render(message.templateKey, message.locale, payload)
+          .text;
     // Terminology Engine (UPD-BE-038) — a universal post-processing pass over every outgoing
     // WhatsApp message, regardless of which template produced it. No-ops (skips the DB lookup
     // entirely) for the many templates that don't reference any `{{term:...}}` placeholder.
     const text = await this.terminology.applyToText(
       message.businessId,
-      rendered.text,
+      renderedText,
     );
     const to = payload.__to;
 

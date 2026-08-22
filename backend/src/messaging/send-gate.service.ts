@@ -18,6 +18,13 @@ export interface SendGateParams {
   to?: { phone?: string; email?: string };
   /** Set for campaign fan-out sends (BE-061) so the funnel report can attribute delivery/read status back. */
   campaignId?: string;
+  /** Overrides `business.channelPref` for this send only (booking reminder rules, UPD-BE-092) — still subject to the same contact-availability fallback in `resolveChannel`. */
+  channel?: Message['channel'];
+  /** Real custom wording (UPD-BE-092 fix-it) — `{{var}}` placeholders, used instead of the fixed
+   * `TEMPLATE_REGISTRY` copy by SMS/email and by WhatsApp inside its 24h window; WhatsApp outside
+   * that window still needs `templateKey` to resolve to a real pre-approved template, so this is
+   * an override of the rendered TEXT only, never of `templateKey` itself. */
+  customBody?: string;
 }
 
 /**
@@ -90,7 +97,10 @@ export class SendGateService {
       ? { phone: customer.phone, email: customer.email }
       : { phone: params.to?.phone, email: params.to?.email };
 
-    const channel = resolveChannel(business.channelPref, contact);
+    const channel = resolveChannel(
+      params.channel ?? business.channelPref,
+      contact,
+    );
     if (!channel) {
       throw new AppException(
         MESSAGE_ERROR_CODES.NO_CHANNEL_AVAILABLE,
@@ -117,6 +127,7 @@ export class SendGateService {
           payload,
           status: 'queued',
           scheduledFor: params.scheduledFor,
+          customBody: params.customBody,
         },
       }),
       this.tenantPrisma.client.business.update({

@@ -5,11 +5,13 @@ import { VariantsService } from './variants.service';
 import { BundlesService } from './bundles.service';
 import { SuppliersService } from './suppliers.service';
 import { PricingService } from './pricing.service';
+import { CategoriesService } from './categories.service';
 import { ProductsController } from './products.controller';
 import { VariantsController } from './variants.controller';
 import { BundlesController } from './bundles.controller';
 import { SuppliersController } from './suppliers.controller';
 import { PricingController } from './pricing.controller';
+import { CategoriesController } from './categories.controller';
 import { ActivityModule } from '../activity/activity.module';
 import { AiModule } from '../ai/ai.module';
 
@@ -25,6 +27,7 @@ import { AiModule } from '../ai/ai.module';
     VariantsController,
     SuppliersController,
     ProductsController,
+    CategoriesController,
   ],
   providers: [
     ProductsService,
@@ -33,6 +36,7 @@ import { AiModule } from '../ai/ai.module';
     BundlesService,
     SuppliersService,
     PricingService,
+    CategoriesService,
   ],
   exports: [ProductsService],
 })

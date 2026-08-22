@@ -7,6 +7,7 @@ interface RawProduct {
   kind: ProductKind;
   name: string;
   category: string | null;
+  categoryId: string | null;
   sku: string | null;
   variations: { label: string; options: { name: string; priceOverride?: number }[] }[];
   costPrice: string;
@@ -15,6 +16,11 @@ interface RawProduct {
   lowStockThreshold: number;
   durationMin: number | null;
   active: boolean;
+  eligibleStaffIds: string[];
+  bufferBeforeMin: number | null;
+  bufferAfterMin: number | null;
+  depositRequired: boolean;
+  depositAmount: string | null;
 }
 
 /**
@@ -28,6 +34,7 @@ function toProduct(raw: RawProduct): Product {
     id: raw.id,
     name: raw.name,
     category: raw.category ?? "",
+    categoryId: raw.categoryId ?? undefined,
     kind: raw.kind,
     sku: raw.sku ?? undefined,
     price,
@@ -40,6 +47,11 @@ function toProduct(raw: RawProduct): Product {
       price: v.options[0]?.priceOverride ?? price,
     })),
     active: raw.active,
+    eligibleStaffIds: raw.eligibleStaffIds,
+    bufferBeforeMin: raw.bufferBeforeMin ?? undefined,
+    bufferAfterMin: raw.bufferAfterMin ?? undefined,
+    depositRequired: raw.depositRequired,
+    depositAmount: raw.depositAmount != null ? Number(raw.depositAmount) : undefined,
   };
 }
 
@@ -53,6 +65,7 @@ function toVariationPayload(variations: ProductVariation[]) {
 export interface ProductDraft {
   name: string;
   category: string;
+  categoryId?: string;
   kind: ProductKind;
   sku?: string;
   price: number;
@@ -62,6 +75,11 @@ export interface ProductDraft {
   durationMinutes?: number;
   variations: ProductVariation[];
   active?: boolean;
+  eligibleStaffIds?: string[];
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  depositRequired?: boolean;
+  depositAmount?: number;
 }
 
 function toPayload(draft: ProductDraft) {
@@ -69,12 +87,18 @@ function toPayload(draft: ProductDraft) {
     kind: draft.kind,
     name: draft.name,
     category: draft.category || undefined,
+    categoryId: draft.categoryId || undefined,
     sku: draft.sku || undefined,
     variations: toVariationPayload(draft.variations),
     costPrice: draft.costPrice,
     sellingPrice: draft.price,
     stockQty: draft.kind === "product" ? (draft.stockOnHand ?? 0) : undefined,
     lowStockThreshold: draft.kind === "product" ? draft.lowStockThreshold : undefined,
+    eligibleStaffIds: draft.kind === "service" ? draft.eligibleStaffIds : undefined,
+    bufferBeforeMin: draft.kind === "service" ? draft.bufferBeforeMin : undefined,
+    bufferAfterMin: draft.kind === "service" ? draft.bufferAfterMin : undefined,
+    depositRequired: draft.kind === "service" ? draft.depositRequired : undefined,
+    depositAmount: draft.kind === "service" ? draft.depositAmount : undefined,
     durationMin: draft.kind === "service" ? draft.durationMinutes : undefined,
     active: draft.active,
   };
@@ -83,6 +107,7 @@ function toPayload(draft: ProductDraft) {
 export interface ProductFilters {
   q?: string;
   category?: string;
+  categoryId?: string;
   kind?: ProductKind;
   active?: boolean;
 }
@@ -91,6 +116,7 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
   if (filters.category) params.set("category", filters.category);
+  if (filters.categoryId) params.set("categoryId", filters.categoryId);
   if (filters.kind) params.set("kind", filters.kind);
   if (filters.active !== undefined) params.set("active", String(filters.active));
   const query = params.toString();
@@ -123,14 +149,4 @@ export interface ImportSummary {
   created: number;
   skipped: number;
   errorsFileUrl?: string;
-}
-
-/** POST /products/import — backend expects canonical columns (name, kind, category, sku, costPrice, sellingPrice, stockQty), no arbitrary column mapping. */
-export function importProductsFile(file: File): Promise<ImportSummary> {
-  const formData = new FormData();
-  formData.append("file", file);
-  return apiFetch<ImportSummary>("/products/import", {
-    method: "POST",
-    body: formData,
-  });
 }

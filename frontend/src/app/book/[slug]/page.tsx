@@ -1,14 +1,20 @@
 "use client";
 
-import { use } from "react";
-import { notFound } from "next/navigation";
+import { use, useEffect } from "react";
+import { notFound, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PublicBookingFlow } from "@/components/public/public-booking-flow";
-import { fetchPublicBookingInfo } from "@/lib/public-booking-api";
+import { fetchPublicBookingInfo, recordPublicBookingVisit } from "@/lib/public-booking-api";
 import { ApiError } from "@/lib/api-client";
 
 export default function PublicBookingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    recordPublicBookingVisit(slug, searchParams.get("src") === "qr" ? "qr" : "link").catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
 
   const {
     data: business,
@@ -42,5 +48,12 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     );
   }
 
-  return <PublicBookingFlow slug={slug} businessName={business.businessName} />;
+  return (
+    <PublicBookingFlow
+      slug={slug}
+      businessName={business.businessName}
+      welcomeText={business.welcomeText}
+      brandColor={business.brandColor}
+    />
+  );
 }

@@ -232,6 +232,12 @@ enum DepositStatus {
   forfeited
 }
 
+/// Deposit settings (UPD-BE-091) — the trigger rule's amount shape.
+enum DepositAmountType {
+  flat
+  percent
+}
+
 enum MessageChannel {
   whatsapp
   sms
@@ -584,13 +590,20 @@ model Business {
   voiceSaleDrafts          VoiceSaleDraft[]
   tables                   Table[]
   returns                  Return[]
+  receiptLogs              ReceiptLog[]
   variantSets              VariantSet[]
   bundles                  Bundle[]
   suppliers                Supplier[]
   priceHistory             PriceHistory[]
+  categories               Category[]
+  scheduledExports         ScheduledExport[]
   waitlistEntries          WaitlistEntry[]
   queueTokens              QueueToken[]
   deposits                 Deposit[]
+  depositSettings          DepositSettings?
+  bookingLinkSettings      BookingLinkSettings?
+  bookingLinkVisits        BookingLinkVisit[]
+  reminderRules            ReminderRule[]
   installmentPlans         InstallmentPlan[]
   installments             Installment[]
   creditShareLinks         CreditShareLink[]
@@ -979,6 +992,22 @@ model Product {
   durationMin       Int?        @map("duration_min")
   active            Boolean     @default(true)
 
+  /// Category, formalized (UPD-BE-088) — the real, canonical category once set; `category` (the
+  /// free-text field above) stays as-is for backward compatibility with every existing reader, but
+  /// new code should prefer this relation.
+  categoryId  String?   @map("category_id")
+  categoryRef Category? @relation(fields: [categoryId], references: [id])
+
+  /// Services, formal fields (UPD-BE-087) — staff/buffer/deposit config the spec expects to live on
+  /// the service itself, not re-entered per appointment. `eligibleStaffIds` is a JSON array of
+  /// `BusinessUser.id`s (MySQL has no native array column) — an empty array means "any staff
+  /// eligible," matching every service that predates this feature.
+  eligibleStaffIds Json     @default("[]") @map("eligible_staff_ids")
+  bufferBeforeMin  Int?     @map("buffer_before_min")
+  bufferAfterMin   Int?     @map("buffer_after_min")
+  depositRequired  Boolean  @default(false) @map("deposit_required")
+  depositAmount    Decimal? @map("deposit_amount") @db.Decimal(12, 2)
+
   orderItems         OrderItem[]
   stockMovements     StockMovement[]
   appointments       Appointment[]
@@ -1051,6 +1080,7 @@ model Order {
   payments      Payment[]
   creditEntries CreditEntry[]
   returns       Return[]
+  receiptLogs   ReceiptLog[]
   stamps        Stamp[]
   delivery      Delivery?
 
@@ -1153,6 +1183,30 @@ model ReturnItem {
 
   @@index([returnId])
   @@map("return_items")
+}
+
+enum ReceiptChannel {
+  digital
+  print
+}
+
+/// Receipts, dedicated resend (UPD-BE-086). One row per real send/print action — lets the
+/// Receipts screen show a genuine digital-vs-printed delivery split instead of a guess, and gives
+/// each order a real history of who resent its receipt and how.
+model ReceiptLog {
+  id           String         @id @default(uuid())
+  businessId   String         @map("business_id")
+  business     Business       @relation(fields: [businessId], references: [id])
+  orderId      String         @map("order_id")
+  order        Order          @relation(fields: [orderId], references: [id])
+  channel      ReceiptChannel
+  sentByUserId String?        @map("sent_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, orderId])
+  @@index([businessId, createdAt])
+  @@map("receipt_log")
 }
 
 /// Held Sales (UPD-BE-005) — a cart snapshot taken before checkout (no payment chosen yet).
@@ -1421,6 +1475,85 @@ model Deposit {
   @@map("deposits")
 }
 
+/// Deposit settings (UPD-BE-091) — the trigger rule ("required after N no-shows," flat vs. %,
+/// which services) the shipped capture/refund flow (`Deposit`) doesn't configure yet. One row per
+/// business, same singleton pattern as `CompetitiveSettings`.
+model DepositSettings {
+  id                   String            @id @default(uuid())
+  businessId           String            @unique @map("business_id")
+  business             Business          @relation(fields: [businessId], references: [id])
+  required             Boolean           @default(false)
+  triggerAfterNoShows  Int?              @map("trigger_after_no_shows")
+  amountType           DepositAmountType @default(flat) @map("amount_type")
+  amountValue          Decimal           @default(0) @map("amount_value") @db.Decimal(12, 2)
+  /// Empty = applies to every service.
+  applicableServiceIds Json              @default("[]") @map("applicable_service_ids")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("deposit_settings")
+}
+
+/// Booking Link & QR (UPD-BE-090) — the public booking page's own customisation, distinct from
+/// `DepositSettings` (which governs the deposit *rule*, not page copy). One row per business.
+model BookingLinkSettings {
+  id               String   @id @default(uuid())
+  businessId       String   @unique @map("business_id")
+  business         Business @relation(fields: [businessId], references: [id])
+  welcomeText      String?  @map("welcome_text") @db.Text
+  /// Empty = every active service shows.
+  visibleServiceIds Json    @default("[]") @map("visible_service_ids")
+  brandColor       String?  @map("brand_color")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("booking_link_settings")
+}
+
+/// Booking Link & QR analytics (UPD-BE-090) — one row per real page load of the public booking
+/// page (`/book/:slug`), recorded by the page itself via `POST /public/booking/:biz/visit`.
+/// `source` distinguishes a direct link open from a QR scan (`?src=qr` on the page URL).
+model BookingLinkVisit {
+  id         String            @id @default(uuid())
+  businessId String            @map("business_id")
+  business   Business          @relation(fields: [businessId], references: [id])
+  source     AppointmentSource @default(link)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("booking_link_visits")
+}
+
+/// Booking reminder rules (UPD-BE-092) — replaces the hardcoded `BOOKING_REMINDER_HOUR_OFFSETS`
+/// constant with per-business, configurable rules. `templateKey` must be one of this app's
+/// pre-approved messaging templates (see `TEMPLATE_REGISTRY`) — WhatsApp/SMS business-initiated
+/// messages can't carry arbitrary freeform text, so "editing the message" means picking a
+/// pre-approved variant, not writing new copy. A business with zero rules keeps the original
+/// hardcoded default behaviour (24h + 2h, `booking_reminder`) — see `DEFAULT_REMINDER_RULES`.
+model ReminderRule {
+  id          String         @id @default(uuid())
+  businessId  String         @map("business_id")
+  business    Business       @relation(fields: [businessId], references: [id])
+  offsetHours Int            @map("offset_hours")
+  channel     MessageChannel?
+  templateKey String         @default("booking_reminder") @map("template_key")
+  /// Real custom wording (UPD-BE-092 fix-it), `{{customerName}}`/`{{serviceName}}`/`{{dateTime}}`
+  /// placeholders. Used verbatim for SMS/email and WhatsApp inside the 24h customer-service
+  /// window (see `WhatsappService`); outside that window Meta requires the pre-approved
+  /// `templateKey` template instead, so this is null-safe rather than a universal override.
+  customMessage String?      @map("custom_message") @db.Text
+  active      Boolean        @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, active])
+  @@map("reminder_rules")
+}
+
 model Message {
   id           String          @id @default(uuid())
   businessId   String          @map("business_id")
@@ -1435,6 +1568,11 @@ model Message {
   status       MessageStatus   @default(queued)
   providerRef  String?         @map("provider_ref")
   scheduledFor DateTime?       @map("scheduled_for")
+  /// Real custom text (UPD-BE-092 fix-it) — when set, the worker sends this (with `{{var}}`
+  /// substitution against `payload`) instead of the fixed `TEMPLATE_REGISTRY` copy for
+  /// `templateKey`. `templateKey`/`category` stay populated regardless, since WhatsApp outside
+  /// its 24h window still needs a real pre-approved template name to fall back to.
+  customBody   String?         @map("custom_body") @db.Text
 
   /// Set only for campaign fan-out sends (BE-061) — drives the funnel report.
   campaignId String?   @map("campaign_id")
@@ -1964,6 +2102,52 @@ model Supplier {
 
   @@index([businessId])
   @@map("suppliers")
+}
+
+/// Categories, formalized (UPD-BE-088). Replaces `Product.category`'s free-text field as the
+/// canonical source going forward — the old field is kept unchanged for backward compatibility
+/// with existing readers (exports, filters) but new code should prefer `Product.categoryId`.
+model Category {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  name       String
+  sortOrder  Int      @default(0) @map("sort_order")
+
+  products Product[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@map("categories")
+}
+
+enum ScheduledExportFrequency {
+  weekly
+  monthly
+}
+
+/// Schedule recurring export (UPD-FE-071). `kind`/`format` are free-text strings (not enums)
+/// mirroring `ExportKind`/`ExportFormat` in exports.constants.ts, validated at the DTO layer —
+/// kept as strings here so a new export kind/format never needs a schema migration to schedule.
+model ScheduledExport {
+  id              String                   @id @default(uuid())
+  businessId      String                   @map("business_id")
+  business        Business                 @relation(fields: [businessId], references: [id])
+  kind            String
+  format          String
+  frequency       ScheduledExportFrequency
+  active          Boolean                  @default(true)
+  createdByUserId String?                  @map("created_by_user_id")
+  lastRunAt       DateTime?                @map("last_run_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("scheduled_exports")
 }
 
 /// Selling-price change log (UPD-BE-015) — written every time `Product.sellingPrice` changes via

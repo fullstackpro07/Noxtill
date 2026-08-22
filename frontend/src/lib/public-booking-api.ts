@@ -3,6 +3,8 @@ import { apiFetch } from "@/lib/api-client";
 export interface PublicBookingBusiness {
   businessName: string;
   branding: Record<string, unknown>;
+  welcomeText: string | null;
+  brandColor: string | null;
 }
 
 /** GET /public/booking/:biz — no auth; business header info for the public booking page. */
@@ -56,4 +58,9 @@ export function createPublicBooking(slug: string, input: CreatePublicBookingInpu
     { method: "POST", body: JSON.stringify(input) },
     { skipAuth: true },
   );
+}
+
+/** Booking Link & QR analytics (UPD-BE-090) — a real page-load counter; called once by the page itself. */
+export function recordPublicBookingVisit(slug: string, source?: "link" | "qr"): Promise<void> {
+  return apiFetch(`/public/booking/${slug}/visit`, { method: "POST", body: JSON.stringify({ source }) }, { skipAuth: true });
 }

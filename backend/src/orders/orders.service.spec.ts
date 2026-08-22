@@ -431,3 +431,153 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
     ).rejects.toBeInstanceOf(AppException);
   });
 });
+
+describe('OrdersService.createDraft/convertDraft/splitBill (UPD-BE-009/UPD-BE-010)', () => {
+  let prisma: PrismaService;
+  let ordersService: OrdersService;
+  let businessId: string;
+  let productId: string;
+  const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
+  const reviewRequests = {
+    scheduleSend: jest.fn().mockResolvedValue(undefined),
+  };
+  const referrals = {
+    issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
+  const coupons = { validateAndApply: jest.fn() };
+  const vouchers = { validateAndApply: jest.fn() };
+  const loyalty = {
+    issueStampIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
+  const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const cashRegister = {
+    recordSaleMovement: jest.fn().mockResolvedValue(undefined),
+  };
+
+  beforeAll(async () => {
+    prisma = new PrismaService();
+    await prisma.$connect();
+
+    const cls = new FakeClsService();
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    ordersService = new OrdersService(
+      tenantPrisma,
+      cls as unknown as ClsService,
+      sendGate as unknown as SendGateService,
+      reviewRequests as unknown as ReviewRequestsService,
+      referrals as unknown as ReferralsService,
+      coupons as unknown as CouponsService,
+      vouchers as unknown as VouchersService,
+      loyalty as unknown as LoyaltyService,
+      activity as unknown as ActivityService,
+      cashRegister as unknown as CashRegisterService,
+    );
+
+    const business = await prisma.business.create({
+      data: {
+        name: 'Draft/Split Test Biz',
+        slug: `draft-split-test-${Date.now()}`,
+      },
+    });
+    businessId = business.id;
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+
+    const product = await prisma.product.create({
+      data: {
+        businessId,
+        kind: 'product',
+        name: 'Draft Widget',
+        costPrice: 20,
+        sellingPrice: 30,
+        stockQty: 20,
+      },
+    });
+    productId = product.id;
+  });
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { businessId } });
+    await prisma.stockMovement.deleteMany({ where: { businessId } });
+    await prisma.payment.deleteMany({ where: { order: { businessId } } });
+    await prisma.orderItem.deleteMany({ where: { order: { businessId } } });
+    await prisma.order.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({ where: { businessId } });
+    await prisma.product.deleteMany({ where: { businessId } });
+    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$disconnect();
+  });
+
+  it('createDraft() writes a real Order row with status "draft" and no stock movement yet', async () => {
+    const draft = await ordersService.createDraft(businessId, {
+      items: [{ productId, qty: 2 }],
+    });
+    expect(draft.status).toBe('draft');
+
+    const movements = await prisma.stockMovement.findMany({
+      where: { businessId, productId },
+    });
+    expect(movements).toHaveLength(0);
+  });
+
+  it('convertDraft() turns a real draft into a completed sale with real stock deducted, using the caller-supplied payment', async () => {
+    const draft = await ordersService.createDraft(businessId, {
+      items: [{ productId, qty: 3 }],
+    });
+    const productBefore = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+    });
+
+    const order = await ordersService.convertDraft(businessId, draft.id, {
+      payment: { method: 'cash' },
+    });
+
+    expect(order.status).toBe('completed');
+    expect(Number(order.total)).toBe(90); // 3 * 30
+
+    const productAfter = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+    });
+    expect(productAfter.stockQty).toBe(productBefore.stockQty - 3);
+  });
+
+  it('rejects converting a draft id that is not actually a draft (e.g. already converted)', async () => {
+    const draft = await ordersService.createDraft(businessId, {
+      items: [{ productId, qty: 1 }],
+    });
+    await ordersService.convertDraft(businessId, draft.id, {
+      payment: { method: 'cash' },
+    });
+
+    await expect(
+      ordersService.convertDraft(businessId, draft.id, {
+        payment: { method: 'cash' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('splitBill() computes real per-guest shares that sum exactly to the order total, without mutating the order', async () => {
+    const order = await ordersService.createSale(businessId, {
+      items: [{ productId, qty: 1 }],
+      payment: { method: 'cash' },
+    });
+    // 30 / 3 doesn't divide evenly — the remainder must land on the first share.
+    const split = await ordersService.splitBill(order.id, 3);
+
+    expect(split.parts).toBe(3);
+    expect(split.shares).toHaveLength(3);
+    const sum = split.shares.reduce(
+      (s, v) => Math.round((s + v) * 100) / 100,
+      0,
+    );
+    expect(sum).toBe(30);
+    expect(split.shares[1]).toBe(split.shares[2]);
+
+    const unchanged = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect(Number(unchanged.total)).toBe(30);
+  });
+});

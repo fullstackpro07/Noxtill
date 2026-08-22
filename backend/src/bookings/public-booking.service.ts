@@ -6,10 +6,18 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { WaitlistService } from './waitlist.service';
 import { CreatePublicBookingDto } from './dto/create-public-booking.dto';
 import { QuerySlotsDto } from './dto/query-slots.dto';
+import { RecordBookingLinkVisitDto } from './dto/record-booking-link-visit.dto';
 import { computeAvailableSlots, WorkingHours } from './working-hours.util';
-import { BOOKING_ERROR_CODES } from './bookings.constants';
+import {
+  BOOKING_ERROR_CODES,
+  DEFAULT_BOOKING_LINK_SETTINGS,
+} from './bookings.constants';
 import { assertSlotAvailable } from './booking-lock.util';
-import { AppointmentStatus, ProductKind } from '@prisma/client';
+import {
+  AppointmentSource,
+  AppointmentStatus,
+  ProductKind,
+} from '@prisma/client';
 
 const RESCHEDULE_TOKEN_BYTES = 16;
 
@@ -37,22 +45,61 @@ export class PublicBookingService {
     return business;
   }
 
-  /** Public booking page header (name/branding) — same shape/pattern as PublicReviewService.getByToken. */
+  /** Public booking page header (name/branding) — same shape/pattern as PublicReviewService.getByToken.
+   * Also folds in Booking Link & QR's page customisation (UPD-BE-090) so the public page can render
+   * a welcome message / brand colour without a second round-trip. */
   async getBusinessInfo(slug: string) {
     const business = await this.resolveBusiness(slug);
-    return { businessName: business.name, branding: business.branding };
+    const settings = await this.prisma.bookingLinkSettings.findUnique({
+      where: { businessId: business.id },
+    });
+    return {
+      businessName: business.name,
+      branding: business.branding,
+      welcomeText:
+        settings?.welcomeText ?? DEFAULT_BOOKING_LINK_SETTINGS.welcomeText,
+      brandColor:
+        settings?.brandColor ?? DEFAULT_BOOKING_LINK_SETTINGS.brandColor,
+    };
   }
 
+  /** Filtered by Booking Link & QR's `visibleServiceIds` (UPD-BE-090) when the business has set one — empty/unset means every active service shows, matching pre-ticket behaviour. */
   async listServices(slug: string) {
     const business = await this.resolveBusiness(slug);
+    const settings = await this.prisma.bookingLinkSettings.findUnique({
+      where: { businessId: business.id },
+    });
+    const visibleIds = (settings?.visibleServiceIds as string[] | null) ?? [];
+
     return this.prisma.product.findMany({
       where: {
         businessId: business.id,
         kind: ProductKind.service,
         active: true,
+        ...(visibleIds.length > 0 ? { id: { in: visibleIds } } : {}),
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  /** Booking Link & QR analytics (UPD-BE-090) — a real page-load counter, called once by the
+   * public booking page itself. Best-effort: never blocks the page on a tracking failure. */
+  async recordVisit(
+    slug: string,
+    dto: RecordBookingLinkVisitDto,
+  ): Promise<void> {
+    try {
+      const business = await this.resolveBusiness(slug);
+      await this.prisma.bookingLinkVisit.create({
+        data: {
+          businessId: business.id,
+          source:
+            dto.source === 'qr' ? AppointmentSource.qr : AppointmentSource.link,
+        },
+      });
+    } catch {
+      // Best-effort, matches ActivityService.record / WaitlistService.tryAutoOffer convention.
+    }
   }
 
   async getSlots(slug: string, query: QuerySlotsDto) {

@@ -6,6 +6,7 @@ import type { LiveAppointment } from "@/lib/bookings-api";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLE: Record<LiveAppointment["status"], string> = {
+  requested: "border-dashed",
   booked: "border-dashed",
   confirmed: "",
   completed: "opacity-70",

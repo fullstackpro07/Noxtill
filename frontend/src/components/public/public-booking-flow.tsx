@@ -23,7 +23,18 @@ const DATES = nextDates(7);
 
 type Step = 1 | 2 | 3;
 
-export function PublicBookingFlow({ slug, businessName }: { slug: string; businessName: string }) {
+export function PublicBookingFlow({
+  slug,
+  businessName,
+  welcomeText,
+  brandColor,
+}: {
+  slug: string;
+  businessName: string;
+  welcomeText?: string | null;
+  brandColor?: string | null;
+}) {
+  const brand = brandColor || "#0c4b3b";
   const [step, setStep] = useState<Step>(1);
   const [service, setService] = useState<PublicService | null>(null);
   const [date, setDate] = useState(DATES[0]);
@@ -84,10 +95,11 @@ export function PublicBookingFlow({ slug, businessName }: { slug: string; busine
   return (
     <div className="mx-auto flex min-h-dvh max-w-sm flex-col gap-5 px-6 py-8">
       <div className="text-center">
-        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[#0c4b3b] font-bold text-[#faf7f0]">
+        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full font-bold text-[#faf7f0]" style={{ background: brand }}>
           {businessName.slice(0, 1)}
         </div>
         <h1 className="text-lg font-bold text-[#1c231e]">Book with {businessName}</h1>
+        {welcomeText && <p className="mt-1 text-sm text-[#6b6353]">{welcomeText}</p>}
       </div>
 
       {confirmed ? (
@@ -104,7 +116,8 @@ export function PublicBookingFlow({ slug, businessName }: { slug: string; busine
             {[1, 2, 3].map((n) => (
               <span
                 key={n}
-                className={`h-1.5 w-8 rounded-full ${n <= step ? "bg-[#0c4b3b]" : "bg-[#e6dcc6]"}`}
+                className="h-1.5 w-8 rounded-full"
+                style={{ background: n <= step ? brand : "#e6dcc6" }}
               />
             ))}
           </div>
@@ -175,7 +188,8 @@ export function PublicBookingFlow({ slug, businessName }: { slug: string; busine
               <button
                 onClick={() => setStep(3)}
                 disabled={slot === null}
-                className="w-full rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-40"
+                className="w-full rounded-full px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-40"
+                style={{ background: brand }}
               >
                 Continue
               </button>
@@ -204,7 +218,8 @@ export function PublicBookingFlow({ slug, businessName }: { slug: string; busine
               <button
                 type="submit"
                 disabled={bookMutation.isPending}
-                className="w-full rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-60"
+                className="w-full rounded-full px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-60"
+                style={{ background: brand }}
               >
                 {bookMutation.isPending ? "Booking…" : "Confirm booking"}
               </button>

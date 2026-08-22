@@ -4,6 +4,18 @@ import { RenderedTemplate, TemplateDefinition } from './template.types';
 
 const DEFAULT_LOCALE = 'en';
 
+/** `{{var}}` substitution shared between registry-rendered text and a business's own custom
+ * message text (UPD-BE-092 fix-it) — the same variable syntax works either way. */
+export function substituteTemplateVariables(
+  text: string,
+  variables: Record<string, string>,
+): string {
+  return text.replace(
+    /\{\{(\w+)\}\}/g,
+    (_match, name: string) => variables[name] ?? '',
+  );
+}
+
 /**
  * Template registry keyed by (template_key, locale) — BE-020. Backs the send
  * gate's "template exists" check and renders the final message body.
@@ -38,11 +50,10 @@ export class TemplateRegistryService {
       );
     }
 
-    const text = body.replace(
-      /\{\{(\w+)\}\}/g,
-      (_match, name: string) => variables[name] ?? '',
-    );
-
-    return { text, category: def.category, locale: resolvedLocale };
+    return {
+      text: substituteTemplateVariables(body, variables),
+      category: def.category,
+      locale: resolvedLocale,
+    };
   }
 }

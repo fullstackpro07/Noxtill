@@ -4,6 +4,14 @@
 // still exercised for real; only archiver's actual ZIP compression is faked out.
 import { PassThrough } from 'stream';
 
+// exports.service.ts now pulls in PdfRendererService -> puppeteer, an ESM-only package ts-jest's
+// CommonJS transform can't parse (same pattern as reports.service.spec.ts / receipts.service.spec.ts).
+// account-zip.processor.ts only ever gets a hand-mocked ExportsService in this spec, so the real
+// module is never needed.
+jest.mock('../common/pdf/pdf-renderer.service', () => ({
+  PdfRendererService: jest.fn(),
+}));
+
 jest.mock('archiver', () => {
   class MockZipArchive {
     private dest: PassThrough | undefined;

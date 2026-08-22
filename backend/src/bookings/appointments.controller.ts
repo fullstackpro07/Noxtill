@@ -17,6 +17,7 @@ import { CreateWalkInAppointmentDto } from './dto/create-walk-in-appointment.dto
 import { CreateAppointmentRequestDto } from './dto/create-appointment-request.dto';
 import { DeclineAppointmentRequestDto } from './dto/decline-appointment-request.dto';
 import { SuggestAlternativeDto } from './dto/suggest-alternative.dto';
+import { BulkAppointmentActionDto } from './dto/bulk-appointment-action.dto';
 
 @Controller('appointments')
 export class AppointmentsController {
@@ -44,6 +45,22 @@ export class AppointmentsController {
     @Body() dto: CreateWalkInAppointmentDto,
   ) {
     return this.appointmentsService.createWalkIn(user.businessId, dto);
+  }
+
+  @Post('bulk-cancel')
+  bulkCancel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkAppointmentActionDto,
+  ) {
+    return this.appointmentsService.bulkCancel(user.businessId, dto.ids);
+  }
+
+  @Post('bulk-remind')
+  bulkRemind(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkAppointmentActionDto,
+  ) {
+    return this.appointmentsService.bulkRemind(user.businessId, dto.ids);
   }
 
   @Post('request')

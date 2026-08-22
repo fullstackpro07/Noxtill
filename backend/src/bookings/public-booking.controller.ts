@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { PublicBookingService } from './public-booking.service';
 import { QuerySlotsDto } from './dto/query-slots.dto';
 import { CreatePublicBookingDto } from './dto/create-public-booking.dto';
+import { RecordBookingLinkVisitDto } from './dto/record-booking-link-visit.dto';
 import { Public } from '../common/decorators/public.decorator';
 
 @Controller('public/booking')
@@ -33,5 +34,14 @@ export class PublicBookingController {
     @Body() dto: CreatePublicBookingDto,
   ) {
     return this.publicBookingService.createBooking(biz, dto);
+  }
+
+  @Public()
+  @Post(':biz/visit')
+  recordVisit(
+    @Param('biz') biz: string,
+    @Body() dto: RecordBookingLinkVisitDto,
+  ) {
+    return this.publicBookingService.recordVisit(biz, dto);
   }
 }

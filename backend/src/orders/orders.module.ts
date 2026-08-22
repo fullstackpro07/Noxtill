@@ -12,6 +12,10 @@ import { TablesController } from './tables.controller';
 import { ReturnsController } from './returns.controller';
 import { SalesHistoryService } from './sales-history.service';
 import { SalesHistoryController } from './sales-history.controller';
+import { InvoicesService } from './invoices.service';
+import { InvoicesController } from './invoices.controller';
+import { ReceiptsService } from './receipts.service';
+import { ReceiptsController } from './receipts.controller';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ReviewsModule } from '../reviews/reviews.module';
 import { MarketingModule } from '../marketing/marketing.module';
@@ -41,6 +45,8 @@ import { SettingsModule } from '../settings/settings.module';
     TablesController,
     ReturnsController,
     SalesHistoryController,
+    InvoicesController,
+    ReceiptsController,
   ],
   providers: [
     OrdersService,
@@ -50,6 +56,8 @@ import { SettingsModule } from '../settings/settings.module';
     TablesService,
     ReturnsService,
     SalesHistoryService,
+    InvoicesService,
+    ReceiptsService,
   ],
   exports: [OrdersService, InvoiceService],
 })

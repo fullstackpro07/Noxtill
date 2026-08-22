@@ -1,4 +1,4 @@
-export type AppointmentStatus = "booked" | "confirmed" | "completed" | "cancelled" | "no_show";
+export type AppointmentStatus = "requested" | "booked" | "confirmed" | "completed" | "cancelled" | "no_show";
 
 export interface Appointment {
   id: string;
@@ -18,6 +18,7 @@ export const TODAY = "2026-07-29";
 
 /** Mirrors the backend's flow guard (BE-054 APPOINTMENT_STATUS_TRANSITIONS) so the UI can pre-validate before the server round-trip. */
 const APPOINTMENT_STATUS_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
+  requested: ["confirmed", "cancelled"],
   booked: ["confirmed", "cancelled", "no_show"],
   confirmed: ["completed", "cancelled", "no_show"],
   completed: [],

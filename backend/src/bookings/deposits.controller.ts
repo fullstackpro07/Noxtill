@@ -1,12 +1,41 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { DepositsService } from './deposits.service';
+import { DepositSettingsService } from './deposit-settings.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
+import { UpdateDepositSettingsDto } from './dto/update-deposit-settings.dto';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('deposits')
 export class DepositsController {
-  constructor(private readonly depositsService: DepositsService) {}
+  constructor(
+    private readonly depositsService: DepositsService,
+    private readonly depositSettings: DepositSettingsService,
+  ) {}
+
+  @Get('settings')
+  getSettings(@CurrentUser() user: AuthenticatedUser) {
+    return this.depositSettings.get(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.BOOKINGS_MANAGE)
+  @Patch('settings')
+  updateSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateDepositSettingsDto,
+  ) {
+    return this.depositSettings.update(user.businessId, dto);
+  }
 
   @Post()
   create(

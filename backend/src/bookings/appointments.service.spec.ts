@@ -257,6 +257,125 @@ describe('AppointmentsService (BE-054)', () => {
     ).rejects.toBeInstanceOf(AppException);
   });
 
+  describe('Services formal fields — eligible staff + buffer enforcement (UPD-BE-087)', () => {
+    let restrictedServiceId: string;
+    let bufferedServiceId: string;
+    let eligibleStaffUserId: string;
+    let ineligibleStaffUserId: string;
+
+    beforeAll(async () => {
+      const eligibleUser = await prisma.user.create({
+        data: {
+          name: 'Eligible Stylist',
+          phone: `+1${Date.now()}e`,
+          passwordHash: 'x',
+        },
+      });
+      const eligibleBu = await prisma.businessUser.create({
+        data: { businessId, userId: eligibleUser.id, role: 'staff' },
+      });
+      const ineligibleUser = await prisma.user.create({
+        data: {
+          name: 'Other Stylist',
+          phone: `+1${Date.now()}f`,
+          passwordHash: 'x',
+        },
+      });
+      const ineligibleBu = await prisma.businessUser.create({
+        data: { businessId, userId: ineligibleUser.id, role: 'staff' },
+      });
+      eligibleStaffUserId = eligibleBu.id;
+      ineligibleStaffUserId = ineligibleBu.id;
+
+      const restricted = await prisma.product.create({
+        data: {
+          businessId,
+          kind: 'service',
+          name: 'Restricted Facial',
+          durationMin: 30,
+          eligibleStaffIds: [eligibleStaffUserId],
+        },
+      });
+      restrictedServiceId = restricted.id;
+
+      const buffered = await prisma.product.create({
+        data: {
+          businessId,
+          kind: 'service',
+          name: 'Buffered Massage',
+          durationMin: 30,
+          bufferBeforeMin: 0,
+          bufferAfterMin: 20,
+        },
+      });
+      bufferedServiceId = buffered.id;
+    });
+
+    it('rejects booking an ineligible staff member for a restricted service', async () => {
+      await expect(
+        service.createWalkIn(businessId, {
+          serviceId: restrictedServiceId,
+          staffId: ineligibleStaffUserId,
+          startsAt: '2026-09-01T10:00:00Z',
+          customerName: 'Blocked Betty',
+          customerPhone: `+1${Date.now()}r1`,
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('allows booking an eligible staff member for the same restricted service', async () => {
+      const appt = await service.createWalkIn(businessId, {
+        serviceId: restrictedServiceId,
+        staffId: eligibleStaffUserId,
+        startsAt: '2026-09-01T10:00:00Z',
+        customerName: 'Allowed Alice',
+        customerPhone: `+1${Date.now()}r2`,
+      });
+      expect(appt.staffUserId).toBe(eligibleStaffUserId);
+    });
+
+    it('an empty eligibleStaffIds (the pre-existing default) allows any staff, unchanged from before this feature', async () => {
+      const appt = await service.createWalkIn(businessId, {
+        serviceId: serviceProductId,
+        staffId: ineligibleStaffUserId,
+        startsAt: '2026-09-01T14:00:00Z',
+        customerName: 'Anyone Annie',
+        customerPhone: `+1${Date.now()}r3`,
+      });
+      expect(appt.staffUserId).toBe(ineligibleStaffUserId);
+    });
+
+    it('a real bufferAfterMin blocks a booking that starts inside the buffer window, even though the two appointments themselves do not overlap', async () => {
+      await service.createWalkIn(businessId, {
+        serviceId: bufferedServiceId,
+        staffId: eligibleStaffUserId,
+        startsAt: '2026-09-02T10:00:00Z', // ends 10:30, +20min buffer -> blocked until 10:50
+        customerName: 'First Fiona',
+        customerPhone: `+1${Date.now()}b1`,
+      });
+
+      await expect(
+        service.createWalkIn(businessId, {
+          serviceId: bufferedServiceId,
+          staffId: eligibleStaffUserId,
+          startsAt: '2026-09-02T10:35:00Z', // starts before the buffer clears at 10:50
+          customerName: 'Second Sara',
+          customerPhone: `+1${Date.now()}b2`,
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+
+      // Confirms this is really the buffer (not just "any conflict") — 10:50 onward is genuinely free.
+      const afterBuffer = await service.createWalkIn(businessId, {
+        serviceId: bufferedServiceId,
+        staffId: eligibleStaffUserId,
+        startsAt: '2026-09-02T10:50:00Z',
+        customerName: 'Third Tara',
+        customerPhone: `+1${Date.now()}b3`,
+      });
+      expect(afterBuffer.status).toBe('confirmed');
+    });
+  });
+
   describe('Booking Requests (UPD-BE-016)', () => {
     it('createRequest() creates an appointment awaiting approval, not booked/confirmed', async () => {
       const requested = await service.createRequest(businessId, {

@@ -28,6 +28,114 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Services, formal fields (UPD-BE-087) — enforced at every internal booking-creation/reschedule
+ * path. An empty `eligibleStaffIds` means "any staff eligible," matching every service that
+ * predates this feature, so existing bookings/tests keep working unchanged. */
+function assertEligibleStaff(
+  service: { eligibleStaffIds: unknown; name: string },
+  staffId?: string | null,
+): void {
+  const eligible = (service.eligibleStaffIds as string[] | null) ?? [];
+  if (eligible.length === 0 || !staffId) return;
+  if (!eligible.includes(staffId)) {
+    throw new AppException(
+      BOOKING_ERROR_CODES.STAFF_NOT_ELIGIBLE,
+      `The selected staff member isn't configured to perform "${service.name}"`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+}
+
+function widen(
+  startsAt: Date,
+  endsAt: Date,
+  bufferBeforeMin: number | null | undefined,
+  bufferAfterMin: number | null | undefined,
+): { start: Date; end: Date } {
+  return {
+    start: new Date(startsAt.getTime() - (bufferBeforeMin ?? 0) * 60 * 1000),
+    end: new Date(endsAt.getTime() + (bufferAfterMin ?? 0) * 60 * 1000),
+  };
+}
+
+interface BufferCheckTx {
+  appointment: {
+    findMany(args: {
+      where: Record<string, unknown>;
+      include: { service: true };
+    }): Promise<
+      {
+        startsAt: Date;
+        endsAt: Date;
+        service: {
+          bufferBeforeMin: number | null;
+          bufferAfterMin: number | null;
+        } | null;
+      }[]
+    >;
+  };
+}
+
+/**
+ * Services, formal fields (UPD-BE-087) — a real, symmetric buffer check: an appointment's buffer
+ * belongs to it wherever it's stored, so a later booking that would land inside an EARLIER
+ * appointment's buffer-after zone (or vice versa) is blocked too, not just the reverse. Widens
+ * both the incoming request's window (by its own service's buffer) AND every real nearby
+ * appointment's window (by *that* appointment's own service's buffer) before comparing them.
+ */
+async function assertBufferAvailable(
+  tx: BufferCheckTx,
+  params: {
+    businessId: string;
+    staffId?: string | null;
+    startsAt: Date;
+    endsAt: Date;
+    bufferBeforeMin?: number | null;
+    bufferAfterMin?: number | null;
+    excludeAppointmentId?: string;
+  },
+): Promise<void> {
+  if (!params.staffId) return;
+  const mine = widen(
+    params.startsAt,
+    params.endsAt,
+    params.bufferBeforeMin,
+    params.bufferAfterMin,
+  );
+
+  const nearby = await tx.appointment.findMany({
+    where: {
+      businessId: params.businessId,
+      staffUserId: params.staffId,
+      status: { notIn: [AppointmentStatus.cancelled] },
+      ...(params.excludeAppointmentId
+        ? { id: { not: params.excludeAppointmentId } }
+        : {}),
+      // A generous real bound so this stays a cheap indexed lookup, not a full table scan —
+      // no buffer this app would ever configure ranges further than a day either side.
+      startsAt: { lt: new Date(params.endsAt.getTime() + 24 * 60 * 60 * 1000) },
+      endsAt: { gt: new Date(params.startsAt.getTime() - 24 * 60 * 60 * 1000) },
+    },
+    include: { service: true },
+  });
+
+  for (const candidate of nearby) {
+    const theirs = widen(
+      candidate.startsAt,
+      candidate.endsAt,
+      candidate.service?.bufferBeforeMin,
+      candidate.service?.bufferAfterMin,
+    );
+    if (mine.start < theirs.end && mine.end > theirs.start) {
+      throw new AppException(
+        BOOKING_ERROR_CODES.SLOT_UNAVAILABLE,
+        'That slot is too close to another appointment for this staff member',
+        HttpStatus.CONFLICT,
+      );
+    }
+  }
+}
+
 @Injectable()
 export class AppointmentsService {
   constructor(
@@ -158,6 +266,9 @@ export class AppointmentsService {
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
     }
+    const service = await this.tenantPrisma.client.product.findUnique({
+      where: { id: appointment.serviceId },
+    });
 
     const durationMs =
       appointment.endsAt.getTime() - appointment.startsAt.getTime();
@@ -165,6 +276,7 @@ export class AppointmentsService {
     const newEnd = new Date(newStart.getTime() + durationMs);
     const staffId =
       dto.staffUserId !== undefined ? dto.staffUserId : appointment.staffUserId;
+    if (service) assertEligibleStaff(service, staffId);
 
     return this.tenantPrisma.client.$transaction(async (tx) => {
       await assertSlotAvailable(tx, {
@@ -173,6 +285,15 @@ export class AppointmentsService {
         serviceId: appointment.serviceId,
         startsAt: newStart,
         endsAt: newEnd,
+        excludeAppointmentId: appointment.id,
+      });
+      await assertBufferAvailable(tx, {
+        businessId,
+        staffId,
+        startsAt: newStart,
+        endsAt: newEnd,
+        bufferBeforeMin: service?.bufferBeforeMin,
+        bufferAfterMin: service?.bufferAfterMin,
         excludeAppointmentId: appointment.id,
       });
 
@@ -207,6 +328,7 @@ export class AppointmentsService {
       );
     }
 
+    assertEligibleStaff(service, dto.staffId);
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(
       startsAt.getTime() + (service.durationMin ?? 30) * 60 * 1000,
@@ -219,6 +341,14 @@ export class AppointmentsService {
         serviceId: dto.serviceId,
         startsAt,
         endsAt,
+      });
+      await assertBufferAvailable(tx, {
+        businessId,
+        staffId: dto.staffId,
+        startsAt,
+        endsAt,
+        bufferBeforeMin: service.bufferBeforeMin,
+        bufferAfterMin: service.bufferAfterMin,
       });
 
       const customer = await tx.customer.upsert({
@@ -267,6 +397,7 @@ export class AppointmentsService {
       );
     }
 
+    assertEligibleStaff(service, dto.staffId);
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(
       startsAt.getTime() + (service.durationMin ?? 30) * 60 * 1000,
@@ -279,6 +410,14 @@ export class AppointmentsService {
         serviceId: dto.serviceId,
         startsAt,
         endsAt,
+      });
+      await assertBufferAvailable(tx, {
+        businessId,
+        staffId: dto.staffId,
+        startsAt,
+        endsAt,
+        bufferBeforeMin: service.bufferBeforeMin,
+        bufferAfterMin: service.bufferAfterMin,
       });
 
       const customer = await tx.customer.upsert({
@@ -457,5 +596,49 @@ export class AppointmentsService {
         noShowCount: Number(row.no_show_count),
       })),
     };
+  }
+
+  /** Appointments List bulk actions (UPD-FE-072) — best-effort per row, matching the
+   * session-wide convention (e.g. `WaitlistService.tryAutoOffer`): one bad row never blocks the rest. */
+  async bulkCancel(businessId: string, ids: string[]) {
+    let cancelled = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.updateStatus(businessId, id, AppointmentStatus.cancelled);
+        cancelled += 1;
+      } catch {
+        failed.push(id);
+      }
+    }
+    return { cancelled, failed };
+  }
+
+  /** Sends the real `booking_reminder` template immediately, outside the scheduled job's timing window. */
+  async bulkRemind(businessId: string, ids: string[]) {
+    const appointments = await this.tenantPrisma.client.appointment.findMany({
+      where: { id: { in: ids }, businessId },
+      include: { service: true },
+    });
+
+    let sent = 0;
+    const failed: string[] = [];
+    for (const appointment of appointments) {
+      try {
+        await this.sendGate.send({
+          businessId,
+          customerId: appointment.customerId,
+          templateKey: 'booking_reminder',
+          variables: {
+            serviceName: appointment.service.name,
+            dateTime: appointment.startsAt.toISOString(),
+          },
+        });
+        sent += 1;
+      } catch {
+        failed.push(appointment.id);
+      }
+    }
+    return { sent, failed };
   }
 }

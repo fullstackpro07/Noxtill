@@ -10,6 +10,10 @@ export class QueryProductsDto {
   category?: string;
 
   @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @IsOptional()
   @IsIn(['product', 'service'])
   kind?: 'product' | 'service';
 

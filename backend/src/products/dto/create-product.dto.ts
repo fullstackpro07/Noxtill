@@ -25,6 +25,10 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsString()
   sku?: string;
 
   @IsOptional()
@@ -59,4 +63,29 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /** Services, formal fields (UPD-BE-087) — only meaningful for `kind: 'service'`. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  eligibleStaffIds?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  bufferBeforeMin?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  bufferAfterMin?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  depositRequired?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  depositAmount?: number;
 }

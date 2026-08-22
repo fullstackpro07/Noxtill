@@ -4,7 +4,26 @@ import { Queue } from 'bullmq';
 import ExcelJS from 'exceljs';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { S3Service } from '../common/storage/s3.service';
-import { ExportKind, EXPORTS_QUEUE } from './exports.constants';
+import { PdfRendererService } from '../common/pdf/pdf-renderer.service';
+import { ExportFormat, ExportKind, EXPORTS_QUEUE } from './exports.constants';
+
+function cellText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value.toString();
+  }
+  if (value instanceof Date) return value.toISOString();
+  return JSON.stringify(value);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 interface DebtorRow {
   customer_id: string;
@@ -62,6 +81,16 @@ const SHEET_COLUMNS: Record<
     { header: 'Amount', key: 'amount', width: 12 },
     { header: 'Recurring', key: 'recurring', width: 10 },
   ],
+  products: [
+    { header: 'Name', key: 'name', width: 24 },
+    { header: 'Kind', key: 'kind', width: 10 },
+    { header: 'SKU', key: 'sku', width: 16 },
+    { header: 'Category', key: 'category', width: 18 },
+    { header: 'Stock qty', key: 'stockQty', width: 10 },
+    { header: 'Cost price', key: 'costPrice', width: 12 },
+    { header: 'Selling price', key: 'sellingPrice', width: 12 },
+    { header: 'Active', key: 'active', width: 8 },
+  ],
 };
 
 const SHEET_TITLE: Record<ExportKind, string> = {
@@ -70,6 +99,7 @@ const SHEET_TITLE: Record<ExportKind, string> = {
   credit: 'Credit',
   stock: 'Stock',
   expenses: 'Expenses',
+  products: 'Products',
 };
 
 /** First real usage of the `exceljs` dependency in this codebase (previously installed but unused). */
@@ -78,6 +108,7 @@ export class ExportsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly s3: S3Service,
+    private readonly pdfRenderer: PdfRendererService,
     @InjectQueue(EXPORTS_QUEUE) private readonly exportsQueue: Queue,
   ) {}
 
@@ -97,8 +128,30 @@ export class ExportsService {
     businessId: string,
     kind: ExportKind,
   ): Promise<{ url: string }> {
-    const buffer = await this.buildXlsxBuffer(businessId, kind);
-    const key = `exports/${businessId}/${kind}-${Date.now()}.xlsx`;
+    return this.generate(businessId, kind, 'xlsx');
+  }
+
+  /** Products Export (UPD-BE-089) adds `csv`/`pdf` alongside the pre-existing `xlsx` format —
+   * every other export kind keeps working unchanged via the `xlsx` default. */
+  async generate(
+    businessId: string,
+    kind: ExportKind,
+    format: ExportFormat = 'xlsx',
+  ): Promise<{ url: string }> {
+    const rows = await this.fetchRows(businessId, kind);
+    const key = `exports/${businessId}/${kind}-${Date.now()}.${format}`;
+
+    if (format === 'csv') {
+      const buffer = await this.buildCsvBuffer(kind, rows);
+      const url = await this.s3.uploadAndSign(key, buffer, 'text/csv');
+      return { url };
+    }
+    if (format === 'pdf') {
+      const buffer = await this.buildPdfBuffer(kind, rows);
+      const url = await this.s3.uploadAndSign(key, buffer, 'application/pdf');
+      return { url };
+    }
+    const buffer = await this.buildXlsxBuffer(businessId, kind, rows);
     const url = await this.s3.uploadAndSign(
       key,
       buffer,
@@ -107,14 +160,67 @@ export class ExportsService {
     return { url };
   }
 
-  async buildXlsxBuffer(businessId: string, kind: ExportKind): Promise<Buffer> {
-    const rows = await this.fetchRows(businessId, kind);
+  async buildXlsxBuffer(
+    businessId: string,
+    kind: ExportKind,
+    preFetchedRows?: Record<string, unknown>[],
+  ): Promise<Buffer> {
+    const rows = preFetchedRows ?? (await this.fetchRows(businessId, kind));
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet(SHEET_TITLE[kind]);
     sheet.columns = SHEET_COLUMNS[kind];
     sheet.addRows(rows);
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  private async buildCsvBuffer(
+    kind: ExportKind,
+    rows: Record<string, unknown>[],
+  ): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(SHEET_TITLE[kind]);
+    sheet.columns = SHEET_COLUMNS[kind];
+    sheet.addRows(rows);
+    const buffer = await workbook.csv.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
+  private async buildPdfBuffer(
+    kind: ExportKind,
+    rows: Record<string, unknown>[],
+  ): Promise<Buffer> {
+    const columns = SHEET_COLUMNS[kind];
+    const headerCells = columns
+      .map(
+        (c) =>
+          `<th style="text-align:left;padding:6px 10px;">${escapeHtml(c.header)}</th>`,
+      )
+      .join('');
+    const bodyRows = rows
+      .map(
+        (row) =>
+          `<tr>${columns
+            .map(
+              (c) =>
+                `<td style="padding:6px 10px;border-top:1px solid #D8D0BF;">${escapeHtml(cellText(row[c.key]))}</td>`,
+            )
+            .join('')}</tr>`,
+      )
+      .join('');
+    const html = `
+      <html>
+        <head><meta charset="utf-8" /></head>
+        <body style="font-family: sans-serif; color: #182420;">
+          <h1 style="margin:0 0 16px;">${SHEET_TITLE[kind]}</h1>
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr style="border-bottom:2px solid #D8D0BF;">${headerCells}</tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    return this.pdfRenderer.renderPdf(html);
   }
 
   private async fetchRows(
@@ -132,6 +238,8 @@ export class ExportsService {
         return this.fetchStockRows();
       case 'expenses':
         return this.fetchExpenseRows();
+      case 'products':
+        return this.fetchProductRows();
     }
   }
 
@@ -206,6 +314,25 @@ export class ExportsService {
       lowStockThreshold: p.lowStockThreshold,
       costPrice: Number(p.costPrice),
       sellingPrice: Number(p.sellingPrice),
+    }));
+  }
+
+  /** Owner-only end to end — `ExportsController` gates the whole controller on `EXPORTS_GENERATE`
+   * (owner-only, see capabilities), so cost price never reaches a manager through this export. */
+  private async fetchProductRows(): Promise<Record<string, unknown>[]> {
+    const products = await this.tenantPrisma.client.product.findMany({
+      include: { categoryRef: true },
+      orderBy: { name: 'asc' },
+    });
+    return products.map((p) => ({
+      name: p.name,
+      kind: p.kind,
+      sku: p.sku ?? '',
+      category: p.categoryRef?.name ?? p.category ?? '',
+      stockQty: p.kind === 'product' ? p.stockQty : '',
+      costPrice: Number(p.costPrice),
+      sellingPrice: Number(p.sellingPrice),
+      active: p.active ? 'Yes' : 'No',
     }));
   }
 

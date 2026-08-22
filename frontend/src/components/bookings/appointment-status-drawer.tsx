@@ -9,6 +9,7 @@ import { formatHour } from "@/lib/profit";
 import { formatDate } from "@/lib/format";
 
 const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "neutral" | "danger"> = {
+  requested: "primary",
   booked: "neutral",
   confirmed: "primary",
   completed: "success",

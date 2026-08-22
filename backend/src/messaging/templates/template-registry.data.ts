@@ -29,6 +29,15 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       en: 'Reminder: {{customerName}}, your {{serviceName}} appointment is at {{dateTime}}.',
     },
   },
+  /// Booking reminder rules (UPD-BE-092) — the shorter-fuse variant a rule can pick for
+  /// close-to-appointment offsets (e.g. 2h out), same variables as `booking_reminder`.
+  booking_reminder_urgent: {
+    key: 'booking_reminder_urgent',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Coming up soon: {{customerName}}, your {{serviceName}} appointment starts at {{dateTime}}. See you shortly!',
+    },
+  },
   booking_declined: {
     key: 'booking_declined',
     category: MessageCategory.utility,
