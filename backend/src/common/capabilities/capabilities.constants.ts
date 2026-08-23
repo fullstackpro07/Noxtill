@@ -39,6 +39,10 @@ export const CAPABILITIES = {
   ADS_MANAGE: 'ads.manage',
   HEALTH_SCORE_MANAGE: 'health_score.manage',
   BOOKINGS_MANAGE: 'bookings.manage',
+  CREDIT_MANAGE: 'credit.manage',
+  /// Owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below) — same pattern as
+  /// CREDIT_WRITE_OFF, matching the spec's "Recovery Reports: Owner-only" note.
+  CREDIT_RECOVERY_REPORT_VIEW: 'credit.recovery_report_view',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -66,6 +70,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.DELIVERY_MANAGE,
   CAPABILITIES.ADS_MANAGE,
   CAPABILITIES.BOOKINGS_MANAGE,
+  CAPABILITIES.CREDIT_MANAGE,
 ];
 
 /**

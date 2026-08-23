@@ -3,6 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
+import { RescheduleInstallmentDto } from './dto/reschedule-installment.dto';
 import { CREDIT_ERROR_CODES } from './credit.constants';
 import { InstallmentPlanStatus, InstallmentStatus } from '@prisma/client';
 
@@ -109,5 +110,42 @@ export class InstallmentsService {
       entry,
       installment: { ...updatedInstallment, creditEntryId: entry.id },
     };
+  }
+
+  /** Due Today screen's "reschedule-instalment popup with reason" (UPD-FE-076) — moves a real
+   * pending instalment's due date, audit-logged with the reason (no separate history column). */
+  async reschedule(
+    businessId: string,
+    id: string,
+    dto: RescheduleInstallmentDto,
+  ) {
+    const installment = await this.tenantPrisma.client.installment.findUnique({
+      where: { id },
+    });
+    if (!installment || installment.businessId !== businessId) {
+      throw new NotFoundException('Installment not found');
+    }
+    if (installment.status !== InstallmentStatus.pending) {
+      throw new AppException(
+        CREDIT_ERROR_CODES.INSTALLMENT_NOT_PENDING,
+        `Instalment is "${installment.status}", expected "pending"`,
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const updated = await this.tenantPrisma.client.installment.update({
+      where: { id },
+      data: { dueDate: new Date(dto.dueDate) },
+    });
+
+    await this.auditService.log({
+      entity: 'Installment',
+      entityId: id,
+      action: 'credit.installment_rescheduled',
+      before: { dueDate: installment.dueDate },
+      after: { dueDate: updated.dueDate, reason: dto.reason },
+    });
+
+    return updated;
   }
 }

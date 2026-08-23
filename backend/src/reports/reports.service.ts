@@ -5,6 +5,7 @@ import { S3Service } from '../common/storage/s3.service';
 import { PdfRendererService } from '../common/pdf/pdf-renderer.service';
 import { ProfitService } from '../profit/profit.service';
 import { CommissionsService } from '../staff/commissions.service';
+import { CreditService } from '../credit/credit.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -33,6 +34,7 @@ export class ReportsService {
     private readonly pdfRenderer: PdfRendererService,
     private readonly profitService: ProfitService,
     private readonly commissionsService: CommissionsService,
+    private readonly creditService: CreditService,
     private readonly sendGate: SendGateService,
   ) {}
 
@@ -118,6 +120,15 @@ export class ReportsService {
         return this.buildStaff(month);
       case 'reviews':
         return this.buildReviews(month);
+      case 'credit_recovery':
+        if (role !== Role.owner) {
+          throw new AppException(
+            'REPORT_FORBIDDEN',
+            'Credit recovery reports are only available to the business owner.',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+        return this.buildCreditRecovery(business);
     }
   }
 
@@ -279,6 +290,39 @@ export class ReportsService {
         <tr><td>Average rating</td><td style="text-align:right">${avgRating ?? '—'}</td></tr>
         <tr><td>Review requests sent</td><td style="text-align:right">${requestsTotal}</td></tr>
         <tr><td>Response rate</td><td style="text-align:right">${responseRate}%</td></tr>
+      </table>
+    `;
+  }
+
+  /** Recovery Reports' "Send to accountant" (UPD-FE-080) — reuses the same aggregate the live screen shows, over the trailing 6 months rather than a single calendar month. */
+  private async buildCreditRecovery(business: BusinessInfo): Promise<string> {
+    const report = await this.creditService.recoveryReport(6);
+
+    const rows = report.trend
+      .map(
+        (r) => `
+        <tr>
+          <td>${r.month}</td>
+          <td style="text-align:right">${this.locale.formatCurrency(r.extended, business)}</td>
+          <td style="text-align:right">${this.locale.formatCurrency(r.recovered, business)}</td>
+          <td style="text-align:right">${r.recoveryRate}%</td>
+          <td style="text-align:right">${this.locale.formatCurrency(r.writtenOff, business)}</td>
+        </tr>`,
+      )
+      .join('');
+
+    return `
+      <h2>Credit recovery — trailing ${report.months} months</h2>
+      <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+        <tr><td>Extended</td><td style="text-align:right">${this.locale.formatCurrency(report.extended, business)}</td></tr>
+        <tr><td>Recovered</td><td style="text-align:right">${this.locale.formatCurrency(report.recovered, business)}</td></tr>
+        <tr><td>Recovery rate</td><td style="text-align:right">${report.recoveryRate}%</td></tr>
+        <tr><td>Written off</td><td style="text-align:right">${this.locale.formatCurrency(report.writtenOff, business)}</td></tr>
+        <tr><td>Net exposure (current)</td><td style="text-align:right">${this.locale.formatCurrency(report.netExposure, business)}</td></tr>
+      </table>
+      <table style="width:100%; border-collapse:collapse;">
+        <thead><tr><th>Month</th><th style="text-align:right">Extended</th><th style="text-align:right">Recovered</th><th style="text-align:right">Rate</th><th style="text-align:right">Written off</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5">No credit activity in this window.</td></tr>'}</tbody>
       </table>
     `;
   }

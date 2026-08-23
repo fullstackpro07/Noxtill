@@ -3,6 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { LocaleService } from '../common/localization/locale.service';
 import { S3Service } from '../common/storage/s3.service';
 import { PdfRendererService } from '../common/pdf/pdf-renderer.service';
+import { SendGateService } from '../messaging/send-gate.service';
 import { buildLedgerRows } from './credit.types';
 
 /** Khata-style credit statement PDF (BE-032): dated entries + running balance. */
@@ -13,6 +14,7 @@ export class CreditStatementService {
     private readonly locale: LocaleService,
     private readonly s3: S3Service,
     private readonly pdfRenderer: PdfRendererService,
+    private readonly sendGate: SendGateService,
   ) {}
 
   async generate(
@@ -45,6 +47,43 @@ export class CreditStatementService {
     const url = await this.s3.uploadAndSign(key, pdf, 'application/pdf');
 
     return { url };
+  }
+
+  /** Statements screen's "send on WhatsApp" (UPD-FE-078) — generates the real PDF, then sends the link to the customer via the send gate (their own channel preference, not necessarily WhatsApp specifically). */
+  async send(businessId: string, customerId: string): Promise<unknown> {
+    const [customer, { url }] = await Promise.all([
+      this.tenantPrisma.client.customer.findUnique({
+        where: { id: customerId },
+      }),
+      this.generate(businessId, customerId),
+    ]);
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return this.sendGate.send({
+      businessId,
+      customerId,
+      templateKey: 'credit_statement_ready',
+      variables: { customerName: customer.name, url },
+    });
+  }
+
+  /** Statements screen's "bulk generate" (UPD-FE-078) — real per-customer PDFs, generated sequentially so a failure on one customer doesn't lose the others already generated. */
+  async bulkGenerate(
+    businessId: string,
+    customerIds: string[],
+  ): Promise<{ customerId: string; url: string | null }[]> {
+    const results: { customerId: string; url: string | null }[] = [];
+    for (const customerId of customerIds) {
+      try {
+        const { url } = await this.generate(businessId, customerId);
+        results.push({ customerId, url });
+      } catch {
+        results.push({ customerId, url: null });
+      }
+    }
+    return results;
   }
 
   private renderHtml(

@@ -4,6 +4,7 @@ import { LocaleService } from '../common/localization/locale.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { CreditService } from './credit.service';
 import { RemindDto } from './dto/remind.dto';
+import { CREDIT_REMINDER_TONE_TEMPLATE_KEYS } from './credit.constants';
 
 export interface RemindResult {
   sent: number;
@@ -26,10 +27,6 @@ export class CreditReminderService {
   ) {}
 
   async remind(businessId: string, dto: RemindDto): Promise<RemindResult> {
-    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
-      where: { id: businessId },
-    });
-
     const targets = dto.all
       ? await this.creditService.listDebtors()
       : [
@@ -38,6 +35,33 @@ export class CreditReminderService {
             balance: await this.creditService.getBalance(dto.customerId!),
           },
         ];
+    return this.sendTo(businessId, targets, 'gentle');
+  }
+
+  /** Outstanding/Overdue screens' "bulk-remind-selected" (UPD-FE-075/077) — same send path, an
+   * explicit customer subset, and (Overdue only) a real escalation-tone override. */
+  async bulkRemind(
+    businessId: string,
+    customerIds: string[],
+    tone: 'gentle' | 'firm' | 'final' = 'gentle',
+  ): Promise<RemindResult> {
+    const targets = await Promise.all(
+      customerIds.map(async (customerId) => ({
+        customerId,
+        balance: await this.creditService.getBalance(customerId),
+      })),
+    );
+    return this.sendTo(businessId, targets, tone);
+  }
+
+  private async sendTo(
+    businessId: string,
+    targets: { customerId: string; balance: number }[],
+    tone: 'gentle' | 'firm' | 'final',
+  ): Promise<RemindResult> {
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
 
     let sent = 0;
     let skipped = 0;
@@ -55,7 +79,7 @@ export class CreditReminderService {
         .send({
           businessId,
           customerId: customer.id,
-          templateKey: 'credit_reminder',
+          templateKey: CREDIT_REMINDER_TONE_TEMPLATE_KEYS[tone],
           variables: {
             customerName: customer.name,
             balance: this.locale.formatCurrency(target.balance, business),

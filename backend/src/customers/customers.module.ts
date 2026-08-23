@@ -17,6 +17,7 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { BillingModule } from '../billing/billing.module';
 import { AutomationsModule } from '../marketing/automations/automations.module';
 import { AutomationModule as OutboundWebhookAutomationModule } from '../integrations/automation/automation.module';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AutomationModule as OutboundWebhookAutomationModule } from '../integrat
     BillingModule,
     AutomationsModule,
     OutboundWebhookAutomationModule,
+    AiModule,
   ],
   controllers: [
     CustomersController,

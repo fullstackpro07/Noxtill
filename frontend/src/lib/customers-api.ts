@@ -140,3 +140,26 @@ export function eraseCustomer(id: string, confirm: string): Promise<LiveCustomer
     body: JSON.stringify({ confirm }),
   }).then(toLiveCustomer);
 }
+
+/** GET /customers/:id/export — a real personal-data export (UPD-BE-097), not a placeholder. */
+export function exportCustomer(id: string): Promise<unknown> {
+  return apiFetch(`/customers/${id}/export`);
+}
+
+/** POST /customers/:id/merge — reassigns `duplicateCustomerId`'s real history onto `id`, then deletes it. */
+export function mergeCustomer(id: string, duplicateCustomerId: string): Promise<CustomerDetail> {
+  return apiFetch<RawCustomerDetail>(`/customers/${id}/merge`, {
+    method: "POST",
+    body: JSON.stringify({ duplicateCustomerId }),
+  }).then((raw) => ({
+    ...toLiveCustomer(raw),
+    orders: raw.orders.map((o) => ({
+      id: o.id,
+      orderNo: o.orderNo,
+      total: Number(o.total),
+      createdAt: o.createdAt,
+      items: o.items.map((i) => ({ name: i.name, price: Number(i.price), qty: i.qty })),
+    })),
+    privateFeedback: raw.privateFeedback,
+  }));
+}

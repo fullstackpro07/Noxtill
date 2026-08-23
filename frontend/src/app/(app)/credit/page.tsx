@@ -1,9 +1,9 @@
 "use client";
 
-import { CreditView } from "@/components/credit/credit-view";
+import { OutstandingPanel } from "@/components/credit/outstanding-panel";
 import { useSession } from "@/lib/session";
 
 export default function CreditPage() {
   const session = useSession();
-  return <CreditView currency={session.business.currency} />;
+  return <OutstandingPanel currency={session.business.currency} />;
 }

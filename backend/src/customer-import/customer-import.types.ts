@@ -23,4 +23,6 @@ export interface ImportPreview {
   counts: { create: number; update: number; skip: number; totalCredit: number };
   preview: StagedImportRow[];
   invalid: StagedImportRow[];
+  /** Column-mapping (UPD-BE-099) — true for csv/xlsx batches, where `GET .../columns` + `PATCH .../remap` are available. False for photo/txt/docx batches, which have nothing to remap. */
+  hasColumnMapping: boolean;
 }

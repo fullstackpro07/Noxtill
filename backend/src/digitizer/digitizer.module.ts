@@ -10,5 +10,6 @@ import { StorageModule } from '../common/storage/storage.module';
   imports: [AiModule, StorageModule],
   controllers: [DigitizerController],
   providers: [DigitizerService, DigitizerVisionService, DigitizerAliasService],
+  exports: [DigitizerVisionService],
 })
 export class DigitizerModule {}

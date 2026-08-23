@@ -94,6 +94,30 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       en: 'Hi {{customerName}}, a friendly reminder that you have an outstanding balance of {{balance}}.',
     },
   },
+  /// Credit reminder rules (UPD-BE-095) — "firm" tone, for a rule's mid-stage escalation.
+  credit_reminder_firm: {
+    key: 'credit_reminder_firm',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, your balance of {{balance}} is still outstanding — please settle it as soon as you can.',
+    },
+  },
+  /// Credit reminder rules (UPD-BE-095) — "final" tone, for a rule's last-stage escalation.
+  credit_reminder_final: {
+    key: 'credit_reminder_final',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, this is a final notice — your balance of {{balance}} remains unpaid. Please contact us immediately to settle it.',
+    },
+  },
+  /// Statements screen's "send on WhatsApp" (UPD-FE-078).
+  credit_statement_ready: {
+    key: 'credit_statement_ready',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, here is your latest statement: {{url}}',
+    },
+  },
   owner_alert: {
     key: 'owner_alert',
     category: MessageCategory.utility,

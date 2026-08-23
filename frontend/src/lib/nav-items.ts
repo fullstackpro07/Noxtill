@@ -39,6 +39,11 @@ import {
   QrCode,
   Bell,
   CalendarDays,
+  CalendarCheck,
+  AlertTriangle,
+  ScrollText,
+  BellRing,
+  PieChart,
   Wallet,
   Users,
   Star,
@@ -49,6 +54,7 @@ import {
   UserCog,
   Building2,
   Settings,
+  Filter,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -153,8 +159,31 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "staff-schedule", labelKey: "nav.staffSchedule", href: "/staff", icon: CalendarDays },
     ],
   },
-  { key: "credit", labelKey: "nav.credit", href: "/credit", icon: Wallet, roles: ["owner", "manager", "staff"] },
-  { key: "customers", labelKey: "nav.customers", href: "/customers", icon: Users, roles: ["owner", "manager", "staff"] },
+  {
+    key: "credit",
+    labelKey: "nav.credit",
+    href: "/credit",
+    icon: Wallet,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "credit-due-today", labelKey: "nav.creditDueToday", href: "/credit/due-today", icon: CalendarCheck },
+      { key: "credit-overdue", labelKey: "nav.creditOverdue", href: "/credit/overdue", icon: AlertTriangle },
+      { key: "credit-statements", labelKey: "nav.creditStatements", href: "/credit/statements", icon: ScrollText },
+      { key: "credit-reminders", labelKey: "nav.creditReminders", href: "/credit/reminders", icon: BellRing },
+      { key: "credit-recovery-reports", labelKey: "nav.creditRecoveryReports", href: "/credit/recovery-reports", icon: PieChart },
+    ],
+  },
+  {
+    key: "customers",
+    labelKey: "nav.customers",
+    href: "/customers",
+    icon: Users,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "segments", labelKey: "nav.segments", href: "/customers/segments", icon: Filter },
+      { key: "import-customers", labelKey: "nav.importCustomers", href: "/customers/import", icon: Upload },
+    ],
+  },
   { key: "reviews", labelKey: "nav.reviews", href: "/reviews", icon: Star, roles: ["owner", "manager", "staff"] },
   {
     key: "marketing",

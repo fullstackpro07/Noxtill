@@ -4,12 +4,21 @@ import { Workbook } from 'exceljs';
 import { extractRawText } from 'mammoth';
 import { ClaudeClient } from '../ai/claude.client';
 import { RawImportRow } from './customer-import.types';
+import {
+  applyMapping,
+  suggestMapping,
+} from './customer-import-mapping.constants';
 
 export interface ImportFile {
   buffer: Buffer;
   mimetype: string;
   originalname: string;
   size: number;
+}
+
+export interface RawRecords {
+  headers: string[];
+  rows: Record<string, string>[];
 }
 
 const CLAUDE_CHUNK_SIZE = 6000;
@@ -26,24 +35,47 @@ export class CustomerImportParser {
   constructor(private readonly claude: ClaudeClient) {}
 
   async parse(file: ImportFile): Promise<RawImportRow[]> {
-    const isXlsx =
-      file.mimetype.includes('sheet') ||
-      file.originalname.toLowerCase().endsWith('.xlsx');
-    const isDocx =
-      file.mimetype.includes('wordprocessingml') ||
-      file.originalname.toLowerCase().endsWith('.docx');
-    const isCsv =
-      file.mimetype.includes('csv') ||
-      file.originalname.toLowerCase().endsWith('.csv');
-
-    if (isXlsx) return this.parseXlsx(file.buffer);
-    if (isCsv) return this.parseCsv(file.buffer);
-    if (isDocx)
-      return this.parseUnstructured(await this.docxToText(file.buffer));
-    return this.parseUnstructured(file.buffer.toString('utf-8'));
+    const records = await this.parseRecords(file);
+    if (records) {
+      return applyMapping(records.rows, suggestMapping(records.headers));
+    }
+    return this.parseUnstructured(await this.readAsText(file));
   }
 
-  private parseCsv(buffer: Buffer): RawImportRow[] {
+  /** Column-mapping (UPD-BE-099) — raw header-keyed rows for csv/xlsx, null for txt/docx (Claude already returns structured fields, nothing to map). */
+  async parseRecords(file: ImportFile): Promise<RawRecords | null> {
+    if (this.isXlsx(file)) return this.parseXlsxRecords(file.buffer);
+    if (this.isCsv(file)) return this.parseCsvRecords(file.buffer);
+    return null;
+  }
+
+  private isXlsx(file: ImportFile): boolean {
+    return (
+      file.mimetype.includes('sheet') ||
+      file.originalname.toLowerCase().endsWith('.xlsx')
+    );
+  }
+
+  private isDocx(file: ImportFile): boolean {
+    return (
+      file.mimetype.includes('wordprocessingml') ||
+      file.originalname.toLowerCase().endsWith('.docx')
+    );
+  }
+
+  private isCsv(file: ImportFile): boolean {
+    return (
+      file.mimetype.includes('csv') ||
+      file.originalname.toLowerCase().endsWith('.csv')
+    );
+  }
+
+  private async readAsText(file: ImportFile): Promise<string> {
+    if (this.isDocx(file)) return this.docxToText(file.buffer);
+    return file.buffer.toString('utf-8');
+  }
+
+  private parseCsvRecords(buffer: Buffer): RawRecords {
     // eslint and tsc disagree on whether this assertion is redundant (same csv-parse/exceljs
     // typing quirk seen in ProductsImportService); tsc genuinely needs it — do not remove.
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
@@ -53,36 +85,27 @@ export class CustomerImportParser {
       trim: true,
     }) as Record<string, string>[];
 
-    return records.map((row) => this.toRawRow(row));
+    const headers = records.length > 0 ? Object.keys(records[0]) : [];
+    return { headers, rows: records };
   }
 
-  private async parseXlsx(buffer: Buffer): Promise<RawImportRow[]> {
+  private async parseXlsxRecords(buffer: Buffer): Promise<RawRecords> {
     const workbook = new Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     const sheet = workbook.worksheets[0];
     const [headerRow, ...dataRows] = sheet.getRows(1, sheet.rowCount) ?? [];
-    if (!headerRow) return [];
+    if (!headerRow) return { headers: [], rows: [] };
 
     const headers = (headerRow.values as (string | undefined)[])
       .slice(1)
       .map((h) => String(h ?? '').trim());
-    return dataRows.map((row) => {
+    const rows = dataRows.map((row) => {
       const values = (row.values as (string | number | undefined)[]).slice(1);
-      const record = Object.fromEntries(
+      return Object.fromEntries(
         headers.map((header, i) => [header, String(values[i] ?? '').trim()]),
       );
-      return this.toRawRow(record);
     });
-  }
-
-  private toRawRow(row: Record<string, string>): RawImportRow {
-    const balanceRaw = row.balance ?? row.openingBalance ?? row.opening_balance;
-    const balance = balanceRaw ? Number(balanceRaw) : undefined;
-    return {
-      name: (row.name ?? '').trim(),
-      phone: (row.phone ?? '').trim(),
-      balance: balance && !Number.isNaN(balance) ? balance : undefined,
-    };
+    return { headers, rows };
   }
 
   private async docxToText(buffer: Buffer): Promise<string> {

@@ -13,6 +13,8 @@ export const SCANNER_TYPES = [
   'menu',
   'product',
   'business_card',
+  /// Import Customers, photo path (UPD-BE-099) — a photographed khata/ledger page of customer names, phones, and opening balances.
+  'customer_list',
   'general',
 ] as const;
 
@@ -35,6 +37,7 @@ export const DEFAULT_DESTINATION_BY_SCANNER_TYPE: Record<
   menu: 'product',
   product: 'product',
   business_card: 'supplier',
+  customer_list: 'customer',
   // "general" is genuinely mixed content — Claude picks a destination per row instead of one default.
   general: null,
 };

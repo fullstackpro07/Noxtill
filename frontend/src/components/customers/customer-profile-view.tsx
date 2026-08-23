@@ -4,13 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreVertical, Download, Trash2, MessageSquareWarning, Wallet, ShoppingBag, Calendar } from "lucide-react";
+import { MoreVertical, Download, Trash2, Merge, MessageSquareWarning, Wallet, ShoppingBag, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownTrigger, DropdownContent, DropdownItem } from "@/components/ui/dropdown-menu";
 import { DestructiveConfirmDialog } from "@/components/shared/destructive-confirm-dialog";
+import { MergeCustomerDialog } from "./merge-customer-dialog";
 import { CUSTOMER_TAGS, type CustomerTag } from "@/lib/customers";
-import { updateCustomer, eraseCustomer, type CustomerDetail } from "@/lib/customers-api";
+import { updateCustomer, eraseCustomer, exportCustomer, type CustomerDetail } from "@/lib/customers-api";
 import { fetchLedger } from "@/lib/credit-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -71,6 +72,7 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
   const [tags, setTags] = useState<CustomerTag[]>(customer.tags.filter((t): t is CustomerTag => (CUSTOMER_TAGS as string[]).includes(t)));
   const [notes, setNotes] = useState(customer.notes ?? "");
   const [eraseOpen, setEraseOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   const { data: ledger } = useQuery({ queryKey: ["ledger", customer.id], queryFn: () => fetchLedger(customer.id) });
 
@@ -103,9 +105,22 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
     setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   }
 
-  function handleExport() {
-    toast.info("Customer data export lands with the Exports module — not available yet.");
-  }
+  const exportMutation = useMutation({
+    mutationFn: () => exportCustomer(customer.id),
+    onSuccess: (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${customer.name.replace(/\s+/g, "-").toLowerCase()}-export.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("Export downloaded.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't export this customer's data — please try again.");
+    },
+  });
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
@@ -122,9 +137,13 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
             </span>
           </DropdownTrigger>
           <DropdownContent className="w-52" align="end">
-            <DropdownItem onSelect={handleExport}>
+            <DropdownItem onSelect={() => exportMutation.mutate()}>
               <Download className="h-4 w-4 text-fg-faint" aria-hidden />
               Export customer data
+            </DropdownItem>
+            <DropdownItem onSelect={() => setMergeOpen(true)}>
+              <Merge className="h-4 w-4 text-fg-faint" aria-hidden />
+              Merge a duplicate…
             </DropdownItem>
             <DropdownItem onSelect={() => setEraseOpen(true)} className="text-destructive hover:bg-destructive/8">
               <Trash2 className="h-4 w-4" aria-hidden />
@@ -147,7 +166,7 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
           icon={Wallet}
           label="Credit balance"
           value={ledger ? formatCurrency(ledger.balance, currency) : "…"}
-          href="/credit"
+          href={`/credit/${customer.id}`}
           tone={ledger && ledger.balance > 0 ? "destructive" : undefined}
         />
       </div>
@@ -247,6 +266,15 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
         confirmLabel="Erase customer"
         pending={eraseMutation.isPending}
       />
+
+      {mergeOpen && (
+        <MergeCustomerDialog
+          customerId={customer.id}
+          customerName={customer.name}
+          onClose={() => setMergeOpen(false)}
+          onMerged={() => setMergeOpen(false)}
+        />
+      )}
     </div>
   );
 }

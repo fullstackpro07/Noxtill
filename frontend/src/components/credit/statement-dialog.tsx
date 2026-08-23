@@ -11,9 +11,10 @@ import { ApiError } from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 
-const ENTRY_LABEL: Record<"credit" | "payment", string> = {
+const ENTRY_LABEL: Record<"credit" | "payment" | "write_off", string> = {
   credit: "Charge",
   payment: "Payment received",
+  write_off: "Written off",
 };
 
 export function StatementDialog({
@@ -87,8 +88,8 @@ function StatementDialogBody({ debtor, currency, onClose }: { debtor: LiveDebtor
                       {ENTRY_LABEL[entry.kind]}
                       {entry.note ? ` — ${entry.note}` : ""}
                     </td>
-                    <td className={`px-3 py-2 text-end tabular-nums ${entry.kind === "payment" ? "text-whatsapp" : "text-fg"}`}>
-                      {entry.kind === "payment" ? "−" : "+"}
+                    <td className={`px-3 py-2 text-end tabular-nums ${entry.kind === "credit" ? "text-fg" : "text-whatsapp"}`}>
+                      {entry.kind === "credit" ? "+" : "−"}
                       {formatCurrency(entry.amount, currency)}
                     </td>
                     <td className="px-3 py-2 text-end font-medium tabular-nums text-fg">

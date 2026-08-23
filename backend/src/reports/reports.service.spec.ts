@@ -6,9 +6,12 @@ import { LocaleService } from '../common/localization/locale.service';
 import { ProfitService } from '../profit/profit.service';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { CommissionsService } from '../staff/commissions.service';
+import { CreditService } from '../credit/credit.service';
 import type { PdfRendererService } from '../common/pdf/pdf-renderer.service';
 import type { S3Service } from '../common/storage/s3.service';
 import type { SendGateService } from '../messaging/send-gate.service';
+import type { AuditService } from '../common/audit/audit.service';
+import type { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { SYSTEM_ROLE_CAPABILITIES } from '../common/capabilities/capabilities.constants';
@@ -72,6 +75,12 @@ describe('ReportsService (INT-012)', () => {
         { complete: jest.fn() } as unknown as AiInfraService,
       ),
       new CommissionsService(tenantPrisma),
+      new CreditService(
+        tenantPrisma,
+        cls as unknown as ClsService,
+        { log: jest.fn() } as unknown as AuditService,
+        { record: jest.fn() } as unknown as ActivityService,
+      ),
       sendGate as unknown as SendGateService,
     );
 

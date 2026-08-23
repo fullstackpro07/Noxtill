@@ -68,6 +68,13 @@ enum InstallmentStatus {
   cancelled
 }
 
+/// Credit reminder rules (UPD-BE-095) — the escalation tone a staged rule sends at.
+enum CreditReminderTone {
+  gentle
+  firm
+  final
+}
+
 enum ActivityEventType {
   sale
   booking
@@ -607,6 +614,9 @@ model Business {
   installmentPlans         InstallmentPlan[]
   installments             Installment[]
   creditShareLinks         CreditShareLink[]
+  creditReminderRules      CreditReminderRule[]
+  creditReminderLogs       CreditReminderLog[]
+  segments                 Segment[]
   loyaltyPrograms          LoyaltyProgram[]
   loyaltyMembers           LoyaltyMember[]
   membershipPlans          MembershipPlan[]
@@ -828,6 +838,7 @@ model Customer {
   queueTokens       QueueToken[]
   installmentPlans  InstallmentPlan[]
   creditShareLinks  CreditShareLink[]
+  creditReminderLogs CreditReminderLog[]
   loyaltyMembers    LoyaltyMember[]
   memberships       Membership[]
   videoTestimonials VideoTestimonial[]
@@ -840,6 +851,26 @@ model Customer {
   @@index([businessId, name])
   @@fulltext([name])
   @@map("customers")
+}
+
+/// Segments, real rule builder (UPD-BE-098) — replaces the compute-on-the-fly vip/new/lapsed
+/// hardcoding with persisted, arbitrary-field AND/OR rules. Coexists with (doesn't replace) the
+/// legacy `GET /segments/:key` hardcoded lookup that `CampaignsService` already depends on —
+/// `SegmentsService.getSegment` tries a real `Segment.id` first, then falls back to the old keys,
+/// so campaigns can target either kind of segment through the same one code path.
+model Segment {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  name       String
+  /// `{ combinator: 'AND' | 'OR', conditions: [{ field, operator, value }] }` — see `segment-rules.util.ts`.
+  rules      Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("segments")
 }
 
 /// Loyalty punch cards/tiers (UPD-BE-024). One business can run multiple programs (e.g. a punch
@@ -1369,6 +1400,49 @@ model CreditShareLink {
 
   @@index([businessId, customerId])
   @@map("credit_share_links")
+}
+
+/// Credit reminder rules (UPD-BE-095) — replaces the single manual `POST /credit/remind` action
+/// with real per-business, staged configuration (days-overdue trigger, tone, channel). Same
+/// pre-approved-template-vs-real-custom-text split as booking reminders (`ReminderRule`):
+/// `customMessage` is honoured for SMS/email/WhatsApp-in-window, `tone` picks which pre-approved
+/// template variant WhatsApp falls back to outside its 24h window.
+model CreditReminderRule {
+  id                String             @id @default(uuid())
+  businessId        String             @map("business_id")
+  business          Business           @relation(fields: [businessId], references: [id])
+  daysOverdueTrigger Int               @map("days_overdue_trigger")
+  tone              CreditReminderTone @default(gentle)
+  channel           MessageChannel?
+  customMessage     String?            @map("custom_message") @db.Text
+  active            Boolean            @default(true)
+
+  logs CreditReminderLog[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, active])
+  @@map("credit_reminder_rules")
+}
+
+/// Idempotency log for the staged reminder job (UPD-BE-095) — one row per real send, so a debtor
+/// who still matches the same rule the next tick isn't reminded again the same day. Kept
+/// deliberately simple (no unique constraint on a truncated date, which MySQL/Prisma can't express
+/// directly) — the job itself windows on `sentAt` at query time, same as `QueueService.todayStart`.
+model CreditReminderLog {
+  id         String             @id @default(uuid())
+  businessId String             @map("business_id")
+  business   Business           @relation(fields: [businessId], references: [id])
+  customerId String             @map("customer_id")
+  customer   Customer           @relation(fields: [customerId], references: [id])
+  ruleId     String             @map("rule_id")
+  rule       CreditReminderRule @relation(fields: [ruleId], references: [id])
+
+  sentAt DateTime @default(now()) @map("sent_at")
+
+  @@index([businessId, customerId, ruleId, sentAt])
+  @@map("credit_reminder_logs")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2764,6 +2838,10 @@ model ImportBatch {
    * same stage-then-commit column, addressed individually via `PATCH /digitizer/rows/:id`.
    */
   rows          Json         @default("[]")
+  /// Import Customers, column-mapping (UPD-BE-099) — the raw, header-keyed rows behind a CSV/XLSX
+  /// customer-import batch, kept alongside the already-staged `rows` so the batch can be re-staged
+  /// under a corrected column mapping without re-uploading. Null for every other source.
+  rawRows       Json?        @map("raw_rows")
   errorsFileUrl String?      @map("errors_file_url")
   contentHash   String       @map("content_hash")
   /// UPD-BE-060: which digitizer scanner type produced this batch — null for every non-photo source.

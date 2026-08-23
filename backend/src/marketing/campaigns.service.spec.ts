@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { SendGateService } from '../messaging/send-gate.service';
 import { SegmentsService } from '../customers/segments.service';
+import type { AiInfraService } from '../ai/ai-infra.service';
 import { CampaignsService } from './campaigns.service';
 import { AppException } from '../common/filters/app.exception';
 
@@ -35,7 +36,9 @@ describe('CampaignsService (BE-061)', () => {
     service = new CampaignsService(
       tenantPrisma,
       sendGate as unknown as SendGateService,
-      new SegmentsService(tenantPrisma),
+      new SegmentsService(tenantPrisma, {
+        complete: jest.fn(),
+      } as unknown as AiInfraService),
     );
 
     const business = await prisma.business.create({

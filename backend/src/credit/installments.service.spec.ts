@@ -166,4 +166,46 @@ describe('InstallmentsService (UPD-BE-021)', () => {
       ),
     ).rejects.toThrow();
   });
+
+  describe('reschedule (UPD-FE-076)', () => {
+    it('moves a pending installment to a new due date and audit-logs the reason', async () => {
+      const plan = await creditService.createInstallmentPlan(customerId, {
+        totalAmount: 25,
+        installments: [{ amount: 25, dueDate: '2020-01-01' }],
+      });
+
+      const updated = await installmentsService.reschedule(
+        businessId,
+        plan.installments[0].id,
+        { dueDate: '2026-12-25', reason: 'Customer requested more time' },
+      );
+      expect(updated.dueDate.toISOString().slice(0, 10)).toBe('2026-12-25');
+
+      const audits = await prisma.auditLog.findMany({
+        where: {
+          entityId: plan.installments[0].id,
+          action: 'credit.installment_rescheduled',
+        },
+      });
+      expect(audits).toHaveLength(1);
+      expect((audits[0].after as { reason: string }).reason).toBe(
+        'Customer requested more time',
+      );
+    });
+
+    it('rejects rescheduling an installment that is already paid', async () => {
+      const plan = await creditService.createInstallmentPlan(customerId, {
+        totalAmount: 5,
+        installments: [{ amount: 5, dueDate: '2020-01-01' }],
+      });
+      await installmentsService.pay(businessId, plan.installments[0].id);
+
+      await expect(
+        installmentsService.reschedule(businessId, plan.installments[0].id, {
+          dueDate: '2027-01-01',
+          reason: 'test',
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+  });
 });

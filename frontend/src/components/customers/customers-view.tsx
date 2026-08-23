@@ -6,12 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Search, Users, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorBanner } from "@/components/shared/error-states";
 import { SkeletonRow } from "@/components/shared/skeleton";
 import { SegmentBar } from "./segment-bar";
-import { ImportCustomersDialog } from "./import-customers-dialog";
 import { CUSTOMER_TAGS, type CustomerTag } from "@/lib/customers";
 import { fetchCustomers, type LiveCustomer } from "@/lib/customers-api";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -38,7 +36,6 @@ function hasTag(c: LiveCustomer, tag: CustomerTag): boolean {
 export function CustomersView({ currency }: { currency: string }) {
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<CustomerTag | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
 
   const {
     data: customers = [],
@@ -65,10 +62,13 @@ export function CustomersView({ currency }: { currency: string }) {
           <h1 className="font-display text-2xl font-bold text-fg">Customers</h1>
           <p className="mt-0.5 text-sm text-fg-muted">{customers.length} total</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+        <Link
+          href="/customers/import"
+          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-strong bg-transparent px-3.5 text-sm font-medium text-fg transition-colors hover:bg-surface-2"
+        >
           <Upload className="h-4 w-4" aria-hidden />
           Import
-        </Button>
+        </Link>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
@@ -154,8 +154,6 @@ export function CustomersView({ currency }: { currency: string }) {
           </table>
         </div>
       )}
-
-      <ImportCustomersDialog open={importOpen} onClose={() => setImportOpen(false)} currency={currency} />
     </div>
   );
 }

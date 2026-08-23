@@ -204,9 +204,16 @@ export class DigitizerService {
     switch (row.destination) {
       case 'customer': {
         const phone = this.requirePhone(data.name, data.phone, defaultCountry);
+        // Import Customers, marketing-consent flag (UPD-BE-099) — a scanned contact never opted
+        // in themselves, so this must never default to the schema's normal `true`.
         await tx.customer.upsert({
           where: { businessId_phone: { businessId, phone } },
-          create: { businessId, phone, name: String(data.name ?? '') },
+          create: {
+            businessId,
+            phone,
+            name: String(data.name ?? ''),
+            consentMarketing: false,
+          },
           update: {},
         });
         const balance = Number(data.balance ?? 0);
@@ -234,7 +241,12 @@ export class DigitizerService {
         );
         const customer = await tx.customer.upsert({
           where: { businessId_phone: { businessId, phone } },
-          create: { businessId, phone, name: String(data.customerName ?? '') },
+          create: {
+            businessId,
+            phone,
+            name: String(data.customerName ?? ''),
+            consentMarketing: false,
+          },
           update: {},
         });
         const amount = Number(data.amount ?? 0);

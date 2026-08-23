@@ -116,4 +116,23 @@ describe('CreditReminderService (BE-031)', () => {
     expect(result.sent).toBe(0);
     expect(result.skipped).toBe(1);
   });
+
+  it('bulkRemind() sends the real tone-specific template to an explicit subset', async () => {
+    const result = await reminderService.bulkRemind(
+      businessId,
+      [optedInId],
+      'final',
+    );
+    expect(result.sent).toBe(1);
+    expect(sendGate.send).toHaveBeenCalledWith(
+      expect.objectContaining({ templateKey: 'credit_reminder_final' }),
+    );
+  });
+
+  it('bulkRemind() defaults to the gentle template when no tone is given', async () => {
+    await reminderService.bulkRemind(businessId, [optedInId]);
+    expect(sendGate.send).toHaveBeenCalledWith(
+      expect.objectContaining({ templateKey: 'credit_reminder' }),
+    );
+  });
 });

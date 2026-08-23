@@ -6,11 +6,13 @@ import { CustomerImportController } from './customer-import.controller';
 import { CustomerImportProcessor } from './customer-import.processor';
 import { CUSTOMER_IMPORT_QUEUE } from './customer-import.constants';
 import { AiModule } from '../ai/ai.module';
+import { DigitizerModule } from '../digitizer/digitizer.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: CUSTOMER_IMPORT_QUEUE }),
     AiModule,
+    DigitizerModule,
   ],
   controllers: [CustomerImportController],
   providers: [

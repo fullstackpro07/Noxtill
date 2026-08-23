@@ -1,4 +1,5 @@
-export type ReportKind = 'monthly' | 'pnl' | 'sales' | 'staff' | 'reviews';
+export type ReportKind =
+  'monthly' | 'pnl' | 'sales' | 'staff' | 'reviews' | 'credit_recovery';
 
 export const REPORT_LABELS: Record<ReportKind, string> = {
   monthly: 'Monthly summary',
@@ -6,6 +7,7 @@ export const REPORT_LABELS: Record<ReportKind, string> = {
   sales: 'Sales report',
   staff: 'Staff performance',
   reviews: 'Reviews summary',
+  credit_recovery: 'Credit recovery report',
 };
 
 export function isReportKind(value: string): value is ReportKind {

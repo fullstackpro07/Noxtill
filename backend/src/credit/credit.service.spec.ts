@@ -333,4 +333,154 @@ describe('CreditService (BE-030)', () => {
       expect(fresh.id).not.toBe(link.id);
     });
   });
+
+  describe('Outstanding view, sort=overdue (UPD-BE-093)', () => {
+    it('sorts by days_outstanding descending instead of balance', async () => {
+      const older = await prisma.customer.create({
+        data: { businessId, phone: `+1${Date.now()}o1`, name: 'Older Debtor' },
+      });
+      const newer = await prisma.customer.create({
+        data: { businessId, phone: `+1${Date.now()}o2`, name: 'Newer Debtor' },
+      });
+      // A small balance but an old entry — should still sort ahead of a bigger, fresher balance under sort=overdue.
+      await prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: older.id,
+          kind: 'credit',
+          amount: 10,
+          createdAt: new Date('2020-01-01'),
+        },
+      });
+      await prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: newer.id,
+          kind: 'credit',
+          amount: 1000,
+        },
+      });
+
+      const byOverdue = await creditService.listDebtors('overdue');
+      const olderIdx = byOverdue.findIndex((d) => d.customerId === older.id);
+      const newerIdx = byOverdue.findIndex((d) => d.customerId === newer.id);
+      expect(olderIdx).toBeLessThan(newerIdx);
+
+      const byBalance = await creditService.listDebtors('balance');
+      const olderBalIdx = byBalance.findIndex((d) => d.customerId === older.id);
+      const newerBalIdx = byBalance.findIndex((d) => d.customerId === newer.id);
+      expect(newerBalIdx).toBeLessThan(olderBalIdx);
+    });
+  });
+
+  describe('Overdue ageing (UPD-BE-094)', () => {
+    it('buckets a real debtor by days_outstanding and flags 90+-with-no-plan as at-risk', async () => {
+      const atRiskCustomer = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}ar`,
+          name: 'At Risk Customer',
+        },
+      });
+      await prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: atRiskCustomer.id,
+          kind: 'credit',
+          amount: 200,
+          createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const report = await creditService.overdueAgeing();
+      const ninetyPlus = report.buckets.find((b) => b.key === 'ninetyPlus');
+      expect(ninetyPlus).toBeDefined();
+      expect(ninetyPlus!.count).toBeGreaterThanOrEqual(1);
+      expect(
+        report.atRisk.debtors.some((d) => d.customerId === atRiskCustomer.id),
+      ).toBe(true);
+    });
+
+    it('excludes a 90+ debtor from at-risk once they have an active instalment plan', async () => {
+      const plannedCustomer = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}pl`,
+          name: 'Planned Customer',
+        },
+      });
+      await prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: plannedCustomer.id,
+          kind: 'credit',
+          amount: 300,
+          createdAt: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000),
+        },
+      });
+      await creditService.createInstallmentPlan(plannedCustomer.id, {
+        totalAmount: 300,
+        installments: [{ amount: 300, dueDate: '2026-12-01' }],
+      });
+
+      const report = await creditService.overdueAgeing();
+      expect(
+        report.atRisk.debtors.some((d) => d.customerId === plannedCustomer.id),
+      ).toBe(false);
+    });
+  });
+
+  describe('collectedToday (UPD-FE-076)', () => {
+    it('sums only real payments recorded today, across both direct payments and instalments', async () => {
+      const c = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}ct`,
+          name: 'Collected Today Customer',
+        },
+      });
+      await prisma.creditEntry.create({
+        data: { businessId, customerId: c.id, kind: 'credit', amount: 200 },
+      });
+      const before = await creditService.collectedToday();
+      await creditService.recordPayment({
+        customerId: c.id,
+        amount: 75,
+        method: 'cash',
+      });
+      const after = await creditService.collectedToday();
+      expect(after).toBeCloseTo(before + 75, 2);
+    });
+  });
+
+  describe('Recovery Reports (UPD-BE-096)', () => {
+    it('aggregates extended/recovered/recoveryRate/writtenOff from real CreditEntry rows', async () => {
+      const c = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}rr`,
+          name: 'Recovery Customer',
+        },
+      });
+      await prisma.creditEntry.create({
+        data: { businessId, customerId: c.id, kind: 'credit', amount: 400 },
+      });
+      await creditService.recordPayment({
+        customerId: c.id,
+        amount: 100,
+        method: 'cash',
+      });
+      await creditService.writeOff(c.id, {
+        amount: 50,
+        reason: 'test',
+        confirm: 'WRITE OFF',
+      });
+
+      const report = await creditService.recoveryReport(12);
+      expect(report.extended).toBeGreaterThanOrEqual(400);
+      expect(report.recovered).toBeGreaterThanOrEqual(100);
+      expect(report.writtenOff).toBeGreaterThanOrEqual(50);
+      expect(report.netExposure).toBeGreaterThanOrEqual(0);
+    });
+  });
 });

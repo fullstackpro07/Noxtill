@@ -1,4 +1,4 @@
-export type ReportKind = "monthly" | "pnl" | "sales" | "staff" | "reviews";
+export type ReportKind = "monthly" | "pnl" | "sales" | "staff" | "reviews" | "credit_recovery";
 
 export interface ReportDef {
   key: ReportKind;

@@ -1,15 +1,27 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { createHash } from 'crypto';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
+import { AppException } from '../common/filters/app.exception';
 import { validateUploadedFile } from '../common/utils/file-validation.util';
 import { normalizePhoneE164 } from '../common/utils/phone.util';
-import { CustomerImportParser, ImportFile } from './customer-import.parser';
 import {
-  ALLOWED_IMPORT_MIME_TYPES,
+  CustomerImportParser,
+  ImportFile,
+  RawRecords,
+} from './customer-import.parser';
+import {
+  applyMapping,
+  suggestMapping,
+} from './customer-import-mapping.constants';
+import { DigitizerVisionService } from '../digitizer/digitizer-vision.service';
+import { ALLOWED_IMAGE_MIME_TYPES } from '../digitizer/digitizer.constants';
+import {
+  ALLOWED_IMPORT_MIME_TYPES_WITH_PHOTO,
+  CUSTOMER_IMPORT_ERROR_CODES,
   CUSTOMER_IMPORT_QUEUE,
   EXECUTE_BATCH_SIZE,
   MAX_IMPORT_SIZE_BYTES,
@@ -23,6 +35,8 @@ import { Customer, ImportSource, Prisma } from '@prisma/client';
 
 function detectSource(file: ImportFile): ImportSource {
   const name = file.originalname.toLowerCase();
+  if ((ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(file.mimetype))
+    return ImportSource.photo;
   if (file.mimetype.includes('sheet') || name.endsWith('.xlsx'))
     return ImportSource.xlsx;
   if (file.mimetype.includes('wordprocessingml') || name.endsWith('.docx'))
@@ -32,13 +46,16 @@ function detectSource(file: ImportFile): ImportSource {
   return ImportSource.text;
 }
 
-/** Customer import pipeline (BE-042/043/044): parse → normalize → dedupe → preview → confirm → queued execute. */
+/** Customer import pipeline (BE-042/043/044, extended by UPD-BE-099): parse (text, or a real
+ * photo via the AI Photo Digitizer's vision pipeline) → normalize → dedupe → preview
+ * (with an optional column-remap step) → confirm → queued execute. */
 @Injectable()
 export class CustomerImportService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly prisma: PrismaService,
     private readonly parser: CustomerImportParser,
+    private readonly vision: DigitizerVisionService,
     private readonly auditService: AuditService,
     @InjectQueue(CUSTOMER_IMPORT_QUEUE) private readonly queue: Queue,
   ) {}
@@ -48,7 +65,7 @@ export class CustomerImportService {
     file: ImportFile,
   ): Promise<ImportPreview> {
     await validateUploadedFile(file, {
-      allowedMimeTypes: ALLOWED_IMPORT_MIME_TYPES,
+      allowedMimeTypes: ALLOWED_IMPORT_MIME_TYPES_WITH_PHOTO,
       maxSizeBytes: MAX_IMPORT_SIZE_BYTES,
     });
 
@@ -67,11 +84,53 @@ export class CustomerImportService {
     const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
       where: { id: businessId },
     });
-    const rawRows = await this.parser.parse(file);
+
+    const isImage = (ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(
+      file.mimetype,
+    );
+    let rawRows: RawImportRow[];
+    let records: RawRecords | null = null;
+
+    if (isImage) {
+      // Import Customers, photo path (UPD-BE-099) — reuses the AI Photo Digitizer's own vision
+      // extraction rather than a parallel one; a "customer_list" scan is a photographed
+      // khata/ledger page of names, phones, and opening balances.
+      const mediaType = file.mimetype as
+        'image/jpeg' | 'image/png' | 'image/webp';
+      const scanned = await this.vision.extract(
+        businessId,
+        'customer_list',
+        file.buffer,
+        mediaType,
+      );
+      rawRows = scanned
+        .filter(
+          (row) =>
+            row.destination === 'customer' ||
+            row.destination === 'credit_opening_balance',
+        )
+        .map((row) => ({
+          name: String(row.data.name ?? row.data.customerName ?? ''),
+          phone: String(row.data.phone ?? ''),
+          balance:
+            row.data.balance != null
+              ? Number(row.data.balance)
+              : row.data.amount != null
+                ? Number(row.data.amount)
+                : undefined,
+        }));
+    } else {
+      records = await this.parser.parseRecords(file);
+      if (records) {
+        rawRows = applyMapping(records.rows, suggestMapping(records.headers));
+      } else {
+        rawRows = await this.parser.parse(file);
+      }
+    }
+
     const existingCustomers = await this.tenantPrisma.client.customer.findMany(
       {},
     );
-
     const staged = this.stageRows(rawRows, business.country, existingCustomers);
     const counts = this.computeCounts(staged);
 
@@ -82,6 +141,9 @@ export class CustomerImportService {
         status: 'pending',
         counts: counts as unknown as Prisma.InputJsonValue,
         rows: staged as unknown as Prisma.InputJsonValue,
+        rawRows: records
+          ? (records as unknown as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
         contentHash,
       },
     });
@@ -97,6 +159,71 @@ export class CustomerImportService {
       throw new NotFoundException('Import batch not found');
     }
     return this.toPreview(batch);
+  }
+
+  /** Column-mapping (UPD-BE-099) — the raw headers plus the currently-suggested mapping, for the mapping-fix UI. */
+  async getColumns(batchId: string) {
+    const batch = await this.tenantPrisma.client.importBatch.findUnique({
+      where: { id: batchId },
+    });
+    if (!batch || !batch.rawRows) {
+      throw new AppException(
+        CUSTOMER_IMPORT_ERROR_CODES.NO_COLUMN_MAPPING,
+        'This import batch has no columns to map (not a CSV/XLSX upload)',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const records = batch.rawRows as unknown as RawRecords;
+    return {
+      headers: records.headers,
+      mapping: suggestMapping(records.headers),
+    };
+  }
+
+  /** Re-stages a csv/xlsx batch under a corrected column mapping, without re-uploading (UPD-BE-099). */
+  async remap(
+    businessId: string,
+    batchId: string,
+    mapping: Record<string, string>,
+  ): Promise<ImportPreview> {
+    const batch = await this.tenantPrisma.client.importBatch.findUnique({
+      where: { id: batchId },
+    });
+    if (!batch || !batch.rawRows) {
+      throw new AppException(
+        CUSTOMER_IMPORT_ERROR_CODES.NO_COLUMN_MAPPING,
+        'This import batch has no columns to map (not a CSV/XLSX upload)',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (batch.status !== 'pending') {
+      throw new AppException(
+        CUSTOMER_IMPORT_ERROR_CODES.ALREADY_CONFIRMED,
+        'This import has already been confirmed and can no longer be remapped',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    const records = batch.rawRows as unknown as RawRecords;
+    const rawRows = applyMapping(records.rows, mapping);
+    const existingCustomers = await this.tenantPrisma.client.customer.findMany(
+      {},
+    );
+    const staged = this.stageRows(rawRows, business.country, existingCustomers);
+    const counts = this.computeCounts(staged);
+
+    const updated = await this.tenantPrisma.client.importBatch.update({
+      where: { id: batchId },
+      data: {
+        counts: counts as unknown as Prisma.InputJsonValue,
+        rows: staged as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return this.toPreview(updated);
   }
 
   async confirm(businessId: string, batchId: string) {
@@ -158,8 +285,15 @@ export class CustomerImportService {
 
         let customerId = row.existingCustomerId;
         if (row.action === 'create') {
+          // Import Customers, marketing-consent flag (UPD-BE-099) — an imported contact never
+          // opted in themselves, so this must never default to the schema's normal `true`.
           const created = await tx.customer.create({
-            data: { businessId, phone: row.normalizedPhone, name: row.name },
+            data: {
+              businessId,
+              phone: row.normalizedPhone,
+              name: row.name,
+              consentMarketing: false,
+            },
           });
           customerId = created.id;
         } else if (row.action === 'update' && customerId) {
@@ -267,6 +401,7 @@ export class CustomerImportService {
     status: string;
     counts: unknown;
     rows: unknown;
+    rawRows?: unknown;
   }): ImportPreview {
     const rows = batch.rows as StagedImportRow[];
     return {
@@ -275,6 +410,7 @@ export class CustomerImportService {
       counts: batch.counts as ImportPreview['counts'],
       preview: rows.filter((r) => r.action !== 'skip').slice(0, 50),
       invalid: rows.filter((r) => r.action === 'skip'),
+      hasColumnMapping: !!batch.rawRows,
     };
   }
 }

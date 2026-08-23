@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { SegmentsService } from '../customers/segments.service';
+import type { AiInfraService } from '../ai/ai-infra.service';
 import { AdAudiencesService } from './ad-audiences.service';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -30,7 +31,9 @@ describe('AdAudiencesService (UPD-BE-070)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    const segments = new SegmentsService(tenantPrisma);
+    const segments = new SegmentsService(tenantPrisma, {
+      complete: jest.fn(),
+    } as unknown as AiInfraService);
     service = new AdAudiencesService(tenantPrisma, segments);
 
     const business = await prisma.business.create({

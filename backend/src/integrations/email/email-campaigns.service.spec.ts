@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../../common/tenancy/tenant.constants';
 import { SegmentsService } from '../../customers/segments.service';
+import type { AiInfraService } from '../../ai/ai-infra.service';
 import { EmailCampaignsService } from './email-campaigns.service';
 import { signPayload } from '../signed-token.util';
 import { AppException } from '../../common/filters/app.exception';
@@ -44,7 +45,9 @@ describe('EmailCampaignsService (BE-083)', () => {
     );
     service = new EmailCampaignsService(
       tenantPrisma,
-      new SegmentsService(tenantPrisma),
+      new SegmentsService(tenantPrisma, {
+        complete: jest.fn(),
+      } as unknown as AiInfraService),
       config,
     );
 
