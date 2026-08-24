@@ -22,6 +22,11 @@ export class CompetitorsController {
     return this.competitorsService.list();
   }
 
+  @Get('category-average')
+  categoryAverage() {
+    return this.competitorsService.categoryAverage();
+  }
+
   @Post()
   create(
     @CurrentUser() user: AuthenticatedUser,

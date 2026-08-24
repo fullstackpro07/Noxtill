@@ -3,6 +3,8 @@ import { apiFetch } from "@/lib/api-client";
 export interface PublicReviewBusiness {
   businessName: string;
   branding: Record<string, unknown>;
+  brandColor: string | null;
+  logoUrl: string | null;
 }
 
 /** GET /r/:token — no auth; 404s if the token was already used or is older than 30 days. */
@@ -36,12 +38,15 @@ export interface PublicReviewWidgetReview {
 export interface PublicReviewWidget {
   businessName: string;
   branding: Record<string, unknown>;
+  brandColor: string | null;
+  logoUrl: string | null;
   reviews: PublicReviewWidgetReview[];
 }
 
-/** GET /reviews/widget/:biz — public, cacheable embed data (4-5★ only, most recent first). */
-export function fetchReviewWidget(slug: string): Promise<PublicReviewWidget> {
-  return apiFetch<PublicReviewWidget>(`/reviews/widget/${slug}`, {}, { skipAuth: true });
+/** GET /reviews/widget/:biz — public, cacheable embed data; `minRating` defaults to 4 server-side. */
+export function fetchReviewWidget(slug: string, minRating?: number): Promise<PublicReviewWidget> {
+  const query = minRating ? `?minRating=${minRating}` : "";
+  return apiFetch<PublicReviewWidget>(`/reviews/widget/${slug}${query}`, {}, { skipAuth: true });
 }
 
 /**

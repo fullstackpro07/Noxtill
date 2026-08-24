@@ -55,6 +55,12 @@ import {
   Building2,
   Settings,
   Filter,
+  Video,
+  MessageSquareWarning,
+  Send,
+  Code2,
+  Award,
+  Trophy,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -184,7 +190,23 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "import-customers", labelKey: "nav.importCustomers", href: "/customers/import", icon: Upload },
     ],
   },
-  { key: "reviews", labelKey: "nav.reviews", href: "/reviews", icon: Star, roles: ["owner", "manager", "staff"] },
+  {
+    key: "reviews",
+    labelKey: "nav.reviews",
+    href: "/reviews",
+    icon: Star,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "video-testimonials", labelKey: "nav.videoTestimonials", href: "/reviews/video-testimonials", icon: Video },
+      { key: "private-reviews", labelKey: "nav.privateReviews", href: "/reviews/complaints", icon: MessageSquareWarning },
+      { key: "review-requests", labelKey: "nav.reviewRequests", href: "/reviews/requests", icon: Send },
+      { key: "rating-qr", labelKey: "nav.ratingQr", href: "/reviews/qr", icon: QrCode },
+      { key: "review-widget", labelKey: "nav.reviewWidget", href: "/reviews/widget", icon: Code2 },
+      { key: "reputation-score", labelKey: "nav.reputationScore", href: "/reviews/reputation-score", icon: Award },
+      { key: "competitor-ratings", labelKey: "nav.competitorRatings", href: "/reviews/competitor-ratings", icon: Trophy },
+      { key: "review-settings", labelKey: "nav.reviewSettings", href: "/reviews/settings", icon: Settings },
+    ],
+  },
   {
     key: "marketing",
     labelKey: "nav.marketing",

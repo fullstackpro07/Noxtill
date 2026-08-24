@@ -8,6 +8,7 @@
   var theme = currentScript.getAttribute("data-theme") === "dark" ? "dark" : "light";
   var layout = currentScript.getAttribute("data-layout") || "badge";
   var apiBase = currentScript.getAttribute("data-api");
+  var minRating = currentScript.getAttribute("data-min-rating");
 
   if (!business || !apiBase) {
     console.error("[noxtill widget] missing required data-business or data-api attribute");
@@ -23,6 +24,7 @@
       ".noxtill-review-widget * { box-sizing: border-box; }",
       ".noxtill-review-widget--light { background: #FAF7F0; color: #1c231e; border: 1px solid #E4DDC9; }",
       ".noxtill-review-widget--dark { background: #171f18; color: #f2ede0; border: 1px solid #2a352b; }",
+      ".noxtill-widget-logo { display: block; width: 32px; height: 32px; border-radius: 50%; object-fit: cover; margin: 0 0 8px; }",
       ".noxtill-widget-rating { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; }",
       ".noxtill-widget-score { font-size: 24px; font-weight: 700; }",
       ".noxtill-widget-stars { color: #E8A93C; }",
@@ -44,7 +46,7 @@
   loading.textContent = "Loading reviews…";
   container.appendChild(loading);
 
-  fetch(apiBase + "/reviews/widget/" + encodeURIComponent(business))
+  fetch(apiBase + "/reviews/widget/" + encodeURIComponent(business) + (minRating ? "?minRating=" + encodeURIComponent(minRating) : ""))
     .then(function (res) {
       if (!res.ok) throw new Error("widget fetch failed: " + res.status);
       return res.json();
@@ -76,9 +78,24 @@
 
     var avg = reviews.reduce(function (sum, r) { return sum + r.stars; }, 0) / reviews.length;
 
+    // Set via property assignment (never innerHTML/markup), and validated against a strict hex
+    // pattern before use — the same @IsHexColor() shape the backend already enforces on write,
+    // checked again here since this script also runs against arbitrary third-party pages.
+    if (data && typeof data.brandColor === "string" && /^#[0-9a-fA-F]{6}$/.test(data.brandColor)) {
+      container.style.setProperty("--noxtill-brand", data.brandColor);
+    }
+
+    if (data && typeof data.logoUrl === "string" && data.logoUrl) {
+      var logo = el("img", "noxtill-widget-logo");
+      logo.src = data.logoUrl;
+      logo.alt = "";
+      container.appendChild(logo);
+    }
+
     var ratingRow = el("div", "noxtill-widget-rating");
     var score = el("span", "noxtill-widget-score");
     score.textContent = avg.toFixed(1);
+    if (data && data.brandColor) score.style.color = "var(--noxtill-brand)";
     var stars = el("span", "noxtill-widget-stars");
     stars.textContent = "★".repeat(Math.round(avg));
     ratingRow.appendChild(score);

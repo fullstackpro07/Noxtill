@@ -35,6 +35,8 @@ backend/dist/
 backend/generated/prisma/
 backend/coverage/
 backend/*.tsbuildinfo
+# S3Service's local-disk fallback (dev-only, active with no real S3 credentials configured)
+backend/local-storage/
 
 # ── Frontend (Next.js) ───────────────────────────────────────────────────
 frontend/.next/

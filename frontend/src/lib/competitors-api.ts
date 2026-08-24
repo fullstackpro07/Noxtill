@@ -58,3 +58,14 @@ export function fetchCompetitorHistory(id: string): Promise<CompetitorHistoryPoi
 export function triggerCompetitorSnapshot(id: string): Promise<RawCompetitor> {
   return apiFetch<RawCompetitor>(`/competitors/${id}/snapshot`, { method: "POST" });
 }
+
+export interface CompetitorCategoryAverage {
+  trackedCount: number;
+  ratedCount: number;
+  averageRating: number | null;
+}
+
+/** UPD-FE-089: no external category-benchmark dataset exists — this is honestly derived from your own tracked competitor set. */
+export function fetchCompetitorCategoryAverage(): Promise<CompetitorCategoryAverage> {
+  return apiFetch<CompetitorCategoryAverage>("/competitors/category-average");
+}

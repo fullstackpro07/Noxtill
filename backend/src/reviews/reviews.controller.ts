@@ -1,21 +1,29 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ReviewsService } from './reviews.service';
 import { ReviewRequestsService } from './review-requests.service';
 import { QrPosterService } from './qr-poster.service';
 import { SentimentAnalysisService } from './sentiment-analysis.service';
+import { ReputationScoreService } from './reputation-score.service';
 import { CreateReviewRequestDto } from './dto/create-review-request.dto';
 import { QueryReviewsDto } from './dto/query-reviews.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { ReplyFeedbackDto } from './dto/reply-feedback.dto';
 import { GenerateQrPosterDto } from './dto/generate-qr-poster.dto';
+import { UpdateReviewSettingsDto } from './dto/update-review-settings.dto';
+import { BulkCreateReviewRequestsDto } from './dto/bulk-create-review-requests.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
@@ -26,6 +34,7 @@ export class ReviewsController {
     private readonly reviewRequests: ReviewRequestsService,
     private readonly qrPoster: QrPosterService,
     private readonly sentimentAnalysis: SentimentAnalysisService,
+    private readonly reputationScore: ReputationScoreService,
   ) {}
 
   @Post('reviews/requests')
@@ -34,6 +43,60 @@ export class ReviewsController {
     @Body() dto: CreateReviewRequestDto,
   ) {
     return this.reviewRequests.create(user.businessId, dto);
+  }
+
+  @Post('reviews/requests/bulk')
+  bulkCreateRequests(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkCreateReviewRequestsDto,
+  ) {
+    return this.reviewRequests.bulkCreate(
+      user.businessId,
+      dto.customerIds,
+      dto.source,
+    );
+  }
+
+  @Get('reviews/requests')
+  listRequests() {
+    return this.reviewsService.listRequests();
+  }
+
+  @Get('reviews/requests/conversion')
+  requestsConversion() {
+    return this.reviewsService.conversionByChannel();
+  }
+
+  @Get('reviews/qr-stats')
+  qrStats() {
+    return this.reviewsService.qrStats();
+  }
+
+  @Get('reviews/reputation-score')
+  reputationScoreGet() {
+    return this.reputationScore.getScore();
+  }
+
+  @Get('reviews/settings')
+  getSettings() {
+    return this.reviewsService.getSettings();
+  }
+
+  @Patch('reviews/settings')
+  updateSettings(@Body() dto: UpdateReviewSettingsDto) {
+    return this.reviewsService.updateSettings(dto);
+  }
+
+  @Post('reviews/settings/logo')
+  @UseInterceptors(FileInterceptor('logo'))
+  uploadLogo(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('logo file is required');
+    return this.reviewsService.uploadLogo(file);
+  }
+
+  @Delete('reviews/settings/logo')
+  removeLogo() {
+    return this.reviewsService.removeLogo();
   }
 
   @Get('reviews')

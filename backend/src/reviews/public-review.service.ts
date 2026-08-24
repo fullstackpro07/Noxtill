@@ -2,14 +2,20 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ActivityService } from '../activity/activity.service';
+import { S3Service } from '../common/storage/s3.service';
 import { AppException } from '../common/filters/app.exception';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import { generateReviewToken } from './review-token.util';
-import { ReviewRoute, Role } from '@prisma/client';
+import { ReviewRequestStatus, ReviewRoute, Role } from '@prisma/client';
+import { REVIEW_TOKEN_EXPIRY_DAYS } from './reviews.constants';
 
-const TOKEN_EXPIRY_DAYS = 30;
 /** Defense-in-depth against a distributed (multi-IP) abuser — the per-IP throttle on the mint endpoint can't catch this alone. */
 const QR_DAILY_CAP_PER_BUSINESS = 200;
+
+interface ResolvedBranding {
+  brandColor: string | null;
+  logoUrl: string | null;
+}
 
 /**
  * Public rating page (BE-046) — no auth, resolved entirely by the token.
@@ -22,7 +28,22 @@ export class PublicReviewService {
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
     private readonly activity: ActivityService,
+    private readonly s3: S3Service,
   ) {}
+
+  /** UPD-FE-086: resolves the real `reviewSettings.brandColor`/`logoKey` into what the 3 public
+   * consumers (rating page, widget, QR poster) actually render — a fresh signed URL every call,
+   * same as `logoKey` resolution on the authenticated settings endpoint. */
+  private async resolveBranding(
+    reviewSettings: unknown,
+  ): Promise<ResolvedBranding> {
+    const settings = (reviewSettings as Record<string, unknown>) ?? {};
+    const logoKey = settings.logoKey as string | undefined;
+    return {
+      brandColor: (settings.brandColor as string | undefined) ?? null,
+      logoUrl: logoKey ? await this.s3.getSignedDownloadUrl(logoKey) : null,
+    };
+  }
 
   /**
    * Mints a fresh, anonymous, single-use review-request token for a QR-scan/no-login entry point
@@ -62,15 +83,18 @@ export class PublicReviewService {
     return { token };
   }
 
-  /** BE-050: public, cacheable embed of a business's best reviews (4-5★, most recent first). */
-  async getWidget(slug: string) {
+  /** BE-050: public, cacheable embed of a business's best reviews, most recent first. `minRating`
+   * defaults to 4 (UPD-BE-102's min-rating control) — clamped to 1-5 so a bad query param can't
+   * turn this into "show every review including 1-stars" by accident. */
+  async getWidget(slug: string, minRating = 4) {
     const business = await this.prisma.business.findUnique({ where: { slug } });
     if (!business) {
       throw new NotFoundException('Business not found');
     }
+    const threshold = Math.min(5, Math.max(1, Math.round(minRating)));
 
     const reviews = await this.prisma.externalReview.findMany({
-      where: { businessId: business.id, stars: { gte: 4 } },
+      where: { businessId: business.id, stars: { gte: threshold } },
       orderBy: { createdAt: 'desc' },
       take: 20,
       select: {
@@ -85,15 +109,24 @@ export class PublicReviewService {
     return {
       businessName: business.name,
       branding: business.branding,
+      ...(await this.resolveBranding(business.reviewSettings)),
       reviews,
     };
   }
 
+  /** UPD-BE-100: first real open of the link — only advances `sent` -> `opened`, never regresses an already-`rated` request. */
   async getByToken(token: string) {
     const reviewRequest = await this.loadValid(token);
+    if (reviewRequest.status === ReviewRequestStatus.sent) {
+      await this.prisma.reviewRequest.update({
+        where: { id: reviewRequest.id },
+        data: { status: ReviewRequestStatus.opened, openedAt: new Date() },
+      });
+    }
     return {
       businessName: reviewRequest.business.name,
       branding: reviewRequest.business.branding,
+      ...(await this.resolveBranding(reviewRequest.business.reviewSettings)),
     };
   }
 
@@ -109,6 +142,7 @@ export class PublicReviewService {
         message: dto.message,
         routedTo,
         respondedAt: new Date(),
+        status: ReviewRequestStatus.rated,
       },
     });
 
@@ -167,7 +201,7 @@ export class PublicReviewService {
 
     const ageDays =
       (Date.now() - reviewRequest.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (reviewRequest.respondedAt || ageDays > TOKEN_EXPIRY_DAYS) {
+    if (reviewRequest.respondedAt || ageDays > REVIEW_TOKEN_EXPIRY_DAYS) {
       throw new NotFoundException();
     }
 

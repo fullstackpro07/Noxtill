@@ -104,4 +104,32 @@ describe('ReviewRequestsService (BE-045)', () => {
       service.scheduleSend(businessId, customerId, 'sometoken'),
     ).resolves.toBeUndefined();
   });
+
+  describe('bulkCreate (UPD-FE-085)', () => {
+    it('sends to every valid customerId and skips ones that fail individually', async () => {
+      const result = await service.bulkCreate(
+        businessId,
+        [customerId, 'not-a-real-customer-id'],
+        'bulk',
+      );
+      expect(result).toEqual({ requested: 2, sent: 1 });
+    });
+
+    it('blocks the whole batch atomically when it would exceed the remaining quota', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { msgQuota: 5, msgUsed: 4 },
+      });
+
+      await expect(
+        service.bulkCreate(businessId, [customerId, customerId, customerId], 'bulk'),
+      ).rejects.toThrow();
+      expect(sendGate.send).not.toHaveBeenCalled();
+
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { msgQuota: 600, msgUsed: 0 },
+      });
+    });
+  });
 });

@@ -55,8 +55,13 @@ export class QrPosterService {
       where: { id: businessId },
     });
 
+    const settings = (business.reviewSettings as Record<string, unknown>) ?? {};
+    const brandColor = (settings.brandColor as string | undefined) ?? undefined;
+    const logoKey = settings.logoKey as string | undefined;
+    const logoUrl = logoKey ? await this.s3.getSignedDownloadUrl(logoKey) : undefined;
+
     const qrDataUrl = await toDataURL(dto.targetUrl, { margin: 1, width: 600 });
-    const html = this.renderHtml(business.name, qrDataUrl, dto.format);
+    const html = this.renderHtml(business.name, qrDataUrl, dto.format, brandColor, logoUrl);
     const { width, height } = PAGE_SIZE_MM[dto.format];
 
     let buffer: Buffer;
@@ -86,8 +91,11 @@ export class QrPosterService {
     businessName: string,
     qrDataUrl: string,
     format: GenerateQrPosterDto['format'],
+    brandColor?: string,
+    logoUrl?: string,
   ): string {
     const isSticker = format === 'sticker';
+    const headingColor = brandColor ?? '#0C4B3B';
     return `
       <html>
         <head>
@@ -106,14 +114,16 @@ export class QrPosterService {
               text-align: center;
               padding: ${isSticker ? '10px' : '48px'};
             }
-            h1 { font-size: ${isSticker ? '13px' : '28px'}; color: #0C4B3B; margin-bottom: ${isSticker ? '6px' : '24px'}; }
-            img { width: ${isSticker ? '65%' : '70%'}; max-width: 420px; }
+            .logo { width: ${isSticker ? '36px' : '96px'}; height: ${isSticker ? '36px' : '96px'}; object-fit: contain; margin-bottom: ${isSticker ? '4px' : '16px'}; }
+            h1 { font-size: ${isSticker ? '13px' : '28px'}; color: ${headingColor}; margin-bottom: ${isSticker ? '6px' : '24px'}; }
+            img.qr { width: ${isSticker ? '65%' : '70%'}; max-width: 420px; }
             p { margin-top: ${isSticker ? '6px' : '24px'}; font-size: ${isSticker ? '9px' : '18px'}; color: #6b6353; }
           </style>
         </head>
         <body>
+          ${logoUrl ? `<img class="logo" src="${logoUrl}" alt="" />` : ''}
           <h1>${escapeHtml(businessName)}</h1>
-          <img src="${qrDataUrl}" alt="QR code" />
+          <img class="qr" src="${qrDataUrl}" alt="QR code" />
           <p>Scan to leave a review</p>
         </body>
       </html>

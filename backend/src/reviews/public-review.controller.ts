@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { PublicReviewService } from './public-review.service';
@@ -39,9 +39,13 @@ export class PublicReviewController {
   @Get('reviews/widget/:biz')
   async widget(
     @Param('biz') biz: string,
+    @Query('minRating') minRating: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
     res.header('Access-Control-Allow-Origin', '*');
-    return this.publicReviewService.getWidget(biz);
+    return this.publicReviewService.getWidget(
+      biz,
+      minRating ? Number(minRating) : undefined,
+    );
   }
 }

@@ -103,6 +103,36 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
     expect(sendGate.send).not.toHaveBeenCalled();
   });
 
+  it('honors a per-business reminderDayOffsets override from Review Settings (UPD-BE-104)', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { reviewSettings: { reminderDayOffsets: [1] } },
+    });
+
+    const oneDayAgo = new Date(rightHour.getTime() - 1 * 24 * 60 * 60 * 1000);
+    const request = await prisma.reviewRequest.create({
+      data: {
+        businessId,
+        customerId,
+        token: generateReviewToken(),
+        source: 'order',
+        createdAt: oneDayAgo,
+      },
+    });
+
+    await processor.runReminders(rightHour); // day-1 override fires immediately, ahead of the day-3 default
+    expect(sendGate.send).toHaveBeenCalledTimes(1);
+
+    sendGate.send.mockClear();
+    await processor.runReminders(rightHour); // only 1 offset configured — max reached, no-op
+    expect(sendGate.send).not.toHaveBeenCalled();
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { reviewSettings: {} },
+    });
+  });
+
   it('never reminds a request that already has respondedAt set', async () => {
     const oldRequest = await prisma.reviewRequest.create({
       data: {

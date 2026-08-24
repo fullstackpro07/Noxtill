@@ -3,6 +3,7 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { PublicReviewService } from './public-review.service';
 import { generateReviewToken } from './review-token.util';
 import { ActivityService } from '../activity/activity.service';
+import type { S3Service } from '../common/storage/s3.service';
 
 describe('PublicReviewService (BE-046)', () => {
   let prisma: PrismaService;
@@ -11,6 +12,7 @@ describe('PublicReviewService (BE-046)', () => {
   let customerId: string;
   const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
   const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const s3 = { getSignedDownloadUrl: jest.fn().mockResolvedValue('https://signed.example/logo.png') };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -19,6 +21,7 @@ describe('PublicReviewService (BE-046)', () => {
       prisma,
       sendGate as unknown as SendGateService,
       activity as unknown as ActivityService,
+      s3 as unknown as S3Service,
     );
 
     const business = await prisma.business.create({
@@ -165,6 +168,59 @@ describe('PublicReviewService (BE-046)', () => {
     await prisma.externalReview.deleteMany({ where: { businessId } });
   });
 
+  it('resolves real brandColor/logoUrl from reviewSettings on both the rating page and the widget (UPD-FE-086)', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { reviewSettings: { brandColor: '#ABCDEF', logoKey: 'review-branding/test/logo.png' } },
+    });
+    const slug = (await prisma.business.findUniqueOrThrow({ where: { id: businessId } })).slug;
+
+    const request = await prisma.reviewRequest.create({
+      data: { businessId, customerId, token: generateReviewToken(), source: 'order' },
+    });
+    const page = await service.getByToken(request.token);
+    expect(page.brandColor).toBe('#ABCDEF');
+    expect(page.logoUrl).toBe('https://signed.example/logo.png');
+    expect(s3.getSignedDownloadUrl).toHaveBeenCalledWith('review-branding/test/logo.png');
+
+    const widget = await service.getWidget(slug);
+    expect(widget.brandColor).toBe('#ABCDEF');
+    expect(widget.logoUrl).toBe('https://signed.example/logo.png');
+
+    await prisma.business.update({ where: { id: businessId }, data: { reviewSettings: {} } });
+  });
+
+  it('returns null brandColor/logoUrl when nothing has been set', async () => {
+    const request = await prisma.reviewRequest.create({
+      data: { businessId, customerId, token: generateReviewToken(), source: 'order' },
+    });
+    const page = await service.getByToken(request.token);
+    expect(page.brandColor).toBeNull();
+    expect(page.logoUrl).toBeNull();
+  });
+
+  it('honors a minRating override, clamped to 1-5 (UPD-BE-102)', async () => {
+    await prisma.externalReview.createMany({
+      data: [
+        { businessId, platform: 'gmb', externalId: 'min-a', stars: 5, text: 'Great!' },
+        { businessId, platform: 'gmb', externalId: 'min-b', stars: 3, text: 'Okay' },
+        { businessId, platform: 'gmb', externalId: 'min-c', stars: 1, text: 'Bad' },
+      ],
+    });
+    const slug = (await prisma.business.findUniqueOrThrow({ where: { id: businessId } })).slug;
+
+    const widgetAll = await service.getWidget(slug, 1);
+    expect(widgetAll.reviews).toHaveLength(3);
+
+    const widgetHighOnly = await service.getWidget(slug, 5);
+    expect(widgetHighOnly.reviews).toHaveLength(1);
+
+    const widgetOutOfRange = await service.getWidget(slug, 99);
+    expect(widgetOutOfRange.reviews).toHaveLength(1); // clamped to 5, same as above
+
+    await prisma.externalReview.deleteMany({ where: { businessId } });
+  });
+
   it('mints an anonymous, customerless review request for a QR scan', async () => {
     const business = await prisma.business.findUniqueOrThrow({
       where: { id: businessId },
@@ -186,6 +242,33 @@ describe('PublicReviewService (BE-046)', () => {
     await expect(
       service.mintAnonymousLink('no-such-business-slug'),
     ).rejects.toThrow();
+  });
+
+  it('marks a request opened on its first real GET, and never regresses it (UPD-BE-100)', async () => {
+    const request = await prisma.reviewRequest.create({
+      data: { businessId, customerId, token: generateReviewToken(), source: 'order' },
+    });
+    expect(request.status).toBe('sent');
+
+    await service.getByToken(request.token);
+    const afterFirstOpen = await prisma.reviewRequest.findUniqueOrThrow({ where: { id: request.id } });
+    expect(afterFirstOpen.status).toBe('opened');
+    expect(afterFirstOpen.openedAt).not.toBeNull();
+    const firstOpenedAt = afterFirstOpen.openedAt;
+
+    await service.getByToken(request.token);
+    const afterSecondOpen = await prisma.reviewRequest.findUniqueOrThrow({ where: { id: request.id } });
+    expect(afterSecondOpen.openedAt).toEqual(firstOpenedAt);
+  });
+
+  it('marks a request rated on submit (UPD-BE-100)', async () => {
+    const request = await prisma.reviewRequest.create({
+      data: { businessId, customerId, token: generateReviewToken(), source: 'order' },
+    });
+
+    await service.submit(request.token, { stars: 4 });
+    const refreshed = await prisma.reviewRequest.findUniqueOrThrow({ where: { id: request.id } });
+    expect(refreshed.status).toBe('rated');
   });
 
   it('refuses to mint once a business hits its daily QR-request cap', async () => {

@@ -112,6 +112,24 @@ describe('CompetitorsService (BE-063)', () => {
     expect(history[1].rating).toBe(4.4);
   });
 
+  it('averages only rated competitors, excluding ones with no snapshot yet (UPD-FE-089)', async () => {
+    const list = await service.list();
+    await prisma.competitor.update({
+      where: { id: list[0].id },
+      data: { lastRating: 4.0, lastReviewsCount: 20 },
+    });
+    await prisma.competitor.update({
+      where: { id: list[1].id },
+      data: { lastRating: 4.6, lastReviewsCount: 40 },
+    });
+    // The rest of `list` stays unrated (null lastRating) — must not count as 0 in the average.
+
+    const result = await service.categoryAverage();
+    expect(result.trackedCount).toBe(list.length);
+    expect(result.ratedCount).toBe(2);
+    expect(result.averageRating).toBe(4.3);
+  });
+
   it('triggers a manual snapshot via the processor', async () => {
     const competitor = await prisma.competitor.create({
       data: { businessId, platformRef: 'trigger-test' },

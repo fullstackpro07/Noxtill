@@ -102,3 +102,120 @@ export function generateQrPoster(input: GenerateQrPosterInput): Promise<{ url: s
     body: JSON.stringify(input),
   });
 }
+
+export type ReviewRequestEffectiveStatus = "sent" | "opened" | "rated" | "no_response";
+
+export interface LiveReviewRequest {
+  id: string;
+  customerId: string | null;
+  customer: { name: string; phone: string } | null;
+  source: string;
+  stars: number | null;
+  status: "sent" | "opened" | "rated";
+  effectiveStatus: ReviewRequestEffectiveStatus;
+  openedAt: string | null;
+  respondedAt: string | null;
+  reminderCount: number;
+  createdAt: string;
+}
+
+/** GET /reviews/requests — every request with its real, possibly-expired-to-no_response status (UPD-BE-100). */
+export function fetchReviewRequests(): Promise<LiveReviewRequest[]> {
+  return apiFetch<LiveReviewRequest[]>("/reviews/requests");
+}
+
+export interface ReviewRequestChannelConversion {
+  source: string;
+  total: number;
+  rated: number;
+  conversionRate: number;
+}
+
+export function fetchReviewRequestsConversion(): Promise<ReviewRequestChannelConversion[]> {
+  return apiFetch<ReviewRequestChannelConversion[]>("/reviews/requests/conversion");
+}
+
+/** POST /reviews/requests/bulk — quota-checked atomically; a 403 CAMPAIGN-style quota error means the whole batch was blocked, nothing partially sent. */
+export function bulkSendReviewRequests(customerIds: string[], source = "manual"): Promise<{ requested: number; sent: number }> {
+  return apiFetch<{ requested: number; sent: number }>("/reviews/requests/bulk", {
+    method: "POST",
+    body: JSON.stringify({ customerIds, source }),
+  });
+}
+
+export interface QrStats {
+  windowDays: number;
+  visits: number;
+  ratingsSubmitted: number;
+  conversionRate: number;
+}
+
+export function fetchQrStats(): Promise<QrStats> {
+  return apiFetch<QrStats>("/reviews/qr-stats");
+}
+
+export interface ReputationScoreComponents {
+  rating: number;
+  volume: number;
+  recency: number;
+  responseRate: number;
+}
+
+export interface ReputationScoreResult {
+  score: number;
+  components: ReputationScoreComponents;
+  weights: ReputationScoreComponents;
+  trend: { weekEnding: string; totalScore: number }[];
+}
+
+export function fetchReputationScore(): Promise<ReputationScoreResult> {
+  return apiFetch<ReputationScoreResult>("/reviews/reputation-score");
+}
+
+export interface ReviewSettings {
+  publicReviewUrl: string | null;
+  publicReviewPlatform?: string;
+  reminderDayOffsets?: number[];
+  replyTemplates?: Record<string, string>;
+  /** Actually rendered on the public rating page, the review widget, and the QR poster — not just stored. */
+  brandColor?: string;
+  logoUrl: string | null;
+}
+
+export function fetchReviewSettings(): Promise<ReviewSettings> {
+  return apiFetch<ReviewSettings>("/reviews/settings");
+}
+
+export function updateReviewSettings(
+  input: Partial<Omit<ReviewSettings, "publicReviewUrl" | "logoUrl">> & { publicReviewUrl?: string },
+): Promise<ReviewSettings> {
+  return apiFetch<ReviewSettings>("/reviews/settings", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/** POST /reviews/settings/logo — real multipart upload to S3; the previous logo (if any) is deleted server-side, not left orphaned. */
+export function uploadReviewLogo(file: File): Promise<ReviewSettings> {
+  const formData = new FormData();
+  formData.append("logo", file);
+  return apiFetch<ReviewSettings>("/reviews/settings/logo", { method: "POST", body: formData });
+}
+
+export function removeReviewLogo(): Promise<ReviewSettings> {
+  return apiFetch<ReviewSettings>("/reviews/settings/logo", { method: "DELETE" });
+}
+
+export interface ReviewSentimentTheme {
+  id: string;
+  theme: string;
+  sentiment: string;
+  exampleQuote: string;
+  reviewCount: number;
+  generatedAt: string;
+}
+
+/** GET /reviews/sentiment — real AI-clustered themes over recent review text (UPD-FE-084). */
+export function fetchReviewSentiment(): Promise<ReviewSentimentTheme[]> {
+  return apiFetch<ReviewSentimentTheme[]>("/reviews/sentiment");
+}

@@ -41,6 +41,8 @@ export function PublicRatingFlow({ token, business }: { token: string; business:
     return () => clearTimeout(timer);
   }, [step, redirectUrl]);
 
+  const brand = business.brandColor || "#0c4b3b";
+
   function handleRate(stars: number) {
     setRating(stars);
     if (stars >= 4) {
@@ -57,9 +59,14 @@ export function PublicRatingFlow({ token, business }: { token: string; business:
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0c4b3b] font-bold text-[#faf7f0]">
-        {business.businessName.slice(0, 1)}
-      </div>
+      {business.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- external S3-signed URL, not a local/optimizable asset
+        <img src={business.logoUrl} alt="" className="h-14 w-14 rounded-full object-cover" />
+      ) : (
+        <div className="flex h-14 w-14 items-center justify-center rounded-full font-bold text-[#faf7f0]" style={{ background: brand }}>
+          {business.businessName.slice(0, 1)}
+        </div>
+      )}
 
       {step === "rate" && (
         <>
@@ -90,7 +97,7 @@ export function PublicRatingFlow({ token, business }: { token: string; business:
           <h1 className="text-xl font-bold text-[#1c231e]">Thank you!</h1>
           <p className="text-sm text-[#6b6353]">Taking you to leave a public review…</p>
           {redirectUrl && (
-            <a href={redirectUrl} className="text-sm font-medium text-[#0c4b3b] underline">
+            <a href={redirectUrl} className="text-sm font-medium underline" style={{ color: brand }}>
               Tap here if you&apos;re not redirected
             </a>
           )}
@@ -122,7 +129,8 @@ export function PublicRatingFlow({ token, business }: { token: string; business:
           <button
             type="submit"
             disabled={feedbackText.trim().length < 5 || submitMutation.isPending}
-            className="w-full rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-40"
+            className="w-full rounded-full px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-40"
+            style={{ background: brand }}
           >
             {submitMutation.isPending ? "Sending…" : "Send privately"}
           </button>
@@ -146,7 +154,8 @@ export function PublicRatingFlow({ token, business }: { token: string; business:
           <button
             type="button"
             onClick={() => setStep(rating >= 4 || rating === 0 ? "rate" : "feedback")}
-            className="rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0]"
+            className="rounded-full px-5 py-3 text-sm font-medium text-[#faf7f0]"
+            style={{ background: brand }}
           >
             Try again
           </button>

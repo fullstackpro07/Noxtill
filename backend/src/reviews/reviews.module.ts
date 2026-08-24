@@ -17,6 +17,7 @@ import { GoogleSyncScheduler } from './jobs/google-sync.scheduler';
 import { GoogleSyncProcessor } from './jobs/google-sync.processor';
 import { GOOGLE_SYNC_QUEUE } from './jobs/google-sync.constants';
 import { SentimentAnalysisService } from './sentiment-analysis.service';
+import { ReputationScoreService } from './reputation-score.service';
 import { SentimentAnalysisScheduler } from './jobs/sentiment-analysis.scheduler';
 import { SentimentAnalysisProcessor } from './jobs/sentiment-analysis.processor';
 import { SENTIMENT_ANALYSIS_QUEUE } from './sentiment-analysis.constants';
@@ -55,6 +56,7 @@ import { ActivityModule } from '../activity/activity.module';
     SentimentAnalysisService,
     SentimentAnalysisScheduler,
     SentimentAnalysisProcessor,
+    ReputationScoreService,
   ],
   exports: [ReviewRequestsService],
 })

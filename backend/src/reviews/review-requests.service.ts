@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { AppException } from '../common/filters/app.exception';
 import { CreateReviewRequestDto } from './dto/create-review-request.dto';
 import { generateReviewToken } from './review-token.util';
 
 const REVIEW_REQUEST_DELAY_MS = 2 * 60 * 60 * 1000; // +2h, per spec §4.1
+const REVIEW_REQUEST_QUOTA_EXCEEDED = 'REVIEW_REQUEST_QUOTA_EXCEEDED';
 
 /**
  * Review request creation + send scheduling (BE-045). `scheduleSend` is the
@@ -51,6 +53,41 @@ export class ReviewRequestsService {
     await this.scheduleSend(businessId, customerId, token);
 
     return reviewRequest;
+  }
+
+  /**
+   * UPD-FE-085's "bulk send with quota-check preview" — same atomic precheck-before-any-send
+   * convention as `CampaignsService.create`: an insufficient-quota batch is blocked entirely,
+   * never partially sent. Customers that individually fail (e.g. no phone on file) are skipped,
+   * not fatal to the rest of the batch.
+   */
+  async bulkCreate(
+    businessId: string,
+    customerIds: string[],
+    source: string,
+  ): Promise<{ requested: number; sent: number }> {
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow(
+      { where: { id: businessId } },
+    );
+    const remainingQuota = business.msgQuota - business.msgUsed;
+    if (customerIds.length > remainingQuota) {
+      throw new AppException(
+        REVIEW_REQUEST_QUOTA_EXCEEDED,
+        `This send needs ${customerIds.length} messages but only ${remainingQuota} remain this month`,
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    let sent = 0;
+    for (const customerId of customerIds) {
+      try {
+        await this.create(businessId, { customerId, source });
+        sent += 1;
+      } catch {
+        // Skip this one customer (e.g. not found) — the rest of the batch still goes out.
+      }
+    }
+    return { requested: customerIds.length, sent };
   }
 
   /** Best-effort: a failure here should never roll back whatever created the review request. */

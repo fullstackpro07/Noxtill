@@ -8,7 +8,6 @@ import {
   REVIEW_REMINDERS_LOCAL_HOUR,
   REVIEW_REMINDERS_QUEUE,
   REVIEW_REMINDER_DAY_OFFSETS,
-  REVIEW_REMINDER_MAX_COUNT,
 } from './review-reminders.constants';
 
 interface ReviewRemindersJobData {
@@ -43,7 +42,7 @@ export class ReviewRemindersProcessor extends WorkerHost {
 
   async runReminders(now: Date = new Date()): Promise<void> {
     const businesses = await this.prisma.business.findMany({
-      select: { id: true, timezone: true },
+      select: { id: true, timezone: true, reviewSettings: true },
     });
 
     for (const business of businesses) {
@@ -53,18 +52,28 @@ export class ReviewRemindersProcessor extends WorkerHost {
       )
         continue;
 
+      // UPD-BE-104: a business can override the day-3/day-7 default via Review Settings.
+      const settings = business.reviewSettings as {
+        reminderDayOffsets?: number[];
+      } | null;
+      const dayOffsets =
+        settings?.reminderDayOffsets && settings.reminderDayOffsets.length > 0
+          ? settings.reminderDayOffsets
+          : REVIEW_REMINDER_DAY_OFFSETS;
+      const maxCount = dayOffsets.length;
+
       const pending = await this.prisma.reviewRequest.findMany({
         where: {
           businessId: business.id,
           respondedAt: null,
-          reminderCount: { lt: REVIEW_REMINDER_MAX_COUNT },
+          reminderCount: { lt: maxCount },
         },
       });
 
       for (const request of pending) {
         const ageDays =
           (now.getTime() - request.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-        const dueOffset = REVIEW_REMINDER_DAY_OFFSETS[request.reminderCount];
+        const dueOffset = dayOffsets[request.reminderCount];
         if (ageDays < dueOffset) continue;
 
         await this.sendGate

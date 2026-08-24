@@ -40,6 +40,9 @@ describe('QrPosterService', () => {
     uploadAndSign: jest
       .fn()
       .mockResolvedValue('https://signed.example/qr-poster'),
+    getSignedDownloadUrl: jest
+      .fn()
+      .mockResolvedValue('https://signed.example/logo.png'),
   };
 
   beforeAll(async () => {
@@ -145,5 +148,37 @@ describe('QrPosterService', () => {
 
     await deleteCrossTestBusinessRows(prisma, evilBusiness.id);
     await prisma.business.delete({ where: { id: evilBusiness.id } });
+  }, 15_000);
+
+  it('renders the real brandColor and a signed logo image when Review Settings has them set (UPD-FE-086)', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { reviewSettings: { brandColor: '#FF6600', logoKey: 'review-branding/test/logo.png' } },
+    });
+
+    await service.generate(businessId, {
+      format: 'a5',
+      fileType: 'pdf',
+      targetUrl: 'https://example.com/rq/test',
+    });
+
+    const htmlArg = pdfRenderer.renderPdf.mock.calls[pdfRenderer.renderPdf.mock.calls.length - 1][0];
+    expect(htmlArg).toContain('#FF6600');
+    expect(htmlArg).toContain('https://signed.example/logo.png');
+    expect(s3.getSignedDownloadUrl).toHaveBeenCalledWith('review-branding/test/logo.png');
+
+    await prisma.business.update({ where: { id: businessId }, data: { reviewSettings: {} } });
+  }, 15_000);
+
+  it('falls back to the default heading color and no logo when nothing is set', async () => {
+    await service.generate(businessId, {
+      format: 'a5',
+      fileType: 'pdf',
+      targetUrl: 'https://example.com/rq/test',
+    });
+
+    const htmlArg = pdfRenderer.renderPdf.mock.calls[pdfRenderer.renderPdf.mock.calls.length - 1][0];
+    expect(htmlArg).toContain('#0C4B3B');
+    expect(htmlArg).not.toContain('class="logo"');
   }, 15_000);
 });

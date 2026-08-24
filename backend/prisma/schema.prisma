@@ -269,6 +269,15 @@ enum ReviewRoute {
   private
 }
 
+/// UPD-BE-100: explicit stored funnel state — "no response" is deliberately NOT a member here,
+/// it's derived at read time (age past the 30-day token expiry with status still `sent`/`opened`),
+/// same as the rest of this model's already-derived-status convention.
+enum ReviewRequestStatus {
+  sent
+  opened
+  rated
+}
+
 enum FeedbackStatus {
   open
   assigned
@@ -541,6 +550,12 @@ model Business {
   /// Business Health Score component weighting (UPD-BE-001), each 0-100 summing to 100, e.g.
   /// `{"ratingTrend":25,"repeatCustomerRate":25,"margin":25,"creditRecovery":25}`. Empty until set.
   healthScoreWeights Json @default("{}") @map("health_score_weights")
+
+  /// Review Settings (UPD-BE-104), e.g. `{"publicReviewPlatform":"google","reminderDelayHours":48,
+  /// "replyTemplates":{"en":"Thanks for..."}}`. Mirrors `referralSettings`'s precedent for a
+  /// small, evolving config blob that doesn't warrant its own table. `publicReviewUrl` above stays
+  /// its own column (already indexed-by-use in the public redirect path) rather than folding in here.
+  reviewSettings Json @default("{}") @map("review_settings")
 
   /// AI usage guardrails (BE-075): shared across every AI feature (what-if, branch-advisor,
   /// review AI-draft, business-type mapping, RAG help, assistant chat).
@@ -1714,6 +1729,10 @@ model ReviewRequest {
   routedTo      ReviewRoute? @map("routed_to")
   reminderCount Int          @default(0) @map("reminder_count")
   respondedAt   DateTime?    @map("responded_at")
+
+  /// UPD-BE-100: `sent` until the public `/r/:token` page is opened, `opened` until submitted, `rated` once responded.
+  status   ReviewRequestStatus @default(sent)
+  openedAt DateTime?           @map("opened_at")
 
   privateFeedback PrivateFeedback[]
 

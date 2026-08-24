@@ -30,6 +30,29 @@ export class CompetitorsService {
     });
   }
 
+  /**
+   * "Category average" for the Reviews module's Competitor Ratings surface (UPD-FE-089) — there's
+   * no external category-benchmark data source, so this is honestly derived from the business's
+   * own tracked competitor set (which are, by definition of being manually added here, businesses
+   * in the same category). Competitors with no rating yet (not snapshotted) are excluded rather
+   * than counted as 0, which would drag the average down for reasons unrelated to real ratings.
+   */
+  async categoryAverage() {
+    const competitors = await this.tenantPrisma.client.competitor.findMany({
+      select: { lastRating: true, lastReviewsCount: true },
+    });
+    const rated = competitors.filter((c) => c.lastRating != null);
+    const averageRating = rated.length
+      ? rated.reduce((sum, c) => sum + Number(c.lastRating), 0) / rated.length
+      : null;
+    return {
+      trackedCount: competitors.length,
+      ratedCount: rated.length,
+      averageRating:
+        averageRating != null ? Math.round(averageRating * 10) / 10 : null,
+    };
+  }
+
   async create(businessId: string, dto: CreateCompetitorDto) {
     const count = await this.tenantPrisma.client.competitor.count();
     if (count >= MAX_COMPETITORS) {
