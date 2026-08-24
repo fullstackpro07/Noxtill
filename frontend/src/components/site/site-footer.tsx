@@ -1,16 +1,17 @@
-import { Moon } from "lucide-react";
-import { FOOTER_LINKS } from "@/lib/landing-content";
+import Link from "next/link";
+import Image from "next/image";
+import { FOOTER_COLUMNS, FOOTER_BOTTOM_LINKS } from "@/lib/marketing/footer-links";
 
 function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
   return (
-    <div>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-faint">{title}</p>
-      <ul className="flex flex-col gap-2 text-sm text-fg-muted">
+    <div className="min-w-[160px] flex-1 basis-[170px]">
+      <p className="mb-3.5 font-mono text-[10.5px] uppercase tracking-[0.12em] text-accent">{title}</p>
+      <ul className="flex flex-col gap-2.5 text-[13.5px]">
         {links.map((link) => (
           <li key={link.label}>
-            <a href={link.href} className="hover:text-fg">
+            <Link href={link.href} className="text-fg-muted hover:text-primary">
               {link.label}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
@@ -20,25 +21,36 @@ function FooterColumn({ title, links }: { title: string; links: { label: string;
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border bg-surface">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                <Moon className="h-3.5 w-3.5" aria-hidden />
-              </span>
-              <span className="font-display text-base font-bold text-fg">Noxtill</span>
-            </div>
-            <p className="mt-3 max-w-xs text-sm text-fg-muted">
-              The Business Operating System for small and medium businesses worldwide. Close your day in one tap.
+    <footer className="border-t border-border" data-theme="light">
+      <div className="mx-auto max-w-[1560px] px-5 py-14 sm:px-7">
+        <div className="mb-10 flex flex-wrap gap-x-10 gap-y-8">
+          <div className="min-w-[220px] max-w-[300px] flex-1 basis-[240px]">
+            <Image src="/brand/noxtill-logo.png" alt="Noxtill" width={130} height={30} className="mb-3.5 h-[30px] w-auto" />
+            <p className="mb-4 text-[13.5px] leading-relaxed text-fg-muted">
+              Business management software for small businesses: point of sale, bookings, customer credit, reviews and reporting in one system.
             </p>
-            <p className="mt-4 text-xs text-fg-faint">© 2026 Noxtill. All rights reserved.</p>
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+            >
+              Start free — 14 days <span aria-hidden>→</span>
+            </Link>
           </div>
 
-          <FooterColumn title="Product" links={FOOTER_LINKS.product} />
-          <FooterColumn title="Resources" links={FOOTER_LINKS.resources} />
-          <FooterColumn title="Company" links={FOOTER_LINKS.company} />
+          {FOOTER_COLUMNS.map((column) => (
+            <FooterColumn key={column.title} title={column.title} links={column.links} />
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-border pt-5 text-[12.5px] text-fg-faint">
+          <span>© 2026 Noxtill. Business management software for small businesses.</span>
+          <span className="flex flex-wrap gap-x-4.5 gap-y-2.5">
+            {FOOTER_BOTTOM_LINKS.map((link) => (
+              <Link key={link.label} href={link.href} className="text-fg-faint hover:text-primary">
+                {link.label}
+              </Link>
+            ))}
+          </span>
         </div>
       </div>
     </footer>

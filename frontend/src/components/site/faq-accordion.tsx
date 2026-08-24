@@ -2,25 +2,15 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { buildFaqJsonLd, type FaqItem } from "@/lib/marketing/faq-jsonld";
 
-export interface FaqItem {
-  question: string;
-  answer: string;
-}
+export type { FaqItem };
 
 /** Renders both the visible accordion and an FAQPage JSON-LD block for SEO — every programmatic type page ships one. */
 export function FaqAccordion({ items }: { items: FaqItem[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: items.map((item) => ({
-      "@type": "Question",
-      name: item.question,
-      acceptedAnswer: { "@type": "Answer", text: item.answer },
-    })),
-  };
+  const jsonLd = buildFaqJsonLd(items);
 
   return (
     <div>

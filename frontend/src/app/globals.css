@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 /*
-  Noxtill design tokens (FE-001).
-  Palette: warm cream ground, deep forest primary, amber accent, brick
-  destructive, WhatsApp green as its own semantic color (never reused for
-  anything else — it must always mean "this is the WhatsApp channel").
-  Radius 14px everywhere, pill (fully rounded) buttons.
+  Noxtill design tokens (FE-002 marketing redesign).
+  Palette: white ground, bright forest-green primary/accent, WhatsApp green
+  as its own semantic color (never reused for anything else — it must always
+  mean "this is the WhatsApp channel"). Buttons use --radius-md (10-14px);
+  pill shape (--radius-full) is reserved for toggles/filter-chips/badges.
 
   Raw values live on plain custom properties (--bg, --fg, ...); `@theme inline`
   below maps each one to the `--color-*` name Tailwind expects. Keeping the
@@ -13,32 +13,35 @@
 */
 
 :root {
-  --bg: #faf7f0;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f2ecdd;
-  --border: #e6dcc6;
-  --border-strong: #d8caa8;
+  --surface-2: #fbfcfb;
+  --border: #e6eae8;
+  --border-strong: #d6ddd9;
 
-  --fg: #1c231e;
-  --fg-muted: #6b6353;
-  --fg-faint: #a89f8b;
+  --fg: #0b1620;
+  --fg-muted: #40514a;
+  --fg-faint: #7b8a83;
 
-  --primary: #0c4b3b;
-  --primary-hover: #0a3e31;
-  --primary-foreground: #faf7f0;
+  --primary: #07784c;
+  --primary-hover: #043023;
+  --primary-foreground: #ffffff;
 
-  --accent: #e8a93c;
-  --accent-hover: #d99a2c;
-  --accent-foreground: #241a06;
+  --accent: #0ea86a;
+  --accent-hover: #0b8f5c;
+  --accent-foreground: #ffffff;
 
   --destructive: #b94a3d;
   --destructive-hover: #a03e32;
   --destructive-foreground: #fdf3f1;
 
-  --whatsapp: #128c5e;
+  --whatsapp: #25d366;
   --whatsapp-foreground: #ffffff;
 
-  --ring: #0c4b3b;
+  /* One-off, not part of the Tailwind-facing token set — star ratings only. */
+  --rating-star: #e8a93c;
+
+  --ring: #0ea86a;
 
   /* Categorical chart series (validated: node scripts/validate_palette.js, dataviz skill) — fixed order, never cycled or reassigned per-filter. */
   --chart-1: #2a78d6;
@@ -52,11 +55,13 @@
 
   --radius-md: 14px;
   --radius-sm: 9px;
+  --radius-lg: 20px;
+  --radius-xl: 26px;
   --radius-full: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(28, 35, 30, 0.06);
-  --shadow-md: 0 4px 16px -4px rgba(28, 35, 30, 0.12), 0 2px 6px -2px rgba(28, 35, 30, 0.08);
-  --shadow-lg: 0 16px 40px -12px rgba(28, 35, 30, 0.22);
+  --shadow-sm: 0 1px 2px rgba(13, 21, 18, 0.06);
+  --shadow-md: 0 4px 16px -4px rgba(13, 21, 18, 0.12), 0 2px 6px -2px rgba(13, 21, 18, 0.08);
+  --shadow-lg: 0 24px 60px -46px rgba(13, 21, 18, 0.5);
 }
 
 :root[data-theme="dark"] {
@@ -184,10 +189,13 @@
 
   --radius-noxtill: var(--radius-md);
   --radius-noxtill-sm: var(--radius-sm);
+  --radius-noxtill-lg: var(--radius-lg);
+  --radius-noxtill-xl: var(--radius-xl);
   --radius-noxtill-full: var(--radius-full);
 
-  --font-display: var(--font-bricolage), "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-instrument), "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-poppins), Poppins, ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-dm-sans), "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
 }
 
 * {
@@ -271,6 +279,26 @@ h1, h2, h3, h4, .font-display {
 }
 .animate-stagger-in {
   animation: stagger-in 400ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Marketing-page scroll reveal (Reveal component) — fade + rise, triggered once an
+   element crosses into view. Respects prefers-reduced-motion via the global rule below. */
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+[data-reveal-state="hidden"] {
+  opacity: 0;
+  transform: translateY(18px);
+}
+[data-reveal-state="visible"] {
+  animation: reveal-in 0.6s cubic-bezier(0.22, 0.7, 0.3, 1) both;
 }
 
 @keyframes shimmer {
