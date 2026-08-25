@@ -58,10 +58,18 @@ export class QrPosterService {
     const settings = (business.reviewSettings as Record<string, unknown>) ?? {};
     const brandColor = (settings.brandColor as string | undefined) ?? undefined;
     const logoKey = settings.logoKey as string | undefined;
-    const logoUrl = logoKey ? await this.s3.getSignedDownloadUrl(logoKey) : undefined;
+    const logoUrl = logoKey
+      ? await this.s3.getSignedDownloadUrl(logoKey)
+      : undefined;
 
     const qrDataUrl = await toDataURL(dto.targetUrl, { margin: 1, width: 600 });
-    const html = this.renderHtml(business.name, qrDataUrl, dto.format, brandColor, logoUrl);
+    const html = this.renderHtml(
+      business.name,
+      qrDataUrl,
+      dto.format,
+      brandColor,
+      logoUrl,
+    );
     const { width, height } = PAGE_SIZE_MM[dto.format];
 
     let buffer: Buffer;

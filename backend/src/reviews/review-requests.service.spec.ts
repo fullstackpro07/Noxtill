@@ -122,7 +122,11 @@ describe('ReviewRequestsService (BE-045)', () => {
       });
 
       await expect(
-        service.bulkCreate(businessId, [customerId, customerId, customerId], 'bulk'),
+        service.bulkCreate(
+          businessId,
+          [customerId, customerId, customerId],
+          'bulk',
+        ),
       ).rejects.toThrow();
       expect(sendGate.send).not.toHaveBeenCalled();
 

@@ -35,7 +35,9 @@ describe('ReviewsService (BE-047)', () => {
   const aiInfra = { complete: jest.fn() };
   const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
   const s3 = {
-    getSignedDownloadUrl: jest.fn().mockResolvedValue('https://signed.example/logo.png'),
+    getSignedDownloadUrl: jest
+      .fn()
+      .mockResolvedValue('https://signed.example/logo.png'),
     upload: jest.fn().mockResolvedValue(undefined),
     delete: jest.fn().mockResolvedValue(undefined),
   };
@@ -224,7 +226,12 @@ describe('ReviewsService (BE-047)', () => {
   describe('review requests (UPD-BE-100)', () => {
     it('reports effective status: sent stays sent, rated stays rated, and an old sent request becomes no_response', async () => {
       const sent = await prisma.reviewRequest.create({
-        data: { businessId, customerId, token: `t-sent-${Date.now()}`, source: 'order' },
+        data: {
+          businessId,
+          customerId,
+          token: `t-sent-${Date.now()}`,
+          source: 'order',
+        },
       });
       const rated = await prisma.reviewRequest.create({
         data: {
@@ -255,10 +262,22 @@ describe('ReviewsService (BE-047)', () => {
 
     it('groups conversion by real source values, not a hardcoded channel list', async () => {
       await prisma.reviewRequest.create({
-        data: { businessId, customerId, token: `t-conv-a-${Date.now()}`, source: 'carrier_pigeon', status: 'rated', respondedAt: new Date() },
+        data: {
+          businessId,
+          customerId,
+          token: `t-conv-a-${Date.now()}`,
+          source: 'carrier_pigeon',
+          status: 'rated',
+          respondedAt: new Date(),
+        },
       });
       await prisma.reviewRequest.create({
-        data: { businessId, customerId, token: `t-conv-b-${Date.now()}`, source: 'carrier_pigeon' },
+        data: {
+          businessId,
+          customerId,
+          token: `t-conv-b-${Date.now()}`,
+          source: 'carrier_pigeon',
+        },
       });
 
       const byChannel = await reviewsService.conversionByChannel();
@@ -268,7 +287,13 @@ describe('ReviewsService (BE-047)', () => {
 
     it('scopes QR stats to source=qr and computes a real conversion rate', async () => {
       await prisma.reviewRequest.create({
-        data: { businessId, token: `t-qr-a-${Date.now()}`, source: 'qr', status: 'rated', respondedAt: new Date() },
+        data: {
+          businessId,
+          token: `t-qr-a-${Date.now()}`,
+          source: 'qr',
+          status: 'rated',
+          respondedAt: new Date(),
+        },
       });
       await prisma.reviewRequest.create({
         data: { businessId, token: `t-qr-b-${Date.now()}`, source: 'qr' },
@@ -322,7 +347,10 @@ describe('ReviewsService (BE-047)', () => {
       s3.getSignedDownloadUrl.mockClear();
       // Each test uploads its own logo(s) against the real DB row — reset so the next test never
       // inherits a leftover logoKey (which would otherwise trigger an extra, unrelated delete call).
-      await prisma.business.update({ where: { id: businessId }, data: { reviewSettings: {} } });
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { reviewSettings: {} },
+      });
     });
 
     it('uploads a real logo to S3 and resolves it to a fresh signed URL on read', async () => {
@@ -341,15 +369,27 @@ describe('ReviewsService (BE-047)', () => {
     });
 
     it('deletes the previous logo from S3 when a new one replaces it', async () => {
-      await reviewsService.uploadLogo({ buffer: Buffer.from('a'), size: 1, mimetype: 'image/png' });
+      await reviewsService.uploadLogo({
+        buffer: Buffer.from('a'),
+        size: 1,
+        mimetype: 'image/png',
+      });
       s3.upload.mockClear();
-      await reviewsService.uploadLogo({ buffer: Buffer.from('b'), size: 1, mimetype: 'image/png' });
+      await reviewsService.uploadLogo({
+        buffer: Buffer.from('b'),
+        size: 1,
+        mimetype: 'image/png',
+      });
 
       expect(s3.delete).toHaveBeenCalledTimes(1);
     });
 
     it('removes the logo and clears logoKey from settings', async () => {
-      await reviewsService.uploadLogo({ buffer: Buffer.from('a'), size: 1, mimetype: 'image/png' });
+      await reviewsService.uploadLogo({
+        buffer: Buffer.from('a'),
+        size: 1,
+        mimetype: 'image/png',
+      });
       const removed = await reviewsService.removeLogo();
 
       expect(s3.delete).toHaveBeenCalled();

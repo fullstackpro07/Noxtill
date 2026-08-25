@@ -66,9 +66,9 @@ export class ReviewRequestsService {
     customerIds: string[],
     source: string,
   ): Promise<{ requested: number; sent: number }> {
-    const business = await this.tenantPrisma.client.business.findUniqueOrThrow(
-      { where: { id: businessId } },
-    );
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
     const remainingQuota = business.msgQuota - business.msgUsed;
     if (customerIds.length > remainingQuota) {
       throw new AppException(

@@ -32,7 +32,10 @@ describe('ReputationScoreService (UPD-BE-103)', () => {
     service = new ReputationScoreService(tenantPrisma);
 
     const business = await prisma.business.create({
-      data: { name: 'Reputation Test Biz', slug: `reputation-test-${Date.now()}` },
+      data: {
+        name: 'Reputation Test Biz',
+        slug: `reputation-test-${Date.now()}`,
+      },
     });
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
@@ -57,8 +60,20 @@ describe('ReputationScoreService (UPD-BE-103)', () => {
   it('scores a real composite once reviews exist: high rating + replied = strong score', async () => {
     await prisma.externalReview.createMany({
       data: [
-        { businessId, platform: 'google', externalId: `rep-a-${Date.now()}`, stars: 5, repliedAt: new Date() },
-        { businessId, platform: 'google', externalId: `rep-b-${Date.now()}`, stars: 5, repliedAt: new Date() },
+        {
+          businessId,
+          platform: 'google',
+          externalId: `rep-a-${Date.now()}`,
+          stars: 5,
+          repliedAt: new Date(),
+        },
+        {
+          businessId,
+          platform: 'google',
+          externalId: `rep-b-${Date.now()}`,
+          stars: 5,
+          repliedAt: new Date(),
+        },
       ],
     });
 
@@ -101,6 +116,8 @@ describe('ReputationScoreService (UPD-BE-103)', () => {
     const trend = await service.getTrend(now);
     expect(trend).toHaveLength(REPUTATION_TREND_WEEKS);
     // The oldest week-point predates the review's creation, so it must not count it yet.
-    expect(trend[0].totalScore).toBeLessThan(trend[trend.length - 1].totalScore);
+    expect(trend[0].totalScore).toBeLessThan(
+      trend[trend.length - 1].totalScore,
+    );
   });
 });

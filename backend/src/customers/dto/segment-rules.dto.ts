@@ -1,5 +1,11 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDefined, IsIn, ValidateNested } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDefined,
+  IsIn,
+  ValidateNested,
+} from 'class-validator';
 import { SEGMENT_FIELDS, SEGMENT_OPERATORS } from '../segment-rules.util';
 
 export class SegmentConditionDto {

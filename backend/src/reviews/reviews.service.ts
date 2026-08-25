@@ -34,10 +34,7 @@ const SPARKLINE_WEEKS = 8;
 const CONVERSION_WINDOW_DAYS = 30;
 
 export type ReviewRequestEffectiveStatus =
-  | 'sent'
-  | 'opened'
-  | 'rated'
-  | 'no_response';
+  'sent' | 'opened' | 'rated' | 'no_response';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -267,7 +264,8 @@ export class ReviewsService {
       windowDays: REVIEW_CONVERSION_WINDOW_DAYS,
       visits,
       ratingsSubmitted,
-      conversionRate: visits > 0 ? round2((ratingsSubmitted / visits) * 100) : 0,
+      conversionRate:
+        visits > 0 ? round2((ratingsSubmitted / visits) * 100) : 0,
     };
   }
 
@@ -333,12 +331,10 @@ export class ReviewsService {
     >
   > {
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
-    const business = await this.tenantPrisma.client.business.findUniqueOrThrow(
-      {
-        where: { id: businessId },
-        select: { publicReviewUrl: true, reviewSettings: true },
-      },
-    );
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { publicReviewUrl: true, reviewSettings: true },
+    });
     const settings = business.reviewSettings as Record<string, unknown>;
     const logoKey = settings.logoKey as string | undefined;
     return {
@@ -385,7 +381,12 @@ export class ReviewsService {
     const existing = (current.reviewSettings as Record<string, unknown>) ?? {};
     const previousLogoKey = existing.logoKey as string | undefined;
 
-    const extension = file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/webp' ? 'webp' : 'jpg';
+    const extension =
+      file.mimetype === 'image/png'
+        ? 'png'
+        : file.mimetype === 'image/webp'
+          ? 'webp'
+          : 'jpg';
     const logoKey = `review-branding/${businessId}/logo-${Date.now()}.${extension}`;
     await this.s3.upload(logoKey, file.buffer, file.mimetype);
 

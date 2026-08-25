@@ -63,7 +63,10 @@ export class S3Service {
         endpoint: this.config.get<string>('S3_ENDPOINT') || undefined,
         forcePathStyle:
           this.config.get<string>('S3_FORCE_PATH_STYLE') === 'true',
-        credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
+        credentials: {
+          accessKeyId: accessKeyId!,
+          secretAccessKey: secretAccessKey!,
+        },
       });
     }
   }
@@ -146,7 +149,10 @@ export class S3Service {
     const filePath = this.resolveLocalPath(key);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, body);
-    await fs.writeFile(this.metaPath(filePath), JSON.stringify({ contentType }));
+    await fs.writeFile(
+      this.metaPath(filePath),
+      JSON.stringify({ contentType }),
+    );
   }
 
   private async localDelete(key: string): Promise<void> {

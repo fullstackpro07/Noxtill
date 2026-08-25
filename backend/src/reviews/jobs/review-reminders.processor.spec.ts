@@ -122,6 +122,10 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
 
     await processor.runReminders(rightHour); // day-1 override fires immediately, ahead of the day-3 default
     expect(sendGate.send).toHaveBeenCalledTimes(1);
+    const afterFirstTick = await prisma.reviewRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    expect(afterFirstTick.reminderCount).toBe(1);
 
     sendGate.send.mockClear();
     await processor.runReminders(rightHour); // only 1 offset configured — max reached, no-op

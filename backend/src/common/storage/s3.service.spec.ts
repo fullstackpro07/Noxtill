@@ -42,14 +42,22 @@ describe('S3Service — local-disk fallback (no real S3 credentials configured)'
     await service.upload(key, Buffer.from('pdf-bytes'), 'application/pdf');
 
     const url = await service.getSignedDownloadUrl(key);
-    expect(url).toBe(`${backendUrl}/local-files?key=${encodeURIComponent(key)}`);
+    expect(url).toBe(
+      `${backendUrl}/local-files?key=${encodeURIComponent(key)}`,
+    );
   });
 
   it('uploadAndSign writes the file and returns its local-files URL in one call', async () => {
     const key = 'video-testimonials/biz-1/clip.mp4';
-    const url = await service.uploadAndSign(key, Buffer.from('mp4-bytes'), 'video/mp4');
+    const url = await service.uploadAndSign(
+      key,
+      Buffer.from('mp4-bytes'),
+      'video/mp4',
+    );
 
-    expect(url).toBe(`${backendUrl}/local-files?key=${encodeURIComponent(key)}`);
+    expect(url).toBe(
+      `${backendUrl}/local-files?key=${encodeURIComponent(key)}`,
+    );
     const read = await service.readLocalFile(key);
     expect(read!.contentType).toBe('video/mp4');
   });
@@ -66,7 +74,9 @@ describe('S3Service — local-disk fallback (no real S3 credentials configured)'
 
     await service.delete(key);
     expect(await service.readLocalFile(key)).toBeNull();
-    await expect(fs.access(path.join(localRoot, `${key}.meta.json`))).rejects.toThrow();
+    await expect(
+      fs.access(path.join(localRoot, `${key}.meta.json`)),
+    ).rejects.toThrow();
   });
 
   it('refuses a path-traversal key instead of writing outside the local storage root', async () => {

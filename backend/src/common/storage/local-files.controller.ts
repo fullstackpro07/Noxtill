@@ -1,4 +1,10 @@
-import { Controller, Get, NotFoundException, Query, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Query,
+  StreamableFile,
+} from '@nestjs/common';
 import { Public } from '../decorators/public.decorator';
 import { S3Service } from './s3.service';
 

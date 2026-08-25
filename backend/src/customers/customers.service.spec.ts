@@ -107,7 +107,12 @@ describe('CustomersService (BE-040)', () => {
         email: 'export@example.com',
       });
       await prisma.creditEntry.create({
-        data: { businessId, customerId: customer.id, kind: 'credit', amount: 40 },
+        data: {
+          businessId,
+          customerId: customer.id,
+          kind: 'credit',
+          amount: 40,
+        },
       });
 
       const exported = await customersService.export(customer.id);
