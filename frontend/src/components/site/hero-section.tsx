@@ -1,7 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Bell, Check, ChevronDown, HeartPulse, Mic, PackageX, PlayCircle, Star, Users, Wallet } from "lucide-react";
+import { ArrowRight, Bell, Check, ChevronDown, HeartPulse, PackageX, PlayCircle, Star, Users, Wallet } from "lucide-react";
 import { Reveal } from "@/components/site/reveal";
+import { HeroPhoneMockup } from "@/components/site/hero-phone-mockup";
 import { HERO_CHANNELS, HERO_TRUST, INTEGRATION_BENEFITS, INTEGRATION_TOOLS } from "@/lib/marketing/home-content";
 
 const SIDEBAR_ITEMS = ["Sales / POS", "Orders", "Products", "Bookings", "Customers", "Inventory", "Marketing", "Reports", "AI Assistant"];
@@ -47,73 +48,80 @@ function Sparkline({ points, color = "#0ea86a" }: { points: number[]; color?: st
 export function HeroSection() {
   return (
     <section className="overflow-hidden px-5 sm:px-7">
-      <div className="mx-auto max-w-[840px] pt-6 text-center sm:pt-9">
-        <h1 className="text-balance font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
-          AI-powered business management software{" "}
-          <span className="border-b-4 border-[#a9e8cb] pb-1.5 text-accent">for small businesses.</span>
-        </h1>
+      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-12 gap-y-12 pt-10 sm:pt-14">
+        <div className="min-w-[300px] max-w-[560px] flex-1 basis-[420px]">
+          <h1 className="text-balance font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
+            AI-powered business management software{" "}
+            <span className="border-b-4 border-[#a9e8cb] pb-1.5 text-accent">for small businesses.</span>
+          </h1>
 
-        <p className="mx-auto mt-5 max-w-[60ch] text-[15.5px] leading-relaxed text-fg-muted">
-          Noxtill is an AI-powered{" "}
-          <Link href="/product" className="text-primary hover:text-primary-hover">
-            business management platform
-          </Link>{" "}
-          that brings sales, customers, bookings, orders, inventory, payments, marketing, communication and reporting into one
-          connected system.
-        </p>
-        <p className="mx-auto mt-3.5 max-w-[60ch] text-[15.5px] leading-relaxed text-fg-muted">
-          Every night at a time you choose, it sends one message with the day&apos;s sales, profit, tomorrow&apos;s bookings and
-          outstanding credit — and the{" "}
-          <Link href="/product#assistant" className="text-primary hover:text-primary-hover">
-            AI Business Assistant
-          </Link>{" "}
-          answers anything else you ask.
-        </p>
+          <p className="mt-5 max-w-[50ch] text-[15.5px] leading-relaxed text-fg-muted">
+            Noxtill is an AI-powered{" "}
+            <Link href="/product" className="text-primary hover:text-primary-hover">
+              business management platform
+            </Link>{" "}
+            that brings sales, customers, bookings, orders, inventory, payments, marketing, communication and reporting into
+            one connected system.
+          </p>
+          <p className="mt-3.5 max-w-[50ch] text-[15.5px] leading-relaxed text-fg-muted">
+            Every night at a time you choose, it sends one message with the day&apos;s sales, profit, tomorrow&apos;s bookings
+            and outstanding credit — and the{" "}
+            <Link href="/product#assistant" className="text-primary hover:text-primary-hover">
+              AI Business Assistant
+            </Link>{" "}
+            answers anything else you ask.
+          </p>
 
-        <div className="mx-auto mt-7 grid max-w-[520px] grid-cols-2 gap-2.5 sm:grid-cols-4">
-          {HERO_CHANNELS.map((channel) => (
-            <div
-              key={channel.title}
-              className="rounded-[16px] border border-border bg-white p-3.5 text-center transition-colors hover:border-[#a9e8cb]"
-            >
-              <div className="mx-auto mb-3 flex h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-surface-2">
-                <channel.icon className="h-[18px] w-[18px] text-accent" aria-hidden />
+          <div className="mt-7 grid max-w-[500px] grid-cols-2 gap-2.5 sm:grid-cols-4">
+            {HERO_CHANNELS.map((channel) => (
+              <div
+                key={channel.title}
+                className="rounded-[16px] border border-border bg-white p-3.5 text-center transition-colors hover:border-[#a9e8cb]"
+              >
+                <div className="mx-auto mb-3 flex h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-surface-2">
+                  <channel.icon className="h-[18px] w-[18px] text-accent" aria-hidden />
+                </div>
+                <div className="mb-1 font-display text-[13.5px] font-semibold text-fg">{channel.title}</div>
+                <div className="text-[12px] leading-snug text-fg-faint">{channel.description}</div>
               </div>
-              <div className="mb-1 font-display text-[13.5px] font-semibold text-fg">{channel.title}</div>
-              <div className="text-[12px] leading-snug text-fg-faint">{channel.description}</div>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2.5 rounded-[14px] bg-primary px-6.5 py-4 text-[15.5px] font-medium text-primary-foreground shadow-[0_12px_26px_-16px_rgba(11,143,78,0.9)] transition-colors hover:bg-primary-hover"
+            >
+              Start 14-Day Free Trial <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
+            <Link
+              href="/book-a-demo"
+              className="inline-flex items-center gap-2.5 rounded-[14px] border border-border-strong bg-white px-6 py-4 text-[15.5px] font-medium text-fg transition-colors hover:border-primary hover:text-accent"
+            >
+              <PlayCircle className="h-[18px] w-[18px]" aria-hidden />
+              Book a Demo
+            </Link>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-x-4.5 gap-y-2 text-[12.5px] text-fg-muted">
+            {HERO_TRUST.map((item) => (
+              <span key={item} className="inline-flex items-center gap-1.5">
+                <Check className="h-[15px] w-[15px] text-accent" aria-hidden />
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link
-            href="/pricing"
-            className="inline-flex items-center gap-2.5 rounded-[14px] bg-primary px-6.5 py-4 text-[15.5px] font-medium text-primary-foreground shadow-[0_12px_26px_-16px_rgba(11,143,78,0.9)] transition-colors hover:bg-primary-hover"
-          >
-            Start 14-Day Free Trial <ArrowRight className="h-4 w-4" aria-hidden />
-          </Link>
-          <Link
-            href="/book-a-demo"
-            className="inline-flex items-center gap-2.5 rounded-[14px] border border-border-strong bg-white px-6 py-4 text-[15.5px] font-medium text-fg transition-colors hover:border-primary hover:text-accent"
-          >
-            <PlayCircle className="h-[18px] w-[18px]" aria-hidden />
-            Book a Demo
-          </Link>
-        </div>
-
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4.5 gap-y-2 text-[12.5px] text-fg-muted">
-          {HERO_TRUST.map((item) => (
-            <span key={item} className="inline-flex items-center gap-1.5">
-              <Check className="h-[15px] w-[15px] text-accent" aria-hidden />
-              {item}
-            </span>
-          ))}
+        <div className="flex flex-1 basis-[260px] items-center justify-center">
+          <HeroPhoneMockup />
         </div>
       </div>
 
-      {/* Product composition — text sits above this, full width: three notification cards on the
-          left, the dashboard laptop and WhatsApp phone side by side in the middle, two more cards
-          on the right. One row at desktop width, stacking down to a single column on small screens. */}
+      {/* Dashboard composition — the animated phone lives up in the hero row beside the text; this is
+          the rest of the "product in action" visual: three notification cards on the left, the
+          dashboard laptop in the middle, two more cards on the right. One row at desktop width,
+          stacking down to a single column on small screens. */}
       <div className="relative mx-auto mt-16 max-w-[1360px] pb-6 sm:mt-20">
         <div
           className="pointer-events-none absolute inset-[6%_10%_10%_10%] rounded-full opacity-70"
@@ -290,60 +298,6 @@ export function HeroSection() {
               </div>
               <div className="mx-[-8px] h-3 rounded-[0_0_14px_14px]" style={{ background: "linear-gradient(180deg,#1f2b31 0%,#0d181e 100%)" }} />
             </div>
-
-            <div className="z-10 -ml-2 hidden w-[168px] flex-none self-end sm:block">
-              <div className="rounded-[26px] bg-[#111c22] p-1.5 shadow-[0_34px_70px_-34px_rgba(13,21,18,0.6)]">
-                <div className="flex aspect-[3/5.5] flex-col overflow-hidden rounded-[20px] bg-[#f2efe9]">
-                  <div className="flex items-center gap-1.5 bg-[#075e45] px-2 py-2">
-                    <Image src="/brand/whatsapp.png" alt="" width={18} height={18} className="h-[18px] w-[18px] rounded-full object-cover" />
-                    <div className="min-w-0">
-                      <div className="truncate text-[9.5px] font-medium text-white">Noxtill Business</div>
-                      <div className="text-[8px] text-[#a9d3c3]">online</div>
-                    </div>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-1.5 overflow-hidden p-2">
-                    <div className="max-w-[86%] self-end rounded-[8px_8px_3px_8px] bg-[#d9fdd3] px-2 py-1.5 text-[9px] leading-tight text-fg">
-                      Give me today&apos;s business summary
-                    </div>
-                    <div className="max-w-[86%] self-start rounded-[8px_8px_8px_3px] bg-white px-2 py-1.5 text-[9px] text-fg">
-                      Here is your summary 👋
-                    </div>
-                    <div className="w-[96%] self-start rounded-[8px] bg-white p-1.5">
-                      <div className="mb-1 text-[8.5px] font-medium text-fg">Today&apos;s Summary</div>
-                      <div className="flex flex-col gap-0.5 text-[8px] text-fg-muted">
-                        {[
-                          ["Sales", "$18,760"],
-                          ["Profit", "$4,890"],
-                          ["Orders", "128"],
-                          ["Bookings", "18"],
-                        ].map(([label, value]) => (
-                          <div key={label} className="flex justify-between">
-                            <span>{label}</span>
-                            <span className="font-medium text-fg">{value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex w-[70%] items-center gap-1.5 self-start rounded-[8px] bg-white px-2 py-1.5">
-                      <span className="h-4 w-4 flex-none rounded-[4px] bg-[#f42b3d]" aria-hidden />
-                      <span className="min-w-0 flex-1 truncate text-[8px] text-fg">Daily_Report.pdf</span>
-                    </div>
-                    <div className="flex w-[52%] items-center gap-1.5 self-start rounded-[8px] bg-white px-2 py-1.5">
-                      <Mic className="h-2.5 w-2.5 flex-none text-whatsapp" aria-hidden />
-                      <span className="h-[3px] flex-1 rounded-full bg-[#dfe6e2]" />
-                      <span className="flex-none text-[7.5px] text-fg-faint">0:07</span>
-                    </div>
-                    <div className="text-[7.5px] leading-snug text-fg-faint">Report sent to WhatsApp and email.</div>
-                  </div>
-                  <div className="flex items-center gap-1 px-2 pb-2">
-                    <div className="flex-1 rounded-full bg-white px-2 py-1 text-[8.5px] text-fg-faint">Type a message</div>
-                    <div className="flex h-[20px] w-[20px] flex-none items-center justify-center rounded-full bg-whatsapp">
-                      <ArrowRight className="h-3 w-3 -rotate-45 text-white" aria-hidden />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div className="hidden w-[196px] flex-none flex-col gap-4 lg:flex">
@@ -434,11 +388,8 @@ export function HeroSection() {
         </p>
 
         <div className="mt-10 grid w-full grid-cols-1 gap-x-5 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
-          {INTEGRATION_BENEFITS.map((benefit, i) => (
-            <div
-              key={benefit.title}
-              className={`flex min-w-0 items-start gap-3.5 ${i < 3 ? "sm:border-r sm:border-border sm:pr-4.5" : ""} ${i === 4 ? "sm:col-start-2" : ""}`}
-            >
+          {INTEGRATION_BENEFITS.slice(0, 4).map((benefit, i) => (
+            <div key={benefit.title} className={`flex min-w-0 items-start gap-3.5 ${i < 3 ? "sm:border-r sm:border-border sm:pr-4.5" : ""}`}>
               <div className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-white shadow-[0_6px_18px_-10px_rgba(13,21,18,0.28)]">
                 <benefit.icon className="h-[22px] w-[22px] text-[#0b8f5c]" aria-hidden />
               </div>
@@ -449,6 +400,25 @@ export function HeroSection() {
             </div>
           ))}
         </div>
+
+        {(() => {
+          const fifthBenefit = INTEGRATION_BENEFITS[4];
+          if (!fifthBenefit) return null;
+          const FifthIcon = fifthBenefit.icon;
+          return (
+            <div className="mt-6 flex w-full justify-center">
+              <div className="flex min-w-0 max-w-[280px] items-start gap-3.5">
+                <div className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-white shadow-[0_6px_18px_-10px_rgba(13,21,18,0.28)]">
+                  <FifthIcon className="h-[22px] w-[22px] text-[#0b8f5c]" aria-hidden />
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-1 text-balance font-display text-[15px] font-semibold text-fg">{fifthBenefit.title}</div>
+                  <div className="text-[13.5px] leading-snug text-fg-muted">{fifthBenefit.description}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="mt-10 flex w-full items-center gap-5 border-t border-border pt-8">
           <span className="hidden h-px flex-1 sm:block" style={{ background: "linear-gradient(90deg,#c8efdd 0%,#ffffff 100%)" }} />

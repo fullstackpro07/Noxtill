@@ -36,4 +36,18 @@ export class AttendanceService {
       } as Prisma.AttendanceUncheckedCreateInput,
     });
   }
+
+  list(staffUserId?: string, from?: string, to?: string) {
+    return this.tenantPrisma.client.attendance.findMany({
+      where: {
+        staffUserId,
+        checkIn: {
+          gte: from ? new Date(from) : undefined,
+          lt: to ? new Date(to) : undefined,
+        },
+      },
+      orderBy: { checkIn: 'desc' },
+      include: { staffUser: { include: { user: true } } },
+    });
+  }
 }

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ExpensesService } from './expenses.service';
+import type { S3Service } from '../common/storage/s3.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -18,6 +19,11 @@ describe('ExpensesService (BE-035)', () => {
   let prisma: PrismaService;
   let expensesService: ExpensesService;
   let businessId: string;
+  const s3 = {
+    getSignedDownloadUrl: jest
+      .fn()
+      .mockResolvedValue('https://signed.example/receipt.jpg'),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -28,7 +34,11 @@ describe('ExpensesService (BE-035)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    expensesService = new ExpensesService(tenantPrisma, prisma);
+    expensesService = new ExpensesService(
+      tenantPrisma,
+      prisma,
+      s3 as unknown as S3Service,
+    );
 
     const business = await prisma.business.create({
       data: { name: 'Expenses Test Biz', slug: `expenses-test-${Date.now()}` },
@@ -60,6 +70,26 @@ describe('ExpensesService (BE-035)', () => {
     const januaryExpenses = await expensesService.findAll({ month: '2026-01' });
     expect(januaryExpenses).toHaveLength(1);
     expect(januaryExpenses[0].category).toBe('Rent');
+    expect(januaryExpenses[0].receiptUrl).toBeNull(); // no receipt attached
+  });
+
+  it('resolves a real signed receiptUrl when a receipt was attached (UPD-BE-107)', async () => {
+    const withReceipt = await prisma.expense.create({
+      data: {
+        businessId,
+        description: 'Scanned supplies receipt',
+        category: 'Supplies',
+        amount: 42,
+        incurredOn: new Date('2026-03-01'),
+        receiptKey: 'digitizer/some-biz/123-receipt.jpg',
+      },
+    });
+
+    const found = await expensesService.findOne(withReceipt.id);
+    expect(found.receiptUrl).toBe('https://signed.example/receipt.jpg');
+    expect(s3.getSignedDownloadUrl).toHaveBeenCalledWith(
+      'digitizer/some-biz/123-receipt.jpg',
+    );
   });
 
   it('clones recurring expenses into the current month, idempotently', async () => {

@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
 import {
   CreateShiftDto,
@@ -10,6 +11,19 @@ import {
 } from './dto/create-shift.dto';
 import { SHIFT_ERROR_CODES } from './shifts.constants';
 import { Prisma, ShiftSwapStatus } from '@prisma/client';
+
+function formatShiftRange(startsAt: Date, endsAt: Date): string {
+  const dateFmt = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timeFmt = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `${dateFmt.format(startsAt)}, ${timeFmt.format(startsAt)}–${timeFmt.format(endsAt)}`;
+}
 
 /**
  * Roster (UPD-BE-031). A shift's swap-request fields live on the shift itself (one active
@@ -22,6 +36,7 @@ export class ShiftsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly cls: ClsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   create(businessId: string, dto: CreateShiftDto) {
@@ -33,6 +48,7 @@ export class ShiftsService {
         endsAt: new Date(dto.endsAt),
         note: dto.note,
       },
+      include: { staffUser: { include: { user: true } } },
     });
   }
 
@@ -69,6 +85,7 @@ export class ShiftsService {
         status: dto.status,
         note: dto.note,
       },
+      include: { staffUser: { include: { user: true } } },
     });
   }
 
@@ -101,6 +118,7 @@ export class ShiftsService {
         swapReason: dto.reason,
         swapReviewedByUserId: null,
       },
+      include: { staffUser: { include: { user: true } } },
     });
   }
 
@@ -123,6 +141,7 @@ export class ShiftsService {
           swapReviewedByUserId: actorUserId,
           staffUserId: shift.swapCoveringUserId as string,
         },
+        include: { staffUser: { include: { user: true } } },
       });
       await tx.auditLog.create({
         data: {
@@ -147,6 +166,7 @@ export class ShiftsService {
         swapStatus: ShiftSwapStatus.rejected,
         swapReviewedByUserId: actorUserId,
       },
+      include: { staffUser: { include: { user: true } } },
     });
   }
 
@@ -160,5 +180,53 @@ export class ShiftsService {
       );
     }
     return shift;
+  }
+
+  /**
+   * UPD-BE-113 "publish-confirmation, naming who gets notified" — there's no draft/published
+   * shift state in this schema (every created shift is immediately real), so "publish" here means
+   * a real in-app notification (reusing `NotificationsService`, the same bell the frontend already
+   * polls) telling each affected staff member their shifts for the range, not a WhatsApp send —
+   * these are staff accounts, not `Customer` records, so `SendGateService` doesn't apply here.
+   */
+  async notify(businessId: string, from: string, to: string) {
+    const shifts = await this.tenantPrisma.client.staffShift.findMany({
+      where: {
+        startsAt: { gte: new Date(from) },
+        endsAt: { lt: new Date(to) },
+      },
+      orderBy: { startsAt: 'asc' },
+      include: { staffUser: { include: { user: true } } },
+    });
+
+    const byStaffUser = new Map<
+      string,
+      { userId: string; name: string; shifts: typeof shifts }
+    >();
+    for (const shift of shifts) {
+      const key = shift.staffUserId;
+      const entry = byStaffUser.get(key) ?? {
+        userId: shift.staffUser.userId,
+        name: shift.staffUser.user.name,
+        shifts: [],
+      };
+      entry.shifts.push(shift);
+      byStaffUser.set(key, entry);
+    }
+
+    const notified: { staffUserId: string; name: string }[] = [];
+    for (const [staffUserId, entry] of byStaffUser) {
+      const lines = entry.shifts
+        .map((s) => formatShiftRange(s.startsAt, s.endsAt))
+        .join('\n');
+      await this.notifications.create(businessId, entry.userId, {
+        title: 'Your schedule has been updated',
+        body: `You have ${entry.shifts.length} shift${entry.shifts.length === 1 ? '' : 's'} coming up:\n${lines}`,
+        link: '/staff/schedule',
+      });
+      notified.push({ staffUserId, name: entry.name });
+    }
+
+    return { notifiedCount: notified.length, notified };
   }
 }

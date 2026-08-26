@@ -22,6 +22,12 @@ export const CAPABILITIES = {
   AUTOMATIONS_MANAGE: 'automations.manage',
   COUPONS_MANAGE: 'coupons.manage',
   VOUCHERS_MANAGE: 'vouchers.manage',
+  REFERRALS_MANAGE: 'referrals.manage',
+  /// UPD-BE-106/107/108 fix-it: P&L/products/time/cash-forecast/analytics/expenses had zero
+  /// server-side gate despite being financial data — the nav already restricts them to
+  /// owner/manager, this makes that real instead of cosmetic.
+  PROFIT_VIEW: 'profit.view',
+  EXPENSES_MANAGE: 'expenses.manage',
   RETURNS_APPROVE: 'returns.approve',
   PRICING_MANAGE: 'pricing.manage',
   VIDEO_TESTIMONIALS_MODERATE: 'video_testimonials.moderate',
@@ -55,6 +61,9 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.AUTOMATIONS_MANAGE,
   CAPABILITIES.COUPONS_MANAGE,
   CAPABILITIES.VOUCHERS_MANAGE,
+  CAPABILITIES.REFERRALS_MANAGE,
+  CAPABILITIES.PROFIT_VIEW,
+  CAPABILITIES.EXPENSES_MANAGE,
   CAPABILITIES.RETURNS_APPROVE,
   CAPABILITIES.PRICING_MANAGE,
   CAPABILITIES.VIDEO_TESTIMONIALS_MODERATE,

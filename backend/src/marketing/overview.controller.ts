@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post } from '@nestjs/common';
 import { MarketingOverviewService } from './overview.service';
 
 @Controller('marketing')
@@ -8,5 +8,10 @@ export class OverviewController {
   @Get('overview')
   get() {
     return this.overview.overview();
+  }
+
+  @Post('overview/reallocation-suggestion')
+  suggestReallocation() {
+    return this.overview.suggestReallocation();
   }
 }

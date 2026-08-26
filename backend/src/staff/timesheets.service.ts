@@ -22,6 +22,10 @@ const MS_PER_WEEK = 7 * 24 * MS_PER_HOUR;
  * calendar Mon–Sun weeks) against `Business.overtimeThresholdHoursPerWeek` — simpler than
  * ISO-week arithmetic and an equally real, disclosed choice, not an approximation of one.
  * Only the "has this staff member's month been approved" flag is persisted (`TimesheetApproval`).
+ *
+ * Break rules (UPD-BE-113): a single continuous attendance session longer than
+ * `Business.breakThresholdHours` has `breakMinutesPerShift` deducted as unpaid before it's
+ * counted — real effect on both `hoursWorked` and overtime, not just a stored-but-unused setting.
  */
 @Injectable()
 export class TimesheetsService {
@@ -33,6 +37,8 @@ export class TimesheetsService {
       where: { id: businessId },
     });
     const threshold = business.overtimeThresholdHoursPerWeek;
+    const breakThresholdHours = business.breakThresholdHours;
+    const breakHours = business.breakMinutesPerShift / 60;
 
     const staff = await this.tenantPrisma.client.businessUser.findMany({
       where: { role: { in: [Role.manager, Role.staff] } },
@@ -52,8 +58,12 @@ export class TimesheetsService {
         const weekHours = new Map<number, number>();
         let totalHours = 0;
         for (const row of attendance) {
-          const hours =
+          const rawHours =
             (row.checkOut!.getTime() - row.checkIn.getTime()) / MS_PER_HOUR;
+          const hours =
+            rawHours > breakThresholdHours
+              ? Math.max(0, rawHours - breakHours)
+              : rawHours;
           totalHours += hours;
           const weekKey = Math.floor(row.checkIn.getTime() / MS_PER_WEEK);
           weekHours.set(weekKey, (weekHours.get(weekKey) ?? 0) + hours);
@@ -116,5 +126,35 @@ export class TimesheetsService {
       },
       update: { approvedByUserId, approvedAt: new Date() },
     });
+  }
+
+  async getSettings(businessId: string) {
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    return {
+      overtimeThresholdHoursPerWeek: business.overtimeThresholdHoursPerWeek,
+      breakThresholdHours: business.breakThresholdHours,
+      breakMinutesPerShift: business.breakMinutesPerShift,
+    };
+  }
+
+  async updateSettings(
+    businessId: string,
+    settings: Partial<{
+      overtimeThresholdHoursPerWeek: number;
+      breakThresholdHours: number;
+      breakMinutesPerShift: number;
+    }>,
+  ) {
+    const business = await this.tenantPrisma.client.business.update({
+      where: { id: businessId },
+      data: settings,
+    });
+    return {
+      overtimeThresholdHoursPerWeek: business.overtimeThresholdHoursPerWeek,
+      breakThresholdHours: business.breakThresholdHours,
+      breakMinutesPerShift: business.breakMinutesPerShift,
+    };
   }
 }

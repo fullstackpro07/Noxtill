@@ -301,6 +301,16 @@ h1, h2, h3, h4, .font-display {
   animation: reveal-in 0.6s cubic-bezier(0.22, 0.7, 0.3, 1) both;
 }
 
+/* Hero phone mockup — chat-bubble typing dots and voice-note waveform bars. */
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes waveform-pulse {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
 @keyframes shimmer {
   from {
     background-position: 150% 0;
@@ -328,6 +338,27 @@ h1, h2, h3, h4, .font-display {
 }
 .animate-shake {
   animation: shake 400ms ease-in-out;
+}
+
+/* AI Assistant live-demo — traveling dot on the dashed connector between a channel card and the
+   processing pipeline, and a soft pulse for whichever pipeline step is currently "active". */
+@keyframes flow-down {
+  0% { transform: translateY(-2px); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(28px); opacity: 0; }
+}
+@keyframes step-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(14, 168, 106, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(14, 168, 106, 0); }
+}
+@keyframes dash-flow {
+  to { stroke-dashoffset: -16; }
+}
+@keyframes bar-fill {
+  0% { width: 0%; }
+  70% { width: 100%; }
+  100% { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

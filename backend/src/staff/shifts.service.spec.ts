@@ -7,6 +7,10 @@ import {
 } from '../common/tenancy/tenant.constants';
 import { ShiftsService } from './shifts.service';
 import { AppException } from '../common/filters/app.exception';
+import type {
+  CreateNotificationInput,
+  NotificationsService,
+} from '../notifications/notifications.service';
 import { Role } from '@prisma/client';
 
 class FakeClsService {
@@ -28,6 +32,12 @@ describe('ShiftsService (UPD-BE-031)', () => {
   let requesterBusinessUserId: string;
   let coveringUserId: string;
   let coveringBusinessUserId: string;
+  let notifications: {
+    create: jest.Mock<
+      Promise<void>,
+      [businessId: string, userId: string, input: CreateNotificationInput]
+    >;
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -38,7 +48,17 @@ describe('ShiftsService (UPD-BE-031)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new ShiftsService(tenantPrisma, cls as unknown as ClsService);
+    notifications = {
+      create: jest.fn<
+        Promise<void>,
+        [businessId: string, userId: string, input: CreateNotificationInput]
+      >(),
+    };
+    service = new ShiftsService(
+      tenantPrisma,
+      cls as unknown as ClsService,
+      notifications as unknown as NotificationsService,
+    );
 
     const business = await prisma.business.create({
       data: { name: 'Shifts Test Biz', slug: `shifts-test-${Date.now()}` },
@@ -93,12 +113,17 @@ describe('ShiftsService (UPD-BE-031)', () => {
       endsAt: '2026-09-01T17:00:00.000Z',
     });
     expect(shift.status).toBe('scheduled');
+    // Regression: create() must join staffUser/user like list()/findOne() do — the frontend's
+    // toShift() reads staffUser.user.name unconditionally, so a missing include throws client-side
+    // on a successful write (shows "Couldn't add this shift" even though the row was created).
+    expect(shift.staffUser.user.name).toBe('Requester Staff');
 
     const list = await service.list(requesterBusinessUserId);
     expect(list.some((s) => s.id === shift.id)).toBe(true);
 
     const updated = await service.update(shift.id, { status: 'completed' });
     expect(updated.status).toBe('completed');
+    expect(updated.staffUser.user.name).toBe('Requester Staff');
 
     await service.remove(shift.id);
     await expect(service.findOne(shift.id)).rejects.toThrow();
@@ -121,6 +146,7 @@ describe('ShiftsService (UPD-BE-031)', () => {
     });
     expect(requested.swapStatus).toBe('pending');
     expect(requested.swapRequestedByUserId).toBe(requesterBusinessUserId);
+    expect(requested.staffUser.user.name).toBe('Requester Staff');
 
     await expect(
       service.requestSwap(businessId, shift.id, {}),
@@ -129,6 +155,8 @@ describe('ShiftsService (UPD-BE-031)', () => {
     const approved = await service.approveSwap(businessId, shift.id);
     expect(approved.swapStatus).toBe('approved');
     expect(approved.staffUserId).toBe(coveringBusinessUserId);
+    // Reassigned to the covering staff member — the joined name must reflect the NEW assignee.
+    expect(approved.staffUser.user.name).toBe('Covering Staff');
 
     const audits = await prisma.auditLog.findMany({
       where: { entityId: shift.id, entity: 'StaffShift' },
@@ -167,5 +195,43 @@ describe('ShiftsService (UPD-BE-031)', () => {
     const rejected = await service.rejectSwap(shift.id);
     expect(rejected.swapStatus).toBe('rejected');
     expect(rejected.staffUserId).toBe(requesterBusinessUserId);
+    expect(rejected.staffUser.user.name).toBe('Requester Staff');
+  });
+
+  it('notifies each distinct staff member with a shift in range exactly once, listing all their shifts in one notification', async () => {
+    notifications.create.mockClear();
+    const shiftA = await service.create(businessId, {
+      staffUserId: requesterBusinessUserId,
+      startsAt: '2026-09-10T09:00:00.000Z',
+      endsAt: '2026-09-10T17:00:00.000Z',
+    });
+    const shiftB = await service.create(businessId, {
+      staffUserId: requesterBusinessUserId,
+      startsAt: '2026-09-11T09:00:00.000Z',
+      endsAt: '2026-09-11T17:00:00.000Z',
+    });
+    const shiftC = await service.create(businessId, {
+      staffUserId: coveringBusinessUserId,
+      startsAt: '2026-09-10T09:00:00.000Z',
+      endsAt: '2026-09-10T17:00:00.000Z',
+    });
+
+    const result = await service.notify(
+      businessId,
+      '2026-09-10T00:00:00.000Z',
+      '2026-09-12T00:00:00.000Z',
+    );
+
+    expect(result.notifiedCount).toBe(2);
+    expect(notifications.create).toHaveBeenCalledTimes(2);
+    const requesterCall = notifications.create.mock.calls.find(
+      (c) => c[1] === requesterUserId,
+    );
+    expect(requesterCall).toBeDefined();
+    expect(requesterCall![2].body).toContain('2 shifts');
+
+    await service.remove(shiftA.id);
+    await service.remove(shiftB.id);
+    await service.remove(shiftC.id);
   });
 });

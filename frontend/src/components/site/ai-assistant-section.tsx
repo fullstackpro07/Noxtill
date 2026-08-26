@@ -2,14 +2,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Check, ShieldCheck } from "lucide-react";
 import { Reveal } from "@/components/site/reveal";
-import { AI_ASSISTANT_BENEFITS, AI_ASSISTANT_CHECKLIST, AI_ASSISTANT_STEPS, AI_ASSISTANT_TAGS } from "@/lib/marketing/home-content";
+import { AiAssistantLiveDemo } from "@/components/site/ai-assistant-live-demo";
+import { AiAssistantFlowSteps } from "@/components/site/ai-assistant-flow-steps";
+import { AiAssistantReportDemo } from "@/components/site/ai-assistant-report-demo";
+import { AI_ASSISTANT_BENEFITS, AI_ASSISTANT_CHECKLIST, AI_ASSISTANT_TAGS } from "@/lib/marketing/home-content";
 
 export function AiAssistantSection() {
   return (
     <section className="px-5 py-16 sm:px-7 sm:py-20">
       <div className="mx-auto max-w-[1560px]">
         <h2 className="mx-auto mb-10 max-w-[1000px] text-balance text-center font-display text-4xl font-semibold leading-[1.1] tracking-[-0.035em] text-fg sm:text-5xl">
-          AI business assistant for <span className="text-accent">real-time business answers</span>
+          AI business assistant for <span className="text-accent">Real time business answers</span>
         </h2>
 
         <div className="flex flex-wrap items-start gap-x-12 gap-y-10">
@@ -33,39 +36,17 @@ export function AiAssistantSection() {
           </div>
 
           <Reveal delay={0} className="min-w-[320px] flex-1 basis-[640px]">
-            <Image
-              src="/marketing/noxtill-ai-business-assistant.png"
-              alt="Noxtill AI Business Assistant answering a business question using connected sales and operations data on WhatsApp, email, voice and PDF"
-              width={1551}
-              height={1014}
-              className="h-auto w-full"
-              sizes="(min-width: 1024px) 640px, 100vw"
-            />
+            <AiAssistantLiveDemo />
           </Reveal>
         </div>
 
         <div className="mt-9 flex flex-wrap items-stretch gap-4">
           <Reveal delay={100} className="min-w-[300px] flex-1 basis-[460px] rounded-[var(--radius-lg)] border border-border bg-surface-2 p-5">
             <div className="mb-4.5 flex items-center gap-3.5">
-              <Image src="/marketing/ai-assistant-robot-cutout.png" alt="Noxtill AI business assistant answering business questions" width={56} height={68} className="h-[68px] w-[56px] flex-none object-contain" />
+              <Image src="/marketing/ai-assistant-robot-cutout-1.png" alt="Noxtill AI business assistant answering business questions" width={56} height={68} className="h-[68px] w-[56px] flex-none object-contain" />
               <div className="font-display text-base font-semibold text-fg">How Noxtill AI Assistant Works</div>
             </div>
-            <div className="flex flex-wrap items-start gap-2.5">
-              {AI_ASSISTANT_STEPS.map((step, i) => (
-                <div key={step.title} className="contents">
-                  <div className="flex min-w-[118px] flex-1 basis-[130px] flex-col items-center gap-2.5 text-center">
-                    <span className="flex h-[54px] w-[54px] items-center justify-center rounded-full border border-border bg-white shadow-[0_8px_20px_-14px_rgba(13,21,18,0.35)]">
-                      <step.icon className="h-6 w-6 text-accent" aria-hidden strokeWidth={1.8} />
-                    </span>
-                    <div className="text-[13.5px] font-medium text-fg">{step.title}</div>
-                    <div className="text-xs leading-snug text-fg-faint">{step.description}</div>
-                  </div>
-                  {i < AI_ASSISTANT_STEPS.length - 1 ? (
-                    <span className="mt-6 flex-none self-start text-[15px] text-[#9fdcc0]">→</span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+            <AiAssistantFlowSteps />
             <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-3.5">
               {AI_ASSISTANT_TAGS.map((tag) => (
                 <span key={tag} className="rounded-full border border-border px-2.5 py-1 text-xs uppercase tracking-wide text-fg">
@@ -76,14 +57,7 @@ export function AiAssistantSection() {
           </Reveal>
 
           <Reveal delay={200} className="min-w-[280px] flex-1 basis-full">
-            <Image
-              src="/marketing/noxtill-ai-business-assistant-report.png"
-              alt="Noxtill AI Business Assistant showing today's business summary, a generated business report delivered to WhatsApp and email, and a marketing campaign prepared from one message"
-              width={1637}
-              height={961}
-              className="h-auto w-full"
-              sizes="100vw"
-            />
+            <AiAssistantReportDemo />
           </Reveal>
         </div>
 

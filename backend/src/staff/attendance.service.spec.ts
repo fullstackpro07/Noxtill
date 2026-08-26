@@ -78,4 +78,24 @@ describe('AttendanceService (BE-057)', () => {
     const rows = await prisma.attendance.findMany({ where: { businessId } });
     expect(rows).toHaveLength(2);
   });
+
+  it('list() returns real rows with the staff user/name joined, newest first, filterable by staffUserId (UPD-BE-113)', async () => {
+    const businessUser = await prisma.businessUser.findFirstOrThrow({
+      where: { businessId, userId },
+    });
+
+    const all = await service.list();
+    expect(all.length).toBeGreaterThanOrEqual(2);
+    expect(all[0].staffUser.user.name).toBe('Clock Person');
+    // Newest first — checkIn timestamps must be non-increasing down the list.
+    for (let i = 1; i < all.length; i++) {
+      expect(all[i - 1].checkIn.getTime()).toBeGreaterThanOrEqual(
+        all[i].checkIn.getTime(),
+      );
+    }
+
+    const filtered = await service.list(businessUser.id);
+    expect(filtered.every((r) => r.staffUserId === businessUser.id)).toBe(true);
+    expect(filtered.length).toBe(all.length);
+  });
 });

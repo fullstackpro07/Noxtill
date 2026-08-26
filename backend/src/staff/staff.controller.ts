@@ -64,4 +64,14 @@ export class StaffController {
   toggleAttendance(@CurrentUser() user: AuthenticatedUser) {
     return this.attendanceService.toggle(user.businessId, user.sub);
   }
+
+  @RequireCapability(CAPABILITIES.STAFF_MANAGE_SCHEDULE)
+  @Get('attendance')
+  listAttendance(
+    @Query('staffUserId') staffUserId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.attendanceService.list(staffUserId, from, to);
+  }
 }

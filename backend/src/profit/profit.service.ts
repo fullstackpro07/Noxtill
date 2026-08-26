@@ -109,11 +109,13 @@ export class ProfitService {
     ]);
 
     const hourly = hourlyRows.map((row) => ({
-      hour: row.hour,
+      // MySQL migration: HOUR(created_at) is a raw date/time function call, which mysql2/Prisma
+      // deserialize as a JS `bigint` — same quirk as DATEDIFF() elsewhere, not just aggregates.
+      hour: Number(row.hour),
       revenue: round2(Number(row.revenue)),
     }));
     const weekday = weekdayRows.map((row) => ({
-      day: WEEKDAY_NAMES[row.dow],
+      day: WEEKDAY_NAMES[Number(row.dow)],
       revenue: round2(Number(row.revenue)),
     }));
 

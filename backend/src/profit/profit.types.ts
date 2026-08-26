@@ -7,12 +7,14 @@ export interface ProductProfitRow {
 }
 
 export interface HourlyRow {
-  hour: number;
+  // MySQL migration: HOUR(created_at) is a raw date/time function call — mysql2/Prisma deserialize it as `bigint`, not `number`.
+  hour: bigint;
   revenue: string;
 }
 
 export interface WeekdayRow {
-  dow: number;
+  // Same bigint quirk as HourlyRow.hour — DAYOFWEEK(created_at) - 1 is a raw expression, not a plain column.
+  dow: bigint;
   revenue: string;
 }
 

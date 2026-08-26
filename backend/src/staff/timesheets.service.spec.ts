@@ -85,7 +85,7 @@ describe('TimesheetsService (UPD-BE-032)', () => {
     await prisma.$disconnect();
   });
 
-  it('computes real hours worked and overtime against the default 40h/week threshold', async () => {
+  it('computes real hours worked and overtime against the default 40h/week threshold, net of the default break rule', async () => {
     const checkIn = findSameBucketCheckIn(45);
     const checkOut = new Date(checkIn.getTime() + 45 * MS_PER_HOUR);
     await prisma.attendance.create({
@@ -114,8 +114,9 @@ describe('TimesheetsService (UPD-BE-032)', () => {
     const report = await service.report(businessId, '2026-11');
     const row = report.find((r) => r.businessUserId === staffUserId);
     expect(row).toBeDefined();
-    expect(row!.hoursWorked).toBe(45);
-    expect(row!.overtimeHours).toBe(5); // 45 - 40
+    // 45h session exceeds the default 6h break threshold, so the default 30min break is deducted.
+    expect(row!.hoursWorked).toBe(44.5);
+    expect(row!.overtimeHours).toBe(4.5); // 44.5 - 40
     expect(row!.scheduledShiftCount).toBe(1);
     expect(row!.approved).toBe(false);
   });
@@ -154,5 +155,65 @@ describe('TimesheetsService (UPD-BE-032)', () => {
     expect(row!.hoursWorked).toBe(0);
     expect(row!.overtimeHours).toBe(0);
     expect(row!.approved).toBe(false);
+  });
+
+  describe('break rules (UPD-BE-113)', () => {
+    // Each sub-test uses its own untouched month (matching this file's existing "different month =
+    // isolation" convention, e.g. the '2026-01' zero-hours test above) so accumulated attendance
+    // rows from earlier tests in this file never bleed into these totals.
+
+    it('does not deduct a break from a session shorter than the configured threshold', async () => {
+      const checkIn = new Date('2026-03-10T09:00:00.000Z');
+      await prisma.attendance.create({
+        data: {
+          businessId,
+          staffUserId,
+          checkIn,
+          checkOut: new Date(checkIn.getTime() + 4 * MS_PER_HOUR),
+        },
+      });
+
+      const report = await service.report(businessId, '2026-03');
+      const row = report.find((r) => r.businessUserId === staffUserId);
+      expect(row!.hoursWorked).toBe(4);
+    });
+
+    it('getSettings/updateSettings persist real Business fields and report() uses the updated rule', async () => {
+      const defaults = await service.getSettings(businessId);
+      expect(defaults).toEqual({
+        overtimeThresholdHoursPerWeek: 40,
+        breakThresholdHours: 6,
+        breakMinutesPerShift: 30,
+      });
+
+      const updated = await service.updateSettings(businessId, {
+        breakThresholdHours: 3,
+        breakMinutesPerShift: 60,
+      });
+      expect(updated.breakThresholdHours).toBe(3);
+      expect(updated.breakMinutesPerShift).toBe(60);
+      expect(updated.overtimeThresholdHoursPerWeek).toBe(40); // untouched field stays as-is
+
+      const checkIn = new Date('2026-04-10T09:00:00.000Z');
+      await prisma.attendance.create({
+        data: {
+          businessId,
+          staffUserId,
+          checkIn,
+          checkOut: new Date(checkIn.getTime() + 4 * MS_PER_HOUR),
+        },
+      });
+
+      const report = await service.report(businessId, '2026-04');
+      const row = report.find((r) => r.businessUserId === staffUserId);
+      // 4h now exceeds the lowered 3h threshold, so the new 60min break rule applies.
+      expect(row!.hoursWorked).toBe(3);
+
+      // Restore defaults so this test doesn't leak state into other tests in this file.
+      await service.updateSettings(businessId, {
+        breakThresholdHours: 6,
+        breakMinutesPerShift: 30,
+      });
+    });
   });
 });

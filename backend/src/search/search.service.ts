@@ -17,7 +17,8 @@ interface ProductRow {
 }
 interface OrderRow {
   id: string;
-  order_no: number;
+  // MySQL migration: a raw-selected Int column comes back as a JS `bigint` via mysql2/Prisma, not `number`.
+  order_no: bigint;
 }
 interface AppointmentRow {
   id: string;
@@ -114,7 +115,7 @@ export class SearchService {
         phone: c.phone,
       })),
       products: products.map((p) => ({ id: p.id, name: p.name })),
-      orders: orders.map((o) => ({ id: o.id, orderNo: o.order_no })),
+      orders: orders.map((o) => ({ id: o.id, orderNo: Number(o.order_no) })),
       appointments: appointments.map((a) => ({
         id: a.id,
         serviceName: a.service_name,

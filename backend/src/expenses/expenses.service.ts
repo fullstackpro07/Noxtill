@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { S3Service } from '../common/storage/s3.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
-import { Prisma } from '@prisma/client';
+import { Expense, Prisma } from '@prisma/client';
 
 function monthBounds(month: string): { start: Date; end: Date } {
   const [year, mon] = month.split('-').map(Number);
@@ -19,7 +20,20 @@ export class ExpensesService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly prisma: PrismaService,
+    private readonly s3: S3Service,
   ) {}
+
+  /** UPD-BE-107: resolves `receiptKey` (if any) to a fresh signed URL — never leaked as a raw storage key. */
+  private async withReceiptUrl<T extends Expense>(
+    expense: T,
+  ): Promise<T & { receiptUrl: string | null }> {
+    return {
+      ...expense,
+      receiptUrl: expense.receiptKey
+        ? await this.s3.getSignedDownloadUrl(expense.receiptKey)
+        : null,
+    };
+  }
 
   create(dto: CreateExpenseDto) {
     return this.tenantPrisma.client.expense.create({
@@ -33,16 +47,17 @@ export class ExpensesService {
     });
   }
 
-  findAll(query: QueryExpensesDto) {
+  async findAll(query: QueryExpensesDto) {
     const where: Prisma.ExpenseWhereInput = { category: query.category };
     if (query.month) {
       const { start, end } = monthBounds(query.month);
       where.incurredOn = { gte: start, lt: end };
     }
-    return this.tenantPrisma.client.expense.findMany({
+    const expenses = await this.tenantPrisma.client.expense.findMany({
       where,
       orderBy: { incurredOn: 'desc' },
     });
+    return Promise.all(expenses.map((e) => this.withReceiptUrl(e)));
   }
 
   async findOne(id: string) {
@@ -52,7 +67,7 @@ export class ExpensesService {
     if (!expense) {
       throw new NotFoundException('Expense not found');
     }
-    return expense;
+    return this.withReceiptUrl(expense);
   }
 
   async update(id: string, dto: UpdateExpenseDto) {

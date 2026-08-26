@@ -195,6 +195,33 @@ describe('ProfitService (BE-036/BE-037)', () => {
     expect(hourly.length).toBeGreaterThan(0);
   });
 
+  it('returns real JSON-serializable numbers for hour/weekday — not raw MySQL bigints (UPD-BE-106 regression)', async () => {
+    const { hourly, weekday } = await profitService.byTime();
+
+    expect(hourly.length).toBeGreaterThan(0);
+    for (const row of hourly) {
+      expect(typeof row.hour).toBe('number');
+    }
+    // The real crash: JSON.stringify throws "Do not know how to serialize a BigInt" if any
+    // field is still a raw bigint — this is what actually reproduces the bug, not a typeof check alone.
+    expect(() => JSON.stringify({ hourly, weekday })).not.toThrow();
+
+    expect(weekday.length).toBeGreaterThan(0);
+    const validDayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+    for (const row of weekday) {
+      expect(typeof row.day).toBe('string');
+      expect(validDayNames).toContain(row.day);
+    }
+  });
+
   describe('bundleSuggestions (UPD-BE-013)', () => {
     afterEach(() => {
       aiInfra.complete.mockReset();

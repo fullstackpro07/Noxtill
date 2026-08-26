@@ -3,12 +3,16 @@ import { ReferralsService } from './referrals.service';
 import { UpdateReferralSettingsDto } from './dto/update-referral-settings.dto';
 import { RedeemReferralDto } from './dto/redeem-referral.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('referrals')
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
+  /** UPD-BE-105b fix-it: this was previously open to any authenticated role — reward config (real money via CreditEntry) needs owner/manager, same as coupons/vouchers. */
+  @RequireCapability(CAPABILITIES.REFERRALS_MANAGE)
   @Post('settings')
   updateSettings(
     @CurrentUser() user: AuthenticatedUser,

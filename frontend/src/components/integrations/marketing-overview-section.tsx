@@ -14,11 +14,12 @@ const CHANNEL_HREF: Record<string, string> = {
 };
 
 export function MarketingOverviewSection({ currency }: { currency: string }) {
-  const { data: rows = [], isPending } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["marketing-overview"],
     queryFn: fetchMarketingOverview,
   });
-  const totalSpend = rows.reduce((sum, r) => sum + r.spend, 0);
+  const rows = data?.channels ?? [];
+  const totalSpend = data?.totals.spend ?? 0;
 
   return (
     <div className="mt-8 flex flex-col gap-5">

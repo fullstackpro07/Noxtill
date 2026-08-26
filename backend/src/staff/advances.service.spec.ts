@@ -100,4 +100,23 @@ describe('AdvancesService (UPD-BE-033)', () => {
   it('rejects operations on an unknown advance', async () => {
     await expect(service.update('not-a-real-id', {})).rejects.toThrow();
   });
+
+  it('listAll() returns every real advance for the business with the staff name joined, newest first (UPD-BE-113)', async () => {
+    const advance = await service.create(businessId, staffUserId, {
+      amount: 30,
+      reason: 'listAll fixture',
+    });
+
+    const all = await service.listAll();
+    const row = all.find((a) => a.id === advance.id);
+    expect(row).toBeDefined();
+    expect(row!.staffUser.user.name).toBe('Advance Staff');
+    expect(Number(row!.amount)).toBe(30);
+    // Newest first.
+    for (let i = 1; i < all.length; i++) {
+      expect(all[i - 1].createdAt.getTime()).toBeGreaterThanOrEqual(
+        all[i].createdAt.getTime(),
+      );
+    }
+  });
 });

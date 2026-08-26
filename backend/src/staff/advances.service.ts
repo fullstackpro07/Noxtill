@@ -32,6 +32,14 @@ export class AdvancesService {
     });
   }
 
+  /** UPD-BE-113: business-wide view for the Advances screen — the per-staff `list()` above stays as-is for its own route. */
+  listAll() {
+    return this.tenantPrisma.client.staffAdvance.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { staffUser: { include: { user: true } } },
+    });
+  }
+
   async update(id: string, dto: UpdateAdvanceDto) {
     const advance = await this.findOutstanding(id);
     return this.tenantPrisma.client.staffAdvance.update({

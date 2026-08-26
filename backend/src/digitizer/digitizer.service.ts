@@ -179,7 +179,13 @@ export class DigitizerService {
       for (const row of rows) {
         if (row.action === 'skip') continue;
         try {
-          await this.commitRow(tx, businessId, business.country, row);
+          await this.commitRow(
+            tx,
+            businessId,
+            business.country,
+            row,
+            batch.imageKey,
+          );
           created[row.destination] += 1;
         } catch (error) {
           skipped.push({ rowId: row.id, reason: (error as Error).message });
@@ -199,6 +205,7 @@ export class DigitizerService {
     businessId: string,
     defaultCountry: string | null,
     row: DigitizerRow,
+    imageKey: string | null,
   ): Promise<void> {
     const data = row.data;
     switch (row.destination) {
@@ -293,6 +300,9 @@ export class DigitizerService {
             incurredOn: data.incurredOn
               ? new Date(String(data.incurredOn))
               : new Date(),
+            /// UPD-BE-107: every expense committed via this pipeline came from a real scanned
+            /// photo — link back to it so the owner can view the original receipt later.
+            receiptKey: imageKey,
           },
         });
         return;

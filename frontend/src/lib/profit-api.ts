@@ -68,3 +68,28 @@ export function whatIf(productId: string, priceDeltaPct: number): Promise<WhatIf
     body: JSON.stringify({ productId, priceDeltaPct }),
   });
 }
+
+export interface DeadHoursOfferDraft {
+  windowLabel: string;
+  offerText: string;
+}
+
+/** POST /profit/time/dead-hours-offer — an AI draft grounded in this business's own real slowest window; never sends anything. */
+export function generateDeadHoursOffer(): Promise<DeadHoursOfferDraft> {
+  return apiFetch<DeadHoursOfferDraft>("/profit/time/dead-hours-offer", { method: "POST" });
+}
+
+export interface DeadHoursOfferResult {
+  id: string;
+  segment: string;
+  body: string;
+  sentCount: number;
+}
+
+/** POST /profit/time/dead-hours-offer/send — the explicit approve step; only this call reaches customers. */
+export function sendDeadHoursOffer(segment: string, offerText: string): Promise<DeadHoursOfferResult> {
+  return apiFetch<DeadHoursOfferResult>("/profit/time/dead-hours-offer/send", {
+    method: "POST",
+    body: JSON.stringify({ segment, offerText }),
+  });
+}

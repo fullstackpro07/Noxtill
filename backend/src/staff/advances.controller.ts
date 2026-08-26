@@ -19,6 +19,11 @@ import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 export class AdvancesController {
   constructor(private readonly advances: AdvancesService) {}
 
+  @Get('advances')
+  listAll() {
+    return this.advances.listAll();
+  }
+
   @Post('staff/:id/advances')
   create(
     @CurrentUser() user: AuthenticatedUser,

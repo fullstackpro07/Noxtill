@@ -14,6 +14,7 @@ import {
   RequestShiftSwapDto,
   UpdateShiftDto,
 } from './dto/create-shift.dto';
+import { NotifyShiftsDto } from './dto/notify-shifts.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -74,5 +75,11 @@ export class ShiftsController {
   @Patch('shifts/:id/swap-request/reject')
   rejectSwap(@Param('id') id: string) {
     return this.shifts.rejectSwap(id);
+  }
+
+  @RequireCapability(CAPABILITIES.STAFF_MANAGE_SCHEDULE)
+  @Post('shifts/notify')
+  notify(@CurrentUser() user: AuthenticatedUser, @Body() dto: NotifyShiftsDto) {
+    return this.shifts.notify(user.businessId, dto.from, dto.to);
   }
 }

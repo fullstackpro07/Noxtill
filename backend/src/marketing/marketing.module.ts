@@ -30,6 +30,10 @@ import { VouchersController } from './vouchers.controller';
 import { SeoHeatmapService } from './seo-heatmap.service';
 import { SeoHeatmapController } from './seo-heatmap.controller';
 import { ListingsModule } from '../listings/listings.module';
+import { ProfitModule } from '../profit/profit.module';
+import { AiModule } from '../ai/ai.module';
+import { MarketingAssetsService } from './marketing-assets.service';
+import { MarketingAssetsController } from './marketing-assets.controller';
 
 @Module({
   imports: [
@@ -38,6 +42,8 @@ import { ListingsModule } from '../listings/listings.module';
     MessagingModule,
     CustomersModule,
     ListingsModule,
+    ProfitModule,
+    AiModule,
   ],
   controllers: [
     CampaignsController,
@@ -48,6 +54,7 @@ import { ListingsModule } from '../listings/listings.module';
     CouponsController,
     VouchersController,
     SeoHeatmapController,
+    MarketingAssetsController,
   ],
   providers: [
     CampaignsService,
@@ -65,6 +72,7 @@ import { ListingsModule } from '../listings/listings.module';
     CouponsService,
     VouchersService,
     SeoHeatmapService,
+    MarketingAssetsService,
   ],
   exports: [ReferralsService, CouponsService, VouchersService],
 })

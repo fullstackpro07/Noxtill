@@ -10,8 +10,8 @@ import { fetchProducts } from "@/lib/products-api";
 import { whatIf } from "@/lib/profit-api";
 import { ApiError } from "@/lib/api-client";
 
-export function ProfitWhatifTab() {
-  const [productId, setProductId] = useState("");
+export function ProfitWhatifTab({ initialProductId }: { initialProductId?: string } = {}) {
+  const [productId, setProductId] = useState(initialProductId ?? "");
   const [priceChangePercent, setPriceChangePercent] = useState(0);
 
   const { data: products = [] } = useQuery({ queryKey: ["products", "active"], queryFn: () => fetchProducts({ active: true }) });

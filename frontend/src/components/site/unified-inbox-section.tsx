@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { Reveal } from "@/components/site/reveal";
+import { UnifiedInboxLiveDemo } from "@/components/site/unified-inbox-live-demo";
 import { INBOX_BENEFITS, INBOX_CHANNELS, INBOX_FEATURES } from "@/lib/marketing/home-content";
 
 export function UnifiedInboxSection() {
@@ -37,16 +38,14 @@ export function UnifiedInboxSection() {
               .
             </p>
 
-            <div className="mb-7 flex flex-col gap-5">
+            <div className="mb-7 flex flex-row flex-nowrap gap-3">
               {INBOX_FEATURES.map((feature) => (
-                <div key={feature.title} className="flex items-start gap-3.5">
-                  <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#e3fbf1]">
+                <div key={feature.title} className="min-w-0 flex-1 basis-0">
+                  <span className="mb-2.5 flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#e3fbf1]">
                     <feature.icon className="h-[19px] w-[19px] text-accent" aria-hidden strokeWidth={1.9} />
                   </span>
-                  <div>
-                    <div className="mb-1 font-display text-[15px] font-semibold text-fg">{feature.title}</div>
-                    <div className="text-[13.5px] leading-relaxed text-fg-muted">{feature.description}</div>
-                  </div>
+                  <div className="mb-1 font-display text-[15px] font-semibold text-fg">{feature.title}</div>
+                  <div className="text-[13.5px] leading-relaxed text-fg-muted">{feature.description}</div>
                 </div>
               ))}
             </div>
@@ -62,14 +61,7 @@ export function UnifiedInboxSection() {
           </div>
 
           <Reveal delay={0} className="min-w-[320px] flex-1 basis-[660px]">
-            <Image
-              src="/marketing/noxtill-unified-inbox-whatsapp-business.png"
-              alt="Noxtill Unified Inbox showing a customer conversation with connected customer context, order history and open tickets"
-              width={1578}
-              height={996}
-              className="h-auto w-full rounded-[var(--radius-lg)] border border-border shadow-[0_24px_60px_-44px_rgba(13,21,18,0.5)]"
-              sizes="(min-width: 1024px) 660px, 100vw"
-            />
+            <UnifiedInboxLiveDemo />
           </Reveal>
         </div>
 

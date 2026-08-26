@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { StaffService } from './staff.service';
 import { AttendanceService } from './attendance.service';
 import { CommissionsService } from './commissions.service';
@@ -15,6 +16,7 @@ import { PayrollService } from './payroll.service';
 import { PayrollController } from './payroll.controller';
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [
     StaffController,
     ShiftsController,

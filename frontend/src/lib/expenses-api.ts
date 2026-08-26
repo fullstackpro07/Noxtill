@@ -7,6 +7,8 @@ interface RawExpense {
   amount: string;
   recurring: boolean;
   incurredOn: string;
+  receiptKey?: string | null;
+  receiptUrl?: string | null;
 }
 
 export interface LiveExpense {
@@ -16,6 +18,8 @@ export interface LiveExpense {
   amount: number;
   recurring: boolean;
   incurredOn: string;
+  receiptKey: string | null;
+  receiptUrl: string | null;
 }
 
 function toLiveExpense(raw: RawExpense): LiveExpense {
@@ -26,6 +30,8 @@ function toLiveExpense(raw: RawExpense): LiveExpense {
     amount: Number(raw.amount),
     recurring: raw.recurring,
     incurredOn: raw.incurredOn,
+    receiptKey: raw.receiptKey ?? null,
+    receiptUrl: raw.receiptUrl ?? null,
   };
 }
 
@@ -48,4 +54,15 @@ export function createExpense(input: CreateExpenseInput): Promise<LiveExpense> {
     method: "POST",
     body: JSON.stringify(input),
   }).then(toLiveExpense);
+}
+
+export function updateExpense(id: string, input: Partial<CreateExpenseInput>): Promise<LiveExpense> {
+  return apiFetch<RawExpense>(`/expenses/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  }).then(toLiveExpense);
+}
+
+export function deleteExpense(id: string): Promise<void> {
+  return apiFetch<void>(`/expenses/${id}`, { method: "DELETE" });
 }
