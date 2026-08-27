@@ -53,10 +53,10 @@ export function IntegrationsAutomationSection() {
                     Automated
                   </span>
                 </div>
-                <div className="flex flex-wrap items-start justify-center gap-1.5">
+                <div className="flex flex-nowrap items-start justify-center gap-1.5 overflow-x-auto">
                   {example.steps.map((step, i) => (
                     <div key={step.title} className="contents">
-                      <div className="flex max-w-[168px] min-w-[118px] flex-[1_1_128px] flex-col items-center gap-2.5 text-center">
+                      <div className="flex max-w-[168px] min-w-[92px] flex-[1_1_100px] flex-col items-center gap-2.5 text-center">
                         <StepIcon step={step} />
                         <div className="font-display text-sm font-semibold text-fg">{step.title}</div>
                         <div className="text-[12.5px] leading-relaxed text-fg-faint">{step.description}</div>

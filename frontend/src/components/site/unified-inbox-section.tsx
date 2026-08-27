@@ -7,14 +7,16 @@ import { INBOX_BENEFITS, INBOX_CHANNELS, INBOX_FEATURES } from "@/lib/marketing/
 
 export function UnifiedInboxSection() {
   return (
-    <section className="px-5 py-16 sm:px-7 sm:py-20">
+    <section className="px-5 pt-16 sm:px-7 sm:pt-14">
       <div className="mx-auto max-w-[1560px]">
-        <div className="flex flex-wrap items-start gap-x-11 gap-y-10">
-          <div className="min-w-[300px] max-w-[430px] flex-1 basis-[360px]">
-            <h2 className="mb-4.5 text-balance font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
+        <h2 className="mb-10 text-balance text-center font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
               Unified inbox for WhatsApp, email,
               <br className="hidden sm:block" /> <span className="text-accent">social messaging and customer chat</span>
-            </h2>
+          </h2>
+        <div className="flex flex-wrap items-center gap-x-11 gap-y-10">
+          
+          <div className="min-w-[300px] max-w-[430px] flex-1 basis-[360px]">
+            
 
             <div className="mb-4 font-display text-lg font-medium leading-tight text-fg">
               Customer messaging in one inbox: WhatsApp, email, voice, website chat and social.

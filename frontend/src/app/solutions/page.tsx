@@ -73,11 +73,7 @@ export default function SolutionsPage() {
 
         <section className="px-5 pb-11 pt-6 text-center sm:px-7">
           <div className="mx-auto max-w-[860px]">
-            <Reveal>
-              <span className="mb-5 inline-flex items-center rounded-full bg-gradient-to-r from-accent to-[#095843] px-4.5 py-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-white">
-                {SOLUTIONS_HERO.eyebrow}
-              </span>
-            </Reveal>
+            
             <Reveal delay={60}>
               <h1 className="mb-4.5 text-balance font-display text-[32px] font-bold leading-[1.1] tracking-tight text-fg sm:text-[42px]">
                 {SOLUTIONS_HERO.headlineLead} <span className="text-accent">{SOLUTIONS_HERO.headlineAccent}</span>

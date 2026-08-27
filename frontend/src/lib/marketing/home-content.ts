@@ -179,6 +179,10 @@ export const POS_FEATURES: string[] = [
   "Send receipts and invoices on WhatsApp",
   "Works offline — sales sync when you reconnect",
   "Stock, margin and staff commission update with the sale",
+  "Track sales, profit and performance by item, staff and time",
+  "Supports multiple locations, tills and staff",
+  "Works with cash, card, QR, UPI and other payment methods",
+  "Supports multiple currencies and tax rates",
 ];
 
 export const RECEPTION_FEATURES: Feature[] = [
@@ -306,8 +310,8 @@ export const HOME_FAQ_ITEMS: FaqItem[] = [
     answer: "Yes. WhatsApp is a first-class channel: customers message you in the unified inbox, receipts and reminders go out on WhatsApp, and your nightly business summary and reports can be delivered there too.",
   },
   {
-    question: "What is digital khata?",
-    answer: "Digital khata is a customer credit ledger that records what each customer owes, payments received, balances, due dates, statements and reminders.",
+    question: "What is digital Record Bookd Book?",
+    answer: "Digital Record Book is a customer credit ledger that records what each customer owes, payments received, balances, due dates, statements and reminders.",
   },
   {
     question: "Can Noxtill manage customer reviews?",

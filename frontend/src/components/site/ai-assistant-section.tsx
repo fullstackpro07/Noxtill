@@ -9,13 +9,13 @@ import { AI_ASSISTANT_BENEFITS, AI_ASSISTANT_CHECKLIST, AI_ASSISTANT_TAGS } from
 
 export function AiAssistantSection() {
   return (
-    <section className="px-5 py-16 sm:px-7 sm:py-20">
+    <section className="bg-surface-tint px-5 pt-16 sm:px-7 sm:pt-20">
       <div className="mx-auto max-w-[1560px]">
         <h2 className="mx-auto mb-10 max-w-[1000px] text-balance text-center font-display text-4xl font-semibold leading-[1.1] tracking-[-0.035em] text-fg sm:text-5xl">
           AI business assistant for <span className="text-accent">Real time business answers</span>
         </h2>
 
-        <div className="flex flex-wrap items-start gap-x-12 gap-y-10">
+        <div className="flex flex-wrap items-center gap-x-12 gap-y-10">
           <div className="min-w-[300px] max-w-[470px] flex-1 basis-[380px]">
             <p className="mb-6 max-w-[46ch] text-[16.5px] leading-relaxed text-fg-muted">
               Noxtill AI Business Assistant understands your business context, retrieves real-time information from your

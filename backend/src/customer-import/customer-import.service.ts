@@ -94,7 +94,7 @@ export class CustomerImportService {
     if (isImage) {
       // Import Customers, photo path (UPD-BE-099) — reuses the AI Photo Digitizer's own vision
       // extraction rather than a parallel one; a "customer_list" scan is a photographed
-      // khata/ledger page of names, phones, and opening balances.
+      // Record Book/ledger page of names, phones, and opening balances.
       const mediaType = file.mimetype as
         'image/jpeg' | 'image/png' | 'image/webp';
       const scanned = await this.vision.extract(

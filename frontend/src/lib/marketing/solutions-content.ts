@@ -157,7 +157,7 @@ export const BUSINESS_TYPES: BusinessTypeSolution[] = [
     modules: [MODULES.pos, MODULES.inventory, MODULES.credit, MODULES.products, MODULES.pnl],
     integrations: [INTEGRATIONS.shopify, INTEGRATIONS.woo, INTEGRATIONS.square],
     cta: "Run your shop with Noxtill",
-    keywords: "retail shop store pos stock inventory khata credit counter",
+    keywords: "retail shop store pos stock inventory Record Book credit counter",
   },
   {
     slug: "auto",
@@ -344,8 +344,8 @@ export const NEEDS: NeedSolution[] = [
     flow: ["Credit sale", "Ledger entry", "Reminder sent", "Payment received", "Balance updated"],
     modules: [MODULES.credit, MODULES.pos, MODULES.inbox, MODULES.reports],
     who: "Retail, tailors, laundry, workshops, academies",
-    cta: "See how digital khata works",
-    keywords: "credit khata udhaar owes balance ledger reminder outstanding",
+    cta: "See how digital Record Book works",
+    keywords: "credit Record Book udhaar owes balance ledger reminder outstanding",
   },
   {
     slug: "real-profit",
@@ -365,7 +365,7 @@ export const NEEDS: NeedSolution[] = [
     modules: [MODULES.digitizer, MODULES.credit, MODULES.products, MODULES.analytics],
     who: "Shops, tailors, workshops, laundries",
     cta: "See how the photo digitizer works",
-    keywords: "paper records register ledger digitize photo ocr khata book",
+    keywords: "paper records register ledger digitize photo ocr Record Book book",
   },
   {
     slug: "several-locations",
@@ -439,7 +439,7 @@ export const SOLUTIONS_FAQS: FaqItem[] = [
   {
     question: "Can a retail shop track customers who pay later?",
     answer:
-      "Yes — that is the customer credit ledger, or digital khata. Put a sale on credit in one tap and the balance, its age and payments received are tracked, with WhatsApp reminders on your schedule.",
+      "Yes — that is the customer credit ledger, or digital Record Book. Put a sale on credit in one tap and the balance, its age and payments received are tracked, with WhatsApp reminders on your schedule.",
   },
   {
     question: "How do automated appointment reminders work?",

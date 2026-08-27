@@ -6,7 +6,7 @@ import { PdfRendererService } from '../common/pdf/pdf-renderer.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { buildLedgerRows } from './credit.types';
 
-/** Khata-style credit statement PDF (BE-032): dated entries + running balance. */
+/** Record Book-style credit statement PDF (BE-032): dated entries + running balance. */
 @Injectable()
 export class CreditStatementService {
   constructor(

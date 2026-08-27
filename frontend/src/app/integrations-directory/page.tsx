@@ -8,6 +8,7 @@ import { Reveal } from "@/components/site/reveal";
 import { MarketingFaqGrid } from "@/components/site/marketing-faq-grid";
 import { IntegrationsDirectory } from "@/components/site/integrations-directory";
 import { IntegrationsStepFlow } from "@/components/site/integrations-step-flow";
+import { IntegrationsSyncOverviewLiveDemo } from "@/components/site/integrations-sync-overview-live-demo";
 import { IntegrationsAutomationSection } from "@/components/site/integrations-automation-section";
 import { IntegrationsProblemCard } from "@/components/site/integrations-problem-card";
 import { IntegrationsRequestForm } from "@/components/site/integrations-request-form";
@@ -136,9 +137,7 @@ export default function IntegrationsPage() {
         <section className="px-5 pb-16 pt-12 sm:px-7 sm:pb-18 sm:pt-14">
           <div className="mx-auto flex max-w-[1420px] flex-wrap items-center gap-10 lg:gap-14">
             <Reveal className="min-w-[300px] max-w-[560px] flex-[1_1_420px]">
-              <div className="mb-5.5 font-display text-[12.5px] font-semibold uppercase tracking-[0.11em] text-primary">
-                {INTEGRATIONS_HERO.eyebrow}
-              </div>
+              
               <h1 className="mb-6.5 text-balance font-display text-[34px] font-bold leading-[1.12] tracking-tight text-fg sm:text-[46px] lg:text-[54px]">
                 {INTEGRATIONS_HERO.headlineLine1}
                 <br />
@@ -177,11 +176,8 @@ export default function IntegrationsPage() {
 
                 <div className="flex items-center gap-2.5">
                   <span className="h-0 w-8.5 border-t-2 border-dashed border-[#a9e8cb]" />
-                  <div className="flex h-[190px] w-[240px] max-w-full items-center justify-center gap-3 rounded-[26px] bg-white shadow-[0_22px_54px_-24px_rgba(16,29,38,0.34)]">
-                    <span className="flex h-11.5 w-11.5 items-center justify-center rounded-[13px] bg-primary font-display text-2xl font-bold text-white">
-                      N
-                    </span>
-                    <span className="font-display text-[28px] font-bold tracking-tight text-fg">Noxtill</span>
+                  <div className="flex h-[190px] w-[240px] max-w-full items-center justify-center rounded-[26px] bg-white shadow-[0_22px_54px_-24px_rgba(16,29,38,0.34)]">
+                    <Image src="/brand/noxtill-logo.png" alt="Noxtill" width={160} height={45} className="h-9 w-auto" />
                   </div>
                   <span className="h-0 w-8.5 border-t-2 border-dashed border-[#a9e8cb]" />
                 </div>
@@ -203,17 +199,7 @@ export default function IntegrationsPage() {
                 ))}
               </div>
 
-              <div className="mb-5 flex flex-wrap justify-center overflow-hidden rounded-[20px] border border-border bg-white shadow-[0_14px_34px_-22px_rgba(16,29,38,0.28)]">
-                {INTEGRATIONS_HERO.syncModules.map((label, i) => (
-                  <div
-                    key={label}
-                    className={`min-w-[112px] flex-[1_1_120px] px-2.5 py-4.5 text-center ${i < INTEGRATIONS_HERO.syncModules.length - 1 ? "border-r border-border" : ""}`}
-                  >
-                    <div className="mb-2 text-[13.5px] font-semibold text-primary">•</div>
-                    <div className="text-[13.5px] text-fg">{label}</div>
-                  </div>
-                ))}
-              </div>
+              
 
               <div className="mx-auto flex max-w-[560px] items-center gap-3.5 rounded-[18px] border border-[#dcefe6] bg-[#f6fbf8] px-5 py-4.5">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary">
@@ -249,15 +235,13 @@ export default function IntegrationsPage() {
             </h2>
             <p className="mx-auto max-w-[56ch] text-[16.5px] leading-relaxed text-fg-muted">{SYNC_OVERVIEW.body}</p>
           </div>
-          <Reveal className="mx-auto max-w-[908px]">
-            <Image src={SYNC_OVERVIEW.image} alt={SYNC_OVERVIEW.imageAlt} width={908} height={420} className="h-auto w-full" />
-          </Reveal>
+          <IntegrationsSyncOverviewLiveDemo />
         </section>
 
         {/* Unified inbox callout */}
         <section className="mx-auto max-w-[1280px] px-5 pb-14 sm:px-7">
           <Reveal className="rounded-[24px] border border-border bg-white p-6 sm:p-8.5">
-            <div className="flex flex-wrap items-start gap-7 sm:gap-10">
+            <div className="flex flex-wrap items-center gap-7 sm:gap-10">
               <div className="min-w-[280px] max-w-[460px] flex-[1_1_340px]">
                 <div className="mb-3.5 font-display text-xs font-semibold uppercase tracking-[0.11em] text-primary">{UNIFIED_INBOX.eyebrow}</div>
                 <h2 className="mb-3.5 text-balance font-display text-[30px] font-bold leading-[1.15] tracking-tight text-fg">{UNIFIED_INBOX.heading}</h2>

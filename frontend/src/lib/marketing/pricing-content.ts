@@ -144,7 +144,7 @@ export const PRICING_COMPARE_CATEGORIES: CompareCategory[] = [
   {
     category: "Finance & operations",
     rows: [
-      { label: "Customer Credit / Khata", values: [1, 1, 1, 1, 1] },
+      { label: "Customer Credit / Record Bookd Bookd Book", values: [1, 1, 1, 1, 1] },
       { label: "Profit & Loss", values: [1, 1, 1, 1, 1] },
       { label: "Inventory", values: [1, 1, 1, 1, 1] },
       { label: "Low Stock Alerts", values: [1, 1, 1, 1, 1] },

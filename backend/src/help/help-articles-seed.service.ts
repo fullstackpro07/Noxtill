@@ -22,7 +22,7 @@ const ARTICLES: { slug: string; title: string; body: string; url: string }[] = [
       'The Credit screen shows every customer who currently owes your business money (a running balance ' +
       'above zero), computed from every credit sale and payment recorded against them. Recording a payment ' +
       'immediately reduces their balance. You can send a payment reminder to one customer or to every ' +
-      'debtor at once — reminders never go to a customer who has opted out of messages. A khata-style ' +
+      'debtor at once — reminders never go to a customer who has opted out of messages. A Record Book-style ' +
       'statement PDF, listing every dated entry and the running balance, can be shared with the customer ' +
       'at any time.',
     url: '/help/credit-ledger-basics',

@@ -5,20 +5,17 @@ import { FINAL_CTA_FEATURES, FINAL_CTA_TRUST } from "@/lib/marketing/home-conten
 
 export function FinalCtaSection() {
   return (
-    <section className="px-5 py-16 sm:px-7 sm:py-20">
+    <section className="px-5 pt-16 sm:px-7 sm:pt-14">
       <div className="mx-auto max-w-[1560px] overflow-hidden rounded-[var(--radius-xl)] border border-border">
-        <div className="flex flex-wrap items-center gap-10 p-8 sm:p-11" style={{ background: "linear-gradient(135deg,#f7fbf9 0%,#ffffff 60%)" }}>
-          <Reveal delay={0} className="min-w-[300px] max-w-[560px] flex-1 basis-[420px]">
-            <h2 className="mb-5 text-balance font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
+        <h2 className="mb-2 mt-10 text-balance text-center font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
               Everything Your Business Needs.
               <br />
               <span className="text-accent">One Place to Run It.</span>
             </h2>
 
-            <div className="mb-6 flex items-center gap-3">
-              <span className="h-0.5 w-32 bg-accent" />
-              <Sparkles className="h-4 w-4 text-accent" aria-hidden />
-            </div>
+        <div className="flex flex-wrap items-center gap-10 p-8 sm:p-11" style={{ background: "linear-gradient(135deg,#f7fbf9 0%,#ffffff 60%)" }}>
+          <Reveal delay={0} className="min-w-[300px] max-w-[560px] flex-1 basis-[420px]">
+            
 
             <p className="mb-2.5 max-w-[50ch] text-base leading-relaxed text-fg-muted">
               Noxtill brings all your conversations, calls, reviews, leads, and workflows together in one powerful platform.

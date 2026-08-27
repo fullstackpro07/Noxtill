@@ -21,7 +21,7 @@ function FooterColumn({ title, links }: { title: string; links: { label: string;
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border" data-theme="light">
+    <footer className="border-t border-border"  data-theme="light">
       <div className="mx-auto max-w-[1560px] px-5 py-14 sm:px-7">
         <div className="mb-10 flex flex-wrap gap-x-10 gap-y-8">
           <div className="min-w-[220px] max-w-[300px] flex-1 basis-[240px]">
@@ -33,7 +33,7 @@ export function SiteFooter() {
               href="/pricing"
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
             >
-              Start free — 14 days <span aria-hidden>→</span>
+              Start free 14 days <span aria-hidden>→</span>
             </Link>
           </div>
 

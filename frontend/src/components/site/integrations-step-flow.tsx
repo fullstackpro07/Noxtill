@@ -1,9 +1,8 @@
-import Image from "next/image";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Reveal } from "@/components/site/reveal";
+import { IntegrationsFlowLiveDemo } from "@/components/site/integrations-flow-live-demo";
 import {
   FLOW_BODY,
-  FLOW_DIAGRAM,
   FLOW_EYEBROW,
   FLOW_HEADING,
   FLOW_STEPS,
@@ -16,19 +15,21 @@ export function IntegrationsStepFlow() {
   return (
     <section className="bg-surface-2 px-5 py-14 sm:px-7 sm:py-19">
       <div className="mx-auto max-w-[1420px]">
-        <div className="mx-auto mb-8.5 max-w-[720px] text-center">
+        <div className="mx-auto mb-8.5 text-center">
           <div className="mb-4.5 inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 font-display text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
             <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden />
             {FLOW_EYEBROW}
           </div>
-          <h2 className="mb-4 text-balance font-display text-2xl font-bold leading-tight tracking-tight text-fg sm:text-[34px]">
-            {headingParts.map((part, i) => (
-              <span key={part}>
-                {i > 0 ? <span className="text-primary"> → </span> : null}
-                <span className={part === "Noxtill" || part === "AI" ? "text-primary" : undefined}>{part}</span>
-              </span>
-            ))}
-          </h2>
+          <div className="mb-4 overflow-x-auto text-left sm:text-center">
+            <h2 className="whitespace-nowrap font-display text-lg font-bold leading-tight tracking-tight text-fg sm:text-[34px]">
+              {headingParts.map((part, i) => (
+                <span key={part}>
+                  {i > 0 ? <span className="text-primary"> → </span> : null}
+                  <span className={part === "Noxtill" ? "text-primary" : undefined}>{part}</span>
+                </span>
+              ))}
+            </h2>
+          </div>
           <p className="mx-auto max-w-[58ch] text-base leading-relaxed text-fg-muted">{FLOW_BODY}</p>
         </div>
 
@@ -49,9 +50,7 @@ export function IntegrationsStepFlow() {
           ))}
         </div>
 
-        <div className="mx-auto max-w-[950px]">
-          <Image src={FLOW_DIAGRAM.image} alt={FLOW_DIAGRAM.imageAlt} width={950} height={520} className="h-auto w-full" />
-        </div>
+        <IntegrationsFlowLiveDemo />
 
         <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-5 rounded-[18px] border border-border p-5.5 sm:p-6">
           {FLOW_TRUST_ITEMS.map(({ icon: Icon, title, description }) => (

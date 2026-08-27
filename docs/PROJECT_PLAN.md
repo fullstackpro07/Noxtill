@@ -74,7 +74,7 @@ Current repo state at time of writing: `backend/` is a NestJS scaffold with empt
 |---|---|---|---|
 | BE-030 | `GET /credit` (from `v_credit_balances`) + `POST /credit/payments` | BE-005,025 | Payment entry reduces displayed balance immediately |
 | BE-031 | `POST /credit/remind` (single or `all:true`) using Utility template, opt-out safe | BE-020 | Opted-out customers excluded from bulk remind |
-| BE-032 | `GET /credit/:customer/statement` khata-style PDF | BE-012,030 | PDF shows dated entries + running balance matching ledger |
+| BE-032 | `GET /credit/:customer/statement` Credit-style PDF | BE-012,030 | PDF shows dated entries + running balance matching ledger |
 
 ### Milestone BE-M4 — Inventory, Expenses, P&L
 

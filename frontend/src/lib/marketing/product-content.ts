@@ -90,7 +90,7 @@ export const PRODUCT_GROUPS_CONTENT: ProductGroup[] = [
         slug: "credit",
         name: "Customer Credit",
         icon: Wallet,
-        description: "A searchable digital khata: who owes what, how old the balance is, what they've paid and when reminders go out.",
+        description: "A searchable digital Record Bookd Bookd Book: who owes what, how old the balance is, what they've paid and when reminders go out.",
       },
       {
         slug: "catalogue",

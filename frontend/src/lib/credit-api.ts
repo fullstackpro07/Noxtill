@@ -85,7 +85,7 @@ export function fetchLedger(customerId: string): Promise<Ledger> {
   return apiFetch<Ledger>(`/credit/${customerId}/entries`);
 }
 
-/** GET /credit/:customer/statement — renders+uploads the khata-style PDF and hands back a signed URL. */
+/** GET /credit/:customer/statement — renders+uploads the Record Book-style PDF and hands back a signed URL. */
 export function generateStatement(customerId: string): Promise<{ url: string }> {
   return apiFetch<{ url: string }>(`/credit/${customerId}/statement`);
 }

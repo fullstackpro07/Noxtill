@@ -28,7 +28,7 @@ function Stars({ count }: { count: number }) {
 
 export function ReputationSection() {
   return (
-    <section className="px-5 py-16 sm:px-7 sm:py-20">
+    <section className="bg-surface-tint px-5 pt-16 sm:px-7 sm:pt-20">
       <div className="mx-auto max-w-[1560px]">
         <div className="mx-auto mb-10 max-w-[900px] text-center">
           <h2 className="mb-4 text-balance font-display text-4xl font-semibold leading-[1.14] tracking-[-0.035em] text-fg sm:text-5xl">
@@ -49,7 +49,7 @@ export function ReputationSection() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-start gap-6">
+        <div className="flex flex-wrap items-center gap-6">
           <div className="flex min-w-[250px] max-w-[400px] flex-1 basis-[260px] flex-col gap-5.5">
             {REPUTATION_FEATURES.map((feature) => (
               <div key={feature.title} className="flex items-start gap-3.5">

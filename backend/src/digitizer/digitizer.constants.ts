@@ -13,7 +13,7 @@ export const SCANNER_TYPES = [
   'menu',
   'product',
   'business_card',
-  /// Import Customers, photo path (UPD-BE-099) — a photographed khata/ledger page of customer names, phones, and opening balances.
+  /// Import Customers, photo path (UPD-BE-099) — a photographed Record Book/ledger page of customer names, phones, and opening balances.
   'customer_list',
   'general',
 ] as const;

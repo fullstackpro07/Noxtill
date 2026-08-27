@@ -16,6 +16,9 @@
   --bg: #ffffff;
   --surface: #ffffff;
   --surface-2: #fbfcfb;
+  /* Alternating section background — a visible tint of the primary green, used to separate
+     stacked marketing sections by color instead of by whitespace alone. */
+  --surface-tint: #f2f9f6;
   --border: #e6eae8;
   --border-strong: #d6ddd9;
 
@@ -68,6 +71,7 @@
   --bg: #10160f;
   --surface: #171f18;
   --surface-2: #1e2820;
+  --surface-tint: #16211c;
   --border: #2a352b;
   --border-strong: #3a473b;
 
@@ -154,6 +158,7 @@
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-tint: var(--surface-tint);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
 
@@ -359,6 +364,14 @@ h1, h2, h3, h4, .font-display {
   0% { width: 0%; }
   70% { width: 100%; }
   100% { width: 100%; }
+}
+
+/* AI Photo Digitizer live-demo — scanning line sweeping down the paper-ledger mockup. */
+@keyframes scan-sweep {
+  0% { top: 0%; opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

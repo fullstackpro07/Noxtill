@@ -166,6 +166,9 @@ export function SiteHeader() {
                 <Link href="/integrations-directory" className={tabClass(null)} onMouseEnter={hoverClose} onFocus={hoverClose}>
                   Integrations
                 </Link>
+                <Link href="/ai" className={tabClass(null)} onMouseEnter={hoverClose} onFocus={hoverClose}>
+                  AI
+                </Link>
               </div>
             ) : (
               <button
@@ -364,6 +367,9 @@ export function SiteHeader() {
           <DrawerAccordion title="Resources" open={!!drawerAcc.resources} onToggle={() => toggleAcc("resources")} links={RESOURCES_DRAWER_LINKS} />
           <Link href="/integrations-directory" className="block border-b border-border py-4 text-base font-medium text-fg" onClick={() => setDrawerOpen(false)}>
             Integrations
+          </Link>
+          <Link href="/ai" className="block border-b border-border py-4 text-base font-medium text-fg" onClick={() => setDrawerOpen(false)}>
+            AI
           </Link>
 
           <div className="mt-5 flex flex-col gap-2.5">

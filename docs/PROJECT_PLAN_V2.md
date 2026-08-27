@@ -110,7 +110,7 @@ Same pattern as v1: **Backend phase → Frontend phase → Integration phase**, 
 | UPD-BE-021 | Instalment plans | — | *(shipped)* `InstallmentPlan`/`Installment`; `GET /installments?due=today` already powers Due Today. |
 | UPD-BE-022 | Transparent ledger links | — | *(shipped)* `POST /credit/:customerId/share-link`. |
 | UPD-BE-023 | Write-off flow | — | *(shipped)* `POST /credit/:id/write-off`. |
-| — | Statements (PDF) | — | *(existing, undocumented)* `GET /credit/:customer/statement` → `credit-statement.service.ts`, real khata-styled PDF via the shared `PdfRendererService`. Credited, not rebuilt. |
+| — | Statements (PDF) | — | *(existing, undocumented)* `GET /credit/:customer/statement` → `credit-statement.service.ts`, real Credit-styled PDF via the shared `PdfRendererService`. Credited, not rebuilt. |
 | UPD-BE-093 | Outstanding view | — | `GET /credit?sort=overdue` — a thin sort/filter param on the already-real `listDebtors()`, no new model. |
 | UPD-BE-094 | Overdue ageing report | — | `GET /credit/overdue` — real 30+/60+/90+-day bucket aggregation over the existing `v_credit_balances` view (the raw `daysOutstanding` per debtor already exists; this adds the bucketed rollup). |
 | UPD-BE-095 | Credit reminder rules | — | New staged-rule model (days-overdue trigger, tone, channel) replacing the existing single manual `POST /credit/remind` action with real per-business configuration; `CRUD /credit/reminder-rules`. |
@@ -434,7 +434,7 @@ Same module grouping and milestone numbers as Phase 1. Every named spec screen g
 | UPD-FE-022 (was 018) | Business Memory notes | UPD-BE-026 | *(shipped)* Subject picker, pin, category filter. |
 | UPD-FE-081 | Customer Profile, new capabilities | UPD-BE-097 | *(extends existing profile page)* "Erase customer" (typed confirm — reuses the real erase endpoint), "Export their data," merge-duplicate popup. |
 | UPD-FE-082 | Segments screen | UPD-BE-098 | Rule builder (field/condition/value, AND/OR chaining, live matching count); AI-persona-suggestion popup with rename; "Message segment," duplicate, export members. |
-| UPD-FE-083 | Import Customers screen | UPD-BE-099 | Column-mapping + preview + invalid-number fix list; explicit not-marketing-consented disclaimer; opening-balance confirmation for khata imports. |
+| UPD-FE-083 | Import Customers screen | UPD-BE-099 | Column-mapping + preview + invalid-number fix list; explicit not-marketing-consented disclaimer; opening-balance confirmation for Credit imports. |
 
 #### Milestone UPD-FE-M8 — Reviews depth
 

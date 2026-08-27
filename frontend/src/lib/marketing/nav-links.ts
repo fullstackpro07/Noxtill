@@ -27,7 +27,7 @@ export const PRODUCT_GROUPS: NavLinkGroup[] = [
       { label: "Fast Sale", href: "/product#fast-sale", description: "Take payment in under ten seconds" },
       { label: "Orders", href: "/product#orders", description: "Counter, delivery, dine-in and tables in one board" },
       { label: "Bookings", href: "/product#bookings", description: "Fewer no-shows, no more phone diary" },
-      { label: "Customer Credit", href: "/product#credit", description: "The khata book, digitised" },
+      { label: "Customer Credit", href: "/product#credit", description: "The Record Bookd Book book, digitised" },
       { label: "Products & Services", href: "/product#catalogue", description: "Your catalogue, with real margins" },
     ],
   },
@@ -56,12 +56,12 @@ export const PRODUCT_GROUPS: NavLinkGroup[] = [
   {
     title: "Powered by AI",
     items: [
-      { label: "Voice-Entry Sales", href: "/product#voice-sales", description: "Speak the sale, confirm it, done", starred: true },
-      { label: "Photo Digitizer", href: "/product#photo-digitizer", description: "Photograph your paper register — we read it" },
-      { label: "Business Assistant", href: "/product#assistant", description: "Ask anything about your own numbers" },
-      { label: "AI Insights", href: "/product#ai-insights", description: "What changed, and what to do about it" },
-      { label: "AI Phone Receptionist", href: "/product#ai-receptionist", description: "Answers when you cannot" },
-      { label: "What our AI never does", href: "/product#ai-promise", description: "Our three commitments, in plain English" },
+      { label: "Voice-Entry Sales", href: "/ai#voice-sales", description: "Speak the sale, confirm it, done", starred: true },
+      { label: "Photo Digitizer", href: "/ai#photo-digitizer", description: "Photograph your paper register — we read it" },
+      { label: "Business Assistant", href: "/ai#assistant", description: "Ask anything about your own numbers" },
+      { label: "AI Insights", href: "/ai#ai-insights", description: "What changed, and what to do about it" },
+      { label: "AI Phone Receptionist", href: "/ai#ai-receptionist", description: "Answers when you cannot" },
+      { label: "What our AI never does", href: "/ai#ai-promise", description: "Our three commitments, in plain English" },
     ],
   },
 ];

@@ -19,10 +19,10 @@ export function MarketingFaqGrid({
   const jsonLd = buildFaqJsonLd(items);
 
   return (
-    <section className="px-5 py-16 sm:px-7 sm:py-20">
+    <section className="px-5 py-16 sm:px-7 sm:py-14">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <div className="mx-auto max-w-[1560px]">
-        <div className="mx-auto mb-8 max-w-[720px] text-center">
+        <div className="mx-auto mb-10 max-w-[720px] text-center">
           <h2 className="mb-3.5 text-balance font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">{title}</h2>
           {description ? <p className="text-[15px] leading-relaxed text-fg-muted">{description}</p> : null}
         </div>
@@ -30,7 +30,7 @@ export function MarketingFaqGrid({
           {[left, right].map((column, columnIndex) => (
             <div key={columnIndex} className="flex min-w-[300px] flex-1 basis-[440px] flex-col gap-4">
               {column.map((item, i) => (
-                <Reveal key={item.question} delay={(i % 3) * 90} className="rounded-2xl border border-border p-5">
+                <Reveal key={item.question} delay={(i % 3) * 90} className="rounded-2xl border border-border bg-white p-5">
                   <h3 className="mb-2 font-display text-[16.5px] font-semibold text-fg">{item.question}</h3>
                   <p className="text-sm leading-relaxed text-fg-muted">{item.answer}</p>
                 </Reveal>

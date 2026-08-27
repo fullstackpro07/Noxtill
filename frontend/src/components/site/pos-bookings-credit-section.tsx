@@ -6,13 +6,14 @@ import { POS_FEATURES } from "@/lib/marketing/home-content";
 
 export function PosBookingsCreditSection() {
   return (
-    <div>
-      <section className="px-5 py-16 sm:px-7 sm:py-20">
-        <div className="mx-auto flex max-w-[1560px] flex-wrap items-start gap-x-12 gap-y-10">
-          <Reveal delay={0} className="min-w-[300px] max-w-[500px] flex-1 basis-[400px]">
-            <h2 className="mb-4.5 text-balance font-display text-[36px] font-semibold leading-[1.1] tracking-[-0.035em] text-fg sm:text-[40px]">
+    <div className="bg-surface-tint">
+      <section className="px-5 pt-16 sm:px-7 sm:pt-14">
+        <h2 className="mb-10 text-balance text-center font-display text-4xl font-semibold leading-[1.1] tracking-[-0.035em] text-fg sm:text-5xl">
               Point of sale software connected to your customers, <span className="text-accent">inventory and business data</span>
-            </h2>
+          </h2>
+        <div className="mx-auto flex max-w-[1560px] flex-wrap items-center gap-x-12 gap-y-10">
+          <Reveal delay={0} className="min-w-[300px] max-w-[500px] flex-1 basis-[400px]">
+            
             <p className="mb-4 max-w-[50ch] text-[15.5px] leading-relaxed text-fg-muted">
               Noxtill&apos;s point of sale for small business takes payment in under ten seconds, prints or sends the receipt on
               WhatsApp, and updates stock, profit and the customer record in the same action. Counter sales, delivery, dine-in
@@ -150,28 +151,28 @@ export function PosBookingsCreditSection() {
               </div>
 
               <div className="min-w-[200px] flex-1 basis-[210px] p-4.5">
-                <div className="flex flex-col gap-2.5">
-                  <div className="rounded-xl border border-[#eef0ef] p-3">
+                <div className="flex flex-wrap gap-2.5">
+                  <div className="min-w-32.5 flex-1 rounded-xl border border-[#eef0ef] p-3">
                     <div className="mb-1.5 text-[11px] text-fg-faint">Receipt sent</div>
                     <div className="flex items-center gap-2 text-[12.5px] text-fg">
                       <Image src="/brand/whatsapp.png" alt="" width={18} height={18} className="h-[18px] w-[18px] object-contain" /> WhatsApp · delivered
                     </div>
                   </div>
-                  <div className="rounded-xl border border-[#eef0ef] p-3">
+                  <div className="min-w-32.5 flex-1 rounded-xl border border-[#eef0ef] p-3">
                     <div className="mb-1.5 text-[11px] text-fg-faint">Stock updated</div>
                     <div className="text-[12.5px] text-fg">
                       Hair serum <span className="text-fg-faint">14 → 13</span>
                     </div>
                     <div className="mt-1 text-[11px] text-[#c4563f]">Low-stock alert at 10</div>
                   </div>
-                  <div className="rounded-xl border border-[#eef0ef] p-3">
+                  <div className="min-w-32.5 flex-1 rounded-xl border border-[#eef0ef] p-3">
                     <div className="mb-1.5 text-[11px] text-fg-faint">Today at this till</div>
                     <div className="flex items-baseline justify-between gap-2 text-[12.5px]">
                       <span className="text-fg-faint">Sales</span>
                       <span className="font-semibold text-fg">$1,284</span>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-[#d5eee2] bg-surface-2 p-3">
+                  <div className="min-w-32.5 flex-1 rounded-xl border border-[#d5eee2] bg-surface-2 p-3">
                     <div className="mb-1.5 font-mono text-[9.5px] uppercase tracking-wide text-accent">Also updated</div>
                     <div className="text-xs leading-relaxed text-[#1e3138]">Today&apos;s profit, the customer record, and tonight&apos;s summary.</div>
                   </div>
@@ -183,7 +184,7 @@ export function PosBookingsCreditSection() {
       </section>
 
       <section className="px-5 pb-16 pt-4 sm:px-7 sm:pb-20">
-        <div className="mx-auto flex max-w-[1560px] flex-wrap items-start gap-x-12 gap-y-10">
+        <div className="mx-auto flex max-w-[1560px] flex-wrap items-center gap-x-12 gap-y-10">
           <Reveal delay={0} className="min-w-[320px] flex-1 basis-[480px] rounded-[var(--radius-lg)] border border-border p-5 shadow-[0_24px_60px_-46px_rgba(13,21,18,0.5)]">
             <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-2.5">
               <div className="font-display text-[15px] font-semibold text-fg">Tomorrow&apos;s bookings</div>
@@ -266,10 +267,10 @@ export function PosBookingsCreditSection() {
       </section>
 
       <section className="px-5 pb-16 pt-4 sm:px-7 sm:pb-20">
-        <div className="mx-auto flex max-w-[1560px] flex-wrap items-start gap-x-12 gap-y-10">
+        <div className="mx-auto flex max-w-[1560px] flex-wrap items-center gap-x-12 gap-y-10">
           <Reveal delay={0} className="min-w-[300px] max-w-[500px] flex-1 basis-[400px]">
             <h2 className="mb-4.5 text-balance font-display text-[36px] font-semibold leading-[1.1] tracking-[-0.035em] text-fg sm:text-[40px]">
-              Digital khata and <span className="text-accent">customer credit ledger software</span>
+              Digital Credit and <span className="text-accent">customer credit ledger software</span>
             </h2>
             <p className="mb-4 max-w-[50ch] text-[15.5px] leading-relaxed text-fg-muted">
               If you let regulars pay later, Noxtill tracks who owes you, how long it has been outstanding, and what they have
@@ -280,7 +281,7 @@ export function PosBookingsCreditSection() {
               Polite reminders go out on WhatsApp on a schedule you set, with the balance and a payment link attached — so you
               stop chasing money by memory, and nobody is embarrassed at the counter. Explore{" "}
               <Link href="/product#credit" className="text-primary hover:text-primary-hover">
-                digital khata
+                digital Credit
               </Link>{" "}
               for{" "}
               <Link href="/solutions#retail" className="text-primary hover:text-primary-hover">

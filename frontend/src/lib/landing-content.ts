@@ -92,7 +92,7 @@ export const MODULES: ModuleCard[] = [
   { icon: Star, title: "Reviews & Reputation", description: "Unified inbox, auto-requests, Google routing, QR code, reply AI, widget." },
   { icon: CalendarClock, title: "Bookings & Appointments", description: "Public booking link, staff calendar, reminders, one-tap reschedule." },
   { icon: Receipt, title: "Orders & Billing", description: "Fast POS, invoices, quotations, online orders, table QR, receipt printing." },
-  { icon: Wallet, title: "Customer Credit Ledger", description: "Digital udhaar/khata/tab. Balances, statements, automated polite reminders." },
+  { icon: Wallet, title: "Customer Credit Ledger", description: "Digital udhaar/Record Book/tab. Balances, statements, automated polite reminders." },
   { icon: Package, title: "Inventory", description: "Auto-decrement on sale, low-stock alerts, wastage tracking, supplier costs." },
   { icon: BarChart3, title: "Profit & Loss Engine", description: "True P&L, hourly patterns, best sellers, dead stock, AI what-if calculator." },
   { icon: Users, title: "Customer CRM", description: "Full history, auto-tags, birthday greetings, segments, one-tap campaigns." },
@@ -110,7 +110,7 @@ export const MODULES: ModuleCard[] = [
 export const CREDIT_MODULE = {
   eyebrow: "Credit Ledger",
   headline: "The tab, digitized. Politely collected.",
-  body: "Every small business extends credit to regulars. Khatabook calls it khata. Argentinian shops say fiado. Noxtill digitizes every debt, tracks every payment, and sends one-tap polite reminders — recovering money owners forget to chase, without a single awkward conversation.",
+  body: "Every small business extends credit to regulars. Record Bookbook calls it Record Book. Argentinian shops say fiado. Noxtill digitizes every debt, tracks every payment, and sends one-tap polite reminders — recovering money owners forget to chase, without a single awkward conversation.",
   stats: [
     { value: "$3.2M+", label: "recovered by businesses" },
     { value: "91%", label: "collection rate with reminders" },

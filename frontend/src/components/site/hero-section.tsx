@@ -48,7 +48,7 @@ function Sparkline({ points, color = "#0ea86a" }: { points: number[]; color?: st
 export function HeroSection() {
   return (
     <section className="overflow-hidden px-5 sm:px-7">
-      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-12 gap-y-12 pt-10 sm:pt-14">
+      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-12 gap-y-12 pt-10 sm:pt-4">
         <div className="min-w-[300px] max-w-[560px] flex-1 basis-[420px]">
           <h1 className="text-balance font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
             AI-powered business management software{" "}
@@ -72,7 +72,7 @@ export function HeroSection() {
             answers anything else you ask.
           </p>
 
-          <div className="mt-7 grid max-w-[500px] grid-cols-2 gap-2.5 sm:grid-cols-4">
+          {/* <div className="mt-7 grid max-w-[500px] grid-cols-2 gap-2.5 sm:grid-cols-4">
             {HERO_CHANNELS.map((channel) => (
               <div
                 key={channel.title}
@@ -85,7 +85,7 @@ export function HeroSection() {
                 <div className="text-[12px] leading-snug text-fg-faint">{channel.description}</div>
               </div>
             ))}
-          </div>
+          </div> */}
 
           <div className="mt-6 flex flex-wrap gap-3">
             <Link

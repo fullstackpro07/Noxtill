@@ -361,6 +361,9 @@ export const SECURITY_SECTION = {
     { icon: ShieldCheck, title: "Role-Based Permissions", description: "You control who can access what. Granular permissions for your team." },
     { icon: KeyRound, title: "Secure API Connections", description: "All integrations use secure, token-based authentication." },
     { icon: EyeOff, title: "Privacy First", description: "We never sell your data. Your business information stays private and safe." },
+    { icon: RefreshCw, title: "Regular Security Audits", description: "We conduct regular security audits and vulnerability assessments." },
+    { icon: SlidersHorizontal, title: "Continuous Monitoring", description: "Our systems are continuously monitored for suspicious activity." },
+    { icon: Server, title: "Reliable Infrastructure", description: "We use reliable cloud infrastructure with redundancy and failover." },
   ] satisfies FlowTrustItem[],
 };
 

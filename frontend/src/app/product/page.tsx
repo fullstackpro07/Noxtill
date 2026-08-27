@@ -64,11 +64,7 @@ export default function ProductPage() {
 
         <section className="px-5 pb-11 pt-7 text-center sm:px-7">
           <div className="mx-auto max-w-[860px]">
-            <Reveal>
-              <span className="inline-flex items-center rounded-full bg-gradient-to-r from-accent to-[#095843] px-5 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-white">
-                {PRODUCT_HERO.eyebrow}
-              </span>
-            </Reveal>
+            
             <Reveal delay={60}>
               <h1 className="mt-5 text-balance font-display text-4xl font-bold leading-[1.1] tracking-tight text-fg sm:text-5xl">
                 {PRODUCT_HERO.headlineLead} <span className="text-accent">{PRODUCT_HERO.headlineHighlight}</span>
