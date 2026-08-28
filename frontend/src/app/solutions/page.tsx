@@ -85,7 +85,7 @@ export default function SolutionsPage() {
             <Reveal delay={180}>
               <div className="mb-4 flex flex-wrap justify-center gap-3">
                 <Link
-                  href="/login"
+                  href="/book-a-demo"
                   className="rounded-[var(--radius-md)] bg-primary px-6.5 py-3.5 text-[15px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
                 >
                   {SOLUTIONS_HERO.primaryCta}
@@ -111,9 +111,9 @@ export default function SolutionsPage() {
 
         <SolutionsNavigator />
 
-        <section className="px-5 pb-14 sm:px-7">
+        <section className="bg-surface-tint-2 px-5 pb-14 sm:px-7">
           <Reveal>
-            <div className="mx-auto max-w-[1240px] rounded-[var(--radius-xl)] border border-border p-7">
+            <div className="mx-auto max-w-[1240px] rounded-[var(--radius-xl)] border border-border bg-white p-7">
               <h2 className="mb-2.5 font-display text-2xl font-semibold tracking-tight text-fg">{FLOW_PANEL.title}</h2>
               <p className="mb-5 max-w-[88ch] text-[14.5px] leading-relaxed text-fg-muted">{FLOW_PANEL.body}</p>
               <div className="flex flex-wrap items-center gap-2">
@@ -180,18 +180,20 @@ export default function SolutionsPage() {
           </div>
         </section>
 
-        <MarketingFaqGrid title="Questions business owners ask" items={SOLUTIONS_FAQS} />
+        <div className="bg-surface-tint">
+          <MarketingFaqGrid title="Questions business owners ask" items={SOLUTIONS_FAQS} />
+        </div>
 
-        <section className="px-5 pb-18 sm:px-7">
+        <section className="bg-surface-tint-2 px-5 pb-18 sm:px-7">
           <Reveal>
-            <div className="mx-auto max-w-[900px] rounded-[var(--radius-xl)] border border-border bg-surface-2 p-10 text-center">
+            <div className="mx-auto max-w-[900px] rounded-[var(--radius-xl)] border border-border bg-white p-10 text-center">
               <h2 className="mb-3 text-balance font-display text-[28px] font-semibold tracking-tight text-fg">
                 {SOLUTIONS_FINAL_CTA.title}
               </h2>
               <p className="mx-auto mb-5.5 max-w-[62ch] text-[14.5px] leading-relaxed text-fg-muted">{SOLUTIONS_FINAL_CTA.body}</p>
               <div className="mb-4 flex flex-wrap justify-center gap-3">
                 <Link
-                  href="/login"
+                  href="/book-a-demo"
                   className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-primary px-6.5 py-3.5 text-[15px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
                 >
                   {SOLUTIONS_FINAL_CTA.primaryCta}

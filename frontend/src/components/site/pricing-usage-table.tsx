@@ -9,7 +9,7 @@ function cellParts(cell: UsageRow["cells"][number]) {
 
 export function PricingUsageTable({ plans, yearly }: { plans: PricingPlan[]; yearly: boolean }) {
   return (
-    <div className="rounded-[20px] border border-[#e9edeb] overflow-x-auto">
+    <div className="rounded-[20px] border border-[#e9edeb] bg-white overflow-x-auto">
       <table className="w-full min-w-[980px] text-[13.5px]">
         <caption className="sr-only">Monthly usage allowances for each Noxtill plan</caption>
         <thead>

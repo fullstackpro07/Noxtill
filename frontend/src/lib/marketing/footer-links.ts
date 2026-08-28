@@ -67,7 +67,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: "Help centre", href: "/resources" },
       { label: "Blog", href: "/resources" },
       { label: "Case studies", href: "/resources" },
-      { label: "Book a demo", href: "/login" },
+      { label: "Book a demo", href: "/book-a-demo" },
       { label: "System status", href: "/resources" },
       { label: "Contact support", href: "/resources" },
     ],

@@ -68,9 +68,32 @@ describe('RollupService (BE-059)', () => {
         },
       ],
     });
+
+    const branchCustomer = await prisma.customer.create({
+      data: {
+        businessId: branchId,
+        phone: `+1${Date.now()}0`,
+        name: 'Rollup Customer',
+      },
+    });
+    await prisma.creditEntry.create({
+      data: {
+        businessId: branchId,
+        customerId: branchCustomer.id,
+        kind: 'credit',
+        amount: 60,
+        note: 'Rollup fixture credit',
+      },
+    });
   });
 
   afterAll(async () => {
+    await prisma.creditEntry.deleteMany({
+      where: { businessId: { in: [parentId, branchId] } },
+    });
+    await prisma.customer.deleteMany({
+      where: { businessId: { in: [parentId, branchId] } },
+    });
     await prisma.externalReview.deleteMany({
       where: { businessId: { in: [parentId, branchId] } },
     });
@@ -99,6 +122,20 @@ describe('RollupService (BE-059)', () => {
     const parentRow = result.branches.find((b) => b.businessId === parentId)!;
     expect(branchRow.reviewAvg).toBe(4);
     expect(parentRow.reviewAvg).toBeNull();
+  });
+
+  it('includes real per-branch customer count and outstanding credit, plus correctly summed totals (UPD-BE-109)', async () => {
+    const result = await service.dashboard(parentId);
+    const branchRow = result.branches.find((b) => b.businessId === branchId)!;
+    const parentRow = result.branches.find((b) => b.businessId === parentId)!;
+
+    expect(branchRow.customerCount).toBe(1);
+    expect(branchRow.creditOutstanding).toBe(60);
+    expect(parentRow.customerCount).toBe(0);
+    expect(parentRow.creditOutstanding).toBe(0);
+
+    expect(result.totals.customerCount).toBe(1);
+    expect(result.totals.creditOutstanding).toBe(60);
   });
 
   it('returns a per-branch weekly comparison series', async () => {

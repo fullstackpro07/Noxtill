@@ -72,6 +72,7 @@ import {
   FileDown,
   ShieldCheck,
   UserCheck,
+  Repeat2,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -267,7 +268,18 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "attendance", labelKey: "nav.staffAttendance", href: "/staff/attendance", icon: UserCheck },
     ],
   },
-  { key: "branches", labelKey: "nav.branches", href: "/branches", icon: Building2, roles: ["owner"] },
+  {
+    key: "branches",
+    labelKey: "nav.branches",
+    href: "/branches",
+    icon: Building2,
+    roles: ["owner"],
+    children: [
+      { key: "rollup", labelKey: "nav.branchRollup", href: "/branches/rollup", icon: LayoutDashboard },
+      { key: "compare", labelKey: "nav.branchCompare", href: "/branches/compare", icon: BarChart3 },
+      { key: "transfers", labelKey: "nav.branchTransfers", href: "/branches/transfers", icon: Repeat2 },
+    ],
+  },
   { key: "settings", labelKey: "nav.settings", href: "/settings", icon: Settings, roles: ["owner", "manager"] },
 ];
 

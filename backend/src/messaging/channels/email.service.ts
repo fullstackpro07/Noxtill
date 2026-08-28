@@ -14,7 +14,7 @@ function humanize(templateKey: string): string {
     .join(' ');
 }
 
-/** Postmark email adapter (BE-017) — SES is a drop-in alternative behind the same ChannelSender contract. */
+/** Resend email adapter (BE-017) — SES is a drop-in alternative behind the same ChannelSender contract. */
 @Injectable()
 export class EmailService implements ChannelSender {
   private readonly logger = new Logger(EmailService.name);
@@ -22,27 +22,27 @@ export class EmailService implements ChannelSender {
   constructor(private readonly config: ConfigService) {}
 
   async send(params: ChannelSendParams): Promise<ChannelSendResult> {
-    const serverToken = this.config.get<string>('EMAIL_PROVIDER_KEY');
+    const apiKey = this.config.get<string>('EMAIL_PROVIDER_KEY');
     const fromAddress = this.config.get<string>('EMAIL_FROM_ADDRESS');
 
-    const response = await axios.post<{ MessageID: string }>(
-      'https://api.postmarkapp.com/email',
+    const response = await axios.post<{ id: string }>(
+      'https://api.resend.com/emails',
       {
-        From: fromAddress,
-        To: params.to,
-        Subject: humanize(params.templateKey),
-        TextBody: params.text,
+        from: fromAddress,
+        to: params.to,
+        subject: humanize(params.templateKey),
+        text: params.text,
       },
       {
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          'X-Postmark-Server-Token': serverToken,
+          Authorization: `Bearer ${apiKey}`,
         },
       },
     );
 
-    this.logger.debug(`Email sent, provider_ref=${response.data.MessageID}`);
-    return { providerRef: response.data.MessageID };
+    this.logger.debug(`Email sent, provider_ref=${response.data.id}`);
+    return { providerRef: response.data.id };
   }
 }

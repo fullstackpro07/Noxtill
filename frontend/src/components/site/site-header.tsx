@@ -193,16 +193,10 @@ export function SiteHeader() {
             EN <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
           </button>
           <Link
-            href="/login"
-            className={`rounded-xl px-4 py-2.5 text-[14.5px] font-medium text-fg hover:bg-surface-2 ${narrow ? "hidden" : "inline-block"}`}
-          >
-            Log in
-          </Link>
-          <Link
-            href="/login"
+            href="/book-a-demo"
             className={`rounded-xl bg-primary px-5 py-2.5 text-[14.5px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover ${narrow ? "hidden" : "inline-block"}`}
           >
-            Start free
+            Book a Demo
           </Link>
           <button
             type="button"
@@ -248,11 +242,11 @@ export function SiteHeader() {
                 </div>
               </div>
               <Link
-                href="/login"
+                href="/book-a-demo"
                 className="inline-flex items-center gap-2 rounded-xl bg-[var(--rating-star)] px-4.5 py-2.5 text-[13.5px] font-semibold text-fg"
               >
                 <PlayCircle className="h-4 w-4" aria-hidden />
-                Watch the demo
+                Book a Demo
               </Link>
             </div>
           </div>
@@ -373,11 +367,8 @@ export function SiteHeader() {
           </Link>
 
           <div className="mt-5 flex flex-col gap-2.5">
-            <Link href="/login" className="rounded-xl bg-primary px-5 py-3.5 text-center text-[15px] font-medium text-primary-foreground">
-              Start free
-            </Link>
-            <Link href="/login" className="rounded-xl border border-border-strong px-5 py-3.5 text-center text-[15px] font-medium text-fg">
-              Log in
+            <Link href="/book-a-demo" className="rounded-xl bg-primary px-5 py-3.5 text-center text-[15px] font-medium text-primary-foreground">
+              Book a Demo
             </Link>
           </div>
         </div>

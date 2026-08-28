@@ -20,7 +20,7 @@ function CompareCell({ value, popular }: { value: CompareCellValue; popular?: bo
 
 export function PricingCompareTable({ plans, yearly }: { plans: PricingPlan[]; yearly: boolean }) {
   return (
-    <div className="rounded-[20px] border border-[#e9edeb] overflow-x-auto">
+    <div className="rounded-[20px] border border-[#e9edeb] bg-white overflow-x-auto">
       <table className="w-full min-w-[940px] text-[13.5px]">
         <caption className="sr-only">Feature comparison across Noxtill Starter, Growth, Business, Scale and Enterprise plans</caption>
         <thead>

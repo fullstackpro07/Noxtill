@@ -16,7 +16,7 @@ interface UnsubscribePayload {
 
 /**
  * Marketing bulk email (BE-083) — mirrors `marketing/campaigns.service.ts`'s real segment-fan-out
- * pattern, but sends via Postmark directly (same shape as the transactional
+ * pattern, but sends via Resend directly (same shape as the transactional
  * `messaging/channels/email.service.ts`) instead of the WhatsApp/SMS send-gate, since email
  * marketing has its own quota-free suppression-list model rather than the messaging quota.
  */
@@ -169,19 +169,18 @@ export class EmailCampaignsService {
 
     try {
       await axios.post(
-        'https://api.postmarkapp.com/email',
+        'https://api.resend.com/emails',
         {
-          From: this.config.get<string>('EMAIL_FROM_ADDRESS'),
-          To: email,
-          Subject: dto.subject,
-          TextBody: textBody,
+          from: this.config.get<string>('EMAIL_FROM_ADDRESS'),
+          to: email,
+          subject: dto.subject,
+          text: textBody,
         },
         {
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            'X-Postmark-Server-Token':
-              this.config.get<string>('EMAIL_PROVIDER_KEY') ?? '',
+            Authorization: `Bearer ${this.config.get<string>('EMAIL_PROVIDER_KEY') ?? ''}`,
           },
         },
       );

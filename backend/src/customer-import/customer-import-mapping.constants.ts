@@ -21,7 +21,6 @@ export const IMPORT_FIELD_ALIASES: Record<string, ImportCanonicalField> = {
   dues: 'balance',
   owed: 'balance',
   amountowed: 'balance',
-  Record Book: 'balance',
 };
 
 export function normalizeHeader(header: string): string {

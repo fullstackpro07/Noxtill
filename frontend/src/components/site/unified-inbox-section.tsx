@@ -7,7 +7,7 @@ import { INBOX_BENEFITS, INBOX_CHANNELS, INBOX_FEATURES } from "@/lib/marketing/
 
 export function UnifiedInboxSection() {
   return (
-    <section className="px-5 pt-16 sm:px-7 sm:pt-14">
+    <section className="bg-surface-tint-2 px-5 pt-16 sm:px-7 sm:pt-14">
       <div className="mx-auto max-w-[1560px]">
         <h2 className="mb-10 text-balance text-center font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
               Unified inbox for WhatsApp, email,
@@ -53,8 +53,8 @@ export function UnifiedInboxSection() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Link href="/pricing" className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6.5 py-3.5 text-[15.5px] font-medium text-primary-foreground hover:bg-primary-hover">
-                Try Noxtill Free <ArrowRight className="h-4 w-4" aria-hidden />
+              <Link href="/book-a-demo" className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6.5 py-3.5 text-[15.5px] font-medium text-primary-foreground hover:bg-primary-hover">
+                Book a Demo <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link href="/product#inbox" className="inline-flex items-center gap-2 rounded-xl border border-border-strong px-6 py-3.5 text-[15.5px] font-medium text-fg hover:border-primary hover:text-accent">
                 See How It Works

@@ -426,7 +426,7 @@ export const INTEGRATIONS_FAQ = [
 export const INTEGRATIONS_FINAL_CTA = {
   heading: "Connect your business. Keep everything in sync.",
   body: "Bring the tools you already use into one connected business system with Noxtill.",
-  primaryCta: { label: "Start 14-Day Free Trial", href: "/login" },
+  primaryCta: { label: "Book a Demo", href: "/book-a-demo" },
   secondaryCta: { label: "View All Integrations", href: "#directory" },
   trust: ["No credit card required", "14-day free trial", "Cancel anytime"],
 };

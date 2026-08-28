@@ -42,7 +42,7 @@ export default function ResourcesPage() {
       <SiteHeader />
 
       <main className="flex-1">
-        <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:px-7 sm:py-24">
+        <section className="mx-auto max-w-3xl px-5 pt-16 text-center sm:px-7 sm:pt-24">
           <span className="inline-flex rounded-full bg-primary/8 px-3 py-1 text-xs font-semibold text-primary">Resources</span>
           <h1 className="mt-5 text-balance font-display text-4xl font-bold leading-tight text-fg sm:text-5xl">Policies, guides and tools</h1>
           <p className="mt-4 text-lg text-fg-muted">
@@ -51,7 +51,8 @@ export default function ResourcesPage() {
           </p>
         </section>
 
-        <section className="mx-auto max-w-3xl px-5 pb-20 sm:px-7">
+        <div className="bg-surface-tint">
+        <section className="mx-auto max-w-3xl px-5 pt-16 pb-20 sm:px-7 sm:pt-20">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {POLICY_LINKS.map(({ href, icon: Icon, title, description }) => (
               <Link
@@ -74,12 +75,13 @@ export default function ResourcesPage() {
 
           <p className="mt-10 text-center text-sm text-fg-faint">
             Looking for our help centre, blog or free tools? Those are on the way — in the meantime,{" "}
-            <Link href="/login" className="font-medium text-primary hover:underline">
+            <Link href="/book-a-demo" className="font-medium text-primary hover:underline">
               get in touch
             </Link>{" "}
             and we&apos;ll point you in the right direction.
           </p>
         </section>
+        </div>
       </main>
 
       <SiteFooter />

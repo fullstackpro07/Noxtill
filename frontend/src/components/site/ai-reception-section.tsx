@@ -6,7 +6,7 @@ import { RECEPTION_BENEFITS, RECEPTION_FEATURES } from "@/lib/marketing/home-con
 
 export function AiReceptionSection() {
   return (
-    <section className="px-5 pt-16 sm:px-7 sm:pt-20">
+    <section className="bg-surface-tint px-5 pt-16 sm:px-7 sm:pt-20">
       <div className="mx-auto max-w-[1560px]">
         <div className="flex flex-wrap items-center gap-x-11 gap-y-10">
           <Reveal delay={0} className="min-w-[300px] max-w-[430px] flex-1 basis-[360px]">
@@ -43,8 +43,8 @@ export function AiReceptionSection() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Link href="/pricing" className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6.5 py-3.5 text-[15.5px] font-medium text-primary-foreground hover:bg-primary-hover">
-                Try Noxtill Free <ArrowRight className="h-4 w-4" aria-hidden />
+              <Link href="/book-a-demo" className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6.5 py-3.5 text-[15.5px] font-medium text-primary-foreground hover:bg-primary-hover">
+                Book a Demo <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link href="/product#ai-receptionist" className="inline-flex items-center gap-2 rounded-xl border border-border-strong px-6 py-3.5 text-[15.5px] font-medium text-fg hover:border-primary hover:text-accent">
                 See How It Works
@@ -83,10 +83,7 @@ export function AiReceptionSection() {
           </div>
           <div className="flex min-w-[270px] flex-1 basis-[300px] flex-col gap-4">
             <div className="flex flex-wrap gap-3">
-              <Link href="/pricing" className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6.5 py-3.5 text-[15.5px] font-medium text-primary-foreground hover:bg-primary-hover">
-                Try Noxtill Free <ArrowRight className="h-4 w-4" aria-hidden />
-              </Link>
-              <Link href="/book-a-demo" className="inline-flex items-center gap-2 rounded-xl border border-border-strong bg-white px-6 py-3.5 text-[15.5px] font-medium text-fg hover:border-primary hover:text-accent">
+              <Link href="/book-a-demo" className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6.5 py-3.5 text-[15.5px] font-medium text-primary-foreground hover:bg-primary-hover">
                 <Calendar className="h-[17px] w-[17px]" aria-hidden /> Book a Demo
               </Link>
             </div>

@@ -11,12 +11,12 @@ export function AiCapabilitySectionBlock({
   data,
   demo,
   reverse = false,
-  tint = false,
+  tint = "white",
 }: {
   data: AiCapabilitySection;
   demo: React.ReactNode;
   reverse?: boolean;
-  tint?: boolean;
+  tint?: "white" | "tint" | "tint-2";
 }) {
   const textColumn = (
     <Reveal delay={0} className="min-w-[300px] max-w-[480px] flex-1 basis-[400px]">
@@ -45,7 +45,10 @@ export function AiCapabilitySectionBlock({
   );
 
   return (
-    <section id={data.slug} className={`px-5 pt-16 sm:px-7 sm:pt-20 ${tint ? "bg-surface-tint" : ""}`}>
+    <section
+      id={data.slug}
+      className={`px-5 pt-16 sm:px-7 sm:pt-20 ${tint === "tint" ? "bg-surface-tint" : tint === "tint-2" ? "bg-surface-tint-2" : ""}`}
+    >
       <div className="mx-auto max-w-[1320px]">
         <div className="flex flex-wrap items-center gap-x-11 gap-y-10">
           {reverse ? (

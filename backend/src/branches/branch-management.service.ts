@@ -1,15 +1,28 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateBranchDto } from './dto/create-branch.dto';
+import { UpdateBranchDto } from './dto/update-branch.dto';
 import { slugify } from '../common/utils/slug.util';
 import {
   BRANCH_ERROR_CODES,
   BRANCH_TEMP_PASSWORD_BYTES,
 } from './branches.constants';
 import { Prisma, Role } from '@prisma/client';
+
+/** The settings fields "copy from another branch" actually copies — deliberately excludes
+ * identity fields (name, slug, currency) and the `active` flag. */
+const COPYABLE_SETTINGS_FIELDS = [
+  'nightlyCloseTime',
+  'taxLabel',
+  'taxRate',
+  'channelPref',
+  'workingHours',
+  'branding',
+  'acceptedPaymentMethods',
+] as const satisfies readonly (keyof Prisma.BusinessUpdateInput)[];
 
 const BCRYPT_ROUNDS = 10;
 
@@ -93,5 +106,88 @@ export class BranchManagementService {
       where: { OR: [{ id: rootId }, { parentId: rootId }] },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  /** UPD-BE-109 — updates a branch's own settings; `callerBusinessId` just proves group membership, the write always targets `branchId`. */
+  async update(
+    callerBusinessId: string,
+    branchId: string,
+    dto: UpdateBranchDto,
+  ) {
+    await this.assertSameGroup(callerBusinessId, branchId);
+    return this.prisma.business.update({
+      where: { id: branchId },
+      data: dto as Prisma.BusinessUpdateInput,
+    });
+  }
+
+  /** Soft-deactivation — the root business (no `parentId`) can never be deactivated, since that would orphan the whole group. */
+  async deactivate(callerBusinessId: string, branchId: string) {
+    await this.assertSameGroup(callerBusinessId, branchId);
+    const branch = await this.prisma.business.findUniqueOrThrow({
+      where: { id: branchId },
+    });
+    if (!branch.parentId) {
+      throw new AppException(
+        BRANCH_ERROR_CODES.CANNOT_DEACTIVATE_ROOT,
+        'The main branch cannot be deactivated',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.prisma.business.update({
+      where: { id: branchId },
+      data: { active: false },
+    });
+  }
+
+  async reactivate(callerBusinessId: string, branchId: string) {
+    await this.assertSameGroup(callerBusinessId, branchId);
+    return this.prisma.business.update({
+      where: { id: branchId },
+      data: { active: true },
+    });
+  }
+
+  /** Copies the real settings fields (hours/tax/branding/channel/payment methods) from one branch onto another — both must be in the caller's own group. */
+  async copySettings(
+    callerBusinessId: string,
+    targetBranchId: string,
+    fromBranchId: string,
+  ) {
+    await this.assertSameGroup(callerBusinessId, targetBranchId);
+    await this.assertSameGroup(callerBusinessId, fromBranchId);
+
+    const source = await this.prisma.business.findUniqueOrThrow({
+      where: { id: fromBranchId },
+    });
+    const data = Object.fromEntries(
+      COPYABLE_SETTINGS_FIELDS.map((field) => [field, source[field]]),
+    ) as Prisma.BusinessUpdateInput;
+
+    return this.prisma.business.update({
+      where: { id: targetBranchId },
+      data,
+    });
+  }
+
+  private async assertSameGroup(callerBusinessId: string, branchId: string) {
+    const caller = await this.prisma.business.findUnique({
+      where: { id: callerBusinessId },
+    });
+    if (!caller) {
+      throw new NotFoundException('Business not found');
+    }
+    const rootId = caller.parentId ?? caller.id;
+    const target = await this.prisma.business.findFirst({
+      where: { id: branchId, OR: [{ id: rootId }, { parentId: rootId }] },
+    });
+    if (!target) {
+      throw new AppException(
+        BRANCH_ERROR_CODES.NOT_SAME_GROUP,
+        'That branch is not part of your business group',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    return target;
   }
 }

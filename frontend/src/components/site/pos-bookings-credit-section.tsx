@@ -6,7 +6,7 @@ import { POS_FEATURES } from "@/lib/marketing/home-content";
 
 export function PosBookingsCreditSection() {
   return (
-    <div className="bg-surface-tint">
+    <div>
       <section className="px-5 pt-16 sm:px-7 sm:pt-14">
         <h2 className="mb-10 text-balance text-center font-display text-4xl font-semibold leading-[1.1] tracking-[-0.035em] text-fg sm:text-5xl">
               Point of sale software connected to your customers, <span className="text-accent">inventory and business data</span>
@@ -293,8 +293,8 @@ export function PosBookingsCreditSection() {
               <Link href="/product#credit" className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6.5 py-3.5 text-[15.5px] font-medium text-primary-foreground hover:bg-primary-hover">
                 See the credit ledger <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
-              <Link href="/pricing" className="inline-flex items-center rounded-xl border border-border-strong px-6 py-3.5 text-[15.5px] font-medium text-fg hover:border-primary hover:text-accent">
-                Start free — 14 days
+              <Link href="/book-a-demo" className="inline-flex items-center rounded-xl border border-border-strong px-6 py-3.5 text-[15.5px] font-medium text-fg hover:border-primary hover:text-accent">
+                Book a Demo
               </Link>
             </div>
           </Reveal>

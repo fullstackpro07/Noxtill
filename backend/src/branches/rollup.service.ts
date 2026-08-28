@@ -52,24 +52,42 @@ export class RollupService {
     const ids = group.map((b) => b.id);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const rows = await this.prisma.$queryRaw<DailyCloseAgg[]>`
-      SELECT business_id,
-             SUM(orders_count) AS orders_count,
-             SUM(revenue) AS revenue,
-             SUM(gross_profit) AS gross_profit
-      FROM v_daily_close
-      WHERE business_id IN (${Prisma.join(ids)}) AND close_date >= DATE(${since.toISOString().slice(0, 10)})
-      GROUP BY business_id
-    `;
+    const [rows, reviewAggs, customerCounts, creditRows] = await Promise.all([
+      this.prisma.$queryRaw<DailyCloseAgg[]>`
+        SELECT business_id,
+               SUM(orders_count) AS orders_count,
+               SUM(revenue) AS revenue,
+               SUM(gross_profit) AS gross_profit
+        FROM v_daily_close
+        WHERE business_id IN (${Prisma.join(ids)}) AND close_date >= DATE(${since.toISOString().slice(0, 10)})
+        GROUP BY business_id
+      `,
+      this.prisma.externalReview.groupBy({
+        by: ['businessId'],
+        where: { businessId: { in: ids }, createdAt: { gte: since } },
+        _avg: { stars: true },
+      }),
+      this.prisma.customer.groupBy({
+        by: ['businessId'],
+        where: { businessId: { in: ids } },
+        _count: { _all: true },
+      }),
+      this.prisma.$queryRaw<{ business_id: string; total: string | null }[]>`
+        SELECT business_id, SUM(balance) AS total
+        FROM v_credit_balances
+        WHERE business_id IN (${Prisma.join(ids)}) AND balance > 0
+        GROUP BY business_id
+      `,
+    ]);
     const byBusiness = new Map(rows.map((r) => [r.business_id, r]));
-
-    const reviewAggs = await this.prisma.externalReview.groupBy({
-      by: ['businessId'],
-      where: { businessId: { in: ids }, createdAt: { gte: since } },
-      _avg: { stars: true },
-    });
     const reviewAvgByBusiness = new Map(
       reviewAggs.map((r) => [r.businessId, r._avg.stars]),
+    );
+    const customerCountByBusiness = new Map(
+      customerCounts.map((r) => [r.businessId, r._count._all]),
+    );
+    const creditByBusiness = new Map(
+      creditRows.map((r) => [r.business_id, Number(r.total ?? 0)]),
     );
 
     const branches = group.map((b) => {
@@ -82,6 +100,8 @@ export class RollupService {
         revenue: Number(row?.revenue ?? 0),
         grossProfit: Number(row?.gross_profit ?? 0),
         reviewAvg: reviewAvg != null ? Number(reviewAvg) : null,
+        customerCount: customerCountByBusiness.get(b.id) ?? 0,
+        creditOutstanding: creditByBusiness.get(b.id) ?? 0,
       };
     });
 
@@ -90,8 +110,16 @@ export class RollupService {
         ordersCount: acc.ordersCount + b.ordersCount,
         revenue: acc.revenue + b.revenue,
         grossProfit: acc.grossProfit + b.grossProfit,
+        customerCount: acc.customerCount + b.customerCount,
+        creditOutstanding: acc.creditOutstanding + b.creditOutstanding,
       }),
-      { ordersCount: 0, revenue: 0, grossProfit: 0 },
+      {
+        ordersCount: 0,
+        revenue: 0,
+        grossProfit: 0,
+        customerCount: 0,
+        creditOutstanding: 0,
+      },
     );
 
     return { totals, branches };

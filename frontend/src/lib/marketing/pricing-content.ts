@@ -43,7 +43,6 @@ export interface PricingPlan {
   summary: string[];
   ctaLabel: string;
   ctaHref: string;
-  secondaryDemo?: boolean;
 }
 
 export const PRICING_PLANS: PricingPlan[] = [
@@ -56,8 +55,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     annual: 39,
     summaryLabel: "Includes",
     summary: ["1 Location", "3 Users", "Core Features", "Basic Reports", "AI Assistant (200/month)", "Unified Inbox", "Core Integrations"],
-    ctaLabel: "Start Free Trial",
-    ctaHref: "/signup",
+    ctaLabel: "Book a Demo",
+    ctaHref: "/book-a-demo",
   },
   {
     key: "growth",
@@ -69,8 +68,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     popular: true,
     summaryLabel: "Everything in Starter, plus:",
     summary: ["2 Locations", "10 Users", "Advanced Bookings", "Marketing & Campaigns", "Advanced Reports", "AI Assistant (1,000/month)", "More Integrations", "Automations"],
-    ctaLabel: "Start Free Trial",
-    ctaHref: "/signup",
+    ctaLabel: "Book a Demo",
+    ctaHref: "/book-a-demo",
   },
   {
     key: "business",
@@ -81,8 +80,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     annual: 103,
     summaryLabel: "Everything in Growth, plus:",
     summary: ["5 Locations", "25 Users", "AI Receptionist", "Advanced Analytics", "Reputation Management", "Advanced Automations", "API Access", "AI Assistant (3,000/month)"],
-    ctaLabel: "Start Free Trial",
-    ctaHref: "/signup",
+    ctaLabel: "Book a Demo",
+    ctaHref: "/book-a-demo",
   },
   {
     key: "scale",
@@ -93,8 +92,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     annual: 159,
     summaryLabel: "Everything in Business, plus:",
     summary: ["10 Locations", "Unlimited Users", "Advanced Permissions", "Branch Performance", "Centralized Dashboard", "Priority Support", "AI Assistant (10,000/month)", "Advanced Integrations"],
-    ctaLabel: "Start Free Trial",
-    ctaHref: "/signup",
+    ctaLabel: "Book a Demo",
+    ctaHref: "/book-a-demo",
   },
   {
     key: "enterprise",
@@ -106,9 +105,8 @@ export const PRICING_PLANS: PricingPlan[] = [
     custom: true,
     summaryLabel: "Everything in Scale, plus:",
     summary: ["Unlimited Locations", "Custom Users", "Custom Integrations", "Dedicated Account Manager", "Custom Workflows", "Advanced Security", "SLA & Priority Support", "Custom AI Limits"],
-    ctaLabel: "Contact Sales",
-    ctaHref: "/contact",
-    secondaryDemo: true,
+    ctaLabel: "Book a Demo",
+    ctaHref: "/book-a-demo",
   },
 ];
 
@@ -300,11 +298,7 @@ export const PRICING_FAQS = [
 export const PRICING_FINAL_CTA = {
   headline: "Choose the plan that fits your business",
   body: "Start with the tools you need today and scale as your business grows.",
-  primaryCta: "Start 14-Day Free Trial",
-  primaryHref: "/signup",
-  secondaryCta: "Contact Sales",
-  secondaryHref: "/contact",
-  tertiaryCta: "Book a Demo",
-  tertiaryHref: "/demo",
+  primaryCta: "Book a Demo",
+  primaryHref: "/book-a-demo",
   trust: ["No credit card required", "14-day free trial", "Cancel anytime"],
 };

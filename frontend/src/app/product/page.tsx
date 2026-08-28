@@ -79,14 +79,14 @@ export default function ProductPage() {
             <Reveal delay={200}>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <Link
-                  href="/login"
+                  href="/book-a-demo"
                   className="flex items-center gap-1.5 rounded-[var(--radius-noxtill)] bg-primary px-6.5 py-3.5 text-[15px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
                 >
                   {PRODUCT_HERO.primaryCta}
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
                 <Link
-                  href="/login"
+                  href="/pricing"
                   className="rounded-[var(--radius-noxtill)] border border-border-strong px-6.5 py-3.5 text-[15px] font-medium text-fg transition-colors hover:border-accent hover:text-primary"
                 >
                   {PRODUCT_HERO.secondaryCta}
@@ -96,7 +96,7 @@ export default function ProductPage() {
           </div>
         </section>
 
-        <section className="px-5 pb-16 sm:px-7">
+        <section className="bg-surface-tint px-5 pb-16 sm:px-7">
           <div className="mx-auto flex max-w-[1200px] flex-col gap-11">
             {PRODUCT_GROUPS_CONTENT.map((group, i) => (
               <ProductFeatureGroup key={group.title} group={group} delay={i * 60} />
@@ -104,9 +104,9 @@ export default function ProductPage() {
           </div>
         </section>
 
-        <section className="px-5 pb-20 sm:px-7">
+        <section className="bg-surface-tint-2 px-5 pb-20 sm:px-7">
           <Reveal>
-            <div className="mx-auto max-w-[1200px] rounded-[var(--radius-noxtill-xl)] border border-border bg-surface-2 p-8 sm:p-9">
+            <div className="mx-auto max-w-[1200px] rounded-[var(--radius-noxtill-xl)] border border-border bg-white p-8 sm:p-9">
               <h2 className="mb-3 font-display text-2xl font-semibold tracking-tight text-fg">{PRODUCT_CALLOUT.title}</h2>
               <p className="mb-5 max-w-[88ch] text-[14.5px] leading-relaxed text-fg-muted">{PRODUCT_CALLOUT.body}</p>
               <div className="flex flex-wrap gap-2.5">

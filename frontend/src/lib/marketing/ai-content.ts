@@ -11,8 +11,8 @@ export const AI_HERO = {
     "Says so honestly when it doesn't know",
     "Never acts on anything sensitive without your approval",
   ],
-  primaryCta: { label: "Start Free — 14 Days", href: "/pricing" },
-  secondaryCta: { label: "Book a Demo", href: "/book-a-demo" },
+  primaryCta: { label: "Book a Demo", href: "/book-a-demo" },
+  secondaryCta: { label: "See Pricing", href: "/pricing" },
 };
 
 export interface AiCapabilitySection {
@@ -92,8 +92,8 @@ export const AI_PROMISE = {
 
 export const AI_FINAL_CTA = {
   heading: "Put AI to work on your own business data",
-  body: "Every feature on this page runs on your connected records from day one of your free trial.",
-  primaryCta: { label: "Start Free — 14 Days", href: "/pricing" },
+  body: "See every AI feature on this page running on your own connected records.",
+  primaryCta: { label: "Book a Demo", href: "/book-a-demo" },
   secondaryCta: { label: "See Full Pricing", href: "/pricing" },
   trust: ["No credit card required", "14-day free trial", "Cancel anytime"],
 };

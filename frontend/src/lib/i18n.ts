@@ -91,6 +91,9 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.staffRoles": "Roles & Permissions",
     "nav.staffAttendance": "Attendance",
     "nav.branches": "Branches",
+    "nav.branchRollup": "Roll-up Dashboard",
+    "nav.branchCompare": "Branch Comparison",
+    "nav.branchTransfers": "Stock Transfers",
     "nav.settings": "Settings",
 
     "topbar.searchPlaceholder": "Search customers, orders…",

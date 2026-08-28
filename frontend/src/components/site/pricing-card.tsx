@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Calendar, Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PricingPlan } from "@/lib/marketing/pricing-content";
 
@@ -70,12 +70,6 @@ export function PricingCard({ plan, yearly }: { plan: PricingPlan; yearly: boole
         >
           {plan.ctaLabel} <ArrowRight className="size-4" aria-hidden />
         </Link>
-        {plan.secondaryDemo && (
-          <Link href="/demo" className="inline-flex items-center justify-center gap-2 text-[13.5px] font-medium text-fg hover:text-primary">
-            <Calendar className="size-[15px]" aria-hidden />
-            Book a Demo
-          </Link>
-        )}
       </div>
     </div>
   );

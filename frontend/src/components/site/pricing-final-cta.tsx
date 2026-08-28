@@ -17,18 +17,6 @@ export function PricingFinalCta() {
           >
             {PRICING_FINAL_CTA.primaryCta} <ArrowRight className="size-4" aria-hidden />
           </Link>
-          <Link
-            href={PRICING_FINAL_CTA.secondaryHref}
-            className="inline-flex items-center rounded-xl border border-[#b6ddc9] bg-white px-7 py-4 text-[15.5px] font-medium text-fg transition-colors hover:border-accent-hover hover:text-accent-hover"
-          >
-            {PRICING_FINAL_CTA.secondaryCta}
-          </Link>
-          <Link
-            href={PRICING_FINAL_CTA.tertiaryHref}
-            className="inline-flex items-center rounded-xl border border-[#b6ddc9] bg-white px-7 py-4 text-[15.5px] font-medium text-fg transition-colors hover:border-accent-hover hover:text-accent-hover"
-          >
-            {PRICING_FINAL_CTA.tertiaryCta}
-          </Link>
         </div>
         <div className="flex flex-wrap justify-center gap-4.5 text-[13.5px] text-fg-muted">
           {PRICING_FINAL_CTA.trust.map((item) => (

@@ -88,7 +88,7 @@ describe('EmailCampaignsService (BE-083)', () => {
   });
 
   it('sends only to segment members with a real email address, skipping those without one', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { MessageID: 'msg-1' } });
+    mockedAxios.post.mockResolvedValue({ data: { id: 'msg-1' } });
 
     const campaign = await service.create(businessId, {
       subject: 'Hi',
@@ -101,14 +101,14 @@ describe('EmailCampaignsService (BE-083)', () => {
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockedAxios.post).toHaveBeenCalledWith(
-      'https://api.postmarkapp.com/email',
-      expect.objectContaining({ To: 'has-email@example.com', Subject: 'Hi' }),
+      'https://api.resend.com/emails',
+      expect.objectContaining({ to: 'has-email@example.com', subject: 'Hi' }),
       expect.any(Object),
     );
   });
 
   it('always appends a real, working unsubscribe link to the sent body', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { MessageID: 'msg-2' } });
+    mockedAxios.post.mockResolvedValue({ data: { id: 'msg-2' } });
     await service.create(businessId, {
       subject: 'Hi again',
       body: 'Body text',
@@ -117,15 +117,15 @@ describe('EmailCampaignsService (BE-083)', () => {
 
     const [, payload] = mockedAxios.post.mock.calls[0] as [
       string,
-      { TextBody: string },
+      { text: string },
     ];
-    expect(payload.TextBody).toContain(
+    expect(payload.text).toContain(
       'http://localhost:3000/unsubscribe?token=',
     );
   });
 
   it('excludes a previously-unsubscribed recipient from a later send (real suppression-list check)', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { MessageID: 'msg-3' } });
+    mockedAxios.post.mockResolvedValue({ data: { id: 'msg-3' } });
     const priorCampaign = await prisma.emailCampaign.create({
       data: { businessId, subject: 'old', body: 'old', segment: 'all' },
     });
@@ -149,7 +149,7 @@ describe('EmailCampaignsService (BE-083)', () => {
   });
 
   it('funnel() reflects real EmailEvent counts grouped by type', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { MessageID: 'msg-4' } });
+    mockedAxios.post.mockResolvedValue({ data: { id: 'msg-4' } });
     await prisma.emailEvent.deleteMany({
       where: { emailCampaign: { businessId } },
     });

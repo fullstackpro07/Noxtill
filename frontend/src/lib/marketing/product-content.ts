@@ -53,8 +53,8 @@ export const PRODUCT_HERO = {
   headlineHighlight: "operating system",
   body: "Noxtill is not a set of separate apps bolted together. The till, the diary, the credit ledger, the stockroom and the reports are one system — so one sale updates every number you rely on, and the nightly close tells you how the day actually went.",
   subBody: "Every feature below is part of the same account. Start with the one that hurts most today; the rest are already connected when you need them.",
-  primaryCta: "Start your 14-day free trial",
-  secondaryCta: "Book a demo",
+  primaryCta: "Book a Demo",
+  secondaryCta: "See Pricing",
 };
 
 export const PRODUCT_GROUPS_CONTENT: ProductGroup[] = [

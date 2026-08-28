@@ -133,4 +133,77 @@ describe('BranchManagementService (UPD-BE-036 follow-up)', () => {
       fromRoot.map((b) => b.id).sort(),
     );
   });
+
+  describe('update/deactivate/reactivate/copySettings (UPD-BE-109)', () => {
+    let branchAId: string;
+    let branchBId: string;
+
+    beforeAll(async () => {
+      const branchA = await service.create(rootId, {
+        name: 'Settings Branch A',
+        ownerName: 'A Owner',
+        ownerPhone: `+1${Date.now()}9`,
+      });
+      branchAId = branchA.business.id;
+      createdBusinessIds.push(branchAId);
+      createdUserIds.push(branchA.businessUser.userId);
+
+      const branchB = await service.create(rootId, {
+        name: 'Settings Branch B',
+        ownerName: 'B Owner',
+        ownerPhone: `+1${Date.now()}8`,
+      });
+      branchBId = branchB.business.id;
+      createdBusinessIds.push(branchBId);
+      createdUserIds.push(branchB.businessUser.userId);
+    });
+
+    it('updates a real branch settings field', async () => {
+      const updated = await service.update(rootId, branchAId, {
+        taxLabel: 'VAT',
+        taxRate: 15,
+        nightlyCloseTime: '23:00',
+      });
+      expect(updated.taxLabel).toBe('VAT');
+      expect(Number(updated.taxRate)).toBe(15);
+      expect(updated.nightlyCloseTime).toBe('23:00');
+    });
+
+    it("rejects updating a branch outside the caller's own group", async () => {
+      const outsideBusiness = await prisma.business.create({
+        data: { name: 'Outside Biz', slug: `outside-biz-${Date.now()}` },
+      });
+      createdBusinessIds.push(outsideBusiness.id);
+
+      await expect(
+        service.update(rootId, outsideBusiness.id, { taxLabel: 'Hacked' }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('deactivates and reactivates a real branch, but refuses to deactivate the root', async () => {
+      const deactivated = await service.deactivate(rootId, branchAId);
+      expect(deactivated.active).toBe(false);
+
+      const reactivated = await service.reactivate(rootId, branchAId);
+      expect(reactivated.active).toBe(true);
+
+      await expect(service.deactivate(rootId, rootId)).rejects.toBeInstanceOf(
+        AppException,
+      );
+    });
+
+    it('copies real settings fields from one branch onto another, leaving identity fields untouched', async () => {
+      await service.update(rootId, branchAId, {
+        taxLabel: 'GST',
+        taxRate: 8,
+        acceptedPaymentMethods: ['cash', 'online'],
+      });
+
+      const copied = await service.copySettings(rootId, branchBId, branchAId);
+      expect(copied.taxLabel).toBe('GST');
+      expect(Number(copied.taxRate)).toBe(8);
+      expect(copied.acceptedPaymentMethods).toEqual(['cash', 'online']);
+      expect(copied.name).toBe('Settings Branch B'); // identity untouched
+    });
+  });
 });

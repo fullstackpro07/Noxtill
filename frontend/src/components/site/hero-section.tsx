@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Bell, Check, ChevronDown, HeartPulse, PackageX, PlayCircle, Star, Users, Wallet } from "lucide-react";
+import { ArrowRight, Bell, Check, ChevronDown, HeartPulse, PackageX, Star, Users, Wallet } from "lucide-react";
 import { Reveal } from "@/components/site/reveal";
 import { HeroPhoneMockup } from "@/components/site/hero-phone-mockup";
 import { HERO_CHANNELS, HERO_TRUST, INTEGRATION_BENEFITS, INTEGRATION_TOOLS } from "@/lib/marketing/home-content";
@@ -89,17 +89,10 @@ export function HeroSection() {
 
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
-              href="/pricing"
+              href="/book-a-demo"
               className="inline-flex items-center gap-2.5 rounded-[14px] bg-primary px-6.5 py-4 text-[15.5px] font-medium text-primary-foreground shadow-[0_12px_26px_-16px_rgba(11,143,78,0.9)] transition-colors hover:bg-primary-hover"
             >
-              Start 14-Day Free Trial <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-            <Link
-              href="/book-a-demo"
-              className="inline-flex items-center gap-2.5 rounded-[14px] border border-border-strong bg-white px-6 py-4 text-[15.5px] font-medium text-fg transition-colors hover:border-primary hover:text-accent"
-            >
-              <PlayCircle className="h-[18px] w-[18px]" aria-hidden />
-              Book a Demo
+              Book a Demo <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
 

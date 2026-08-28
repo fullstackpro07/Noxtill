@@ -30,10 +30,10 @@ export function SiteFooter() {
               Business management software for small businesses: point of sale, bookings, customer credit, reviews and reporting in one system.
             </p>
             <Link
-              href="/pricing"
+              href="/book-a-demo"
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
             >
-              Start free 14 days <span aria-hidden>→</span>
+              Book a Demo <span aria-hidden>→</span>
             </Link>
           </div>
 

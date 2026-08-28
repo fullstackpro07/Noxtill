@@ -28,10 +28,10 @@ export function FinalCtaSection() {
 
             <div className="mb-6 flex flex-wrap gap-3.5">
               <Link
-                href="/pricing"
+                href="/book-a-demo"
                 className="inline-flex items-center gap-3 rounded-xl bg-primary px-7 py-4.5 text-base font-semibold text-primary-foreground shadow-[0_14px_30px_-18px_rgba(11,143,78,0.9)] transition-colors hover:bg-primary-hover"
               >
-                Start Your Free 14-Day Trial <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
+                Book a Demo <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
               </Link>
               <Link
                 href="/product"
@@ -48,10 +48,6 @@ export function FinalCtaSection() {
                   {item}
                 </span>
               ))}
-              <span className="h-4.5 w-px bg-border" />
-              <Link href="/book-a-demo" className="text-primary hover:text-primary-hover">
-                Book a demo
-              </Link>
             </div>
           </Reveal>
 

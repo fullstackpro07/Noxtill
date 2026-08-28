@@ -87,7 +87,7 @@ export const SOLUTIONS_HERO = {
   headlineLead: "Business software built for",
   headlineAccent: "the way you work",
   body: "Whether you run a salon, restaurant, clinic, shop, service business or several locations, Noxtill brings sales, customers, bookings, inventory, payments, communication and business intelligence into one connected system.",
-  primaryCta: "Start 14-day free trial",
+  primaryCta: "Book a Demo",
   secondaryCta: "Explore all solutions",
   trust: ["No credit card required", "14-day free trial", "Cancel anytime"],
 };
@@ -465,7 +465,7 @@ export const SOLUTIONS_FAQS: FaqItem[] = [
 export const SOLUTIONS_FINAL_CTA = {
   title: "Run your business with one connected system",
   body: "Noxtill brings sales, customers, bookings, inventory, payments, communication and business intelligence together so your team spends less time switching between tools.",
-  primaryCta: "Start 14-day free trial",
+  primaryCta: "Book a Demo",
   secondaryCta: "See how Noxtill works",
   trust: ["No credit card required", "14-day free trial", "Cancel anytime"],
 };

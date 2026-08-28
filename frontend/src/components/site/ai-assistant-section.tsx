@@ -117,8 +117,8 @@ export function AiAssistantSection() {
               Get the answers, reports and insights you need without dashboard hopping.
             </div>
             <div className="flex flex-wrap justify-center gap-2.5">
-              <Link href="/pricing" className="inline-flex items-center rounded-xl border border-[#c8efdd] bg-white px-5 py-2.5 text-[13.5px] font-medium text-[#0b8f5c] hover:border-primary">
-                Try Noxtill Free
+              <Link href="/book-a-demo" className="inline-flex items-center rounded-xl border border-[#c8efdd] bg-white px-5 py-2.5 text-[13.5px] font-medium text-[#0b8f5c] hover:border-primary">
+                Book a Demo
               </Link>
               <Link href="/product#assistant" className="inline-flex items-center gap-1 rounded-xl border border-border-strong bg-white px-5 py-2.5 text-[13.5px] font-medium text-fg hover:border-primary hover:text-accent">
                 See How It Works <ArrowRight className="h-3.5 w-3.5" aria-hidden />

@@ -16,9 +16,10 @@
   --bg: #ffffff;
   --surface: #ffffff;
   --surface-2: #fbfcfb;
-  /* Alternating section background — a visible tint of the primary green, used to separate
-     stacked marketing sections by color instead of by whitespace alone. */
+  /* Alternating section backgrounds — two visible tints of the logo green, used to separate
+     stacked marketing sections by color instead of by whitespace alone (white → tint → tint-2). */
   --surface-tint: #f2f9f6;
+  --surface-tint-2: #e6f5ee;
   --border: #e6eae8;
   --border-strong: #d6ddd9;
 
@@ -72,6 +73,7 @@
   --surface: #171f18;
   --surface-2: #1e2820;
   --surface-tint: #16211c;
+  --surface-tint-2: #1a2a22;
   --border: #2a352b;
   --border-strong: #3a473b;
 
@@ -159,6 +161,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-tint: var(--surface-tint);
+  --color-surface-tint-2: var(--surface-tint-2);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
 

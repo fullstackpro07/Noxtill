@@ -154,16 +154,16 @@ export default function AiPage() {
         </section>
 
         {/* AI Phone Receptionist */}
-        <AiCapabilitySectionBlock data={AI_CAPABILITIES.reception} demo={<AiReceptionLiveDemo />} />
+        <AiCapabilitySectionBlock data={AI_CAPABILITIES.reception} demo={<AiReceptionLiveDemo />} tint="tint-2" />
 
         {/* Voice-Entry Sales */}
-        <AiCapabilitySectionBlock data={AI_CAPABILITIES.voiceSales} demo={<AiVoiceSalesDemo />} reverse tint />
+        <AiCapabilitySectionBlock data={AI_CAPABILITIES.voiceSales} demo={<AiVoiceSalesDemo />} reverse />
 
         {/* Photo Digitizer */}
-        <AiCapabilitySectionBlock data={AI_CAPABILITIES.photoDigitizer} demo={<AiPhotoDigitizerDemo />} />
+        <AiCapabilitySectionBlock data={AI_CAPABILITIES.photoDigitizer} demo={<AiPhotoDigitizerDemo />} tint="tint" />
 
         {/* AI Insights */}
-        <AiCapabilitySectionBlock data={AI_CAPABILITIES.insights} demo={<AiInsightsFeedDemo />} reverse tint />
+        <AiCapabilitySectionBlock data={AI_CAPABILITIES.insights} demo={<AiInsightsFeedDemo />} reverse tint="tint-2" />
 
         {/* What Our AI Never Does */}
         <AiPromiseSection />
@@ -174,8 +174,9 @@ export default function AiPage() {
         </div>
 
         {/* Final CTA */}
+        <div className="bg-surface-tint-2">
         <section className="mx-auto max-w-[1280px] px-5 pb-16 sm:px-7 sm:pb-18">
-          <Reveal className="rounded-[24px] border border-[#cfeede] bg-surface-2 p-8 text-center sm:p-11">
+          <Reveal className="rounded-[24px] border border-[#cfeede] bg-white p-8 text-center sm:p-11">
             <h2 className="mb-3.5 text-balance font-display text-[26px] font-bold leading-[1.14] tracking-tight text-fg sm:text-[38px]">
               {AI_FINAL_CTA.heading}
             </h2>
@@ -201,6 +202,7 @@ export default function AiPage() {
             </div>
           </Reveal>
         </section>
+        </div>
       </main>
 
       <SiteFooter />

@@ -6,10 +6,10 @@ jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('EmailService (BE-017)', () => {
-  it('posts to the Postmark API and returns the MessageID as providerRef', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { MessageID: 'msg-123' } });
+  it('posts to the Resend API and returns the id as providerRef', async () => {
+    mockedAxios.post.mockResolvedValue({ data: { id: 'msg-123' } });
     const config = new ConfigService({
-      EMAIL_PROVIDER_KEY: 'pm-token',
+      EMAIL_PROVIDER_KEY: 're-token',
       EMAIL_FROM_ADDRESS: 'hello@noxtill.app',
     });
     const service = new EmailService(config);
@@ -25,15 +25,15 @@ describe('EmailService (BE-017)', () => {
     expect(result.providerRef).toBe('msg-123');
     // eslint-disable-next-line @typescript-eslint/unbound-method -- jest.Mocked method reference, not a real `this`-bound call
     expect(mockedAxios.post).toHaveBeenCalledWith(
-      'https://api.postmarkapp.com/email',
+      'https://api.resend.com/emails',
       expect.objectContaining({
-        To: 'customer@example.com',
-        Subject: 'Receipt',
+        to: 'customer@example.com',
+        subject: 'Receipt',
       }),
       expect.objectContaining({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- jest matcher typing noise, not app logic
         headers: expect.objectContaining({
-          'X-Postmark-Server-Token': 'pm-token',
+          Authorization: 'Bearer re-token',
         }),
       }),
     );

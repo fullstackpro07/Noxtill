@@ -1,9 +1,20 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { RollupService } from './rollup.service';
 import { BranchAdvisorService } from './branch-advisor.service';
 import { BranchManagementService } from './branch-management.service';
 import { BranchAdvisorDto } from './dto/branch-advisor.dto';
 import { CreateBranchDto } from './dto/create-branch.dto';
+import { UpdateBranchDto } from './dto/update-branch.dto';
+import { CopyBranchSettingsDto } from './dto/copy-branch-settings.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -29,6 +40,48 @@ export class BranchesController {
   @Get('branches')
   listBranches(@CurrentUser() user: AuthenticatedUser) {
     return this.branchManagementService.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.BRANCHES_MANAGE)
+  @Patch('branches/:id')
+  updateBranch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateBranchDto,
+  ) {
+    return this.branchManagementService.update(user.businessId, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.BRANCHES_MANAGE)
+  @Delete('branches/:id')
+  deactivateBranch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.branchManagementService.deactivate(user.businessId, id);
+  }
+
+  @RequireCapability(CAPABILITIES.BRANCHES_MANAGE)
+  @Post('branches/:id/reactivate')
+  reactivateBranch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.branchManagementService.reactivate(user.businessId, id);
+  }
+
+  @RequireCapability(CAPABILITIES.BRANCHES_MANAGE)
+  @Post('branches/:id/copy-settings')
+  copyBranchSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: CopyBranchSettingsDto,
+  ) {
+    return this.branchManagementService.copySettings(
+      user.businessId,
+      id,
+      dto.fromBranchId,
+    );
   }
 
   @Get('rollup/dashboard')

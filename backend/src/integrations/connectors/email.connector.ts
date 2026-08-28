@@ -3,8 +3,8 @@ import { Connector, OAuthTokens } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
 /**
- * Email connector (BE-083) — not an OAuth provider at all. Postmark/SES have no consumer-facing
- * OAuth flow; marketing email is sent through the same shared, platform-wide Postmark account
+ * Email connector (BE-083) — not an OAuth provider at all. Resend/SES have no consumer-facing
+ * OAuth flow; marketing email is sent through the same shared, platform-wide Resend account
  * already used for transactional sends (`messaging/channels/email.service.ts`). "Connecting" is
  * therefore just enabling the channel, which is why `authUrl` returns `null` — the one signal
  * `IntegrationsService.connect` uses to skip the OAuth redirect entirely.
@@ -22,7 +22,7 @@ export class EmailConnector implements Connector {
     return { accessToken: '' };
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await -- shared Postmark account, nothing to refresh
+  // eslint-disable-next-line @typescript-eslint/require-await -- shared Resend account, nothing to refresh
   async refreshToken(tokens: OAuthTokens): Promise<OAuthTokens> {
     return tokens;
   }
@@ -33,6 +33,6 @@ export class EmailConnector implements Connector {
   }
 
   async disconnect(): Promise<void> {
-    // Nothing external to revoke — the shared platform Postmark account isn't per-business.
+    // Nothing external to revoke — the shared platform Resend account isn't per-business.
   }
 }

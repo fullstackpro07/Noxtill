@@ -21,11 +21,12 @@ const TWILIO_STATUS_MAP: Record<string, MessageStatus> = {
   undelivered: MessageStatus.failed,
 };
 
-const POSTMARK_STATUS_MAP: Record<string, MessageStatus> = {
-  Delivery: MessageStatus.delivered,
-  Open: MessageStatus.read,
-  Bounce: MessageStatus.failed,
-  SpamComplaint: MessageStatus.failed,
+const RESEND_STATUS_MAP: Record<string, MessageStatus> = {
+  'email.sent': MessageStatus.sent,
+  'email.delivered': MessageStatus.delivered,
+  'email.opened': MessageStatus.read,
+  'email.bounced': MessageStatus.failed,
+  'email.complained': MessageStatus.failed,
 };
 
 /**
@@ -62,7 +63,7 @@ export class WebhookEventsProcessor extends WorkerHost {
         );
       case 'email-event':
         return this.handleEmailEvent(
-          job.data as { MessageID?: string; RecordType?: string },
+          job.data as { type?: string; data?: { email_id?: string } },
         );
       default:
         this.logger.warn(`Unknown webhook job: ${job.name}`);
@@ -107,15 +108,16 @@ export class WebhookEventsProcessor extends WorkerHost {
   }
 
   private async handleEmailEvent(body: {
-    MessageID?: string;
-    RecordType?: string;
+    type?: string;
+    data?: { email_id?: string };
   }): Promise<void> {
-    if (!body.MessageID || !body.RecordType) return;
-    const mapped = POSTMARK_STATUS_MAP[body.RecordType];
+    const emailId = body.data?.email_id;
+    if (!emailId || !body.type) return;
+    const mapped = RESEND_STATUS_MAP[body.type];
     if (!mapped) return;
     await this.prisma.message
       .updateMany({
-        where: { providerRef: body.MessageID },
+        where: { providerRef: emailId },
         data: { status: mapped },
       })
       .catch(() => undefined);

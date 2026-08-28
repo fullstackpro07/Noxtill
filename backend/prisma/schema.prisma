@@ -574,6 +574,15 @@ model Business {
   parent   Business?  @relation("BusinessBranches", fields: [parentId], references: [id])
   branches Business[] @relation("BusinessBranches")
 
+  /// All Branches management (UPD-BE-109): soft-deactivation for a branch — the root business
+  /// (no `parentId`) can never be deactivated, since that would orphan the whole group.
+  active Boolean @default(true)
+
+  /// Branch Settings (UPD-BE-109), stored as JSON since MySQL has no native array column type —
+  /// same convention as `Customer.tags`. A real, displayed preference; not yet enforced as a
+  /// restriction at the POS payment-method picker, which still offers every `PaymentMethod` value.
+  acceptedPaymentMethods Json @default("[\"cash\",\"card\",\"online\",\"credit\"]") @map("accepted_payment_methods")
+
   trialEndsAt DateTime? @map("trial_ends_at")
 
   /// Billing (BE-064/065): Stripe customer/subscription linkage, set once checkout completes.

@@ -148,10 +148,9 @@ export class WebhooksController {
       throw new ForbiddenException('Invalid webhook token');
     }
 
-    const body = req.body as { MessageID?: string; RecordType?: string };
-    const eventId = body.MessageID
-      ? `${body.MessageID}-${body.RecordType ?? 'event'}`
-      : undefined;
+    const body = req.body as { type?: string; data?: { email_id?: string } };
+    const emailId = body.data?.email_id;
+    const eventId = emailId ? `${emailId}-${body.type ?? 'event'}` : undefined;
     if (eventId) {
       await this.idempotency.handle('email', eventId, async () => {
         await this.webhookQueue.add('email-event', body, {
