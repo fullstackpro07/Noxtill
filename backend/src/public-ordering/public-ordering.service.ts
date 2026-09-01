@@ -1,7 +1,10 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { computeOrderTotals } from '../orders/order-totals.util';
+import {
+  computeOrderTotals,
+  resolveTaxRatePercent,
+} from '../orders/order-totals.util';
 import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { OrderStatus } from '@prisma/client';
@@ -69,6 +72,9 @@ export class PublicOrderingService {
         where: { id: { in: productIds }, businessId: business.id },
       });
       const productMap = new Map(products.map((p) => [p.id, p]));
+      const taxRules = await tx.taxRule.findMany({
+        where: { businessId: business.id },
+      });
 
       const itemsData = dto.items.map((item) => {
         const product = productMap.get(item.productId);
@@ -85,6 +91,11 @@ export class PublicOrderingService {
           price: Number(product.sellingPrice),
           cost: Number(product.costPrice),
           qty: item.qty,
+          taxRatePercent: resolveTaxRatePercent(
+            taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
+            product.category,
+            Number(business.taxRate),
+          ),
         };
       });
 

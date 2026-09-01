@@ -7,6 +7,7 @@ export interface AuthUser {
   name: string;
   email: string | null;
   phone: string | null;
+  twoFactorEnabled: boolean;
   role: Role;
   businessUserId: string | null;
 }
@@ -37,6 +38,8 @@ interface AuthState {
   hasHydrated: boolean;
   setSession: (data: AuthTokens & { user: AuthUser; business: AuthBusiness }) => void;
   setTokens: (tokens: AuthTokens) => void;
+  /** Patches fields on the current user without a full re-login — e.g. 2FA status flipping. */
+  updateUser: (patch: Partial<AuthUser>) => void;
   clearSession: () => void;
   setHasHydrated: (hasHydrated: boolean) => void;
 }
@@ -55,6 +58,8 @@ export const useAuthStore = create<AuthState>()(
       hasHydrated: false,
       setSession: ({ accessToken, refreshToken, user, business }) => set({ accessToken, refreshToken, user, business }),
       setTokens: ({ accessToken, refreshToken }) => set({ accessToken, refreshToken }),
+      updateUser: (patch) =>
+        set((state) => (state.user ? { user: { ...state.user, ...patch } } : state)),
       clearSession: () => set({ accessToken: null, refreshToken: null, user: null, business: null }),
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
     }),

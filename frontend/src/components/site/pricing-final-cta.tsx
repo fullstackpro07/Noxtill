@@ -4,8 +4,8 @@ import { PRICING_FINAL_CTA } from "@/lib/marketing/pricing-content";
 
 export function PricingFinalCta() {
   return (
-    <section className="mx-auto max-w-[1280px] px-5 pb-20 sm:px-10">
-      <div className="rounded-3xl border border-[#cfeede] bg-primary/8 px-6 py-13 text-center sm:px-8">
+    <section className="bg-surface-deep px-5 pb-0 pt-10 sm:px-10 sm:pt-16">
+      <div className="mx-auto max-w-[1280px] rounded-3xl border border-border bg-white px-6 py-13 text-center sm:px-8">
         <h2 className="mx-auto mb-3.5 max-w-[24ch] text-balance font-display text-[clamp(28px,3.4vw,42px)] font-bold leading-[1.12] tracking-[-0.035em] text-fg">
           {PRICING_FINAL_CTA.headline}
         </h2>

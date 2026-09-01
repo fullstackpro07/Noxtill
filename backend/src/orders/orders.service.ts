@@ -19,7 +19,7 @@ import {
   ORDER_ERROR_CODES,
   ORDER_STATUS_TRANSITIONS,
 } from './orders.constants';
-import { computeOrderTotals } from './order-totals.util';
+import { computeOrderTotals, resolveTaxRatePercent } from './order-totals.util';
 import { OrderStatus, Prisma, ProductKind } from '@prisma/client';
 import { withDeadlockRetry } from '../common/utils/prisma-transaction-retry.util';
 
@@ -104,6 +104,7 @@ export class OrdersService {
             where: { id: { in: productIds } },
           });
           const productMap = new Map(products.map((p) => [p.id, p]));
+          const taxRules = await tx.taxRule.findMany({ where: { businessId } });
 
           const itemsData = dto.items.map((item) => {
             const product = productMap.get(item.productId);
@@ -135,6 +136,11 @@ export class OrdersService {
               cost,
               qty: item.qty,
               kind: product.kind,
+              taxRatePercent: resolveTaxRatePercent(
+                taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
+                product.category,
+                Number(business.taxRate),
+              ),
             };
           });
 
@@ -318,7 +324,21 @@ export class OrdersService {
             });
           }
 
-          return { order, reviewToken, reviewCustomerId: customerId };
+          const orderWithRelations = await tx.order.findUniqueOrThrow({
+            where: { id: order.id },
+            include: {
+              items: true,
+              payments: true,
+              creditEntries: true,
+              customer: true,
+            },
+          });
+
+          return {
+            order: orderWithRelations,
+            reviewToken,
+            reviewCustomerId: customerId,
+          };
         }),
     );
 
@@ -376,6 +396,7 @@ export class OrdersService {
         where: { id: { in: productIds } },
       });
       const productMap = new Map(products.map((p) => [p.id, p]));
+      const taxRules = await tx.taxRule.findMany({ where: { businessId } });
 
       const itemsData = dto.items.map((item) => {
         const product = productMap.get(item.productId);
@@ -392,6 +413,11 @@ export class OrdersService {
           price: item.priceOverride ?? Number(product.sellingPrice),
           cost: Number(product.costPrice),
           qty: item.qty,
+          taxRatePercent: resolveTaxRatePercent(
+            taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
+            product.category,
+            Number(business.taxRate),
+          ),
         };
       });
 
@@ -515,6 +541,12 @@ export class OrdersService {
     const updated = await this.tenantPrisma.client.order.update({
       where: { id: orderId },
       data: { status: nextStatus },
+      include: {
+        items: true,
+        payments: true,
+        creditEntries: true,
+        customer: true,
+      },
     });
 
     if (updated.customerId) {

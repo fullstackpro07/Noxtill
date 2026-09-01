@@ -71,7 +71,12 @@ export class DeadHoursOfferService {
       'a specific product name you were not given. No preamble, return only the message text.';
 
     try {
-      const offerText = await this.aiInfra.complete(businessId, prompt, 0.6);
+      const offerText = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0.6,
+        'campaign_copy',
+      );
       return { windowLabel, offerText };
     } catch {
       return {

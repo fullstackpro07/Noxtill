@@ -36,7 +36,7 @@ export function SolutionsNeedCard({ need }: { need: NeedSolution }) {
 
       <div className="text-[11.5px] text-fg-faint">Most useful for: {need.who}</div>
 
-      <Link href={`#${need.slug}`} className="mt-auto flex items-center gap-1 text-[13px] font-medium text-primary">
+      <Link href={`/solutions/${need.slug}`} className="mt-auto flex items-center gap-1 text-[13px] font-medium text-primary">
         {need.cta}
         <ArrowRight className="h-3.5 w-3.5" aria-hidden />
       </Link>

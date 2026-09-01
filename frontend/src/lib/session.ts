@@ -5,6 +5,8 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
+  phone: string | null;
+  twoFactorEnabled: boolean;
   role: Role;
   /** The staff-scoped BusinessUser row's own id — distinct from `id` (the person). Null if somehow missing a staff link. */
   businessUserId: string | null;
@@ -38,7 +40,15 @@ export function useSession(): Session {
   }
 
   return {
-    user: { id: user.id, name: user.name, email: user.email ?? "", role: user.role, businessUserId: user.businessUserId },
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email ?? "",
+      phone: user.phone,
+      twoFactorEnabled: user.twoFactorEnabled,
+      role: user.role,
+      businessUserId: user.businessUserId,
+    },
     business: {
       id: business.id,
       name: business.name,

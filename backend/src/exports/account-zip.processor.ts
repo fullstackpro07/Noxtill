@@ -65,11 +65,16 @@ export class AccountZipProcessor extends WorkerHost {
     const key = `exports/${businessId}/account-${Date.now()}.zip`;
     const url = await this.s3.uploadAndSign(key, zip, 'application/zip');
 
-    await this.notifications.create(businessId, userId, {
-      title: 'Export ready',
-      body: 'Your full account export is ready to download.',
-      link: url,
-    });
+    await this.notifications.create(
+      businessId,
+      userId,
+      {
+        title: 'Export ready',
+        body: 'Your full account export is ready to download.',
+        link: url,
+      },
+      'export_ready',
+    );
 
     this.logger.debug(`Account zip export ready for business ${businessId}`);
   }

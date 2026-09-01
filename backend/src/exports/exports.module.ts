@@ -10,12 +10,16 @@ import { ScheduledExportsProcessor } from './scheduled-exports.processor';
 import { EXPORTS_QUEUE } from './exports.constants';
 import { SCHEDULED_EXPORTS_QUEUE } from './scheduled-exports.constants';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ReportsModule } from '../reports/reports.module';
+import { MessagingModule } from '../messaging/messaging.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: EXPORTS_QUEUE }),
     BullModule.registerQueue({ name: SCHEDULED_EXPORTS_QUEUE }),
     NotificationsModule,
+    ReportsModule,
+    MessagingModule,
   ],
   // ScheduledExportsController (`/exports/schedules`) must be registered BEFORE ExportsController
   // — Nest/Express resolve routes in registration order, and ExportsController's `GET/:kind` would

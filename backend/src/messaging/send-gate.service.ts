@@ -100,6 +100,7 @@ export class SendGateService {
     const channel = resolveChannel(
       params.channel ?? business.channelPref,
       contact,
+      (business.channelPriority as Message['channel'][] | null) ?? undefined,
     );
     if (!channel) {
       throw new AppException(

@@ -219,11 +219,16 @@ export class ShiftsService {
       const lines = entry.shifts
         .map((s) => formatShiftRange(s.startsAt, s.endsAt))
         .join('\n');
-      await this.notifications.create(businessId, entry.userId, {
-        title: 'Your schedule has been updated',
-        body: `You have ${entry.shifts.length} shift${entry.shifts.length === 1 ? '' : 's'} coming up:\n${lines}`,
-        link: '/staff/schedule',
-      });
+      await this.notifications.create(
+        businessId,
+        entry.userId,
+        {
+          title: 'Your schedule has been updated',
+          body: `You have ${entry.shifts.length} shift${entry.shifts.length === 1 ? '' : 's'} coming up:\n${lines}`,
+          link: '/staff/schedule',
+        },
+        'schedule_updated',
+      );
       notified.push({ staffUserId, name: entry.name });
     }
 

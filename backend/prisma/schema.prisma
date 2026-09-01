@@ -530,9 +530,33 @@ model Business {
   country     String?
   channelPref MessageChannel @default(whatsapp) @map("channel_pref")
 
+  /// Business Profile (UPD-FE-M16 fix-it) — genuinely never persisted before this ticket; the
+  /// screen editing these was a pure client-side mock with hardcoded fake defaults.
+  phone   String?
+  address String?
+
   nightlyCloseTime String  @default("22:00") @map("nightly_close_time")
-  taxLabel         String  @default("Tax") @map("tax_label")
-  taxRate          Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  /// Nightly Close, full (UPD-BE-119): `{"sections":["sales","lowStock","reviews","feedback","credit","appointmentsTomorrow"],"voiceNoteEnabled":false,"voiceId":null,"customLines":[{"label":"...","value":"..."}]}`.
+  /// An empty `{}` (every pre-existing business) means "all real sections, in their original
+  /// order, no custom lines" — `composeAndSend` falls back to that exact default.
+  nightlyCloseConfig Json @default("{}") @map("nightly_close_config")
+
+  taxLabel String  @default("Tax") @map("tax_label")
+  taxRate  Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+
+  /// Messages & Channels, configurable (UPD-BE-118): ordered `MessageChannel[]` overriding the
+  /// hardcoded whatsapp→sms→email fallback in `channel-resolution.util.ts`. `[]` (every
+  /// pre-existing business) means "use the original hardcoded order" — fully backward-compatible.
+  channelPriority Json @default("[]") @map("channel_priority")
+  /// `{ [templateKey]: { status: "approved"|"pending"|"rejected", reason?: string } }` — a
+  /// missing key defaults to "approved" (every template already in real use today was already
+  /// being sent, so this never retroactively blocks anything).
+  templateApprovals Json @default("{}") @map("template_approvals")
+
+  /// Billing & Plan, extended (UPD-BE-121): a small set of real toggleable extras billed as flat
+  /// add-ons, e.g. `["extra_branch","priority_support"]` — disclosed as config flags this
+  /// business has opted into, not (yet) live Stripe subscription line items.
+  addOns Json @default("[]") @map("add_ons")
 
   msgQuota Int @default(600) @map("msg_quota")
   msgUsed  Int @default(0) @map("msg_used")
@@ -561,6 +585,13 @@ model Business {
   /// review AI-draft, business-type mapping, RAG help, assistant chat).
   aiMonthlyCostCapUsd  Decimal @default(5.00) @map("ai_monthly_cost_cap_usd") @db.Decimal(8, 2)
   aiRateLimitPerMinute Int     @default(10) @map("ai_rate_limit_per_minute")
+
+  /// AI Settings (UPD-BE-115): per-feature on/off toggle, one key per named feature in the spec
+  /// ("Voice entry","Photo digitizer","Review replies","Campaign copy","Insights","What-if",
+  /// "Assistant") — a missing key defaults to enabled (`AiInfraService.isFeatureEnabled`), so this
+  /// starts `{}` rather than a fully-populated default and every existing business is unaffected
+  /// until an owner explicitly turns something off.
+  aiFeatureToggles Json @default("{}") @map("ai_feature_toggles")
 
   /// Timesheets (UPD-BE-032): weekly hours beyond this count as overtime for that week.
   overtimeThresholdHoursPerWeek Int @default(40) @map("overtime_threshold_hours_per_week")
@@ -634,6 +665,8 @@ model Business {
   categories               Category[]
   scheduledExports         ScheduledExport[]
   waitlistEntries          WaitlistEntry[]
+  purchaseOrders           PurchaseOrder[]
+  productWaitlistEntries   ProductWaitlistEntry[]
   queueTokens              QueueToken[]
   deposits                 Deposit[]
   depositSettings          DepositSettings?
@@ -700,6 +733,11 @@ model Business {
   apiKeys                  ApiKey[]
   nightlyCloseLogs         NightlyCloseLog[]
   healthScoreWeightChanges HealthScoreWeightChange[]
+  voiceCommandDrafts       VoiceCommandDraft[]
+  assistantConversations   AssistantConversation[]
+  notificationPreferences  NotificationPreference[]
+  dataSubjectRequests      DataSubjectRequest[]
+  taxRules                 TaxRule[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -720,15 +758,90 @@ model User {
   /// also fixes the pre-existing "logging in on a second device silently kills the first" bug.
   twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
 
-  businessUsers  BusinessUser[]
-  notifications  Notification[]
-  sessions       Session[]
-  twoFactorCodes TwoFactorCode[]
+  businessUsers          BusinessUser[]
+  notifications          Notification[]
+  sessions               Session[]
+  twoFactorCodes         TwoFactorCode[]
+  assistantConversations AssistantConversation[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+enum VoiceCommandStatus {
+  pending
+  confirmed
+  rejected
+}
+
+/// Voice Assistant, general-purpose (UPD-BE-113) — hands-free operation for any write action in
+/// the curated set below (not literally every write endpoint in the app, which would be its own
+/// large undertaking; extendable by registering another `VoiceCommandAction`). Same staged-draft-
+/// then-explicit-confirm discipline as `VoiceSaleDraft` (`orders/voice-sale.service.ts`): the AI's
+/// parse of a spoken command is never committed directly — `propose()` only ever creates this row,
+/// `confirm()` is a separate call that performs the real write through the same service/validation
+/// path any other caller of that write would go through.
+model VoiceCommandDraft {
+  id              String             @id @default(uuid())
+  businessId      String             @map("business_id")
+  business        Business           @relation(fields: [businessId], references: [id])
+  createdByUserId String?            @map("created_by_user_id")
+  transcript      String             @db.Text
+  action          String
+  args            Json
+  humanSummary    String             @map("human_summary") @db.Text
+  status          VoiceCommandStatus @default(pending)
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  confirmedAt DateTime? @map("confirmed_at")
+
+  @@index([businessId, status])
+  @@map("voice_command_drafts")
+}
+
+enum AssistantMessageRole {
+  user
+  assistant
+}
+
+/// Chat History (UPD-BE-114) — `AssistantService.chat()` previously built its message array
+/// in-memory per request and threw it away; this persists each turn so a conversation can be
+/// resumed and so the Chat History screen has something real to list. Continuing a conversation
+/// replays only each past turn's final user/assistant text (not intermediate tool_use/tool_result
+/// blocks) back into the model's context — a disclosed simplification that keeps context size
+/// bounded and matches what the history screen itself displays.
+model AssistantConversation {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id])
+  /// The first user message, truncated — set once at creation, never re-derived.
+  title      String?
+
+  messages AssistantMessage[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, userId, updatedAt])
+  @@map("assistant_conversations")
+}
+
+model AssistantMessage {
+  id             String                @id @default(uuid())
+  conversationId String                @map("conversation_id")
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AssistantMessageRole
+  content        String                @db.Text
+  toolCalls      Json?                 @map("tool_calls")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([conversationId, createdAt])
+  @@map("assistant_messages")
 }
 
 /// UPD-BE-040. One row per real login — replaces the single `User.refreshTokenHash` column so a
@@ -864,6 +977,7 @@ model Customer {
   privateFeedback   PrivateFeedback[]
   returns           Return[]
   waitlistEntries   WaitlistEntry[]
+  productWaitlistEntries ProductWaitlistEntry[]
   queueTokens       QueueToken[]
   installmentPlans  InstallmentPlan[]
   creditShareLinks  CreditShareLink[]
@@ -871,6 +985,7 @@ model Customer {
   loyaltyMembers    LoyaltyMember[]
   memberships       Membership[]
   videoTestimonials VideoTestimonial[]
+  dataSubjectRequests DataSubjectRequest[]
   vouchers          Voucher[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1077,6 +1192,8 @@ model Product {
   bundleItems        BundleItem[]
   priceHistory       PriceHistory[]
   waitlistEntries    WaitlistEntry[]
+  purchaseOrderItems PurchaseOrderItem[]
+  productWaitlistEntries ProductWaitlistEntry[]
   queueTokens        QueueToken[]
   stockTransferItems StockTransferItem[]
   stockCountLines    StockCountLine[]
@@ -2203,12 +2320,84 @@ model Supplier {
   notes      String?  @db.Text
 
   stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("suppliers")
+}
+
+enum PurchaseOrderStatus {
+  draft
+  sent
+  confirmed
+  partially_received
+  received
+  cancelled
+}
+
+/// Purchase Orders, formal (UPD-BE-112) — replaces the two "always-immediate" write paths
+/// (`InventoryService.recordPurchase`, `SuppliersService.quickPurchaseOrder`, both left unchanged
+/// for existing callers) with a real draft-first lifecycle: nothing touches `Product.stockQty`
+/// until `receive()` is actually called, and only for the quantities genuinely received.
+model PurchaseOrder {
+  id              String              @id @default(uuid())
+  businessId      String              @map("business_id")
+  business        Business            @relation(fields: [businessId], references: [id])
+  supplierId      String              @map("supplier_id")
+  supplier        Supplier            @relation(fields: [supplierId], references: [id])
+  status          PurchaseOrderStatus @default(draft)
+  note            String?
+  createdByUserId String?             @map("created_by_user_id")
+
+  sentAt      DateTime? @map("sent_at")
+  confirmedAt DateTime? @map("confirmed_at")
+  receivedAt  DateTime? @map("received_at")
+
+  items PurchaseOrderItem[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String        @map("purchase_order_id")
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  productId       String        @map("product_id")
+  product         Product       @relation(fields: [productId], references: [id])
+  qtyOrdered      Int           @map("qty_ordered")
+  qtyReceived     Int           @default(0) @map("qty_received")
+  unitCost        Decimal       @db.Decimal(12, 2) @map("unit_cost")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("purchase_order_items")
+}
+
+/// Back-in-stock notifications (UPD-BE-111) — no general "notify me" concept existed anywhere in
+/// this schema for products (`WaitlistEntry` is booking-slot-only). Deliberately minimal: staff add
+/// a customer who asked in person/by phone, not a public storefront "notify me" widget (that would
+/// need its own public-facing flow, out of scope here).
+model ProductWaitlistEntry {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  customerId String   @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id])
+  productId  String   @map("product_id")
+  product    Product  @relation(fields: [productId], references: [id])
+  notifiedAt DateTime? @map("notified_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, productId])
+  @@map("product_waitlist_entries")
 }
 
 /// Categories, formalized (UPD-BE-088). Replaces `Product.category`'s free-text field as the
@@ -2239,16 +2428,23 @@ enum ScheduledExportFrequency {
 /// Schedule recurring export (UPD-FE-071). `kind`/`format` are free-text strings (not enums)
 /// mirroring `ExportKind`/`ExportFormat` in exports.constants.ts, validated at the DTO layer —
 /// kept as strings here so a new export kind/format never needs a schema migration to schedule.
+/// UPD-BE-116 fix-it: generalized to also schedule real report kinds (`ReportsService`), not just
+/// raw data exports (`ExportsService`) — exactly one of `kind`/`reportKind` is set, validated in
+/// `ScheduledExportsService.create()` since MySQL has no cross-column CHECK constraint here.
+/// `recipients` (real WhatsApp/email contacts) is additive and backward-compatible: an empty array
+/// (the default, and every pre-existing row) keeps the original in-app-notify-the-creator behavior.
 model ScheduledExport {
   id              String                   @id @default(uuid())
   businessId      String                   @map("business_id")
   business        Business                 @relation(fields: [businessId], references: [id])
-  kind            String
+  kind            String?
+  reportKind      String?                  @map("report_kind")
   format          String
   frequency       ScheduledExportFrequency
   active          Boolean                  @default(true)
   createdByUserId String?                  @map("created_by_user_id")
   lastRunAt       DateTime?                @map("last_run_at")
+  recipients      Json                     @default("[]")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3608,4 +3804,89 @@ model HelpArticle {
   @@fulltext([title])
   @@fulltext([body])
   @@map("help_articles")
+}
+
+/// Notifications, preference matrix (UPD-BE-122). `userId` null = the business-wide default for
+/// this event/channel; a set `userId` is a per-staff override that takes precedence. `channel`
+/// today only meaningfully gates the real in-app `Notification` inbox (the only delivery
+/// transport internal alerts actually have) — see `NotificationsService.create()`'s doc comment
+/// for the disclosed scope boundary on WhatsApp/email delivery of internal alerts.
+model NotificationPreference {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  /// `""` (default) = the business-wide default row; a real user id = that staff member's own
+  /// override. A genuine `String?` FK to `User` would make this composite `@@unique` unreliable —
+  /// MySQL (like every SQL engine) never treats two NULLs as equal in a unique index, so multiple
+  /// "default" rows for the same event/channel could silently slip past it. No `User` relation is
+  /// declared here on purpose — membership is checked explicitly in `NotificationsService`.
+  userId  String  @default("") @map("user_id")
+  event   String
+  channel String  @default("in_app")
+  enabled Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, userId, event, channel])
+  @@map("notification_preferences")
+}
+
+enum DsrRequestKind {
+  export
+  erasure
+}
+
+enum DsrRequestStatus {
+  pending
+  in_progress
+  fulfilled
+  rejected
+}
+
+/// Data & Privacy, DSR queue (UPD-BE-123) — a request-tracking layer on top of the already-real
+/// `CustomersService.export()`/`.erase()`, which stay exactly as-is; this only adds "a request
+/// exists, here's its status and legal-deadline urgency," fulfilled by calling those real methods.
+model DataSubjectRequest {
+  id                String            @id @default(uuid())
+  businessId        String            @map("business_id")
+  business          Business          @relation(fields: [businessId], references: [id])
+  customerId        String            @map("customer_id")
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  kind              DsrRequestKind
+  status            DsrRequestStatus  @default(pending)
+  requestedByUserId String?           @map("requested_by_user_id")
+  fulfilledAt       DateTime?         @map("fulfilled_at")
+  /// Set only for a fulfilled `export` request — the real signed download link.
+  resultUrl         String?           @map("result_url")
+  note              String?           @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("data_subject_requests")
+}
+
+/// Taxes & Currency, multi-rate (UPD-BE-120). Additive, not a replacement: `Business.taxRate`/
+/// `.taxLabel` stay as the real fallback/default rate — order pricing (`order-totals.util.ts`)
+/// checks for a matching active `TaxRule` by product category first, falling back to the flat
+/// rate when none matches. The M15 Tax Reports feature needs no code change at all: it already
+/// sums whichever real `Order.tax` value each order ended up with, regardless of which rate
+/// computed it — a `null`-category rule applies to any product with no more specific match.
+model TaxRule {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  category     String?
+  label        String
+  rate         Decimal  @db.Decimal(5, 2)
+  taxInclusive Boolean  @default(false) @map("tax_inclusive")
+  active       Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, category])
+  @@map("tax_rules")
 }

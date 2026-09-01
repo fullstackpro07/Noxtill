@@ -6,6 +6,8 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { BusinessesModule } from './businesses/businesses.module';
+import { GdprModule } from './gdpr/gdpr.module';
+import { TaxRulesModule } from './tax-rules/tax-rules.module';
 import { CustomersModule } from './customers/customers.module';
 import { AiModule } from './ai/ai.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
@@ -78,6 +80,8 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     AuthModule,
     UsersModule,
     BusinessesModule,
+    GdprModule,
+    TaxRulesModule,
     CustomersModule,
     AiModule,
     WhatsappModule,

@@ -124,4 +124,112 @@ describe('InventoryService (BE-033/BE-034)', () => {
     const item = inventory.find((i) => i.id === productId);
     expect(item?.supplier).toBe('Acme');
   });
+
+  it('accepts a Theft wastage reason (UPD-BE-111)', async () => {
+    const movement = await inventoryService.recordWastage(businessId, {
+      productId,
+      qty: 1,
+      reason: 'Theft',
+    });
+    expect(movement.reason).toBe('Theft');
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+    });
+    expect(product.stockQty).toBe(24); // 25 - 1, matches the wastage cutting real stock
+  });
+
+  describe('listMovements (UPD-BE-110)', () => {
+    it('computes a real resultingBalance per movement by replaying against current stock, newest first', async () => {
+      const movements = await inventoryService.listMovements({ productId });
+      // Fixture history for this product, oldest to newest: +20 purchase (10->30), -5 wastage (30->25), -1 theft (25->24).
+      expect(movements).toHaveLength(3);
+      expect(movements[0].kind).toBe('wastage'); // the -1 theft row, newest
+      expect(movements[0].resultingBalance).toBe(24);
+      expect(movements[1].resultingBalance).toBe(25); // the -5 wastage row
+      expect(movements[2].kind).toBe('purchase');
+      expect(movements[2].resultingBalance).toBe(30);
+    });
+
+    it('filters by kind', async () => {
+      const purchasesOnly = await inventoryService.listMovements({
+        productId,
+        kind: 'purchase',
+      });
+      expect(purchasesOnly).toHaveLength(1);
+      expect(purchasesOnly[0].resultingBalance).toBe(30);
+    });
+  });
+
+  describe('listLowStock (UPD-BE-111)', () => {
+    let lowStockProductId: string;
+    let outOfStockProductId: string;
+
+    beforeAll(async () => {
+      const lowStock = await prisma.product.create({
+        data: {
+          businessId,
+          kind: 'product',
+          name: 'Low Stock Widget',
+          costPrice: 1,
+          sellingPrice: 10,
+          stockQty: 2,
+          lowStockThreshold: 5,
+        },
+      });
+      lowStockProductId = lowStock.id;
+
+      const outOfStock = await prisma.product.create({
+        data: {
+          businessId,
+          kind: 'product',
+          name: 'Out Of Stock Widget',
+          costPrice: 1,
+          sellingPrice: 10,
+          stockQty: 0,
+          lowStockThreshold: 5,
+        },
+      });
+      outOfStockProductId = outOfStock.id;
+
+      // A real sale that took it to zero 2 days ago, so daysOutOfStock/lostSalesEstimate are computable.
+      const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      await prisma.stockMovement.create({
+        data: {
+          businessId,
+          productId: outOfStockProductId,
+          kind: 'sale',
+          qty: -3,
+          createdAt: twoDaysAgo,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.stockMovement.deleteMany({
+        where: { productId: { in: [lowStockProductId, outOfStockProductId] } },
+      });
+      await prisma.product.deleteMany({
+        where: { id: { in: [lowStockProductId, outOfStockProductId] } },
+      });
+    });
+
+    it('only returns products below threshold or out of stock', async () => {
+      const lowStock = await inventoryService.listLowStock();
+      const ids = lowStock.map((p) => p.id);
+      expect(ids).toContain(lowStockProductId);
+      expect(ids).toContain(outOfStockProductId);
+      expect(ids).not.toContain(productId); // 'ok' status, excluded
+    });
+
+    it('computes a real, non-negative lostSalesEstimate for an out-of-stock product with real recent sales', async () => {
+      const lowStock = await inventoryService.listLowStock();
+      const outOfStockRow = lowStock.find((p) => p.id === outOfStockProductId)!;
+      expect(outOfStockRow.daysOutOfStock).toBeGreaterThanOrEqual(2);
+      expect(outOfStockRow.lostSalesEstimate).toBeGreaterThan(0);
+
+      const lowStockRow = lowStock.find((p) => p.id === lowStockProductId)!;
+      expect(lowStockRow.lostSalesEstimate).toBe(0); // not out of stock, no lost-sales estimate
+    });
+  });
 });

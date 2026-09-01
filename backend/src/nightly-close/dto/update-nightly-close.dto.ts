@@ -1,4 +1,28 @@
-import { IsIn, IsOptional, Matches } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  ValidateNested,
+} from 'class-validator';
+import {
+  NIGHTLY_CLOSE_SECTIONS,
+  NIGHTLY_CLOSE_VOICE_OPTIONS,
+} from '../nightly-close-sections.constants';
+
+const VOICE_IDS = NIGHTLY_CLOSE_VOICE_OPTIONS.map((v) => v.id);
+
+export class NightlyCloseCustomLineDto {
+  @IsString()
+  label!: string;
+
+  @IsString()
+  value!: string;
+}
 
 export class UpdateNightlyCloseDto {
   @IsOptional()
@@ -10,4 +34,25 @@ export class UpdateNightlyCloseDto {
   @IsOptional()
   @IsIn(['whatsapp', 'sms', 'email'])
   channel?: 'whatsapp' | 'sms' | 'email';
+
+  /** A full, reordered list of the same real sections — a subset omits (hides) the rest. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(NIGHTLY_CLOSE_SECTIONS, { each: true })
+  sections?: (typeof NIGHTLY_CLOSE_SECTIONS)[number][];
+
+  @IsOptional()
+  @IsBoolean()
+  voiceNoteEnabled?: boolean;
+
+  @IsOptional()
+  @IsIn(VOICE_IDS)
+  voiceId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => NightlyCloseCustomLineDto)
+  customLines?: NightlyCloseCustomLineDto[];
 }

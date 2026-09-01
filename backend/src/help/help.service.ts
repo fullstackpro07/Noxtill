@@ -79,7 +79,12 @@ export class HelpService {
       `If none of the passages actually answer the question, reply with EXACTLY: "${HELP_NOT_FOUND_MESSAGE}"`,
     ].join('\n\n');
 
-    const answer = await this.aiInfra.complete(businessId, prompt);
+    const answer = await this.aiInfra.complete(
+      businessId,
+      prompt,
+      0,
+      'help_ask',
+    );
 
     return {
       answer,

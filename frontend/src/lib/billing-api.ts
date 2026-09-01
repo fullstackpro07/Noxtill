@@ -31,3 +31,48 @@ export function createCheckout(planKey: string, gateway?: string): Promise<{ url
     }),
   });
 }
+
+export interface BillingInvoice {
+  id: string;
+  number: string | null;
+  status: string | null;
+  amountDue: number;
+  amountPaid: number;
+  currency: string;
+  createdAt: string;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+}
+
+/** GET /billing/invoices (UPD-BE-121) — real Stripe invoice history; empty without a stripeCustomerId. */
+export function fetchBillingInvoices(): Promise<BillingInvoice[]> {
+  return apiFetch<BillingInvoice[]>("/billing/invoices");
+}
+
+export interface AddOnCatalogEntry {
+  key: string;
+  label: string;
+}
+
+export interface AddOnsState {
+  catalog: AddOnCatalogEntry[];
+  active: string[];
+}
+
+/** GET /billing/add-ons (UPD-BE-121) */
+export function fetchAddOns(): Promise<AddOnsState> {
+  return apiFetch<AddOnsState>("/billing/add-ons");
+}
+
+/** PATCH /billing/add-ons (UPD-BE-121) */
+export function updateAddOns(keys: string[]): Promise<AddOnsState> {
+  return apiFetch<AddOnsState>("/billing/add-ons", {
+    method: "PATCH",
+    body: JSON.stringify({ keys }),
+  });
+}
+
+/** POST /billing/cancel (UPD-BE-121) — cancels this business's own active subscription. */
+export function cancelSubscription(): Promise<{ cancelled: true }> {
+  return apiFetch<{ cancelled: true }>("/billing/cancel", { method: "POST" });
+}

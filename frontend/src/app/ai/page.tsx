@@ -4,7 +4,7 @@ import { ArrowRight, Bot, Check } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { Reveal } from "@/components/site/reveal";
-import { MarketingFaqGrid } from "@/components/site/marketing-faq-grid";
+import { FaqAccordion } from "@/components/site/faq-accordion";
 import { AiAssistantLiveDemo } from "@/components/site/ai-assistant-live-demo";
 import { AiAssistantFlowSteps } from "@/components/site/ai-assistant-flow-steps";
 import { AiAssistantReportDemo } from "@/components/site/ai-assistant-report-demo";
@@ -119,7 +119,7 @@ export default function AiPage() {
         </section>
 
         {/* Business Assistant */}
-        <section id="assistant" className="bg-surface-tint px-5 pt-16 sm:px-7 sm:pt-20">
+        <section id="assistant" className="px-5 pt-16 sm:px-7 sm:pt-20">
           <div className="mx-auto max-w-[1320px]">
             <div className="mx-auto mb-8 max-w-[720px] text-center">
               <div className="mb-3.5 font-display text-xs font-semibold uppercase tracking-[0.11em] text-primary">
@@ -154,29 +154,33 @@ export default function AiPage() {
         </section>
 
         {/* AI Phone Receptionist */}
-        <AiCapabilitySectionBlock data={AI_CAPABILITIES.reception} demo={<AiReceptionLiveDemo />} tint="tint-2" />
+        <AiCapabilitySectionBlock data={AI_CAPABILITIES.reception} demo={<AiReceptionLiveDemo />} />
 
         {/* Voice-Entry Sales */}
         <AiCapabilitySectionBlock data={AI_CAPABILITIES.voiceSales} demo={<AiVoiceSalesDemo />} reverse />
 
         {/* Photo Digitizer */}
-        <AiCapabilitySectionBlock data={AI_CAPABILITIES.photoDigitizer} demo={<AiPhotoDigitizerDemo />} tint="tint" />
+        <AiCapabilitySectionBlock data={AI_CAPABILITIES.photoDigitizer} demo={<AiPhotoDigitizerDemo />} />
 
         {/* AI Insights */}
-        <AiCapabilitySectionBlock data={AI_CAPABILITIES.insights} demo={<AiInsightsFeedDemo />} reverse tint="tint-2" />
+        <AiCapabilitySectionBlock data={AI_CAPABILITIES.insights} demo={<AiInsightsFeedDemo />} reverse />
 
         {/* What Our AI Never Does */}
         <AiPromiseSection />
 
         {/* FAQ */}
-        <div className="bg-surface-tint">
-          <MarketingFaqGrid title="AI questions, answered plainly" items={AI_FAQ} />
-        </div>
+        <section className="mx-auto max-w-[760px] px-5 py-16 sm:px-7 sm:py-14">
+          <div className="mx-auto mb-10 max-w-[620px] text-center">
+            <h2 className="mb-3.5 text-balance font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+              AI questions, answered plainly
+            </h2>
+          </div>
+          <FaqAccordion items={AI_FAQ} />
+        </section>
 
         {/* Final CTA */}
-        <div className="bg-surface-tint-2">
-        <section className="mx-auto max-w-[1280px] px-5 pb-16 sm:px-7 sm:pb-18">
-          <Reveal className="rounded-[24px] border border-[#cfeede] bg-white p-8 text-center sm:p-11">
+        <section className="bg-surface-deep px-5 pb-0 pt-10 sm:px-7 sm:pb-18 sm:pt-16">
+          <Reveal className="mx-auto max-w-[1280px] rounded-[24px] border border-border bg-white p-8 text-center sm:p-11">
             <h2 className="mb-3.5 text-balance font-display text-[26px] font-bold leading-[1.14] tracking-tight text-fg sm:text-[38px]">
               {AI_FINAL_CTA.heading}
             </h2>
@@ -202,7 +206,6 @@ export default function AiPage() {
             </div>
           </Reveal>
         </section>
-        </div>
       </main>
 
       <SiteFooter />

@@ -114,6 +114,8 @@ describe('AiService.whatIf (BE-038)', () => {
     expect(aiInfra.complete).toHaveBeenCalledWith(
       businessId,
       expect.stringContaining('Gizmo'),
+      0,
+      'what_if',
     );
     expect(result.estimate).toContain('Revenue would likely increase');
     expect(result.disclaimer).toMatch(/not a guarantee/i);

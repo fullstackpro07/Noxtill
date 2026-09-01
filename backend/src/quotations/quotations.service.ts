@@ -1,7 +1,10 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { computeOrderTotals } from '../orders/order-totals.util';
+import {
+  computeOrderTotals,
+  resolveTaxRatePercent,
+} from '../orders/order-totals.util';
 import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { OrderStatus } from '@prisma/client';
@@ -47,6 +50,7 @@ export class QuotationsService {
         where: { id: { in: productIds } },
       });
       const productMap = new Map(products.map((p) => [p.id, p]));
+      const taxRules = await tx.taxRule.findMany({ where: { businessId } });
 
       const itemsData = dto.items.map((item) => {
         const product = productMap.get(item.productId);
@@ -63,6 +67,11 @@ export class QuotationsService {
           price: item.priceOverride ?? Number(product.sellingPrice),
           cost: Number(product.costPrice),
           qty: item.qty,
+          taxRatePercent: resolveTaxRatePercent(
+            taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
+            product.category,
+            Number(business.taxRate),
+          ),
         };
       });
 
@@ -156,7 +165,15 @@ export class QuotationsService {
         })),
       });
 
-      return order;
+      return tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: {
+          items: true,
+          payments: true,
+          creditEntries: true,
+          customer: true,
+        },
+      });
     });
   }
 }

@@ -23,6 +23,8 @@ describe('AiContentStudioService (UPD-BE-048)', () => {
     expect(aiInfra.complete).toHaveBeenCalledWith(
       'biz-1',
       expect.stringContaining('new menu launch'),
+      0,
+      'campaign_copy',
     );
   });
 
@@ -32,6 +34,8 @@ describe('AiContentStudioService (UPD-BE-048)', () => {
     expect(aiInfra.complete).toHaveBeenCalledWith(
       'biz-1',
       expect.stringContaining('urgent'),
+      0,
+      'campaign_copy',
     );
   });
 

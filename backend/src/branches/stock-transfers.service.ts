@@ -123,6 +123,7 @@ export class StockTransfersService {
         status: StockTransferStatus.approved,
         approvedByUserId: actorUserId,
       },
+      include: { items: { include: { sourceProduct: true } } },
     });
   }
 
@@ -167,6 +168,7 @@ export class StockTransfersService {
           status: StockTransferStatus.shipped,
           shippedByUserId: actorUserId,
         },
+        include: { items: { include: { sourceProduct: true } } },
       });
     });
   }
@@ -207,6 +209,7 @@ export class StockTransfersService {
           status: StockTransferStatus.received,
           receivedByUserId: actorUserId,
         },
+        include: { items: { include: { sourceProduct: true } } },
       });
     });
   }
@@ -239,6 +242,7 @@ export class StockTransfersService {
           : transfer.note,
         approvedByUserId: actorUserId,
       },
+      include: { items: { include: { sourceProduct: true } } },
     });
   }
 

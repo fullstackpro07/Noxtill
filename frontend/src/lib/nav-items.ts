@@ -73,6 +73,15 @@ import {
   ShieldCheck,
   UserCheck,
   Repeat2,
+  PackageCheck,
+  Trash2,
+  Bot,
+  HelpCircle,
+  Mic,
+  MessagesSquare,
+  Settings2,
+  Clock,
+  Percent,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -148,7 +157,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Package,
     roles: ["owner", "manager", "staff"],
     children: [
-      { key: "inventory", labelKey: "nav.inventory", href: "/inventory", icon: Boxes },
       { key: "variants", labelKey: "nav.variants", href: "/products/variants", icon: Layers },
       { key: "bundles", labelKey: "nav.bundles", href: "/products/bundles", icon: PackagePlus },
       { key: "suppliers", labelKey: "nav.suppliers", href: "/products/suppliers", icon: Truck },
@@ -157,6 +165,20 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "categories", labelKey: "nav.categories", href: "/products/categories", icon: Tags },
       { key: "product-import", labelKey: "nav.productImport", href: "/products/import", icon: Upload },
       { key: "product-export", labelKey: "nav.productExport", href: "/products/export", icon: Download },
+    ],
+  },
+  {
+    key: "inventory",
+    labelKey: "nav.inventory",
+    href: "/inventory",
+    icon: Boxes,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "stock-count", labelKey: "nav.stockCount", href: "/inventory/stock-count", icon: ClipboardCheck },
+      { key: "movements", labelKey: "nav.movements", href: "/inventory/movements", icon: History },
+      { key: "low-stock", labelKey: "nav.lowStock", href: "/inventory/low-stock", icon: AlertTriangle },
+      { key: "purchases", labelKey: "nav.purchases", href: "/inventory/purchases", icon: PackageCheck },
+      { key: "wastage", labelKey: "nav.wastage", href: "/inventory/wastage", icon: Trash2 },
     ],
   },
   {
@@ -250,7 +272,17 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "customer-analytics", labelKey: "nav.customerAnalytics", href: "/profit/customer-analytics", icon: Users },
       { key: "staff-analytics", labelKey: "nav.staffAnalytics", href: "/profit/staff-analytics", icon: BarChart3 },
       { key: "expenses", labelKey: "nav.expenses", href: "/expenses", icon: Receipt },
-      { key: "reports", labelKey: "nav.reports", href: "/reports", icon: FileBarChart },
+    ],
+  },
+  {
+    key: "reports",
+    labelKey: "nav.reports",
+    href: "/reports",
+    icon: FileBarChart,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "scheduled-reports", labelKey: "nav.scheduledReports", href: "/reports/scheduled", icon: Clock },
+      { key: "tax-reports", labelKey: "nav.taxReports", href: "/reports/tax", icon: Percent },
     ],
   },
   {
@@ -278,6 +310,19 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "rollup", labelKey: "nav.branchRollup", href: "/branches/rollup", icon: LayoutDashboard },
       { key: "compare", labelKey: "nav.branchCompare", href: "/branches/compare", icon: BarChart3 },
       { key: "transfers", labelKey: "nav.branchTransfers", href: "/branches/transfers", icon: Repeat2 },
+    ],
+  },
+  {
+    key: "ai-assistant",
+    labelKey: "nav.aiAssistant",
+    href: "/assistant/help",
+    icon: Bot,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "help", labelKey: "nav.helpAssistant", href: "/assistant/help", icon: HelpCircle },
+      { key: "voice", labelKey: "nav.voiceAssistant", href: "/assistant/voice", icon: Mic },
+      { key: "history", labelKey: "nav.chatHistory", href: "/assistant/history", icon: MessagesSquare },
+      { key: "ai-settings", labelKey: "nav.aiSettings", href: "/assistant/settings", icon: Settings2 },
     ],
   },
   { key: "settings", labelKey: "nav.settings", href: "/settings", icon: Settings, roles: ["owner", "manager"] },

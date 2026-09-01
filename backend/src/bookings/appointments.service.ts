@@ -194,6 +194,11 @@ export class AppointmentsService {
     const updated = await this.tenantPrisma.client.appointment.update({
       where: { id },
       data: { status: nextStatus },
+      include: {
+        service: true,
+        customer: true,
+        staffUser: { include: { user: true } },
+      },
     });
 
     if (nextStatus === AppointmentStatus.completed) {

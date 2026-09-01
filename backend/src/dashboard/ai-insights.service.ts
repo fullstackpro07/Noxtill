@@ -143,7 +143,12 @@ export class AiInsightsService {
       'Example shape: ["Sentence for fact 1.", "Sentence for fact 2."]',
     ].join('\n');
 
-    const raw = await this.aiInfra.complete(businessId, prompt);
+    const raw = await this.aiInfra.complete(
+      businessId,
+      prompt,
+      0,
+      'ai_insights',
+    );
     const parsed = this.parseObservationArray(raw, facts.length);
     if (!parsed) {
       throw new AppException(

@@ -73,7 +73,7 @@ export class AiService {
 
     let estimate: string;
     try {
-      estimate = await this.aiInfra.complete(businessId, prompt);
+      estimate = await this.aiInfra.complete(businessId, prompt, 0, 'what_if');
     } catch (error) {
       if (error instanceof AppException) {
         throw error; // rate-limit / cost-cap errors from AiInfraService are already typed

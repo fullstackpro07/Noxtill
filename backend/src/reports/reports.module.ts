@@ -10,5 +10,6 @@ import { CreditModule } from '../credit/credit.module';
   imports: [MessagingModule, ProfitModule, StaffModule, CreditModule],
   controllers: [ReportsController],
   providers: [ReportsService],
+  exports: [ReportsService],
 })
 export class ReportsModule {}

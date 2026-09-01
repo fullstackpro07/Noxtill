@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { Reveal } from "@/components/site/reveal";
-import { MarketingFaqGrid } from "@/components/site/marketing-faq-grid";
+import { FaqAccordion } from "@/components/site/faq-accordion";
 import { SolutionsNavigator } from "@/components/site/solutions-navigator";
 import {
   SOLUTIONS_HERO,
@@ -111,7 +111,7 @@ export default function SolutionsPage() {
 
         <SolutionsNavigator />
 
-        <section className="bg-surface-tint-2 px-5 pb-14 sm:px-7">
+        <section className="px-5 pb-14 sm:px-7">
           <Reveal>
             <div className="mx-auto max-w-[1240px] rounded-[var(--radius-xl)] border border-border bg-white p-7">
               <h2 className="mb-2.5 font-display text-2xl font-semibold tracking-tight text-fg">{FLOW_PANEL.title}</h2>
@@ -180,11 +180,16 @@ export default function SolutionsPage() {
           </div>
         </section>
 
-        <div className="bg-surface-tint">
-          <MarketingFaqGrid title="Questions business owners ask" items={SOLUTIONS_FAQS} />
-        </div>
+        <section className="mx-auto max-w-[760px] px-5 py-16 sm:px-7 sm:py-14">
+          <div className="mx-auto mb-10 max-w-[620px] text-center">
+            <h2 className="mb-3.5 text-balance font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+              Questions business owners ask
+            </h2>
+          </div>
+          <FaqAccordion items={SOLUTIONS_FAQS} />
+        </section>
 
-        <section className="bg-surface-tint-2 px-5 pb-18 sm:px-7">
+        <section className="bg-surface-deep px-5 pb-0 pt-10 sm:px-7 sm:pt-16">
           <Reveal>
             <div className="mx-auto max-w-[900px] rounded-[var(--radius-xl)] border border-border bg-white p-10 text-center">
               <h2 className="mb-3 text-balance font-display text-[28px] font-semibold tracking-tight text-fg">

@@ -1,4 +1,4 @@
-import { refreshAccessToken } from "@/lib/api-client";
+import { apiFetch, refreshAccessToken } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth-store";
 import { useBranchContextStore } from "@/store/branch-context-store";
 
@@ -17,6 +17,7 @@ export interface AssistantToolCall {
 export interface AssistantChatResult {
   text: string;
   toolCalls: AssistantToolCall[];
+  conversationId: string;
 }
 
 interface StreamHandlers {
@@ -34,11 +35,11 @@ function buildHeaders(): Headers {
   return headers;
 }
 
-function postChat(message: string, signal?: AbortSignal): Promise<Response> {
+function postChat(message: string, conversationId: string | undefined, signal?: AbortSignal): Promise<Response> {
   return fetch(`${BASE_URL}/assistant/chat`, {
     method: "POST",
     headers: buildHeaders(),
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, conversationId }),
     signal,
   });
 }
@@ -68,9 +69,10 @@ export async function streamAssistantChat(
   message: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  conversationId?: string,
 ): Promise<void> {
   try {
-    let res = await postChat(message, signal);
+    let res = await postChat(message, conversationId, signal);
 
     if (res.status === 401) {
       const refreshed = await refreshAccessToken();
@@ -80,7 +82,7 @@ export async function streamAssistantChat(
         handlers.onError("Your session expired — please sign in again.");
         return;
       }
-      res = await postChat(message, signal);
+      res = await postChat(message, conversationId, signal);
     }
 
     if (!res.ok || !res.body) {
@@ -109,4 +111,41 @@ export async function streamAssistantChat(
     if (error instanceof DOMException && error.name === "AbortError") return;
     handlers.onError("Something went wrong — please try again.");
   }
+}
+
+// --- Chat History (UPD-BE-114) ---
+
+export interface AssistantConversationSummary {
+  id: string;
+  title: string;
+  questionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssistantMessageRecord {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+export interface AssistantConversationDetail {
+  id: string;
+  title: string | null;
+  messages: AssistantMessageRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function fetchAssistantConversations(): Promise<AssistantConversationSummary[]> {
+  return apiFetch<AssistantConversationSummary[]>("/assistant/conversations");
+}
+
+export function fetchAssistantConversation(id: string): Promise<AssistantConversationDetail> {
+  return apiFetch<AssistantConversationDetail>(`/assistant/conversations/${id}`);
+}
+
+export function deleteAssistantConversation(id: string): Promise<void> {
+  return apiFetch<void>(`/assistant/conversations/${id}`, { method: "DELETE" });
 }

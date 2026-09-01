@@ -190,4 +190,24 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       en: '{{body}}',
     },
   },
+  /// Purchase Orders, formal (UPD-BE-112) — the real WhatsApp preview sent to a supplier's own
+  /// phone (`to: {phone}`, no Customer record), so it must resolve outside any 24h conversation
+  /// window like every other transactional send.
+  purchase_order: {
+    key: 'purchase_order',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Purchase order from {{businessName}}:\n{{items}}\nTotal: {{total}}{{note}}',
+    },
+  },
+  /// Low Stock's back-in-stock waitlist (UPD-BE-111) — a direct reply to something the customer
+  /// themselves asked for, so utility (never blocked by a marketing opt-out), same reasoning as
+  /// `feedback_reply`.
+  back_in_stock: {
+    key: 'back_in_stock',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, good news — {{productName}} is back in stock at {{businessName}}!',
+    },
+  },
 };

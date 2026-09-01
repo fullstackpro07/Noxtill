@@ -6,45 +6,45 @@ import { FINAL_CTA_FEATURES, FINAL_CTA_TRUST } from "@/lib/marketing/home-conten
 export function FinalCtaSection() {
   return (
     <section className="px-5 pt-16 sm:px-7 sm:pt-14">
-      <div className="mx-auto max-w-[1560px] overflow-hidden rounded-[var(--radius-xl)] border border-border">
-        <h2 className="mb-2 mt-10 text-balance text-center font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg sm:text-5xl">
+      <div className="mx-auto max-w-[1560px] overflow-hidden rounded-[var(--radius-xl)] bg-surface-deep">
+        <h2 className="mb-2 mt-10 text-balance text-center font-display text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-fg-on-deep sm:text-5xl">
               Everything Your Business Needs.
               <br />
-              <span className="text-accent">One Place to Run It.</span>
+              <span className="text-accent-on-deep">One Place to Run It.</span>
             </h2>
 
-        <div className="flex flex-wrap items-center gap-10 p-8 sm:p-11" style={{ background: "linear-gradient(135deg,#f7fbf9 0%,#ffffff 60%)" }}>
+        <div className="flex flex-wrap items-center gap-10 p-8 sm:p-11">
           <Reveal delay={0} className="min-w-[300px] max-w-[560px] flex-1 basis-[420px]">
-            
 
-            <p className="mb-2.5 max-w-[50ch] text-base leading-relaxed text-fg-muted">
+
+            <p className="mb-2.5 max-w-[50ch] text-base leading-relaxed text-fg-on-deep-muted">
               Noxtill brings all your conversations, calls, reviews, leads, and workflows together in one powerful platform.
               Save time, improve customer experience, build your reputation, and grow your business — faster than ever. Smart
               automation. Real results. Unlimited growth.
             </p>
-            <div className="mb-7 text-base font-medium text-fg">
-              Noxtill is <span className="text-accent">your partner in success.</span>
+            <div className="mb-7 text-base font-medium text-fg-on-deep">
+              Noxtill is <span className="text-accent-on-deep">your partner in success.</span>
             </div>
 
             <div className="mb-6 flex flex-wrap gap-3.5">
               <Link
                 href="/book-a-demo"
-                className="inline-flex items-center gap-3 rounded-xl bg-primary px-7 py-4.5 text-base font-semibold text-primary-foreground shadow-[0_14px_30px_-18px_rgba(11,143,78,0.9)] transition-colors hover:bg-primary-hover"
+                className="inline-flex items-center gap-3 rounded-xl bg-white px-7 py-4.5 text-base font-semibold text-[#053b2a] shadow-[0_14px_30px_-18px_rgba(0,0,0,0.35)] transition-colors hover:bg-[#e6f5ee]"
               >
                 Book a Demo <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
               </Link>
               <Link
                 href="/product"
-                className="inline-flex items-center gap-2.5 rounded-xl border border-border-strong bg-white px-6.5 py-4.5 text-base font-medium text-fg hover:border-primary hover:text-accent"
+                className="inline-flex items-center gap-2.5 rounded-xl border border-border-on-deep bg-transparent px-6.5 py-4.5 text-base font-medium text-fg-on-deep hover:border-fg-on-deep-muted"
               >
                 <PlayCircle className="h-[19px] w-[19px]" aria-hidden /> See How It Works
               </Link>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-[13.5px] text-fg-muted">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-[13.5px] text-fg-on-deep-muted">
               {FINAL_CTA_TRUST.map((item, i) => (
                 <span key={item} className="flex items-center gap-x-5">
-                  {i > 0 ? <span className="h-4.5 w-px bg-border" /> : null}
+                  {i > 0 ? <span className="h-4.5 w-px bg-border-on-deep" /> : null}
                   {item}
                 </span>
               ))}
@@ -97,28 +97,28 @@ export function FinalCtaSection() {
           </Reveal>
         </div>
 
-        <div className="grid grid-cols-2 border-t border-[#eceeed] sm:grid-cols-4 lg:grid-cols-8">
-          {FINAL_CTA_FEATURES.map((feature, i) => (
-            <div key={feature.title} className={`flex flex-col items-center gap-2.5 p-5.5 text-center ${i > 0 ? "border-l border-[#eceeed]" : ""}`}>
+        <div className="grid grid-cols-2 border-t border-border-on-deep sm:grid-cols-4 lg:grid-cols-8">
+          {FINAL_CTA_FEATURES.map((feature) => (
+            <div key={feature.title} className="flex flex-col items-center gap-2.5 p-5.5 text-center">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e3fbf1]">
                 <feature.icon className="h-[21px] w-[21px] text-accent" aria-hidden strokeWidth={1.8} />
               </span>
-              <div className="font-display text-sm font-semibold text-fg">{feature.title}</div>
-              <div className="text-xs leading-snug text-fg-faint">{feature.description}</div>
+              <div className="font-display text-sm font-semibold text-fg-on-deep">{feature.title}</div>
+              <div className="text-xs leading-snug text-fg-on-deep-faint">{feature.description}</div>
             </div>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-5 border-t border-[#eceeed] bg-[#f7faf8] px-7 py-7">
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-accent">
-            <Sparkles className="h-5 w-5 text-white" aria-hidden />
+        <div className="flex flex-wrap items-center justify-center gap-5 border-t border-border-on-deep px-7 py-7">
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-white">
+            <Sparkles className="h-5 w-5 text-[#053b2a]" aria-hidden />
           </span>
           <div className="text-center">
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="font-display text-[22px] font-semibold tracking-[-0.02em] text-fg">One connected platform for the whole business</span>
+              <span className="font-display text-[22px] font-semibold tracking-[-0.02em] text-fg-on-deep">One connected platform for the whole business</span>
               <span className="text-lg tracking-[2px] text-[#f5a623]">★★★★★</span>
             </div>
-            <div className="mt-1.5 text-sm text-fg-muted">All the tools you need. One simple platform. Endless possibilities.</div>
+            <div className="mt-1.5 text-sm text-fg-on-deep-muted">All the tools you need. One simple platform. Endless possibilities.</div>
           </div>
         </div>
       </div>

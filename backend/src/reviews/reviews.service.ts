@@ -153,7 +153,12 @@ export class ReviewsService {
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
     let draft: string;
     try {
-      draft = await this.aiInfra.complete(businessId, prompt);
+      draft = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0,
+        'review_reply',
+      );
     } catch (error) {
       if (error instanceof AppException) {
         throw error; // rate-limit / cost-cap errors from AiInfraService are already typed

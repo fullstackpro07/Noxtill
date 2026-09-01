@@ -73,7 +73,12 @@ export class MarketingOverviewService {
       'spend/results data yet to say anything meaningful, say so honestly instead of guessing.';
 
     try {
-      const suggestion = await this.aiInfra.complete(businessId, prompt, 0.5);
+      const suggestion = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0.5,
+        'marketing_reallocation',
+      );
       return { suggestion };
     } catch {
       return {

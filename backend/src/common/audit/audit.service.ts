@@ -98,6 +98,35 @@ export class AuditService {
       }),
     ]);
 
-    return { total, page, pageSize, rows };
+    // Data & Privacy erasure log (UPD-BE-123) needs a real "who did this," not a bare user id —
+    // `AuditLog.actorUserId` has no Prisma relation (User isn't tenant-scoped), so this resolves
+    // names with one small batched follow-up query instead of an `include`.
+    const actorIds = [
+      ...new Set(
+        rows
+          .map((r) => r.actorUserId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const actors =
+      actorIds.length > 0
+        ? await this.tenantPrisma.client.user.findMany({
+            where: { id: { in: actorIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+    const actorNameById = new Map(actors.map((a) => [a.id, a.name]));
+
+    return {
+      total,
+      page,
+      pageSize,
+      rows: rows.map((row) => ({
+        ...row,
+        actorName: row.actorUserId
+          ? (actorNameById.get(row.actorUserId) ?? null)
+          : null,
+      })),
+    };
   }
 }

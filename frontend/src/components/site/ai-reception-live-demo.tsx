@@ -12,13 +12,10 @@ const CALL_MESSAGES = [
   { from: "caller", text: "I think the Growth plan. Does it include team access?", time: "10:25 AM" },
   {
     from: "ai",
-    text: "Yes! The Growth plan includes up to 10 team members, unlimited customers, automated workflows and advanced reports. Would you like me to send the details to your email?",
+    text: "Yes! The Growth plan includes up to 10 team members, unlimited customers, automated workflows and reports.",
     time: "10:24 AM",
   },
-  { from: "caller", text: "Yes, please. My email is sophia.martinez@email.com", time: "10:25 AM" },
-  { from: "ai", text: "Perfect! I've sent the details to your email. Do you want to schedule a demo with our team?", time: "10:25 AM" },
-  { from: "caller", text: "Yes, tomorrow at 11 AM works.", time: "10:26 AM" },
-  { from: "ai", text: "Great! ✅ Your demo is scheduled for tomorrow at 11:00 AM. You'll receive a calendar invite shortly.", time: "10:27 AM" },
+  
 ];
 
 /**

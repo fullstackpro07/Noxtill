@@ -8,7 +8,12 @@ import {
 } from './adapters/payment-gateway.adapter';
 import { StripeGatewayAdapter } from './adapters/stripe-gateway.adapter';
 import { JazzCashGatewayAdapter } from './adapters/jazzcash-gateway.adapter';
-import { BILLING_ERROR_CODES } from './billing.constants';
+import {
+  ADD_ON_CATALOG,
+  ADD_ON_KEYS,
+  AddOnKey,
+  BILLING_ERROR_CODES,
+} from './billing.constants';
 
 /**
  * Checkout orchestration (BE-064). Deliberately gateway-agnostic: this
@@ -22,7 +27,7 @@ export class BillingService {
 
   constructor(
     private readonly prisma: PrismaService,
-    stripeAdapter: StripeGatewayAdapter,
+    private readonly stripeAdapter: StripeGatewayAdapter,
     jazzCashAdapter: JazzCashGatewayAdapter,
   ) {
     this.adapters = {
@@ -162,5 +167,65 @@ export class BillingService {
       trialEndsAt: business.trialEndsAt,
       hasActiveSubscription: !!business.stripeSubscriptionId,
     };
+  }
+
+  /**
+   * Billing & Plan, extended (UPD-BE-121) — real Stripe invoice history when the business has a
+   * real `stripeCustomerId` and Stripe is configured; an empty list otherwise (no fabricated rows).
+   */
+  async listInvoices(businessId: string) {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    if (!business.stripeCustomerId || !this.stripeAdapter.isConfigured) {
+      return [];
+    }
+    return this.stripeAdapter.listInvoices(business.stripeCustomerId);
+  }
+
+  /** Real catalog + this business's real, persisted selection. */
+  async getAddOns(businessId: string) {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    const active = (business.addOns as unknown as string[] | null) ?? [];
+    return { catalog: ADD_ON_CATALOG, active };
+  }
+
+  async setAddOns(businessId: string, keys: AddOnKey[]) {
+    const invalid = keys.filter((k) => !ADD_ON_KEYS.includes(k));
+    if (invalid.length > 0) {
+      throw new AppException(
+        BILLING_ERROR_CODES.ADD_ON_NOT_FOUND,
+        `Unknown add-on(s): ${invalid.join(', ')}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const unique = [...new Set(keys)];
+    await this.prisma.business.update({
+      where: { id: businessId },
+      data: { addOns: unique },
+    });
+    return this.getAddOns(businessId);
+  }
+
+  /**
+   * Cancellation-with-export-offer (UPD-BE-121) — the real cancel call, resolving this business's
+   * own `stripeSubscriptionId` rather than requiring the caller to know it. The "offer an export
+   * first" UX is a frontend concern; `POST /exports/account-zip` already exists for that.
+   */
+  async cancelOwnSubscription(businessId: string) {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    if (!business.stripeSubscriptionId) {
+      throw new AppException(
+        BILLING_ERROR_CODES.NO_ACTIVE_SUBSCRIPTION,
+        'This business has no active subscription to cancel',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    await this.cancelSubscription(business.stripeSubscriptionId);
+    return { cancelled: true };
   }
 }

@@ -114,7 +114,12 @@ export class VoiceSaleService {
     ].join('\n');
 
     try {
-      const raw = await this.aiInfra.complete(businessId, prompt);
+      const raw = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0,
+        'voice_entry',
+      );
       const jsonStart = raw.indexOf('{');
       const jsonEnd = raw.lastIndexOf('}');
       if (jsonStart === -1 || jsonEnd === -1)

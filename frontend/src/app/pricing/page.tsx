@@ -71,7 +71,6 @@ export default function PricingPage() {
 
         <PricingPlansSection />
 
-        <div className="bg-surface-tint-2">
         <section className="mx-auto max-w-[1280px] px-5 pb-20 sm:px-10">
           <div className="mx-auto mb-7.5 max-w-[620px] text-center">
             <h2 className="mb-3 text-balance font-display text-[clamp(28px,3.4vw,44px)] font-bold leading-[1.1] tracking-[-0.035em] text-fg">
@@ -93,7 +92,6 @@ export default function PricingPage() {
             </div>
           </Reveal>
         </section>
-        </div>
 
         <section className="mx-auto max-w-[1000px] px-5 pb-20 sm:px-10">
           <div className="mx-auto mb-7.5 max-w-[620px] text-center">

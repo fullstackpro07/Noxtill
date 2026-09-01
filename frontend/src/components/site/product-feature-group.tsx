@@ -1,13 +1,16 @@
+import Link from "next/link";
 import { Reveal } from "@/components/site/reveal";
 import type { ProductGroup } from "@/lib/marketing/product-content";
 
 /**
- * Renders one Product-page feature group (heading + card grid). Each card's `id` is the
- * slug the mega-menu's `/product#<slug>` links target — see nav-links.ts — so it must stay
- * on the card wrapper even though the card itself isn't a link (detail pages are out of
- * scope for this pass; anchor scroll is all it needs to do).
+ * Renders one Product-page feature group (heading + card grid). Each card's `id` is kept as
+ * the slug so old `/product#<slug>` bookmarks still scroll correctly, but the card itself now
+ * links to a real detail page — `/product/<slug>` for the three feature groups, `/ai#<slug>`
+ * for "Powered by AI" (that group's real home is the dedicated AI page).
  */
 export function ProductFeatureGroup({ group, delay = 0 }: { group: ProductGroup; delay?: number }) {
+  const isAiGroup = group.title === "Powered by AI";
+
   return (
     <Reveal delay={delay}>
       <div>
@@ -19,10 +22,12 @@ export function ProductFeatureGroup({ group, delay = 0 }: { group: ProductGroup;
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {group.items.map((item) => {
             const Icon = item.icon;
+            const href = isAiGroup ? `/ai#${item.slug}` : `/product/${item.slug}`;
             return (
-              <div
+              <Link
                 key={item.slug}
                 id={item.slug}
+                href={href}
                 className="scroll-mt-24 flex flex-col gap-2.5 rounded-[var(--radius-noxtill-lg)] border border-border p-5 transition-colors hover:border-accent/40 hover:bg-surface-2"
               >
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-noxtill)] bg-primary/8 text-primary">
@@ -30,7 +35,7 @@ export function ProductFeatureGroup({ group, delay = 0 }: { group: ProductGroup;
                 </span>
                 <span className="font-display text-[15.5px] font-semibold text-fg">{item.name}</span>
                 <span className="text-[13px] leading-relaxed text-fg-muted">{item.description}</span>
-              </div>
+              </Link>
             );
           })}
         </div>

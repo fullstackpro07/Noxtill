@@ -108,6 +108,7 @@ describe('AccountZipProcessor (INT-012)', () => {
         title: 'Export ready',
         link: 'https://signed.example/account.zip',
       }),
+      'export_ready',
     );
   });
 });

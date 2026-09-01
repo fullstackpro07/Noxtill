@@ -43,6 +43,7 @@ describe('ReportsService (INT-012)', () => {
   let ownerBusinessUserId: string;
   let staffUserId: string;
   let staffBusinessUserId: string;
+  let cls: FakeClsService;
   const month = '2025-06';
 
   const pdfRenderer = {
@@ -59,7 +60,7 @@ describe('ReportsService (INT-012)', () => {
     prisma = new PrismaService();
     await prisma.$connect();
 
-    const cls = new FakeClsService();
+    cls = new FakeClsService();
     const tenantPrisma = new TenantPrismaService(
       prisma,
       cls as unknown as ClsService,
@@ -245,6 +246,105 @@ describe('ReportsService (INT-012)', () => {
   it('generates the reviews summary report', async () => {
     const result = await service.generate('reviews', month, asOwner());
     expect(result).toEqual({ url: 'https://signed.example/report' });
+  });
+
+  describe('Tax report (UPD-BE-117)', () => {
+    let taxBusinessId: string;
+
+    beforeAll(async () => {
+      const business = await prisma.business.create({
+        data: {
+          name: 'Tax Report Test Biz',
+          slug: `tax-report-test-${Date.now()}`,
+          taxRate: 8.5,
+          taxLabel: 'VAT',
+        },
+      });
+      taxBusinessId = business.id;
+      // TenantPrismaService scopes every query by the CLS-bound business, overwriting any
+      // explicit `businessId` passed in `where` — rebind it to this block's own fixture business.
+      cls.set(CLS_KEY_BUSINESS_ID, taxBusinessId);
+
+      await prisma.order.create({
+        data: {
+          businessId: taxBusinessId,
+          orderNo: 1,
+          status: 'completed',
+          orderType: 'counter',
+          subtotal: 100,
+          tax: 8.5,
+          total: 108.5,
+          createdAt: new Date('2025-06-15T00:00:00Z'),
+        },
+      });
+      await prisma.order.create({
+        data: {
+          businessId: taxBusinessId,
+          orderNo: 2,
+          status: 'completed',
+          orderType: 'counter',
+          subtotal: 50,
+          tax: 4.25,
+          total: 54.25,
+          createdAt: new Date('2025-06-20T00:00:00Z'),
+        },
+      });
+      // A cancelled order in the same month must never count toward taxable sales/collected.
+      await prisma.order.create({
+        data: {
+          businessId: taxBusinessId,
+          orderNo: 3,
+          status: 'cancelled',
+          orderType: 'counter',
+          subtotal: 1000,
+          tax: 85,
+          total: 1085,
+          createdAt: new Date('2025-06-22T00:00:00Z'),
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.order.deleteMany({ where: { businessId: taxBusinessId } });
+      await prisma.business.delete({ where: { id: taxBusinessId } });
+      cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    });
+
+    it("generates the tax PDF using the business's own VAT/taxRate label and real order aggregates", async () => {
+      const result = await service.generate('tax', month, {
+        ...ownerAuth,
+        sub: ownerUserId,
+        businessId: taxBusinessId,
+      });
+      expect(result).toEqual({ url: 'https://signed.example/report' });
+      const html = pdfRenderer.renderPdf.mock.calls[0][0];
+      expect(html).toContain('VAT');
+      expect(html).toContain('Not tracked');
+    });
+
+    it('taxSummary() returns the real current-period figures, excluding non-completed orders', async () => {
+      const summary = await service.taxSummary(taxBusinessId, month);
+      expect(summary.taxLabel).toBe('VAT');
+      expect(summary.taxRate).toBe(8.5);
+      expect(summary.taxableSales).toBe(150);
+      expect(summary.taxCollected).toBe(12.75);
+      expect(summary.netTaxDue).toBe(12.75);
+      expect(summary.taxOnPurchasesTracked).toBe(false);
+    });
+
+    it('taxSummary() returns a real trailing 6-month trend ending on the requested period', async () => {
+      const summary = await service.taxSummary(taxBusinessId, month);
+      expect(summary.trend).toHaveLength(6);
+      expect(summary.trend[5]).toEqual(
+        expect.objectContaining({ period: month, taxCollected: 12.75 }),
+      );
+      expect(summary.trend[0].period).toBe('2025-01');
+    });
+
+    it('taxSummary() defaults to the current month when no period is given', async () => {
+      const summary = await service.taxSummary(taxBusinessId);
+      expect(summary.period).toMatch(/^\d{4}-\d{2}$/);
+    });
   });
 
   it('send() generates the PDF then pushes it to the caller via the real send-gate template', async () => {

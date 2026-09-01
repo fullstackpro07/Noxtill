@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { AssistantService } from './assistant.service';
 import { AssistantChatDto } from './dto/assistant-chat.dto';
@@ -17,7 +25,8 @@ export class AssistantController {
   /**
    * Streamed as Server-Sent Events: each `delta` event is a token of the
    * final answer as it's generated; the stream ends with one `done` event
-   * carrying the full text and the tool-call trace (BE-074).
+   * carrying the full text, the tool-call trace, and the conversation id
+   * (BE-074, BE-114).
    */
   @Post('chat')
   async chat(
@@ -33,7 +42,9 @@ export class AssistantController {
     try {
       const result = await this.assistantService.chat(
         user.businessId,
+        user.sub,
         dto.message,
+        dto.conversationId,
         (text) => {
           res.write(`event: delta\ndata: ${JSON.stringify({ text })}\n\n`);
         },
@@ -46,5 +57,30 @@ export class AssistantController {
     } finally {
       res.end();
     }
+  }
+
+  @Get('conversations')
+  listConversations(@CurrentUser() user: AuthenticatedUser) {
+    return this.assistantService.listConversations(user.businessId, user.sub);
+  }
+
+  @Get('conversations/:id')
+  getConversation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.assistantService.getConversation(user.businessId, user.sub, id);
+  }
+
+  @Delete('conversations/:id')
+  deleteConversation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.assistantService.deleteConversation(
+      user.businessId,
+      user.sub,
+      id,
+    );
   }
 }

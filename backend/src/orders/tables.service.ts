@@ -5,7 +5,7 @@ import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
 import { MoveTableDto } from './dto/move-table.dto';
 import { MergeTablesDto } from './dto/merge-tables.dto';
-import { computeOrderTotals } from './order-totals.util';
+import { computeOrderTotals, resolveTaxRatePercent } from './order-totals.util';
 import { ACTIVE_ORDER_STATUSES, TABLE_ERROR_CODES } from './tables.constants';
 import { OrderStatus, TableStatus } from '@prisma/client';
 
@@ -172,11 +172,30 @@ export class TablesService {
       const business = await tx.business.findUniqueOrThrow({
         where: { id: businessId },
       });
+      const taxRules = await tx.taxRule.findMany({ where: { businessId } });
+      const productIds = [
+        ...new Set(
+          items
+            .map((i) => i.productId)
+            .filter((id): id is string => id !== null),
+        ),
+      ];
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+      });
+      const productCategoryMap = new Map(
+        products.map((p) => [p.id, p.category]),
+      );
       const { subtotal, tax, total, cogs } = computeOrderTotals(
         items.map((i) => ({
           price: Number(i.price),
           cost: Number(i.cost),
           qty: i.qty,
+          taxRatePercent: resolveTaxRatePercent(
+            taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
+            i.productId ? (productCategoryMap.get(i.productId) ?? null) : null,
+            Number(business.taxRate),
+          ),
         })),
         Number(destinationOrder.discount),
         Number(business.taxRate),

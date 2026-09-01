@@ -49,6 +49,22 @@ export const CAPABILITIES = {
   /// Owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below) — same pattern as
   /// CREDIT_WRITE_OFF, matching the spec's "Recovery Reports: Owner-only" note.
   CREDIT_RECOVERY_REPORT_VIEW: 'credit.recovery_report_view',
+  /// Purchase Orders, formal (UPD-BE-112) — a real financial commitment to a supplier, so the
+  /// send/confirm/receive lifecycle is owner+manager, matching the spec's "Purchases: Owner,
+  /// Manager" note (unlike Wastage, which the spec marks staff-recordable and stays ungated).
+  PURCHASES_MANAGE: 'purchases.manage',
+  /// AI Settings (UPD-BE-115) — owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES
+  /// below), matching the spec's explicit "Owner-only" note on this screen: cost cap / rate limit /
+  /// per-feature toggles are a billing-adjacent control, same tier as BILLING_MANAGE.
+  AI_SETTINGS_MANAGE: 'ai_settings.manage',
+  /// Settings depth (UPD-BE-M16) — one capability per new settings area, owner+manager unless noted.
+  BUSINESS_PROFILE_MANAGE: 'business_profile.manage',
+  MESSAGING_CHANNELS_MANAGE: 'messaging_channels.manage',
+  NIGHTLY_CLOSE_MANAGE: 'nightly_close.manage',
+  TAX_RULES_MANAGE: 'tax_rules.manage',
+  /// Owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below) — a data-subject
+  /// request can end in real customer PII erasure, same tier as CUSTOMERS_ERASE itself.
+  GDPR_MANAGE: 'gdpr.manage',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -80,6 +96,11 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.ADS_MANAGE,
   CAPABILITIES.BOOKINGS_MANAGE,
   CAPABILITIES.CREDIT_MANAGE,
+  CAPABILITIES.PURCHASES_MANAGE,
+  CAPABILITIES.BUSINESS_PROFILE_MANAGE,
+  CAPABILITIES.MESSAGING_CHANNELS_MANAGE,
+  CAPABILITIES.NIGHTLY_CLOSE_MANAGE,
+  CAPABILITIES.TAX_RULES_MANAGE,
 ];
 
 /**

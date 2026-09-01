@@ -43,6 +43,7 @@ describe('UsersService', () => {
       name: 'Amara Osei',
       email: 'amara@sunsethair.co',
       phone: null,
+      twoFactorEnabled: false,
     });
     prisma.business.findUnique.mockResolvedValue({
       id: 'b1',
@@ -64,6 +65,7 @@ describe('UsersService', () => {
       name: 'Amara Osei',
       email: 'amara@sunsethair.co',
       phone: null,
+      twoFactorEnabled: false,
       role: 'owner',
       businessUserId: 'bu1',
     });

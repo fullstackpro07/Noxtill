@@ -1,8 +1,11 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { LocaleService } from '../common/localization/locale.service';
-import { SendGateService } from '../messaging/send-gate.service';
+import {
+  SendGateService,
+  SendGateParams,
+} from '../messaging/send-gate.service';
 import { NightlyCloseService } from './nightly-close.service';
-import { Role } from '@prisma/client';
+import { Message, Role } from '@prisma/client';
 
 describe('NightlyCloseService history/preview/test-send (UPD-BE-083)', () => {
   let prisma: PrismaService;
@@ -10,7 +13,9 @@ describe('NightlyCloseService history/preview/test-send (UPD-BE-083)', () => {
   let businessId: string;
   let ownerUserId: string;
   const sendGate = {
-    send: jest.fn().mockResolvedValue(undefined),
+    send: jest
+      .fn<Promise<Message>, [SendGateParams]>()
+      .mockResolvedValue(undefined as unknown as Message),
   };
 
   beforeAll(async () => {
@@ -132,5 +137,73 @@ describe('NightlyCloseService history/preview/test-send (UPD-BE-083)', () => {
       true,
     );
     expect(failedOnly.length).toBeGreaterThanOrEqual(1);
+  });
+
+  describe('Nightly Close Settings, full (UPD-BE-119)', () => {
+    it('getSettings() defaults to every real section, in order, no custom lines, voice off', async () => {
+      const settings = await service.getSettings(businessId);
+      expect(settings.config.sections).toEqual([
+        'sales',
+        'lowStock',
+        'appointmentsTomorrow',
+        'newReviews',
+        'openFeedback',
+        'creditPayments',
+      ]);
+      expect(settings.config.voiceNoteEnabled).toBe(false);
+      expect(settings.config.customLines).toEqual([]);
+    });
+
+    it('updateSettings() really persists a reordered/reduced section list, a voice selection, and custom lines', async () => {
+      const updated = await service.updateSettings(businessId, {
+        sections: ['creditPayments', 'sales'],
+        voiceNoteEnabled: true,
+        voiceId: 'warm_female',
+        customLines: [{ label: 'Weather', value: 'Sunny, light foot traffic' }],
+      });
+      expect(updated.config.sections).toEqual(['creditPayments', 'sales']);
+      expect(updated.config.voiceNoteEnabled).toBe(true);
+      expect(updated.config.voiceId).toBe('warm_female');
+      expect(updated.config.customLines).toEqual([
+        { label: 'Weather', value: 'Sunny, light foot traffic' },
+      ]);
+
+      const refetched = await service.getSettings(businessId);
+      expect(refetched.config.sections).toEqual(['creditPayments', 'sales']);
+    });
+
+    it('a partial updateSettings() call merges over the existing config rather than resetting it', async () => {
+      await service.updateSettings(businessId, {
+        sections: ['sales', 'lowStock'],
+        customLines: [{ label: 'Note', value: 'Test' }],
+      });
+      await service.updateSettings(businessId, { voiceNoteEnabled: false });
+
+      const settings = await service.getSettings(businessId);
+      expect(settings.config.sections).toEqual(['sales', 'lowStock']);
+      expect(settings.config.customLines).toEqual([
+        { label: 'Note', value: 'Test' },
+      ]);
+      expect(settings.config.voiceNoteEnabled).toBe(false);
+    });
+
+    it('composeAndSend() sends a real customBody reflecting only the configured sections, in the configured order, plus custom lines', async () => {
+      await service.updateSettings(businessId, {
+        sections: ['creditPayments', 'sales'],
+        customLines: [{ label: 'Weather', value: 'Rainy' }],
+      });
+
+      await service.composeAndSend(businessId, new Date());
+
+      const [[sendArgs]] = sendGate.send.mock.calls.slice(-1);
+      const body = (sendArgs as { customBody: string }).customBody;
+      const creditIndex = body.indexOf('Credit payments today');
+      const salesIndex = body.indexOf('Sales:');
+      expect(creditIndex).toBeGreaterThanOrEqual(0);
+      expect(salesIndex).toBeGreaterThan(creditIndex);
+      expect(body).toContain('Weather: Rainy');
+      expect(body).not.toContain('Low stock');
+      expect(body).not.toContain('Tomorrow:');
+    });
   });
 });

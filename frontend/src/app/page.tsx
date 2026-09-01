@@ -98,7 +98,7 @@ export default function HomePage() {
 
       <main className="flex-1">
         <HeroSection />
-        <AiAssistantSection />
+        
         <UnifiedInboxSection />
         <PosBookingsCreditSection />
         <AiReceptionSection />

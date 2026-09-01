@@ -29,7 +29,12 @@ export class AiContentStudioService {
     const prompt = `Write a single social media caption about: "${dto.topic}". Tone: ${dto.tone ?? 'friendly and engaging'}. Keep it under ${CAPTION_MAX_CHARS} characters, no hashtags unless natural, no surrounding quote marks.`;
     let caption: string;
     try {
-      caption = await this.aiInfra.complete(businessId, prompt);
+      caption = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0,
+        'campaign_copy',
+      );
     } catch (error) {
       if (error instanceof AppException) throw error; // rate-limit / cost-cap errors already typed
       throw new AppException(

@@ -8,6 +8,8 @@ import { MessageWorkerProcessor } from './message-worker.processor';
 import { MessageDeadLetterListener } from './message-dead-letter.listener';
 import { MessagesService } from './messages.service';
 import { MessagesController } from './messages.controller';
+import { MessagingChannelsService } from './messaging-channels.service';
+import { MessagingChannelsController } from './messaging-channels.controller';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MESSAGES_QUEUE } from './messaging.constants';
@@ -22,7 +24,7 @@ import { dlqName } from '../common/queue/queue.constants';
     WhatsappModule,
     SettingsModule,
   ],
-  controllers: [MessagesController],
+  controllers: [MessagesController, MessagingChannelsController],
   providers: [
     SendGateService,
     TemplateRegistryService,
@@ -31,6 +33,7 @@ import { dlqName } from '../common/queue/queue.constants';
     MessageWorkerProcessor,
     MessageDeadLetterListener,
     MessagesService,
+    MessagingChannelsService,
   ],
   exports: [SendGateService, TemplateRegistryService],
 })

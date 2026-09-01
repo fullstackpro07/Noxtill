@@ -27,7 +27,7 @@ function StepIcon({ step }: { step: AutomationStep }) {
 
 export function IntegrationsAutomationSection() {
   return (
-    <section className="bg-surface-tint px-5 py-14 sm:px-7 sm:py-17.5">
+    <section className="px-5 py-14 sm:px-7 sm:py-17.5">
       <div className="mx-auto max-w-[1280px]">
         <div className="mx-auto mb-8 max-w-[640px] text-center">
           <div className="mb-4 inline-flex items-center gap-2 font-display text-xs font-semibold uppercase tracking-[0.09em] text-primary">

@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { X, ArrowDownCircle, ArrowUpCircle, AlertTriangle } from "lucide-react";
+import { X, ArrowDownCircle, ArrowUpCircle, AlertTriangle, SlidersHorizontal, Undo2, ArrowLeftRight } from "lucide-react";
 import { InlineError } from "@/components/shared/error-states";
 import { Skeleton } from "@/components/shared/skeleton";
 import { fetchMovements, type LiveInventoryItem, type MovementKind } from "@/lib/inventory-api";
@@ -12,12 +12,20 @@ const MOVEMENT_ICON: Record<MovementKind, typeof ArrowDownCircle> = {
   purchase: ArrowDownCircle,
   sale: ArrowUpCircle,
   wastage: AlertTriangle,
+  adjustment: SlidersHorizontal,
+  return: Undo2,
+  transfer_out: ArrowLeftRight,
+  transfer_in: ArrowLeftRight,
 };
 
 const MOVEMENT_TONE: Record<MovementKind, string> = {
   purchase: "text-whatsapp",
   sale: "text-fg-muted",
   wastage: "text-destructive",
+  adjustment: "text-accent-foreground",
+  return: "text-fg-muted",
+  transfer_out: "text-accent-foreground",
+  transfer_in: "text-whatsapp",
 };
 
 export function MovementHistoryDrawer({ item, onClose }: { item: LiveInventoryItem | null; onClose: () => void }) {
@@ -67,7 +75,7 @@ function MovementHistoryPanel({ item, onClose }: { item: LiveInventoryItem; onCl
                     <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${MOVEMENT_TONE[m.kind]}`} aria-hidden />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium capitalize text-fg">{m.kind}</p>
+                        <p className="text-sm font-medium capitalize text-fg">{m.kind.replace(/_/g, " ")}</p>
                         <span className={`text-sm font-medium tabular-nums ${m.qty > 0 ? "text-whatsapp" : "text-destructive"}`}>
                           {m.qty > 0 ? "+" : ""}
                           {m.qty}

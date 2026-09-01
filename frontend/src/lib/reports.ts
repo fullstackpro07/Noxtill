@@ -1,4 +1,4 @@
-export type ReportKind = "monthly" | "pnl" | "sales" | "staff" | "reviews" | "credit_recovery";
+export type ReportKind = "monthly" | "pnl" | "sales" | "staff" | "reviews" | "credit_recovery" | "tax";
 
 export interface ReportDef {
   key: ReportKind;
@@ -13,6 +13,7 @@ export const REPORT_DEFS: ReportDef[] = [
   { key: "sales", label: "Sales report", description: "Every order, itemized, for a date range." },
   { key: "staff", label: "Staff performance", description: "Sales and commissions per team member." },
   { key: "reviews", label: "Reviews summary", description: "Rating trend and response rate across platforms." },
+  { key: "tax", label: "Tax report", description: "Taxable sales and tax collected for the month." },
 ];
 
 export interface ExcelExportDef {

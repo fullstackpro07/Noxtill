@@ -15,7 +15,7 @@ export function PricingPlansSection() {
   const enterprisePlan = PRICING_PLANS[4];
 
   return (
-    <div className="bg-surface-tint">
+    <div>
       <section className="mx-auto max-w-[1560px] px-5 pb-20 sm:px-10">
         <div className="mx-auto mb-8 max-w-[660px] text-center">
           <h2 className="mb-3.5 text-balance font-display text-[clamp(30px,3.8vw,52px)] font-bold leading-[1.06] tracking-[-0.04em] text-fg">

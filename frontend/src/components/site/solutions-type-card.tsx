@@ -65,7 +65,7 @@ export function SolutionsTypeCard({ type }: { type: BusinessTypeSolution }) {
         ))}
       </div>
 
-      <Link href={`#${type.slug}`} className="mt-auto flex items-center gap-1 text-[13px] font-medium text-primary">
+      <Link href={`/solutions/${type.slug}`} className="mt-auto flex items-center gap-1 text-[13px] font-medium text-primary">
         {type.cta}
         <ArrowRight className="h-3.5 w-3.5" aria-hidden />
       </Link>

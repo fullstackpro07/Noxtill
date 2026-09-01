@@ -11,7 +11,7 @@ import { recordWastage } from "@/lib/inventory-api";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
-const WASTAGE_REASONS: WastageReason[] = ["Damaged", "Expired", "Other"];
+const WASTAGE_REASONS: WastageReason[] = ["Damaged", "Expired", "Theft", "Other"];
 
 export function WastageDialog({ item, onClose }: { item: LiveInventoryItem | null; onClose: () => void }) {
   if (!item) return null;

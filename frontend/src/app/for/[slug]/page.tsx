@@ -48,7 +48,6 @@ export default async function BusinessTypePage({ params }: { params: Promise<{ s
           </div>
         </section>
 
-        <div className="bg-surface-tint">
         <section className="mx-auto max-w-2xl px-4 pb-14 sm:px-6">
           <Quote className="h-6 w-6 text-accent-foreground" aria-hidden />
           <p className="mt-3 font-display text-xl font-medium leading-snug text-fg">&ldquo;{page.testimonial.quote}&rdquo;</p>
@@ -56,11 +55,10 @@ export default async function BusinessTypePage({ params }: { params: Promise<{ s
             {page.testimonial.author} — {page.testimonial.place}
           </p>
         </section>
-        </div>
 
-        <div className="bg-surface-tint-2">
-        <section className="mx-auto max-w-2xl px-4 pb-14 sm:px-6">
-          <h2 className="mb-6 text-center font-display text-2xl font-bold text-fg">Questions {page.name.toLowerCase()} ask</h2>
+        <div className="bg-surface-deep">
+        <section className="mx-auto max-w-2xl px-4 pb-14 pt-14 sm:px-6 sm:pt-16">
+          <h2 className="mb-6 text-center font-display text-2xl font-bold text-fg-on-deep">Questions {page.name.toLowerCase()} ask</h2>
           <FaqAccordion items={page.faqs} />
         </section>
         </div>

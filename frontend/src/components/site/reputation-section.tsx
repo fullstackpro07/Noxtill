@@ -28,7 +28,7 @@ function Stars({ count }: { count: number }) {
 
 export function ReputationSection() {
   return (
-    <section className="bg-surface-tint-2 px-5 pt-16 sm:px-7 sm:pt-20">
+    <section className="px-5 pt-16 sm:px-7 sm:pt-20">
       <div className="mx-auto max-w-[1560px]">
         <div className="mx-auto mb-10 max-w-[900px] text-center">
           <h2 className="mb-4 text-balance font-display text-4xl font-semibold leading-[1.14] tracking-[-0.035em] text-fg sm:text-5xl">

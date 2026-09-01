@@ -23,6 +23,18 @@
   --border: #e6eae8;
   --border-strong: #d6ddd9;
 
+  /* Dark-green "highlight" section background — the logo's deep forest green, used sparingly
+     (1-2 sections per landing page, plus the footer) against an otherwise all-white page.
+     Text/links/icons placed directly on this background use the `*-on-deep` tokens below;
+     white cards/mockups nested inside a deep section keep their normal light-mode colors as-is. */
+  --surface-deep: #053b2a;
+  --surface-deep-2: #0a4c37;
+  --border-on-deep: rgba(255, 255, 255, 0.14);
+  --fg-on-deep: #f4faf7;
+  --fg-on-deep-muted: #bfe0cf;
+  --fg-on-deep-faint: #86ad9a;
+  --accent-on-deep: #4fe3a8;
+
   --fg: #0b1620;
   --fg-muted: #40514a;
   --fg-faint: #7b8a83;
@@ -162,12 +174,19 @@
   --color-surface-2: var(--surface-2);
   --color-surface-tint: var(--surface-tint);
   --color-surface-tint-2: var(--surface-tint-2);
+  --color-surface-deep: var(--surface-deep);
+  --color-surface-deep-2: var(--surface-deep-2);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
+  --color-border-on-deep: var(--border-on-deep);
 
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-faint: var(--fg-faint);
+  --color-fg-on-deep: var(--fg-on-deep);
+  --color-fg-on-deep-muted: var(--fg-on-deep-muted);
+  --color-fg-on-deep-faint: var(--fg-on-deep-faint);
+  --color-accent-on-deep: var(--accent-on-deep);
 
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);

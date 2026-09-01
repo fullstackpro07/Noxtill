@@ -170,4 +170,67 @@ describe('AiInfraService (BE-075)', () => {
 
     await prisma.business.delete({ where: { id: rateLimitedBusiness.id } });
   });
+
+  describe('AI Settings feature toggles (UPD-BE-115)', () => {
+    it('blocks a call whose kind maps to a toggled-off feature', async () => {
+      const toggledOffBusiness = await prisma.business.create({
+        data: {
+          name: 'AI Toggle Off Test Biz',
+          slug: `ai-toggle-off-${Date.now()}`,
+          aiFeatureToggles: { reviewReplies: false },
+        },
+      });
+      claude.createMessage.mockResolvedValue(fakeResult());
+
+      await expect(
+        service.complete(
+          toggledOffBusiness.id,
+          'draft a reply',
+          0,
+          'review_reply',
+        ),
+      ).rejects.toBeInstanceOf(AppException);
+      expect(claude.createMessage).not.toHaveBeenCalled();
+
+      await prisma.business.delete({ where: { id: toggledOffBusiness.id } });
+    });
+
+    it('allows a call whose kind is not one of the 7 toggleable features, regardless of toggles', async () => {
+      const business = await prisma.business.create({
+        data: {
+          name: 'AI Untracked Kind Test Biz',
+          slug: `ai-untracked-kind-${Date.now()}`,
+          aiFeatureToggles: { reviewReplies: false },
+        },
+      });
+      claude.createMessage.mockResolvedValue(fakeResult());
+
+      const text = await service.complete(business.id, 'anything', 0);
+      expect(text).toBe('hello');
+
+      await prisma.aiCallLog.deleteMany({ where: { businessId: business.id } });
+      await prisma.business.delete({ where: { id: business.id } });
+    });
+
+    it('allows a mapped kind when the toggle is left unset (defaults to enabled)', async () => {
+      const business = await prisma.business.create({
+        data: {
+          name: 'AI Default-Enabled Test Biz',
+          slug: `ai-default-enabled-${Date.now()}`,
+        },
+      });
+      claude.createMessage.mockResolvedValue(fakeResult());
+
+      const text = await service.complete(
+        business.id,
+        'draft a reply',
+        0,
+        'review_reply',
+      );
+      expect(text).toBe('hello');
+
+      await prisma.aiCallLog.deleteMany({ where: { businessId: business.id } });
+      await prisma.business.delete({ where: { id: business.id } });
+    });
+  });
 });

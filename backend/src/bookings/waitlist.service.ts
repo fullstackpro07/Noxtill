@@ -91,7 +91,7 @@ export class WaitlistService {
         offeredStartsAt: new Date(dto.startsAt),
         offeredEndsAt: new Date(dto.endsAt),
       },
-      include: { service: true },
+      include: { customer: true, service: true },
     });
 
     await this.sendGate
@@ -154,6 +154,7 @@ export class WaitlistService {
     return this.tenantPrisma.client.waitlistEntry.update({
       where: { id },
       data: { status: WaitlistStatus.cancelled },
+      include: { customer: true, service: true },
     });
   }
 

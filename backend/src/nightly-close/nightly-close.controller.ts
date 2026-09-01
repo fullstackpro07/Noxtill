@@ -10,8 +10,11 @@ import {
 } from '@nestjs/common';
 import { NightlyCloseService } from './nightly-close.service';
 import { UpdateNightlyCloseDto } from './dto/update-nightly-close.dto';
+import { NIGHTLY_CLOSE_VOICE_OPTIONS } from './nightly-close-sections.constants';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 function parseDate(value: string, label: string): Date {
   const parsed = new Date(value);
@@ -63,15 +66,23 @@ export class NightlyCloseController {
     return this.nightlyClose.testSend(user.businessId);
   }
 
+  @Get('settings/nightly-close')
+  getSettings(@CurrentUser() user: AuthenticatedUser) {
+    return this.nightlyClose.getSettings(user.businessId);
+  }
+
+  /** UPD-BE-119 fix-it: this write previously had no capability gate at all — now consistent with every other new M16 settings endpoint. */
+  @RequireCapability(CAPABILITIES.NIGHTLY_CLOSE_MANAGE)
   @Patch('settings/nightly-close')
   updateSettings(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateNightlyCloseDto,
   ) {
-    return this.nightlyClose.updateSettings(
-      user.businessId,
-      dto.time,
-      dto.channel,
-    );
+    return this.nightlyClose.updateSettings(user.businessId, dto);
+  }
+
+  @Get('settings/nightly-close/voice-options')
+  voiceOptions() {
+    return NIGHTLY_CLOSE_VOICE_OPTIONS;
   }
 }

@@ -149,6 +149,8 @@ describe('ReviewsService (BE-047)', () => {
     expect(aiInfra.complete).toHaveBeenCalledWith(
       businessId,
       expect.stringContaining('Excelente servicio'),
+      0,
+      'review_reply',
     );
   });
 

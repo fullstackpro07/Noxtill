@@ -8,8 +8,8 @@ export class CreateWastageDto {
   @Min(1)
   qty!: number;
 
-  @IsIn(['Expired', 'Damaged', 'Other'])
-  reason!: 'Expired' | 'Damaged' | 'Other';
+  @IsIn(['Expired', 'Damaged', 'Theft', 'Other'])
+  reason!: 'Expired' | 'Damaged' | 'Theft' | 'Other';
 
   @IsOptional()
   @IsString()

@@ -23,6 +23,7 @@ interface BusinessInfo {
   currency: string;
   locale: string;
   timezone: string;
+  taxLabel: string;
 }
 
 @Injectable()
@@ -129,6 +130,8 @@ export class ReportsService {
           );
         }
         return this.buildCreditRecovery(business);
+      case 'tax':
+        return this.buildTax(businessId, month, business);
     }
   }
 
@@ -325,6 +328,106 @@ export class ReportsService {
         <tbody>${rows || '<tr><td colspan="5">No credit activity in this window.</td></tr>'}</tbody>
       </table>
     `;
+  }
+
+  /**
+   * Tax Reports (UPD-BE-117). Taxable sales/tax collected come from real `Order.subtotal`/`.tax`
+   * (already computed per-order against the business's own `taxRate` — see `order-totals.util.ts`,
+   * unchanged by this ticket). There is deliberately no "tax on purchases" figure: no field on
+   * `PurchaseOrderItem`/`Expense` records tax paid to suppliers anywhere in this schema (confirmed
+   * before building this), so netting it against tax collected would be fabricated. `netTaxDue`
+   * is therefore tax collected alone, and every consumer of this data (PDF + the JSON summary
+   * below) is expected to disclose that purchases aren't tracked rather than implying a false net.
+   */
+  private async computeTaxPeriod(
+    businessId: string,
+    month: string,
+  ): Promise<{ taxableSales: number; taxCollected: number }> {
+    const { start, end } = monthBounds(month);
+    const agg = await this.tenantPrisma.client.order.aggregate({
+      where: {
+        businessId,
+        status: OrderStatus.completed,
+        isQuotation: false,
+        createdAt: { gte: start, lt: end },
+      },
+      _sum: { subtotal: true, tax: true },
+    });
+    return {
+      taxableSales: round2(Number(agg._sum.subtotal ?? 0)),
+      taxCollected: round2(Number(agg._sum.tax ?? 0)),
+    };
+  }
+
+  private async buildTax(
+    businessId: string,
+    month: string,
+    business: BusinessInfo,
+  ): Promise<string> {
+    const { taxableSales, taxCollected } = await this.computeTaxPeriod(
+      businessId,
+      month,
+    );
+
+    return `
+      <h2>${business.taxLabel} report — ${month}</h2>
+      <table style="width:100%; border-collapse:collapse;">
+        <tr><td>Taxable sales</td><td style="text-align:right">${this.locale.formatCurrency(taxableSales, business)}</td></tr>
+        <tr><td>${business.taxLabel} collected</td><td style="text-align:right">${this.locale.formatCurrency(taxCollected, business)}</td></tr>
+        <tr><td>Tax on purchases</td><td style="text-align:right">Not tracked</td></tr>
+        <tr><th style="border-top:2px solid #D8D0BF;">Net ${business.taxLabel.toLowerCase()} due</th><th style="text-align:right; border-top:2px solid #D8D0BF;">${this.locale.formatCurrency(taxCollected, business)}</th></tr>
+      </table>
+      <p style="margin-top:12px; font-size:12px; color:#6b7280;">
+        "Tax on purchases" isn't tracked yet — no supplier invoice in this system currently records tax paid, so net due here is tax collected only, not netted against input tax.
+      </p>
+    `;
+  }
+
+  /** The real JSON summary behind the Tax Reports screen — same computation as `buildTax()`'s PDF, plus a trailing 6-month trend. */
+  async taxSummary(businessId: string, period?: string) {
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    const resolvedPeriod = period ?? currentMonth();
+
+    const months: string[] = [];
+    const [year, mon] = resolvedPeriod.split('-').map(Number);
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(Date.UTC(year, mon - 1 - i, 1));
+      months.push(
+        `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+      );
+    }
+
+    const trend = await Promise.all(
+      months.map(async (m) => ({
+        period: m,
+        ...(await this.computeTaxPeriod(businessId, m)),
+      })),
+    );
+
+    const current = trend[trend.length - 1];
+
+    return {
+      period: resolvedPeriod,
+      taxLabel: business.taxLabel,
+      taxRate: Number(business.taxRate),
+      taxableSales: current.taxableSales,
+      taxCollected: current.taxCollected,
+      taxOnPurchasesTracked: false,
+      netTaxDue: current.taxCollected,
+      trend,
+      // A generic monthly-filing assumption, not jurisdiction-specific — disclosed on the screen.
+      nextFilingDate: this.nextGenericFilingDate(),
+    };
+  }
+
+  private nextGenericFilingDate(): string {
+    const now = new Date();
+    const next = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 15),
+    );
+    return next.toISOString().slice(0, 10);
   }
 
   private renderHtml(

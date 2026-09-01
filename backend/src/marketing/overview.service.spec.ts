@@ -215,6 +215,7 @@ describe('MarketingOverviewService (BE-089, extended UPD-BE-105a)', () => {
       businessId,
       expect.stringContaining('"Google Ads"'),
       0.5,
+      'marketing_reallocation',
     );
   });
 

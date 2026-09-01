@@ -45,14 +45,70 @@ export function sendNightlyCloseTest(): Promise<void> {
   return apiFetch<void>("/nightly-close/test-send", { method: "POST" });
 }
 
+export const NIGHTLY_CLOSE_SECTIONS = [
+  "sales",
+  "lowStock",
+  "appointmentsTomorrow",
+  "newReviews",
+  "openFeedback",
+  "creditPayments",
+] as const;
+export type NightlyCloseSection = (typeof NIGHTLY_CLOSE_SECTIONS)[number];
+
+export const NIGHTLY_CLOSE_SECTION_LABEL: Record<NightlyCloseSection, string> = {
+  sales: "Sales summary",
+  lowStock: "Low stock alerts",
+  appointmentsTomorrow: "Tomorrow's appointments",
+  newReviews: "New reviews",
+  openFeedback: "Open complaints",
+  creditPayments: "Credit payments received",
+};
+
+export interface NightlyCloseCustomLine {
+  label: string;
+  value: string;
+}
+
+export interface NightlyCloseConfig {
+  sections: NightlyCloseSection[];
+  voiceNoteEnabled: boolean;
+  voiceId: string | null;
+  customLines: NightlyCloseCustomLine[];
+}
+
+export interface NightlyCloseSettings {
+  time: string;
+  channel: "whatsapp" | "sms" | "email";
+  config: NightlyCloseConfig;
+}
+
+export interface NightlyCloseVoiceOption {
+  id: string;
+  label: string;
+}
+
 export interface UpdateNightlyCloseSettings {
   time?: string;
   channel?: "whatsapp" | "sms" | "email";
+  sections?: NightlyCloseSection[];
+  voiceNoteEnabled?: boolean;
+  voiceId?: string | null;
+  customLines?: NightlyCloseCustomLine[];
+}
+
+/** GET /settings/nightly-close */
+export function fetchNightlyCloseSettings(): Promise<NightlyCloseSettings> {
+  return apiFetch<NightlyCloseSettings>("/settings/nightly-close");
+}
+
+/** GET /settings/nightly-close/voice-options */
+export function fetchNightlyCloseVoiceOptions(): Promise<NightlyCloseVoiceOption[]> {
+  return apiFetch<NightlyCloseVoiceOption[]>("/settings/nightly-close/voice-options");
 }
 
 /** PATCH /settings/nightly-close */
-export function updateNightlyCloseSettings(dto: UpdateNightlyCloseSettings): Promise<unknown> {
-  return apiFetch("/settings/nightly-close", {
+export function updateNightlyCloseSettings(dto: UpdateNightlyCloseSettings): Promise<NightlyCloseSettings> {
+  return apiFetch<NightlyCloseSettings>("/settings/nightly-close", {
     method: "PATCH",
     body: JSON.stringify(dto),
   });

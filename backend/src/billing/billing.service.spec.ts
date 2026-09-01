@@ -186,4 +186,123 @@ describe('BillingService (BE-064)', () => {
       await prisma.aiCallLog.deleteMany({ where: { businessId } });
     });
   });
+
+  describe('Billing & Plan, extended (UPD-BE-121)', () => {
+    it('listInvoices() returns an empty list when the business has no stripeCustomerId, even if Stripe is configured', async () => {
+      const stripe = {
+        ...fakeAdapter('stripe'),
+        listInvoices: jest.fn(),
+      } as unknown as StripeGatewayAdapter;
+      const service = new BillingService(
+        prisma,
+        stripe,
+        fakeAdapter('jazzcash') as unknown as JazzCashGatewayAdapter,
+      );
+
+      const invoices = await service.listInvoices(businessId);
+      expect(invoices).toEqual([]);
+      expect(
+        (stripe as unknown as { listInvoices: jest.Mock }).listInvoices,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('listInvoices() calls the real Stripe adapter when a stripeCustomerId exists', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { stripeCustomerId: `cus_test_${Date.now()}` },
+      });
+
+      const fakeInvoices = [{ id: 'in_1', amountDue: 19, amountPaid: 19 }];
+      const stripe = {
+        ...fakeAdapter('stripe'),
+        listInvoices: jest.fn().mockResolvedValue(fakeInvoices),
+      } as unknown as StripeGatewayAdapter;
+      const service = new BillingService(
+        prisma,
+        stripe,
+        fakeAdapter('jazzcash') as unknown as JazzCashGatewayAdapter,
+      );
+
+      const invoices = await service.listInvoices(businessId);
+      expect(invoices).toEqual(fakeInvoices);
+
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { stripeCustomerId: null },
+      });
+    });
+
+    it('getAddOns() defaults to the real catalog with nothing active', async () => {
+      const service = new BillingService(
+        prisma,
+        fakeAdapter('stripe') as unknown as StripeGatewayAdapter,
+        fakeAdapter('jazzcash') as unknown as JazzCashGatewayAdapter,
+      );
+
+      const result = await service.getAddOns(businessId);
+      expect(result.catalog.length).toBeGreaterThan(0);
+      expect(result.active).toEqual([]);
+    });
+
+    it('setAddOns() really persists a valid selection and rejects an unknown key', async () => {
+      const service = new BillingService(
+        prisma,
+        fakeAdapter('stripe') as unknown as StripeGatewayAdapter,
+        fakeAdapter('jazzcash') as unknown as JazzCashGatewayAdapter,
+      );
+
+      const result = await service.setAddOns(businessId, ['extra_branch']);
+      expect(result.active).toEqual(['extra_branch']);
+
+      const refetched = await service.getAddOns(businessId);
+      expect(refetched.active).toEqual(['extra_branch']);
+
+      await expect(
+        service.setAddOns(businessId, [
+          'not_a_real_add_on' as unknown as never,
+        ]),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('cancelOwnSubscription() rejects a business with no active subscription', async () => {
+      const service = new BillingService(
+        prisma,
+        fakeAdapter('stripe') as unknown as StripeGatewayAdapter,
+        fakeAdapter('jazzcash') as unknown as JazzCashGatewayAdapter,
+      );
+
+      await expect(
+        service.cancelOwnSubscription(businessId),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('cancelOwnSubscription() resolves the real stripeSubscriptionId and calls through to the adapter', async () => {
+      const subId = `sub_test_${Date.now()}`;
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { stripeSubscriptionId: subId },
+      });
+
+      const stripe = fakeAdapter('stripe', {
+        cancelSubscription: jest.fn().mockResolvedValue(undefined),
+      }) as unknown as StripeGatewayAdapter;
+      const service = new BillingService(
+        prisma,
+        stripe,
+        fakeAdapter('jazzcash') as unknown as JazzCashGatewayAdapter,
+      );
+
+      const result = await service.cancelOwnSubscription(businessId);
+      expect(result.cancelled).toBe(true);
+      expect(
+        (stripe as unknown as { cancelSubscription: jest.Mock })
+          .cancelSubscription,
+      ).toHaveBeenCalledWith(subId);
+
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { stripeSubscriptionId: null },
+      });
+    });
+  });
 });

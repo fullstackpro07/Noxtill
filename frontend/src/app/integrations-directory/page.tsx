@@ -5,7 +5,7 @@ import { ArrowRight, Check, Sparkles } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { Reveal } from "@/components/site/reveal";
-import { MarketingFaqGrid } from "@/components/site/marketing-faq-grid";
+import { FaqAccordion } from "@/components/site/faq-accordion";
 import { IntegrationsDirectory } from "@/components/site/integrations-directory";
 import { IntegrationsStepFlow } from "@/components/site/integrations-step-flow";
 import { IntegrationsSyncOverviewLiveDemo } from "@/components/site/integrations-sync-overview-live-demo";
@@ -215,7 +215,7 @@ export default function IntegrationsPage() {
         </section>
 
         {/* Integration Directory */}
-        <section id="directory" className="bg-surface-tint px-5 pb-16 sm:px-7 sm:pb-18">
+        <section id="directory" className="px-5 pb-16 sm:px-7 sm:pb-18">
           <div className="mx-auto max-w-[1420px]">
             <IntegrationsDirectory />
           </div>
@@ -224,7 +224,6 @@ export default function IntegrationsPage() {
         <IntegrationsStepFlow />
 
         {/* What You Can Connect & Sync */}
-        <div className="bg-surface-tint-2">
         <section className="mx-auto max-w-[1560px] px-5 pb-16 sm:px-7 sm:pb-18">
           <div className="mx-auto mb-8 max-w-[720px] text-center">
             <div className="mb-4.5 inline-flex items-center gap-2 font-display text-[12.5px] font-semibold uppercase tracking-[0.09em] text-primary">
@@ -238,7 +237,6 @@ export default function IntegrationsPage() {
           </div>
           <IntegrationsSyncOverviewLiveDemo />
         </section>
-        </div>
 
         {/* Unified inbox callout */}
         <section className="mx-auto max-w-[1280px] px-5 pb-14 sm:px-7">
@@ -269,7 +267,6 @@ export default function IntegrationsPage() {
         </section>
 
         {/* Multi-location callout */}
-        <div className="bg-surface-tint">
         <section className="mx-auto max-w-[1280px] px-5 pb-14 sm:px-7">
           <Reveal className="rounded-[24px] border border-border bg-white p-6 sm:p-8.5">
             <div className="flex flex-wrap items-center gap-7 sm:gap-10">
@@ -304,10 +301,8 @@ export default function IntegrationsPage() {
             </div>
           </Reveal>
         </section>
-        </div>
 
         {/* Built for the way your business works */}
-        <div className="bg-surface-tint-2">
         <section className="mx-auto max-w-[1280px] px-5 pb-14 sm:px-7">
           <div className="mx-auto mb-6.5 max-w-[620px] text-center">
             <h2 className="mb-3 text-balance font-display text-[30px] font-bold leading-[1.15] tracking-tight text-fg">{BUILT_FOR_BUSINESS.heading}</h2>
@@ -330,7 +325,6 @@ export default function IntegrationsPage() {
             </Link>
           </div>
         </section>
-        </div>
 
         {/* Solve the problems that matter most */}
         <section className="mx-auto max-w-[1280px] px-5 pb-14 sm:px-7">
@@ -353,7 +347,6 @@ export default function IntegrationsPage() {
         <IntegrationsAutomationSection />
 
         {/* Security + Request an integration */}
-        <div className="bg-surface-tint-2">
         <section id="request" className="mx-auto max-w-[1280px] px-5 pb-14 sm:px-7">
           <div className="flex flex-wrap items-stretch gap-4.5">
             <Reveal className="min-w-[300px] flex-[1_1_440px] rounded-[20px] border border-border bg-white p-6.5">
@@ -408,16 +401,19 @@ export default function IntegrationsPage() {
             </Reveal>
           </div>
         </section>
-        </div>
 
-        <div id="faq">
-          <MarketingFaqGrid title="Integration questions, answered" items={INTEGRATIONS_FAQ} />
-        </div>
+        <section id="faq" className="mx-auto max-w-[760px] px-5 py-16 sm:px-7 sm:py-14">
+          <div className="mx-auto mb-10 max-w-[620px] text-center">
+            <h2 className="mb-3.5 text-balance font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+              Integration questions, answered
+            </h2>
+          </div>
+          <FaqAccordion items={INTEGRATIONS_FAQ} />
+        </section>
 
         {/* Final CTA */}
-        <div className="bg-surface-tint">
-        <section className="mx-auto max-w-[1280px] px-5 pb-18 sm:px-7">
-          <Reveal className="rounded-[24px] border border-[#cfeede] bg-white p-8 text-center sm:p-11">
+        <section className="bg-surface-deep px-5 pb-0 pt-10 sm:px-7 sm:pt-16">
+          <Reveal className="mx-auto max-w-[1280px] rounded-[24px] border border-border bg-white p-8 text-center sm:p-11">
             <h2 className="mb-3.5 text-balance font-display text-[26px] font-bold leading-[1.14] tracking-tight text-fg sm:text-[38px]">
               {INTEGRATIONS_FINAL_CTA.heading}
             </h2>
@@ -443,7 +439,6 @@ export default function IntegrationsPage() {
             </div>
           </Reveal>
         </section>
-        </div>
       </main>
 
       <SiteFooter />

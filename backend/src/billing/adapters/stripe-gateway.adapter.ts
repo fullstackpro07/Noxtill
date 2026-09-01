@@ -116,4 +116,38 @@ export class StripeGatewayAdapter implements PaymentGatewayAdapter {
     }
     await this.client.subscriptions.cancel(providerRef);
   }
+
+  /** Billing & Plan, extended (UPD-BE-121) — real invoice history straight from Stripe. */
+  async listInvoices(customerRef: string): Promise<
+    {
+      id: string;
+      number: string | null;
+      status: string | null;
+      amountDue: number;
+      amountPaid: number;
+      currency: string;
+      createdAt: Date;
+      hostedInvoiceUrl: string | null;
+      invoicePdf: string | null;
+    }[]
+  > {
+    if (!this.client) {
+      return [];
+    }
+    const invoices = await this.client.invoices.list({
+      customer: customerRef,
+      limit: 24,
+    });
+    return invoices.data.map((invoice) => ({
+      id: invoice.id ?? '',
+      number: invoice.number,
+      status: invoice.status,
+      amountDue: invoice.amount_due / 100,
+      amountPaid: invoice.amount_paid / 100,
+      currency: invoice.currency,
+      createdAt: new Date(invoice.created * 1000),
+      hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+      invoicePdf: invoice.invoice_pdf ?? null,
+    }));
+  }
 }

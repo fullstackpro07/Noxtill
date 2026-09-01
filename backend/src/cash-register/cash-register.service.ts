@@ -74,6 +74,7 @@ export class CashRegisterService {
     return this.tenantPrisma.client.cashShift.update({
       where: { id: shift.id },
       data: { status: CashShiftStatus.closed, closedAt: new Date() },
+      include: { movements: { orderBy: { createdAt: 'asc' } } },
     });
   }
 
@@ -159,6 +160,7 @@ export class CashRegisterService {
         variance,
         varianceNote: dto.note,
       },
+      include: { movements: { orderBy: { createdAt: 'asc' } } },
     });
   }
 

@@ -119,6 +119,7 @@ describe('DeadHoursOfferService (UPD-BE-106)', () => {
       businessId,
       expect.stringContaining('15:00'),
       0.6,
+      'campaign_copy',
     );
 
     await prisma.order.deleteMany({ where: { businessId } });

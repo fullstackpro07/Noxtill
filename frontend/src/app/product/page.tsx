@@ -96,7 +96,7 @@ export default function ProductPage() {
           </div>
         </section>
 
-        <section className="bg-surface-tint px-5 pb-16 sm:px-7">
+        <section className="px-5 pb-16 sm:px-7">
           <div className="mx-auto flex max-w-[1200px] flex-col gap-11">
             {PRODUCT_GROUPS_CONTENT.map((group, i) => (
               <ProductFeatureGroup key={group.title} group={group} delay={i * 60} />
@@ -104,7 +104,7 @@ export default function ProductPage() {
           </div>
         </section>
 
-        <section className="bg-surface-tint-2 px-5 pb-20 sm:px-7">
+        <section className="bg-surface-deep px-5 pb-0 pt-10 sm:px-7 sm:pt-16">
           <Reveal>
             <div className="mx-auto max-w-[1200px] rounded-[var(--radius-noxtill-xl)] border border-border bg-white p-8 sm:p-9">
               <h2 className="mb-3 font-display text-2xl font-semibold tracking-tight text-fg">{PRODUCT_CALLOUT.title}</h2>

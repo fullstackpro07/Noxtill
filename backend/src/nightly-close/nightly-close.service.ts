@@ -2,12 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocaleService } from '../common/localization/locale.service';
 import { SendGateService } from '../messaging/send-gate.service';
-import { MessageChannel, Role } from '@prisma/client';
+import { MessageChannel, Prisma, Role } from '@prisma/client';
 import {
   DailyCloseRow,
   LowStockRow,
   NightlyCloseData,
 } from './nightly-close.types';
+import {
+  DEFAULT_NIGHTLY_CLOSE_CONFIG,
+  NightlyCloseConfig,
+  NightlyCloseSection,
+} from './nightly-close-sections.constants';
+import { UpdateNightlyCloseDto } from './dto/update-nightly-close.dto';
 
 function dayBounds(date: Date): { start: Date; end: Date } {
   const start = new Date(
@@ -118,14 +124,14 @@ export class NightlyCloseService {
 
     try {
       const data = await this.composeDayData(businessId, date);
-
-      const alerts: string[] = [];
-      if (data.lowStockProducts.length > 0)
-        alerts.push(`${data.lowStockProducts.length} low-stock item(s)`);
-      if (data.openFeedbackCount > 0)
-        alerts.push(`${data.openFeedbackCount} open complaint(s)`);
-      if (data.appointmentsTomorrowCount > 0)
-        alerts.push(`${data.appointmentsTomorrowCount} booking(s) tomorrow`);
+      const config = this.resolveConfig(business.nightlyCloseConfig);
+      const deepLink = `/day/${date.toISOString().slice(0, 10)}`;
+      const customBody = this.composeMessageBody(
+        data,
+        config,
+        business,
+        deepLink,
+      );
 
       await this.sendGate.send({
         businessId,
@@ -134,15 +140,19 @@ export class NightlyCloseService {
           phone: owner.user.phone ?? undefined,
           email: owner.user.email ?? undefined,
         },
+        // `variables` still populates the fixed registry copy as a fallback for a channel that
+        // somehow can't render `customBody` — `message-worker.processor.ts` prefers `customBody`
+        // whenever it's set, which it always is here now that sections are configurable.
         variables: {
           businessName: data.businessName,
           dateLabel: data.dateLabel,
           ordersCount: String(data.ordersCount),
           revenue: this.locale.formatCurrency(data.revenue, business),
           grossProfit: this.locale.formatCurrency(data.grossProfit, business),
-          alertsSummary: alerts.length ? `${alerts.join(', ')}. ` : '',
-          deepLink: `/day/${date.toISOString().slice(0, 10)}`,
+          alertsSummary: '',
+          deepLink,
         },
+        customBody,
       });
 
       await this.logDelivery(
@@ -228,17 +238,92 @@ export class NightlyCloseService {
     );
   }
 
-  async updateSettings(
-    businessId: string,
-    time?: string,
-    channel?: 'whatsapp' | 'sms' | 'email',
-  ) {
-    return this.prisma.business.update({
+  /** UPD-BE-119 — the real, currently-effective config for the settings screen (an untouched `{}` resolves to the same defaults `composeAndSend` itself falls back to). */
+  async getSettings(businessId: string) {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    return {
+      time: business.nightlyCloseTime,
+      channel: business.channelPref,
+      config: this.resolveConfig(business.nightlyCloseConfig),
+    };
+  }
+
+  /** UPD-BE-119: extends the original `time`/`channel` update with section reorder, voice-note toggle+selection, and custom line items — merged over whatever config already existed, so a partial PATCH never silently resets the rest. */
+  async updateSettings(businessId: string, dto: UpdateNightlyCloseDto) {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    const current = this.resolveConfig(business.nightlyCloseConfig);
+    const nextConfig: NightlyCloseConfig = {
+      sections: dto.sections ?? current.sections,
+      voiceNoteEnabled: dto.voiceNoteEnabled ?? current.voiceNoteEnabled,
+      voiceId: dto.voiceId !== undefined ? dto.voiceId : current.voiceId,
+      customLines: dto.customLines ?? current.customLines,
+    };
+
+    await this.prisma.business.update({
       where: { id: businessId },
       data: {
-        nightlyCloseTime: time,
-        channelPref: channel,
+        nightlyCloseTime: dto.time,
+        channelPref: dto.channel,
+        nightlyCloseConfig: nextConfig as unknown as Prisma.InputJsonValue,
       },
     });
+    return this.getSettings(businessId);
+  }
+
+  private resolveConfig(raw: unknown): NightlyCloseConfig {
+    const stored = (raw ?? {}) as Partial<NightlyCloseConfig>;
+    return {
+      sections:
+        stored.sections && stored.sections.length > 0
+          ? stored.sections
+          : DEFAULT_NIGHTLY_CLOSE_CONFIG.sections,
+      voiceNoteEnabled:
+        stored.voiceNoteEnabled ??
+        DEFAULT_NIGHTLY_CLOSE_CONFIG.voiceNoteEnabled,
+      voiceId: stored.voiceId ?? DEFAULT_NIGHTLY_CLOSE_CONFIG.voiceId,
+      customLines:
+        stored.customLines ?? DEFAULT_NIGHTLY_CLOSE_CONFIG.customLines,
+    };
+  }
+
+  /** The real, section-aware message body — every line reflects genuinely computed data from
+   * `composeDayData()`; a section is skipped only if the caller removed it from `config.sections`,
+   * never because it happened to be zero (a real "0 orders" night is still real information). */
+  private composeMessageBody(
+    data: NightlyCloseData,
+    config: NightlyCloseConfig,
+    business: Parameters<LocaleService['formatCurrency']>[1],
+    deepLink: string,
+  ): string {
+    const lines: string[] = [`${data.businessName} — ${data.dateLabel}`];
+
+    const sectionLine: Record<NightlyCloseSection, () => string> = {
+      sales: () =>
+        `Sales: ${data.ordersCount} orders, ${this.locale.formatCurrency(data.revenue, business)} revenue, ${this.locale.formatCurrency(data.grossProfit, business)} profit`,
+      lowStock: () =>
+        data.lowStockProducts.length > 0
+          ? `Low stock: ${data.lowStockProducts.length} item(s) — ${data.lowStockProducts.map((p) => p.name).join(', ')}`
+          : 'Low stock: none',
+      appointmentsTomorrow: () =>
+        `Tomorrow: ${data.appointmentsTomorrowCount} appointment(s)`,
+      newReviews: () => `Reviews: ${data.newReviewsCount} new`,
+      openFeedback: () => `Open complaints: ${data.openFeedbackCount}`,
+      creditPayments: () =>
+        `Credit payments today: ${this.locale.formatCurrency(data.creditPaymentsTodayTotal, business)}`,
+    };
+
+    for (const section of config.sections) {
+      lines.push(sectionLine[section]());
+    }
+    for (const custom of config.customLines) {
+      lines.push(`${custom.label}: ${custom.value}`);
+    }
+    lines.push(`View details: ${deepLink}`);
+
+    return lines.join('\n');
   }
 }

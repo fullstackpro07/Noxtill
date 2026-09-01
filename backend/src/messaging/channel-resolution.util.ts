@@ -18,13 +18,23 @@ function hasContactFor(channel: MessageChannel, contact: ContactInfo): boolean {
 
 /**
  * Channel resolution (BE-015 / spec §3.1): business preference first, then
- * fall back through WhatsApp → SMS → Email, picking the first channel the
- * customer actually has contact info for.
+ * fall back through a configurable channel-priority order, picking the
+ * first channel the customer actually has contact info for.
+ *
+ * Messages & Channels, configurable (UPD-BE-118): `businessFallbackOrder` is the business's own
+ * real `channelPriority` setting; an empty/missing array (every pre-existing business, and any
+ * new one that never touches this setting) keeps the exact original hardcoded whatsapp→sms→email
+ * order — fully backward-compatible.
  */
 export function resolveChannel(
   preferred: MessageChannel,
   contact: ContactInfo,
+  businessFallbackOrder?: MessageChannel[],
 ): MessageChannel | undefined {
-  const order = [preferred, ...FALLBACK_ORDER.filter((c) => c !== preferred)];
+  const fallback =
+    businessFallbackOrder && businessFallbackOrder.length > 0
+      ? businessFallbackOrder
+      : FALLBACK_ORDER;
+  const order = [preferred, ...fallback.filter((c) => c !== preferred)];
   return order.find((channel) => hasContactFor(channel, contact));
 }

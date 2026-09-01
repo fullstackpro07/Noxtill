@@ -71,7 +71,7 @@ export function SolutionsNavigator() {
   const hiddenNeedSlugs = new Set(NEEDS.filter((n) => !filteredNeeds.includes(n)).map((n) => n.slug));
 
   return (
-    <div className="bg-surface-tint">
+    <div>
       <section id="navigator" className="px-5 pb-6 sm:px-7">
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-center gap-3">
           <div role="group" aria-label="Choose an entry path" className="flex gap-1.5 rounded-full border border-border p-1">

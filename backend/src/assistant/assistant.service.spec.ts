@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AssistantService } from './assistant.service';
-import { ClaudeClient } from '../ai/claude.client';
+import { ClaudeClient, CreateMessageParams } from '../ai/claude.client';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 
@@ -109,8 +109,11 @@ describe('AssistantService (BE-074)', () => {
   let prisma: PrismaService;
   let service: AssistantService;
   let businessId: string;
+  let userId: string;
   const helpSlug = `assistant-help-test-${Date.now()}`;
-  const claude = { streamMessage: jest.fn() };
+  const claude = {
+    streamMessage: jest.fn<Promise<Readable>, [CreateMessageParams]>(),
+  };
   const aiInfra = {
     checkGuardrails: jest.fn().mockResolvedValue(undefined),
     recordUsage: jest.fn().mockResolvedValue(undefined),
@@ -141,6 +144,15 @@ describe('AssistantService (BE-074)', () => {
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
+    const user = await prisma.user.create({
+      data: {
+        name: 'Assistant Test User',
+        email: `assistant-test-user-${Date.now()}@example.com`,
+        passwordHash: 'x',
+      },
+    });
+    userId = user.id;
+
     await prisma.order.create({
       data: {
         businessId,
@@ -170,8 +182,17 @@ describe('AssistantService (BE-074)', () => {
   });
 
   afterAll(async () => {
+    const conversations = await prisma.assistantConversation.findMany({
+      where: { businessId },
+      select: { id: true },
+    });
+    await prisma.assistantMessage.deleteMany({
+      where: { conversationId: { in: conversations.map((c) => c.id) } },
+    });
+    await prisma.assistantConversation.deleteMany({ where: { businessId } });
     await prisma.order.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
+    await prisma.user.delete({ where: { id: userId } });
     await prisma.helpArticle.delete({ where: { slug: helpSlug } });
     await prisma.$disconnect();
   });
@@ -184,7 +205,9 @@ describe('AssistantService (BE-074)', () => {
     const deltas: string[] = [];
     const result = await service.chat(
       businessId,
+      userId,
       'How much revenue today?',
+      undefined,
       (text) => deltas.push(text),
     );
 
@@ -197,8 +220,64 @@ describe('AssistantService (BE-074)', () => {
         output: { revenue: 200, orders: 1 },
       },
     ]);
+    expect(result.conversationId).toBeTruthy();
     expect(aiInfra.checkGuardrails).toHaveBeenCalledTimes(2);
     expect(claude.streamMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('persists both turns of a conversation and lets a follow-up continue it', async () => {
+    claude.streamMessage
+      .mockResolvedValueOnce(toolUseTurn())
+      .mockResolvedValueOnce(finalTurn());
+
+    const first = await service.chat(
+      businessId,
+      userId,
+      'How much revenue today?',
+    );
+    const stored = await prisma.assistantConversation.findUnique({
+      where: { id: first.conversationId },
+      include: { messages: { orderBy: { createdAt: 'asc' } } },
+    });
+    expect(stored?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(stored?.messages[1].content).toBe('Revenue today is $200.');
+
+    claude.streamMessage.mockResolvedValueOnce(finalTurn());
+    const second = await service.chat(
+      businessId,
+      userId,
+      'And yesterday?',
+      first.conversationId,
+    );
+    expect(second.conversationId).toBe(first.conversationId);
+
+    const messages = claude.streamMessage.mock.calls[2][0].messages;
+    expect(messages[0]).toEqual({
+      role: 'user',
+      content: 'How much revenue today?',
+    });
+    expect(messages[1]).toEqual({
+      role: 'assistant',
+      content: 'Revenue today is $200.',
+    });
+    expect(messages[2]).toEqual({ role: 'user', content: 'And yesterday?' });
+  });
+
+  it('lists and deletes a real conversation', async () => {
+    claude.streamMessage.mockResolvedValueOnce(finalTurn());
+    const { conversationId } = await service.chat(
+      businessId,
+      userId,
+      'List me test',
+    );
+
+    const list = await service.listConversations(businessId, userId);
+    expect(list.some((c) => c.id === conversationId)).toBe(true);
+
+    await service.deleteConversation(businessId, userId, conversationId);
+    await expect(
+      service.getConversation(businessId, userId, conversationId),
+    ).rejects.toThrow();
   });
 
   it('never lets the model override which business a tool reads from', async () => {
@@ -234,7 +313,11 @@ describe('AssistantService (BE-074)', () => {
     );
     claude.streamMessage.mockResolvedValueOnce(finalTurn());
 
-    const result = await service.chat(businessId, 'Find customer +1000');
+    const result = await service.chat(
+      businessId,
+      userId,
+      'Find customer +1000',
+    );
     expect(result.toolCalls[0]).toEqual({
       name: 'find_customer_by_phone',
       input: { phone: '+1000' },
@@ -250,6 +333,7 @@ describe('AssistantService (BE-074)', () => {
 
     const result = await service.chat(
       businessId,
+      userId,
       'How does the frobnicator work?',
     );
     const output = result.toolCalls[0].output as {
@@ -279,6 +363,7 @@ describe('AssistantService (BE-074)', () => {
 
     const result = await service.chat(
       businessId,
+      userId,
       'zzqx unrelated nonsense topic',
     );
     expect(result.toolCalls[0].output).toEqual({ found: false });
@@ -289,9 +374,9 @@ describe('AssistantService (BE-074)', () => {
       new Error('ANTHROPIC_API_KEY is not configured'),
     );
 
-    await expect(service.chat(businessId, 'test')).rejects.toBeInstanceOf(
-      AppException,
-    );
+    await expect(
+      service.chat(businessId, userId, 'test'),
+    ).rejects.toBeInstanceOf(AppException);
   });
 
   describe("today's bookings tool", () => {
@@ -345,7 +430,7 @@ describe('AssistantService (BE-074)', () => {
       );
       claude.streamMessage.mockResolvedValueOnce(finalTurn());
 
-      const result = await service.chat(businessId, "What's on today?");
+      const result = await service.chat(businessId, userId, "What's on today?");
       expect(result.toolCalls[0]).toEqual({
         name: 'get_todays_bookings',
         input: {},

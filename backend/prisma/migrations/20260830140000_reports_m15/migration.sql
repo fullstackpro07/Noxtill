@@ -1,0 +1,4 @@
+ALTER TABLE `scheduled_exports`
+  MODIFY COLUMN `kind` VARCHAR(191) NULL,
+  ADD COLUMN `report_kind` VARCHAR(191) NULL,
+  ADD COLUMN `recipients` JSON NOT NULL DEFAULT (JSON_ARRAY());

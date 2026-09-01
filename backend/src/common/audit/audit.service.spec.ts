@@ -115,4 +115,41 @@ describe('AuditService.list() — Activity Log (UPD-BE-079)', () => {
     ).resolves.toBeUndefined();
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
   });
+
+  describe('actorName resolution (Data & Privacy erasure log, UPD-BE-123)', () => {
+    it('resolves a real actor name for a row whose actorUserId matches a real user', async () => {
+      const realUser = await prisma.user.create({
+        data: { name: 'Amara Osei', passwordHash: 'x' },
+      });
+      cls.set(CLS_KEY_USER_ID, realUser.id);
+      await service.log({
+        entity: 'Customer',
+        entityId: 'customer-erase-1',
+        action: 'customer.erase',
+      });
+
+      const result = await service.list(businessId, {
+        action: 'customer.erase',
+      });
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].actorName).toBe('Amara Osei');
+
+      await prisma.user.delete({ where: { id: realUser.id } });
+    });
+
+    it('returns null actorName for a row with no actorUserId or an unresolvable one', async () => {
+      cls.set(CLS_KEY_USER_ID, undefined);
+      await service.log({
+        entity: 'Customer',
+        entityId: 'customer-erase-2',
+        action: 'customer.erase.system',
+      });
+
+      const result = await service.list(businessId, {
+        action: 'customer.erase.system',
+      });
+      expect(result.rows[0].actorName).toBeNull();
+      cls.set(CLS_KEY_USER_ID, 'user-1');
+    });
+  });
 });
