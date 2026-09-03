@@ -47,6 +47,8 @@ describe('HelpService (BE-073)', () => {
     expect(aiInfra.complete).toHaveBeenCalledWith(
       'biz-1',
       expect.stringContaining('frobnicate'),
+      0,
+      'help_ask',
     );
     expect(result.answer).toContain('midnight');
   });

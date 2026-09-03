@@ -30,7 +30,14 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: mysql://root:root@localhost:3306/noxtill_test
+      # connection_limit caps each PrismaClient's own pool (Prisma's default is numCpus*2+1 per
+      # client when unset). Jest runs ~217 spec files across several parallel workers, each
+      # constructing its own `new PrismaService()` — without this cap, enough of those pools can
+      # be open at once to exceed MySQL 8.0's default 151 max_connections, which surfaces as
+      # random, non-deterministic failures in unrelated test files (a `business.delete()` cleanup
+      # spuriously hitting a foreign-key error, or a `beforeAll` timing out on `$connect()`) that
+      # have nothing to do with those tests' own logic.
+      DATABASE_URL: mysql://root:root@localhost:3306/noxtill_test?connection_limit=5&pool_timeout=30
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-only-secret-do-not-reuse-in-prod-please-32c
       JWT_REFRESH_SECRET: ci-only-refresh-secret-do-not-reuse-32chars
