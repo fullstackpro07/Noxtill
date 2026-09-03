@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ProfitService } from './profit.service';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { withDeadlockRetry } from '../common/utils/prisma-transaction-retry.util';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -146,15 +147,21 @@ describe('ProfitService (BE-036/BE-037)', () => {
   });
 
   afterAll(async () => {
-    await prisma.expense.deleteMany({ where: { businessId } });
-    await prisma.orderItem.deleteMany({ where: { product: { businessId } } });
-    await prisma.order.deleteMany({ where: { businessId } });
-    await prisma.bundleItem.deleteMany({
-      where: { bundle: { businessId } },
+    // MySQL InnoDB deadlocks between sibling Jest workers deleting overlapping rows are expected
+    // under load — same rationale as orders.service.ts's use of this helper.
+    await withDeadlockRetry(async () => {
+      await prisma.expense.deleteMany({ where: { businessId } });
+      await prisma.orderItem.deleteMany({
+        where: { product: { businessId } },
+      });
+      await prisma.order.deleteMany({ where: { businessId } });
+      await prisma.bundleItem.deleteMany({
+        where: { bundle: { businessId } },
+      });
+      await prisma.bundle.deleteMany({ where: { businessId } });
+      await prisma.product.deleteMany({ where: { businessId } });
+      await prisma.business.delete({ where: { id: businessId } });
     });
-    await prisma.bundle.deleteMany({ where: { businessId } });
-    await prisma.product.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
 
