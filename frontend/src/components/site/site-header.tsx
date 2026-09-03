@@ -16,25 +16,21 @@ import {
   SOLUTIONS_MORE_BUSINESS_TYPES,
   SOLUTIONS_NEEDS,
   SOLUTIONS_DRAWER_LINKS,
+  AI_MENU_ITEMS,
   type NavLinkItem,
 } from "@/lib/marketing/nav-links";
+import { AI_PROMISE } from "@/lib/marketing/ai-content";
 
-type PanelKey = "product" | "solutions" | "resources";
-
-const TABS: { key: PanelKey; label: string }[] = [
-  { key: "product", label: "Product" },
-  { key: "solutions", label: "Solutions" },
-  { key: "resources", label: "Resources" },
-];
+type PanelKey = "product" | "solutions" | "resources" | "ai";
 
 const OPEN_DELAY = 150;
 const CLOSE_DELAY = 300;
 
-function NavLinkList({ items, compact }: { items: NavLinkItem[]; compact?: boolean }) {
+function NavLinkList({ items, compact, onNavigate }: { items: NavLinkItem[]; compact?: boolean; onNavigate?: () => void }) {
   return (
     <div className="flex flex-col gap-3.5">
       {items.map((item) => (
-        <Link key={item.label} href={item.href} className="group/link block">
+        <Link key={item.label} href={item.href} className="group/link block" onClick={onNavigate}>
           <span className="flex items-center gap-1.5 text-[14.5px] font-medium text-fg group-hover/link:text-primary">
             {item.label}
             {item.starred ? <span className="text-[11px] text-[var(--rating-star)]">★</span> : null}
@@ -42,6 +38,32 @@ function NavLinkList({ items, compact }: { items: NavLinkItem[]; compact?: boole
           {!compact && item.description ? (
             <span className="mt-0.5 block text-[12.5px] text-fg-faint">{item.description}</span>
           ) : null}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function AiMenuGrid({ items, onNavigate }: { items: NavLinkItem[]; onNavigate?: () => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+      {items.map((item) => (
+        <Link
+          key={item.label}
+          href={item.href}
+          onClick={onNavigate}
+          className="group/link -mx-2 flex items-start gap-3 rounded-xl p-2 transition-colors hover:bg-surface-2"
+        >
+          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-[#e3fbf1]">
+            {item.icon ? <item.icon className="h-[18px] w-[18px] text-accent" aria-hidden strokeWidth={1.8} /> : null}
+          </span>
+          <span className="min-w-0 pt-0.5">
+            <span className="flex items-center gap-1.5 text-[14px] font-medium text-fg group-hover/link:text-primary">
+              {item.label}
+              {item.starred ? <span className="text-[11px] text-[var(--rating-star)]">★</span> : null}
+            </span>
+            {item.description ? <span className="mt-0.5 block text-[12px] leading-snug text-fg-faint">{item.description}</span> : null}
+          </span>
         </Link>
       ))}
     </div>
@@ -131,6 +153,12 @@ export function SiteHeader() {
     setDrawerAcc((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
+  function closeMenu() {
+    if (openTimer.current) clearTimeout(openTimer.current);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpen(null);
+  }
+
   const tabClass = (key: PanelKey | null) =>
     `inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-[14.5px] font-medium transition-colors ${
       open === key ? "bg-surface-2 text-primary" : "text-fg hover:text-primary"
@@ -149,39 +177,25 @@ export function SiteHeader() {
         </Link>
 
         <nav className={`min-w-0 flex-1 items-center justify-center gap-1 ${narrow ? "hidden" : "flex"}`}>
-          {TABS.map((tab) =>
-            tab.key === "resources" ? (
-              <div key="resources-and-more" className="contents">
-                <button
-                  type="button"
-                  className={tabClass("resources")}
-                  onMouseEnter={() => hoverOpen("resources")}
-                  onFocus={() => focusOpen("resources")}
-                >
-                  Resources <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
-                </button>
-                <Link href="/pricing" className={tabClass(null)} onMouseEnter={hoverClose} onFocus={hoverClose}>
-                  Pricing
-                </Link>
-                <Link href="/integrations-directory" className={tabClass(null)} onMouseEnter={hoverClose} onFocus={hoverClose}>
-                  Integrations
-                </Link>
-                <Link href="/ai" className={tabClass(null)} onMouseEnter={hoverClose} onFocus={hoverClose}>
-                  AI
-                </Link>
-              </div>
-            ) : (
-              <button
-                key={tab.key}
-                type="button"
-                className={tabClass(tab.key)}
-                onMouseEnter={() => hoverOpen(tab.key)}
-                onFocus={() => focusOpen(tab.key)}
-              >
-                {tab.label} <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
-              </button>
-            ),
-          )}
+          <button type="button" className={tabClass("product")} onMouseEnter={() => hoverOpen("product")} onFocus={() => focusOpen("product")}>
+            Product <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
+          </button>
+          <button type="button" className={tabClass("solutions")} onMouseEnter={() => hoverOpen("solutions")} onFocus={() => focusOpen("solutions")}>
+            Solutions <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
+          </button>
+          <button type="button" className={tabClass("ai")} onMouseEnter={() => hoverOpen("ai")} onFocus={() => focusOpen("ai")}>
+            AI <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
+          </button>
+          <button type="button" className={tabClass("resources")} onMouseEnter={() => hoverOpen("resources")} onFocus={() => focusOpen("resources")}>
+            Resources <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
+          </button>
+          
+          <Link href="/pricing" className={tabClass(null)} onMouseEnter={hoverClose} onFocus={hoverClose}>
+            Pricing
+          </Link>
+          <Link href="/integrations-directory" className={tabClass(null)} onMouseEnter={hoverClose} onFocus={hoverClose}>
+            Integrations
+          </Link>
         </nav>
 
         <div className="ml-auto flex flex-none items-center gap-3.5">
@@ -222,7 +236,7 @@ export function SiteHeader() {
             {PRODUCT_GROUPS.map((group) => (
               <div key={group.title} className="min-w-[180px] flex-1 basis-[190px]">
                 <ColumnHeading>{group.title}</ColumnHeading>
-                <NavLinkList items={group.items} />
+                <NavLinkList items={group.items} onNavigate={closeMenu} />
               </div>
             ))}
             <div className="flex min-w-[230px] max-w-[280px] flex-1 basis-[240px] flex-col items-center gap-3.5 rounded-2xl bg-primary p-5 text-center text-white">
@@ -243,6 +257,7 @@ export function SiteHeader() {
               </div>
               <Link
                 href="/book-a-demo"
+                onClick={closeMenu}
                 className="inline-flex items-center gap-2 rounded-xl bg-[var(--rating-star)] px-4.5 py-2.5 text-[13.5px] font-semibold text-fg"
               >
                 <PlayCircle className="h-4 w-4" aria-hidden />
@@ -252,9 +267,9 @@ export function SiteHeader() {
           </div>
           <div className="border-t border-border bg-surface-2 px-7 py-3.5">
             <div className="mx-auto flex max-w-[1320px] flex-wrap gap-x-6 gap-y-2 text-[13px]">
-              <Link href="/product" className="text-primary hover:text-primary-hover">Compare all features →</Link>
-              <Link href="/resources" className="text-primary hover:text-primary-hover">Mobile app →</Link>
-              <Link href="/resources" className="text-primary hover:text-primary-hover">What&apos;s new →</Link>
+              <Link href="/product" onClick={closeMenu} className="text-primary hover:text-primary-hover">Compare all features →</Link>
+              <Link href="/resources" onClick={closeMenu} className="text-primary hover:text-primary-hover">Mobile app →</Link>
+              <Link href="/resources" onClick={closeMenu} className="text-primary hover:text-primary-hover">What&apos;s new →</Link>
             </div>
           </div>
         </Panel>
@@ -263,15 +278,15 @@ export function SiteHeader() {
           <div className="mx-auto flex max-w-[1320px] flex-wrap gap-7 px-7 pb-2 pt-7">
             <div className="min-w-[185px] flex-1 basis-[200px]">
               <ColumnHeading>By business type</ColumnHeading>
-              <NavLinkList items={SOLUTIONS_BUSINESS_TYPES} compact />
+              <NavLinkList items={SOLUTIONS_BUSINESS_TYPES} compact onNavigate={closeMenu} />
             </div>
             <div className="min-w-[185px] flex-1 basis-[200px]">
               <ColumnHeading>More business types</ColumnHeading>
-              <NavLinkList items={SOLUTIONS_MORE_BUSINESS_TYPES} compact />
+              <NavLinkList items={SOLUTIONS_MORE_BUSINESS_TYPES} compact onNavigate={closeMenu} />
             </div>
             <div className="min-w-[220px] flex-1 basis-[250px]">
               <ColumnHeading>By what you need</ColumnHeading>
-              <NavLinkList items={SOLUTIONS_NEEDS} />
+              <NavLinkList items={SOLUTIONS_NEEDS} onNavigate={closeMenu} />
             </div>
             <div className="min-w-[240px] max-w-[300px] flex-1 basis-[250px] rounded-2xl border border-border bg-surface-2 p-5">
               <div className="mb-2 font-display text-[17px] font-semibold text-fg">Not on the list?</div>
@@ -295,7 +310,7 @@ export function SiteHeader() {
           </div>
           <div className="border-t border-border bg-surface-2 px-7 py-3.5">
             <div className="mx-auto max-w-[1320px] text-[13px]">
-              <Link href="/solutions" className="text-primary hover:text-primary-hover">See all 300+ business types →</Link>
+              <Link href="/solutions" onClick={closeMenu} className="text-primary hover:text-primary-hover">See all 300+ business types →</Link>
             </div>
           </div>
         </Panel>
@@ -304,22 +319,23 @@ export function SiteHeader() {
           <div className="mx-auto flex max-w-[1320px] flex-wrap gap-7 px-7 pb-2 pt-7">
             <div className="min-w-[160px] flex-1 basis-[170px]">
               <ColumnHeading>Learn</ColumnHeading>
-              <NavLinkList items={RESOURCES_LEARN} compact />
+              <NavLinkList items={RESOURCES_LEARN} compact onNavigate={closeMenu} />
             </div>
             <div className="min-w-[160px] flex-1 basis-[170px]">
               <ColumnHeading>Read</ColumnHeading>
-              <NavLinkList items={RESOURCES_READ} compact />
+              <NavLinkList items={RESOURCES_READ} compact onNavigate={closeMenu} />
             </div>
             <div className="min-w-[220px] flex-1 basis-[240px]">
               <ColumnHeading>Free tools</ColumnHeading>
-              <NavLinkList items={RESOURCES_TOOLS} />
+              <NavLinkList items={RESOURCES_TOOLS} onNavigate={closeMenu} />
             </div>
             <div className="min-w-[160px] flex-1 basis-[170px]">
               <ColumnHeading>Support</ColumnHeading>
-              <NavLinkList items={RESOURCES_SUPPORT} compact />
+              <NavLinkList items={RESOURCES_SUPPORT} compact onNavigate={closeMenu} />
             </div>
             <Link
               href="/resources"
+              onClick={closeMenu}
               className="block min-w-[230px] max-w-[290px] flex-1 basis-[240px] overflow-hidden rounded-2xl border border-border hover:border-primary"
             >
               <div className="h-[118px] w-full bg-surface-2" />
@@ -333,6 +349,46 @@ export function SiteHeader() {
                 <div className="mt-2 text-xs text-fg-faint">6 min read</div>
               </div>
             </Link>
+          </div>
+        </Panel>
+
+        <Panel visible={open === "ai"}>
+          <div className="mx-auto flex max-w-[1320px] flex-wrap gap-7 px-7 pb-2 pt-7">
+            <div className="min-w-[340px] flex-[2_1_460px]">
+              <ColumnHeading>Powered by AI</ColumnHeading>
+              <AiMenuGrid items={AI_MENU_ITEMS} onNavigate={closeMenu} />
+            </div>
+            <div className="flex min-w-[230px] max-w-[280px] flex-1 basis-[240px] flex-col gap-4 rounded-2xl bg-surface-deep p-5 text-white">
+              <div className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.1em] text-accent-on-deep">
+                Our AI commitments
+              </div>
+              <div className="flex flex-1 flex-col gap-3.5">
+                {AI_PROMISE.principles.map((principle) => (
+                  <div key={principle.title} className="flex items-start gap-2.5">
+                    <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-white/10">
+                      <principle.icon className="h-[14px] w-[14px] text-accent-on-deep" aria-hidden strokeWidth={1.9} />
+                    </span>
+                    <div>
+                      <div className="text-[13px] font-semibold text-fg-on-deep">{principle.title}</div>
+                      <div className="mt-0.5 text-[11.5px] leading-snug text-fg-on-deep-muted">{principle.description}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/ai"
+                onClick={closeMenu}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4.5 py-2.5 text-[13.5px] font-semibold text-[#053b2a] hover:bg-[#e6f5ee]"
+              >
+                <PlayCircle className="h-4 w-4" aria-hidden />
+                See all AI features
+              </Link>
+            </div>
+          </div>
+          <div className="border-t border-border bg-surface-2 px-7 py-3.5">
+            <div className="mx-auto max-w-[1320px] text-[13px]">
+              <Link href="/ai" onClick={closeMenu} className="text-primary hover:text-primary-hover">See every AI feature →</Link>
+            </div>
           </div>
         </Panel>
       </div>
@@ -353,21 +409,47 @@ export function SiteHeader() {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
-          <DrawerAccordion title="Product" open={!!drawerAcc.product} onToggle={() => toggleAcc("product")} links={PRODUCT_DRAWER_LINKS} />
-          <DrawerAccordion title="Solutions" open={!!drawerAcc.solutions} onToggle={() => toggleAcc("solutions")} links={SOLUTIONS_DRAWER_LINKS} />
+          <DrawerAccordion
+            title="Product"
+            open={!!drawerAcc.product}
+            onToggle={() => toggleAcc("product")}
+            links={PRODUCT_DRAWER_LINKS}
+            onNavigate={() => setDrawerOpen(false)}
+          />
+          <DrawerAccordion
+            title="Solutions"
+            open={!!drawerAcc.solutions}
+            onToggle={() => toggleAcc("solutions")}
+            links={SOLUTIONS_DRAWER_LINKS}
+            onNavigate={() => setDrawerOpen(false)}
+          />
+          <DrawerAccordion
+            title="Resources"
+            open={!!drawerAcc.resources}
+            onToggle={() => toggleAcc("resources")}
+            links={RESOURCES_DRAWER_LINKS}
+            onNavigate={() => setDrawerOpen(false)}
+          />
+          <DrawerAccordion
+            title="AI"
+            open={!!drawerAcc.ai}
+            onToggle={() => toggleAcc("ai")}
+            links={AI_MENU_ITEMS}
+            onNavigate={() => setDrawerOpen(false)}
+          />
           <Link href="/pricing" className="block border-b border-border py-4 text-base font-medium text-fg" onClick={() => setDrawerOpen(false)}>
             Pricing
           </Link>
-          <DrawerAccordion title="Resources" open={!!drawerAcc.resources} onToggle={() => toggleAcc("resources")} links={RESOURCES_DRAWER_LINKS} />
           <Link href="/integrations-directory" className="block border-b border-border py-4 text-base font-medium text-fg" onClick={() => setDrawerOpen(false)}>
             Integrations
           </Link>
-          <Link href="/ai" className="block border-b border-border py-4 text-base font-medium text-fg" onClick={() => setDrawerOpen(false)}>
-            AI
-          </Link>
 
           <div className="mt-5 flex flex-col gap-2.5">
-            <Link href="/book-a-demo" className="rounded-xl bg-primary px-5 py-3.5 text-center text-[15px] font-medium text-primary-foreground">
+            <Link
+              href="/book-a-demo"
+              onClick={() => setDrawerOpen(false)}
+              className="rounded-xl bg-primary px-5 py-3.5 text-center text-[15px] font-medium text-primary-foreground"
+            >
               Book a Demo
             </Link>
           </div>
@@ -397,11 +479,13 @@ function DrawerAccordion({
   open,
   onToggle,
   links,
+  onNavigate,
 }: {
   title: string;
   open: boolean;
   onToggle: () => void;
   links: NavLinkItem[];
+  onNavigate?: () => void;
 }) {
   return (
     <>
@@ -416,7 +500,7 @@ function DrawerAccordion({
       {open ? (
         <div className="flex flex-col gap-0.5 py-1.5 pb-3">
           {links.map((link) => (
-            <Link key={link.label} href={link.href} className="py-2 text-[14.5px] text-fg-muted">
+            <Link key={link.label} href={link.href} className="py-2 text-[14.5px] text-fg-muted" onClick={onNavigate}>
               {link.label}
             </Link>
           ))}

@@ -100,7 +100,7 @@ export function AiVoiceSalesDemo() {
         </div>
       </div>
 
-      <div className="relative min-h-[168px]">
+      <div className="relative min-h-[200px]">
         <div className={`absolute inset-0 flex items-center justify-center text-[13px] text-fg-faint ${reveal(!confirming)}`}>Waiting for the sale to finish…</div>
 
         <div className={`absolute inset-0 rounded-2xl border border-[#d5eee2] bg-[#f7fdfa] p-4 ${reveal(confirming)}`}>

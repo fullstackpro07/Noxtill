@@ -74,11 +74,11 @@ export default function AiPage() {
         {/* Hero */}
         <section className="px-5 pt-7 text-center sm:px-7">
           <div className="mx-auto max-w-[820px]">
-            <Reveal delay={0}>
+            {/* <Reveal delay={0}>
               <div className="mb-4 inline-flex items-center gap-2 font-display text-xs font-semibold uppercase tracking-[0.11em] text-primary">
                 {AI_HERO.eyebrow}
               </div>
-            </Reveal>
+            </Reveal> */}
             <Reveal delay={60}>
               <h1 className="text-balance font-display text-4xl font-bold leading-[1.1] tracking-tight text-fg sm:text-5xl">
                 {AI_HERO.headlineLead} <span className="text-accent">{AI_HERO.headlineHighlight}</span>
@@ -179,7 +179,7 @@ export default function AiPage() {
         </section>
 
         {/* Final CTA */}
-        <section className="bg-surface-deep px-5 pb-0 pt-10 sm:px-7 sm:pb-18 sm:pt-16">
+        <section className="bg-surface-deep px-5 pb-0 pt-10 sm:px-7 sm:pb-0 sm:pt-16">
           <Reveal className="mx-auto max-w-[1280px] rounded-[24px] border border-border bg-white p-8 text-center sm:p-11">
             <h2 className="mb-3.5 text-balance font-display text-[26px] font-bold leading-[1.14] tracking-tight text-fg sm:text-[38px]">
               {AI_FINAL_CTA.heading}

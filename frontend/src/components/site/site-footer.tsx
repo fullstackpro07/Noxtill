@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { FOOTER_COLUMNS, FOOTER_BOTTOM_LINKS } from "@/lib/marketing/footer-links";
+import { ChatWidget } from "@/components/site/chat-widget";
 
 function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
   return (
@@ -21,6 +22,7 @@ function FooterColumn({ title, links }: { title: string; links: { label: string;
 
 export function SiteFooter() {
   return (
+    <>
     <footer className="bg-surface-deep">
       <div className="mx-auto max-w-[1560px] px-5 py-14 sm:px-7">
         <div className="mb-10 flex flex-wrap gap-x-10 gap-y-8">
@@ -54,5 +56,7 @@ export function SiteFooter() {
         </div>
       </div>
     </footer>
+    <ChatWidget />
+    </>
   );
 }

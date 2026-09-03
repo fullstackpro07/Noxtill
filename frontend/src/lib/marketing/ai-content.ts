@@ -38,8 +38,8 @@ export const AI_CAPABILITIES: Record<"assistant" | "reception" | "voiceSales" | 
     eyebrow: "Never miss a call",
     title: "AI Phone Receptionist that",
     highlight: "books the appointment",
-    body: "Noxtill answers business calls, understands what the caller needs, gives approved information, captures the lead and books the appointment — escalating to a person the moment it should.",
-    bullets: ["Understands natural conversation, not a phone tree", "Captures leads and intent automatically", "Hands off to your team when it matters"],
+    body: "Noxtill answers business calls, understands what the caller needs, gives approved information, captures the lead and books the appointment escalating to a person the moment it should.",
+    bullets: ["Understands natural conversation, not a phone tree", "Captures leads and intent automatically", "Hands off to your team when it matters", "Transcript and intent stay attached to the lead", "Works with your existing phone number", "Supports multiple languages and accents", "Gets smarter over time with your feedback" , "Generates a summary of the call for your team", "Creates a booking in your system if requested, with confirmation to the caller", "Escalates to a person if the request is outside its approved scope", "Integrates with your existing phone system or VoIP providers", "Complies with privacy regulations and data protection standards"],
   },
   voiceSales: {
     slug: "voice-sales",

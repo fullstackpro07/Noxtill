@@ -102,7 +102,6 @@ export default function HomePage() {
         <UnifiedInboxSection />
         <PosBookingsCreditSection />
         <AiReceptionSection />
-        <ReputationSection />
         <FinalCtaSection />
         <FaqSection />
       </main>

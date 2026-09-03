@@ -7,11 +7,15 @@
  * matching hub page (`#slug`) rather than a route that would 404.
  */
 
+import type { LucideIcon } from "lucide-react";
+import { Bot, Camera, Mic, PhoneCall, ShieldCheck, Sparkles } from "lucide-react";
+
 export interface NavLinkItem {
   label: string;
   href: string;
   description?: string;
   starred?: boolean;
+  icon?: LucideIcon;
 }
 
 export interface NavLinkGroup {
@@ -53,17 +57,16 @@ export const PRODUCT_GROUPS: NavLinkGroup[] = [
       { label: "Multi-location", href: "/product/multi-location", description: "One account, every branch" },
     ],
   },
-  {
-    title: "Powered by AI",
-    items: [
-      { label: "Voice-Entry Sales", href: "/ai#voice-sales", description: "Speak the sale, confirm it, done", starred: true },
-      { label: "Photo Digitizer", href: "/ai#photo-digitizer", description: "Photograph your paper register — we read it" },
-      { label: "Business Assistant", href: "/ai#assistant", description: "Ask anything about your own numbers" },
-      { label: "AI Insights", href: "/ai#ai-insights", description: "What changed, and what to do about it" },
-      { label: "AI Phone Receptionist", href: "/ai#ai-receptionist", description: "Answers when you cannot" },
-      { label: "What our AI never does", href: "/ai#ai-promise", description: "Our three commitments, in plain English" },
-    ],
-  },
+];
+
+/** Dropdown content for the header's "AI" nav item. */
+export const AI_MENU_ITEMS: NavLinkItem[] = [
+  { label: "Voice-Entry Sales", href: "/ai#voice-sales", description: "Speak the sale, confirm it, done", starred: true, icon: Mic },
+  { label: "Photo Digitizer", href: "/ai#photo-digitizer", description: "Photograph your paper register — we read it", icon: Camera },
+  { label: "Business Assistant", href: "/ai#assistant", description: "Ask anything about your own numbers", icon: Bot },
+  { label: "AI Insights", href: "/ai#ai-insights", description: "What changed, and what to do about it", icon: Sparkles },
+  { label: "AI Phone Receptionist", href: "/ai#ai-receptionist", description: "Answers when you cannot", icon: PhoneCall },
+  { label: "What our AI never does", href: "/ai#ai-promise", description: "Our three commitments, in plain English", icon: ShieldCheck },
 ];
 
 export const SOLUTIONS_BUSINESS_TYPES: NavLinkItem[] = [
@@ -141,9 +144,6 @@ export const PRODUCT_DRAWER_LINKS: NavLinkItem[] = [
   { label: "Inventory", href: "/product/inventory" },
   { label: "Reviews & Reputation", href: "/product/reviews" },
   { label: "Unified Inbox", href: "/product/inbox" },
-  { label: "Voice-Entry Sales", href: "/ai#voice-sales" },
-  { label: "Business Assistant", href: "/ai#assistant" },
-  { label: "AI Phone Receptionist", href: "/ai#ai-receptionist" },
 ];
 
 /** Flat list for the mobile drawer's Solutions accordion. */

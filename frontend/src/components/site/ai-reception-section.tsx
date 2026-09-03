@@ -72,29 +72,7 @@ export function AiReceptionSection() {
           ))}
         </div>
 
-        <div className="mt-5.5 flex flex-wrap items-center gap-6 rounded-[22px] bg-surface-deep p-7">
-          <div className="flex-1 basis-[340px] min-w-[280px]">
-            <div className="mb-2.5 text-balance font-display text-[27px] font-semibold leading-tight tracking-[-0.025em] text-fg-on-deep">
-              Let AI Handle Your Calls. You Focus on Growth.
-            </div>
-            <div className="max-w-[54ch] text-[14.5px] leading-relaxed text-fg-on-deep-muted">
-              Noxtill AI Reception is your smart phone receptionist that works 24/7 to answer calls, help customers and grow
-              your business.
-            </div>
-          </div>
-          <div className="flex min-w-[270px] flex-1 basis-[300px] flex-col gap-4">
-            <div className="flex flex-wrap gap-3">
-              <Link href="/book-a-demo" className="inline-flex items-center gap-2.5 rounded-xl bg-white px-6.5 py-3.5 text-[15.5px] font-medium text-[#053b2a] hover:bg-[#e6f5ee]">
-                <Calendar className="h-[17px] w-[17px]" aria-hidden /> Book a Demo
-              </Link>
-            </div>
-            <div className="flex flex-wrap gap-x-5 gap-y-2 text-[12.5px] text-fg-on-deep-muted">
-              <span>No Credit Card</span>
-              <span>14-Day Free Trial</span>
-              <span>Cancel Anytime</span>
-            </div>
-          </div>
-        </div>
+        
       </div>
     </section>
   );
