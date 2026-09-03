@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Bell, ShoppingCart, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,6 @@ export function LowStockView({ currency }: { currency: string }) {
   const [editingThreshold, setEditingThreshold] = useState(false);
   const [poOpen, setPoOpen] = useState(false);
   const [waitlistItem, setWaitlistItem] = useState<LowStockItem | null>(null);
-  const queryClient = useQueryClient();
 
   const { data: items = [], isPending, isError, refetch } = useQuery({
     queryKey: ["low-stock"],

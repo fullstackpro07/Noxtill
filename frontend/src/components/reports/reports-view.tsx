@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { FileSpreadsheet, Archive, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReportCard } from "./report-card";
 import { REPORT_DEFS, EXCEL_EXPORTS } from "@/lib/reports";

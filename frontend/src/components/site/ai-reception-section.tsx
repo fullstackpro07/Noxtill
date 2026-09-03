@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Calendar } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Reveal } from "@/components/site/reveal";
 import { AiReceptionLiveDemo } from "@/components/site/ai-reception-live-demo";
 import { RECEPTION_BENEFITS, RECEPTION_FEATURES } from "@/lib/marketing/home-content";

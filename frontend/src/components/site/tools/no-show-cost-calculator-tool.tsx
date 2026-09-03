@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { CalendarX } from "lucide-react";
 
 const inputClass =
@@ -68,9 +69,9 @@ export function NoShowCostCalculatorTool() {
       <p className="mt-4 text-[12.5px] leading-relaxed text-fg-faint">
         Based on {noShowsPerWeek} no-show{noShowsPerWeek === 1 ? "" : "s"}/week × {money(avgValue)}/service × 52 weeks. The recoverable
         estimate reflects the typical reduction businesses see from two automatic reminders plus waitlist fills — see{" "}
-        <a href="/product/bookings" className="text-primary hover:underline">
+        <Link href="/product/bookings" className="text-primary hover:underline">
           Bookings
-        </a>
+        </Link>
         .
       </p>
     </div>

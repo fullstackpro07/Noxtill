@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Percent } from "lucide-react";
 
 const inputClass =
@@ -81,9 +82,9 @@ export function ProfitMarginCalculatorTool() {
       <p className="mt-4 text-[12.5px] leading-relaxed text-fg-faint">
         Materials-cost-only, this would look like a {naiveMarginPct.toFixed(0)}% margin — counting your time and a fair share of
         overhead brings it to the real {marginPct.toFixed(0)}%. See{" "}
-        <a href="/product/pnl" className="text-primary hover:underline">
+        <Link href="/product/pnl" className="text-primary hover:underline">
           Profit &amp; Loss
-        </a>{" "}
+        </Link>{" "}
         for how Noxtill tracks this automatically, per item.
       </p>
     </div>

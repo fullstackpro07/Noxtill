@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { QRCodeCanvas } from "qrcode.react";
 import { Download, QrCode } from "lucide-react";
 
@@ -83,9 +84,9 @@ export function QrCodeGeneratorTool() {
 
       <p className="mt-6 text-[12.5px] leading-relaxed text-fg-faint">
         Works for any link — your Noxtill booking page, your Google review link, a menu, anything. Print it, or see{" "}
-        <a href="/product/bookings" className="text-primary hover:underline">
+        <Link href="/product/bookings" className="text-primary hover:underline">
           Bookings
-        </a>{" "}
+        </Link>{" "}
         for how customers land straight in your diary.
       </p>
     </div>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Globe, Menu, PlayCircle, X } from "lucide-react";
+import { ChevronDown, Menu, PlayCircle, X } from "lucide-react";
 import {
   PRODUCT_GROUPS,
   PRODUCT_DRAWER_LINKS,

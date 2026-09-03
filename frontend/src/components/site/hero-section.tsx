@@ -3,7 +3,7 @@ import Image from "next/image";
 import { ArrowRight, Bell, Check, ChevronDown, HeartPulse, PackageX, Star, Users, Wallet } from "lucide-react";
 import { Reveal } from "@/components/site/reveal";
 import { HeroPhoneMockup } from "@/components/site/hero-phone-mockup";
-import { HERO_CHANNELS, HERO_TRUST, INTEGRATION_BENEFITS, INTEGRATION_TOOLS } from "@/lib/marketing/home-content";
+import { HERO_TRUST, INTEGRATION_BENEFITS, INTEGRATION_TOOLS } from "@/lib/marketing/home-content";
 
 const SIDEBAR_ITEMS = ["Sales / POS", "Orders", "Products", "Bookings", "Customers", "Inventory", "Marketing", "Reports", "AI Assistant"];
 

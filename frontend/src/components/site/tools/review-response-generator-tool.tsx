@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Check, Copy, MessageSquareQuote, RefreshCw, Star } from "lucide-react";
 
 const inputClass =
@@ -127,9 +128,9 @@ export function ReviewResponseGeneratorTool() {
 
       <p className="mt-4 text-[12.5px] leading-relaxed text-fg-faint">
         Noxtill drafts a reply like this automatically for every new review — see{" "}
-        <a href="/product/reviews" className="text-primary hover:underline">
+        <Link href="/product/reviews" className="text-primary hover:underline">
           Reviews &amp; Reputation
-        </a>
+        </Link>
         .
       </p>
     </div>

@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { BookDemoRequestDto } from './dto/book-demo-request.dto';
@@ -54,12 +58,17 @@ export class BookDemoService {
         },
       );
 
-      this.logger.debug(`Demo request emailed, provider_ref=${response.data.id}`);
+      this.logger.debug(
+        `Demo request emailed, provider_ref=${response.data.id}`,
+      );
     } catch (err) {
       // Never let the raw provider error (which can include the server token in the request
       // config) reach the client — log the full submission so the lead isn't silently lost,
       // and surface a plain message the visitor can act on.
-      this.logger.error(`Failed to email demo request for ${dto.email} (${dto.businessName})`, err instanceof Error ? err.stack : err);
+      this.logger.error(
+        `Failed to email demo request for ${dto.email} (${dto.businessName})`,
+        err instanceof Error ? err.stack : err,
+      );
       this.logger.error(`Undelivered demo request:\n${lines.join('\n')}`);
       throw new InternalServerErrorException(
         "We couldn't send your request just now — please try again in a moment, or email us directly at sales@noxtill.com.",

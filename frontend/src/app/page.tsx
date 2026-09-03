@@ -2,11 +2,9 @@ import type { Metadata } from "next";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { HeroSection } from "@/components/site/hero-section";
-import { AiAssistantSection } from "@/components/site/ai-assistant-section";
 import { UnifiedInboxSection } from "@/components/site/unified-inbox-section";
 import { PosBookingsCreditSection } from "@/components/site/pos-bookings-credit-section";
 import { AiReceptionSection } from "@/components/site/ai-reception-section";
-import { ReputationSection } from "@/components/site/reputation-section";
 import { FinalCtaSection } from "@/components/site/final-cta-section";
 import { FaqSection } from "@/components/site/faq-section";
 

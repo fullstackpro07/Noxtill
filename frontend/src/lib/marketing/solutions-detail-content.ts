@@ -19,7 +19,6 @@ import {
   History,
   MapPinned,
   Repeat,
-  Award,
   MessageCircle,
   Network,
   Zap,

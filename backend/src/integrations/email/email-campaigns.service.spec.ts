@@ -119,9 +119,7 @@ describe('EmailCampaignsService (BE-083)', () => {
       string,
       { text: string },
     ];
-    expect(payload.text).toContain(
-      'http://localhost:3000/unsubscribe?token=',
-    );
+    expect(payload.text).toContain('http://localhost:3000/unsubscribe?token=');
   });
 
   it('excludes a previously-unsubscribed recipient from a later send (real suppression-list check)', async () => {
