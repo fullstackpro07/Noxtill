@@ -80,7 +80,7 @@ export function ChatWidget() {
   const showSuggestions = messages.length === 1;
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end sm:bottom-7 sm:right-7">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end sm:bottom-7 sm:right-7">
       {open ? (
         <div className="mb-3 flex h-[min(560px,calc(100vh-140px))] w-[min(380px,calc(100vw-40px))] flex-col overflow-hidden rounded-[20px] border border-border bg-white shadow-[0_30px_70px_-24px_rgba(13,21,18,0.35)]">
           <div className="flex flex-none items-center justify-between gap-3 bg-surface-deep px-4.5 py-4">
@@ -172,13 +172,13 @@ export function ChatWidget() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Close chat" : "Open chat"}
-        className="relative h-[84px] w-[84px] transition-transform hover:scale-105"
+        className="relative h-14 w-14 transition-transform hover:scale-105 sm:h-[84px] sm:w-[84px]"
       >
         <Image
           src={ROBOT_IMAGE}
           alt="Noxtill AI Assistant"
           fill
-          sizes="84px"
+          sizes="(min-width: 640px) 84px, 56px"
           priority
           className="object-contain drop-shadow-[0_14px_28px_rgba(13,21,18,0.35)]"
         />

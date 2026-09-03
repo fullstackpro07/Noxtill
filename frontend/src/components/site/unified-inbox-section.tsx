@@ -40,9 +40,9 @@ export function UnifiedInboxSection() {
               .
             </p>
 
-            <div className="mb-7 flex flex-row flex-nowrap gap-3">
+            <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:flex-nowrap sm:gap-3">
               {INBOX_FEATURES.map((feature) => (
-                <div key={feature.title} className="min-w-0 flex-1 basis-0">
+                <div key={feature.title} className="min-w-0 sm:flex-1 sm:basis-0">
                   <span className="mb-2.5 flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#e3fbf1]">
                     <feature.icon className="h-[19px] w-[19px] text-accent" aria-hidden strokeWidth={1.9} />
                   </span>

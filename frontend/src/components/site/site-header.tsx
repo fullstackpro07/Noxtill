@@ -199,13 +199,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex flex-none items-center gap-3.5">
-          <button
-            type="button"
-            className={`items-center gap-1.5 px-1 py-2 text-sm text-fg-muted hover:text-fg ${narrow ? "hidden" : "inline-flex"}`}
-          >
-            <Globe className="h-[17px] w-[17px]" aria-hidden />
-            EN <ChevronDown className="h-3 w-3 opacity-55" aria-hidden />
-          </button>
+          
           <Link
             href="/book-a-demo"
             className={`rounded-xl bg-primary px-5 py-2.5 text-[14.5px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover ${narrow ? "hidden" : "inline-block"}`}
@@ -358,7 +352,7 @@ export function SiteHeader() {
               <ColumnHeading>Powered by AI</ColumnHeading>
               <AiMenuGrid items={AI_MENU_ITEMS} onNavigate={closeMenu} />
             </div>
-            <div className="flex min-w-[230px] max-w-[280px] flex-1 basis-[240px] flex-col gap-4 rounded-2xl bg-surface-deep p-5 text-white">
+            <div className="flex min-w-[230px] max-w-[280px] flex-1 basis-[240px] flex-col gap-4 rounded-2xl bg-primary p-5 text-white">
               <div className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.1em] text-accent-on-deep">
                 Our AI commitments
               </div>

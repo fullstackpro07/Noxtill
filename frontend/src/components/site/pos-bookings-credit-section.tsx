@@ -36,13 +36,13 @@ export function PosBookingsCreditSection() {
           One connected system for the till, the diary <span className="text-accent">and the customer ledger</span>
         </h2>
 
-        <div className="inline-flex flex-wrap items-center justify-center gap-1 rounded-full border border-border bg-surface-2 p-1.5">
+        <div className="inline-flex max-w-full items-center justify-center gap-1 overflow-x-auto rounded-full border border-border bg-surface-2 p-1.5">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setActive(tab.key)}
-              className={`rounded-full px-5 py-2.5 text-[14.5px] font-medium transition-colors ${
+              className={`flex-none whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors sm:px-5 sm:py-2.5 sm:text-[14.5px] ${
                 active === tab.key ? "bg-white text-fg shadow-[0_2px_10px_-4px_rgba(13,21,18,0.35)]" : "text-fg-muted hover:text-fg"
               }`}
             >

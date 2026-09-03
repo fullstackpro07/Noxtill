@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Every in-page anchor jump (mega-menu links like /product#fast-sale, /ai#voice-sales, footer
+   links, etc.) lands its target flush against the top of the viewport by default, which tucks it
+   right behind the sticky 72px header. This keeps every such jump — and every scrollIntoView()
+   call — clear of the header on both mobile and desktop, without touching each anchored section. */
+html {
+  scroll-padding-top: 88px;
+}
+
 /*
   Noxtill design tokens (FE-002 marketing redesign).
   Palette: white ground, bright forest-green primary/accent, WhatsApp green

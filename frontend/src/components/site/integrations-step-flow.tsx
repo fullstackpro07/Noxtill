@@ -20,10 +20,10 @@ export function IntegrationsStepFlow() {
             <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden />
             {FLOW_EYEBROW}
           </div>
-          <div className="mb-4 overflow-x-auto text-left sm:text-center">
-            <h2 className="whitespace-nowrap font-display text-lg font-bold leading-tight tracking-tight text-fg sm:text-[34px]">
+          <div className="mb-4 text-center">
+            <h2 className="text-balance font-display text-2xl font-bold leading-tight tracking-tight text-fg sm:whitespace-nowrap sm:text-[34px]">
               {headingParts.map((part, i) => (
-                <span key={part}>
+                <span key={part} className="inline-block">
                   {i > 0 ? <span className="text-primary"> → </span> : null}
                   <span className={part === "Noxtill" ? "text-primary" : undefined}>{part}</span>
                 </span>
