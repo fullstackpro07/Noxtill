@@ -28,9 +28,9 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: "Profit & loss", href: "/product#pnl" },
       { label: "Reviews & reputation", href: "/product#reviews" },
       { label: "Unified inbox", href: "/product#inbox" },
-      { label: "Voice-entry sales", href: "/product#voice-sales" },
-      { label: "Photo digitizer", href: "/product#photo-digitizer" },
-      { label: "AI phone receptionist", href: "/product#ai-receptionist" },
+      { label: "Voice-entry sales", href: "/product/voice-sales" },
+      { label: "Photo digitizer", href: "/product/photo-digitizer" },
+      { label: "AI phone receptionist", href: "/product/ai-receptionist" },
     ],
   },
   {

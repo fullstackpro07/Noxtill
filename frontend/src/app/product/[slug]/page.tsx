@@ -6,8 +6,14 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { DetailHero, DetailComparison, DetailRelated } from "@/components/site/detail-page-sections";
 import { PRODUCT_DETAIL_PAGES, findProductDetailPage } from "@/lib/marketing/product-detail-content";
 
+// "nightly-close" and "fast-sale" each have their own bespoke static page (a custom per-page
+// redesign, not the shared template below) — excluded here so the routes don't collide; the
+// static sibling route takes precedence for that exact path regardless, but generating it here
+// too would make this file's generateStaticParams claim an unreachable path.
+const BESPOKE_SLUGS = new Set(["nightly-close", "fast-sale", "orders", "bookings", "credit", "catalogue", "pnl", "inventory", "health-score", "reports", "staff", "reviews", "inbox", "marketing", "listings", "social", "multi-location", "analytics"]);
+
 export function generateStaticParams() {
-  return PRODUCT_DETAIL_PAGES.map((p) => ({ slug: p.slug }));
+  return PRODUCT_DETAIL_PAGES.filter((p) => !BESPOKE_SLUGS.has(p.slug)).map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {

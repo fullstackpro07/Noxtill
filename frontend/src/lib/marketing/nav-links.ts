@@ -61,11 +61,11 @@ export const PRODUCT_GROUPS: NavLinkGroup[] = [
 
 /** Dropdown content for the header's "AI" nav item. */
 export const AI_MENU_ITEMS: NavLinkItem[] = [
-  { label: "Voice-Entry Sales", href: "/ai#voice-sales", description: "Speak the sale, confirm it, done", starred: true, icon: Mic },
-  { label: "Photo Digitizer", href: "/ai#photo-digitizer", description: "Photograph your paper register — we read it", icon: Camera },
-  { label: "Business Assistant", href: "/ai#assistant", description: "Ask anything about your own numbers", icon: Bot },
+  { label: "Voice-Entry Sales", href: "/product/voice-sales", description: "Speak the sale, confirm it, done", starred: true, icon: Mic },
+  { label: "Photo Digitizer", href: "/product/photo-digitizer", description: "Photograph your paper register — we read it", icon: Camera },
+  { label: "Business Assistant", href: "/product/assistant", description: "Ask anything about your own numbers", icon: Bot },
   { label: "AI Insights", href: "/ai#ai-insights", description: "What changed, and what to do about it", icon: Sparkles },
-  { label: "AI Phone Receptionist", href: "/ai#ai-receptionist", description: "Answers when you cannot", icon: PhoneCall },
+  { label: "AI Phone Receptionist", href: "/product/ai-receptionist", description: "Answers when you cannot", icon: PhoneCall },
   { label: "What our AI never does", href: "/ai#ai-promise", description: "Our three commitments, in plain English", icon: ShieldCheck },
 ];
 
