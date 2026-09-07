@@ -24,12 +24,26 @@ export class NotificationsController {
 export class NotificationPreferencesController {
   constructor(private readonly notifications: NotificationsService) {}
 
-  /** Omitting `?userId=` views your own effective preferences (defaults + your own overrides) — always self-permitted. Passing another staff member's id needs manage capability. */
+  /**
+   * Omitting both params views your own effective preferences (defaults + your own overrides) —
+   * always self-permitted. `?scope=default` deliberately asks for the pure business-wide default
+   * with no user overlay (needs manage capability, same as writing it) — distinct from passing
+   * another staff member's `?userId=`, which shows *their* effective view instead.
+   */
   @Get()
   getMatrix(
     @CurrentUser() user: AuthenticatedUser,
     @Query('userId') userId?: string,
+    @Query('scope') scope?: string,
   ) {
+    if (scope === 'default') {
+      this.notifications.assertSelfOrManaging(
+        user.sub,
+        user.capabilities,
+        undefined,
+      );
+      return this.notifications.getPreferenceMatrix(user.businessId);
+    }
     const target = userId ?? user.sub;
     this.notifications.assertSelfOrManaging(
       user.sub,

@@ -102,7 +102,7 @@ export default function PhotoDigitizerPage() {
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="relative overflow-hidden px-5 pb-8 pt-14 sm:px-7 sm:pb-10 sm:pt-10">
+        <section className="relative overflow-hidden px-5 pb-8 pt-10 sm:px-7 sm:pb-10 sm:pt-10">
           <div
             className="absolute inset-0 z-0"
             style={{  backgroundImage: "url(/marketing/photo-digitizer-hero-bg.jpg)", backgroundSize: "cover", backgroundPosition: "center" }}

@@ -64,9 +64,9 @@ export const AI_MENU_ITEMS: NavLinkItem[] = [
   { label: "Voice-Entry Sales", href: "/product/voice-sales", description: "Speak the sale, confirm it, done", starred: true, icon: Mic },
   { label: "Photo Digitizer", href: "/product/photo-digitizer", description: "Photograph your paper register — we read it", icon: Camera },
   { label: "Business Assistant", href: "/product/assistant", description: "Ask anything about your own numbers", icon: Bot },
-  { label: "AI Insights", href: "/ai#ai-insights", description: "What changed, and what to do about it", icon: Sparkles },
+  { label: "AI Insights", href: "/product/ai-insights", description: "What changed, and what to do about it", icon: Sparkles },
   { label: "AI Phone Receptionist", href: "/product/ai-receptionist", description: "Answers when you cannot", icon: PhoneCall },
-  { label: "What our AI never does", href: "/ai#ai-promise", description: "Our three commitments, in plain English", icon: ShieldCheck },
+  { label: "What our AI never does", href: "/product/ai-promise", description: "Our three commitments, in plain English", icon: ShieldCheck },
 ];
 
 export const SOLUTIONS_BUSINESS_TYPES: NavLinkItem[] = [

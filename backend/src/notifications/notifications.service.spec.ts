@@ -195,6 +195,31 @@ describe('NotificationsService (INT-012)', () => {
       expect(aEnabled).toBe(true);
     });
 
+    it("getPreferenceMatrix(businessId) with no userId returns the pure business-wide default, unaffected by any staff member's own override", async () => {
+      await service.setPreferences(businessId, {
+        preferences: [
+          { event: 'schedule_updated', channel: 'in_app', enabled: false },
+        ],
+      });
+      await service.setPreferences(businessId, {
+        userId: userAId,
+        preferences: [
+          { event: 'schedule_updated', channel: 'in_app', enabled: true },
+        ],
+      });
+
+      const defaults = await service.getPreferenceMatrix(businessId);
+      const row = defaults.find((r) => r.event === 'schedule_updated');
+      expect(row?.enabled).toBe(false);
+      expect(row?.enabledByDefault).toBe(false);
+      expect(row?.overridden).toBe(false);
+
+      const asUserA = await service.getPreferenceMatrix(businessId, userAId);
+      const rowA = asUserA.find((r) => r.event === 'schedule_updated');
+      expect(rowA?.enabled).toBe(true);
+      expect(rowA?.overridden).toBe(true);
+    });
+
     it('setPreferences() rejects a userId that is not a real member of this business', async () => {
       await expect(
         service.setPreferences(businessId, {

@@ -23,6 +23,11 @@ export function fetchNotificationPreferences(userId?: string): Promise<Notificat
   return apiFetch<NotificationPreferenceRow[]>(`/notification-preferences${query}`);
 }
 
+/** GET /notification-preferences?scope=default — the pure business-wide default, with no user overlay. Needs manage capability. */
+export function fetchDefaultNotificationPreferences(): Promise<NotificationPreferenceRow[]> {
+  return apiFetch<NotificationPreferenceRow[]>("/notification-preferences?scope=default");
+}
+
 /** PATCH /notification-preferences — omit userId to write the business-wide default (needs manage capability). */
 export function updateNotificationPreferences(
   preferences: { event: NotificationEvent; channel: NotificationChannel; enabled: boolean }[],
