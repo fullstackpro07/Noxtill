@@ -703,6 +703,8 @@ model Business {
   masterListing            MasterListing?
   listingSyncLogs          ListingSyncLog[]
   citations                Citation[]
+  listingPhotos            ListingPhoto[]
+  listingSettings          ListingSettings?
   gmbPhotos                GmbPhoto[]
   gmbQnas                  GmbQna[]
   gmbInsightsSnapshots     GmbInsightsSnapshot[]
@@ -712,6 +714,8 @@ model Business {
   socialInboxItems         SocialInboxItem[]
   socialAnalyticsSnapshots SocialAnalyticsSnapshot[]
   socialSettings           SocialSettings?
+  socialPostAnalytics      SocialPostAnalytics[]
+  socialCaptionGenerations SocialCaptionGeneration[]
   visibilityScoreSnapshots VisibilityScoreSnapshot[]
   competitiveOpportunities CompetitiveOpportunity[]
   competitiveSettings      CompetitiveSettings?
@@ -3542,6 +3546,58 @@ model Citation {
   @@map("citations")
 }
 
+enum ListingPhotoCategory {
+  exterior
+  interior
+  team
+  products
+  logo
+}
+
+/// Photos & Media, cross-directory (UPD-BE-124) — a generic, directory-agnostic photo, distinct
+/// from `GmbPhoto` (which stays GMB-only, matching the existing `listings/gmb/photos` endpoints).
+/// `pushedProviders` records which connected directories a real push has succeeded to. All four
+/// directory connectors implement `pushPhoto` against the same API family their own `pushListing`
+/// already calls — real HTTP calls, untestable without a real partner credential in this
+/// environment, same disclosed constraint every connector's `pushListing` already carries.
+model ListingPhoto {
+  id               String               @id @default(uuid())
+  businessId       String               @map("business_id")
+  business         Business             @relation(fields: [businessId], references: [id])
+  url              String
+  category         ListingPhotoCategory
+  pushedProviders  Json                 @default("[]") @map("pushed_providers")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, category])
+  @@map("listing_photos")
+}
+
+/// Listings Settings (UPD-BE-125). `fieldMapping` (`{ [provider]: string[] }`, listing which
+/// `MasterListingData` field keys to EXCLUDE when pushing to that provider) is real and enforced —
+/// `ListingSyncService.sync()` filters fields per-provider before calling `pushListing`.
+/// `conflictResolution` is real and enforced too: when `directory_wins`, `sync()` first pulls
+/// every connected reconcile-capable provider's current data (`Connector.fetchListing`) and
+/// overwrites the real Master Listing's fields with theirs before pushing back out; `master_wins`
+/// (the default) skips that pull entirely, so the Master Listing is always the source of truth.
+model ListingSettings {
+  id                     String   @id @default(uuid())
+  businessId             String   @unique @map("business_id")
+  business               Business @relation(fields: [businessId], references: [id])
+  autoSyncEnabled        Boolean  @default(false) @map("auto_sync_enabled")
+  autoSyncFrequencyHours Int      @default(24) @map("auto_sync_frequency_hours")
+  fieldMapping           Json     @default("{}") @map("field_mapping")
+  conflictResolution     String   @default("master_wins") @map("conflict_resolution")
+  lastAutoSyncAt         DateTime? @map("last_auto_sync_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("listing_settings")
+}
+
 /// UPD-BE-042 GMB photo gallery entry. `url` is assumed already-uploaded (existing generic upload
 /// endpoints elsewhere in the app follow this same "client already has a URL" convention) — this
 /// ticket doesn't add a new S3 upload path, a disclosed scope boundary.
@@ -3676,11 +3732,37 @@ model SocialPostTarget {
   errorMessage String?                @map("error_message")
   publishedAt  DateTime?              @map("published_at")
 
+  analytics SocialPostAnalytics?
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([socialPostId, platform])
   @@map("social_post_targets")
+}
+
+/// Published Posts, per-post analytics (UPD-BE-127) — one row per published `SocialPostTarget`,
+/// distinct from `SocialAnalyticsSnapshot`'s account-level-per-day rollup. `Connector.fetchPostInsights`
+/// is genuinely optional per-platform (only facebook/instagram implement it today — see that
+/// method's doc comment); pulling for an unsupported platform's target is a real, disclosed no-op.
+model SocialPostAnalytics {
+  id                 String           @id @default(uuid())
+  businessId         String           @map("business_id")
+  business           Business         @relation(fields: [businessId], references: [id])
+  socialPostTargetId String           @unique @map("social_post_target_id")
+  socialPostTarget   SocialPostTarget @relation(fields: [socialPostTargetId], references: [id])
+  reach              Int              @default(0)
+  likes              Int              @default(0)
+  comments           Int              @default(0)
+  shares             Int              @default(0)
+  saves              Int              @default(0)
+  clicks             Int              @default(0)
+  pulledAt           DateTime         @map("pulled_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("social_post_analytics")
 }
 
 /// UPD-BE-049 Social Inbox. `externalId` is the platform's own comment/DM id — the
@@ -3726,6 +3808,27 @@ model SocialAnalyticsSnapshot {
 
   @@unique([businessId, platform, date])
   @@map("social_analytics_snapshots")
+}
+
+/// AI Content Studio, generation history fix — a dedicated real history table for captions
+/// specifically (unlike `MediaAsset`, which already doubles as a real image-generation history via
+/// `source: 'ai_generated'`, `AiCallLog` never stored the actual completion text for any AI
+/// feature, so it can't answer "what did I generate last week" for captions). Kept separate from
+/// `AiCallLog` rather than adding text-storage fields there, since that model is shared by every
+/// unrelated AI feature in the product (assistant chat, branch advisor, etc.) and widening its
+/// storage/PII footprint globally to fix a Social-only gap would be the wrong tradeoff.
+model SocialCaptionGeneration {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  topic      String
+  tone       String?
+  caption    String   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("social_caption_generations")
 }
 
 /// UPD-BE-051 Social Settings — one row per business (upsert-on-write, same pattern as

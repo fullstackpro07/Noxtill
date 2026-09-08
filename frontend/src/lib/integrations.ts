@@ -1,4 +1,13 @@
-export type ConnectorKey = "email" | "gmb" | "google_ads" | "merchant_center" | "meta_ads" | "tiktok_ads";
+export type ConnectorKey =
+  | "email"
+  | "gmb"
+  | "google_ads"
+  | "merchant_center"
+  | "meta_ads"
+  | "tiktok_ads"
+  | "bing_places"
+  | "apple_business_connect"
+  | "yelp";
 export type ConnectorStatus = "not_connected" | "connected" | "needs_attention";
 
 export interface Connector {
@@ -17,6 +26,9 @@ export const CONNECTORS: Connector[] = [
   { key: "merchant_center", name: "Google Merchant Center", description: "Product feed built from your catalog.", status: "not_connected", href: "/integrations/merchant-center" },
   { key: "meta_ads", name: "Meta Ads", description: "Facebook & Instagram, including review-to-ad.", status: "connected", href: "/integrations/meta-ads" },
   { key: "tiktok_ads", name: "TikTok Ads", description: "Slideshow creatives from your product photos.", status: "not_connected", href: "/integrations/tiktok-ads" },
+  { key: "bing_places", name: "Bing Places", description: "Keep your listing in sync on Bing Maps and search.", status: "not_connected", href: "/listings" },
+  { key: "apple_business_connect", name: "Apple Business Connect", description: "Keep your listing in sync on Apple Maps.", status: "not_connected", href: "/listings" },
+  { key: "yelp", name: "Yelp", description: "Keep your listing in sync on Yelp.", status: "not_connected", href: "/listings" },
 ];
 
 export const STATUS_LABELS: Record<ConnectorStatus, string> = {

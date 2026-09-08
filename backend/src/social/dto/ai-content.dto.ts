@@ -8,3 +8,9 @@ export class GenerateCaptionDto {
   @IsString()
   tone?: string;
 }
+
+/** Hashtag suggester fix. */
+export class GenerateHashtagsDto {
+  @IsString()
+  caption!: string;
+}

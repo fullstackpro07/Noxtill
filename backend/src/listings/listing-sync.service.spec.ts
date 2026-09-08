@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { MasterListingService } from './master-listing.service';
 import { ListingSyncService } from './listing-sync.service';
+import { ListingSettingsService } from './listing-settings.service';
 import { AppException } from '../common/filters/app.exception';
 import type { IntegrationsService } from '../integrations/integrations.service';
 import type { ConnectorRegistry } from '../integrations/connector-registry';
@@ -23,9 +24,11 @@ describe('ListingSyncService (UPD-BE-044)', () => {
   let prisma: PrismaService;
   let service: ListingSyncService;
   let masterListing: MasterListingService;
+  let listingSettings: ListingSettingsService;
   let businessId: string;
   const pushListing = jest.fn();
   const failingPushListing = jest.fn();
+  const fetchListing = jest.fn();
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -37,6 +40,7 @@ describe('ListingSyncService (UPD-BE-044)', () => {
       cls as unknown as ClsService,
     );
     masterListing = new MasterListingService(tenantPrisma);
+    listingSettings = new ListingSettingsService(tenantPrisma);
 
     const integrations = {
       getTokens: jest.fn().mockResolvedValue({ accessToken: 'fake-token' }),
@@ -46,9 +50,10 @@ describe('ListingSyncService (UPD-BE-044)', () => {
         IntegrationProvider.gmb,
         IntegrationProvider.yelp,
       ],
+      reconcileProviders: () => [IntegrationProvider.gmb],
       get: (provider: IntegrationProvider) =>
         provider === IntegrationProvider.gmb
-          ? { pushListing }
+          ? { pushListing, fetchListing }
           : { pushListing: failingPushListing },
     };
 
@@ -57,6 +62,7 @@ describe('ListingSyncService (UPD-BE-044)', () => {
       integrations as unknown as IntegrationsService,
       connectors as unknown as ConnectorRegistry,
       masterListing,
+      listingSettings,
     );
 
     const business = await prisma.business.create({
@@ -72,6 +78,7 @@ describe('ListingSyncService (UPD-BE-044)', () => {
   afterEach(() => {
     pushListing.mockReset();
     failingPushListing.mockReset();
+    fetchListing.mockReset();
   });
 
   afterAll(async () => {
@@ -79,6 +86,7 @@ describe('ListingSyncService (UPD-BE-044)', () => {
     await prisma.listingSyncLog.deleteMany({ where: { businessId } });
     await prisma.integration.deleteMany({ where: { businessId } });
     await prisma.masterListing.deleteMany({ where: { businessId } });
+    await prisma.listingSettings.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
@@ -165,6 +173,29 @@ describe('ListingSyncService (UPD-BE-044)', () => {
     expect(gmbAudit!.mismatchedFields).toContain('name');
   });
 
+  it('a real per-provider field exclusion (Listings Settings, UPD-BE-125) strips that field before push, and the citation audit never flags it as stale', async () => {
+    await listingSettings.update(businessId, {
+      fieldMapping: { [IntegrationProvider.gmb]: ['phone'] },
+    });
+    pushListing.mockResolvedValue({ ok: true });
+
+    await service.sync(businessId);
+    const [, sentListing] = pushListing.mock.calls.at(-1) as [
+      unknown,
+      { phone?: string; name: string },
+    ];
+    expect(sentListing.phone).toBeUndefined();
+    expect(sentListing.name).toBe('Renamed Biz');
+
+    // Even though the live Master Listing still has a real phone number, it's excluded from this
+    // provider's push on purpose — the citation audit must not treat that as drift.
+    const audit = await service.citationAudit(businessId);
+    const gmbAudit = audit.find((a) => a.provider === IntegrationProvider.gmb);
+    expect(gmbAudit!.mismatchedFields).not.toContain('phone');
+
+    await listingSettings.update(businessId, { fieldMapping: {} });
+  });
+
   it('health() reflects real connected-provider count and real mismatch count', async () => {
     const health = await service.health(businessId);
     expect(health.totalProviders).toBe(2); // gmb + yelp, per the fake registry
@@ -176,5 +207,86 @@ describe('ListingSyncService (UPD-BE-044)', () => {
     );
     expect(health.mismatchCount).toBeGreaterThanOrEqual(1);
     expect(health.score).toBeLessThan(100);
+  });
+
+  // Placed after health() deliberately — these each call sync() successfully, which re-snapshots
+  // the Citation to match the (post-reconcile) Master Listing and would eliminate the drift the
+  // health() test above depends on if run earlier.
+  describe('conflictResolution (UPD-BE-125)', () => {
+    it('"master_wins" (the default) never pulls from a directory before pushing', async () => {
+      pushListing.mockResolvedValue({ ok: true });
+      await service.sync(businessId);
+      expect(fetchListing).not.toHaveBeenCalled();
+    });
+
+    it('"directory_wins" really pulls the connected directory\'s data first and overwrites the real Master Listing before pushing', async () => {
+      await listingSettings.update(businessId, {
+        conflictResolution: 'directory_wins',
+      });
+      fetchListing.mockResolvedValue({
+        name: 'Name From Google',
+        phone: '+15557778888',
+      });
+      pushListing.mockResolvedValue({ ok: true });
+
+      await service.sync(businessId);
+
+      const reconciled = await masterListing.find(businessId);
+      expect(reconciled!.name).toBe('Name From Google');
+      expect(reconciled!.phone).toBe('+15557778888');
+
+      const [, sentListing] = pushListing.mock.calls.at(-1) as [
+        unknown,
+        { name: string; phone?: string },
+      ];
+      expect(sentListing.name).toBe('Name From Google');
+
+      await listingSettings.update(businessId, {
+        conflictResolution: 'master_wins',
+      });
+    });
+
+    it('"directory_wins" respects field exclusions during reconciliation, not just during push', async () => {
+      await listingSettings.update(businessId, {
+        conflictResolution: 'directory_wins',
+        fieldMapping: { [IntegrationProvider.gmb]: ['name'] },
+      });
+      fetchListing.mockResolvedValue({
+        name: 'Should Be Ignored',
+        phone: '+15551112222',
+      });
+      pushListing.mockResolvedValue({ ok: true });
+
+      await service.sync(businessId);
+
+      const reconciled = await masterListing.find(businessId);
+      expect(reconciled!.name).not.toBe('Should Be Ignored');
+      expect(reconciled!.phone).toBe('+15551112222');
+
+      await listingSettings.update(businessId, {
+        conflictResolution: 'master_wins',
+        fieldMapping: {},
+      });
+    });
+
+    it('"directory_wins" tolerates a fetchListing failure without blocking sync()', async () => {
+      await listingSettings.update(businessId, {
+        conflictResolution: 'directory_wins',
+      });
+      fetchListing.mockRejectedValue(new Error('Google API unreachable'));
+      pushListing.mockResolvedValue({ ok: true });
+
+      const results = await service.sync(businessId);
+      expect(
+        results.some(
+          (r) =>
+            r.provider === IntegrationProvider.gmb && r.status === 'success',
+        ),
+      ).toBe(true);
+
+      await listingSettings.update(businessId, {
+        conflictResolution: 'master_wins',
+      });
+    });
   });
 });

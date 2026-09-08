@@ -11,6 +11,8 @@ import {
 import { MasterListingService } from './master-listing.service';
 import { ListingSyncService } from './listing-sync.service';
 import { GmbManagementService } from './gmb-management.service';
+import { ListingPhotosService } from './listing-photos.service';
+import { ListingSettingsService } from './listing-settings.service';
 import { UpdateMasterListingDto } from './dto/update-master-listing.dto';
 import {
   AnswerGmbQnaDto,
@@ -18,6 +20,12 @@ import {
   CreateGmbPhotoDto,
   CreateGmbPostDto,
 } from './dto/gmb.dto';
+import {
+  CreateListingPhotoDto,
+  UpdateListingPhotoDto,
+  PushListingPhotoDto,
+} from './dto/listing-photo.dto';
+import { UpdateListingSettingsDto } from './dto/listing-settings.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -29,6 +37,8 @@ export class ListingsController {
     private readonly masterListing: MasterListingService,
     private readonly listingSync: ListingSyncService,
     private readonly gmbManagement: GmbManagementService,
+    private readonly listingPhotos: ListingPhotosService,
+    private readonly listingSettings: ListingSettingsService,
   ) {}
 
   @Get('listings/master')
@@ -88,6 +98,11 @@ export class ListingsController {
     @Body() dto: SelectGmbLocationDto,
   ) {
     return this.gmbManagement.selectLocation(user.businessId, dto.locationId);
+  }
+
+  @Get('listings/gmb/location')
+  getSelectedGmbLocation(@CurrentUser() user: AuthenticatedUser) {
+    return this.gmbManagement.getSelectedLocation(user.businessId);
   }
 
   @Get('listings/gmb/posts')
@@ -166,5 +181,64 @@ export class ListingsController {
   @Post('listings/gmb/insights/pull')
   pullInsights(@CurrentUser() user: AuthenticatedUser) {
     return this.gmbManagement.pullInsights(user.businessId);
+  }
+
+  /** UPD-BE-124 */
+  @Get('listings/photos')
+  listPhotosAll(@CurrentUser() user: AuthenticatedUser) {
+    return this.listingPhotos.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.LISTINGS_MANAGE)
+  @Post('listings/photos')
+  createPhoto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateListingPhotoDto,
+  ) {
+    return this.listingPhotos.create(user.businessId, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.LISTINGS_MANAGE)
+  @Patch('listings/photos/:id')
+  updatePhoto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateListingPhotoDto,
+  ) {
+    return this.listingPhotos.update(user.businessId, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.LISTINGS_MANAGE)
+  @Delete('listings/photos/:id')
+  removeListingPhoto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.listingPhotos.remove(user.businessId, id);
+  }
+
+  @RequireCapability(CAPABILITIES.LISTINGS_MANAGE)
+  @Post('listings/photos/:id/push')
+  pushPhoto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PushListingPhotoDto,
+  ) {
+    return this.listingPhotos.push(user.businessId, id, dto.providers);
+  }
+
+  /** UPD-BE-125 */
+  @Get('listings/settings')
+  getListingSettings(@CurrentUser() user: AuthenticatedUser) {
+    return this.listingSettings.get(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.LISTINGS_MANAGE)
+  @Patch('listings/settings')
+  updateListingSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateListingSettingsDto,
+  ) {
+    return this.listingSettings.update(user.businessId, dto);
   }
 }

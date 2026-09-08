@@ -4,7 +4,9 @@ import { AppException } from '../common/filters/app.exception';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { ConnectorRegistry } from '../integrations/connector-registry';
 import { MasterListingService } from './master-listing.service';
+import { ListingSettingsService } from './listing-settings.service';
 import { LISTING_ERROR_CODES } from './listings.constants';
+import { MasterListingData } from '../integrations/connector.interface';
 import { IntegrationStatus, Prisma } from '@prisma/client';
 
 const RECENT_SYNC_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -39,10 +41,11 @@ export class ListingSyncService {
     private readonly integrations: IntegrationsService,
     private readonly connectors: ConnectorRegistry,
     private readonly masterListing: MasterListingService,
+    private readonly listingSettings: ListingSettingsService,
   ) {}
 
   async sync(businessId: string): Promise<SyncResult[]> {
-    const listing = await this.masterListing.find(businessId);
+    let listing = await this.masterListing.find(businessId);
     if (!listing) {
       throw new AppException(
         LISTING_ERROR_CODES.MASTER_LISTING_NOT_SET,
@@ -50,6 +53,13 @@ export class ListingSyncService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const settings = await this.listingSettings.get(businessId);
+    const fieldMapping = settings.fieldMapping as Record<string, string[]>;
+
+    if (settings.conflictResolution === 'directory_wins') {
+      listing = (await this.reconcile(businessId, fieldMapping)) ?? listing;
+    }
+
     const data = this.masterListing.toConnectorData(listing);
 
     const results: SyncResult[] = [];
@@ -68,9 +78,10 @@ export class ListingSyncService {
       if (!tokens || !connector.pushListing) continue;
 
       try {
+        const sentData = this.applyFieldMapping(data, fieldMapping[provider]);
         await connector.pushListing(
           tokens,
-          data,
+          sentData,
           integration.meta as Record<string, unknown>,
         );
         await this.tenantPrisma.client.listingSyncLog.create({
@@ -81,11 +92,11 @@ export class ListingSyncService {
           create: {
             businessId,
             provider,
-            snapshot: data as unknown as Prisma.InputJsonValue,
+            snapshot: sentData as unknown as Prisma.InputJsonValue,
             syncedAt: new Date(),
           },
           update: {
-            snapshot: data as unknown as Prisma.InputJsonValue,
+            snapshot: sentData as unknown as Prisma.InputJsonValue,
             syncedAt: new Date(),
           },
         });
@@ -120,12 +131,15 @@ export class ListingSyncService {
     const citations = await this.tenantPrisma.client.citation.findMany({
       where: { businessId },
     });
+    const fieldMapping =
+      await this.listingSettings.findFieldMapping(businessId);
 
     return citations.map((citation) => {
       const snapshot = citation.snapshot as Record<string, unknown>;
+      const excluded = new Set(fieldMapping[citation.provider] ?? []);
       const mismatchedFields = listing
-        ? this.diffFields(snapshot, listing)
-        : NAP_FIELDS.slice();
+        ? this.diffFields(snapshot, listing, excluded)
+        : NAP_FIELDS.filter((f) => !excluded.has(f));
       return {
         provider: citation.provider,
         syncedAt: citation.syncedAt,
@@ -178,9 +192,78 @@ export class ListingSyncService {
   private diffFields(
     snapshot: Record<string, unknown>,
     current: Record<string, unknown>,
+    excluded: Set<string>,
   ): string[] {
     return NAP_FIELDS.filter(
-      (field) => (snapshot[field] ?? null) !== (current[field] ?? null),
+      (field) =>
+        !excluded.has(field) &&
+        (snapshot[field] ?? null) !== (current[field] ?? null),
     );
+  }
+
+  /**
+   * Listings Settings conflict resolution (UPD-BE-125) — the real mechanism `conflictResolution`
+   * was missing: when set to `directory_wins`, pulls each connected reconcile-capable provider's
+   * CURRENT data via `fetchListing` and overwrites the real Master Listing's fields with theirs
+   * (excluding any field mapped out for that provider, same as the push side). If more than one
+   * provider disagrees, the last one processed wins — providers are iterated in
+   * `ConnectorRegistry`'s fixed order, so this is at least deterministic. A provider whose
+   * `fetchListing` call fails is skipped here (not fatal) — the same failure surfaces for real
+   * moments later when that provider's own push in the loop below is attempted.
+   */
+  private async reconcile(
+    businessId: string,
+    fieldMapping: Record<string, string[]>,
+  ) {
+    const updates: Partial<Omit<MasterListingData, 'categories' | 'hours'>> =
+      {};
+
+    for (const provider of this.connectors.reconcileProviders()) {
+      const integration = await this.tenantPrisma.client.integration.findUnique(
+        { where: { businessId_provider: { businessId, provider } } },
+      );
+      if (!integration || integration.status !== IntegrationStatus.connected) {
+        continue;
+      }
+      const tokens = await this.integrations.getTokens(businessId, provider);
+      const connector = this.connectors.get(provider);
+      if (!tokens || !connector.fetchListing) continue;
+
+      try {
+        const remote = await connector.fetchListing(
+          tokens,
+          integration.meta as Record<string, unknown>,
+        );
+        const excluded = new Set(fieldMapping[provider] ?? []);
+        for (const field of NAP_FIELDS) {
+          if (excluded.has(field)) continue;
+          const value = remote[field];
+          if (value !== undefined && value !== null && value !== '') {
+            updates[field] = value;
+          }
+        }
+      } catch {
+        // Read-only reconciliation failure — not fatal, see doc comment above.
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return null;
+    return this.masterListing.applyReconciledFields(businessId, updates);
+  }
+
+  /**
+   * Listings Settings (UPD-BE-125) — real field exclusion: strips any key named in
+   * `excludedFields` before the data is sent to a given provider's `pushListing`, and before it's
+   * stored as that provider's citation snapshot (so a deliberately-excluded field is never later
+   * flagged as "stale" by the citation audit — see `citationAudit()`).
+   */
+  private applyFieldMapping(
+    data: MasterListingData,
+    excludedFields: string[] | undefined,
+  ): MasterListingData {
+    if (!excludedFields || excludedFields.length === 0) return data;
+    const filtered = { ...data } as Record<string, unknown>;
+    for (const field of excludedFields) delete filtered[field];
+    return filtered as unknown as MasterListingData;
   }
 }

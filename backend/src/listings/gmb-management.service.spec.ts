@@ -189,6 +189,20 @@ describe('GmbManagementService (UPD-BE-042)', () => {
     );
   });
 
+  it('getSelectedLocation() reflects the real currently-selected location — the fix for the "no way to show current state" gap', async () => {
+    const selected = await service.getSelectedLocation(businessId);
+    expect(selected).toEqual({ locationId: 'accounts/1/locations/2' });
+  });
+
+  it('getSelectedLocation() returns null, not an error, when GMB was never connected', async () => {
+    const otherBusiness = await prisma.business.create({
+      data: { name: 'No GMB Biz', slug: `no-gmb-${Date.now()}` },
+    });
+    const selected = await service.getSelectedLocation(otherBusiness.id);
+    expect(selected).toEqual({ locationId: null });
+    await prisma.business.delete({ where: { id: otherBusiness.id } });
+  });
+
   it('photos: addPhoto() and removePhoto() are real local CRUD, no external call needed', async () => {
     const photo = await service.addPhoto(businessId, {
       url: 'https://example.com/photo.jpg',

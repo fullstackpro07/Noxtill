@@ -39,4 +39,41 @@ describe('AppleBusinessConnectConnector (UPD-BE-043)', () => {
       }),
     );
   });
+
+  it('pushPhoto() POSTs to the real locations/primary/photos endpoint (UPD-BE-124)', async () => {
+    mockedAxios.post.mockResolvedValue({ data: { ok: true } });
+    await connector.pushPhoto(
+      { accessToken: 'test-api-key' },
+      'https://cdn.example/a.jpg',
+      'exterior',
+      {},
+    );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://businessconnect.apple.com/api/v1/locations/primary/photos',
+      { url: 'https://cdn.example/a.jpg', category: 'exterior' },
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer test-api-key' },
+      }),
+    );
+  });
+
+  it('fetchListing() GETs the real locations/primary endpoint and maps the response (UPD-BE-125)', async () => {
+    mockedAxios.get.mockResolvedValue({
+      data: { name: 'Real Biz', phoneNumber: '+15551234567' },
+    });
+    const result = await connector.fetchListing(
+      { accessToken: 'test-api-key' },
+      {},
+    );
+    expect(result.name).toBe('Real Biz');
+    expect(result.phone).toBe('+15551234567');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'https://businessconnect.apple.com/api/v1/locations/primary',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer test-api-key' },
+      }),
+    );
+  });
 });

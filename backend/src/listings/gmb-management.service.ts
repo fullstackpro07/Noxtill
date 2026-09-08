@@ -70,6 +70,26 @@ export class GmbManagementService {
     return { locationId };
   }
 
+  /**
+   * Real fix for a genuine gap: nothing previously let the frontend know whether a location had
+   * already been selected, so the picker had no way to show current state. Never throws when GMB
+   * isn't connected or no location is set yet — both are real, normal states to render, not errors.
+   */
+  async getSelectedLocation(
+    businessId: string,
+  ): Promise<{ locationId: string | null }> {
+    const integration = await this.tenantPrisma.client.integration.findUnique({
+      where: {
+        businessId_provider: {
+          businessId,
+          provider: IntegrationProvider.gmb,
+        },
+      },
+    });
+    const meta = (integration?.meta as Record<string, unknown>) ?? {};
+    return { locationId: (meta.locationId as string | undefined) ?? null };
+  }
+
   listPosts(businessId: string) {
     return this.tenantPrisma.client.gmbPost.findMany({
       where: { businessId },

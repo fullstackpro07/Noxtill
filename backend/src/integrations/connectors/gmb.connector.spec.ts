@@ -85,4 +85,87 @@ describe('GmbConnector (BE-084, via GoogleOAuth2Connector)', () => {
       }),
     );
   });
+
+  it('pushPhoto() rejects with a clear error when no locationId has been selected (UPD-BE-124)', async () => {
+    await expect(
+      connector.pushPhoto(
+        { accessToken: 'fake-token' },
+        'https://cdn.example/a.jpg',
+        'exterior',
+        {},
+      ),
+    ).rejects.toThrow(/no gmb location selected/i);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.post).not.toHaveBeenCalledWith(
+      expect.stringContaining('/media'),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('pushPhoto() POSTs the real media-create endpoint with the mapped category once a locationId is set', async () => {
+    mockedAxios.post.mockResolvedValue({ data: { name: 'media/1' } });
+    await connector.pushPhoto(
+      { accessToken: 'fake-token' },
+      'https://cdn.example/a.jpg',
+      'exterior',
+      { locationId: 'locations/123' },
+    );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://mybusinessbusinessinformation.googleapis.com/v1/locations/123/media',
+      expect.objectContaining({
+        sourceUrl: 'https://cdn.example/a.jpg',
+        locationAssociation: { category: 'EXTERIOR' },
+      }),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer fake-token' },
+      }),
+    );
+  });
+
+  it('fetchListing() rejects with a clear error when no locationId has been selected (UPD-BE-125)', async () => {
+    await expect(
+      connector.fetchListing({ accessToken: 'fake-token' }, {}),
+    ).rejects.toThrow(/no gmb location selected/i);
+  });
+
+  it('fetchListing() GETs the real Business Information API and maps the response back to MasterListingData shape', async () => {
+    mockedAxios.get.mockResolvedValue({
+      data: {
+        title: 'Real Biz From Google',
+        phoneNumbers: { primaryPhone: '+15559998888' },
+        websiteUri: 'https://real-biz.example',
+        storefrontAddress: {
+          addressLines: ['1 Main St', 'Suite 2'],
+          locality: 'Springfield',
+          administrativeArea: 'IL',
+          postalCode: '62704',
+          regionCode: 'US',
+        },
+      },
+    });
+    const result = await connector.fetchListing(
+      { accessToken: 'fake-token' },
+      { locationId: 'locations/123' },
+    );
+    expect(result).toEqual({
+      name: 'Real Biz From Google',
+      phone: '+15559998888',
+      website: 'https://real-biz.example',
+      addressLine1: '1 Main St',
+      addressLine2: 'Suite 2',
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62704',
+      country: 'US',
+    });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'https://mybusinessbusinessinformation.googleapis.com/v1/locations/locations/123',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer fake-token' },
+      }),
+    );
+  });
 });

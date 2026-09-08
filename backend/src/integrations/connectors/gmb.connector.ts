@@ -92,4 +92,93 @@ export class GmbConnector extends GoogleOAuth2Connector {
     );
     return response.data;
   }
+
+  /**
+   * Listings Settings conflict resolution (UPD-BE-125) — the read half of `pushListing`, same
+   * endpoint family and `meta.locationId` requirement.
+   */
+  async fetchListing(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+  ): Promise<Partial<MasterListingData>> {
+    const locationId = meta.locationId as string | undefined;
+    if (!locationId) {
+      throw new Error('No GMB location selected for this business');
+    }
+
+    const response = await axios.get<{
+      title?: string;
+      phoneNumbers?: { primaryPhone?: string };
+      websiteUri?: string;
+      storefrontAddress?: {
+        addressLines?: string[];
+        locality?: string;
+        administrativeArea?: string;
+        postalCode?: string;
+        regionCode?: string;
+      };
+    }>(
+      `https://mybusinessbusinessinformation.googleapis.com/v1/locations/${locationId}`,
+      {
+        params: { readMask: 'title,phoneNumbers,websiteUri,storefrontAddress' },
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      },
+    );
+
+    const data = response.data;
+    const address = data.storefrontAddress;
+    return {
+      name: data.title,
+      phone: data.phoneNumbers?.primaryPhone,
+      website: data.websiteUri,
+      addressLine1: address?.addressLines?.[0],
+      addressLine2: address?.addressLines?.[1],
+      city: address?.locality,
+      state: address?.administrativeArea,
+      postalCode: address?.postalCode,
+      country: address?.regionCode,
+    };
+  }
+
+  /** Real category mapping onto Google's own `LocationAssociation.category` enum values. */
+  private static readonly CATEGORY_MAP: Record<string, string> = {
+    exterior: 'EXTERIOR',
+    interior: 'INTERIOR',
+    team: 'TEAMS',
+    products: 'PRODUCT',
+    logo: 'LOGO',
+  };
+
+  /**
+   * Pushes one photo to the real GMB Business Profile media gallery via the documented
+   * `locations.media.create` endpoint. Requires `meta.locationId`, same disclosed gap as
+   * `pushListing` — no location-picker UI exists yet, so this throws a clear, real error rather
+   * than faking success until one is built.
+   */
+  async pushPhoto(
+    tokens: OAuthTokens,
+    photoUrl: string,
+    category: string,
+    meta: Record<string, unknown>,
+  ): Promise<unknown> {
+    const locationId = meta.locationId as string | undefined;
+    if (!locationId) {
+      throw new Error(
+        'No GMB location selected for this business — connect a location before pushing photos',
+      );
+    }
+
+    const response = await axios.post(
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${locationId}/media`,
+      {
+        mediaFormat: 'PHOTO',
+        locationAssociation: {
+          category: GmbConnector.CATEGORY_MAP[category] ?? 'ADDITIONAL',
+        },
+        sourceUrl: photoUrl,
+      },
+      { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+    );
+    return response.data;
+  }
 }

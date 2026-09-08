@@ -11,6 +11,7 @@ import {
   SocialInboxReplyTarget,
   SocialInsights,
   SocialOAuthTokens,
+  SocialPostInsights,
   SocialPublishPayload,
   SocialPublishResult,
 } from './social-connector.interface';
@@ -132,6 +133,37 @@ export class InstagramConnector extends StandardOAuth2Connector {
       reach: byName('reach'),
       impressions: byName('impressions'),
       engagement: byName('profile_views'),
+    };
+  }
+
+  /**
+   * Published Posts, per-post analytics (UPD-BE-127) — real per-media metrics via the Graph API's
+   * media-level `insights` edge (reach/likes/comments/saved/shares) plus a follow-up call for
+   * `taps_forward`-style click data isn't universally available for feed media, so `clicks` comes
+   * back `0` rather than fabricated.
+   */
+  async fetchPostInsights(
+    tokens: SocialOAuthTokens,
+    externalId: string,
+  ): Promise<SocialPostInsights> {
+    const response = await axios.get<{
+      data: { name: string; values: { value: number }[] }[];
+    }>(`${GRAPH}/${externalId}/insights`, {
+      params: {
+        access_token: tokens.accessToken,
+        metric: 'reach,likes,comments,saved,shares',
+      },
+    });
+    const byName = (name: string): number =>
+      response.data.data.find((m) => m.name === name)?.values?.[0]?.value ?? 0;
+
+    return {
+      reach: byName('reach'),
+      likes: byName('likes'),
+      comments: byName('comments'),
+      saves: byName('saved'),
+      shares: byName('shares'),
+      clicks: 0,
     };
   }
 }

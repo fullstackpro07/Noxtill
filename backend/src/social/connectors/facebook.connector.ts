@@ -11,6 +11,7 @@ import {
   SocialInboxReplyTarget,
   SocialInsights,
   SocialOAuthTokens,
+  SocialPostInsights,
   SocialPublishPayload,
   SocialPublishResult,
 } from './social-connector.interface';
@@ -124,6 +125,50 @@ export class FacebookConnector extends StandardOAuth2Connector {
       impressions: byName('page_impressions'),
       engagement: byName('page_engaged_users'),
       reach: byName('page_post_engagements'),
+    };
+  }
+
+  /**
+   * Published Posts, per-post analytics (UPD-BE-127) — real per-post metrics via the Graph API's
+   * post-level `insights` edge (reach) plus the post object's own `likes`/`comments`/`shares`
+   * summary fields. Facebook's post-level API has no real "saves" or "clicks" metric for a plain
+   * feed post, so those come back `0`, never fabricated.
+   */
+  async fetchPostInsights(
+    tokens: SocialOAuthTokens,
+    externalId: string,
+  ): Promise<SocialPostInsights> {
+    const [insights, summary] = await Promise.all([
+      axios.get<{ data: { name: string; values: { value: number }[] }[] }>(
+        `${GRAPH}/${externalId}/insights`,
+        {
+          params: {
+            access_token: tokens.accessToken,
+            metric: 'post_impressions_unique,post_clicks',
+          },
+        },
+      ),
+      axios.get<{
+        likes?: { summary?: { total_count?: number } };
+        comments?: { summary?: { total_count?: number } };
+        shares?: { count?: number };
+      }>(`${GRAPH}/${externalId}`, {
+        params: {
+          access_token: tokens.accessToken,
+          fields: 'likes.summary(true),comments.summary(true),shares',
+        },
+      }),
+    ]);
+    const byName = (name: string): number =>
+      insights.data.data.find((m) => m.name === name)?.values?.[0]?.value ?? 0;
+
+    return {
+      reach: byName('post_impressions_unique'),
+      clicks: byName('post_clicks'),
+      likes: summary.data.likes?.summary?.total_count ?? 0,
+      comments: summary.data.comments?.summary?.total_count ?? 0,
+      shares: summary.data.shares?.count ?? 0,
+      saves: 0,
     };
   }
 }

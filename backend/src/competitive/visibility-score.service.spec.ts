@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { MasterListingService } from '../listings/master-listing.service';
 import { ListingSyncService } from '../listings/listing-sync.service';
+import { ListingSettingsService } from '../listings/listing-settings.service';
 import { VisibilityScoreService } from './visibility-score.service';
 import type { IntegrationsService } from '../integrations/integrations.service';
 import type { ConnectorRegistry } from '../integrations/connector-registry';
@@ -38,11 +39,13 @@ describe('VisibilityScoreService (UPD-BE-052)', () => {
     // test here; listing scoring's own real behavior is already covered by
     // listing-sync.service.spec.ts, this file only needs it as a stable input to the average.
     const connectors = { directoryProviders: () => [] };
+    const listingSettings = new ListingSettingsService(tenantPrisma);
     const listingSync = new ListingSyncService(
       tenantPrisma,
       {} as unknown as IntegrationsService,
       connectors as unknown as ConnectorRegistry,
       masterListing,
+      listingSettings,
     );
     service = new VisibilityScoreService(tenantPrisma, listingSync);
 

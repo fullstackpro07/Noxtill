@@ -114,4 +114,39 @@ describe('FacebookConnector (UPD-BE-045, via StandardOAuth2Connector)', () => {
     expect(insights.followers).toBe(500);
     expect(insights.impressions).toBe(1000);
   });
+
+  it('fetchPostInsights() pulls real per-post reach/clicks plus likes/comments/shares summary (UPD-BE-127)', async () => {
+    mockedAxios.get.mockImplementation((url: string) => {
+      if (url.endsWith('/insights')) {
+        return Promise.resolve({
+          data: {
+            data: [
+              { name: 'post_impressions_unique', values: [{ value: 250 }] },
+              { name: 'post_clicks', values: [{ value: 12 }] },
+            ],
+          },
+        });
+      }
+      return Promise.resolve({
+        data: {
+          likes: { summary: { total_count: 40 } },
+          comments: { summary: { total_count: 5 } },
+          shares: { count: 3 },
+        },
+      });
+    });
+
+    const result = await connector.fetchPostInsights(
+      { accessToken: 'fb-token' },
+      'post-1',
+    );
+    expect(result).toEqual({
+      reach: 250,
+      clicks: 12,
+      likes: 40,
+      comments: 5,
+      shares: 3,
+      saves: 0,
+    });
+  });
 });

@@ -57,4 +57,45 @@ describe('YelpConnector (UPD-BE-043)', () => {
     expect(body.location.city).toBe('Springfield');
     expect(options.headers.Authorization).toBe('Bearer yelp-token');
   });
+
+  it('pushPhoto() POSTs to the real managed-business photos endpoint (UPD-BE-124)', async () => {
+    mockedAxios.post.mockResolvedValue({ data: { ok: true } });
+    await connector.pushPhoto(
+      { accessToken: 'yelp-token' },
+      'https://cdn.example/a.jpg',
+      'exterior',
+      { yelpBusinessId: 'biz-1' },
+    );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://api.yelp.com/v3/businesses/managed/biz-1/photos',
+      { photo_url: 'https://cdn.example/a.jpg', caption: 'exterior' },
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer yelp-token' },
+      }),
+    );
+  });
+
+  it('fetchListing() GETs the real managed-business endpoint and maps the response (UPD-BE-125)', async () => {
+    mockedAxios.get.mockResolvedValue({
+      data: {
+        name: 'Real Biz',
+        phone: '+15551234567',
+        location: { city: 'Springfield' },
+      },
+    });
+    const result = await connector.fetchListing(
+      { accessToken: 'yelp-token' },
+      { yelpBusinessId: 'biz-1' },
+    );
+    expect(result.name).toBe('Real Biz');
+    expect(result.city).toBe('Springfield');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'https://api.yelp.com/v3/businesses/managed/biz-1',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer yelp-token' },
+      }),
+    );
+  });
 });

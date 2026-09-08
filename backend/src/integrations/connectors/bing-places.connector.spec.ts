@@ -58,4 +58,46 @@ describe('BingPlacesConnector (UPD-BE-043)', () => {
       }),
     );
   });
+
+  it('pushPhoto() POSTs to the real UploadStorePhoto endpoint (UPD-BE-124)', async () => {
+    mockedAxios.post.mockResolvedValue({ data: { ok: true } });
+    await connector.pushPhoto(
+      { accessToken: 'bing-token' },
+      'https://cdn.example/a.jpg',
+      'exterior',
+      { storeId: 'store-1' },
+    );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://api.bingplaces.com/api/UploadStorePhoto',
+      {
+        StoreId: 'store-1',
+        PhotoUrl: 'https://cdn.example/a.jpg',
+        PhotoType: 'exterior',
+      },
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer bing-token' },
+      }),
+    );
+  });
+
+  it('fetchListing() GETs the real GetStore endpoint and maps the response (UPD-BE-125)', async () => {
+    mockedAxios.get.mockResolvedValue({
+      data: { StoreName: 'Real Biz', BusinessPhone: '+15551234567' },
+    });
+    const result = await connector.fetchListing(
+      { accessToken: 'bing-token' },
+      { storeId: 'store-1' },
+    );
+    expect(result.name).toBe('Real Biz');
+    expect(result.phone).toBe('+15551234567');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'https://api.bingplaces.com/api/GetStore',
+      expect.objectContaining({
+        params: { StoreId: 'store-1' },
+        headers: { Authorization: 'Bearer bing-token' },
+      }),
+    );
+  });
 });

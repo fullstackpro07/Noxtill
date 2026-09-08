@@ -36,6 +36,16 @@ export interface SocialInsights {
   impressions: number;
 }
 
+/** Published Posts, per-post analytics (UPD-BE-127) — real per-post metrics, distinct from `SocialInsights`'s account-level rollup. */
+export interface SocialPostInsights {
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  clicks: number;
+}
+
 /**
  * `postExternalId` matters because not every platform can reply directly to a specific comment
  * id — Pinterest/Tumblr's real APIs only support commenting on the parent post/pin, so their
@@ -78,5 +88,19 @@ export interface SocialConnector {
     tokens: SocialOAuthTokens,
     meta: Record<string, unknown>,
   ): Promise<SocialInsights>;
+  /**
+   * Published Posts, per-post analytics (UPD-BE-127) — real per-post metrics for one published
+   * target, keyed by its real `externalId`. Genuinely optional per-connector, same convention as
+   * every other optional capability in this codebase (e.g. `Connector.pushPhoto` in
+   * `src/integrations`): only Facebook and Instagram implement it today, against Meta's real,
+   * well-documented post/media insights endpoints. The other 13 platforms don't have a
+   * well-documented public per-post insights API to build against honestly, so they leave this
+   * undefined — `SocialPostsService` checks for its presence before calling it.
+   */
+  fetchPostInsights?(
+    tokens: SocialOAuthTokens,
+    externalId: string,
+    meta: Record<string, unknown>,
+  ): Promise<SocialPostInsights>;
   disconnect(): Promise<void>;
 }

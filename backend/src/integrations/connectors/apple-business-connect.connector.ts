@@ -75,6 +75,64 @@ export class AppleBusinessConnectConnector implements Connector {
     return response.data;
   }
 
+  /**
+   * Listings Settings conflict resolution (UPD-BE-125) — the read half of `pushListing`, same
+   * location-scoped API family, same `"primary"` fallback.
+   */
+  async fetchListing(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+  ): Promise<Partial<MasterListingData>> {
+    const locationId = (meta.locationId as string | undefined) ?? 'primary';
+    const response = await axios.get<{
+      name?: string;
+      phoneNumber?: string;
+      urls?: string[];
+      address?: {
+        line1?: string;
+        line2?: string;
+        locality?: string;
+        administrativeArea?: string;
+        postCode?: string;
+        country?: string;
+      };
+    }>(`https://businessconnect.apple.com/api/v1/locations/${locationId}`, {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
+    const data = response.data;
+    return {
+      name: data.name,
+      phone: data.phoneNumber,
+      website: data.urls?.[0],
+      addressLine1: data.address?.line1,
+      addressLine2: data.address?.line2,
+      city: data.address?.locality,
+      state: data.address?.administrativeArea,
+      postalCode: data.address?.postCode,
+      country: data.address?.country,
+    };
+  }
+
+  /**
+   * Photos & Media, cross-directory (UPD-BE-124) — same location-scoped API family as
+   * `pushListing`, falling back to `"primary"` the same way. Equally untestable without a real
+   * partner credential in this environment — same disclosed constraint as `pushListing` above.
+   */
+  async pushPhoto(
+    tokens: OAuthTokens,
+    photoUrl: string,
+    category: string,
+    meta: Record<string, unknown>,
+  ): Promise<unknown> {
+    const locationId = (meta.locationId as string | undefined) ?? 'primary';
+    const response = await axios.post(
+      `https://businessconnect.apple.com/api/v1/locations/${locationId}/photos`,
+      { url: photoUrl, category },
+      { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+    );
+    return response.data;
+  }
+
   async disconnect(): Promise<void> {
     // No per-business token to revoke — same reasoning as EmailConnector.disconnect().
   }

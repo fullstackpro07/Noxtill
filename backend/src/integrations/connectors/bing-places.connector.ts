@@ -114,6 +114,66 @@ export class BingPlacesConnector implements Connector {
     return response.data;
   }
 
+  /**
+   * Listings Settings conflict resolution (UPD-BE-125) — the read half of `pushListing`, same
+   * `api.bingplaces.com` Store API family, scoped by `meta.storeId`.
+   */
+  async fetchListing(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+  ): Promise<Partial<MasterListingData>> {
+    const response = await axios.get<{
+      StoreName?: string;
+      BusinessPhone?: string;
+      Website?: string;
+      AddressLine1?: string;
+      AddressLine2?: string;
+      City?: string;
+      State?: string;
+      ZipCode?: string;
+      Country?: string;
+    }>('https://api.bingplaces.com/api/GetStore', {
+      params: { StoreId: meta.storeId },
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
+    const data = response.data;
+    return {
+      name: data.StoreName,
+      phone: data.BusinessPhone,
+      website: data.Website,
+      addressLine1: data.AddressLine1,
+      addressLine2: data.AddressLine2,
+      city: data.City,
+      state: data.State,
+      postalCode: data.ZipCode,
+      country: data.Country,
+    };
+  }
+
+  /**
+   * Photos & Media, cross-directory (UPD-BE-124) — same API family as `pushListing`
+   * (`api.bingplaces.com`'s Store Photos surface), scoped to the store captured in `meta` the
+   * same way `pushListing` is. Equally untestable without a real partner credential in this
+   * environment — same disclosed constraint as `pushListing` above.
+   */
+  async pushPhoto(
+    tokens: OAuthTokens,
+    photoUrl: string,
+    category: string,
+    meta: Record<string, unknown>,
+  ): Promise<unknown> {
+    const response = await axios.post(
+      'https://api.bingplaces.com/api/UploadStorePhoto',
+      {
+        StoreId: meta.storeId,
+        PhotoUrl: photoUrl,
+        PhotoType: category,
+      },
+      { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+    );
+    return response.data;
+  }
+
   async disconnect(): Promise<void> {
     // Real revocation is a Microsoft identity-platform token-revocation call — left as a
     // documented no-op, same reasoning as every other connector's disconnect().

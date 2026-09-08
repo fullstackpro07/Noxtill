@@ -32,5 +32,6 @@ import { CustomersModule } from '../customers/customers.module';
     AdAnalyticsService,
     AdLeadsService,
   ],
+  exports: [AdCampaignsService],
 })
 export class AdsModule {}

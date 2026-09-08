@@ -134,6 +134,35 @@ export interface Connector {
     meta: Record<string, unknown>,
   ): Promise<unknown>;
   /**
+   * Photos & Media, cross-directory (UPD-BE-124) — pushes one photo to the provider's real media
+   * gallery. Directory-type only. Implemented by all four directory connectors (gmb, bing_places,
+   * apple_business_connect, yelp), each against the same API family/host its own `pushListing`
+   * already calls — same disclosed "attempted against the real endpoint, untestable without a
+   * real partner credential in this environment" constraint that already applies to every
+   * connector's `pushListing`, not a new one. `ListingPhotosService` checks for `pushPhoto`'s
+   * presence the same way `ListingSyncService` checks for `pushListing`, so a future connector
+   * that genuinely can't support this (e.g. a pure ad-platform connector) can still leave it
+   * undefined without special-casing anywhere.
+   */
+  pushPhoto?(
+    tokens: OAuthTokens,
+    photoUrl: string,
+    category: string,
+    meta: Record<string, unknown>,
+  ): Promise<unknown>;
+  /**
+   * Listings Settings conflict resolution (UPD-BE-125) — pulls the provider's real CURRENT
+   * listing data, the read half of the same API family/endpoint `pushListing` already writes to.
+   * Implemented by all four directory connectors. `ListingSyncService.sync()` calls this first,
+   * before pushing, only when `ListingSettings.conflictResolution === 'directory_wins'` — the real
+   * mechanism that setting was missing until now. Returns only the fields the provider's response
+   * actually included (a partial read), never fabricated defaults for missing ones.
+   */
+  fetchListing?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+  ): Promise<Partial<MasterListingData>>;
+  /**
    * Ad-platform connectors only (UPD-BE-069) — creates a real campaign on the provider, paused/
    * draft by default (never launches spend without the owner explicitly activating it later).
    * `meta` carries provider-specific context an account selection puts there (e.g. an ad account

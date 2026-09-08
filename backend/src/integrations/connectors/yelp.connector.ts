@@ -106,6 +106,66 @@ export class YelpConnector implements Connector {
     return response.data;
   }
 
+  /**
+   * Listings Settings conflict resolution (UPD-BE-125) — the read half of `pushListing`, same
+   * managed-business API family, scoped by `meta.yelpBusinessId`.
+   */
+  async fetchListing(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+  ): Promise<Partial<MasterListingData>> {
+    const response = await axios.get<{
+      name?: string;
+      phone?: string;
+      website?: string;
+      location?: {
+        address1?: string;
+        address2?: string;
+        city?: string;
+        state?: string;
+        zip_code?: string;
+        country?: string;
+      };
+    }>(
+      `https://api.yelp.com/v3/businesses/managed/${meta.yelpBusinessId as string}`,
+      {
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      },
+    );
+    const data = response.data;
+    return {
+      name: data.name,
+      phone: data.phone,
+      website: data.website,
+      addressLine1: data.location?.address1,
+      addressLine2: data.location?.address2,
+      city: data.location?.city,
+      state: data.location?.state,
+      postalCode: data.location?.zip_code,
+      country: data.location?.country,
+    };
+  }
+
+  /**
+   * Photos & Media, cross-directory (UPD-BE-124) — same managed-business API family as
+   * `pushListing`, scoped to the business captured in `meta.yelpBusinessId`. Equally untestable
+   * without a real partner credential in this environment — same disclosed constraint as
+   * `pushListing` above.
+   */
+  async pushPhoto(
+    tokens: OAuthTokens,
+    photoUrl: string,
+    category: string,
+    meta: Record<string, unknown>,
+  ): Promise<unknown> {
+    const response = await axios.post(
+      `https://api.yelp.com/v3/businesses/managed/${meta.yelpBusinessId as string}/photos`,
+      { photo_url: photoUrl, caption: category },
+      { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+    );
+    return response.data;
+  }
+
   async disconnect(): Promise<void> {
     // Real revocation is a Yelp OAuth token-revocation call — left as a documented no-op, same
     // reasoning as every other connector's disconnect().

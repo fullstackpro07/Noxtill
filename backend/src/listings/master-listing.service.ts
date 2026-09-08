@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { UpdateMasterListingDto } from './dto/update-master-listing.dto';
-import { MasterListingData } from '../integrations/connector.interface';
+import type { MasterListingData } from '../integrations/connector.interface';
 
 /**
  * Master Business Record (UPD-BE-041) — the single canonical NAP record `POST /listings/sync`
@@ -31,6 +31,22 @@ export class MasterListingService {
   async find(businessId: string) {
     return this.tenantPrisma.client.masterListing.findUnique({
       where: { businessId },
+    });
+  }
+
+  /**
+   * Listings Settings conflict resolution (UPD-BE-125) — a real, system-triggered partial write,
+   * distinct from `update()`: no `name`-required DTO validation (a reconcile pass may only ever
+   * touch e.g. `phone`), and it never creates a row (reconciliation only makes sense once a real
+   * Master Listing already exists — `ListingSyncService` only calls this after confirming one).
+   */
+  applyReconciledFields(
+    businessId: string,
+    fields: Partial<Omit<MasterListingData, 'categories' | 'hours'>>,
+  ) {
+    return this.tenantPrisma.client.masterListing.update({
+      where: { businessId },
+      data: fields,
     });
   }
 

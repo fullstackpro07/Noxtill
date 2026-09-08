@@ -9,6 +9,9 @@ const TO_BACKEND_PROVIDER: Record<ConnectorKey, string> = {
   merchant_center: "merchant",
   meta_ads: "meta_ads",
   tiktok_ads: "tiktok_ads",
+  bing_places: "bing_places",
+  apple_business_connect: "apple_business_connect",
+  yelp: "yelp",
 };
 
 const FROM_BACKEND_PROVIDER: Record<string, ConnectorKey> = Object.fromEntries(

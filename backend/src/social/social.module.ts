@@ -42,6 +42,7 @@ import {
 } from './social.constants';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { AiModule } from '../ai/ai.module';
+import { AdsModule } from '../ads/ads.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { AiModule } from '../ai/ai.module';
     ),
     IntegrationsModule,
     AiModule,
+    AdsModule,
   ],
   controllers: [
     SocialAccountsController,

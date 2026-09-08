@@ -8,6 +8,7 @@ import type { S3Service } from '../common/storage/s3.service';
 import type { SocialAccountsService } from './social-accounts.service';
 import type { SocialConnectorRegistry } from './connectors/social-connector-registry';
 import type { MediaLibraryService } from './media-library.service';
+import type { AdCampaignsService } from '../ads/ad-campaigns.service';
 import type { Queue } from 'bullmq';
 import {
   SocialPlatform,
@@ -51,6 +52,14 @@ describe('SocialPostsService (UPD-BE-046)', () => {
   const mediaLibrary = {
     incrementUsage: jest.fn().mockResolvedValue(undefined),
   };
+  const adCampaigns = {
+    create: jest
+      .fn<
+        Promise<{ id: string; status: string }>,
+        [string, string, Record<string, unknown>]
+      >()
+      .mockResolvedValue({ id: 'campaign-1', status: 'draft' }),
+  };
   const queue = { add: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
@@ -68,7 +77,7 @@ describe('SocialPostsService (UPD-BE-046)', () => {
       accounts as unknown as SocialAccountsService,
       connectors as unknown as SocialConnectorRegistry,
       mediaLibrary as unknown as MediaLibraryService,
-
+      adCampaigns as unknown as AdCampaignsService,
       queue as unknown as Queue,
     );
 
@@ -85,6 +94,7 @@ describe('SocialPostsService (UPD-BE-046)', () => {
   afterEach(() => jest.clearAllMocks());
 
   afterAll(async () => {
+    await prisma.socialPostAnalytics.deleteMany({ where: { businessId } });
     await prisma.socialPostTarget.deleteMany({
       where: { socialPost: { businessId } },
     });
@@ -214,5 +224,281 @@ describe('SocialPostsService (UPD-BE-046)', () => {
     });
     await service.remove(businessId, post.id);
     await expect(service.findOne(businessId, post.id)).rejects.toThrow();
+  });
+
+  describe('Draft editing fix', () => {
+    it('update() changes caption/mediaKeys on a real draft without touching its targets', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Original caption',
+        platforms: [SocialPlatform.facebook],
+      });
+      const updated = await service.update(businessId, post.id, {
+        caption: 'Edited caption',
+        mediaKeys: ['media/x/new.png'],
+      });
+      expect(updated.caption).toBe('Edited caption');
+      expect(updated.mediaKeys).toEqual(['media/x/new.png']);
+      expect(updated.targets).toHaveLength(1);
+      expect(updated.targets[0].platform).toBe(SocialPlatform.facebook);
+      expect(updated.status).toBe(SocialPostStatus.draft);
+    });
+
+    it('update() replaces the target set when platforms change', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Platform swap',
+        platforms: [SocialPlatform.facebook],
+      });
+      const updated = await service.update(businessId, post.id, {
+        platforms: [SocialPlatform.instagram, SocialPlatform.tiktok],
+      });
+      expect(updated.targets.map((t) => t.platform).sort()).toEqual(
+        [SocialPlatform.instagram, SocialPlatform.tiktok].sort(),
+      );
+    });
+
+    it('update() with scheduledFor promotes the draft to scheduled and enqueues a real delayed job', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Now schedule me',
+        platforms: [SocialPlatform.facebook],
+      });
+      const future = new Date(Date.now() + 60_000).toISOString();
+      const updated = await service.update(businessId, post.id, {
+        scheduledFor: future,
+      });
+      expect(updated.status).toBe(SocialPostStatus.scheduled);
+      expect(queue.add).toHaveBeenCalledWith(
+        'publish-post',
+        { businessId, postId: post.id },
+        expect.objectContaining({ jobId: `social-publish-${post.id}` }),
+      );
+    });
+
+    it('update() rejects editing a post that is no longer a draft', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Will publish then try to edit',
+        platforms: [SocialPlatform.facebook],
+      });
+      accounts.getTokens.mockResolvedValue({ accessToken: 'tok' });
+      publishFacebook.mockResolvedValue({ externalId: 'fb-edit-1' });
+      await service.executePublish(businessId, post.id);
+
+      await expect(
+        service.update(businessId, post.id, { caption: 'Too late' }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+  });
+
+  describe('Scheduled Posts queue + retry (UPD-BE-126)', () => {
+    it('listQueue() returns only scheduled/publishing posts, ordered by scheduledFor', async () => {
+      const soon = new Date(Date.now() + 60_000).toISOString();
+      const later = new Date(Date.now() + 120_000).toISOString();
+      const later_ = await service.create(businessId, 'owner-1', {
+        caption: 'Later',
+        platforms: [SocialPlatform.facebook],
+        scheduledFor: later,
+      });
+      const sooner = await service.create(businessId, 'owner-1', {
+        caption: 'Sooner',
+        platforms: [SocialPlatform.facebook],
+        scheduledFor: soon,
+      });
+      const draft = await service.create(businessId, 'owner-1', {
+        caption: 'Draft, not queued',
+        platforms: [SocialPlatform.facebook],
+      });
+
+      const queued = await service.listQueue(businessId);
+      const ids = queued.map((p) => p.id);
+      expect(ids).toContain(sooner.id);
+      expect(ids).toContain(later_.id);
+      expect(ids).not.toContain(draft.id);
+      expect(ids.indexOf(sooner.id)).toBeLessThan(ids.indexOf(later_.id));
+
+      await service.remove(businessId, draft.id);
+    });
+
+    it('executePublish() is safely re-runnable: an already-published target is never re-published', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Idempotency check',
+        platforms: [SocialPlatform.facebook],
+      });
+      accounts.getTokens.mockResolvedValue({ accessToken: 'tok' });
+      publishFacebook.mockResolvedValue({ externalId: 'fb-idem-1' });
+
+      await service.executePublish(businessId, post.id);
+      publishFacebook.mockClear();
+      await service.executePublish(businessId, post.id);
+
+      expect(publishFacebook).not.toHaveBeenCalled();
+    });
+
+    it('retryTarget() rejects a platform with no target on the post', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'No IG target',
+        platforms: [SocialPlatform.facebook],
+      });
+      await expect(
+        service.retryTarget(businessId, post.id, SocialPlatform.instagram),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('retryTarget() rejects a target that is not currently failed', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Still pending',
+        platforms: [SocialPlatform.facebook],
+      });
+      await expect(
+        service.retryTarget(businessId, post.id, SocialPlatform.facebook),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('retryTarget() really resets just the failed target and re-enqueues, leaving a successful sibling target untouched', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Partial retry',
+        platforms: [SocialPlatform.facebook, SocialPlatform.instagram],
+      });
+      accounts.getTokens.mockResolvedValue({ accessToken: 'tok' });
+      publishFacebook.mockResolvedValue({ externalId: 'fb-retry-1' });
+      publishInstagram.mockRejectedValue(new Error('IG down'));
+      await service.executePublish(businessId, post.id);
+
+      queue.add.mockClear();
+      const result = await service.retryTarget(
+        businessId,
+        post.id,
+        SocialPlatform.instagram,
+      );
+      expect(result).toEqual({ queued: true });
+      expect(queue.add).toHaveBeenCalledWith(
+        'publish-post',
+        { businessId, postId: post.id },
+        expect.objectContaining({ attempts: 3 }),
+      );
+
+      const afterReset = await prisma.socialPostTarget.findFirst({
+        where: { socialPostId: post.id, platform: SocialPlatform.instagram },
+      });
+      expect(afterReset!.status).toBe(SocialPostTargetStatus.pending);
+      expect(afterReset!.errorMessage).toBeNull();
+
+      publishInstagram.mockResolvedValue({ externalId: 'ig-retry-1' });
+      await service.executePublish(businessId, post.id);
+
+      const reloaded = await prisma.socialPost.findUniqueOrThrow({
+        where: { id: post.id },
+        include: { targets: true },
+      });
+      expect(reloaded.status).toBe(SocialPostStatus.published);
+      const fbTarget = reloaded.targets.find(
+        (t) => t.platform === SocialPlatform.facebook,
+      )!;
+      expect(fbTarget.externalId).toBe('fb-retry-1'); // untouched by the retry
+    });
+  });
+
+  describe('Published Posts, per-post analytics + boost (UPD-BE-127)', () => {
+    it('pullPostAnalytics() calls fetchPostInsights only for a published target whose connector supports it, and stores the real result', async () => {
+      const fetchPostInsights = jest.fn().mockResolvedValue({
+        reach: 100,
+        likes: 10,
+        comments: 2,
+        shares: 1,
+        saves: 3,
+        clicks: 0,
+      });
+      connectors.get.mockImplementation((platform: SocialPlatform) =>
+        platform === SocialPlatform.facebook
+          ? { publish: publishFacebook, fetchPostInsights }
+          : { publish: publishInstagram },
+      );
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Analytics post',
+        platforms: [SocialPlatform.facebook, SocialPlatform.instagram],
+      });
+      accounts.getTokens.mockResolvedValue({ accessToken: 'tok' });
+      publishFacebook.mockResolvedValue({ externalId: 'fb-analytics-1' });
+      publishInstagram.mockResolvedValue({ externalId: 'ig-analytics-1' });
+      await service.executePublish(businessId, post.id);
+
+      const analytics = await service.pullPostAnalytics(businessId, post.id);
+      expect(fetchPostInsights).toHaveBeenCalledWith(
+        { accessToken: 'tok' },
+        'fb-analytics-1',
+        {},
+      );
+      expect(analytics).toHaveLength(1); // instagram's connector has no fetchPostInsights here
+      expect(analytics[0].reach).toBe(100);
+      expect(analytics[0].likes).toBe(10);
+
+      const stored = await service.getPostAnalytics(businessId, post.id);
+      expect(stored).toHaveLength(1);
+      expect(stored[0].socialPostTarget.platform).toBe(SocialPlatform.facebook);
+    });
+
+    it('boostAsAd() rejects a platform target that has not published yet', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Not published',
+        platforms: [SocialPlatform.facebook],
+      });
+      await expect(
+        service.boostAsAd(businessId, post.id, SocialPlatform.facebook, {
+          goal: 'traffic',
+          dailyBudget: 10,
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('boostAsAd() rejects a platform with no real ad-provider mapping', async () => {
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Youtube post',
+        platforms: [SocialPlatform.youtube],
+      });
+      connectors.get.mockImplementation(() => ({
+        publish: jest.fn().mockResolvedValue({ externalId: 'yt-1' }),
+      }));
+      accounts.getTokens.mockResolvedValue({ accessToken: 'tok' });
+      await service.executePublish(businessId, post.id);
+
+      await expect(
+        service.boostAsAd(businessId, post.id, SocialPlatform.youtube, {
+          goal: 'traffic',
+          dailyBudget: 10,
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('boostAsAd() really hands off to AdCampaignsService.create() with the mapped provider and real post context', async () => {
+      connectors.get.mockImplementation((platform: SocialPlatform) =>
+        platform === SocialPlatform.facebook
+          ? { publish: publishFacebook }
+          : { publish: publishInstagram },
+      );
+      const post = await service.create(businessId, 'owner-1', {
+        caption: 'Boost me please this is a long caption to be truncated',
+        platforms: [SocialPlatform.facebook],
+      });
+      accounts.getTokens.mockResolvedValue({ accessToken: 'tok' });
+      publishFacebook.mockResolvedValue({ externalId: 'fb-boost-1' });
+      await service.executePublish(businessId, post.id);
+
+      const result = await service.boostAsAd(
+        businessId,
+        post.id,
+        SocialPlatform.facebook,
+        { goal: 'traffic', dailyBudget: 25 },
+      );
+      expect(result).toEqual({ id: 'campaign-1', status: 'draft' });
+      expect(adCampaigns.create).toHaveBeenCalledTimes(1);
+      const [calledBusinessId, calledProvider, calledDto] =
+        adCampaigns.create.mock.calls[0];
+      expect(calledBusinessId).toBe(businessId);
+      expect(calledProvider).toBe('meta_ads');
+      expect(calledDto.goal).toBe('traffic');
+      expect(calledDto.dailyBudget).toBe(25);
+      expect(calledDto.meta).toEqual({
+        boostedSocialPostId: post.id,
+        externalPostId: 'fb-boost-1',
+      });
+    });
   });
 });

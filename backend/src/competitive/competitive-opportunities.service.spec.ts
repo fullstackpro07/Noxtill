@@ -5,6 +5,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { MasterListingService } from '../listings/master-listing.service';
 import { ListingSyncService } from '../listings/listing-sync.service';
+import { ListingSettingsService } from '../listings/listing-settings.service';
 import { CompetitiveOpportunitiesService } from './competitive-opportunities.service';
 import { CompetitiveSettingsService } from './competitive-settings.service';
 import type { IntegrationsService } from '../integrations/integrations.service';
@@ -37,11 +38,13 @@ describe('CompetitiveOpportunitiesService (UPD-BE-054)', () => {
     );
     const masterListing = new MasterListingService(tenantPrisma);
     const connectors = { directoryProviders: () => [] };
+    const listingSettings = new ListingSettingsService(tenantPrisma);
     const listingSync = new ListingSyncService(
       tenantPrisma,
       {} as unknown as IntegrationsService,
       connectors as unknown as ConnectorRegistry,
       masterListing,
+      listingSettings,
     );
     const settings = new CompetitiveSettingsService(tenantPrisma);
     service = new CompetitiveOpportunitiesService(

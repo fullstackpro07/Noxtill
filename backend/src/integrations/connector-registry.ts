@@ -94,4 +94,18 @@ export class ConnectorRegistry {
       (provider) => typeof this.get(provider).pushListing === 'function',
     );
   }
+
+  /** Providers whose connector implements `pushPhoto` (UPD-BE-124) — real photo push, not every directory provider. */
+  photoPushProviders(): IntegrationProvider[] {
+    return this.all().filter(
+      (provider) => typeof this.get(provider).pushPhoto === 'function',
+    );
+  }
+
+  /** Providers whose connector implements `fetchListing` (UPD-BE-125) — real conflict-resolution reads. */
+  reconcileProviders(): IntegrationProvider[] {
+    return this.all().filter(
+      (provider) => typeof this.get(provider).fetchListing === 'function',
+    );
+  }
 }
