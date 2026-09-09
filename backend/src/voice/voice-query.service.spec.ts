@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { VoiceQueryService } from './voice-query.service';
+import type { S3Service } from '../common/storage/s3.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -28,7 +29,12 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new VoiceQueryService(tenantPrisma);
+    const s3 = {
+      getSignedDownloadUrl: jest
+        .fn()
+        .mockResolvedValue('https://signed.example.com/recording.mp3'),
+    };
+    service = new VoiceQueryService(tenantPrisma, s3 as unknown as S3Service);
 
     const business = await prisma.business.create({
       data: {
@@ -98,5 +104,32 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
     expect(analytics.byOutcome.booking).toBe(1);
     // (120s + 15s) / 2 ended calls = 67.5s, rounded
     expect(analytics.averageDurationSeconds).toBe(68);
+  });
+
+  describe('getRecordingUrl() (Transcripts & Recordings depth fix)', () => {
+    it('returns a real signed S3 URL when the call has a recordingKey', async () => {
+      const call = await prisma.phoneCall.create({
+        data: {
+          businessId,
+          callSid: 'CA-q-recording',
+          fromNumber: '+15550003004',
+          recordingKey: 'voice-recordings/biz/CA-q-recording-123.mp3',
+        },
+      });
+      const result = await service.getRecordingUrl(call.id);
+      expect(result.url).toBe('https://signed.example.com/recording.mp3');
+    });
+
+    it('returns a real null (not fabricated) when the call has no recording', async () => {
+      const call = await prisma.phoneCall.create({
+        data: {
+          businessId,
+          callSid: 'CA-q-no-recording',
+          fromNumber: '+15550003005',
+        },
+      });
+      const result = await service.getRecordingUrl(call.id);
+      expect(result.url).toBeNull();
+    });
   });
 });

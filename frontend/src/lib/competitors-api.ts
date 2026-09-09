@@ -1,18 +1,24 @@
 import { apiFetch } from "@/lib/api-client";
 import type { Competitor } from "@/lib/competitors";
 
-interface RawCompetitor {
+export interface RawCompetitor {
   id: string;
+  name: string;
   platformRef: string;
   lastRating: string | null;
   lastReviewsCount: number | null;
+  metaPageId: string | null;
 }
 
-/** Real Competitor has no separate "name" field — platformRef IS the identifying label the owner typed when adding it. */
+/** Raw shape (id/platformRef/metaPageId included) — for screens that need more than the card-friendly `Competitor` shape. */
+export function fetchCompetitorsRaw(): Promise<RawCompetitor[]> {
+  return apiFetch<RawCompetitor[]>("/competitors");
+}
+
 function toCompetitor(raw: RawCompetitor, weeklyRatings: number[]): Competitor {
   return {
     id: raw.id,
-    name: raw.platformRef,
+    name: raw.name,
     rating: raw.lastRating != null ? Number(raw.lastRating) : 0,
     reviewCount: raw.lastReviewsCount ?? 0,
     weeklyRatings,
@@ -33,11 +39,37 @@ export async function fetchCompetitors(): Promise<Competitor[]> {
   return withHistory;
 }
 
-export function addCompetitor(platformRef: string): Promise<RawCompetitor> {
+/** Free-text add (no Places search) — name and platformRef are the same typed value, same as before this field split. */
+export function addCompetitor(name: string): Promise<RawCompetitor> {
   return apiFetch<RawCompetitor>("/competitors", {
     method: "POST",
-    body: JSON.stringify({ platformRef }),
+    body: JSON.stringify({ name, platformRef: name }),
   });
+}
+
+export interface PlaceSearchResult {
+  placeId: string;
+  name: string;
+  address: string | null;
+  rating: number | null;
+  userRatingsTotal: number | null;
+}
+
+/** Competitor add-flow fix (UPD-BE-128) — real Google Places search; returns [] if no API key is configured server-side. */
+export function searchCompetitorPlaces(query: string): Promise<PlaceSearchResult[]> {
+  return apiFetch<PlaceSearchResult[]>(`/competitors/search?query=${encodeURIComponent(query)}`);
+}
+
+/** Add via a selected search result — platformRef is the real Google Place ID. */
+export function addCompetitorFromPlace(place: PlaceSearchResult): Promise<RawCompetitor> {
+  return apiFetch<RawCompetitor>("/competitors", {
+    method: "POST",
+    body: JSON.stringify({ name: place.name, platformRef: place.placeId }),
+  });
+}
+
+export function updateCompetitor(id: string, input: { name?: string; metaPageId?: string }): Promise<RawCompetitor> {
+  return apiFetch<RawCompetitor>(`/competitors/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export function removeCompetitor(id: string): Promise<{ success: boolean }> {
@@ -68,4 +100,42 @@ export interface CompetitorCategoryAverage {
 /** UPD-FE-089: no external category-benchmark dataset exists — this is honestly derived from your own tracked competitor set. */
 export function fetchCompetitorCategoryAverage(): Promise<CompetitorCategoryAverage> {
   return apiFetch<CompetitorCategoryAverage>("/competitors/category-average");
+}
+
+export interface CompetitorAd {
+  adArchiveId: string;
+  pageName: string;
+  body: string | null;
+  snapshotUrl: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
+/** Empty (not an error) until the competitor has a metaPageId set and META_AD_LIBRARY_ACCESS_TOKEN is configured server-side. */
+export function fetchCompetitorAds(id: string): Promise<CompetitorAd[]> {
+  return apiFetch<CompetitorAd[]>(`/competitors/${id}/ads`);
+}
+
+export interface CompetitorReview {
+  authorName: string;
+  rating: number;
+  text: string;
+  relativeTime: string;
+}
+
+export interface CompetitorDetails {
+  hours: string[] | null;
+  reviews: CompetitorReview[];
+  photos: string[];
+}
+
+/**
+ * Real hours/reviews/photos via Google Places — degrades to `{hours: null, reviews: [], photos: []}`
+ * (not an error) when the competitor was added free-text (no real Place ID to look up) or no
+ * GOOGLE_PLACES_API_KEY is configured. Deliberately has no "recent posts": Google's public Places
+ * API never exposes a business's own promotional posts — only the profile owner's own OAuth-gated
+ * Business Profile API can, and we have no path to a competitor's consent for that.
+ */
+export function fetchCompetitorDetails(id: string): Promise<CompetitorDetails> {
+  return apiFetch<CompetitorDetails>(`/competitors/${id}/details`);
 }

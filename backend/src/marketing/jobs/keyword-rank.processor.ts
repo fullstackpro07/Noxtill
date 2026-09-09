@@ -3,12 +3,14 @@ import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SerpRankService } from '../serp-rank.service';
+import { GoogleTrendsService } from '../google-trends.service';
 import { KEYWORD_RANK_QUEUE } from '../marketing.constants';
 
 /**
  * `keyword-rank-check` (BE-063 extension): weekly rank check for every tracked keyword across
  * every business, via the real SerpApi-shaped lookup. Structured identically to
- * CompetitorSnapshotProcessor.
+ * CompetitorSnapshotProcessor. Also captures the real top-result title (same SerpApi call) and a
+ * real search-interest figure (Google Trends, same SERPAPI_KEY) — Keyword Rankings depth fix.
  */
 @Processor(KEYWORD_RANK_QUEUE)
 export class KeywordRankProcessor extends WorkerHost {
@@ -17,6 +19,7 @@ export class KeywordRankProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly serpRank: SerpRankService,
+    private readonly trends: GoogleTrendsService,
   ) {
     super();
   }
@@ -67,10 +70,13 @@ export class KeywordRankProcessor extends WorkerHost {
         })
       ).name;
 
-    const rank = await this.serpRank.fetchRank(keyword, businessName);
+    const [{ rank, topResultTitle }, searchInterest] = await Promise.all([
+      this.serpRank.fetchRank(keyword, businessName),
+      this.trends.fetchInterest(keyword),
+    ]);
 
     await this.prisma.keywordRankSnapshot.create({
-      data: { keywordId, rank },
+      data: { keywordId, rank, topResultTitle, searchInterest },
     });
   }
 }

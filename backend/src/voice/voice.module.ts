@@ -3,6 +3,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { TelephonyService } from './telephony.service';
 import { VoiceCallService } from './voice-call.service';
 import { VoiceQueryService } from './voice-query.service';
+import { VoiceSettingsService } from './voice-settings.service';
+import { VoiceQueueService } from './voice-queue.service';
+import { VoiceLiveJoinService } from './voice-live-join.service';
+import { PollyVoiceService } from './polly-voice.service';
 import { MissedCallService } from './missed-call.service';
 import { VoiceController } from './voice.controller';
 import { VoiceRetentionScheduler } from './jobs/voice-retention.scheduler';
@@ -26,6 +30,10 @@ import { MessagingModule } from '../messaging/messaging.module';
     TelephonyService,
     VoiceCallService,
     VoiceQueryService,
+    VoiceSettingsService,
+    VoiceQueueService,
+    VoiceLiveJoinService,
+    PollyVoiceService,
     MissedCallService,
     VoiceRetentionScheduler,
     VoiceRetentionProcessor,

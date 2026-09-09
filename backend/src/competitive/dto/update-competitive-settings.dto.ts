@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, Min } from 'class-validator';
+import { IsEmail, IsInt, IsOptional, Min } from 'class-validator';
 
 export class UpdateCompetitiveSettingsDto {
   @IsOptional()
@@ -15,4 +15,9 @@ export class UpdateCompetitiveSettingsDto {
   @IsInt()
   @Min(1)
   reviewFreshnessAlertDays?: number;
+
+  /** Full spec parity (UPD-FE-048e) — null clears it (no weekly email sent). */
+  @IsOptional()
+  @IsEmail()
+  weeklyReportRecipient?: string | null;
 }

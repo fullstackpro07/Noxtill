@@ -92,6 +92,14 @@ import {
   Images,
   Wand2,
   MessageCircle,
+  Gauge,
+  Lightbulb,
+  Map,
+  Hash,
+  PhoneCall,
+  PhoneMissed,
+  Inbox,
+  ScanLine,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -283,6 +291,20 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    key: "competitive",
+    labelKey: "nav.competitive",
+    href: "/competitive/visibility-score",
+    icon: Gauge,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "competitive-visibility", labelKey: "nav.competitiveVisibility", href: "/competitive/visibility-score", icon: Gauge },
+      { key: "competitive-opportunities", labelKey: "nav.competitiveOpportunities", href: "/competitive/opportunities", icon: Lightbulb },
+      { key: "competitive-tracking", labelKey: "nav.competitiveTracking", href: "/competitive/tracking", icon: Building2 },
+      { key: "competitive-keywords", labelKey: "nav.competitiveKeywords", href: "/competitive/keywords", icon: Hash },
+      { key: "competitive-heatmap", labelKey: "nav.competitiveHeatmap", href: "/competitive/heatmap", icon: Map },
+    ],
+  },
+  {
     key: "social",
     labelKey: "nav.social",
     href: "/social",
@@ -365,6 +387,32 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "voice", labelKey: "nav.voiceAssistant", href: "/assistant/voice", icon: Mic },
       { key: "history", labelKey: "nav.chatHistory", href: "/assistant/history", icon: MessagesSquare },
       { key: "ai-settings", labelKey: "nav.aiSettings", href: "/assistant/settings", icon: Settings2 },
+    ],
+  },
+  {
+    key: "digitizer",
+    labelKey: "nav.digitizer",
+    href: "/digitizer",
+    icon: ScanLine,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "digitizer-scanner", labelKey: "nav.digitizerScanner", href: "/digitizer", icon: Camera },
+      { key: "digitizer-history", labelKey: "nav.digitizerHistory", href: "/digitizer/history", icon: History },
+      { key: "digitizer-settings", labelKey: "nav.digitizerSettings", href: "/digitizer/settings", icon: Settings2 },
+    ],
+  },
+  {
+    key: "receptionist",
+    labelKey: "nav.receptionist",
+    href: "/receptionist",
+    icon: PhoneCall,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "receptionist-overview", labelKey: "nav.receptionistOverview", href: "/receptionist", icon: PhoneCall },
+      { key: "receptionist-missed", labelKey: "nav.receptionistMissed", href: "/receptionist/missed-calls", icon: PhoneMissed },
+      { key: "receptionist-queue", labelKey: "nav.receptionistQueue", href: "/receptionist/queue", icon: Inbox },
+      { key: "receptionist-analytics", labelKey: "nav.receptionistAnalytics", href: "/receptionist/analytics", icon: BarChart3 },
+      { key: "receptionist-settings", labelKey: "nav.receptionistSettings", href: "/receptionist/settings", icon: Settings2 },
     ],
   },
   { key: "settings", labelKey: "nav.settings", href: "/settings", icon: Settings, roles: ["owner", "manager"] },

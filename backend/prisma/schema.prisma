@@ -719,6 +719,7 @@ model Business {
   visibilityScoreSnapshots VisibilityScoreSnapshot[]
   competitiveOpportunities CompetitiveOpportunity[]
   competitiveSettings      CompetitiveSettings?
+  voiceSettings            VoiceSettings?
   phoneNumber              PhoneNumber?
   phoneCalls               PhoneCall[]
   digitizerAliases         DigitizerAlias[]
@@ -1994,16 +1995,33 @@ model PhoneCall {
   fromNumber    String           @map("from_number")
   status        PhoneCallStatus  @default(in_progress)
   outcome       PhoneCallOutcome @default(none)
+  /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the
+  /// AI matched this call to (Call Queue depth fix, UPD-BE-129).
+  customIntentName String?       @map("custom_intent_name")
   transcript    Json             @default("[]")
   recordingKey  String?          @map("recording_key")
   appointmentId String?          @map("appointment_id")
   appointment   Appointment?     @relation(fields: [appointmentId], references: [id])
   startedAt     DateTime         @default(now()) @map("started_at")
   endedAt       DateTime?        @map("ended_at")
+  /// Call Queue fix (UPD-BE-129) — set when staff mark this "message"/"custom"/missed call as
+  /// handled (manually called back, or otherwise resolved). NULL means it's still sitting in the
+  /// real operational queue of calls needing human follow-up.
+  resolvedAt          DateTime? @map("resolved_at")
+  /// Set when staff explicitly log that a callback was promised, without yet marking it resolved —
+  /// a distinct state from `resolvedAt` (a queue item can be "callback offered" but not yet done).
+  callbackRequestedAt DateTime? @map("callback_requested_at")
+  /// Live Calls listen/take-over fix — set the moment a staff member's own phone is bridged live
+  /// into this call via a real Twilio conference redirect (Twilio's "modify a live call" REST
+  /// action), replacing the earlier disclosed 15s-poll-only gap. Loose reference (no relation), same
+  /// convention as `AuditLog.actorUserId`.
+  joinedAt       DateTime? @map("joined_at")
+  joinedByUserId String?   @map("joined_by_user_id")
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, status, startedAt])
+  @@index([businessId, resolvedAt])
   @@map("phone_calls")
 }
 
@@ -2019,6 +2037,35 @@ enum PhoneCallOutcome {
   booking
   message
   transfer
+  /// A configured custom intent (`VoiceSettings.customIntents`) was matched — see `customIntentName`.
+  custom
+}
+
+/// Receptionist Settings (UPD-FE-051e / Call Queue depth fix) — one row per business, upsert-on-write
+/// (same pattern as `SocialSettings`/`CompetitiveSettings`). Every field here is real, wired
+/// behavior in `VoiceCallService`, not inert config: `voiceId` sets Twilio `<Say voice="...">`,
+/// `responseTimeoutSeconds` sets `<Record timeout="...">`, `queueHoldMessage` is injected into the
+/// message-taking prompt and used as the real MAX_CALL_TURNS fallback line, `customIntents` are
+/// injected into the real intent-classification prompt.
+model VoiceSettings {
+  id                     String   @id @default(uuid())
+  businessId             String   @unique @map("business_id")
+  business               Business @relation(fields: [businessId], references: [id])
+  /// A real Twilio `<Say>` voice name (e.g. "Polly.Joanna", "Polly.Matthew", "alice") — NULL uses
+  /// Twilio's own default. There is no custom TTS service in this app; this only selects among
+  /// Twilio's own built-in voices, and (disclosed) has no in-app preview since Twilio exposes no
+  /// preview API — the voice is only actually heard on a real call.
+  voiceId                String?  @map("voice_id")
+  responseTimeoutSeconds Int      @default(5) @map("response_timeout_seconds")
+  queueHoldMessage       String?  @map("queue_hold_message") @db.Text
+  /// `[{name, priority}]` — real, injected into the intent-classification prompt alongside the 5
+  /// built-in intents (book/message/transfer/continue/end).
+  customIntents          Json     @default("[]") @map("custom_intents")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("voice_settings")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2828,6 +2875,11 @@ model Competitor {
   id               String   @id @default(uuid())
   businessId       String   @map("business_id")
   business         Business @relation(fields: [businessId], references: [id])
+  /// Competitor add-flow fix (UPD-BE-128): a real display name, separate from `platformRef`. Before
+  /// this, `platformRef` doubled as the label because it WAS the free-text the owner typed; now that
+  /// adding goes through a real Google-place-search-and-select, `platformRef` becomes an opaque
+  /// Google Place ID and needs a human-readable name stored alongside it.
+  name             String
   platformRef      String   @map("platform_ref")
   lastRating       Decimal? @map("last_rating") @db.Decimal(2, 1)
   lastReviewsCount Int?     @map("last_reviews_count")
@@ -2977,6 +3029,16 @@ model KeywordRankSnapshot {
   keyword    TrackedKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
   /// Null means not found in the checked results window.
   rank       Int?
+  /// Keyword Rankings depth fix — the #1 organic result's title at check time, captured from the
+  /// SAME SerpApi call already made for `rank` (no extra API call). A real "who currently dominates
+  /// this keyword" figure, not a fabricated "difficulty" score — this app has no real
+  /// keyword-difficulty data source (that needs proprietary backlink/authority data no free API
+  /// exposes), so that column is deliberately not represented anywhere in this schema.
+  topResultTitle String? @map("top_result_title")
+  /// Google Trends "interest over time" (0-100 relative index, via SerpApi's `google_trends`
+  /// engine) — a real, freely-available search-interest proxy. Deliberately NOT presented as an
+  /// exact monthly search-volume count, which no accessible-without-payment API provides.
+  searchInterest Int?    @map("search_interest")
   capturedAt DateTime       @default(now()) @map("captured_at")
 
   @@index([keywordId, capturedAt])
@@ -3034,6 +3096,9 @@ model CompetitiveSettings {
   scanFrequencyDays         Int      @default(7) @map("scan_frequency_days")
   keywordRankAlertThreshold Int      @default(10) @map("keyword_rank_alert_threshold")
   reviewFreshnessAlertDays  Int      @default(14) @map("review_freshness_alert_days")
+  /// Competitive Settings, full spec parity (UPD-FE-048e) — nullable: no weekly email report is
+  /// sent while unset (never a fabricated "on" state with nowhere to send).
+  weeklyReportRecipient     String?  @map("weekly_report_recipient")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

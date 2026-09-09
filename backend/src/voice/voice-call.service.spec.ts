@@ -370,4 +370,119 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(call?.endedAt).toBeNull();
     });
   });
+
+  describe('Receptionist Settings depth fix — real, wired VoiceSettings (UPD-FE-051e)', () => {
+    afterEach(async () => {
+      await prisma.voiceSettings.deleteMany({ where: { businessId } });
+    });
+
+    it('applies a configured voiceId to every <Say> and responseTimeoutSeconds to <Record>', async () => {
+      await prisma.voiceSettings.create({
+        data: {
+          businessId,
+          voiceId: 'Polly.Joanna',
+          responseTimeoutSeconds: 8,
+        },
+      });
+
+      const xml = await service.handleIncoming(
+        'CA-settings-voice',
+        '+15550000012',
+        '+15559990000',
+      );
+      expect(xml).toContain('<Say voice="Polly.Joanna">');
+      expect(xml).toContain('timeout="8"');
+    });
+
+    it('uses the configured queueHoldMessage as the real MAX_CALL_TURNS fallback line', async () => {
+      await prisma.voiceSettings.create({
+        data: {
+          businessId,
+          queueHoldMessage: "We'll ring you back within the hour.",
+        },
+      });
+      await service.handleIncoming(
+        'CA-settings-holdmsg',
+        '+15550000013',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: 'Sure, one more thing.', intent: 'continue' }),
+      );
+      // Drive the transcript past MAX_CALL_TURNS (8) by recording repeatedly — each call adds one
+      // caller turn then (below the cap) one assistant turn, so the 5th call is the one whose
+      // caller-turn push crosses the length>=8 check.
+      for (let i = 0; i < 5; i++) {
+        await service.handleRecording(
+          'CA-settings-holdmsg',
+          `https://api.twilio.com/recordings/RE-loop-${i}`,
+        );
+      }
+
+      const call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-settings-holdmsg' },
+      });
+      const transcript = call?.transcript as unknown as { text: string }[];
+      expect(transcript[transcript.length - 1].text).toBe(
+        "We'll ring you back within the hour.",
+      );
+    });
+
+    it('records outcome "custom" with the matched intent name when the AI matches a configured custom intent', async () => {
+      await prisma.voiceSettings.create({
+        data: {
+          businessId,
+          customIntents: [{ name: 'supplier_inquiry', priority: 5 }],
+        },
+      });
+      await service.handleIncoming(
+        'CA-settings-custom',
+        '+15550000014',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: "I'll pass this to our purchasing team.",
+          intent: 'supplier_inquiry',
+        }),
+      );
+
+      const xml = await service.handleRecording(
+        'CA-settings-custom',
+        'https://api.twilio.com/recordings/RE-custom',
+      );
+      expect(xml).toContain('<Hangup/>');
+
+      const call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-settings-custom' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.custom);
+      expect(call?.customIntentName).toBe('supplier_inquiry');
+    });
+
+    it('injects configured custom intents into the real classification prompt sent to the AI', async () => {
+      await prisma.voiceSettings.create({
+        data: {
+          businessId,
+          customIntents: [{ name: 'media_inquiry', priority: 3 }],
+        },
+      });
+      await service.handleIncoming(
+        'CA-settings-prompt',
+        '+15550000015',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: 'Got it.', intent: 'continue' }),
+      );
+
+      await service.handleRecording(
+        'CA-settings-prompt',
+        'https://api.twilio.com/recordings/RE-prompt',
+      );
+
+      const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+      expect(prompt).toContain('media_inquiry');
+    });
+  });
 });

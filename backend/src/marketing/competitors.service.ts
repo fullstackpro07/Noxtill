@@ -6,6 +6,12 @@ import { UpdateCompetitorDto } from './dto/update-competitor.dto';
 import { MARKETING_ERROR_CODES, MAX_COMPETITORS } from './marketing.constants';
 import { CompetitorSnapshotProcessor } from './jobs/competitor-snapshot.processor';
 import { MetaAdLibraryService, CompetitorAd } from './meta-ad-library.service';
+import {
+  GooglePlacesService,
+  PlaceSearchResult,
+} from './google-places.service';
+import { S3Service } from '../common/storage/s3.service';
+import { randomUUID } from 'crypto';
 
 const HISTORY_WEEKS = 12;
 
@@ -22,7 +28,49 @@ export class CompetitorsService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly snapshotProcessor: CompetitorSnapshotProcessor,
     private readonly adLibrary: MetaAdLibraryService,
+    private readonly places: GooglePlacesService,
+    private readonly s3: S3Service,
   ) {}
+
+  /** Competitor add-flow fix (UPD-BE-128) — real search step ahead of `create()`. */
+  search(query: string): Promise<PlaceSearchResult[]> {
+    return this.places.searchPlaces(query);
+  }
+
+  /**
+   * Competitor detail depth fix — real hours + up to 5 real reviews + up to 6 real photos, on
+   * demand (not stored/refreshed on a schedule like rating). Photos are downloaded server-side and
+   * re-uploaded to S3 (same pattern as `MediaLibraryService.generateImage()`'s AI-image handling)
+   * so the Google Places API key is never sent to the client. Gracefully empty — not an error —
+   * when the competitor's `platformRef` isn't a real Google Place ID (e.g. added via free-text) or
+   * no `GOOGLE_PLACES_API_KEY` is configured.
+   */
+  async details(id: string) {
+    const competitor = await this.tenantPrisma.client.competitor.findUnique({
+      where: { id },
+    });
+    if (!competitor) {
+      throw new NotFoundException('Competitor not found');
+    }
+
+    const details = await this.places.fetchPlaceDetails(competitor.platformRef);
+    if (!details) {
+      return { hours: null, reviews: [], photos: [] };
+    }
+
+    const photos = (
+      await Promise.all(
+        details.photoReferences.map(async (ref) => {
+          const photo = await this.places.fetchPhoto(ref);
+          if (!photo) return null;
+          const key = `competitor-photos/${id}/${randomUUID()}.jpg`;
+          return this.s3.uploadAndSign(key, photo.buffer, photo.contentType);
+        }),
+      )
+    ).filter((url): url is string => !!url);
+
+    return { hours: details.hours, reviews: details.reviews, photos };
+  }
 
   list() {
     return this.tenantPrisma.client.competitor.findMany({
@@ -66,6 +114,7 @@ export class CompetitorsService {
     return this.tenantPrisma.client.competitor.create({
       data: {
         businessId,
+        name: dto.name,
         platformRef: dto.platformRef,
       },
     });
@@ -80,7 +129,10 @@ export class CompetitorsService {
     }
     return this.tenantPrisma.client.competitor.update({
       where: { id },
-      data: { metaPageId: dto.metaPageId },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.metaPageId !== undefined ? { metaPageId: dto.metaPageId } : {}),
+      },
     });
   }
 

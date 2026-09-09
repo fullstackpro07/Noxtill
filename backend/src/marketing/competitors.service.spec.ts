@@ -7,6 +7,8 @@ import { AppException } from '../common/filters/app.exception';
 import { MAX_COMPETITORS } from './marketing.constants';
 import type { CompetitorSnapshotProcessor } from './jobs/competitor-snapshot.processor';
 import type { MetaAdLibraryService } from './meta-ad-library.service';
+import type { GooglePlacesService } from './google-places.service';
+import type { S3Service } from '../common/storage/s3.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -24,6 +26,12 @@ describe('CompetitorsService (BE-063)', () => {
   let businessId: string;
   const snapshotProcessor = { snapshotOne: jest.fn() };
   const adLibrary = { fetchAds: jest.fn() };
+  const places = {
+    searchPlaces: jest.fn(),
+    fetchPlaceDetails: jest.fn(),
+    fetchPhoto: jest.fn(),
+  };
+  const s3 = { uploadAndSign: jest.fn() };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -38,6 +46,8 @@ describe('CompetitorsService (BE-063)', () => {
       tenantPrisma,
       snapshotProcessor as unknown as CompetitorSnapshotProcessor,
       adLibrary as unknown as MetaAdLibraryService,
+      places as unknown as GooglePlacesService,
+      s3 as unknown as S3Service,
     );
 
     const business = await prisma.business.create({
@@ -64,11 +74,17 @@ describe('CompetitorsService (BE-063)', () => {
 
   it(`allows up to ${MAX_COMPETITORS} competitors and rejects the next add`, async () => {
     for (let i = 0; i < MAX_COMPETITORS; i++) {
-      await service.create(businessId, { platformRef: `place-${i}` });
+      await service.create(businessId, {
+        name: `Place ${i}`,
+        platformRef: `place-${i}`,
+      });
     }
 
     await expect(
-      service.create(businessId, { platformRef: 'one-too-many' }),
+      service.create(businessId, {
+        name: 'One Too Many',
+        platformRef: 'one-too-many',
+      }),
     ).rejects.toBeInstanceOf(AppException);
 
     const list = await service.list();
@@ -80,14 +96,31 @@ describe('CompetitorsService (BE-063)', () => {
     await service.remove(list[0].id);
 
     const created = await service.create(businessId, {
+      name: 'Replacement',
       platformRef: 'replacement',
     });
     expect(created.platformRef).toBe('replacement');
   });
 
+  it('search() delegates straight to GooglePlacesService', async () => {
+    const results = [
+      {
+        placeId: 'p1',
+        name: 'Rival Cafe',
+        address: null,
+        rating: 4.5,
+        userRatingsTotal: 200,
+      },
+    ];
+    places.searchPlaces.mockResolvedValue(results);
+    const result = await service.search('rival cafe');
+    expect(result).toBe(results);
+    expect(places.searchPlaces).toHaveBeenCalledWith('rival cafe');
+  });
+
   it('returns snapshot history oldest-first', async () => {
     const competitor = await prisma.competitor.create({
-      data: { businessId, platformRef: 'history-test' },
+      data: { businessId, name: 'History Test', platformRef: 'history-test' },
     });
     await prisma.competitorSnapshot.createMany({
       data: [
@@ -130,9 +163,63 @@ describe('CompetitorsService (BE-063)', () => {
     expect(result.averageRating).toBe(4.3);
   });
 
+  describe('Competitor detail depth fix (hours/reviews/photos)', () => {
+    it('details() returns real hours/reviews and re-uploads real photo bytes to S3', async () => {
+      const competitor = await prisma.competitor.create({
+        data: {
+          businessId,
+          name: 'Detail Test',
+          platformRef: 'place-detail-1',
+        },
+      });
+      places.fetchPlaceDetails.mockResolvedValue({
+        hours: ['Monday: 9AM–5PM'],
+        reviews: [
+          {
+            authorName: 'A. Customer',
+            rating: 5,
+            text: 'Great!',
+            relativeTime: 'a week ago',
+          },
+        ],
+        photoReferences: ['ref-1', 'ref-2'],
+      });
+      places.fetchPhoto.mockResolvedValue({
+        buffer: Buffer.from('fake-image-bytes'),
+        contentType: 'image/jpeg',
+      });
+      s3.uploadAndSign.mockResolvedValue(
+        'https://signed.example.com/photo.jpg',
+      );
+
+      const result = await service.details(competitor.id);
+      expect(result.hours).toEqual(['Monday: 9AM–5PM']);
+      expect(result.reviews).toHaveLength(1);
+      expect(result.photos).toEqual([
+        'https://signed.example.com/photo.jpg',
+        'https://signed.example.com/photo.jpg',
+      ]);
+      expect(places.fetchPlaceDetails).toHaveBeenCalledWith('place-detail-1');
+    });
+
+    it('details() degrades gracefully (not an error) when the place lookup fails', async () => {
+      const competitor = await prisma.competitor.create({
+        data: {
+          businessId,
+          name: 'Free Text Competitor',
+          platformRef: 'Free Text Competitor',
+        },
+      });
+      places.fetchPlaceDetails.mockResolvedValue(null);
+
+      const result = await service.details(competitor.id);
+      expect(result).toEqual({ hours: null, reviews: [], photos: [] });
+    });
+  });
+
   it('triggers a manual snapshot via the processor', async () => {
     const competitor = await prisma.competitor.create({
-      data: { businessId, platformRef: 'trigger-test' },
+      data: { businessId, name: 'Trigger Test', platformRef: 'trigger-test' },
     });
     snapshotProcessor.snapshotOne.mockResolvedValue(undefined);
 

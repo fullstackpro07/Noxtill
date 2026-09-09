@@ -1,12 +1,16 @@
 import { PrismaService } from '../../prisma/prisma.service';
 import { KeywordRankProcessor } from './keyword-rank.processor';
-import { SerpRankService } from '../serp-rank.service';
+import { SerpRankService, SerpRankResult } from '../serp-rank.service';
+import { GoogleTrendsService } from '../google-trends.service';
 
 describe('KeywordRankProcessor (BE-063 extension)', () => {
   let prisma: PrismaService;
   let processor: KeywordRankProcessor;
   let businessId: string;
-  const serpRank = { fetchRank: jest.fn() };
+  const serpRank = {
+    fetchRank: jest.fn<Promise<SerpRankResult>, [string, string]>(),
+  };
+  const trends = { fetchInterest: jest.fn<Promise<number | null>, [string]>() };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -14,6 +18,7 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     processor = new KeywordRankProcessor(
       prisma,
       serpRank as unknown as SerpRankService,
+      trends as unknown as GoogleTrendsService,
     );
 
     const business = await prisma.business.create({
@@ -24,6 +29,7 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
 
   afterEach(() => {
     serpRank.fetchRank.mockReset();
+    trends.fetchInterest.mockReset();
   });
 
   afterAll(async () => {
@@ -42,7 +48,11 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     const keyword = await prisma.trackedKeyword.create({
       data: { businessId, keyword: 'not ranked yet' },
     });
-    serpRank.fetchRank.mockResolvedValue(null);
+    serpRank.fetchRank.mockResolvedValue({
+      rank: null,
+      topResultTitle: 'Someone Else',
+    });
+    trends.fetchInterest.mockResolvedValue(null);
 
     await processor.checkOne(
       businessId,
@@ -56,13 +66,19 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     });
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0].rank).toBeNull();
+    expect(snapshots[0].topResultTitle).toBe('Someone Else');
+    expect(snapshots[0].searchInterest).toBeNull();
   });
 
-  it('records a real rank when found', async () => {
+  it('records a real rank, top-result title, and search interest when found', async () => {
     const keyword = await prisma.trackedKeyword.create({
       data: { businessId, keyword: 'ranked keyword' },
     });
-    serpRank.fetchRank.mockResolvedValue(4);
+    serpRank.fetchRank.mockResolvedValue({
+      rank: 4,
+      topResultTitle: 'Rank Test Biz',
+    });
+    trends.fetchInterest.mockResolvedValue(62);
 
     await processor.checkOne(
       businessId,
@@ -75,13 +91,19 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
       where: { keywordId: keyword.id },
     });
     expect(snapshots[0].rank).toBe(4);
+    expect(snapshots[0].topResultTitle).toBe('Rank Test Biz');
+    expect(snapshots[0].searchInterest).toBe(62);
   });
 
   it('runCheck records a snapshot for a tracked keyword it finds', async () => {
     const keyword = await prisma.trackedKeyword.create({
       data: { businessId, keyword: 'run-check-test' },
     });
-    serpRank.fetchRank.mockResolvedValue(9);
+    serpRank.fetchRank.mockResolvedValue({
+      rank: 9,
+      topResultTitle: 'Someone Else',
+    });
+    trends.fetchInterest.mockResolvedValue(30);
 
     await processor.runCheck();
 

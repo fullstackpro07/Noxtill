@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DigitizerService } from './digitizer.service';
+import { DigitizerAliasService } from './digitizer-alias.service';
 import { UploadDigitizerScanDto } from './dto/upload-digitizer-scan.dto';
 import { UpdateDigitizerRowDto } from './dto/update-digitizer-row.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -18,7 +20,10 @@ import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
 @Controller()
 export class DigitizerController {
-  constructor(private readonly digitizer: DigitizerService) {}
+  constructor(
+    private readonly digitizer: DigitizerService,
+    private readonly aliases: DigitizerAliasService,
+  ) {}
 
   @Post('digitizer/upload')
   @UseInterceptors(FileInterceptor('image'))
@@ -53,5 +58,16 @@ export class DigitizerController {
   @Post('imports/:id/commit')
   commit(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.digitizer.commit(user.businessId, id);
+  }
+
+  /** Scanner Settings depth fix — real learned-alias management, closing the FE-054 gap. */
+  @Get('digitizer/aliases')
+  listAliases(@CurrentUser() user: AuthenticatedUser) {
+    return this.aliases.list(user.businessId);
+  }
+
+  @Delete('digitizer/aliases/:id')
+  removeAlias(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.aliases.remove(user.businessId, id);
   }
 }

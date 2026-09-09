@@ -40,7 +40,7 @@ describe('CompetitorSnapshotProcessor (BE-063)', () => {
 
   it('leaves competitors untouched when the Google lookup finds nothing', async () => {
     const competitor = await prisma.competitor.create({
-      data: { businessId, platformRef: 'place-123' },
+      data: { businessId, name: 'Place 123', platformRef: 'place-123' },
     });
     googlePlaces.fetchPlaceSnapshot.mockResolvedValue(null);
 
@@ -55,7 +55,7 @@ describe('CompetitorSnapshotProcessor (BE-063)', () => {
 
   it('records the latest snapshot and a permanent history row when the lookup succeeds', async () => {
     const competitor = await prisma.competitor.create({
-      data: { businessId, platformRef: 'place-456' },
+      data: { businessId, name: 'Place 456', platformRef: 'place-456' },
     });
     googlePlaces.fetchPlaceSnapshot.mockResolvedValue({
       rating: 4.6,

@@ -62,6 +62,11 @@ describe('TelephonyService (UPD-BE-056)', () => {
     await prisma.$disconnect();
   });
 
+  it('getNumber() returns null (not fabricated) before any number is provisioned', async () => {
+    const result = await service.getNumber(businessId);
+    expect(result).toBeNull();
+  });
+
   it('provisions a real number: searches available numbers, purchases one, and persists it', async () => {
     mockedAxios.get.mockResolvedValue({
       data: { available_phone_numbers: [{ phone_number: '+15551230000' }] },
@@ -84,6 +89,9 @@ describe('TelephonyService (UPD-BE-056)', () => {
       where: { businessId },
     });
     expect(stored?.phoneNumber).toBe('+15551230000');
+
+    const viaGetter = await service.getNumber(businessId);
+    expect(viaGetter?.phoneNumber).toBe('+15551230000');
   });
 
   it('rejects provisioning a second number for a business that already has one', async () => {

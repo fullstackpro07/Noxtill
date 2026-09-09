@@ -75,4 +75,45 @@ describe('DigitizerAliasService (UPD-BE-063)', () => {
     const map = new Map([['Sprte', 'Sprite']]);
     expect(service.applyAliases('Fanta 500ml', map)).toBe('Fanta 500ml');
   });
+
+  describe('Scanner Settings depth fix — real alias list/remove (UPD-FE-054)', () => {
+    it('list() returns real learned aliases for this business, most recently updated first', async () => {
+      const rows = await service.list(businessId);
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((r) => r.businessId === businessId)).toBe(true);
+    });
+
+    it('remove() deletes a real alias so it no longer appears in list() or getMap()', async () => {
+      await service.learn(businessId, 'Pepsee', 'Pepsi');
+      const before = await service.list(businessId);
+      const target = before.find((r) => r.rawText === 'Pepsee')!;
+
+      await service.remove(businessId, target.id);
+
+      const after = await service.list(businessId);
+      expect(after.some((r) => r.id === target.id)).toBe(false);
+      const map = await service.getMap(businessId);
+      expect(map.has('Pepsee')).toBe(false);
+    });
+
+    it('remove() rejects removing an alias that does not belong to this business', async () => {
+      const otherBusiness = await prisma.business.create({
+        data: { name: 'Other Biz', slug: `other-biz-${Date.now()}` },
+      });
+      const otherAlias = await prisma.digitizerAlias.create({
+        data: {
+          businessId: otherBusiness.id,
+          rawText: 'Foo',
+          correctedText: 'Bar',
+        },
+      });
+
+      await expect(service.remove(businessId, otherAlias.id)).rejects.toThrow();
+
+      await prisma.digitizerAlias.deleteMany({
+        where: { businessId: otherBusiness.id },
+      });
+      await prisma.business.delete({ where: { id: otherBusiness.id } });
+    });
+  });
 });

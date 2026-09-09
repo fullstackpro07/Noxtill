@@ -9,4 +9,5 @@ export const DEFAULT_COMPETITIVE_SETTINGS = {
   scanFrequencyDays: 7,
   keywordRankAlertThreshold: 10,
   reviewFreshnessAlertDays: 14,
+  weeklyReportRecipient: null,
 } as const;

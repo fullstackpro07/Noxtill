@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 
 /**
@@ -31,6 +31,25 @@ export class DigitizerAliasService {
       create: { businessId, rawText, correctedText },
       update: { correctedText },
     });
+  }
+
+  /** Scanner Settings depth fix — a real, visible list of every learned correction, not just an internal replay map. */
+  list(businessId: string) {
+    return this.tenantPrisma.client.digitizerAlias.findMany({
+      where: { businessId },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  /** Lets the owner remove a bad learned alias (e.g. a one-off correction that shouldn't generalize). */
+  async remove(businessId: string, id: string): Promise<void> {
+    const alias = await this.tenantPrisma.client.digitizerAlias.findUnique({
+      where: { id },
+    });
+    if (!alias || alias.businessId !== businessId) {
+      throw new NotFoundException('Learned alias not found');
+    }
+    await this.tenantPrisma.client.digitizerAlias.delete({ where: { id } });
   }
 
   /** Applies every known alias as a literal substring replacement over a raw extracted value. */

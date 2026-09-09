@@ -12,6 +12,12 @@ interface SerpApiResponse {
   organic_results?: SerpApiOrganicResult[];
 }
 
+export interface SerpRankResult {
+  rank: number | null;
+  /** Keyword Rankings depth fix — the #1 organic result's title, captured from this SAME call (no extra API hit). Null only when the provider call itself failed/returned nothing. */
+  topResultTitle: string | null;
+}
+
 /**
  * Real SERP rank lookup (keyword tracking, BE-063 extension) via a SerpApi-shaped provider. Needs
  * `SERPAPI_KEY` in the environment — same disclosed-gap pattern as GOOGLE_PLACES_API_KEY/
@@ -30,7 +36,7 @@ export class SerpRankService {
   async fetchRank(
     keyword: string,
     businessName: string,
-  ): Promise<number | null> {
+  ): Promise<SerpRankResult> {
     const apiKey = this.config.get<string>('SERPAPI_KEY');
 
     let response: AxiosResponse<SerpApiResponse>;
@@ -54,19 +60,20 @@ export class SerpRankService {
       this.logger.warn(
         `SERP rank lookup failed for "${keyword}": ${JSON.stringify(message)}`,
       );
-      return null;
+      return { rank: null, topResultTitle: null };
     }
 
     const results = response.data.organic_results ?? [];
     const needle = businessName.trim().toLowerCase();
     const match = results.find((r) => r.title.toLowerCase().includes(needle));
+    const topResultTitle = results[0]?.title ?? null;
 
     if (!match) {
       this.logger.debug(
         `No SERP match for "${businessName}" in results for "${keyword}"`,
       );
-      return null;
+      return { rank: null, topResultTitle };
     }
-    return match.position;
+    return { rank: match.position, topResultTitle };
   }
 }

@@ -1,11 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { S3Service } from '../common/storage/s3.service';
 import { PhoneCallOutcome, PhoneCallStatus } from '@prisma/client';
 
 /** Call history, missed-call recovery funnel, and analytics (UPD-BE-059) — all thin reads over the real `PhoneCall` log. */
 @Injectable()
 export class VoiceQueryService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly s3: S3Service,
+  ) {}
 
   listCalls() {
     return this.tenantPrisma.client.phoneCall.findMany({
@@ -13,6 +17,20 @@ export class VoiceQueryService {
       take: 200,
       include: { appointment: true },
     });
+  }
+
+  /** Transcripts & Recordings depth fix — a real signed S3 URL (24h TTL, same convention as every other file in this app), not the raw `recordingKey`. */
+  async getRecordingUrl(id: string): Promise<{ url: string | null }> {
+    const call = await this.tenantPrisma.client.phoneCall.findUnique({
+      where: { id },
+    });
+    if (!call) {
+      throw new NotFoundException('Call not found');
+    }
+    if (!call.recordingKey) {
+      return { url: null };
+    }
+    return { url: await this.s3.getSignedDownloadUrl(call.recordingKey) };
   }
 
   listMissedCalls() {
@@ -38,6 +56,7 @@ export class VoiceQueryService {
       booking: 0,
       message: 0,
       transfer: 0,
+      custom: 0,
     };
     const byStatus: Record<PhoneCallStatus, number> = {
       in_progress: 0,
