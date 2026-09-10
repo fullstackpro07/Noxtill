@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
+  CampaignStatsResult,
   Connector,
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -111,6 +113,91 @@ export class TikTokAdsConnector implements Connector {
       { headers: { 'Access-Token': tokens.accessToken } },
     );
     return { externalId: String(response.data.data.campaign_id) };
+  }
+
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const advertiserId = meta.advertiserId as string | undefined;
+    if (!advertiserId) {
+      throw new Error('No TikTok advertiser recorded for this campaign');
+    }
+    const body: Record<string, unknown> = {
+      advertiser_id: advertiserId,
+      campaign_id: externalId,
+    };
+    if (changes.status) {
+      body.operation_status =
+        changes.status === 'active' ? 'ENABLE' : 'DISABLE';
+    }
+    if (changes.dailyBudget !== undefined) body.budget = changes.dailyBudget;
+    await axios.post(
+      'https://business-api.tiktok.com/open_api/v1.3/campaign/update/',
+      body,
+      { headers: { 'Access-Token': tokens.accessToken } },
+    );
+  }
+
+  /** Real integrated reporting API, trailing 30 days. */
+  async fetchCampaignStats(
+    tokens: OAuthTokens,
+    externalId: string,
+    meta: Record<string, unknown>,
+  ): Promise<CampaignStatsResult> {
+    const advertiserId = meta.advertiserId as string | undefined;
+    if (!advertiserId) {
+      throw new Error('No TikTok advertiser recorded for this campaign');
+    }
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+    const response = await axios.get<{
+      data: {
+        list: {
+          metrics: {
+            spend?: string;
+            impressions?: string;
+            clicks?: string;
+            conversion?: string;
+          };
+        }[];
+      };
+    }>('https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/', {
+      headers: { 'Access-Token': tokens.accessToken },
+      params: {
+        advertiser_id: advertiserId,
+        report_type: 'BASIC',
+        dimensions: JSON.stringify(['campaign_id']),
+        metrics: JSON.stringify([
+          'spend',
+          'impressions',
+          'clicks',
+          'conversion',
+        ]),
+        data_level: 'AUCTION_CAMPAIGN',
+        filtering: JSON.stringify([
+          {
+            field_name: 'campaign_ids',
+            filter_type: 'IN',
+            filter_value: JSON.stringify([externalId]),
+          },
+        ]),
+        start_date: iso(startDate),
+        end_date: iso(endDate),
+      },
+    });
+    const metrics = response.data.data.list[0]?.metrics;
+    if (!metrics) return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+    return {
+      spend: Number(metrics.spend ?? 0),
+      impressions: Number(metrics.impressions ?? 0),
+      clicks: Number(metrics.clicks ?? 0),
+      results: Number(metrics.conversion ?? 0),
+    };
   }
 
   private mapGoalToObjective(goal: string): string {

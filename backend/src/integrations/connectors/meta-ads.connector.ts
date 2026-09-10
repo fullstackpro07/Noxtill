@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
+  CampaignStatsResult,
   Connector,
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -109,6 +111,59 @@ export class MetaAdsConnector implements Connector {
       },
     );
     return { externalId: response.data.id };
+  }
+
+  /**
+   * `daily_budget` only actually moves spend when the campaign has Campaign Budget Optimization
+   * enabled — this connector's own `createCampaign` doesn't request CBO, so a real budget change
+   * sent here may be a no-op at Meta's end even though the call itself succeeds; status changes
+   * are unconditionally real regardless.
+   */
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+  ): Promise<void> {
+    const body: Record<string, unknown> = { access_token: tokens.accessToken };
+    if (changes.status)
+      body.status = changes.status === 'active' ? 'ACTIVE' : 'PAUSED';
+    if (changes.dailyBudget !== undefined) {
+      body.daily_budget = Math.round(changes.dailyBudget * 100); // Meta budgets are in the account currency's smallest unit
+    }
+    await axios.post(`https://graph.facebook.com/v19.0/${externalId}`, body);
+  }
+
+  /** Real Insights API, trailing 30 days. `results` sums every real `actions[]` value — Meta reports conversions as a list of typed actions, not one field. */
+  async fetchCampaignStats(
+    tokens: OAuthTokens,
+    externalId: string,
+  ): Promise<CampaignStatsResult> {
+    const response = await axios.get<{
+      data: {
+        spend?: string;
+        impressions?: string;
+        clicks?: string;
+        actions?: { action_type: string; value: string }[];
+      }[];
+    }>(`https://graph.facebook.com/v19.0/${externalId}/insights`, {
+      params: {
+        fields: 'spend,impressions,clicks,actions',
+        date_preset: 'last_30d',
+        access_token: tokens.accessToken,
+      },
+    });
+    const row = response.data.data[0];
+    if (!row) return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+    const results = (row.actions ?? []).reduce(
+      (sum, a) => sum + Number(a.value || 0),
+      0,
+    );
+    return {
+      spend: Number(row.spend ?? 0),
+      impressions: Number(row.impressions ?? 0),
+      clicks: Number(row.clicks ?? 0),
+      results,
+    };
   }
 
   private mapGoalToObjective(goal: string): string {

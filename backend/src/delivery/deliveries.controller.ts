@@ -19,6 +19,8 @@ import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import { SubmitProofDto } from './dto/submit-proof.dto';
+import { RateDeliveryDto } from './dto/rate-delivery.dto';
+import { AssignDeliveryZoneDto } from './dto/assign-delivery-zone.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -37,6 +39,12 @@ export class DeliveriesController {
   @Sse('live')
   live(@CurrentUser() user: AuthenticatedUser): Observable<MessageEvent> {
     return this.deliveries.stream(user.businessId);
+  }
+
+  /** On-time-rate depth fix — registered before `:id` so "on-time-stats" is never matched as an id. */
+  @Get('on-time-stats')
+  onTimeStats(@CurrentUser() user: AuthenticatedUser) {
+    return this.deliveries.onTimeStats(user.businessId);
   }
 
   @Get(':id')
@@ -65,6 +73,17 @@ export class DeliveriesController {
     @Body() dto: AssignDeliveryDto,
   ) {
     return this.deliveries.assign(user.businessId, id, dto);
+  }
+
+  /** Per-zone SLA depth fix. */
+  @RequireCapability(CAPABILITIES.DELIVERY_MANAGE)
+  @Patch(':id/zone')
+  setZone(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: AssignDeliveryZoneDto,
+  ) {
+    return this.deliveries.setZone(user.businessId, id, dto.zoneId);
   }
 
   @Patch(':id/status')
@@ -103,5 +122,11 @@ export class DeliveriesController {
       dto.lat,
       dto.lng,
     );
+  }
+
+  /** Riders screen depth fix (UPD-FE-127). */
+  @Post(':id/rating')
+  rate(@Param('id') id: string, @Body() dto: RateDeliveryDto) {
+    return this.deliveries.rate(id, dto);
   }
 }

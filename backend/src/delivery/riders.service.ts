@@ -18,10 +18,44 @@ export class RidersService {
     private readonly pubsub: ActivityPubSubService,
   ) {}
 
-  list() {
-    return this.tenantPrisma.client.rider.findMany({
+  /** Riders screen depth fix (UPD-FE-127) — real "deliveries today" and "currently active" counts alongside each rider, for the roster table. */
+  async list() {
+    const riders = await this.tenantPrisma.client.rider.findMany({
       orderBy: { name: 'asc' },
     });
+    if (riders.length === 0) return [];
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const riderIds = riders.map((r) => r.id);
+
+    const [todayCounts, activeCounts] = await Promise.all([
+      this.tenantPrisma.client.delivery.groupBy({
+        by: ['riderId'],
+        where: { riderId: { in: riderIds }, createdAt: { gte: startOfDay } },
+        _count: { riderId: true },
+      }),
+      this.tenantPrisma.client.delivery.groupBy({
+        by: ['riderId'],
+        where: {
+          riderId: { in: riderIds },
+          status: { in: ['assigned', 'picked_up', 'en_route'] },
+        },
+        _count: { riderId: true },
+      }),
+    ]);
+    const todayByRider = new Map(
+      todayCounts.map((r) => [r.riderId, r._count.riderId]),
+    );
+    const activeByRider = new Map(
+      activeCounts.map((r) => [r.riderId, r._count.riderId]),
+    );
+
+    return riders.map((rider) => ({
+      ...rider,
+      deliveriesToday: todayByRider.get(rider.id) ?? 0,
+      activeDeliveries: activeByRider.get(rider.id) ?? 0,
+    }));
   }
 
   async findOne(id: string) {
@@ -34,7 +68,14 @@ export class RidersService {
 
   create(businessId: string, dto: CreateRiderDto) {
     return this.tenantPrisma.client.rider.create({
-      data: { businessId, name: dto.name, phone: dto.phone },
+      data: {
+        businessId,
+        name: dto.name,
+        phone: dto.phone,
+        vehicleType: dto.vehicleType,
+        commissionRate: dto.commissionRate,
+        zoneIds: dto.zoneIds ?? [],
+      },
     });
   }
 
@@ -42,7 +83,18 @@ export class RidersService {
     await this.findOne(id);
     return this.tenantPrisma.client.rider.update({
       where: { id },
-      data: dto,
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+        ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(dto.vehicleType !== undefined
+          ? { vehicleType: dto.vehicleType }
+          : {}),
+        ...(dto.commissionRate !== undefined
+          ? { commissionRate: dto.commissionRate }
+          : {}),
+        ...(dto.zoneIds !== undefined ? { zoneIds: dto.zoneIds } : {}),
+      },
     });
   }
 
@@ -76,6 +128,16 @@ export class RidersService {
           )
         : null;
 
+    // Riders screen depth fix (UPD-FE-127) — real average of staff-recorded ratings, null (not a
+    // fabricated default) until at least one delivery has actually been rated.
+    const ratings = deliveries
+      .map((d) => d.qualityRating)
+      .filter((r): r is number => r != null);
+    const averageRating =
+      ratings.length > 0
+        ? round2(ratings.reduce((sum, r) => sum + r, 0) / ratings.length)
+        : null;
+
     return {
       riderId: rider.id,
       name: rider.name,
@@ -85,6 +147,8 @@ export class RidersService {
       successRate:
         completed > 0 ? round2((delivered.length / completed) * 100) : null,
       averageDeliveryMinutes,
+      averageRating,
+      ratedDeliveries: ratings.length,
     };
   }
 

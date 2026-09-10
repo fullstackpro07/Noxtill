@@ -100,6 +100,8 @@ import {
   PhoneMissed,
   Inbox,
   ScanLine,
+  Route,
+  Target,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -278,6 +280,20 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    key: "advertising",
+    labelKey: "nav.advertising",
+    href: "/advertising",
+    icon: Target,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "advertising-accounts", labelKey: "nav.advertisingAccounts", href: "/advertising", icon: Plug },
+      { key: "advertising-campaigns", labelKey: "nav.advertisingCampaigns", href: "/advertising/campaigns", icon: BarChart3 },
+      { key: "advertising-creatives", labelKey: "nav.advertisingCreatives", href: "/advertising/creatives", icon: ImageIcon },
+      { key: "advertising-performance", labelKey: "nav.advertisingPerformance", href: "/advertising/performance", icon: Wallet },
+      { key: "advertising-settings", labelKey: "nav.advertisingSettings", href: "/advertising/settings", icon: Settings2 },
+    ],
+  },
+  {
     key: "listings",
     labelKey: "nav.listings",
     href: "/listings",
@@ -387,6 +403,20 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "voice", labelKey: "nav.voiceAssistant", href: "/assistant/voice", icon: Mic },
       { key: "history", labelKey: "nav.chatHistory", href: "/assistant/history", icon: MessagesSquare },
       { key: "ai-settings", labelKey: "nav.aiSettings", href: "/assistant/settings", icon: Settings2 },
+    ],
+  },
+  {
+    key: "deliveries",
+    labelKey: "nav.deliveries",
+    href: "/deliveries",
+    icon: Truck,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "deliveries-live", labelKey: "nav.deliveriesLive", href: "/deliveries", icon: Radio },
+      { key: "deliveries-all", labelKey: "nav.deliveriesAll", href: "/deliveries/all", icon: Package },
+      { key: "deliveries-riders", labelKey: "nav.deliveriesRiders", href: "/deliveries/riders", icon: UserCheck },
+      { key: "deliveries-routes", labelKey: "nav.deliveriesRoutes", href: "/deliveries/routes", icon: Route },
+      { key: "deliveries-settings", labelKey: "nav.deliveriesSettings", href: "/deliveries/settings", icon: Settings2 },
     ],
   },
   {

@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { AdCampaignsService } from './ad-campaigns.service';
 import { CreateAdCampaignDto } from './dto/create-ad-campaign.dto';
+import { UpdateAdCampaignDto } from './dto/update-ad-campaign.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -20,6 +21,12 @@ export class AdCampaignsController {
     return this.campaigns.findOne(id);
   }
 
+  /** Fatigue-warning depth fix. */
+  @Get('campaigns/:id/fatigue')
+  fatigue(@Param('id') id: string) {
+    return this.campaigns.getFatigueWarning(id);
+  }
+
   @RequireCapability(CAPABILITIES.ADS_MANAGE)
   @Post(':provider/campaigns')
   create(
@@ -28,5 +35,15 @@ export class AdCampaignsController {
     @Body() dto: CreateAdCampaignDto,
   ) {
     return this.campaigns.create(user.businessId, provider, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.ADS_MANAGE)
+  @Patch('campaigns/:id')
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateAdCampaignDto,
+  ) {
+    return this.campaigns.update(user.businessId, id, dto, user.role);
   }
 }

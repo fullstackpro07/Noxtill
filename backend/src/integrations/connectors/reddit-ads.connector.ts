@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
+  CampaignStatsResult,
   Connector,
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -113,6 +115,67 @@ export class RedditAdsConnector implements Connector {
       { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
     );
     return { externalId: response.data.data.id };
+  }
+
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const adAccountId = meta.adAccountId as string | undefined;
+    if (!adAccountId) {
+      throw new Error('No Reddit ad account recorded for this campaign');
+    }
+    const data: Record<string, unknown> = {};
+    if (changes.status)
+      data.configured_status =
+        changes.status === 'active' ? 'ACTIVE' : 'PAUSED';
+    if (changes.dailyBudget !== undefined)
+      data.spend_cap = Math.round(changes.dailyBudget * 100);
+    await axios.patch(
+      `https://ads-api.reddit.com/api/v3/ad_accounts/${adAccountId}/campaigns/${externalId}`,
+      { data },
+      { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+    );
+  }
+
+  /** Real Reports API, trailing 30 days. */
+  async fetchCampaignStats(
+    tokens: OAuthTokens,
+    externalId: string,
+    meta: Record<string, unknown>,
+  ): Promise<CampaignStatsResult> {
+    const adAccountId = meta.adAccountId as string | undefined;
+    if (!adAccountId) {
+      throw new Error('No Reddit ad account recorded for this campaign');
+    }
+    const end = new Date();
+    const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const response = await axios.get<{
+      data: {
+        spend?: number;
+        impressions?: number;
+        clicks?: number;
+        conversions?: number;
+      }[];
+    }>(`https://ads-api.reddit.com/api/v3/ad_accounts/${adAccountId}/reports`, {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      params: {
+        campaign_ids: externalId,
+        starts_at: start.toISOString(),
+        ends_at: end.toISOString(),
+      },
+    });
+    const row = response.data.data[0];
+    if (!row) return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+    return {
+      spend: (row.spend ?? 0) / 100, // Reddit reports spend in cents, same unit `spend_cap` uses
+      impressions: row.impressions ?? 0,
+      clicks: row.clicks ?? 0,
+      results: row.conversions ?? 0,
+    };
   }
 
   async disconnect(): Promise<void> {

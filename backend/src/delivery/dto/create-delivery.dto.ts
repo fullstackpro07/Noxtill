@@ -18,4 +18,9 @@ export class CreateDeliveryDto {
   @Min(-180)
   @Max(180)
   lng?: number;
+
+  /** Per-zone SLA depth fix — real zone, manually chosen (this app's zones carry no geofence). */
+  @IsOptional()
+  @IsString()
+  zoneId?: string;
 }

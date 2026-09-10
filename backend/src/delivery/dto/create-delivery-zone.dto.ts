@@ -1,9 +1,11 @@
 import {
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 
@@ -32,4 +34,11 @@ export class CreateDeliveryZoneDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /** Per-zone SLA depth fix — omit to use the business default. */
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(1440)
+  slaMinutes?: number;
 }

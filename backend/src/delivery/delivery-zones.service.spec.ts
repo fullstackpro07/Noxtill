@@ -75,4 +75,19 @@ describe('DeliveryZonesService (UPD-BE-068)', () => {
     ).rejects.toThrow();
     await expect(service.remove('no-such-zone')).rejects.toThrow();
   });
+
+  it('per-zone SLA depth fix: persists a real slaMinutes override and can clear it back to null', async () => {
+    const created = await service.create(businessId, {
+      name: 'Fast Zone',
+      chargeType: 'flat',
+      flatAmount: 3,
+      slaMinutes: 20,
+    });
+    expect(created.slaMinutes).toBe(20);
+
+    const cleared = await service.update(created.id, { slaMinutes: null });
+    expect(cleared.slaMinutes).toBeNull();
+
+    await service.remove(created.id);
+  });
 });

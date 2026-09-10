@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
+  CampaignStatsResult,
   Connector,
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -109,6 +111,74 @@ export class PinterestAdsConnector implements Connector {
       { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
     );
     return { externalId: response.data.id };
+  }
+
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const adAccountId = meta.adAccountId as string | undefined;
+    if (!adAccountId) {
+      throw new Error('No Pinterest ad account recorded for this campaign');
+    }
+    const patch: Record<string, unknown> = { id: externalId };
+    if (changes.status)
+      patch.status = changes.status === 'active' ? 'ACTIVE' : 'PAUSED';
+    if (changes.dailyBudget !== undefined) {
+      patch.daily_spend_cap = Math.round(changes.dailyBudget * 1_000_000);
+    }
+    await axios.patch(
+      `https://api.pinterest.com/v5/ad_accounts/${adAccountId}/campaigns`,
+      { campaigns: [patch] },
+      { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+    );
+  }
+
+  /** Real campaign analytics API, trailing 30 days. */
+  async fetchCampaignStats(
+    tokens: OAuthTokens,
+    externalId: string,
+    meta: Record<string, unknown>,
+  ): Promise<CampaignStatsResult> {
+    const adAccountId = meta.adAccountId as string | undefined;
+    if (!adAccountId) {
+      throw new Error('No Pinterest ad account recorded for this campaign');
+    }
+    const end = new Date();
+    const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+    const response = await axios.get<
+      {
+        SPEND_IN_DOLLAR?: number;
+        IMPRESSION_2?: number;
+        CLICKTHROUGH_2?: number;
+        TOTAL_CONVERSIONS?: number;
+      }[]
+    >(
+      `https://api.pinterest.com/v5/ad_accounts/${adAccountId}/campaigns/analytics`,
+      {
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+        params: {
+          campaign_ids: externalId,
+          start_date: iso(start),
+          end_date: iso(end),
+          columns:
+            'SPEND_IN_DOLLAR,IMPRESSION_2,CLICKTHROUGH_2,TOTAL_CONVERSIONS',
+          granularity: 'ALL',
+        },
+      },
+    );
+    const row = response.data[0];
+    if (!row) return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+    return {
+      spend: row.SPEND_IN_DOLLAR ?? 0,
+      impressions: row.IMPRESSION_2 ?? 0,
+      clicks: row.CLICKTHROUGH_2 ?? 0,
+      results: row.TOTAL_CONVERSIONS ?? 0,
+    };
   }
 
   async disconnect(): Promise<void> {

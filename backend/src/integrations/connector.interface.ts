@@ -25,6 +25,27 @@ export interface CreateCampaignParams {
 
 export interface CreateCampaignResult {
   externalId: string;
+  /**
+   * Campaign management actions (UPD-BE-130) — extra real context this connector needs later to
+   * apply a real update (e.g. Google Ads' separate `CampaignBudget` resource name, which its own
+   * campaign resource never carries). Merged into `AdCampaign.providerMeta` alongside the caller's
+   * own `meta`, and replayed into `updateCampaign`'s own `meta` param.
+   */
+  providerMeta?: Record<string, unknown>;
+}
+
+/** Campaign management actions (UPD-BE-130) — every field optional; only the fields the caller actually asked to change are ever sent. */
+export interface UpdateCampaignChanges {
+  status?: 'paused' | 'active';
+  dailyBudget?: number;
+}
+
+/** Fatigue-warning depth fix — a real rollup over the campaign's real reporting window (each connector's own window, disclosed in its own implementation). */
+export interface CampaignStatsResult {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  results: number;
 }
 
 /** Accounting Sync (UPD-BE-072) — one real invoice line, already resolved against `AccountingMapping`. */
@@ -173,6 +194,34 @@ export interface Connector {
     params: CreateCampaignParams,
     meta: Record<string, unknown>,
   ): Promise<CreateCampaignResult>;
+  /**
+   * Ad-platform connectors only (UPD-BE-130) — applies a real pause/resume and/or budget change
+   * directly on the provider for an already-created campaign. `meta` is the same provider-
+   * selection context `createCampaign` received, persisted on `AdCampaign.providerMeta` and
+   * replayed here so the caller never has to resupply it. Implementations that can't apply every
+   * requested change at the provider (e.g. Google Ads' budget lives on a separate resource this
+   * app never stored a reference to) apply what they really can and document the rest — the caller
+   * always persists the full change locally regardless, the same disclosed-degradation shape as
+   * `createCampaign`'s own local-draft fallback.
+   */
+  updateCampaign?(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+    meta: Record<string, unknown>,
+  ): Promise<void>;
+  /**
+   * Fatigue-warning depth fix — a real, current rollup from the provider's own reporting API,
+   * never fabricated. Two providers' real reporting APIs (Microsoft, Amazon) are genuinely
+   * async — submit a report request, poll for it — so their implementations submit-and-poll once
+   * per call; if the report isn't ready yet they throw (the caller skips that campaign this cycle
+   * and tries again next hour), rather than returning a guessed number.
+   */
+  fetchCampaignStats?(
+    tokens: OAuthTokens,
+    externalId: string,
+    meta: Record<string, unknown>,
+  ): Promise<CampaignStatsResult>;
   /** Accounting connectors only (UPD-BE-072) — pushes a real invoice, never auto-sent/finalized. */
   pushInvoice?(
     tokens: OAuthTokens,

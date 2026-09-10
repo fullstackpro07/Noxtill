@@ -16,4 +16,9 @@ export class UpdateAdCreativeDto {
   @IsOptional()
   @IsIn(['draft', 'approved', 'active', 'paused'])
   status?: string;
+
+  /** A/B-test setup depth fix — `null` removes this creative from its experiment. */
+  @IsOptional()
+  @IsString()
+  experimentKey?: string | null;
 }

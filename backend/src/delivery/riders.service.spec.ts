@@ -71,6 +71,93 @@ describe('RidersService (UPD-BE-064/065)', () => {
     await expect(service.findOne(created.id)).rejects.toThrow();
   });
 
+  describe('Riders screen depth fix (UPD-FE-127)', () => {
+    it('persists real vehicle type, commission rate, and zone ids through create() and update()', async () => {
+      const created = await service.create(businessId, {
+        name: 'Depth Rider',
+        phone: '+14155550020',
+        vehicleType: 'motorcycle',
+        commissionRate: 12.5,
+        zoneIds: ['zone-1', 'zone-2'],
+      });
+      expect(created.vehicleType).toBe('motorcycle');
+      expect(Number(created.commissionRate)).toBe(12.5);
+      expect(created.zoneIds).toEqual(['zone-1', 'zone-2']);
+
+      const updated = await service.update(created.id, {
+        vehicleType: 'van',
+        zoneIds: ['zone-3'],
+      });
+      expect(updated.vehicleType).toBe('van');
+      expect(updated.zoneIds).toEqual(['zone-3']);
+    });
+
+    it('list() enriches each rider with a real "deliveries today" count, not fabricated', async () => {
+      const rider = await service.create(businessId, {
+        name: 'Today Rider',
+        phone: '+14155550021',
+      });
+      const order = await prisma.order.create({
+        data: { businessId, orderNo: 950 },
+      });
+      await prisma.delivery.create({
+        data: {
+          businessId,
+          orderId: order.id,
+          addressLine: 'C',
+          riderId: rider.id,
+          status: 'assigned',
+        },
+      });
+
+      const listed = await service.list();
+      const row = listed.find((r) => r.id === rider.id)!;
+      expect(row.deliveriesToday).toBe(1);
+      expect(row.activeDeliveries).toBe(1);
+    });
+
+    it('performance() averages real staff-recorded ratings, null until at least one exists', async () => {
+      const rider = await service.create(businessId, {
+        name: 'Rated Rider',
+        phone: '+14155550022',
+      });
+      const noRatingYet = await service.performance(rider.id);
+      expect(noRatingYet.averageRating).toBeNull();
+      expect(noRatingYet.ratedDeliveries).toBe(0);
+
+      const order = await prisma.order.create({
+        data: { businessId, orderNo: 951 },
+      });
+      await prisma.delivery.create({
+        data: {
+          businessId,
+          orderId: order.id,
+          addressLine: 'D',
+          riderId: rider.id,
+          status: 'delivered',
+          qualityRating: 4,
+        },
+      });
+      const order2 = await prisma.order.create({
+        data: { businessId, orderNo: 952 },
+      });
+      await prisma.delivery.create({
+        data: {
+          businessId,
+          orderId: order2.id,
+          addressLine: 'E',
+          riderId: rider.id,
+          status: 'delivered',
+          qualityRating: 5,
+        },
+      });
+
+      const withRatings = await service.performance(rider.id);
+      expect(withRatings.averageRating).toBe(4.5);
+      expect(withRatings.ratedDeliveries).toBe(2);
+    });
+  });
+
   it('rejects operating on an unknown rider', async () => {
     await expect(service.findOne('no-such-rider')).rejects.toThrow();
     await expect(

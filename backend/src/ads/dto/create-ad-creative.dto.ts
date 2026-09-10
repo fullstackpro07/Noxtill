@@ -18,4 +18,9 @@ export class CreateAdCreativeDto {
   @IsOptional()
   @IsString()
   mediaKey?: string;
+
+  /** A/B-test setup depth fix — creatives sharing this real, user-chosen key are variants of one experiment. */
+  @IsOptional()
+  @IsString()
+  experimentKey?: string;
 }

@@ -37,6 +37,7 @@ export class AdCreativesService {
         headline: dto.headline,
         body: dto.body,
         mediaKey: dto.mediaKey,
+        experimentKey: dto.experimentKey,
       },
     });
   }

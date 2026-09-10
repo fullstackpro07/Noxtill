@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
+  CampaignStatsResult,
   Connector,
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -109,6 +111,63 @@ export class SnapchatAdsConnector implements Connector {
       { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
     );
     return { externalId: response.data.campaigns[0].campaign.id };
+  }
+
+  /** Snap's campaign object is addressable by its own id alone — no ad account needed in the URL. */
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+  ): Promise<void> {
+    const campaign: Record<string, unknown> = { id: externalId };
+    if (changes.status)
+      campaign.status = changes.status === 'active' ? 'ACTIVE' : 'PAUSED';
+    if (changes.dailyBudget !== undefined) {
+      campaign.daily_budget_micro = Math.round(changes.dailyBudget * 1_000_000);
+    }
+    await axios.put(
+      `https://adsapi.snapchat.com/v1/campaigns/${externalId}`,
+      { campaigns: [campaign] },
+      { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+    );
+  }
+
+  /** Real Stats API, trailing 30 days. */
+  async fetchCampaignStats(
+    tokens: OAuthTokens,
+    externalId: string,
+  ): Promise<CampaignStatsResult> {
+    const end = new Date();
+    const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const response = await axios.get<{
+      campaigns_stats?: {
+        campaign_stats?: {
+          stats?: {
+            spend?: number;
+            impressions?: number;
+            swipes?: number;
+            conversion_purchases?: number;
+          };
+        };
+      }[];
+    }>(`https://adsapi.snapchat.com/v1/campaigns/${externalId}/stats`, {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      params: {
+        fields: 'spend,impressions,swipes,conversion_purchases',
+        granularity: 'TOTAL',
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+      },
+    });
+    const stats = response.data.campaigns_stats?.[0]?.campaign_stats?.stats;
+    if (!stats) return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+    return {
+      spend: (stats.spend ?? 0) / 1_000_000, // Snap reports spend in micro-currency, same unit `daily_budget_micro` uses
+      impressions: stats.impressions ?? 0,
+      clicks: stats.swipes ?? 0,
+      results: stats.conversion_purchases ?? 0,
+    };
   }
 
   async disconnect(): Promise<void> {

@@ -40,4 +40,22 @@ export const DELIVERY_ERROR_CODES = {
   NO_ACTIVE_RIDERS: 'NO_ACTIVE_RIDERS',
   DELIVERY_ALREADY_HAS_PROOF: 'DELIVERY_ALREADY_HAS_PROOF',
   INVALID_STATUS_TRANSITION: 'INVALID_DELIVERY_STATUS_TRANSITION',
+  FAILURE_REASON_REQUIRED: 'DELIVERY_FAILURE_REASON_REQUIRED',
 } as const;
+
+/** All Deliveries depth fix (UPD-FE-055e) — common reasons for the dropdown; the field itself is free text so "Add custom" always works. */
+export const DELIVERY_FAILURE_REASONS = [
+  'Customer not available',
+  'Wrong or incomplete address',
+  'Customer refused delivery',
+  'Item damaged in transit',
+  'Unable to contact customer',
+] as const;
+
+/** On-time-rate depth fix — mirrored by `DeliverySettings.defaultSlaMinutes`'s own column default. */
+export const DEFAULT_DELIVERY_SETTINGS = {
+  defaultSlaMinutes: 45,
+} as const;
+
+/** How many trailing days the on-time-rate trend covers. */
+export const ON_TIME_TREND_DAYS = 14;

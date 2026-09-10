@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
+  CampaignStatsResult,
   Connector,
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -120,6 +122,70 @@ export class LinkedInAdsConnector implements Connector {
       },
     );
     return { externalId: response.data.id };
+  }
+
+  /** LinkedIn's Rest.li `PARTIAL_UPDATE` convention: a POST to the resource with a header flag, not a real PATCH verb. */
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+  ): Promise<void> {
+    const set: Record<string, unknown> = {};
+    if (changes.status)
+      set.status = changes.status === 'active' ? 'ACTIVE' : 'PAUSED';
+    if (changes.dailyBudget !== undefined) {
+      set.dailyBudget = {
+        amount: String(changes.dailyBudget),
+        currencyCode: 'USD',
+      };
+    }
+    await axios.post(
+      `https://api.linkedin.com/rest/adCampaigns/${externalId}`,
+      { patch: { $set: set } },
+      {
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          'LinkedIn-Version': '202401',
+          'X-RestLi-Method': 'PARTIAL_UPDATE',
+        },
+      },
+    );
+  }
+
+  /** Real Ad Analytics API, trailing 30 days. */
+  async fetchCampaignStats(
+    tokens: OAuthTokens,
+    externalId: string,
+  ): Promise<CampaignStatsResult> {
+    const end = new Date();
+    const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const dateParam = (d: Date, prefix: string) =>
+      `${prefix}.day=${d.getUTCDate()}&${prefix}.month=${d.getUTCMonth() + 1}&${prefix}.year=${d.getUTCFullYear()}`;
+
+    const response = await axios.get<{
+      elements: {
+        impressions?: number;
+        clicks?: number;
+        costInLocalCurrency?: string;
+        externalWebsiteConversions?: number;
+      }[];
+    }>(
+      `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&campaigns[0]=urn:li:sponsoredCampaign:${externalId}&${dateParam(start, 'dateRange.start')}&${dateParam(end, 'dateRange.end')}&fields=impressions,clicks,costInLocalCurrency,externalWebsiteConversions`,
+      {
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          'LinkedIn-Version': '202401',
+        },
+      },
+    );
+    const row = response.data.elements[0];
+    if (!row) return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+    return {
+      spend: Number(row.costInLocalCurrency ?? 0),
+      impressions: row.impressions ?? 0,
+      clicks: row.clicks ?? 0,
+      results: row.externalWebsiteConversions ?? 0,
+    };
   }
 
   async disconnect(): Promise<void> {

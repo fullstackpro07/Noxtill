@@ -6,6 +6,7 @@ import {
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -124,6 +125,35 @@ export class AmazonAdsConnector implements Connector {
       },
     );
     return { externalId: response.data[0].campaignId };
+  }
+
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const profileId = meta.profileId as string | undefined;
+    if (!profileId) {
+      throw new Error(
+        'No Amazon Advertising profile recorded for this campaign',
+      );
+    }
+    const campaign: Record<string, unknown> = { campaignId: externalId };
+    if (changes.status)
+      campaign.state = changes.status === 'active' ? 'enabled' : 'paused';
+    if (changes.dailyBudget !== undefined)
+      campaign.dailyBudget = changes.dailyBudget;
+    await axios.put(
+      'https://advertising-api.amazon.com/v2/sp/campaigns',
+      [campaign],
+      {
+        headers: {
+          ...this.clientHeaders(tokens),
+          'Amazon-Advertising-API-Scope': profileId,
+        },
+      },
+    );
   }
 
   async disconnect(): Promise<void> {

@@ -9,6 +9,8 @@ import { RoutesController } from './routes.controller';
 import { RoutingService } from './routing.service';
 import { DeliveryZonesService } from './delivery-zones.service';
 import { DeliveryZonesController } from './delivery-zones.controller';
+import { DeliverySettingsService } from './delivery-settings.service';
+import { DeliverySettingsController } from './delivery-settings.controller';
 import { ActivityModule } from '../activity/activity.module';
 import { StorageModule } from '../common/storage/storage.module';
 
@@ -19,6 +21,7 @@ import { StorageModule } from '../common/storage/storage.module';
     DeliveriesController,
     RoutesController,
     DeliveryZonesController,
+    DeliverySettingsController,
   ],
   providers: [
     RidersService,
@@ -27,6 +30,7 @@ import { StorageModule } from '../common/storage/storage.module';
     RoutesService,
     RoutingService,
     DeliveryZonesService,
+    DeliverySettingsService,
   ],
 })
 export class DeliveryModule {}

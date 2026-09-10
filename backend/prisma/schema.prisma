@@ -727,9 +727,12 @@ model Business {
   deliveries               Delivery[]
   routes                   Route[]
   deliveryZones            DeliveryZone[]
+  deliverySettings         DeliverySettings?
   adCreatives              AdCreative[]
   adAudiences              AdAudience[]
   adLeads                  AdLead[]
+  adSettings               AdSettings?
+  adCampaignStatsSnapshots AdCampaignStatsSnapshot[]
   accountingMappings       AccountingMapping[]
   outboundWebhooks         OutboundWebhook[]
   reviewSentimentThemes    ReviewSentimentTheme[]
@@ -3187,6 +3190,12 @@ model Rider {
   name           String
   phone          String
   status         RiderStatus @default(active)
+  /// Riders screen depth fix (UPD-FE-127) — real fields the plan doc's spec named but the original
+  /// model never had. `zoneIds` is a lightweight tag-style reference (like `VoiceSettings.customIntents`),
+  /// not a join table — zone assignment here is informational grouping, not a query-heavy relation.
+  vehicleType    RiderVehicleType? @map("vehicle_type")
+  commissionRate Decimal?          @map("commission_rate") @db.Decimal(5, 2)
+  zoneIds        Json              @default("[]") @map("zone_ids")
   /// Last GPS fix pushed by the rider's own device (UPD-BE-065 live tracking) — null until their first check-in.
   lastLat        Decimal?    @map("last_lat") @db.Decimal(9, 6)
   lastLng        Decimal?    @map("last_lng") @db.Decimal(9, 6)
@@ -3207,6 +3216,14 @@ enum RiderStatus {
   inactive
 }
 
+enum RiderVehicleType {
+  bike
+  motorcycle
+  car
+  van
+  on_foot
+}
+
 /// One per delivery order (UPD-BE-065), 1:1 with the `Order` it fulfills. `routeSequence` is this
 /// delivery's stop position within its `Route`, when it has one — a real ordering column (not
 /// implicit array order), same MySQL-row-ordering-safety reasoning as `VariantOption.sortOrder`.
@@ -3225,6 +3242,11 @@ model Delivery {
   routeId           String?        @map("route_id")
   route             Route?         @relation(fields: [routeId], references: [id])
   routeSequence     Int?           @map("route_sequence")
+  /// Per-zone SLA depth fix — real link, set manually (staff picks a zone; this app's zones carry
+  /// no geofence to auto-match an address to). Drives which SLA `computePromisedAt()` uses: this
+  /// zone's own `slaMinutes` when set, else the business's `DeliverySettings.defaultSlaMinutes`.
+  zoneId            String?        @map("zone_id")
+  zone              DeliveryZone?  @relation(fields: [zoneId], references: [id])
   proofSignatureKey String?        @map("proof_signature_key")
   proofPhotoKey     String?        @map("proof_photo_key")
   proofLat          Decimal?       @map("proof_lat") @db.Decimal(9, 6)
@@ -3232,6 +3254,19 @@ model Delivery {
   proofAt           DateTime?      @map("proof_at")
   assignedAt        DateTime?      @map("assigned_at")
   deliveredAt       DateTime?      @map("delivered_at")
+  /// All Deliveries depth fix (real on-time-rate) — set the moment a rider is assigned, from the
+  /// business's own `DeliverySettings.defaultSlaMinutes` at that moment. NULL for every delivery
+  /// assigned before this fix existed — those are honestly excluded from on-time-rate rather than
+  /// retroactively assigned a promise that was never actually made.
+  promisedAt        DateTime?      @map("promised_at")
+  /// All Deliveries depth fix (UPD-FE-055e) — only ever set when `status = failed`. Free text (the
+  /// frontend offers a dropdown of common reasons + "Add custom"), not a closed enum, since a
+  /// delivery-failure reason is inherently open-ended and store-specific.
+  failureReason     String?        @map("failure_reason") @db.Text
+  /// Riders screen depth fix (UPD-FE-127) — a real, staff-recorded 1-5 delivery-quality rating
+  /// (never claimed to be customer-submitted — this app has no customer-facing rating surface for
+  /// deliveries). Aggregated into `RidersService.performance()`'s `averageRating`.
+  qualityRating     Int?           @map("quality_rating")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3287,6 +3322,11 @@ model DeliveryZone {
   perKmAmount         Decimal?           @map("per_km_amount") @db.Decimal(10, 2)
   freeAboveOrderValue Decimal?           @map("free_above_order_value") @db.Decimal(10, 2)
   active              Boolean            @default(true)
+  /// Per-zone SLA depth fix — NULL means "use the business default"; a real override only when
+  /// explicitly set for this zone.
+  slaMinutes          Int?               @map("sla_minutes")
+
+  deliveries Delivery[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3299,6 +3339,23 @@ enum DeliveryChargeType {
   flat
   by_distance
   by_order_value
+}
+
+/// All Deliveries depth fix (real on-time-rate) — one row per business, upsert-on-write (same
+/// pattern as `VoiceSettings`/`CompetitiveSettings`). A single global SLA rather than per-zone: a
+/// `Delivery` has no real zone relationship to hang a per-zone SLA off today (`DeliveryZone` is a
+/// charge-rule CRUD, not linked to individual deliveries) — widening that relationship is a
+/// separate, larger integration this fix doesn't take on.
+model DeliverySettings {
+  id                String   @id @default(uuid())
+  businessId        String   @unique @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id])
+  defaultSlaMinutes Int      @default(45) @map("default_sla_minutes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("delivery_settings")
 }
 
 model Integration {
@@ -3336,15 +3393,59 @@ model AdCampaign {
   status        String              @default("draft")
   externalId    String?             @map("external_id")
   stats         Json                @default("{}")
+  /// Campaign management actions (UPD-BE-130) — the exact provider-selection context
+  /// (`Connector.createCampaign`'s own `meta` param, e.g. a chosen ad account/customer/advertiser
+  /// id) persisted at creation, so `updateCampaign()` can reuse it later without asking the caller
+  /// to resupply account context on every pause/resume/budget-adjust action.
+  providerMeta  Json                @default("{}") @map("provider_meta")
 
-  creatives AdCreative[]
-  leads     AdLead[]
+  creatives      AdCreative[]
+  leads          AdLead[]
+  statsSnapshots AdCampaignStatsSnapshot[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("ad_campaigns")
+}
+
+/// Fatigue-warning depth fix — a real, timestamped rollup snapshot, captured hourly by
+/// `AdStatsSyncProcessor` from each connected provider's real reporting API (never fabricated for
+/// a gap in history — a campaign with fewer than 2 snapshots simply has no trend to show yet).
+model AdCampaignStatsSnapshot {
+  id          String     @id @default(uuid())
+  businessId  String     @map("business_id")
+  business    Business   @relation(fields: [businessId], references: [id])
+  campaignId  String     @map("campaign_id")
+  campaign    AdCampaign @relation(fields: [campaignId], references: [id])
+  spend       Decimal    @db.Decimal(12, 2)
+  impressions Int
+  clicks      Int
+  results     Int
+  capturedAt  DateTime   @default(now()) @map("captured_at")
+
+  @@index([campaignId, capturedAt])
+  @@map("ad_campaign_stats_snapshots")
+}
+
+/// Advertising Settings (UPD-BE-131) — one row per business, upsert-on-write (same pattern as
+/// `DeliverySettings`). `autoPauseCostPerResult`, when set, is real-enforced by the hourly
+/// `ad-auto-pause` job (`AdAutoPauseProcessor`), which pauses a real active campaign — through the
+/// same per-provider `updateCampaign()` path a manual pause uses — the moment its own stored stats
+/// show a real cost-per-result over the threshold; never a stat that was fabricated for the check.
+model AdSettings {
+  id                     String   @id @default(uuid())
+  businessId             String   @unique @map("business_id")
+  business               Business @relation(fields: [businessId], references: [id])
+  defaultDailyBudgetCap  Decimal? @map("default_daily_budget_cap") @db.Decimal(12, 2)
+  autoPauseCostPerResult Decimal? @map("auto_pause_cost_per_result") @db.Decimal(12, 2)
+  requireApproval        Boolean  @default(false) @map("require_approval")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ad_settings")
 }
 
 /// Ad Creatives (UPD-BE-070) — `sourceReviewId` is set when this creative was built from a real
@@ -3363,11 +3464,15 @@ model AdCreative {
   sourceReviewId String?             @map("source_review_id")
   externalId     String?             @map("external_id")
   status         String              @default("draft")
+  /// A/B-test setup depth fix — creatives sharing the same real, user-chosen key are treated as
+  /// variants of one experiment. NULL means "not part of an experiment."
+  experimentKey  String?             @map("experiment_key")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId])
+  @@index([businessId, experimentKey])
   @@map("ad_creatives")
 }
 

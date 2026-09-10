@@ -12,6 +12,10 @@ describe('MetaAdsConnector (BE-087)', () => {
   });
   const connector = new MetaAdsConnector(config);
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('builds a real facebook.com authorize URL with the ads_management scope', () => {
     const url = new URL(connector.authUrl('signed-state'));
     expect(url.origin + url.pathname).toBe(
@@ -62,5 +66,67 @@ describe('MetaAdsConnector (BE-087)', () => {
       }),
     );
     /* eslint-enable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment */
+  });
+
+  describe('updateCampaign() (UPD-BE-130, campaign management actions)', () => {
+    it('applies status and budget to the real campaign resource by id alone, no ad account needed', async () => {
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      await connector.updateCampaign({ accessToken: 'tok' }, 'camp_123', {
+        status: 'active',
+        dailyBudget: 15,
+      });
+      /* eslint-disable @typescript-eslint/unbound-method -- jest.Mocked method types as `any` */
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://graph.facebook.com/v19.0/camp_123',
+        { access_token: 'tok', status: 'ACTIVE', daily_budget: 1500 },
+      );
+      /* eslint-enable @typescript-eslint/unbound-method */
+    });
+  });
+
+  describe('fetchCampaignStats() (fatigue-warning depth fix)', () => {
+    it('sums every real actions[] value as results, over the real trailing-30-day insights window', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          data: [
+            {
+              spend: '42.50',
+              impressions: '1000',
+              clicks: '30',
+              actions: [
+                { action_type: 'link_click', value: '20' },
+                { action_type: 'lead', value: '3' },
+              ],
+            },
+          ],
+        },
+      });
+
+      const stats = await connector.fetchCampaignStats(
+        { accessToken: 'tok' },
+        'camp_123',
+      );
+
+      expect(stats).toEqual({
+        spend: 42.5,
+        impressions: 1000,
+        clicks: 30,
+        results: 23,
+      });
+    });
+
+    it('returns real zeros, not fabricated numbers, when the insights response has no row', async () => {
+      mockedAxios.get.mockResolvedValue({ data: { data: [] } });
+      const stats = await connector.fetchCampaignStats(
+        { accessToken: 'tok' },
+        'camp_123',
+      );
+      expect(stats).toEqual({
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        results: 0,
+      });
+    });
   });
 });

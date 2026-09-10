@@ -6,6 +6,7 @@ import {
   CreateCampaignParams,
   CreateCampaignResult,
   OAuthTokens,
+  UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
 
@@ -132,6 +133,37 @@ export class MicrosoftAdsConnector implements Connector {
       },
     );
     return { externalId: response.data.CampaignIds[0] };
+  }
+
+  async updateCampaign(
+    tokens: OAuthTokens,
+    externalId: string,
+    changes: UpdateCampaignChanges,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const accountId = meta.accountId as string | undefined;
+    const customerId = meta.customerId as string | undefined;
+    if (!accountId || !customerId) {
+      throw new Error(
+        'No Microsoft Advertising account recorded for this campaign',
+      );
+    }
+    const campaign: Record<string, unknown> = { Id: externalId };
+    if (changes.status)
+      campaign.Status = changes.status === 'active' ? 'Active' : 'Paused';
+    if (changes.dailyBudget !== undefined)
+      campaign.DailyBudget = changes.dailyBudget;
+    await axios.post(
+      'https://campaign.api.bingads.microsoft.com/CampaignManagement/v13/Campaigns/Update',
+      { Campaigns: [campaign] },
+      {
+        headers: {
+          ...this.developerHeaders(tokens),
+          CustomerAccountId: accountId,
+          CustomerId: customerId,
+        },
+      },
+    );
   }
 
   async disconnect(): Promise<void> {
