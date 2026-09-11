@@ -184,7 +184,7 @@ function TrendChart() {
               82
             </text>
             <text x={last.x + 35} y={last.y + 10} fontSize="7" fill="var(--color-fg-faint)" textAnchor="middle">
-              May '25
+              May &apos;25
             </text>
           </g>
         ) : null}

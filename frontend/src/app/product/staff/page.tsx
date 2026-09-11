@@ -139,7 +139,7 @@ function TrendChart() {
             $7,842
           </text>
           <text x={hl.x - 6} y={hl.y - 7} fontSize="7" fill="#9ee8c4" textAnchor="middle">
-            May '25
+            May &apos;25
           </text>
         </g>
       ) : null}

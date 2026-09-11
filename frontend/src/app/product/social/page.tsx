@@ -407,10 +407,13 @@ export default function SocialAdvertisingPage() {
                   <circle cx="18" cy="18" r="15.5" fill="none" stroke="#eceeed" strokeWidth="5" />
                   {(() => {
                     const gap = 1.6;
-                    let offset = 0;
-                    return AUDIENCE_SEGMENTS.map((seg) => {
+                    const offsets = AUDIENCE_SEGMENTS.reduce<number[]>((acc, seg, i) => {
+                      acc.push(i === 0 ? 0 : acc[i - 1] + AUDIENCE_SEGMENTS[i - 1].value);
+                      return acc;
+                    }, []);
+                    return AUDIENCE_SEGMENTS.map((seg, i) => {
                       const dash = (seg.value / 100) * 100 - gap;
-                      const circle = (
+                      return (
                         <circle
                           key={seg.label}
                           cx="18"
@@ -421,11 +424,9 @@ export default function SocialAdvertisingPage() {
                           strokeWidth="5"
                           strokeLinecap="round"
                           strokeDasharray={`${dash} ${100 - dash}`}
-                          strokeDashoffset={-offset}
+                          strokeDashoffset={-offsets[i]}
                         />
                       );
-                      offset += seg.value;
-                      return circle;
                     });
                   })()}
                 </svg>
