@@ -5,14 +5,19 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { IntegrationsService } from '../../integrations/integrations.service';
 import { ConnectorRegistry } from '../../integrations/connector-registry';
 import { AD_STATS_SYNC_QUEUE } from '../ads.constants';
-import { IntegrationStatus, Prisma } from '@prisma/client';
+import {
+  AdCampaign,
+  IntegrationProvider,
+  IntegrationStatus,
+  Prisma,
+} from '@prisma/client';
 
 /**
  * `ad-stats-sync` (fatigue-warning depth fix) — refreshes `AdCampaign.stats` from each connected
- * provider's own real reporting API and appends a real, timestamped snapshot row. This is the
- * real data source `computeFatigueWarning` reads — a campaign never sync'd yet (or whose provider
- * doesn't implement `fetchCampaignStats`, e.g. Microsoft/Amazon — see `AD_STATS_SYNC_QUEUE`'s own
- * doc) simply accumulates no history, and honestly shows no fatigue signal rather than a fabricated one.
+ * provider's own real reporting API (all 9 platforms — see `AD_STATS_SYNC_QUEUE`'s own doc for
+ * Microsoft/Amazon's real async report flow) and appends a real, timestamped snapshot row. This
+ * is the real data source `computeFatigueWarning` reads — a campaign never sync'd yet simply
+ * accumulates no history, and honestly shows no fatigue signal rather than a fabricated one.
  */
 @Processor(AD_STATS_SYNC_QUEUE)
 export class AdStatsSyncProcessor extends WorkerHost {
@@ -38,7 +43,34 @@ export class AdStatsSyncProcessor extends WorkerHost {
         status: { in: ['active', 'paused'] },
       },
     });
+    const syncedCount = await this.syncCampaigns(campaigns);
+    this.logger.debug(
+      `ad-stats-sync processed ${campaigns.length} campaign(s), synced ${syncedCount}`,
+    );
+  }
 
+  /**
+   * Connection Detail depth fix — the real, on-demand version of the hourly tick above, scoped to
+   * one business's campaigns on one provider: what "Sync now" on that connector's Connection
+   * Detail page actually triggers, rather than making the caller wait up to an hour.
+   */
+  async syncBusinessProvider(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<{ synced: number; total: number }> {
+    const campaigns = await this.prisma.adCampaign.findMany({
+      where: {
+        businessId,
+        provider,
+        externalId: { not: null },
+        status: { in: ['active', 'paused'] },
+      },
+    });
+    const synced = await this.syncCampaigns(campaigns);
+    return { synced, total: campaigns.length };
+  }
+
+  private async syncCampaigns(campaigns: AdCampaign[]): Promise<number> {
     let syncedCount = 0;
     for (const campaign of campaigns) {
       const connector = this.connectors.get(campaign.provider);
@@ -88,9 +120,6 @@ export class AdStatsSyncProcessor extends WorkerHost {
         );
       }
     }
-
-    this.logger.debug(
-      `ad-stats-sync processed ${campaigns.length} campaign(s), synced ${syncedCount}`,
-    );
+    return syncedCount;
   }
 }

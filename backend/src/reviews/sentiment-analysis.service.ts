@@ -61,6 +61,17 @@ export class SentimentAnalysisService {
     const themes = await this.clusterThemes(businessId, reviews);
     if (themes.length === 0) return 0;
 
+    // Trend-arrows depth fix — snapshot the previous run's counts (by normalized theme text)
+    // before they're overwritten, so each new row can carry a real previous-vs-current comparison.
+    const previousThemes =
+      await this.tenantPrisma.client.reviewSentimentTheme.findMany({
+        where: { businessId },
+        select: { theme: true, reviewCount: true },
+      });
+    const previousCountByTheme = new Map(
+      previousThemes.map((t) => [normalize(t.theme), t.reviewCount]),
+    );
+
     await this.tenantPrisma.client.reviewSentimentTheme.deleteMany({
       where: { businessId },
     });
@@ -71,6 +82,8 @@ export class SentimentAnalysisService {
         sentiment: t.sentiment,
         exampleQuote: t.exampleQuote,
         reviewCount: t.reviewCount,
+        previousReviewCount:
+          previousCountByTheme.get(normalize(t.theme)) ?? null,
       })),
     });
     return themes.length;

@@ -34,11 +34,11 @@ export interface AdCampaignStats {
 export const AD_AUTO_PAUSE_QUEUE = 'ad-auto-pause';
 
 /**
- * Fatigue-warning depth fix — the real hourly stats-refresh job's queue. Covers 7/9 platforms:
- * Microsoft Ads and Amazon Ads' real reporting APIs are asynchronous multi-step report-generation
- * + file-download flows (not a single request/response call like the other 7), which a single
- * hourly tick can't reliably complete — a disclosed, narrow gap, not a fabricated stats feed for
- * them. Their campaign create/pause/resume/budget-adjust paths are unaffected.
+ * Fatigue-warning depth fix — the real hourly stats-refresh job's queue, across all 9 platforms.
+ * Microsoft Ads and Amazon Ads' real reporting APIs are asynchronous multi-step
+ * report-generation + file-download flows (submit -> poll -> download -> decompress), unlike the
+ * other 7's single request/response call — each connector's own `fetchCampaignStats` runs that
+ * real flow inline, bounded to ~10 polls so one slow report never blocks the whole hourly job.
  */
 export const AD_STATS_SYNC_QUEUE = 'ad-stats-sync';
 

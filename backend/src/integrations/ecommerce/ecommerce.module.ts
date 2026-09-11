@@ -7,5 +7,6 @@ import { IntegrationsModule } from '../integrations.module';
   imports: [IntegrationsModule],
   controllers: [EcommerceController],
   providers: [EcommerceSyncService],
+  exports: [EcommerceSyncService],
 })
 export class EcommerceModule {}

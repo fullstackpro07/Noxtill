@@ -81,11 +81,13 @@ export class IntegrationsService {
           businessId,
           provider,
           status: IntegrationStatus.connected,
+          connectedAt: new Date(),
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
           ...(meta ? { meta } : {}),
         },
         update: {
           status: IntegrationStatus.connected,
+          connectedAt: new Date(),
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
           ...(meta ? { meta } : {}),
         },
@@ -124,11 +126,13 @@ export class IntegrationsService {
           businessId,
           provider,
           status: IntegrationStatus.connected,
+          connectedAt: new Date(),
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
           ...(meta ? { meta } : {}),
         },
         update: {
           status: IntegrationStatus.connected,
+          connectedAt: new Date(),
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
           ...(meta ? { meta } : {}),
         },
@@ -168,7 +172,11 @@ export class IntegrationsService {
       );
     await this.tenantPrisma.client.integration.updateMany({
       where: { businessId, provider },
-      data: { status: IntegrationStatus.not_connected, tokens: null },
+      data: {
+        status: IntegrationStatus.not_connected,
+        tokens: null,
+        connectedAt: null,
+      },
     });
   }
 

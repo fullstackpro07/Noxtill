@@ -61,6 +61,7 @@ import { AccountingModule } from './integrations/accounting/accounting.module';
 import { EcommerceModule } from './integrations/ecommerce/ecommerce.module';
 import { AutomationModule as OutboundWebhookAutomationModule } from './integrations/automation/automation.module';
 import { IntegrationDirectoryModule } from './integrations/directory/integration-directory.module';
+import { ConnectionDetailModule } from './integrations/connection-detail/connection-detail.module';
 import { DeveloperModule } from './developer/developer.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 
@@ -129,6 +130,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     EcommerceModule,
     OutboundWebhookAutomationModule,
     IntegrationDirectoryModule,
+    ConnectionDetailModule,
     DeveloperModule,
     AuditLogModule,
   ],

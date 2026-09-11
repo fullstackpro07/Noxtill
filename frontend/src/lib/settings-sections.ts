@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Store, MessageSquare, Moon, Bell, Globe, Receipt, CreditCard, ShieldCheck, Lock, Tags, ListChecks, TriangleAlert } from "lucide-react";
+import { Store, MessageSquare, Moon, Bell, Globe, Receipt, CreditCard, ShieldCheck, Lock, Tags, ListChecks, TriangleAlert, Code2 } from "lucide-react";
 
 export interface SettingsSection {
   key: string;
@@ -19,6 +19,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { key: "language", labelKey: "settings.section.language.label", href: "/settings/language", icon: Globe },
   { key: "tax", labelKey: "settings.section.tax.label", href: "/settings/tax", icon: Receipt },
   { key: "billing", labelKey: "settings.section.billing.label", href: "/settings/billing", icon: CreditCard },
+  { key: "developer", labelKey: "settings.section.developer.label", href: "/settings/developer", icon: Code2 },
   { key: "privacy", labelKey: "settings.section.privacy.label", href: "/settings/privacy", icon: ShieldCheck },
   { key: "security", labelKey: "settings.section.security.label", href: "/settings/security", icon: Lock },
   { key: "labels", labelKey: "settings.section.labels.label", href: "/settings/labels", icon: Tags },

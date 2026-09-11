@@ -1,17 +1,45 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
+import { Sparkles, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonRow } from "@/components/shared/skeleton";
-import { fetchReviewSentiment } from "@/lib/reviews-api";
+import { fetchReviewSentiment, type ReviewSentimentTheme } from "@/lib/reviews-api";
 
 const SENTIMENT_TONE: Record<string, "success" | "danger" | "warning"> = {
   positive: "success",
   negative: "danger",
   mixed: "warning",
 };
+
+/** Trend-arrows depth fix — a real comparison against the previous real generation run, never fabricated. */
+function ThemeTrend({ theme }: { theme: ReviewSentimentTheme }) {
+  if (theme.previousReviewCount == null) {
+    return <span className="text-xs text-fg-faint">New</span>;
+  }
+  if (theme.reviewCount > theme.previousReviewCount) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs text-whatsapp">
+        <TrendingUp className="h-3 w-3" aria-hidden />
+        {theme.reviewCount - theme.previousReviewCount}
+      </span>
+    );
+  }
+  if (theme.reviewCount < theme.previousReviewCount) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs text-fg-muted">
+        <TrendingDown className="h-3 w-3" aria-hidden />
+        {theme.previousReviewCount - theme.reviewCount}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-0.5 text-xs text-fg-faint">
+      <Minus className="h-3 w-3" aria-hidden />
+    </span>
+  );
+}
 
 export function SentimentThemesPanel() {
   const { data: themes, isPending } = useQuery({ queryKey: ["review-sentiment"], queryFn: fetchReviewSentiment });
@@ -45,9 +73,12 @@ export function SentimentThemesPanel() {
                 <Badge tone={SENTIMENT_TONE[t.sentiment] ?? "warning"}>{t.sentiment}</Badge>
               </div>
               <p className="mb-1.5 text-xs italic text-fg-muted">&ldquo;{t.exampleQuote}&rdquo;</p>
-              <p className="text-xs text-fg-faint">
-                Mentioned in {t.reviewCount} review{t.reviewCount === 1 ? "" : "s"}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-fg-faint">
+                  Mentioned in {t.reviewCount} review{t.reviewCount === 1 ? "" : "s"}
+                </p>
+                <ThemeTrend theme={t} />
+              </div>
             </div>
           ))}
         </div>

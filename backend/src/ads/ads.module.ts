@@ -53,6 +53,6 @@ import { CustomersModule } from '../customers/customers.module';
     AdStatsSyncScheduler,
     AdStatsSyncProcessor,
   ],
-  exports: [AdCampaignsService],
+  exports: [AdCampaignsService, AdStatsSyncProcessor],
 })
 export class AdsModule {}

@@ -5,9 +5,10 @@ import { Tabs } from "@/components/ui/tabs";
 import { TeamList } from "./team-list";
 import { CommissionReport } from "./commission-report";
 import { TeamInbox } from "./team-inbox";
+import { ActivityLogView } from "./activity-log-view";
 import type { Role } from "@/lib/nav-items";
 
-type StaffTab = "team" | "commissions" | "inbox";
+type StaffTab = "team" | "commissions" | "inbox" | "activity";
 
 export function StaffView({ currency, role }: { currency: string; role: Role }) {
   const [tab, setTab] = useState<StaffTab>("team");
@@ -21,16 +22,18 @@ export function StaffView({ currency, role }: { currency: string; role: Role }) 
             { key: "team", label: "Team" },
             { key: "commissions", label: "Commissions" },
             { key: "inbox", label: "Inbox" },
+            ...(role !== "staff" ? [{ key: "activity", label: "Activity Log" }] : []),
           ]}
           value={tab}
           onChange={(k) => setTab(k as StaffTab)}
-          className="w-80"
+          className="w-96"
         />
       </div>
 
       {tab === "team" && <TeamList role={role} />}
       {tab === "commissions" && <CommissionReport currency={currency} />}
       {tab === "inbox" && <TeamInbox role={role} />}
+      {tab === "activity" && <ActivityLogView role={role} />}
     </div>
   );
 }

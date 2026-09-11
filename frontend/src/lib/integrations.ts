@@ -13,7 +13,11 @@ export type ConnectorKey =
   | "reddit_ads"
   | "bing_places"
   | "apple_business_connect"
-  | "yelp";
+  | "yelp"
+  | "quickbooks"
+  | "xero"
+  | "shopify"
+  | "woocommerce";
 export type ConnectorStatus = "not_connected" | "connected" | "needs_attention";
 
 export interface Connector {
@@ -47,6 +51,10 @@ export const CONNECTORS: Connector[] = [
   { key: "bing_places", name: "Bing Places", description: "Keep your listing in sync on Bing Maps and search.", status: "not_connected", href: "/listings" },
   { key: "apple_business_connect", name: "Apple Business Connect", description: "Keep your listing in sync on Apple Maps.", status: "not_connected", href: "/listings" },
   { key: "yelp", name: "Yelp", description: "Keep your listing in sync on Yelp.", status: "not_connected", href: "/listings" },
+  { key: "quickbooks", name: "QuickBooks", description: "Push completed orders as real invoices.", status: "not_connected", href: "/integrations/quickbooks" },
+  { key: "xero", name: "Xero", description: "Push completed orders as real invoices.", status: "not_connected", href: "/integrations/xero" },
+  { key: "shopify", name: "Shopify", description: "Two-way stock sync and online order import.", status: "not_connected", href: "/integrations/shopify" },
+  { key: "woocommerce", name: "WooCommerce", description: "Two-way stock sync and online order import.", status: "not_connected", href: "/integrations/woocommerce" },
 ];
 
 export const STATUS_LABELS: Record<ConnectorStatus, string> = {

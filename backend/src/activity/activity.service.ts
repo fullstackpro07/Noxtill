@@ -102,6 +102,13 @@ export class ActivityService {
     }
   }
 
+  /** Live Activity depth fix — a real, live count of currently-occupied tables (not derivable from the event stream, which only logs discrete occurrences). */
+  async openTablesCount(businessId: string): Promise<number> {
+    return this.tenantPrisma.client.table.count({
+      where: { businessId, status: 'occupied' },
+    });
+  }
+
   async getRecentHistory(
     businessId: string,
     limit = ACTIVITY_HISTORY_BACKFILL,

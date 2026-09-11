@@ -1,3 +1,5 @@
+import { apiFetch } from "@/lib/api-client";
+
 export type ActivityEventType =
   | "sale"
   | "booking"
@@ -36,3 +38,8 @@ export const ACTIVITY_EVENT_TYPE_LABEL: Record<ActivityEventType, string> = {
 
 /** How many live events the feed keeps in memory (the initial SSE backfill is already capped at 50 server-side). */
 export const ACTIVITY_FEED_MAX = 200;
+
+/** GET /activity/open-tables-count — a real, live count of currently-occupied tables. */
+export function fetchOpenTablesCount(): Promise<{ count: number }> {
+  return apiFetch<{ count: number }>("/activity/open-tables-count");
+}

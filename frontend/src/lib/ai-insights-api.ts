@@ -8,6 +8,8 @@ export interface LiveAiInsight {
   category: AiInsightCategory;
   observation: string;
   sourceFigure: string;
+  /** A real dollar figure already present in the underlying fact (revenue delta / overdue balance); null when no such figure naturally exists (stock/customers/marketing). */
+  estimatedImpact: string | null;
   status: AiInsightStatus;
   createdAt: string;
   updatedAt: string;

@@ -87,6 +87,12 @@ export class ListingSyncService {
         await this.tenantPrisma.client.listingSyncLog.create({
           data: { businessId, provider, status: 'success' },
         });
+        // Connection Detail depth fix (UPD-BE-132) — real activity for the generic Connection
+        // Detail view, alongside this module's own `ListingSyncLog`.
+        await this.tenantPrisma.client.integration.update({
+          where: { businessId_provider: { businessId, provider } },
+          data: { lastSyncAt: new Date() },
+        });
         await this.tenantPrisma.client.citation.upsert({
           where: { businessId_provider: { businessId, provider } },
           create: {

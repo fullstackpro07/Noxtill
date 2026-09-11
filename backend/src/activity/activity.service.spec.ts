@@ -50,6 +50,7 @@ describe('ActivityService (UPD-BE-002)', () => {
 
   afterAll(async () => {
     await prisma.activityEvent.deleteMany({ where: { businessId } });
+    await prisma.table.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
@@ -136,5 +137,21 @@ describe('ActivityService (UPD-BE-002)', () => {
     expect(pubsubWithSubscribe.subscribe).toHaveBeenCalledWith(
       activityChannel(businessId),
     );
+  });
+
+  describe('openTablesCount() (Live Activity depth fix)', () => {
+    it('counts only real tables with status occupied, not free/reserved/needs_cleaning ones', async () => {
+      await prisma.table.createMany({
+        data: [
+          { businessId, number: 'T1', status: 'occupied' },
+          { businessId, number: 'T2', status: 'occupied' },
+          { businessId, number: 'T3', status: 'free' },
+          { businessId, number: 'T4', status: 'reserved' },
+        ],
+      });
+
+      const count = await service.openTablesCount(businessId);
+      expect(count).toBe(2);
+    });
   });
 });

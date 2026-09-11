@@ -148,6 +148,25 @@ export class AccountingSyncService {
       }
     }
 
+    // Connection Detail depth fix — a real record of this sync attempt, so `GET
+    // /integrations/:provider` has real activity to show, not a fabricated timeline.
+    await this.tenantPrisma.client.integration.update({
+      where: { businessId_provider: { businessId, provider } },
+      data: { lastSyncAt: new Date() },
+    });
+    await this.tenantPrisma.client.integrationSyncLog.create({
+      data: {
+        businessId,
+        provider,
+        success: result.failed === 0,
+        recordsProcessed: result.pushed,
+        message:
+          result.failed === 0
+            ? `Pushed ${result.pushed} invoice(s)`
+            : `Pushed ${result.pushed}, failed ${result.failed}`,
+      },
+    });
+
     return result;
   }
 }

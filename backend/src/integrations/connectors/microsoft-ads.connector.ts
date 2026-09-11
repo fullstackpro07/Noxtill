@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import AdmZip from 'adm-zip';
 import {
+  CampaignStatsResult,
   Connector,
   CreateCampaignParams,
   CreateCampaignResult,
@@ -9,6 +11,10 @@ import {
   UpdateCampaignChanges,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const AUTHORIZE_URL =
   'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
@@ -169,6 +175,111 @@ export class MicrosoftAdsConnector implements Connector {
   async disconnect(): Promise<void> {
     // Real revocation is a Microsoft identity-platform token-revocation call — left as a
     // documented no-op, same reasoning as every other connector's disconnect().
+  }
+
+  /**
+   * Fatigue-warning depth fix — Microsoft's Reporting API has no synchronous "get me the numbers"
+   * call: a report is submitted, polled until ready, then downloaded as a real zipped CSV
+   * (`GenerateReport` -> `PollGenerateReport` -> GET the `ReportDownloadUrl`, unzipped here with
+   * `adm-zip`) — a genuine 3-step async flow, not a shortcut. Bounded to ~10 polls at 3s apart;
+   * if the report genuinely isn't ready by then this throws, and the caller (the hourly
+   * `AdStatsSyncProcessor`) just retries next cycle rather than blocking the whole job.
+   */
+  async fetchCampaignStats(
+    tokens: OAuthTokens,
+    externalId: string,
+    meta: Record<string, unknown>,
+  ): Promise<CampaignStatsResult> {
+    const accountId = meta.accountId as string | undefined;
+    const customerId = meta.customerId as string | undefined;
+    if (!accountId || !customerId) {
+      throw new Error(
+        'No Microsoft Advertising account recorded for this campaign',
+      );
+    }
+    const headers = {
+      ...this.developerHeaders(tokens),
+      CustomerAccountId: accountId,
+      CustomerId: customerId,
+    };
+
+    const now = new Date();
+    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const dateRange = (d: Date) => ({
+      Day: d.getUTCDate(),
+      Month: d.getUTCMonth() + 1,
+      Year: d.getUTCFullYear(),
+    });
+
+    const generateResponse = await axios.post<{ ReportRequestId: string }>(
+      'https://reporting.api.bingads.microsoft.com/Reporting/v13/GenerateReport',
+      {
+        ReportRequest: {
+          Type: 'CampaignPerformanceReportRequest',
+          Format: 'Csv',
+          Aggregation: 'Summary',
+          ReturnOnlyCompleteData: false,
+          Time: {
+            CustomDateRangeStart: dateRange(start),
+            CustomDateRangeEnd: dateRange(now),
+          },
+          Scope: { Campaigns: [{ CampaignId: Number(externalId) }] },
+          Columns: [
+            'CampaignId',
+            'Spend',
+            'Impressions',
+            'Clicks',
+            'Conversions',
+          ],
+        },
+      },
+      { headers },
+    );
+    const reportRequestId = generateResponse.data.ReportRequestId;
+
+    let downloadUrl: string | undefined;
+    for (let attempt = 0; attempt < 10 && !downloadUrl; attempt += 1) {
+      if (attempt > 0) await sleep(3000);
+      const pollResponse = await axios.post<{
+        ReportRequestStatus: { Status: string; ReportDownloadUrl?: string };
+      }>(
+        'https://reporting.api.bingads.microsoft.com/Reporting/v13/PollGenerateReport',
+        { ReportRequestId: reportRequestId },
+        { headers },
+      );
+      const { Status, ReportDownloadUrl } =
+        pollResponse.data.ReportRequestStatus;
+      if (Status === 'Success') downloadUrl = ReportDownloadUrl;
+      else if (Status === 'Error') {
+        throw new Error('Microsoft Advertising report generation failed');
+      }
+    }
+    if (!downloadUrl) {
+      throw new Error('Microsoft Advertising report was not ready in time');
+    }
+
+    const fileResponse = await axios.get<ArrayBuffer>(downloadUrl, {
+      responseType: 'arraybuffer',
+    });
+    const zip = new AdmZip(Buffer.from(fileResponse.data));
+    const csvEntry = zip.getEntries().find((e) => e.entryName.endsWith('.csv'));
+    if (!csvEntry) return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+
+    const csv = zip.readAsText(csvEntry);
+    const lines = csv.split('\n').filter((l) => l.trim().length > 0);
+    // The real report has a header line, then one summary data row (Aggregation: 'Summary').
+    const header = lines[0]?.split(',').map((h) => h.replace(/"/g, '').trim());
+    const row = lines[1]?.split(',').map((v) => v.replace(/"/g, '').trim());
+    if (!header || !row)
+      return { spend: 0, impressions: 0, clicks: 0, results: 0 };
+
+    const col = (name: string) => Number(row[header.indexOf(name)] ?? 0) || 0;
+    return {
+      spend: col('Spend'),
+      impressions: col('Impressions'),
+      clicks: col('Clicks'),
+      results: col('Conversions'),
+    };
   }
 
   private mapTokenResponse(data: MicrosoftTokenResponse): OAuthTokens {

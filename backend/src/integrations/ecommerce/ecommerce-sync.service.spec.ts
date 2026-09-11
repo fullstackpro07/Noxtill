@@ -81,6 +81,8 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
     await prisma.order.deleteMany({ where: { businessId } });
     await prisma.stockMovement.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
+    await prisma.integrationSyncLog.deleteMany({ where: { businessId } });
+    await prisma.ecommerceSyncConflict.deleteMany({ where: { businessId } });
     await prisma.integration.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
@@ -121,6 +123,16 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
     });
     expect(movement?.kind).toBe(StockMovementKind.adjustment);
     expect(movement?.qty).toBe(7);
+
+    // E-commerce conflict history depth fix — a real, persisted row for this real conflict.
+    const persisted = await prisma.ecommerceSyncConflict.findFirst({
+      where: { businessId, sku: 'SKU-BLUE' },
+    });
+    expect(persisted).toMatchObject({
+      winner: 'remote',
+      localQty: 5,
+      remoteQty: 12,
+    });
   });
 
   it('local stock level wins when more recently updated — pushes to the platform instead of overwriting local', async () => {
@@ -203,5 +215,86 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
       },
     });
     expect(rows).toHaveLength(1);
+  });
+
+  describe('Connection Detail depth fix (UPD-BE-132)', () => {
+    it('records a real successful sync — lastSyncAt set, a real IntegrationSyncLog row written', async () => {
+      fetchProducts.mockResolvedValue([]);
+      fetchOrders.mockResolvedValue([]);
+
+      await service.sync(businessId);
+
+      const integration = await prisma.integration.findUniqueOrThrow({
+        where: {
+          businessId_provider: {
+            businessId,
+            provider: IntegrationProvider.shopify,
+          },
+        },
+      });
+      expect(integration.lastSyncAt).not.toBeNull();
+
+      const [latestLog] = await prisma.integrationSyncLog.findMany({
+        where: { businessId, provider: IntegrationProvider.shopify },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      });
+      expect(latestLog.success).toBe(true);
+    });
+
+    it('honestly records a failed sync when the real product fetch throws, rather than reporting success', async () => {
+      fetchProducts.mockRejectedValue(new Error('rate limited'));
+      fetchOrders.mockResolvedValue([]);
+
+      await service.sync(businessId);
+
+      const [latestLog] = await prisma.integrationSyncLog.findMany({
+        where: { businessId, provider: IntegrationProvider.shopify },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      });
+      expect(latestLog.success).toBe(false);
+    });
+  });
+
+  describe('listConflicts() (e-commerce conflict history depth fix)', () => {
+    it('returns real persisted conflicts for this business, most recent first, optionally filtered by provider', async () => {
+      await prisma.product.create({
+        data: {
+          businessId,
+          name: 'Conflict Widget',
+          sku: 'SKU-CONFLICT',
+          sellingPrice: 9,
+          stockQty: 1,
+        },
+      });
+      fetchProducts.mockResolvedValue([
+        { sku: 'SKU-CONFLICT', quantity: 4, updatedAt: '2099-01-01T00:00:00Z' },
+      ]);
+      fetchOrders.mockResolvedValue([]);
+      await service.sync(businessId);
+
+      const all = await service.listConflicts(businessId);
+      expect(
+        all.some((c) => c.sku === 'SKU-CONFLICT' && c.remoteQty === 4),
+      ).toBe(true);
+
+      const filtered = await service.listConflicts(
+        businessId,
+        IntegrationProvider.shopify,
+      );
+      expect(
+        filtered.every((c) => c.provider === IntegrationProvider.shopify),
+      ).toBe(true);
+
+      const wrongProvider = await service.listConflicts(
+        businessId,
+        IntegrationProvider.woocommerce,
+      );
+      expect(wrongProvider).toHaveLength(0);
+      // No manual cleanup here — this suite's own `afterAll` bulk-deletes stockMovement/product
+      // rows for the whole businessId, and this product's real conflict-triggered StockMovement
+      // row would otherwise block a standalone delete.
+    });
   });
 });

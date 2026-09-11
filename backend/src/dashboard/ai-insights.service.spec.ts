@@ -108,6 +108,8 @@ describe('AiInsightsService (UPD-BE-003)', () => {
       const creditFact = facts.find((f) => f.category === 'credit');
       expect(creditFact).toBeDefined();
       expect(creditFact?.sourceFigure).toContain('Overdue Customer owes 200');
+      // Estimated-impact depth fix — the real overdue balance, not a fabricated estimate.
+      expect(creditFact?.estimatedImpact).toBe(200);
     });
 
     it('flags marketing as quiet when a business has customers but no recent campaign', async () => {
@@ -159,6 +161,12 @@ describe('AiInsightsService (UPD-BE-003)', () => {
       expect(rows.some((r) => r.sourceFigure.includes('Low Widget'))).toBe(
         true,
       );
+      // Estimated-impact depth fix — persisted for categories with a real dollar figure (credit),
+      // left null for categories without one (stock).
+      const creditRow = rows.find((r) => r.category === 'credit');
+      expect(Number(creditRow?.estimatedImpact)).toBe(200);
+      const stockRow = rows.find((r) => r.category === 'stock');
+      expect(stockRow?.estimatedImpact).toBeNull();
     });
 
     it('falls back to the raw source figure as the observation when the AI call fails', async () => {

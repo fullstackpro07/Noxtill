@@ -18,6 +18,10 @@ const TO_BACKEND_PROVIDER: Record<ConnectorKey, string> = {
   bing_places: "bing_places",
   apple_business_connect: "apple_business_connect",
   yelp: "yelp",
+  quickbooks: "quickbooks",
+  xero: "xero",
+  shopify: "shopify",
+  woocommerce: "woocommerce",
 };
 
 const FROM_BACKEND_PROVIDER: Record<string, ConnectorKey> = Object.fromEntries(

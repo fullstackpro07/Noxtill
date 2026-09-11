@@ -732,6 +732,8 @@ model Business {
   adAudiences              AdAudience[]
   adLeads                  AdLead[]
   adSettings               AdSettings?
+  integrationSyncLogs      IntegrationSyncLog[]
+  ecommerceSyncConflicts   EcommerceSyncConflict[]
   adCampaignStatsSnapshots AdCampaignStatsSnapshot[]
   accountingMappings       AccountingMapping[]
   outboundWebhooks         OutboundWebhook[]
@@ -1933,6 +1935,10 @@ model ReviewSentimentTheme {
   sentiment    String
   exampleQuote String   @map("example_quote") @db.Text
   reviewCount  Int      @map("review_count")
+  /// Trend-arrows depth fix (UPD-FE-M25) — this same theme's `reviewCount` from the previous
+  /// generation run (matched by normalized theme text), `null` when the theme is new. A real
+  /// comparison across two real runs, never a fabricated trend.
+  previousReviewCount Int? @map("previous_review_count")
 
   generatedAt DateTime @default(now()) @map("generated_at")
 
@@ -2981,6 +2987,10 @@ model AiInsight {
   category     AiInsightCategory
   observation  String
   sourceFigure String            @map("source_figure")
+  /// Estimated-impact depth fix (UPD-INT-001) — a real dollar figure already present in the
+  /// underlying fact (e.g. the real revenue delta or the real overdue balance), never a fabricated
+  /// estimate. Null for categories with no natural dollar figure (stock/customers/marketing).
+  estimatedImpact Decimal?        @map("estimated_impact") @db.Decimal(12, 2)
   status       AiInsightStatus   @default(new)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -3371,6 +3381,14 @@ model Integration {
   /// Prisma P2000 error.
   tokens     String?             @db.Text
   meta       Json                @default("{}")
+  /// Connection Detail depth fix (UPD-BE-132) — set the moment `status` actually becomes
+  /// `connected` (a fresh OAuth exchange or non-OAuth connect), never backfilled; a reconnect
+  /// after disconnecting resets it, since that's honestly a new connection period.
+  connectedAt DateTime?          @map("connected_at")
+  /// Connection Detail depth fix — set by whichever real sync path actually ran for this
+  /// provider's category (Accounting/E-commerce/Business Listings); NULL means never synced, not
+  /// a fabricated "just now".
+  lastSyncAt  DateTime?          @map("last_sync_at")
 
   adCampaigns AdCampaign[]
 
@@ -3379,6 +3397,45 @@ model Integration {
 
   @@unique([businessId, provider])
   @@map("integrations")
+}
+
+/// Connection Detail depth fix (UPD-BE-132) — a real, generic sync-activity log across Accounting
+/// and E-commerce Sync (Business Listings already has its own `ListingSyncLog`, reused as-is
+/// rather than duplicated). One row per real sync attempt, success or failure, never fabricated.
+model IntegrationSyncLog {
+  id               String              @id @default(uuid())
+  businessId       String              @map("business_id")
+  business         Business            @relation(fields: [businessId], references: [id])
+  provider         IntegrationProvider
+  success          Boolean
+  recordsProcessed Int                 @default(0) @map("records_processed")
+  message          String?             @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, provider, createdAt])
+  @@map("integration_sync_logs")
+}
+
+/// E-commerce conflict history depth fix — a real, persisted row per real stock conflict
+/// `EcommerceSyncService.reconcileStock()` actually detects, so Connection Detail has a real
+/// browsable log rather than only ever showing the single most recent sync run's outcome. The
+/// resolution itself is unchanged (still automatic, most-recently-updated wins) — this only makes
+/// that real decision durable and visible after the fact.
+model EcommerceSyncConflict {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  provider   IntegrationProvider
+  sku        String
+  winner     String
+  localQty   Int                 @map("local_qty")
+  remoteQty  Int                 @map("remote_qty")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, provider, createdAt])
+  @@map("ecommerce_sync_conflicts")
 }
 
 model AdCampaign {

@@ -2,6 +2,8 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { AuditService } from '../common/audit/audit.service';
 import { QueryAuditLogDto } from './dto/query-audit-log.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
 /** Activity Log (UPD-BE-079) — a thin query surface over the existing append-only `AuditLog` model, no new model needed. */
@@ -9,6 +11,7 @@ import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 export class AuditLogController {
   constructor(private readonly auditService: AuditService) {}
 
+  @RequireCapability(CAPABILITIES.ACTIVITY_LOG_VIEW)
   @Get()
   list(
     @CurrentUser() user: AuthenticatedUser,

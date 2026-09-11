@@ -67,6 +67,7 @@ describe('AccountingSyncService (UPD-BE-072)', () => {
     await prisma.order.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
     await prisma.accountingMapping.deleteMany({ where: { businessId } });
+    await prisma.integrationSyncLog.deleteMany({ where: { businessId } });
     await prisma.integration.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
@@ -132,6 +133,23 @@ describe('AccountingSyncService (UPD-BE-072)', () => {
     });
     expect(refreshed.accountingExternalId).toBe('qbo-inv-1');
     expect(refreshed.accountingSyncedAt).not.toBeNull();
+
+    // Connection Detail depth fix (UPD-BE-132) — a real, generic sync record.
+    const integration = await prisma.integration.findUniqueOrThrow({
+      where: {
+        businessId_provider: {
+          businessId,
+          provider: IntegrationProvider.quickbooks,
+        },
+      },
+    });
+    expect(integration.lastSyncAt).not.toBeNull();
+    const logs = await prisma.integrationSyncLog.findMany({
+      where: { businessId, provider: IntegrationProvider.quickbooks },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].success).toBe(true);
+    expect(logs[0].recordsProcessed).toBe(1);
   });
 
   it('a category-specific mapping overrides the default for that one product', async () => {
@@ -218,5 +236,12 @@ describe('AccountingSyncService (UPD-BE-072)', () => {
       where: { id: order.id },
     });
     expect(refreshed.accountingSyncedAt).toBeNull();
+
+    const [latestLog] = await prisma.integrationSyncLog.findMany({
+      where: { businessId, provider: IntegrationProvider.quickbooks },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+    });
+    expect(latestLog.success).toBe(false);
   });
 });

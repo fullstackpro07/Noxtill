@@ -20,13 +20,22 @@ export interface AuditLogPage {
   rows: AuditLogRow[];
 }
 
-/** GET /audit-log */
-export function fetchAuditLog(filters: { action?: string; entity?: string; page?: number; pageSize?: number } = {}): Promise<AuditLogPage> {
+export interface QueryAuditLogInput {
+  entity?: string;
+  actorUserId?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** GET /audit-log — the real, append-only audit trail (owner/manager only), filterable by entity/actor/action/date. */
+export function fetchAuditLog(query: QueryAuditLogInput = {}): Promise<AuditLogPage> {
   const params = new URLSearchParams();
-  if (filters.action) params.set("action", filters.action);
-  if (filters.entity) params.set("entity", filters.entity);
-  if (filters.page) params.set("page", String(filters.page));
-  if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
-  const query = params.toString();
-  return apiFetch<AuditLogPage>(`/audit-log${query ? `?${query}` : ""}`);
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return apiFetch<AuditLogPage>(`/audit-log${qs ? `?${qs}` : ""}`);
 }

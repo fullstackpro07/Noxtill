@@ -212,6 +212,8 @@ export interface ReviewSentimentTheme {
   sentiment: string;
   exampleQuote: string;
   reviewCount: number;
+  /** Trend-arrows depth fix — this theme's reviewCount from the previous real generation run, matched by theme text; null when the theme is new. */
+  previousReviewCount: number | null;
   generatedAt: string;
 }
 

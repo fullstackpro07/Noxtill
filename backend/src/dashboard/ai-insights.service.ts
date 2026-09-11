@@ -20,6 +20,8 @@ interface CategoryFact {
   sourceFigure: string;
   /** Extra context for the AI prompt only — never stored, never itself trusted as the source figure. */
   context: string;
+  /** Estimated-impact depth fix — a real dollar figure already present in this fact, when one naturally exists. */
+  estimatedImpact?: number;
 }
 
 interface LowStockRow {
@@ -116,6 +118,7 @@ export class AiInsightsService {
         category: fact.category,
         sourceFigure: fact.sourceFigure,
         observation: observations[i] || fact.sourceFigure,
+        estimatedImpact: fact.estimatedImpact ?? null,
       })),
     });
 
@@ -245,6 +248,7 @@ export class AiInsightsService {
         deltaPercent >= 0
           ? 'this is a real increase'
           : 'this is a real decline',
+      estimatedImpact: round2(Math.abs(thisWeekTotal - lastWeekTotal)),
     };
   }
 
@@ -320,10 +324,12 @@ export class AiInsightsService {
     if (rows.length === 0) return null;
 
     const [top] = rows;
+    const balance = round2(Number(top.balance));
     return {
       category: 'credit',
-      sourceFigure: `${top.name} owes ${round2(Number(top.balance))}, ${top.days_outstanding} days overdue`,
+      sourceFigure: `${top.name} owes ${balance}, ${top.days_outstanding} days overdue`,
       context: 'this is the most overdue outstanding balance right now',
+      estimatedImpact: balance,
     };
   }
 }

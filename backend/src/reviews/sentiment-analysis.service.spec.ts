@@ -114,6 +114,8 @@ describe('SentimentAnalysisService (UPD-BE-076)', () => {
     expect(themes).toHaveLength(1);
     expect(themes[0].theme).toBe('Slow service');
     expect(themes[0].exampleQuote).toBe('we waited 40 minutes for a table');
+    // Trend-arrows depth fix — first-ever run for this business, no prior run to compare against.
+    expect(themes[0].previousReviewCount).toBeNull();
   });
 
   it('replaces the AI quote with the real review text when the AI quote cannot be verified verbatim (never fabricates)', async () => {
@@ -136,6 +138,9 @@ describe('SentimentAnalysisService (UPD-BE-076)', () => {
       'this quote was invented and never appears in the review',
     );
     expect(themes[0].exampleQuote.length).toBeGreaterThan(0);
+    // Trend-arrows depth fix — same theme name as the previous run (reviewCount 1), so this
+    // regeneration carries forward a real previous-count comparison rather than null.
+    expect(themes[0].previousReviewCount).toBe(1);
   });
 
   it('regenerating replaces the previous themes rather than accumulating duplicates', async () => {
@@ -153,6 +158,8 @@ describe('SentimentAnalysisService (UPD-BE-076)', () => {
     const themes = await service.list(businessId);
     expect(themes).toHaveLength(1);
     expect(themes[0].theme).toBe('New theme');
+    // Trend-arrows depth fix — a genuinely new theme name has no prior run to compare against.
+    expect(themes[0].previousReviewCount).toBeNull();
   });
 
   it('gracefully returns 0 (never throws) when the AI call itself fails', async () => {

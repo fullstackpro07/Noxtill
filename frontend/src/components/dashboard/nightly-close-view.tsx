@@ -1,14 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Moon, Eye, Send, Settings2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Select } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorBanner } from "@/components/shared/error-states";
 import { SkeletonRow } from "@/components/shared/skeleton";
@@ -16,23 +15,24 @@ import { useSession } from "@/lib/session";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { NightlyCloseTrendChart } from "./nightly-close-trend-chart";
 import {
   fetchNightlyCloseHistory,
   previewNightlyClose,
   sendNightlyCloseTest,
-  updateNightlyCloseSettings,
   type NightlyClosePreview,
 } from "@/lib/nightly-close-api";
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function NightlyCloseView() {
   const session = useSession();
   const queryClient = useQueryClient();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const { data: history, isPending, isError, refetch } = useQuery({
     queryKey: ["nightly-close-history"],
-    queryFn: () => fetchNightlyCloseHistory(),
+    queryFn: () => fetchNightlyCloseHistory({ from: new Date(Date.now() - THIRTY_DAYS_MS).toISOString().slice(0, 10) }),
   });
 
   const previewQuery = useQuery({
@@ -83,21 +83,31 @@ export function NightlyCloseView() {
               {testSendMutation.isPending ? "Sending…" : "Send test now"}
             </Button>
             {session.user.role === "owner" && (
-              <Button variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}>
-                <Settings2 className="h-3.5 w-3.5" aria-hidden />
-                Change time
-              </Button>
+              <Link href="/settings/nightly-close">
+                <Button variant="ghost" size="sm">
+                  <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                  Manage settings
+                </Button>
+              </Link>
             )}
           </div>
         </CardHeader>
         <CardContent>
           {stats ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard label="Last sent" value={formatDate(stats.lastSent)} />
-              <StatCard label="Delivery status" value={stats.lastStatus === "sent" ? "Sent" : "Failed"} />
-              <StatCard label="Success rate (30 days)" value={`${stats.successRate}%`} />
-              <StatCard label="Channel" value={stats.channel} />
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard label="Last sent" value={formatDate(stats.lastSent)} />
+                <StatCard label="Delivery status" value={stats.lastStatus === "sent" ? "Sent" : "Failed"} />
+                <StatCard label="Success rate (30 days)" value={`${stats.successRate}%`} />
+                <StatCard label="Channel" value={stats.channel} />
+              </div>
+              {history && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium text-fg-muted">Sales trend (30 days)</p>
+                  <NightlyCloseTrendChart history={history} />
+                </div>
+              )}
+            </>
           ) : (
             <p className="text-sm text-fg-muted">No history yet — your first Nightly Close sends tonight.</p>
           )}
@@ -160,7 +170,6 @@ export function NightlyCloseView() {
       </Card>
 
       <PreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} data={previewQuery.data} isPending={previewQuery.isPending} currency={session.business.currency} />
-      <NightlyCloseSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
@@ -208,52 +217,3 @@ function PreviewDialog({
   );
 }
 
-function NightlyCloseSettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
-  return <NightlyCloseSettingsDialogBody onClose={onClose} />;
-}
-
-function NightlyCloseSettingsDialogBody({ onClose }: { onClose: () => void }) {
-  const [time, setTime] = useState("22:00");
-  const [channel, setChannel] = useState<"whatsapp" | "sms" | "email">("whatsapp");
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: () => updateNightlyCloseSettings({ time, channel }),
-    onSuccess: () => {
-      toast.success("Nightly Close settings saved.");
-      queryClient.invalidateQueries({ queryKey: ["nightly-close-history"] });
-      onClose();
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't save these settings — please try again.");
-    },
-  });
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Nightly Close settings"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving…" : "Save"}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3.5">
-        <Input type="time" label="Send time" value={time} onChange={(e) => setTime(e.target.value)} />
-        <Select label="Channel" value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="sms">SMS</option>
-          <option value="email">Email</option>
-        </Select>
-      </div>
-    </Dialog>
-  );
-}

@@ -1,7 +1,9 @@
 import { ClsService } from 'nestjs-cls';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../../common/tenancy/tenant.constants';
+import { QueueService } from '../../common/queue/queue.service';
 import { OutboundWebhookService } from './outbound-webhook.service';
 import { IntegrationProvider, WorkflowTriggerKey } from '@prisma/client';
 
@@ -19,6 +21,7 @@ describe('OutboundWebhookService (UPD-BE-074)', () => {
   let prisma: PrismaService;
   let service: OutboundWebhookService;
   let businessId: string;
+  const addJob = jest.fn();
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -29,7 +32,11 @@ describe('OutboundWebhookService (UPD-BE-074)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new OutboundWebhookService(tenantPrisma);
+    service = new OutboundWebhookService(
+      tenantPrisma,
+      { addJob } as unknown as QueueService,
+      {} as unknown as Queue,
+    );
 
     const business = await prisma.business.create({
       data: {
@@ -95,5 +102,41 @@ describe('OutboundWebhookService (UPD-BE-074)', () => {
     });
     await service.unsubscribe(sub.id);
     await expect(service.unsubscribe(sub.id)).rejects.toThrow();
+  });
+
+  describe('test() (Connection Detail / Automation Platforms depth fix)', () => {
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('creates a real delivery honestly labelled as a test and enqueues the same real delivery job', async () => {
+      const sub = await service.subscribe(businessId, {
+        provider: IntegrationProvider.zapier,
+        triggerKey: WorkflowTriggerKey.sale,
+        targetUrl: 'https://hooks.zapier.com/hooks/catch/test/abc',
+      });
+
+      const delivery = await service.test(sub.id);
+
+      expect((delivery.payload as Record<string, unknown>).test).toBe(true);
+      expect((delivery.payload as Record<string, unknown>).trigger).toBe(
+        WorkflowTriggerKey.sale,
+      );
+      expect(addJob).toHaveBeenCalledWith(
+        expect.anything(),
+        'deliver',
+        { deliveryId: delivery.id },
+        delivery.id,
+      );
+
+      const stored = await prisma.outboundWebhookDelivery.findUnique({
+        where: { id: delivery.id },
+      });
+      expect(stored).not.toBeNull();
+    });
+
+    it('rejects testing a subscription that does not exist', async () => {
+      await expect(service.test('no-such-id')).rejects.toThrow();
+    });
   });
 });

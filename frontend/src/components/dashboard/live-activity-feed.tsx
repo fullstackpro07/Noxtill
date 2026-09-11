@@ -29,7 +29,7 @@ import { useActivityStream } from "@/hooks/use-activity-stream";
 import { useNow } from "@/hooks/use-now";
 import { fetchStaffList } from "@/lib/staff-api";
 import { formatCurrency, formatRelativeTime, formatDate, formatTime } from "@/lib/format";
-import { ACTIVITY_EVENT_TYPE_LABEL, type ActivityEventType, type LiveActivityEvent } from "@/lib/activity-api";
+import { ACTIVITY_EVENT_TYPE_LABEL, fetchOpenTablesCount, type ActivityEventType, type LiveActivityEvent } from "@/lib/activity-api";
 
 const TYPE_ICON: Record<ActivityEventType, LucideIcon> = {
   sale: ShoppingCart,
@@ -70,6 +70,7 @@ export function LiveActivityFeed() {
   const now = useNow();
 
   const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60 * 1000 });
+  const { data: openTables } = useQuery({ queryKey: ["open-tables-count"], queryFn: fetchOpenTablesCount, refetchInterval: 30_000 });
   const staffNameByUserId = useMemo(() => new Map((staff ?? []).map((s) => [s.userId, s.name])), [staff]);
 
   // While paused, the visible list freezes at the event id captured at pause time — new events still
@@ -155,6 +156,9 @@ export function LiveActivityFeed() {
         </span>
         <span>
           <span className="font-semibold tabular-nums text-fg">{activeStaffLastHour}</span> active staff
+        </span>
+        <span>
+          <span className="font-semibold tabular-nums text-fg">{openTables?.count ?? "—"}</span> open tables
         </span>
       </div>
 

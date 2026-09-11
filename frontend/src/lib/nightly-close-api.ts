@@ -30,9 +30,15 @@ export interface NightlyClosePreview {
 /** GET /nightly-close/history */
 export function fetchNightlyCloseHistory(filters?: {
   status?: "sent" | "failed";
+  from?: string;
+  to?: string;
 }): Promise<NightlyCloseHistoryRow[]> {
-  const query = filters?.status ? `?status=${filters.status}` : "";
-  return apiFetch<NightlyCloseHistoryRow[]>(`/nightly-close/history${query}`);
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  const query = params.toString();
+  return apiFetch<NightlyCloseHistoryRow[]>(`/nightly-close/history${query ? `?${query}` : ""}`);
 }
 
 /** POST /nightly-close/preview — composes tonight's close without sending it. */

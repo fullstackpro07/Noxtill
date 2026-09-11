@@ -15,7 +15,7 @@ import { SkeletonRow } from "@/components/shared/skeleton";
 import { useSession } from "@/lib/session";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatCurrency } from "@/lib/format";
 import { useNow } from "@/hooks/use-now";
 import {
   AI_INSIGHT_CATEGORY_LABEL,
@@ -58,6 +58,9 @@ export function AiInsightsFeed() {
     return {
       insightsThisWeek: thisWeek.length,
       actionsTaken: thisWeek.filter((i) => i.status === "actioned").length,
+      // Estimated-impact depth fix — sums only the real dollar figures already present on each
+      // insight (revenue delta / overdue balance); insights with no such figure contribute nothing.
+      estimatedImpact: thisWeek.reduce((sum, i) => sum + (i.estimatedImpact != null ? Number(i.estimatedImpact) : 0), 0),
     };
   }, [allInsights, now]);
 
@@ -103,6 +106,11 @@ export function AiInsightsFeed() {
         <span>
           <span className="font-semibold tabular-nums text-whatsapp">{stats.actionsTaken}</span> actioned
         </span>
+        {stats.estimatedImpact > 0 && (
+          <span>
+            <span className="font-semibold tabular-nums text-fg">{formatCurrency(stats.estimatedImpact, session.business.currency)}</span> estimated impact
+          </span>
+        )}
       </div>
 
       <CardContent className={data && data.length > 0 ? "flex flex-col gap-3" : ""}>
@@ -175,6 +183,7 @@ function InsightCard({
 }
 
 function InsightDetailDialog({ insight, onClose }: { insight: LiveAiInsight | null; onClose: () => void }) {
+  const session = useSession();
   if (!insight) return null;
   return (
     <Dialog open={!!insight} onClose={onClose} title="Insight detail">
@@ -190,6 +199,12 @@ function InsightDetailDialog({ insight, onClose }: { insight: LiveAiInsight | nu
           </p>
           <p className="text-sm text-fg">{insight.sourceFigure}</p>
         </div>
+        {insight.estimatedImpact != null && (
+          <div className="rounded-[var(--radius-sm)] border border-border bg-surface-2/50 p-3.5">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-fg-faint">Estimated impact</p>
+            <p className="text-sm text-fg">{formatCurrency(Number(insight.estimatedImpact), session.business.currency)}</p>
+          </div>
+        )}
       </div>
     </Dialog>
   );

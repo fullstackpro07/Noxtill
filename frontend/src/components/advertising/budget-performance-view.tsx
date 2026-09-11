@@ -1,42 +1,59 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { Wallet, Lightbulb } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Wallet, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { SkeletonRow } from "@/components/shared/skeleton";
 import { ErrorBanner } from "@/components/shared/error-states";
 import { EmptyState } from "@/components/shared/empty-state";
 import { fetchAdBudget, fetchAdPerformance, fetchAdLeads, fetchAdSettings, AD_PROVIDER_LABELS } from "@/lib/ads-api";
+import { suggestMarketingReallocation } from "@/lib/marketing-overview-api";
+import { ApiError } from "@/lib/api-client";
+import { toast } from "@/lib/toast";
 import { formatDate } from "@/lib/format";
 
 /**
- * The AI-reallocation-suggestion popup (UPD-FE-060e) is a real, rule-based insight computed
- * client-side from `fetchAdPerformance()`'s real per-platform cost-per-result — not an LLM call,
- * and disclosed as such: it names the real highest- and lowest-cost-per-result platforms when the
- * gap is meaningful, never a fabricated number.
+ * AI-reallocation-suggestion (UPD-FE-060e) — a real Claude call via the shared, rate-limited AI
+ * infra (`MarketingOverviewService.suggestReallocation`, already built for the cross-channel
+ * Marketing Overview screen), grounded in this business's own real spend/results across every ad
+ * platform. Reused rather than duplicated with a second, ads-only AI call.
  */
-function ReallocationInsight({ performance }: { performance: { provider: string; costPerResult: number | null; results: number }[] }) {
-  const withResults = performance.filter((p) => p.costPerResult != null && p.results > 0);
-  if (withResults.length < 2) return null;
-  const sorted = [...withResults].sort((a, b) => (a.costPerResult ?? 0) - (b.costPerResult ?? 0));
-  const best = sorted[0];
-  const worst = sorted[sorted.length - 1];
-  if (!best.costPerResult || !worst.costPerResult || worst.costPerResult <= best.costPerResult * 1.3) return null;
+function ReallocationDialog({ onClose }: { onClose: () => void }) {
+  const mutation = useMutation({
+    mutationFn: () => suggestMarketingReallocation(),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't get a suggestion right now."),
+  });
 
   return (
-    <div className="mb-4 flex items-start gap-2 rounded-[var(--radius-noxtill)] border border-primary/30 bg-primary/8 p-3 text-sm">
-      <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
-      <p>
-        <span className="font-medium text-fg">Reallocation suggestion (rule-based, from your real numbers):</span>{" "}
-        {AD_PROVIDER_LABELS[worst.provider as keyof typeof AD_PROVIDER_LABELS]} costs ${worst.costPerResult.toFixed(2)}/result vs{" "}
-        {AD_PROVIDER_LABELS[best.provider as keyof typeof AD_PROVIDER_LABELS]}&apos;s ${best.costPerResult.toFixed(2)} — consider shifting some budget toward the latter.
-      </p>
-    </div>
+    <Dialog
+      open
+      onClose={onClose}
+      title="AI reallocation ideas"
+      description="Grounded in your own real spend and results across every channel — not a generic tip."
+      footer={
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      {mutation.data ? (
+        <p className="text-sm text-fg">{mutation.data.suggestion}</p>
+      ) : (
+        <Button size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          {mutation.isPending ? "Thinking…" : "Get suggestion"}
+        </Button>
+      )}
+    </Dialog>
   );
 }
 
 export function BudgetPerformanceView() {
+  const [aiOpen, setAiOpen] = useState(false);
   const { data: budget, isPending: budgetPending, isError: budgetError, refetch: refetchBudget } = useQuery({ queryKey: ["ad-budget"], queryFn: fetchAdBudget });
   const { data: performance, isPending: perfPending } = useQuery({ queryKey: ["ad-performance"], queryFn: fetchAdPerformance });
   const { data: leads, isPending: leadsPending, isError: leadsError, refetch: refetchLeads } = useQuery({ queryKey: ["ad-leads"], queryFn: fetchAdLeads });
@@ -44,9 +61,15 @@ export function BudgetPerformanceView() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-5">
-        <h1 className="font-display text-2xl font-bold text-fg">Budget, Performance &amp; Leads</h1>
-        <p className="mt-0.5 text-sm text-fg-muted">A real cross-platform rollup over every stored campaign — no fabricated trend, since only current totals are stored.</p>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-fg">Budget, Performance &amp; Leads</h1>
+          <p className="mt-0.5 text-sm text-fg-muted">A real cross-platform rollup over every stored campaign — no fabricated trend, since only current totals are stored.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setAiOpen(true)}>
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          AI reallocation ideas
+        </Button>
       </div>
 
       {settings?.autoPauseCostPerResult != null && (
@@ -57,8 +80,6 @@ export function BudgetPerformanceView() {
           </Link>
         </p>
       )}
-
-      {performance && <ReallocationInsight performance={performance} />}
 
       <div className="mb-8">
         <p className="mb-3 text-sm font-medium text-fg">Budget &amp; Spend</p>
@@ -148,6 +169,8 @@ export function BudgetPerformanceView() {
           </div>
         )}
       </div>
+
+      {aiOpen && <ReallocationDialog onClose={() => setAiOpen(false)} />}
     </div>
   );
 }

@@ -8,5 +8,6 @@ import { IntegrationsModule } from '../integrations.module';
   imports: [IntegrationsModule],
   controllers: [AccountingController],
   providers: [AccountingMappingService, AccountingSyncService],
+  exports: [AccountingMappingService, AccountingSyncService],
 })
 export class AccountingModule {}

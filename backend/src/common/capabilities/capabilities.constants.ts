@@ -65,6 +65,10 @@ export const CAPABILITIES = {
   /// Owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below) — a data-subject
   /// request can end in real customer PII erasure, same tier as CUSTOMERS_ERASE itself.
   GDPR_MANAGE: 'gdpr.manage',
+  /// Activity Log depth fix (UPD-BE-M25) — the append-only audit trail spans every entity
+  /// (financial mutations included), so viewing it is owner+manager, matching the tier every
+  /// other cross-business oversight screen (Profit & Analytics, Expenses) already uses.
+  ACTIVITY_LOG_VIEW: 'activity_log.view',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -101,6 +105,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.MESSAGING_CHANNELS_MANAGE,
   CAPABILITIES.NIGHTLY_CLOSE_MANAGE,
   CAPABILITIES.TAX_RULES_MANAGE,
+  CAPABILITIES.ACTIVITY_LOG_VIEW,
 ];
 
 /**

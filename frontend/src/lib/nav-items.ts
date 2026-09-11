@@ -102,6 +102,7 @@ import {
   ScanLine,
   Route,
   Target,
+  Calculator,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -276,7 +277,6 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "email-marketing", labelKey: "nav.emailMarketing", href: "/marketing/email", icon: Mail },
       { key: "marketing-assets", labelKey: "nav.marketingAssets", href: "/marketing/assets", icon: ImageIcon },
       { key: "marketing-analytics", labelKey: "nav.marketingAnalytics", href: "/marketing/analytics", icon: BarChart3 },
-      { key: "integrations", labelKey: "nav.integrations", href: "/integrations", icon: Plug },
     ],
   },
   {
@@ -291,6 +291,18 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "advertising-creatives", labelKey: "nav.advertisingCreatives", href: "/advertising/creatives", icon: ImageIcon },
       { key: "advertising-performance", labelKey: "nav.advertisingPerformance", href: "/advertising/performance", icon: Wallet },
       { key: "advertising-settings", labelKey: "nav.advertisingSettings", href: "/advertising/settings", icon: Settings2 },
+    ],
+  },
+  {
+    key: "integrations",
+    labelKey: "nav.integrations",
+    href: "/integrations",
+    icon: Plug,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "integrations-directory", labelKey: "nav.integrationsDirectory", href: "/integrations", icon: Plug },
+      { key: "integrations-accounting-ecommerce", labelKey: "nav.integrationsAccountingEcommerce", href: "/integrations/accounting-ecommerce", icon: Calculator },
+      { key: "integrations-automation", labelKey: "nav.integrationsAutomation", href: "/integrations/automation", icon: Zap },
     ],
   },
   {

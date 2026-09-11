@@ -42,4 +42,11 @@ export class AutomationController {
   deliveries(@Param('id') id: string) {
     return this.webhooks.deliveries(id);
   }
+
+  /** Connection Detail / Automation Platforms depth fix — a real test delivery, not a simulated one. */
+  @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)
+  @Post('webhooks/:id/test')
+  test(@Param('id') id: string) {
+    return this.webhooks.test(id);
+  }
 }

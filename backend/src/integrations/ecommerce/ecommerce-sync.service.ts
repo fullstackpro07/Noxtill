@@ -53,6 +53,15 @@ export class EcommerceSyncService {
     private readonly connectors: ConnectorRegistry,
   ) {}
 
+  /** E-commerce conflict history depth fix — the real, persisted conflict log, most recent first. */
+  listConflicts(businessId: string, provider?: IntegrationProvider) {
+    return this.tenantPrisma.client.ecommerceSyncConflict.findMany({
+      where: { businessId, ...(provider ? { provider } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
   async sync(businessId: string): Promise<EcommerceSyncResult[]> {
     const integrations = await this.tenantPrisma.client.integration.findMany({
       where: {
@@ -88,7 +97,7 @@ export class EcommerceSyncService {
     if (!tokens || !connector.fetchProducts || !connector.fetchOrders)
       return result;
 
-    await this.reconcileStock(
+    const stockFetchOk = await this.reconcileStock(
       businessId,
       provider,
       connector,
@@ -96,7 +105,7 @@ export class EcommerceSyncService {
       meta,
       result,
     );
-    await this.importOrders(
+    const ordersFetchOk = await this.importOrders(
       businessId,
       provider,
       connector,
@@ -104,6 +113,28 @@ export class EcommerceSyncService {
       meta,
       result,
     );
+
+    // Connection Detail depth fix — a real record of this sync attempt. `success` reflects
+    // whether the real fetches actually reached the provider, not just that nothing threw —
+    // `reconcileStock`/`importOrders` log-and-return on a fetch failure rather than throwing, so
+    // checking their own outcome (not just "no exception") is what keeps this honest.
+    await this.tenantPrisma.client.integration.update({
+      where: { businessId_provider: { businessId, provider } },
+      data: { lastSyncAt: new Date() },
+    });
+    await this.tenantPrisma.client.integrationSyncLog.create({
+      data: {
+        businessId,
+        provider,
+        success: stockFetchOk && ordersFetchOk,
+        recordsProcessed: result.productsReconciled + result.ordersImported,
+        message:
+          stockFetchOk && ordersFetchOk
+            ? `Reconciled ${result.productsReconciled} product(s), imported ${result.ordersImported} order(s)`
+            : 'One or more real fetches from the provider failed — see server logs',
+      },
+    });
+
     return result;
   }
 
@@ -114,7 +145,7 @@ export class EcommerceSyncService {
     tokens: OAuthTokens,
     meta: Record<string, unknown>,
     result: EcommerceSyncResult,
-  ): Promise<void> {
+  ): Promise<boolean> {
     let remoteProducts: EcommerceProduct[];
     try {
       remoteProducts = await connector.fetchProducts!(tokens, meta);
@@ -122,7 +153,7 @@ export class EcommerceSyncService {
       this.logger.warn(
         `E-commerce product fetch failed for provider=${provider}: ${(error as Error).message}`,
       );
-      return;
+      return false;
     }
 
     for (const remoteProduct of remoteProducts.slice(
@@ -145,6 +176,18 @@ export class EcommerceSyncService {
         winner: remoteWins ? 'remote' : 'local',
         localQty: localProduct.stockQty,
         remoteQty: remoteProduct.quantity,
+      });
+      // E-commerce conflict history depth fix — a real, persisted row per real conflict, so
+      // Connection Detail has a real browsable log rather than only this run's own response.
+      await this.tenantPrisma.client.ecommerceSyncConflict.create({
+        data: {
+          businessId,
+          provider,
+          sku: remoteProduct.sku,
+          winner: remoteWins ? 'remote' : 'local',
+          localQty: localProduct.stockQty,
+          remoteQty: remoteProduct.quantity,
+        },
       });
 
       if (remoteWins) {
@@ -172,6 +215,7 @@ export class EcommerceSyncService {
           );
       }
     }
+    return true;
   }
 
   private async importOrders(
@@ -181,7 +225,7 @@ export class EcommerceSyncService {
     tokens: OAuthTokens,
     meta: Record<string, unknown>,
     result: EcommerceSyncResult,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const lastImported = await this.tenantPrisma.client.order.findFirst({
       where: { businessId, externalProvider: provider },
       orderBy: { createdAt: 'desc' },
@@ -200,7 +244,7 @@ export class EcommerceSyncService {
       this.logger.warn(
         `E-commerce order fetch failed for provider=${provider}: ${(error as Error).message}`,
       );
-      return;
+      return false;
     }
 
     for (const remoteOrder of remoteOrders.slice(0, ECOMMERCE_FETCH_LIMIT)) {
@@ -261,5 +305,6 @@ export class EcommerceSyncService {
       });
       result.ordersImported += 1;
     }
+    return true;
   }
 }

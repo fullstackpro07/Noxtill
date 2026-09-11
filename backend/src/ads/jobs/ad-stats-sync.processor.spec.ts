@@ -168,4 +168,46 @@ describe('AdStatsSyncProcessor (fatigue-warning depth fix, real stats history)',
     });
     expect(snapshots).toHaveLength(0);
   });
+
+  describe('syncBusinessProvider() (Connection Detail depth fix — real on-demand "Sync now")', () => {
+    it('syncs only this business+provider, ignoring other campaigns', async () => {
+      await prisma.integration.create({
+        data: {
+          businessId,
+          provider: IntegrationProvider.meta_ads,
+          status: IntegrationStatus.connected,
+        },
+      });
+      getTokens.mockResolvedValue({ accessToken: 'tok' });
+      fetchCampaignStats.mockResolvedValue({
+        spend: 5,
+        impressions: 100,
+        clicks: 4,
+        results: 1,
+      });
+      const target = await makeCampaign(IntegrationProvider.meta_ads, 'camp_a');
+      // A tiktok_ads campaign in the same business — its connector has no fetchCampaignStats, so
+      // it must not affect the meta_ads sync count.
+      await makeCampaign(IntegrationProvider.tiktok_ads, 'camp_b');
+
+      const result = await processor.syncBusinessProvider(
+        businessId,
+        IntegrationProvider.meta_ads,
+      );
+
+      expect(result).toEqual({ synced: 1, total: 1 });
+      const snapshots = await prisma.adCampaignStatsSnapshot.findMany({
+        where: { campaignId: target.id },
+      });
+      expect(snapshots).toHaveLength(1);
+    });
+
+    it('returns zero when the business has no eligible campaigns for that provider', async () => {
+      const result = await processor.syncBusinessProvider(
+        businessId,
+        IntegrationProvider.meta_ads,
+      );
+      expect(result).toEqual({ synced: 0, total: 0 });
+    });
+  });
 });

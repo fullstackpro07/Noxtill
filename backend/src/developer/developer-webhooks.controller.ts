@@ -46,4 +46,10 @@ export class DeveloperWebhooksController {
   deliveries(@Param('id') id: string) {
     return this.webhooks.deliveries(id);
   }
+
+  @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)
+  @Post(':id/test')
+  test(@Param('id') id: string) {
+    return this.webhooks.test(id);
+  }
 }
