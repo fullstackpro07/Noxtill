@@ -25,6 +25,12 @@ function hasRecognizedCommissionRule(rule: unknown): boolean {
  * reversible by re-exporting. Advances are deducted oldest-first, whole-record (never partially
  * deducting a single advance) — one that doesn't fully fit in the remaining commission stays
  * outstanding for a future payout.
+ *
+ * Staff depth fix (UPD-INT-011): an unapproved timesheet for the month is surfaced as a real
+ * `warnings` entry (same mechanism already used for a missing commission rule) rather than
+ * silently paying out — approval previously had no effect anywhere downstream of the timesheet
+ * screen. This is a warning, not a hard block: the export still runs (an owner may need the
+ * numbers before chasing down an approval), but the gap is no longer invisible.
  */
 @Injectable()
 export class PayrollService {
@@ -70,6 +76,11 @@ export class PayrollService {
         month,
       );
       const timesheet = timesheetByStaffId.get(c.businessUserId);
+      if (timesheet && !timesheet.approved) {
+        warnings.push(
+          `${c.name}'s timesheet for ${month} has not been approved yet`,
+        );
+      }
 
       rows.push({
         name: c.name,

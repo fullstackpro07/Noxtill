@@ -47,3 +47,17 @@ export function updateCoupon(id: string, input: UpdateCouponInput): Promise<Coup
 export function deleteCoupon(id: string): Promise<void> {
   return apiFetch(`/coupons/${id}`, { method: "DELETE" });
 }
+
+export interface CouponPreview {
+  couponId: string;
+  code: string;
+  discountAmount: number;
+}
+
+/** POS checkout preview (UPD-INT-009) — read-only, never consumes a real usage slot. */
+export function previewCoupon(code: string, subtotal: number, customerId?: string): Promise<CouponPreview> {
+  return apiFetch<CouponPreview>("/coupons/preview", {
+    method: "POST",
+    body: JSON.stringify({ code, subtotal, customerId }),
+  });
+}

@@ -37,6 +37,12 @@ export class MembershipsController {
     return this.membershipsService.activate(id);
   }
 
+  /** Membership depth fix (UPD-INT-007) — the real cash-renewal action staff use each period. */
+  @Post('memberships/:id/renew-cash')
+  renewCash(@Param('id') id: string) {
+    return this.membershipsService.renewCash(id);
+  }
+
   @Post('memberships/:id/cancel')
   cancel(@Param('id') id: string) {
     return this.membershipsService.cancel(id);

@@ -428,6 +428,49 @@ describe('CreditService (BE-030)', () => {
         report.atRisk.debtors.some((d) => d.customerId === plannedCustomer.id),
       ).toBe(false);
     });
+
+    it('a partial payment does not reset days_outstanding to zero (credit aging depth fix, UPD-INT-006)', async () => {
+      const partialPayerCustomer = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}pp`,
+          name: 'Partial Payer Customer',
+        },
+      });
+      await prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: partialPayerCustomer.id,
+          kind: 'credit',
+          amount: 500,
+          createdAt: new Date(Date.now() - 95 * 24 * 60 * 60 * 1000),
+        },
+      });
+      // A real payment made TODAY, toward a 95-day-old debt — must not make this customer look
+      // "current." Before the fix, v_credit_balances.days_outstanding was DATEDIFF(NOW(),
+      // MAX(created_at)), so this payment alone reset the age to 0 for the whole remaining balance.
+      await creditService.recordPayment({
+        customerId: partialPayerCustomer.id,
+        amount: 100,
+        method: 'cash',
+      });
+
+      const debtors = await creditService.listDebtors('overdue');
+      const debtor = debtors.find(
+        (d) => d.customerId === partialPayerCustomer.id,
+      );
+      expect(debtor).toBeDefined();
+      expect(debtor!.balance).toBe(400);
+      expect(debtor!.daysOutstanding).toBeGreaterThanOrEqual(94);
+
+      const report = await creditService.overdueAgeing();
+      const ninetyPlus = report.buckets.find((b) => b.key === 'ninetyPlus');
+      expect(
+        report.atRisk.debtors.some(
+          (d) => d.customerId === partialPayerCustomer.id,
+        ) || ninetyPlus!.count >= 1,
+      ).toBe(true);
+    });
   });
 
   describe('collectedToday (UPD-FE-076)', () => {

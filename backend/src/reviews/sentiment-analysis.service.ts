@@ -7,6 +7,7 @@ import {
   SENTIMENT_MIN_REVIEWS,
   SENTIMENT_REVIEW_LOOKBACK,
 } from './sentiment-analysis.constants';
+import { ReviewSentimentSource } from '@prisma/client';
 
 interface RawThemeResponse {
   theme: string;
@@ -42,9 +43,9 @@ export class SentimentAnalysisService {
     private readonly aiInfra: AiInfraService,
   ) {}
 
-  list(businessId: string) {
+  list(businessId: string, source: ReviewSentimentSource = 'public_review') {
     return this.tenantPrisma.client.reviewSentimentTheme.findMany({
-      where: { businessId },
+      where: { businessId, source },
       orderBy: { reviewCount: 'desc' },
     });
   }
@@ -58,14 +59,44 @@ export class SentimentAnalysisService {
     });
     if (reviews.length < SENTIMENT_MIN_REVIEWS) return 0;
 
-    const themes = await this.clusterThemes(businessId, reviews);
+    return this.clusterAndStore(businessId, 'public_review', reviews);
+  }
+
+  /**
+   * Private Reviews depth fix (UPD-INT-008) — the same real clustering pipeline, but reading real
+   * `PrivateFeedback.message` text instead of public review text, stored under the distinct
+   * `private_feedback` source so it can never overwrite or be conflated with public review themes.
+   */
+  async generateComplaintThemesForBusiness(
+    businessId: string,
+  ): Promise<number> {
+    const feedback = await this.tenantPrisma.client.privateFeedback.findMany({
+      where: { businessId, message: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: SENTIMENT_REVIEW_LOOKBACK,
+    });
+    if (feedback.length < SENTIMENT_MIN_REVIEWS) return 0;
+
+    const asReviews = feedback.map((f) => ({
+      text: f.message,
+      stars: f.stars,
+    }));
+    return this.clusterAndStore(businessId, 'private_feedback', asReviews);
+  }
+
+  private async clusterAndStore(
+    businessId: string,
+    source: ReviewSentimentSource,
+    reviews: { text: string | null; stars: number }[],
+  ): Promise<number> {
+    const themes = await this.clusterThemes(businessId, reviews, source);
     if (themes.length === 0) return 0;
 
     // Trend-arrows depth fix — snapshot the previous run's counts (by normalized theme text)
     // before they're overwritten, so each new row can carry a real previous-vs-current comparison.
     const previousThemes =
       await this.tenantPrisma.client.reviewSentimentTheme.findMany({
-        where: { businessId },
+        where: { businessId, source },
         select: { theme: true, reviewCount: true },
       });
     const previousCountByTheme = new Map(
@@ -73,11 +104,12 @@ export class SentimentAnalysisService {
     );
 
     await this.tenantPrisma.client.reviewSentimentTheme.deleteMany({
-      where: { businessId },
+      where: { businessId, source },
     });
     await this.tenantPrisma.client.reviewSentimentTheme.createMany({
       data: themes.map((t) => ({
         businessId,
+        source,
         theme: t.theme,
         sentiment: t.sentiment,
         exampleQuote: t.exampleQuote,
@@ -92,6 +124,7 @@ export class SentimentAnalysisService {
   private async clusterThemes(
     businessId: string,
     reviews: { text: string | null; stars: number }[],
+    source: ReviewSentimentSource = 'public_review',
   ): Promise<
     Array<{
       theme: string;
@@ -104,13 +137,21 @@ export class SentimentAnalysisService {
       .map((r, i) => `[${i}] (${r.stars}★) "${r.text}"`)
       .join('\n');
 
+    // Private Reviews depth fix — a complaint-ticket message is a different corpus from a public
+    // review (privately submitted, skews negative, no public-facing tone), so the prompt names it
+    // accurately rather than reusing "reviews" language that would bias the AI's read of them.
+    const corpusLabel =
+      source === 'private_feedback'
+        ? 'real private customer feedback messages (submitted privately, not posted publicly)'
+        : 'real public customer reviews';
+
     const prompt = [
-      'Below are real customer reviews for a business, each numbered.',
+      `Below are ${corpusLabel} for a business, each numbered.`,
       numbered,
-      `Identify up to ${SENTIMENT_MAX_THEMES} recurring themes across these reviews (e.g. "slow service", "friendly staff", "great prices").`,
+      `Identify up to ${SENTIMENT_MAX_THEMES} recurring themes across these (e.g. "slow service", "friendly staff", "great prices").`,
       'For each theme, give: a short theme name, its sentiment ("positive", "negative", or "mixed"),',
-      'the numeric indices of every review that mentions it, and one exact quote COPIED WORD-FOR-WORD',
-      "from one of those reviews' text (never paraphrase or invent a quote).",
+      'the numeric indices of every entry that mentions it, and one exact quote COPIED WORD-FOR-WORD',
+      'from one of those entries (never paraphrase or invent a quote).',
       'Reply with ONLY a JSON array, no other text. Example shape:',
       '[{"theme":"Slow service","sentiment":"negative","reviewIndices":[2,5],"exampleQuote":"we waited 40 minutes"}]',
     ].join('\n');

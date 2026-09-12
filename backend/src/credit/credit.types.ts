@@ -4,7 +4,9 @@ export interface DebtorRow {
   phone: string;
   balance: string;
   last_entry_at: Date;
-  days_outstanding: number;
+  // Credit aging fix (UPD-INT-006): computed through v_credit_balances's window-function CTE,
+  // mysql2 decodes this as a real JS `bigint`, not `number` — callers must wrap in `Number(...)`.
+  days_outstanding: bigint;
   // MySQL migration: a raw SQL query's Boolean column comes back as a JS `number` (0/1, MySQL's
   // native TINYINT(1) representation) — mysql2 doesn't coerce it to a real boolean the way
   // Prisma's typed model API does. Callers must wrap this in `Boolean(...)`.

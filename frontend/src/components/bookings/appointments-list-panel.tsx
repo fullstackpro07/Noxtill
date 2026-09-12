@@ -22,6 +22,7 @@ import {
   type AppointmentFilters,
 } from "@/lib/bookings-api";
 import { fetchStaff } from "@/lib/staff-api";
+import { NoShowTrendChart } from "./no-shows-panel";
 
 const SOURCE_LABEL: Record<LiveAppointment["source"], string> = {
   link: "Link",
@@ -121,14 +122,24 @@ export function AppointmentsListPanel() {
         </Card>
       </div>
 
-      {perDay.length > 1 && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="mb-3 text-sm font-medium text-fg">Bookings per day</p>
-            <BookingsPerDayChart data={perDay} />
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {perDay.length > 1 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-3 text-sm font-medium text-fg">Bookings per day</p>
+              <BookingsPerDayChart data={perDay} />
+            </CardContent>
+          </Card>
+        )}
+        {noShowReport && noShowReport.trend.length > 1 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-3 text-sm font-medium text-fg">No-show rate trend</p>
+              <NoShowTrendChart trend={noShowReport.trend} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">

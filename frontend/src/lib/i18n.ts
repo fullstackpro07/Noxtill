@@ -59,6 +59,8 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.creditReminders": "Reminders & Recovery",
     "nav.creditRecoveryReports": "Recovery Reports",
     "nav.customers": "Customers",
+    "nav.loyalty": "Loyalty & Memberships",
+    "nav.memoryNotes": "Memory Notes",
     "nav.segments": "Segments",
     "nav.importCustomers": "Import",
     "nav.reviews": "Reviews",

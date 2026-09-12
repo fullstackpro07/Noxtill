@@ -48,4 +48,15 @@ export class PublicReviewController {
       minRating ? Number(minRating) : undefined,
     );
   }
+
+  /** Video Testimonials depth fix (UPD-INT-008) — the real public gallery an "approved" testimonial's approval was always supposed to lead to. Mints a fresh signed video URL on every real request rather than caching one that would eventually expire. */
+  @Public()
+  @Get('reviews/video-gallery/:biz')
+  async videoGallery(
+    @Param('biz') biz: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.header('Access-Control-Allow-Origin', '*');
+    return this.publicReviewService.getVideoGallery(biz);
+  }
 }

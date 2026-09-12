@@ -10,6 +10,7 @@ import {
   BRANCH_ERROR_CODES,
   BRANCH_TEMP_PASSWORD_BYTES,
 } from './branches.constants';
+import { DEFAULT_WORKING_HOURS } from '../bookings/bookings.constants';
 import { Prisma, Role } from '@prisma/client';
 
 /** The settings fields "copy from another branch" actually copies — deliberately excludes
@@ -61,6 +62,17 @@ export class BranchManagementService {
       where: { OR: identityFilters },
     });
 
+    // Public booking depth fix — a new branch has its own public booking link, so it needs real
+    // working hours from day one rather than inheriting `Business.workingHours`'s empty-object
+    // default (see `DEFAULT_WORKING_HOURS`'s own doc comment). Inherits the parent's real hours
+    // when it has configured any (same intent as `COPYABLE_SETTINGS_FIELDS` above), falling back
+    // to the sensible default only if the parent itself has never configured hours either.
+    const parentWorkingHours = caller.workingHours as Record<string, unknown>;
+    const inheritedWorkingHours =
+      parentWorkingHours && Object.keys(parentWorkingHours).length > 0
+        ? caller.workingHours
+        : DEFAULT_WORKING_HOURS;
+
     const branch = await this.prisma.business.create({
       data: {
         name: dto.name,
@@ -69,6 +81,7 @@ export class BranchManagementService {
         country: dto.country,
         currency: dto.currency ?? caller.currency,
         timezone: dto.timezone ?? caller.timezone,
+        workingHours: inheritedWorkingHours as Prisma.InputJsonValue,
       },
     });
 

@@ -13,6 +13,7 @@ import { fetchCustomer } from "@/lib/customers-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { useSession } from "@/lib/session";
 
 const STATUS_TONE: Record<FeedbackStatus, "danger" | "warning" | "success"> = {
   open: "danger",
@@ -44,6 +45,7 @@ function ComplaintDrawerBody({
 }) {
   const [reply, setReply] = useState("");
   const [resolutionNote, setResolutionNote] = useState(complaint.resolutionNote ?? "");
+  const session = useSession();
   const queryClient = useQueryClient();
 
   const { data: customer } = useQuery({
@@ -77,6 +79,17 @@ function ComplaintDrawerBody({
     },
   });
 
+  const assignMutation = useMutation({
+    mutationFn: () => updateFeedback(complaint.id, { status: "assigned", assignedTo: session.user.name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      toast.success(`Assigned to ${session.user.name}.`);
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't assign this — please try again.");
+    },
+  });
+
   if (typeof document === "undefined") return null;
 
   return createPortal(
@@ -102,6 +115,25 @@ function ComplaintDrawerBody({
             </div>
             <Badge tone={STATUS_TONE[complaint.status]}>{complaint.status}</Badge>
           </div>
+
+          {complaint.status !== "resolved" && (
+            <div className="mb-4 flex items-center justify-between rounded-[var(--radius-noxtill)] border border-border bg-surface-2/50 px-3.5 py-2.5">
+              <p className="text-xs text-fg-muted">
+                {complaint.assignedTo ? (
+                  <>
+                    Assigned to <span className="font-medium text-fg">{complaint.assignedTo}</span>
+                  </>
+                ) : (
+                  "Unassigned"
+                )}
+              </p>
+              {complaint.assignedTo !== session.user.name && (
+                <Button size="sm" variant="ghost" onClick={() => assignMutation.mutate()} disabled={assignMutation.isPending}>
+                  {assignMutation.isPending ? "Assigning…" : "Assign to me"}
+                </Button>
+              )}
+            </div>
+          )}
 
           <p className="mb-4 text-sm text-accent-foreground">
             {"★".repeat(complaint.stars)}

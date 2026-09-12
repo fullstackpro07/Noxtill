@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Video, Plus, Check, X, Play } from "lucide-react";
+import { Video, Plus, Check, X, Play, Trash2, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -17,6 +17,7 @@ import {
   requestVideoTestimonial,
   approveVideoTestimonial,
   rejectVideoTestimonial,
+  deleteVideoTestimonial,
   type VideoTestimonial,
   type VideoTestimonialStatus,
 } from "@/lib/video-testimonials-api";
@@ -24,6 +25,7 @@ import { searchCustomers, type CustomerSearchResult } from "@/lib/customers-api"
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { useSession } from "@/lib/session";
 
 const STATUS_TONE: Record<VideoTestimonialStatus, "neutral" | "warning" | "success" | "danger"> = {
   requested: "neutral",
@@ -35,6 +37,7 @@ const STATUS_TONE: Record<VideoTestimonialStatus, "neutral" | "warning" | "succe
 export function VideoTestimonialsPanel() {
   const [statusFilter, setStatusFilter] = useState<VideoTestimonialStatus | "all">("all");
   const [requestOpen, setRequestOpen] = useState(false);
+  const session = useSession();
   const queryClient = useQueryClient();
 
   const {
@@ -65,6 +68,15 @@ export function VideoTestimonialsPanel() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't reject this testimonial."),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteVideoTestimonial(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["video-testimonials"] });
+      toast.success("Testimonial deleted.");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't delete this testimonial."),
+  });
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -75,11 +87,20 @@ export function VideoTestimonialsPanel() {
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </Select>
-        <Button size="sm" onClick={() => setRequestOpen(true)}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          Request a testimonial
-        </Button>
+        <div className="flex gap-2">
+          <a href={`/gallery/${session.business.slug}`} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline">
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              View public gallery
+            </Button>
+          </a>
+          <Button size="sm" onClick={() => setRequestOpen(true)}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Request a testimonial
+          </Button>
+        </div>
       </div>
+      <p className="text-xs text-fg-faint">Approved testimonials appear in the public gallery immediately — no separate publish step.</p>
 
       {isError && <ErrorBanner title="Couldn't load video testimonials" onRetry={() => refetch()} />}
       {isPending && (
@@ -110,7 +131,8 @@ export function VideoTestimonialsPanel() {
               testimonial={t}
               onApprove={() => approveMutation.mutate(t.id)}
               onReject={() => rejectMutation.mutate(t.id)}
-              pending={approveMutation.isPending || rejectMutation.isPending}
+              onDelete={() => deleteMutation.mutate(t.id)}
+              pending={approveMutation.isPending || rejectMutation.isPending || deleteMutation.isPending}
             />
           ))}
         </div>
@@ -125,11 +147,13 @@ function TestimonialCard({
   testimonial,
   onApprove,
   onReject,
+  onDelete,
   pending,
 }: {
   testimonial: VideoTestimonial;
   onApprove: () => void;
   onReject: () => void;
+  onDelete: () => void;
   pending: boolean;
 }) {
   return (
@@ -144,7 +168,12 @@ function TestimonialCard({
         )}
         <div className="flex items-center justify-between gap-2">
           <p className="truncate text-sm font-medium text-fg">{testimonial.customer?.name ?? "Anonymous"}</p>
-          <Badge tone={STATUS_TONE[testimonial.status]}>{testimonial.status}</Badge>
+          <div className="flex items-center gap-1">
+            <Badge tone={STATUS_TONE[testimonial.status]}>{testimonial.status}</Badge>
+            <Button variant="ghost" size="icon" aria-label="Delete" onClick={onDelete} disabled={pending}>
+              <Trash2 className="h-3.5 w-3.5 text-fg-faint" aria-hidden />
+            </Button>
+          </div>
         </div>
         {testimonial.caption && <p className="line-clamp-2 text-xs text-fg-muted">{testimonial.caption}</p>}
         <p className="text-xs text-fg-faint">{formatDate(testimonial.createdAt)}</p>

@@ -136,7 +136,14 @@ export class MarketingOverviewService {
 
     for (const provider of AD_PROVIDERS) {
       const campaigns = adCampaigns.filter((c) => c.provider === provider);
-      const spend = campaigns.reduce((sum, c) => sum + Number(c.budget), 0);
+      // Marketing depth fix (UPD-INT-009) — `budget` is the planned/target spend a campaign was
+      // configured with, not what was actually spent; a paused campaign with a large budget but
+      // $0 real spend was inflating this card. `stats.spend` (the real, provider-reported figure)
+      // is the same field `AdAnalyticsService.performance()` already uses for this exact reason.
+      const spend = campaigns.reduce((sum, c) => {
+        const stats = c.stats as { spend?: number; results?: number } | null;
+        return sum + (stats?.spend ?? 0);
+      }, 0);
       const results = campaigns.reduce((sum, c) => {
         const stats = c.stats as { results?: number } | null;
         return sum + (stats?.results ?? 0);

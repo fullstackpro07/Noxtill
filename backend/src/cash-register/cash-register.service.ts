@@ -10,7 +10,12 @@ import {
   CASH_REGISTER_ERROR_CODES,
   VARIANCE_NOTE_THRESHOLD,
 } from './cash-register.constants';
-import { CashMovementType, CashShiftStatus, Role } from '@prisma/client';
+import {
+  CashMovementType,
+  CashShiftStatus,
+  Prisma,
+  Role,
+} from '@prisma/client';
 
 /**
  * Cash Register (UPD-BE-006). One open shift per business at a time — checked explicitly before
@@ -159,6 +164,9 @@ export class CashRegisterService {
         countedCash: dto.countedCash,
         variance,
         varianceNote: dto.note,
+        denominationCounts: dto.denominations?.length
+          ? (dto.denominations as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
       include: { movements: { orderBy: { createdAt: 'asc' } } },
     });
@@ -194,19 +202,29 @@ export class CashRegisterService {
     return shifts.map((shift) => this.stripVariance(shift));
   }
 
-  /** UPD-FE-006e/007e: staff must never see the drawer's variance fields. */
+  /** UPD-FE-006e/007e: staff must never see the drawer's variance fields (denomination counts reveal the same counted-cash breakdown, so they're stripped alongside). */
   private stripVariance<
     T extends {
       countedCash: unknown;
       variance: unknown;
       varianceNote: unknown;
+      denominationCounts: unknown;
     },
-  >(shift: T): Omit<T, 'countedCash' | 'variance' | 'varianceNote'> {
+  >(
+    shift: T,
+  ): Omit<
+    T,
+    'countedCash' | 'variance' | 'varianceNote' | 'denominationCounts'
+  > {
     const safe: Partial<T> = { ...shift };
     delete safe.countedCash;
     delete safe.variance;
     delete safe.varianceNote;
-    return safe as Omit<T, 'countedCash' | 'variance' | 'varianceNote'>;
+    delete safe.denominationCounts;
+    return safe as Omit<
+      T,
+      'countedCash' | 'variance' | 'varianceNote' | 'denominationCounts'
+    >;
   }
 
   private async requireOpenShift(businessId: string) {

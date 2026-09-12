@@ -106,13 +106,16 @@ describe('MarketingOverviewService (BE-089, extended UPD-BE-105a)', () => {
       ],
     });
 
+    // Marketing depth fix (UPD-INT-009) — `budget` (999, deliberately far from the real spend
+    // below) must never be read as "spend"; only `stats.spend`, the real provider-reported
+    // figure, should be. A previous bug summed `budget` instead.
     await prisma.adCampaign.create({
       data: {
         businessId,
         provider: 'google_ads',
         goal: 'traffic',
-        budget: 100,
-        stats: { results: 20 },
+        budget: 999,
+        stats: { spend: 100, results: 20 },
       },
     });
 

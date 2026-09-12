@@ -73,6 +73,15 @@ describe('AuthService integration (BE-007)', () => {
     expect(result.accessToken).toBeDefined();
     expect(result.refreshToken).toBeDefined();
     expect(result.user.email).toBe(testEmail);
+
+    // Public booking depth fix — a real signup must not leave `workingHours` at the schema's
+    // empty-object default, or the business's public booking link is permanently broken (every
+    // date shows zero slots) until someone finds the working-hours settings screen.
+    const business = await prisma.business.findUniqueOrThrow({
+      where: { id: result.business.id },
+    });
+    expect(business.workingHours).not.toEqual({});
+    expect(business.workingHours).toMatchObject({ mon: [['09:00', '17:00']] });
   });
 
   it('rejects signup with a duplicate email', async () => {

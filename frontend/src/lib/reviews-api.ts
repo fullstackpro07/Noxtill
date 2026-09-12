@@ -221,3 +221,8 @@ export interface ReviewSentimentTheme {
 export function fetchReviewSentiment(): Promise<ReviewSentimentTheme[]> {
   return apiFetch<ReviewSentimentTheme[]>("/reviews/sentiment");
 }
+
+/** GET /reviews/complaint-themes — Private Reviews depth fix: the real, distinct AI cluster over private-feedback messages, never the public-review themes above. */
+export function fetchComplaintThemes(): Promise<ReviewSentimentTheme[]> {
+  return apiFetch<ReviewSentimentTheme[]>("/reviews/complaint-themes");
+}

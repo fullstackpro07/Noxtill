@@ -17,7 +17,9 @@ interface DebtorRow {
   name: string;
   phone: string;
   balance: string;
-  days_outstanding: number;
+  // Credit aging fix (UPD-INT-006): mysql2 decodes this as a real JS `bigint` through
+  // v_credit_balances's window-function CTE — never compare/arithmetic it directly.
+  days_outstanding: bigint;
   opted_out: number;
 }
 
@@ -83,8 +85,9 @@ export class CreditRemindersProcessor extends WorkerHost {
       for (const debtor of debtors) {
         if (debtor.opted_out) continue;
 
+        const daysOutstanding = Number(debtor.days_outstanding);
         const matching = rules
-          .filter((r) => debtor.days_outstanding >= r.daysOverdueTrigger)
+          .filter((r) => daysOutstanding >= r.daysOverdueTrigger)
           .sort((a, b) => b.daysOverdueTrigger - a.daysOverdueTrigger)[0];
         if (!matching) continue;
 

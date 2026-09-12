@@ -41,4 +41,10 @@ export class RequestShiftSwapDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  /** A specific shift already belonging to `coveringUserId` that they'll trade back — makes this
+   * a real reciprocal swap instead of a one-way handoff. Omit for a plain coverage request. */
+  @IsOptional()
+  @IsString()
+  swapWithShiftId?: string;
 }

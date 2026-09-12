@@ -5,7 +5,7 @@ import { Sparkles, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonRow } from "@/components/shared/skeleton";
-import { fetchReviewSentiment, type ReviewSentimentTheme } from "@/lib/reviews-api";
+import { fetchReviewSentiment, fetchComplaintThemes, type ReviewSentimentTheme } from "@/lib/reviews-api";
 
 const SENTIMENT_TONE: Record<string, "success" | "danger" | "warning"> = {
   positive: "success",
@@ -41,8 +41,12 @@ function ThemeTrend({ theme }: { theme: ReviewSentimentTheme }) {
   );
 }
 
-export function SentimentThemesPanel() {
-  const { data: themes, isPending } = useQuery({ queryKey: ["review-sentiment"], queryFn: fetchReviewSentiment });
+export function SentimentThemesPanel({ source = "public_review" }: { source?: "public_review" | "private_feedback" }) {
+  const isComplaints = source === "private_feedback";
+  const { data: themes, isPending } = useQuery({
+    queryKey: isComplaints ? ["complaint-themes"] : ["review-sentiment"],
+    queryFn: isComplaints ? fetchComplaintThemes : fetchReviewSentiment,
+  });
 
   if (isPending) {
     return (
@@ -63,7 +67,7 @@ export function SentimentThemesPanel() {
       <CardContent className="p-4">
         <p className="mb-3 flex items-center gap-1.5 text-sm font-medium text-fg">
           <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden />
-          Recurring themes, AI-clustered from your recent reviews
+          {isComplaints ? "Recurring complaint themes, AI-clustered from private feedback" : "Recurring themes, AI-clustered from your recent reviews"}
         </p>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {themes.map((t) => (
@@ -75,7 +79,7 @@ export function SentimentThemesPanel() {
               <p className="mb-1.5 text-xs italic text-fg-muted">&ldquo;{t.exampleQuote}&rdquo;</p>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-fg-faint">
-                  Mentioned in {t.reviewCount} review{t.reviewCount === 1 ? "" : "s"}
+                  Mentioned in {t.reviewCount} {isComplaints ? "ticket" : "review"}{t.reviewCount === 1 ? "" : "s"}
                 </p>
                 <ThemeTrend theme={t} />
               </div>

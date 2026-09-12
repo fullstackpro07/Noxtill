@@ -111,7 +111,13 @@ export class ReviewsController {
 
   @Get('reviews/sentiment')
   sentiment(@CurrentUser() user: AuthenticatedUser) {
-    return this.sentimentAnalysis.list(user.businessId);
+    return this.sentimentAnalysis.list(user.businessId, 'public_review');
+  }
+
+  /** Private Reviews depth fix (UPD-INT-008) — the real, distinct complaint-theme cluster the Private Reviews screen needs (never the public-review themes above). */
+  @Get('reviews/complaint-themes')
+  complaintThemes(@CurrentUser() user: AuthenticatedUser) {
+    return this.sentimentAnalysis.list(user.businessId, 'private_feedback');
   }
 
   @Post('reviews/qr-poster')

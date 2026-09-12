@@ -90,6 +90,9 @@ describe('AppointmentsService (BE-054)', () => {
       where: { businessId },
     });
     await prisma.reviewRequest.deleteMany({ where: { businessId } });
+    await prisma.deposit.deleteMany({
+      where: { appointment: { businessId } },
+    });
     await prisma.appointment.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
@@ -472,6 +475,105 @@ describe('AppointmentsService (BE-054)', () => {
           startsAt: '2026-08-10T10:00:00Z',
         }),
       ).rejects.toBeInstanceOf(AppException);
+    });
+  });
+
+  describe('Services, formal fields — deposit enforcement depth fix (UPD-INT-004)', () => {
+    let depositServiceId: string;
+
+    beforeAll(async () => {
+      const svc = await prisma.product.create({
+        data: {
+          businessId,
+          kind: 'service',
+          name: 'Deposit Massage',
+          durationMin: 30,
+          depositRequired: true,
+          depositAmount: 50,
+        },
+      });
+      depositServiceId = svc.id;
+    });
+
+    it('createWalkIn() rejects a deposit-required service with no deposit given', async () => {
+      await expect(
+        service.createWalkIn(businessId, {
+          serviceId: depositServiceId,
+          startsAt: '2026-08-11T10:00:00Z',
+          customerName: 'No Deposit Nancy',
+          customerPhone: `+1${Date.now()}3`,
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('createWalkIn() rejects a deposit amount below the required minimum', async () => {
+      await expect(
+        service.createWalkIn(businessId, {
+          serviceId: depositServiceId,
+          startsAt: '2026-08-11T11:00:00Z',
+          customerName: 'Short Deposit Sam',
+          customerPhone: `+1${Date.now()}2`,
+          depositAmount: 20,
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('createWalkIn() succeeds and captures a real Deposit row once a sufficient amount is given', async () => {
+      const appt = await service.createWalkIn(businessId, {
+        serviceId: depositServiceId,
+        startsAt: '2026-08-11T12:00:00Z',
+        customerName: 'Paid Deposit Paula',
+        customerPhone: `+1${Date.now()}1`,
+        depositAmount: 50,
+      });
+      expect(appt.status).toBe('confirmed');
+      expect(Number(appt.depositPaid)).toBe(50);
+
+      const deposit = await prisma.deposit.findFirst({
+        where: { appointmentId: appt.id },
+      });
+      expect(deposit?.status).toBe('captured');
+      expect(Number(deposit?.amount)).toBe(50);
+    });
+
+    it('approve() rejects confirming a deposit-required request with no deposit captured', async () => {
+      const requested = await service.createRequest(businessId, {
+        serviceId: depositServiceId,
+        startsAt: '2026-08-11T13:00:00Z',
+        customerName: 'Requester No Deposit',
+        customerPhone: `+1${Date.now()}9`,
+      });
+
+      await expect(
+        service.approve(businessId, requested.id),
+      ).rejects.toBeInstanceOf(AppException);
+
+      const stillRequested = await prisma.appointment.findUniqueOrThrow({
+        where: { id: requested.id },
+      });
+      expect(stillRequested.status).toBe('requested');
+    });
+
+    it('approve() succeeds once a real captured deposit covers the required amount', async () => {
+      const requested = await service.createRequest(businessId, {
+        serviceId: depositServiceId,
+        startsAt: '2026-08-11T14:00:00Z',
+        customerName: 'Requester With Deposit',
+        customerPhone: `+1${Date.now()}8`,
+      });
+
+      await prisma.deposit.create({
+        data: {
+          businessId,
+          appointmentId: requested.id,
+          amount: 50,
+          method: 'cash',
+          status: 'captured',
+        },
+      });
+
+      const approved = await service.approve(businessId, requested.id);
+      expect(approved.status).toBe('confirmed');
     });
   });
 

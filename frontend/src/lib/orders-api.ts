@@ -96,6 +96,9 @@ export interface CreateSaleInput {
   staffUserId?: string;
   items: SaleLineInput[];
   discount?: number;
+  couponCode?: string;
+  voucherCode?: string;
+  voucherAmount?: number;
   payment: { method: "cash" | "card" | "online" | "credit"; amount?: number; note?: string };
 }
 

@@ -31,7 +31,9 @@ interface DebtorRow {
   customer_id: string;
   name: string;
   balance: string;
-  days_outstanding: number;
+  // Credit aging fix (UPD-INT-006): mysql2 decodes this as a real JS `bigint` through
+  // v_credit_balances's window-function CTE — never compare/arithmetic it directly.
+  days_outstanding: bigint;
   last_entry_at: Date;
 }
 
@@ -256,18 +258,21 @@ export class ActionCenterService {
       ORDER BY v.days_outstanding DESC
     `;
 
-    return rows.map((row) => ({
-      type: ActionItemType.overdue_credit,
-      entityId: row.customer_id,
-      priority:
-        row.days_outstanding >= CREDIT_NOTABLE_OVERDUE_DAYS * 2
-          ? ActionItemPriority.urgent
-          : ActionItemPriority.normal,
-      title: `${row.name} — ${Number(row.balance)} owed`,
-      reason: `${row.days_outstanding} days overdue`,
-      occurredAt: row.last_entry_at,
-      deepLink: '/credit',
-    }));
+    return rows.map((row) => {
+      const daysOutstanding = Number(row.days_outstanding);
+      return {
+        type: ActionItemType.overdue_credit,
+        entityId: row.customer_id,
+        priority:
+          daysOutstanding >= CREDIT_NOTABLE_OVERDUE_DAYS * 2
+            ? ActionItemPriority.urgent
+            : ActionItemPriority.normal,
+        title: `${row.name} — ${Number(row.balance)} owed`,
+        reason: `${daysOutstanding} days overdue`,
+        occurredAt: row.last_entry_at,
+        deepLink: '/credit',
+      };
+    });
   }
 
   private async unrepliedReviewItems(

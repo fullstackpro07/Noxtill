@@ -80,9 +80,9 @@ export function ScheduleView() {
 
   const approveSwapMutation = useMutation({
     mutationFn: (id: string) => approveShiftSwap(id),
-    onSuccess: () => {
+    onSuccess: (approved) => {
       queryClient.invalidateQueries({ queryKey: ["shifts"] });
-      toast.success("Swap approved — shift reassigned.");
+      toast.success(approved.swapWithShiftId ? "Swap approved — both shifts traded." : "Swap approved — shift reassigned.");
       setSelectedShift(null);
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't approve this swap — please try again."),
@@ -220,6 +220,21 @@ export function ScheduleView() {
               <div className="rounded-[var(--radius-sm)] border border-accent/30 bg-accent/6 p-3.5">
                 <p className="mb-1 font-medium text-fg">Swap requested</p>
                 {selectedShift.swapReason && <p className="mb-2 text-xs text-fg-muted">&quot;{selectedShift.swapReason}&quot;</p>}
+                {selectedShift.swapWithShiftId ? (
+                  (() => {
+                    const paired = shifts.find((s) => s.id === selectedShift.swapWithShiftId);
+                    return (
+                      <p className="mb-2 flex items-center gap-1 text-xs text-fg-muted">
+                        <Repeat2 className="h-3 w-3 shrink-0" aria-hidden />
+                        {paired
+                          ? `Real trade: they'll take this shift, you'll get their ${formatTime(paired.startsAt)}–${formatTime(paired.endsAt)} shift on ${paired.startsAt.slice(0, 10)}.`
+                          : "Real trade — the proposed shift back is no longer visible in this week."}
+                      </p>
+                    );
+                  })()
+                ) : (
+                  <p className="mb-2 text-xs text-fg-faint">One-way coverage request — nothing traded back.</p>
+                )}
                 <div className="flex gap-2">
                   <Button size="sm" onClick={() => approveSwapMutation.mutate(selectedShift.id)} disabled={approveSwapMutation.isPending}>
                     <Check className="h-3.5 w-3.5" aria-hidden />
@@ -237,7 +252,7 @@ export function ScheduleView() {
                 </div>
               </div>
             ) : (
-              <RequestSwapInline shift={selectedShift} staffList={staffList} onDone={() => setSelectedShift(null)} />
+              <RequestSwapInline shift={selectedShift} staffList={staffList} shifts={shifts} onDone={() => setSelectedShift(null)} />
             )}
           </div>
         </ShiftDetailDialog>
@@ -321,21 +336,37 @@ function formatTimeInput(iso: string): string {
 function RequestSwapInline({
   shift,
   staffList,
+  shifts,
   onDone,
 }: {
   shift: Shift;
   staffList: { id: string; name: string }[];
+  shifts: Shift[];
   onDone: () => void;
 }) {
   const [coveringUserId, setCoveringUserId] = useState("");
+  const [swapWithShiftId, setSwapWithShiftId] = useState("");
   const [reason, setReason] = useState("");
   const queryClient = useQueryClient();
 
+  // Staff depth fix (UPD-INT-011): a real reciprocal trade needs a specific shift of the covering
+  // person's to trade back — only their own shifts from the currently-loaded week are offerable.
+  const coveringPersonShifts = shifts.filter((s) => s.staffUserId === coveringUserId && s.id !== shift.id);
+
+  if (coveringUserId === "" && swapWithShiftId !== "") {
+    setSwapWithShiftId("");
+  }
+
   const mutation = useMutation({
-    mutationFn: () => requestShiftSwap(shift.id, { coveringUserId: coveringUserId || undefined, reason: reason || undefined }),
+    mutationFn: () =>
+      requestShiftSwap(shift.id, {
+        coveringUserId: coveringUserId || undefined,
+        reason: reason || undefined,
+        swapWithShiftId: swapWithShiftId || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["shifts"] });
-      toast.success("Swap requested.");
+      toast.success(swapWithShiftId ? "Swap requested — proposed as a real trade." : "Swap requested.");
       onDone();
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't request this swap — please try again."),
@@ -354,6 +385,19 @@ function RequestSwapInline({
             </option>
           ))}
       </Select>
+      {coveringUserId && (
+        <Select value={swapWithShiftId} onChange={(e) => setSwapWithShiftId(e.target.value)}>
+          <option value="">One-way — just give them this shift</option>
+          {coveringPersonShifts.map((s) => (
+            <option key={s.id} value={s.id}>
+              Trade for their {formatTime(s.startsAt)}–{formatTime(s.endsAt)} shift on {s.startsAt.slice(0, 10)}
+            </option>
+          ))}
+        </Select>
+      )}
+      {coveringUserId && coveringPersonShifts.length === 0 && (
+        <p className="text-[11px] text-fg-faint">They have no shifts this week to trade back — this will be a one-way coverage request.</p>
+      )}
       <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" />
       <Button size="sm" variant="outline" className="self-start" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
         {mutation.isPending ? "Requesting…" : "Request swap"}

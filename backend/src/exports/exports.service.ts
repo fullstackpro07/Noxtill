@@ -31,7 +31,9 @@ interface DebtorRow {
   phone: string;
   balance: number;
   last_entry_at: Date;
-  days_outstanding: number;
+  // Credit aging fix (UPD-INT-006): mysql2 decodes this as a real JS `bigint` through
+  // v_credit_balances's window-function CTE — never compare/arithmetic/serialize it directly.
+  days_outstanding: bigint;
 }
 
 const SHEET_COLUMNS: Record<
@@ -295,7 +297,7 @@ export class ExportsService {
       name: r.name,
       phone: r.phone,
       balance: Number(r.balance),
-      daysOutstanding: r.days_outstanding,
+      daysOutstanding: Number(r.days_outstanding),
       lastEntryAt: r.last_entry_at
         ? new Date(r.last_entry_at).toISOString().slice(0, 10)
         : '',

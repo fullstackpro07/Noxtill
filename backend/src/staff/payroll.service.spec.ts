@@ -166,4 +166,37 @@ describe('PayrollService (UPD-BE-034)', () => {
     });
     expect(advances).toHaveLength(1); // still just the one — not deducted again
   });
+
+  describe('unapproved-timesheet warning (Staff depth fix, UPD-INT-011)', () => {
+    it('warns when a staff member included in the export has not had their timesheet approved for that month', async () => {
+      const result = await service.export(businessId, '2026-12');
+      expect(
+        result.warnings.some(
+          (w) =>
+            w.includes('Commissioned Staff') && w.includes('not been approved'),
+        ),
+      ).toBe(true);
+    });
+
+    it('stops warning about a staff member once their timesheet for that month is approved', async () => {
+      await prisma.timesheetApproval.create({
+        data: {
+          businessId,
+          staffUserId: ruledStaffId,
+          month: '2026-12',
+          approvedByUserId: ruledUserId,
+          approvedAt: new Date(),
+        },
+      });
+
+      const result = await service.export(businessId, '2026-12');
+      expect(
+        result.warnings.some((w) => w.includes('Commissioned Staff')),
+      ).toBe(false);
+
+      await prisma.timesheetApproval.deleteMany({
+        where: { businessId, staffUserId: ruledStaffId, month: '2026-12' },
+      });
+    });
+  });
 });

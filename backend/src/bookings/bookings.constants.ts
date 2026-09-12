@@ -1,4 +1,22 @@
 import { AppointmentStatus } from '@prisma/client';
+import type { WorkingHours } from './working-hours.util';
+
+/**
+ * Public booking depth fix — a real business's `workingHours` (`schema.prisma`'s `Business` model)
+ * defaults to `{}` (no configured hours for any day), and `computeAvailableSlots` correctly treats
+ * an unconfigured day as fully closed. That's the right behavior for a day a business has
+ * deliberately closed, but it means a business that never visits the working-hours settings screen
+ * gets a permanently broken public booking link — every date shows zero slots, with no indication
+ * why. Seeding a real, sensible Mon-Fri 9-5 default at signup (see `AuthService.signup`) makes the
+ * booking link work out of the box, while staying fully editable/overridable per business.
+ */
+export const DEFAULT_WORKING_HOURS: WorkingHours = {
+  mon: [['09:00', '17:00']],
+  tue: [['09:00', '17:00']],
+  wed: [['09:00', '17:00']],
+  thu: [['09:00', '17:00']],
+  fri: [['09:00', '17:00']],
+};
 
 /** Valid forward transitions (same flow-guard pattern as ORDER_STATUS_TRANSITIONS). */
 export const APPOINTMENT_STATUS_TRANSITIONS: Record<
@@ -28,6 +46,8 @@ export const BOOKING_ERROR_CODES = {
   INVALID_STATUS_TRANSITION: 'BOOKING_INVALID_STATUS_TRANSITION',
   NOT_REQUESTED: 'BOOKING_NOT_REQUESTED',
   STAFF_NOT_ELIGIBLE: 'BOOKING_STAFF_NOT_ELIGIBLE',
+  /** Services, formal fields depth fix (UPD-INT-004) — the service's own `depositRequired`/`depositAmount` (not the separate, out-of-scope-by-design DepositSettings trigger) has no captured deposit covering it yet. */
+  DEPOSIT_REQUIRED: 'BOOKING_DEPOSIT_REQUIRED',
 } as const;
 
 export const REMINDER_RULE_ERROR_CODES = {

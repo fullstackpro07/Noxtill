@@ -125,6 +125,15 @@ export class VideoTestimonialsService {
     });
   }
 
+  /** Video Testimonials depth fix (UPD-INT-008) — a real delete: removes the row and, when a video was actually uploaded, the real S3 object behind it too, so a taken-down testimonial can never still resolve via a stale signed URL. */
+  async remove(id: string): Promise<void> {
+    const testimonial = await this.findRow(id);
+    if (testimonial.videoKey) {
+      await this.s3.delete(testimonial.videoKey);
+    }
+    await this.tenantPrisma.client.videoTestimonial.delete({ where: { id } });
+  }
+
   private async withVideoUrl<T extends { videoKey: string | null }>(
     row: T,
   ): Promise<T & { videoUrl: string | null }> {

@@ -182,6 +182,97 @@ describe('ShiftsService (UPD-BE-031)', () => {
     ).rejects.toBeInstanceOf(AppException);
   });
 
+  describe('reciprocal swap via swapWithShiftId (Staff depth fix, UPD-INT-011)', () => {
+    it('really trades two shifts on approval, not just a one-way reassignment', async () => {
+      const requesterShift = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-20T09:00:00.000Z',
+        endsAt: '2026-09-20T17:00:00.000Z',
+      });
+      const coveringShift = await service.create(businessId, {
+        staffUserId: coveringBusinessUserId,
+        startsAt: '2026-09-21T09:00:00.000Z',
+        endsAt: '2026-09-21T17:00:00.000Z',
+      });
+
+      const requested = await service.requestSwap(
+        businessId,
+        requesterShift.id,
+        {
+          coveringUserId: coveringBusinessUserId,
+          swapWithShiftId: coveringShift.id,
+        },
+      );
+      expect(requested.swapStatus).toBe('pending');
+
+      const approved = await service.approveSwap(businessId, requesterShift.id);
+      expect(approved.staffUserId).toBe(coveringBusinessUserId);
+
+      // The paired shift really moved to the original requester — a genuine two-way trade.
+      const refreshedPaired = await prisma.staffShift.findUniqueOrThrow({
+        where: { id: coveringShift.id },
+      });
+      expect(refreshedPaired.staffUserId).toBe(requesterBusinessUserId);
+
+      await service.remove(requesterShift.id);
+      await service.remove(coveringShift.id);
+    });
+
+    it('rejects requesting a swap whose proposed paired shift does not belong to the covering staff member', async () => {
+      const requesterShift = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-22T09:00:00.000Z',
+        endsAt: '2026-09-22T17:00:00.000Z',
+      });
+      const someoneElsesShift = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-23T09:00:00.000Z',
+        endsAt: '2026-09-23T17:00:00.000Z',
+      });
+
+      await expect(
+        service.requestSwap(businessId, requesterShift.id, {
+          coveringUserId: coveringBusinessUserId,
+          swapWithShiftId: someoneElsesShift.id,
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+
+      await service.remove(requesterShift.id);
+      await service.remove(someoneElsesShift.id);
+    });
+
+    it('rejects approval if the paired shift changed hands after the swap was requested', async () => {
+      const requesterShift = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-24T09:00:00.000Z',
+        endsAt: '2026-09-24T17:00:00.000Z',
+      });
+      const coveringShift = await service.create(businessId, {
+        staffUserId: coveringBusinessUserId,
+        startsAt: '2026-09-25T09:00:00.000Z',
+        endsAt: '2026-09-25T17:00:00.000Z',
+      });
+
+      await service.requestSwap(businessId, requesterShift.id, {
+        coveringUserId: coveringBusinessUserId,
+        swapWithShiftId: coveringShift.id,
+      });
+
+      // The covering staff member's shift moved away in the meantime (e.g. a manager reassigned it).
+      await prisma.staffShift.update({
+        where: { id: coveringShift.id },
+        data: { staffUserId: requesterBusinessUserId },
+      });
+
+      await expect(
+        service.approveSwap(businessId, requesterShift.id),
+      ).rejects.toBeInstanceOf(AppException);
+
+      await service.remove(requesterShift.id);
+      await service.remove(coveringShift.id);
+    });
+  });
+
   it('rejects a swap request, leaving the shift with the original staff member', async () => {
     const shift = await service.create(businessId, {
       staffUserId: requesterBusinessUserId,

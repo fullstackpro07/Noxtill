@@ -165,6 +165,8 @@ export interface CreateWalkInInput {
   startsAt: string;
   customerName: string;
   customerPhone: string;
+  /** Required (cash) when the chosen service has `depositRequired` set — see backend `assertDepositSatisfied`-equivalent gate in `AppointmentsService.createWalkIn`. */
+  depositAmount?: number;
 }
 
 export async function createWalkInAppointment(input: CreateWalkInInput): Promise<LiveAppointment> {

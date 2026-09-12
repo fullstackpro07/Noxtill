@@ -7,15 +7,27 @@ import { CreateMembershipDto } from './dto/create-membership.dto';
 import { MEMBERSHIP_ERROR_CODES } from './memberships.constants';
 import { MembershipStatus, Prisma } from '@prisma/client';
 
+/** Membership depth fix (UPD-INT-007) — real interval math shared by cash enrollment and renewal. */
+function nextPeriodEnd(from: Date, interval: 'monthly' | 'yearly'): Date {
+  const next = new Date(from);
+  if (interval === 'yearly') next.setFullYear(next.getFullYear() + 1);
+  else next.setMonth(next.getMonth() + 1);
+  return next;
+}
+
 /**
  * Membership plans (UPD-BE-025) — a customer-level recurring subscription, separate from the
  * business's own Stripe billing plan. `method: 'cash'` memberships are real and immediate (the
- * business collects payment manually each period, same trust level as CashRegister elsewhere).
- * `method: 'online'` memberships create a real Stripe Checkout session but land `pending` —
- * there's no webhook wired up yet to flip them to `active` automatically (a disclosed gap, kept
- * deliberately separate from `stripe-webhook.processor.ts`'s business-plan path so a membership
- * event can never be mistaken for — or corrupt — the business's own subscription state); staff
- * confirms payment in their Stripe dashboard and calls `POST /memberships/:id/activate`.
+ * business collects payment manually each period, same trust level as CashRegister elsewhere) —
+ * "charges on schedule" for cash means a real `currentPeriodEnd` due date plus a real lapse job
+ * (`CrmJobsProcessor.runMembershipExpiry`) and a real `renewCash()` action, since there's no
+ * gateway to auto-charge cash. `method: 'online'` memberships create a real Stripe subscription
+ * Checkout session; `POST /billing/webhook` → `StripeWebhookProcessor` activates it automatically
+ * once checkout completes and keeps `currentPeriodEnd` in sync on every real Stripe renewal —
+ * kept deliberately separate from that processor's business-plan path (disambiguated by real
+ * `membershipId` metadata) so a membership event can never be mistaken for — or corrupt — the
+ * business's own subscription state. `POST /memberships/:id/activate` still exists as a manual
+ * fallback for a business without webhooks configured.
  */
 @Injectable()
 export class MembershipsService {
@@ -52,6 +64,10 @@ export class MembershipsService {
     }
 
     if (dto.method === 'cash') {
+      // Membership depth fix (UPD-INT-007) — cash memberships have no gateway to auto-charge,
+      // so "charges on schedule" for them means an honest renewal-due date, real enough to drive
+      // a real lapse job (`MembershipRenewalProcessor`), rather than staying "active" forever
+      // with zero indication a renewal payment was ever due.
       const membership = await this.tenantPrisma.client.membership.create({
         data: {
           businessId,
@@ -59,6 +75,7 @@ export class MembershipsService {
           customerId: dto.customerId,
           status: MembershipStatus.active,
           method: 'cash',
+          currentPeriodEnd: nextPeriodEnd(new Date(), plan.interval),
         },
       });
       return { membership, checkoutUrl: null as string | null };
@@ -121,6 +138,46 @@ export class MembershipsService {
     return this.tenantPrisma.client.membership.update({
       where: { id },
       data: { status: MembershipStatus.active },
+    });
+  }
+
+  /** Membership depth fix — a cash membership's real renewal action: staff collects the next
+   * period's cash payment and records it here, extending the real due date. Also reactivates a
+   * membership the expiry job already lapsed, since a late cash payment still counts. */
+  async renewCash(id: string) {
+    const membership = await this.tenantPrisma.client.membership.findUnique({
+      where: { id },
+      include: { plan: true },
+    });
+    if (!membership) {
+      throw new NotFoundException('Membership not found');
+    }
+    if (membership.method !== 'cash') {
+      throw new AppException(
+        MEMBERSHIP_ERROR_CODES.ALREADY_TERMINAL,
+        'Only a cash membership can be renewed this way — an online membership renews automatically via Stripe',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (membership.status === MembershipStatus.cancelled) {
+      throw new AppException(
+        MEMBERSHIP_ERROR_CODES.ALREADY_TERMINAL,
+        'This membership was cancelled and cannot be renewed',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const renewFrom =
+      membership.currentPeriodEnd && membership.currentPeriodEnd > new Date()
+        ? membership.currentPeriodEnd
+        : new Date();
+
+    return this.tenantPrisma.client.membership.update({
+      where: { id },
+      data: {
+        status: MembershipStatus.active,
+        currentPeriodEnd: nextPeriodEnd(renewFrom, membership.plan.interval),
+      },
     });
   }
 

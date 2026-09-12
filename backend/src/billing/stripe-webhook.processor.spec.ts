@@ -112,4 +112,124 @@ describe('StripeWebhookProcessor (BE-065)', () => {
     });
     expect(business.planId).toBe(basic.id);
   });
+
+  describe('Membership depth fix (UPD-INT-007) — disambiguated by real membershipId metadata', () => {
+    let membershipPlanId: string;
+    let membershipId: string;
+    let membershipCustomerId: string;
+
+    beforeAll(async () => {
+      const plan = await prisma.membershipPlan.create({
+        data: {
+          businessId,
+          name: 'Webhook Membership Plan',
+          price: 20,
+          interval: 'monthly',
+          stripePriceId: `price_membership_${Date.now()}`,
+        },
+      });
+      membershipPlanId = plan.id;
+
+      const customer = await prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Membership Webhook Customer',
+          phone: `+1${Date.now()}mw`,
+        },
+      });
+      membershipCustomerId = customer.id;
+
+      const membership = await prisma.membership.create({
+        data: {
+          businessId,
+          planId: membershipPlanId,
+          customerId: membershipCustomerId,
+          status: 'pending',
+          method: 'online',
+        },
+      });
+      membershipId = membership.id;
+    });
+
+    afterAll(async () => {
+      await prisma.membership.deleteMany({ where: { businessId } });
+      await prisma.membershipPlan.delete({ where: { id: membershipPlanId } });
+      await prisma.customer.delete({ where: { id: membershipCustomerId } });
+    });
+
+    it('activates a pending membership for real on checkout.session.completed, never touching Business', async () => {
+      subscriptionsRetrieve.mockResolvedValue({
+        id: 'sub_membership_1',
+        metadata: { membershipId },
+        items: {
+          data: [
+            {
+              price: { id: 'price_irrelevant' },
+              current_period_end: Math.floor(Date.now() / 1000) + 30 * 86400,
+            },
+          ],
+        },
+      });
+
+      await processor.process(
+        jobOf('checkout.session.completed', {
+          client_reference_id: membershipId, // a membership id here, not a businessId
+          subscription: 'sub_membership_1',
+          customer: 'cus_membership_1',
+        }),
+      );
+
+      const membership = await prisma.membership.findUniqueOrThrow({
+        where: { id: membershipId },
+      });
+      expect(membership.status).toBe('active');
+      expect(membership.stripeSubscriptionId).toBe('sub_membership_1');
+      expect(membership.currentPeriodEnd).not.toBeNull();
+
+      // The business's own Stripe fields must be untouched by a membership's checkout.
+      const business = await prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+      });
+      expect(business.stripeCustomerId).not.toBe('cus_membership_1');
+    });
+
+    it('advances currentPeriodEnd on a real recurring renewal (customer.subscription.updated)', async () => {
+      const newPeriodEnd = Math.floor(Date.now() / 1000) + 60 * 86400;
+      await processor.process(
+        jobOf('customer.subscription.updated', {
+          id: 'sub_membership_1',
+          status: 'active',
+          items: { data: [{ current_period_end: newPeriodEnd }] },
+        }),
+      );
+
+      const membership = await prisma.membership.findUniqueOrThrow({
+        where: { id: membershipId },
+      });
+      expect(membership.status).toBe('active');
+      expect(Math.floor(membership.currentPeriodEnd!.getTime() / 1000)).toBe(
+        newPeriodEnd,
+      );
+    });
+
+    it('marks a membership expired on a real failed-payment cancellation (customer.subscription.deleted)', async () => {
+      await processor.process(
+        jobOf('customer.subscription.deleted', { id: 'sub_membership_1' }),
+      );
+
+      const membership = await prisma.membership.findUniqueOrThrow({
+        where: { id: membershipId },
+      });
+      expect(membership.status).toBe('expired');
+
+      // The business's own plan must be untouched by a membership's cancellation.
+      const business = await prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+      });
+      const basic = await prisma.plan.findUniqueOrThrow({
+        where: { key: BASIC_PLAN_KEY },
+      });
+      expect(business.planId).toBe(basic.id); // already Basic from the earlier test, unchanged
+    });
+  });
 });

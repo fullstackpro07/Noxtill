@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, Minus, Trash2, Banknote, CreditCard, Wallet, HandCoins, Barcode, ShoppingCart, X } from "lucide-react";
+import { Search, Plus, Minus, Trash2, Banknote, CreditCard, Wallet, HandCoins, Barcode, ShoppingCart, X, Tag, Ticket } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/shared/skeleton";
@@ -13,6 +13,8 @@ import { holdSale } from "@/lib/held-sales-api";
 import { VoiceSaleRecorder } from "@/components/pos/voice-sale-recorder";
 import { useSession } from "@/lib/session";
 import { searchCustomers, fetchDebtors } from "@/lib/customers-api";
+import { previewCoupon, type CouponPreview } from "@/lib/coupons-api";
+import { previewVoucher, type VoucherPreview } from "@/lib/vouchers-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "@/lib/toast";
@@ -59,6 +61,22 @@ function CartPanel({
   onHold,
   holding,
   total,
+  couponCode,
+  onCouponCodeChange,
+  couponPreview,
+  couponStale,
+  couponPending,
+  couponError,
+  onApplyCoupon,
+  onClearCoupon,
+  voucherCode,
+  onVoucherCodeChange,
+  voucherPreview,
+  voucherStale,
+  voucherPending,
+  voucherError,
+  onApplyVoucher,
+  onClearVoucher,
 }: {
   cart: CartLine[];
   onIncrement: (id: string) => void;
@@ -75,7 +93,25 @@ function CartPanel({
   onHold: () => void;
   holding: boolean;
   total: number;
+  couponCode: string;
+  onCouponCodeChange: (v: string) => void;
+  couponPreview: CouponPreview | null;
+  couponStale: boolean;
+  couponPending: boolean;
+  couponError: string | null;
+  onApplyCoupon: () => void;
+  onClearCoupon: () => void;
+  voucherCode: string;
+  onVoucherCodeChange: (v: string) => void;
+  voucherPreview: VoucherPreview | null;
+  voucherStale: boolean;
+  voucherPending: boolean;
+  voucherError: string | null;
+  onApplyVoucher: () => void;
+  onClearVoucher: () => void;
 }) {
+  const discount = couponPreview && !couponStale ? couponPreview.discountAmount : 0;
+  const displayTotal = Math.max(0, total - discount);
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border p-4">
@@ -169,9 +205,73 @@ function CartPanel({
           </p>
         )}
 
+        <div className="mb-3 flex flex-col gap-2">
+          {couponPreview ? (
+            <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-primary/30 bg-primary/6 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-xs">
+                <Tag className="h-3.5 w-3.5 text-primary" aria-hidden />
+                <span className="font-medium text-fg">{couponPreview.code}</span>
+                <span className="text-fg-muted">
+                  −{formatCurrency(couponPreview.discountAmount, currency)}
+                  {couponStale ? " (cart changed — re-apply)" : ""}
+                </span>
+              </div>
+              <button onClick={onClearCoupon} aria-label="Remove coupon" className="text-fg-faint hover:text-destructive">
+                <X className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={couponCode}
+                onChange={(e) => onCouponCodeChange(e.target.value)}
+                placeholder="Coupon code"
+                leadingSlot={<Tag className="h-3.5 w-3.5" aria-hidden />}
+                className="h-9 text-sm"
+              />
+              <Button variant="outline" size="sm" disabled={!couponCode.trim() || couponPending} onClick={onApplyCoupon}>
+                {couponPending ? "…" : "Apply"}
+              </Button>
+            </div>
+          )}
+          {couponError && <p className="text-xs text-destructive">{couponError}</p>}
+
+          {voucherPreview ? (
+            <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-primary/30 bg-primary/6 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-xs">
+                <Ticket className="h-3.5 w-3.5 text-primary" aria-hidden />
+                <span className="font-medium text-fg">{voucherPreview.code}</span>
+                <span className="text-fg-muted">
+                  covers {formatCurrency(voucherPreview.amountApplied, currency)}
+                  {voucherStale ? " (cart changed — re-apply)" : ""}
+                </span>
+              </div>
+              <button onClick={onClearVoucher} aria-label="Remove voucher" className="text-fg-faint hover:text-destructive">
+                <X className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={voucherCode}
+                onChange={(e) => onVoucherCodeChange(e.target.value)}
+                placeholder="Voucher code"
+                leadingSlot={<Ticket className="h-3.5 w-3.5" aria-hidden />}
+                className="h-9 text-sm"
+              />
+              <Button variant="outline" size="sm" disabled={!voucherCode.trim() || voucherPending} onClick={onApplyVoucher}>
+                {voucherPending ? "…" : "Apply"}
+              </Button>
+            </div>
+          )}
+          {voucherError && <p className="text-xs text-destructive">{voucherError}</p>}
+        </div>
+
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-fg-muted">Total</span>
-          <span className="font-display text-xl font-bold text-fg">{formatCurrency(total, currency)}</span>
+          <span className="text-sm font-medium text-fg-muted">
+            Total{voucherPreview && !voucherStale ? " (before voucher)" : ""}
+          </span>
+          <span className="font-display text-xl font-bold text-fg">{formatCurrency(displayTotal, currency)}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -238,9 +338,56 @@ export function PosView({ currency }: { currency: string }) {
       setCart([]);
       setCustomerQuery("");
       setMobileCartOpen(false);
+      setCouponCode("");
+      setCouponPreview(null);
+      setCouponPreviewSubtotal(null);
+      setVoucherCode("");
+      setVoucherPreview(null);
+      setVoucherPreviewSubtotal(null);
     },
     onError: (err) => {
       toast.error(err instanceof ApiError ? err.message : "Couldn't complete this sale — please try again.");
+    },
+  });
+
+  // Discount/payment-code previews (POS checkout preview, UPD-INT-009) — read-only calls against
+  // the real coupon/voucher validation logic, so staff see the real discount before confirming;
+  // the sale itself always recomputes for real, this is purely informational.
+  const [couponCode, setCouponCode] = useState("");
+  const [couponPreview, setCouponPreview] = useState<CouponPreview | null>(null);
+  const [couponPreviewSubtotal, setCouponPreviewSubtotal] = useState<number | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
+  const [voucherCode, setVoucherCode] = useState("");
+  const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
+  const [voucherPreviewSubtotal, setVoucherPreviewSubtotal] = useState<number | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+
+  const couponPreviewMutation = useMutation({
+    mutationFn: (args: { code: string; subtotal: number }) => previewCoupon(args.code, args.subtotal, customer?.id),
+    onSuccess: (result, args) => {
+      setCouponPreview(result);
+      setCouponPreviewSubtotal(args.subtotal);
+      setCouponError(null);
+    },
+    onError: (err) => {
+      setCouponPreview(null);
+      setCouponPreviewSubtotal(null);
+      setCouponError(err instanceof ApiError ? err.message : "Couldn't apply this coupon.");
+    },
+  });
+
+  const voucherPreviewMutation = useMutation({
+    mutationFn: (args: { code: string; subtotal: number }) => previewVoucher(args.code, args.subtotal, args.subtotal),
+    onSuccess: (result, args) => {
+      setVoucherPreview(result);
+      setVoucherPreviewSubtotal(args.subtotal);
+      setVoucherError(null);
+    },
+    onError: (err) => {
+      setVoucherPreview(null);
+      setVoucherPreviewSubtotal(null);
+      setVoucherError(err instanceof ApiError ? err.message : "Couldn't apply this voucher.");
     },
   });
 
@@ -264,6 +411,8 @@ export function PosView({ currency }: { currency: string }) {
   });
 
   const total = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
+  const couponStale = couponPreviewSubtotal !== null && couponPreviewSubtotal !== total;
+  const voucherStale = voucherPreviewSubtotal !== null && voucherPreviewSubtotal !== total;
 
   function addToCart(productId: string) {
     const product = products.find((p) => p.id === productId);
@@ -306,8 +455,68 @@ export function PosView({ currency }: { currency: string }) {
       payment: { method: paymentMethod === "wallet" ? "online" : paymentMethod },
       ...(session.user.businessUserId ? { staffUserId: session.user.businessUserId } : {}),
       ...(customer ? { customerId: customer.id } : customerQuery.trim() ? { customerPhone: customerQuery.trim() } : {}),
+      // The server always revalidates and recomputes the real discount/amount itself — the
+      // preview above is purely informational, never trusted as the source of truth.
+      ...(couponPreview && !couponStale ? { couponCode: couponPreview.code } : {}),
+      ...(voucherPreview && !voucherStale ? { voucherCode: voucherPreview.code } : {}),
     });
   }
+
+  function handleApplyCoupon() {
+    couponPreviewMutation.mutate({ code: couponCode.trim(), subtotal: total });
+  }
+
+  function handleClearCoupon() {
+    setCouponPreview(null);
+    setCouponPreviewSubtotal(null);
+    setCouponCode("");
+    setCouponError(null);
+  }
+
+  function handleApplyVoucher() {
+    voucherPreviewMutation.mutate({ code: voucherCode.trim(), subtotal: total });
+  }
+
+  function handleClearVoucher() {
+    setVoucherPreview(null);
+    setVoucherPreviewSubtotal(null);
+    setVoucherCode("");
+    setVoucherError(null);
+  }
+
+  const cartPanelProps = {
+    cart,
+    onIncrement: increment,
+    onDecrement: decrement,
+    onRemove: remove,
+    currency,
+    customerQuery,
+    onCustomerQueryChange: setCustomerQuery,
+    customer,
+    paymentMethod,
+    onPaymentMethodChange: setPaymentMethod,
+    onConfirm: handleConfirm,
+    confirming: saleMutation.isPending,
+    onHold: () => holdMutation.mutate(),
+    holding: holdMutation.isPending,
+    total,
+    couponCode,
+    onCouponCodeChange: setCouponCode,
+    couponPreview,
+    couponStale,
+    couponPending: couponPreviewMutation.isPending,
+    couponError,
+    onApplyCoupon: handleApplyCoupon,
+    onClearCoupon: handleClearCoupon,
+    voucherCode,
+    onVoucherCodeChange: setVoucherCode,
+    voucherPreview,
+    voucherStale,
+    voucherPending: voucherPreviewMutation.isPending,
+    voucherError,
+    onApplyVoucher: handleApplyVoucher,
+    onClearVoucher: handleClearVoucher,
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -349,23 +558,7 @@ export function PosView({ currency }: { currency: string }) {
         </div>
 
         <div className="hidden w-80 shrink-0 border-s border-border bg-surface lg:block">
-          <CartPanel
-            cart={cart}
-            onIncrement={increment}
-            onDecrement={decrement}
-            onRemove={remove}
-            currency={currency}
-            customerQuery={customerQuery}
-            onCustomerQueryChange={setCustomerQuery}
-            customer={customer}
-            paymentMethod={paymentMethod}
-            onPaymentMethodChange={setPaymentMethod}
-            onConfirm={handleConfirm}
-            confirming={saleMutation.isPending}
-            onHold={() => holdMutation.mutate()}
-            holding={holdMutation.isPending}
-            total={total}
-          />
+          <CartPanel {...cartPanelProps} />
         </div>
       </div>
 
@@ -396,23 +589,7 @@ export function PosView({ currency }: { currency: string }) {
                 <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
-            <CartPanel
-              cart={cart}
-              onIncrement={increment}
-              onDecrement={decrement}
-              onRemove={remove}
-              currency={currency}
-              customerQuery={customerQuery}
-              onCustomerQueryChange={setCustomerQuery}
-              customer={customer}
-              paymentMethod={paymentMethod}
-              onPaymentMethodChange={setPaymentMethod}
-              onConfirm={handleConfirm}
-              confirming={saleMutation.isPending}
-              onHold={() => holdMutation.mutate()}
-              holding={holdMutation.isPending}
-              total={total}
-            />
+            <CartPanel {...cartPanelProps} />
           </div>
         </div>
       )}

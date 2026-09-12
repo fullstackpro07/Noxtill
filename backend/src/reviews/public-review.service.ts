@@ -114,6 +114,42 @@ export class PublicReviewService {
     };
   }
 
+  /** Video Testimonials depth fix (UPD-INT-008) — the real public gallery of approved testimonials. Signs a fresh, short-lived video URL per request instead of persisting one, since a stored signed URL would eventually expire and 403. */
+  async getVideoGallery(slug: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { slug },
+    });
+    if (!business) {
+      throw new NotFoundException('Business not found');
+    }
+
+    const testimonials = await this.prisma.videoTestimonial.findMany({
+      where: {
+        businessId: business.id,
+        status: 'approved',
+        videoKey: { not: null },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+      include: { customer: true },
+    });
+
+    const items = await Promise.all(
+      testimonials.map(async (t) => ({
+        id: t.id,
+        caption: t.caption,
+        customerName: t.customer?.name ?? null,
+        videoUrl: await this.s3.getSignedDownloadUrl(t.videoKey!),
+      })),
+    );
+
+    return {
+      businessName: business.name,
+      branding: business.branding,
+      testimonials: items,
+    };
+  }
+
   /** UPD-BE-100: first real open of the link — only advances `sent` -> `opened`, never regresses an already-`rated` request. */
   async getByToken(token: string) {
     const reviewRequest = await this.loadValid(token);

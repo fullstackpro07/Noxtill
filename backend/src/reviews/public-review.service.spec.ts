@@ -61,6 +61,7 @@ describe('PublicReviewService (BE-046)', () => {
   afterAll(async () => {
     await prisma.privateFeedback.deleteMany({ where: { businessId } });
     await prisma.reviewRequest.deleteMany({ where: { businessId } });
+    await prisma.videoTestimonial.deleteMany({ where: { businessId } });
     await prisma.businessUser.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
@@ -352,5 +353,59 @@ describe('PublicReviewService (BE-046)', () => {
       where: { businessId: capBusiness.id },
     });
     await prisma.business.delete({ where: { id: capBusiness.id } });
+  });
+
+  describe('getVideoGallery() (Video Testimonials depth fix, UPD-INT-008)', () => {
+    it('returns only approved testimonials with a fresh signed video URL, never pending/rejected ones', async () => {
+      const business = await prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+      });
+
+      const approved = await prisma.videoTestimonial.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          status: 'approved',
+          videoKey: 'video-testimonials/gallery-1.mp4',
+          caption: 'Loved it!',
+        },
+      });
+      await prisma.videoTestimonial.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          status: 'submitted',
+          videoKey: 'video-testimonials/not-yet-approved.mp4',
+        },
+      });
+      await prisma.videoTestimonial.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          status: 'rejected',
+          videoKey: 'video-testimonials/rejected.mp4',
+        },
+      });
+
+      const gallery = await service.getVideoGallery(business.slug);
+      expect(gallery.testimonials).toHaveLength(1);
+      expect(gallery.testimonials[0].id).toBe(approved.id);
+      expect(gallery.testimonials[0].caption).toBe('Loved it!');
+      expect(gallery.testimonials[0].videoUrl).toBe(
+        'https://signed.example/logo.png',
+      );
+      expect(s3.getSignedDownloadUrl).toHaveBeenCalledWith(
+        'video-testimonials/gallery-1.mp4',
+      );
+    });
+
+    it('404s for an unknown business slug', async () => {
+      await expect(
+        service.getVideoGallery('not-a-real-slug'),
+      ).rejects.toThrow();
+    });
   });
 });

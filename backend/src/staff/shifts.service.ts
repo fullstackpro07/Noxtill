@@ -30,6 +30,11 @@ function formatShiftRange(startsAt: Date, endsAt: Date): string {
  * request at a time) — requesting is open to any authenticated staff member, approving/rejecting
  * is owner/manager-only (enforced by `@Roles` at the controller), same raise-then-approve shape
  * as `ReturnsService`.
+ *
+ * Staff depth fix (UPD-INT-011): `swapWithShiftId` makes this a real two-way trade — when set,
+ * approving the request reassigns BOTH shifts (the requester gets the covering staff member's
+ * named shift, and vice versa), not just a one-way handoff. Omitting it keeps the original
+ * plain-coverage-request behavior for cases where nothing is traded back.
  */
 @Injectable()
 export class ShiftsService {
@@ -105,6 +110,15 @@ export class ShiftsService {
       );
     }
 
+    if (dto.swapWithShiftId) {
+      await this.validatePairedShift(
+        businessId,
+        id,
+        dto.swapWithShiftId,
+        dto.coveringUserId,
+      );
+    }
+
     const requestedBy = await this.tenantPrisma.client.businessUser.findUnique({
       where: { businessId_userId: { businessId, userId: actorUserId } },
     });
@@ -117,9 +131,50 @@ export class ShiftsService {
         swapCoveringUserId: dto.coveringUserId,
         swapReason: dto.reason,
         swapReviewedByUserId: null,
+        swapWithShiftId: dto.swapWithShiftId ?? null,
       },
       include: { staffUser: { include: { user: true } } },
     });
+  }
+
+  /**
+   * Staff depth fix (UPD-INT-011): validates that a proposed paired shift is real, belongs to the
+   * same business, isn't the shift being requested itself, and is actually owned by the proposed
+   * covering staff member — checked both at request time (fast feedback) and again inside
+   * `approveSwap`'s transaction (authoritative, guards a race where the paired shift changed
+   * hands in between).
+   */
+  private async validatePairedShift(
+    businessId: string,
+    shiftId: string,
+    pairedShiftId: string,
+    coveringUserId: string | undefined,
+  ) {
+    if (pairedShiftId === shiftId) {
+      throw new AppException(
+        SHIFT_ERROR_CODES.INVALID_PAIRED_SHIFT,
+        'A shift cannot be traded for itself',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const paired = await this.tenantPrisma.client.staffShift.findUnique({
+      where: { id: pairedShiftId },
+    });
+    if (!paired || paired.businessId !== businessId) {
+      throw new AppException(
+        SHIFT_ERROR_CODES.INVALID_PAIRED_SHIFT,
+        'The proposed shift to trade was not found',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!coveringUserId || paired.staffUserId !== coveringUserId) {
+      throw new AppException(
+        SHIFT_ERROR_CODES.INVALID_PAIRED_SHIFT,
+        'The proposed shift to trade must belong to the covering staff member',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return paired;
   }
 
   async approveSwap(businessId: string, id: string) {
@@ -134,6 +189,31 @@ export class ShiftsService {
     }
 
     return this.tenantPrisma.client.$transaction(async (tx) => {
+      // Reciprocal trade (UPD-INT-011): if a paired shift was proposed, re-validate it's still
+      // really owned by the covering staff member (it may have moved since the request was
+      // raised) and hand it back to the original requester — a real two-way exchange, not just a
+      // one-way reassignment.
+      if (shift.swapWithShiftId) {
+        const paired = await tx.staffShift.findUnique({
+          where: { id: shift.swapWithShiftId },
+        });
+        if (
+          !paired ||
+          paired.businessId !== businessId ||
+          paired.staffUserId !== shift.swapCoveringUserId
+        ) {
+          throw new AppException(
+            SHIFT_ERROR_CODES.PAIRED_SHIFT_CHANGED,
+            "The covering staff member's proposed shift has since changed hands — ask them to re-propose the swap",
+            HttpStatus.CONFLICT,
+          );
+        }
+        await tx.staffShift.update({
+          where: { id: paired.id },
+          data: { staffUserId: shift.staffUserId },
+        });
+      }
+
       const updated = await tx.staffShift.update({
         where: { id },
         data: {

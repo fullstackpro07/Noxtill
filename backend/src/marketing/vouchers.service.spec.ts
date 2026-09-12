@@ -173,4 +173,51 @@ describe('VouchersService (UPD-BE-030)', () => {
       ),
     ).rejects.toBeInstanceOf(AppException);
   });
+
+  describe('preview() (POS checkout preview, UPD-INT-009)', () => {
+    it('returns the same amountApplied validateAndApply would, without spending down the real balance', async () => {
+      const voucher = await service.issue(businessId, { value: 30 });
+
+      const preview = await service.preview(businessId, voucher.code, 20, 100);
+      expect(preview.amountApplied).toBe(20);
+      expect(preview.remainingBalance).toBe(10);
+      expect(preview.voucherId).toBe(voucher.id);
+
+      const afterPreview = await prisma.voucher.findUniqueOrThrow({
+        where: { id: voucher.id },
+      });
+      expect(Number(afterPreview.balance)).toBe(30); // untouched
+      expect(afterPreview.status).toBe('active');
+
+      // Previewing repeatedly never spends down the real balance.
+      await service.preview(businessId, voucher.code, 20, 100);
+      const stillFull = await prisma.voucher.findUniqueOrThrow({
+        where: { id: voucher.id },
+      });
+      expect(Number(stillFull.balance)).toBe(30);
+
+      // The real applied path still works and actually spends it down.
+      const applied = await service.validateAndApply(
+        businessId,
+        voucher.code,
+        20,
+        100,
+        prisma,
+      );
+      expect(applied.amountApplied).toBe(20);
+      const afterApply = await prisma.voucher.findUniqueOrThrow({
+        where: { id: voucher.id },
+      });
+      expect(Number(afterApply.balance)).toBe(10);
+    });
+
+    it('rejects a preview the same way validateAndApply would (cancelled voucher)', async () => {
+      const cancelled = await service.issue(businessId, { value: 10 });
+      await service.cancel(cancelled.id);
+
+      await expect(
+        service.preview(businessId, cancelled.code, 5, 100),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+  });
 });

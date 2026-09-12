@@ -83,6 +83,15 @@ describe('MembershipsService (UPD-BE-025)', () => {
     expect(result.membership.status).toBe('active');
     expect(result.checkoutUrl).toBeNull();
     expect(billing.createSubscriptionCheckout).not.toHaveBeenCalled();
+    // Membership depth fix (UPD-INT-007) — a real due date, ~1 month out for a monthly plan,
+    // not left null forever (there's no gateway to auto-charge cash, so this is what makes
+    // "charges on schedule" real for it, via the expiry job).
+    expect(result.membership.currentPeriodEnd).not.toBeNull();
+    const daysUntilDue =
+      (result.membership.currentPeriodEnd!.getTime() - Date.now()) /
+      (24 * 60 * 60 * 1000);
+    expect(daysUntilDue).toBeGreaterThan(25);
+    expect(daysUntilDue).toBeLessThan(32);
   });
 
   it('an online membership with no stripePriceId configured fails cleanly rather than faking checkout', async () => {
@@ -225,5 +234,92 @@ describe('MembershipsService (UPD-BE-025)', () => {
     await expect(
       membershipsService.cancel(membership.id),
     ).rejects.toBeInstanceOf(AppException);
+  });
+
+  describe('renewCash() (Membership depth fix, UPD-INT-007)', () => {
+    it('extends the real due date by one real interval from the current period end', async () => {
+      const plan = await membershipsService.createPlan({
+        name: 'Renew Plan',
+        price: 25,
+      });
+      const { membership } = await membershipsService.create(businessId, {
+        customerId,
+        planId: plan.id,
+        method: 'cash',
+      });
+      const before = membership.currentPeriodEnd!;
+
+      const renewed = await membershipsService.renewCash(membership.id);
+      expect(renewed.status).toBe('active');
+      expect(renewed.currentPeriodEnd!.getTime()).toBeGreaterThan(
+        before.getTime(),
+      );
+      const gapDays =
+        (renewed.currentPeriodEnd!.getTime() - before.getTime()) /
+        (24 * 60 * 60 * 1000);
+      expect(gapDays).toBeGreaterThan(25);
+      expect(gapDays).toBeLessThan(32);
+    });
+
+    it('reactivates an already-expired cash membership on a late renewal, counted from today', async () => {
+      const plan = await membershipsService.createPlan({
+        name: 'Late Renew Plan',
+        price: 25,
+      });
+      const membership = await prisma.membership.create({
+        data: {
+          businessId,
+          planId: plan.id,
+          customerId,
+          status: 'expired',
+          method: 'cash',
+          currentPeriodEnd: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const renewed = await membershipsService.renewCash(membership.id);
+      expect(renewed.status).toBe('active');
+      expect(renewed.currentPeriodEnd!.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('rejects renewing an online membership (it renews automatically via Stripe)', async () => {
+      const plan = await membershipsService.createPlan({
+        name: 'Online Renew Plan',
+        price: 25,
+        stripePriceId: 'price_renew_test',
+      });
+      billing.createSubscriptionCheckout.mockResolvedValue({
+        url: 'https://checkout.stripe.com/session/renew',
+        sessionRef: 'cs_renew',
+      });
+      const { membership } = await membershipsService.create(businessId, {
+        customerId,
+        planId: plan.id,
+        method: 'online',
+        successUrl: 'https://example.com/ok',
+        cancelUrl: 'https://example.com/cancel',
+      });
+
+      await expect(
+        membershipsService.renewCash(membership.id),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('rejects renewing a cancelled membership', async () => {
+      const plan = await membershipsService.createPlan({
+        name: 'Cancelled Renew Plan',
+        price: 25,
+      });
+      const { membership } = await membershipsService.create(businessId, {
+        customerId,
+        planId: plan.id,
+        method: 'cash',
+      });
+      await membershipsService.cancel(membership.id);
+
+      await expect(
+        membershipsService.renewCash(membership.id),
+      ).rejects.toBeInstanceOf(AppException);
+    });
   });
 });

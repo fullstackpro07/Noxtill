@@ -9,6 +9,7 @@ import { slugify } from '../common/utils/slug.util';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { CapabilitiesService } from '../common/capabilities/capabilities.service';
+import { DEFAULT_WORKING_HOURS } from '../bookings/bookings.constants';
 import { SessionsService } from './sessions.service';
 import { TwoFactorService } from './two-factor.service';
 import {
@@ -86,6 +87,10 @@ export class AuthService {
             currency: dto.currency ?? 'USD',
             locale: dto.locale ?? 'en',
             trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            // Public booking depth fix — a real, sensible Mon-Fri 9-5 default so the public
+            // booking link works immediately, instead of every date silently showing zero slots
+            // until the owner finds the working-hours settings screen. Fully editable/overridable.
+            workingHours: DEFAULT_WORKING_HOURS,
           },
         });
 
@@ -394,6 +399,11 @@ export class AuthService {
       role,
       capabilities,
       sessionId: session.id,
+      // Staff depth fix (UPD-INT-011): tells CapabilitiesGuard to re-resolve this user's
+      // capabilities live from the current CustomRole row rather than trusting the snapshot
+      // above, so an owner editing a custom role's capabilities takes effect on this user's very
+      // next request instead of waiting for a token refresh.
+      customRoleId,
     };
 
     const accessToken = await this.jwt.signAsync(payload, {

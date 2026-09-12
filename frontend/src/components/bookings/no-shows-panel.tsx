@@ -77,7 +77,7 @@ export function NoShowsPanel() {
   );
 }
 
-function NoShowTrendChart({ trend }: { trend: { month: string; rate: number }[] }) {
+export function NoShowTrendChart({ trend }: { trend: { month: string; rate: number }[] }) {
   const width = 560;
   const height = 140;
   const max = Math.max(...trend.map((t) => t.rate), 10);

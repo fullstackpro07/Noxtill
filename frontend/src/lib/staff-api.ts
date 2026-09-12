@@ -216,6 +216,7 @@ interface RawShift {
   swapCoveringUserId: string | null;
   swapReason: string | null;
   swapReviewedByUserId: string | null;
+  swapWithShiftId: string | null;
   staffUser: { id: string; user: { id: string; name: string } };
 }
 
@@ -231,6 +232,9 @@ export interface Shift {
   swapRequestedByUserId: string | null;
   swapCoveringUserId: string | null;
   swapReason: string | null;
+  /** Staff depth fix (UPD-INT-011): the covering staff member's own shift being traded back — set
+   * means this is a real two-way swap, not just a one-way coverage handoff. */
+  swapWithShiftId: string | null;
 }
 
 function toShift(raw: RawShift): Shift {
@@ -246,6 +250,7 @@ function toShift(raw: RawShift): Shift {
     swapRequestedByUserId: raw.swapRequestedByUserId,
     swapCoveringUserId: raw.swapCoveringUserId,
     swapReason: raw.swapReason,
+    swapWithShiftId: raw.swapWithShiftId,
   };
 }
 
@@ -280,7 +285,10 @@ export function deleteShift(id: string): Promise<void> {
   return apiFetch<void>(`/shifts/${id}`, { method: "DELETE" });
 }
 
-export async function requestShiftSwap(id: string, input: { coveringUserId?: string; reason?: string }): Promise<Shift> {
+export async function requestShiftSwap(
+  id: string,
+  input: { coveringUserId?: string; reason?: string; swapWithShiftId?: string },
+): Promise<Shift> {
   const raw = await apiFetch<RawShift>(`/shifts/${id}/swap-request`, { method: "POST", body: JSON.stringify(input) });
   return toShift(raw);
 }

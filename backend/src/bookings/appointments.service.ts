@@ -21,6 +21,7 @@ import {
 import {
   AppointmentSource,
   AppointmentStatus,
+  DepositStatus,
   ProductKind,
 } from '@prisma/client';
 
@@ -339,6 +340,20 @@ export class AppointmentsService {
       startsAt.getTime() + (service.durationMin ?? 30) * 60 * 1000,
     );
 
+    // Services, formal fields depth fix (UPD-INT-004) — the customer is physically present for a
+    // walk-in, so a required deposit must be collected (cash) in this same request rather than
+    // deferred, unlike `approve()` where it's collected ahead of the appointment existing.
+    const requiredDeposit = service.depositRequired
+      ? Number(service.depositAmount ?? 0)
+      : 0;
+    if (requiredDeposit > 0 && (dto.depositAmount ?? 0) < requiredDeposit) {
+      throw new AppException(
+        BOOKING_ERROR_CODES.DEPOSIT_REQUIRED,
+        `"${service.name}" requires a deposit of at least ${requiredDeposit} (cash) to book — ${dto.depositAmount ?? 0} given.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     return this.tenantPrisma.client.$transaction(async (tx) => {
       await assertSlotAvailable(tx, {
         businessId,
@@ -368,7 +383,7 @@ export class AppointmentsService {
         update: {},
       });
 
-      return tx.appointment.create({
+      const appointment = await tx.appointment.create({
         data: {
           businessId,
           serviceId: dto.serviceId,
@@ -379,6 +394,26 @@ export class AppointmentsService {
           status: AppointmentStatus.confirmed,
           source,
         },
+      });
+
+      if (requiredDeposit > 0) {
+        await tx.deposit.create({
+          data: {
+            businessId,
+            appointmentId: appointment.id,
+            amount: dto.depositAmount!,
+            method: 'cash',
+            status: DepositStatus.captured,
+          },
+        });
+        await tx.appointment.update({
+          where: { id: appointment.id },
+          data: { depositPaid: { increment: dto.depositAmount! } },
+        });
+      }
+
+      return tx.appointment.findUniqueOrThrow({
+        where: { id: appointment.id },
         include: {
           service: true,
           customer: true,
@@ -474,8 +509,38 @@ export class AppointmentsService {
     return appointment;
   }
 
+  /**
+   * Services, formal fields depth fix (UPD-INT-004) — a deposit-required service can no longer be
+   * confirmed with zero deposit captured. Cash-only, same honest limit as `DepositsService.capture`
+   * itself (no one-off card/online charge primitive exists yet). Checks the service's own
+   * `depositRequired`/`depositAmount`, not the separate, deliberately-out-of-scope-for-now
+   * `DepositSettings` no-show trigger.
+   */
+  private async assertDepositSatisfied(
+    appointmentId: string,
+    service: { depositRequired: boolean; depositAmount: unknown; name: string },
+  ): Promise<void> {
+    if (!service.depositRequired) return;
+    const required = Number(service.depositAmount ?? 0);
+    if (required <= 0) return;
+
+    const captured = await this.tenantPrisma.client.deposit.aggregate({
+      where: { appointmentId, status: DepositStatus.captured },
+      _sum: { amount: true },
+    });
+    const capturedTotal = Number(captured._sum.amount ?? 0);
+    if (capturedTotal < required) {
+      throw new AppException(
+        BOOKING_ERROR_CODES.DEPOSIT_REQUIRED,
+        `"${service.name}" requires a deposit of at least ${required} before this booking can be confirmed — only ${capturedTotal} captured so far.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   async approve(businessId: string, id: string) {
     const requested = await this.requireRequested(id);
+    await this.assertDepositSatisfied(id, requested.service);
     const updated = await this.updateStatus(
       businessId,
       id,

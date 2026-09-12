@@ -31,3 +31,18 @@ export function issueVoucher(input: IssueVoucherInput): Promise<Voucher> {
 export function cancelVoucher(id: string): Promise<Voucher> {
   return apiFetch<Voucher>(`/vouchers/${id}/cancel`, { method: "PATCH" });
 }
+
+export interface VoucherPreview {
+  voucherId: string;
+  code: string;
+  amountApplied: number;
+  remainingBalance: number;
+}
+
+/** POS checkout preview (UPD-INT-009) — read-only, never spends down the real balance. */
+export function previewVoucher(code: string, requestedAmount: number, orderTotal: number): Promise<VoucherPreview> {
+  return apiFetch<VoucherPreview>("/vouchers/preview", {
+    method: "POST",
+    body: JSON.stringify({ code, requestedAmount, orderTotal }),
+  });
+}

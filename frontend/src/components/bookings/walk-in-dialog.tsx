@@ -11,8 +11,10 @@ import { fetchStaff } from "@/lib/staff-api";
 import { fetchProducts } from "@/lib/products-api";
 import { createWalkInAppointment, type LiveAppointment } from "@/lib/bookings-api";
 import { formatHour } from "@/lib/profit";
+import { formatCurrency } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
+import { useSession } from "@/lib/session";
 
 export function WalkInDialog({
   open,
@@ -25,12 +27,14 @@ export function WalkInDialog({
   date: string;
   existingAppointments: LiveAppointment[];
 }) {
+  const session = useSession();
   const queryClient = useQueryClient();
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [staffId, setStaffId] = useState("");
   const [hour, setHour] = useState(WORKING_HOURS[0]);
+  const [depositAmount, setDepositAmount] = useState("");
 
   const { data: services = [] } = useQuery({
     queryKey: ["products", "service"],
@@ -47,6 +51,8 @@ export function WalkInDialog({
   // submissions must resolve through the same fallback, not the raw (possibly still-empty) state.
   const service = services.find((s) => s.id === serviceId) ?? services[0];
 
+  const requiredDeposit = service?.depositRequired ? service.depositAmount ?? 0 : 0;
+
   const createMutation = useMutation({
     mutationFn: () =>
       createWalkInAppointment({
@@ -55,12 +61,14 @@ export function WalkInDialog({
         startsAt: dateHourToIso(date, hour),
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
+        depositAmount: requiredDeposit > 0 ? Number(depositAmount) || 0 : undefined,
       }),
     onSuccess: (created) => {
       toast.success(`Walk-in booked for ${created.customerName}.`);
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
       setCustomerName("");
       setCustomerPhone("");
+      setDepositAmount("");
       onClose();
     },
     onError: (err) => {
@@ -77,7 +85,8 @@ export function WalkInDialog({
   if (!open) return null;
 
   const conflict = staffId ? appointmentOccupying(existingAppointments, staffId, hour) : undefined;
-  const canCreate = customerName.trim() !== "" && customerPhone.trim() !== "" && !!service && !conflict;
+  const depositSatisfied = requiredDeposit <= 0 || Number(depositAmount) >= requiredDeposit;
+  const canCreate = customerName.trim() !== "" && customerPhone.trim() !== "" && !!service && !conflict && depositSatisfied;
 
   return (
     <Dialog
@@ -123,6 +132,21 @@ export function WalkInDialog({
           </Select>
         </div>
         {conflict && <p className="text-xs text-destructive">That staff member already has {conflict.customerName} at this time.</p>}
+        {requiredDeposit > 0 && (
+          <div>
+            <Input
+              label={`Deposit collected (cash) — at least ${formatCurrency(requiredDeposit, session.business.currency)} required`}
+              type="number"
+              min={0}
+              step="0.01"
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-fg-faint">
+              &quot;{service?.name}&quot; requires a deposit before it can be booked — this is collected in cash right now, since the customer is present.
+            </p>
+          </div>
+        )}
       </div>
     </Dialog>
   );

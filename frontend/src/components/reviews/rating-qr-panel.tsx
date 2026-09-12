@@ -24,11 +24,14 @@ export function RatingQrPanel({ businessName, businessSlug }: { businessName: st
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Rating Page depth fix (UPD-INT-008) — a real QR scan and a real "visit" to this page are the
+          same event in this system (the QR code opens the page directly, nothing else lands here),
+          so this shows the 3 genuinely distinct real metrics rather than padding out to 4 by
+          re-labelling one number twice or adding a non-metric "Window" card. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile label={`Scans (${stats?.windowDays ?? 30}d)`} value={stats ? String(stats.visits) : "…"} />
         <StatTile label="Ratings submitted" value={stats ? String(stats.ratingsSubmitted) : "…"} />
         <StatTile label="Conversion" value={stats ? `${stats.conversionRate}%` : "…"} />
-        <StatTile label="Window" value={`${stats?.windowDays ?? 30} days`} />
       </div>
 
       {!settings?.publicReviewUrl && (

@@ -63,6 +63,14 @@ describe('BranchManagementService (UPD-BE-036 follow-up)', () => {
     expect(result.businessUser.role).toBe('owner');
     expect(result.tempPassword).toBeTruthy();
 
+    // Public booking depth fix — the parent ("Root HQ") was created directly via Prisma above
+    // with no workingHours, so it's still the schema's empty-object default; the new branch must
+    // not inherit that (a permanently broken public booking link) and falls back to a real default.
+    expect(result.business.workingHours).not.toEqual({});
+    expect(result.business.workingHours).toMatchObject({
+      mon: [['09:00', '17:00']],
+    });
+
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: result.businessUser.userId },
     });
@@ -71,6 +79,31 @@ describe('BranchManagementService (UPD-BE-036 follow-up)', () => {
       user.passwordHash,
     );
     expect(matches).toBe(true);
+  });
+
+  it('inherits the parent business real configured working hours for a new branch, when it has any', async () => {
+    const customHoursRoot = await prisma.business.create({
+      data: {
+        name: 'Root With Custom Hours',
+        slug: `root-custom-hours-${Date.now()}`,
+        currency: 'PKR',
+        timezone: 'Asia/Karachi',
+        workingHours: { sat: [['10:00', '14:00']] },
+      },
+    });
+    createdBusinessIds.push(customHoursRoot.id);
+
+    const result = await service.create(customHoursRoot.id, {
+      name: 'Branch With Inherited Hours',
+      ownerName: 'Branch Owner',
+      ownerEmail: `branch-inherit-owner-${Date.now()}@test.com`,
+    });
+    createdBusinessIds.push(result.business.id);
+    createdUserIds.push(result.businessUser.userId);
+
+    expect(result.business.workingHours).toEqual({
+      sat: [['10:00', '14:00']],
+    });
   });
 
   it('flattens the hierarchy: creating a branch from an existing branch parents it to the root, not the branch', async () => {

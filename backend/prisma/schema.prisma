@@ -1431,6 +1431,10 @@ model CashShift {
   countedCash  Decimal? @map("counted_cash") @db.Decimal(12, 2)
   variance     Decimal? @db.Decimal(12, 2)
   varianceNote String?  @map("variance_note")
+  /// Shift Closing depth fix (UPD-INT-002) — the real denomination breakdown entered while
+  /// counting the drawer, persisted so a shift report can be printed/reprinted later against
+  /// history rather than only the ephemeral counting-session state. `[{value, count}]`.
+  denominationCounts Json? @map("denomination_counts")
 
   movements CashMovement[]
 
@@ -1927,14 +1931,24 @@ model ExternalReview {
 /// accumulated — this is a current-state snapshot, not a history log). `exampleQuote` is always a
 /// real, verbatim substring of an actual review's text, verified before being stored — never an
 /// AI paraphrase — same "never fabricate" discipline as `AiInsight.sourceFigure`.
+/// Private Reviews depth fix (UPD-INT-008) — themes clustered from real private-feedback messages
+/// are a genuinely different corpus from public review text and must never share a row with (or be
+/// wiped out by regenerating) the other, hence a real `source` column rather than reusing `businessId`
+/// alone to scope reads/writes.
+enum ReviewSentimentSource {
+  public_review
+  private_feedback
+}
+
 model ReviewSentimentTheme {
-  id           String   @id @default(uuid())
-  businessId   String   @map("business_id")
-  business     Business @relation(fields: [businessId], references: [id])
+  id           String                @id @default(uuid())
+  businessId   String                @map("business_id")
+  business     Business              @relation(fields: [businessId], references: [id])
+  source       ReviewSentimentSource @default(public_review)
   theme        String
   sentiment    String
-  exampleQuote String   @map("example_quote") @db.Text
-  reviewCount  Int      @map("review_count")
+  exampleQuote String                @map("example_quote") @db.Text
+  reviewCount  Int                   @map("review_count")
   /// Trend-arrows depth fix (UPD-FE-M25) — this same theme's `reviewCount` from the previous
   /// generation run (matched by normalized theme text), `null` when the theme is new. A real
   /// comparison across two real runs, never a fabricated trend.
@@ -1942,7 +1956,7 @@ model ReviewSentimentTheme {
 
   generatedAt DateTime @default(now()) @map("generated_at")
 
-  @@index([businessId, generatedAt])
+  @@index([businessId, source, generatedAt])
   @@map("review_sentiment_themes")
 }
 
@@ -2698,6 +2712,11 @@ model StaffShift {
   swapCoveringUserId    String?          @map("swap_covering_user_id")
   swapReason            String?          @map("swap_reason")
   swapReviewedByUserId  String?          @map("swap_reviewed_by_user_id")
+  /// Staff depth fix (UPD-INT-011): a specific shift already belonging to `swapCoveringUserId`
+  /// that gets traded back on approval, making this a real reciprocal swap instead of a one-way
+  /// handoff. Plain reference (no FK), same non-FK reviewer-reference convention as the fields
+  /// above — null means a plain coverage request with nothing traded back.
+  swapWithShiftId String? @map("swap_with_shift_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

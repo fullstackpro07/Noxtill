@@ -35,7 +35,9 @@ interface DebtorRow {
   customer_id: string;
   name: string;
   balance: string;
-  days_outstanding: number;
+  // Credit aging fix (UPD-INT-006): mysql2 decodes this as a real JS `bigint` through
+  // v_credit_balances's window-function CTE — never compare/arithmetic it directly.
+  days_outstanding: bigint;
 }
 
 function round2(value: number): number {
@@ -325,9 +327,10 @@ export class AiInsightsService {
 
     const [top] = rows;
     const balance = round2(Number(top.balance));
+    const daysOutstanding = Number(top.days_outstanding);
     return {
       category: 'credit',
-      sourceFigure: `${top.name} owes ${balance}, ${top.days_outstanding} days overdue`,
+      sourceFigure: `${top.name} owes ${balance}, ${daysOutstanding} days overdue`,
       context: 'this is the most overdue outstanding balance right now',
       estimatedImpact: balance,
     };

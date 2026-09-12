@@ -56,7 +56,9 @@ export class CreditService {
       phone: row.phone,
       balance: Number(row.balance),
       lastEntryAt: row.last_entry_at,
-      daysOutstanding: row.days_outstanding,
+      // Credit aging fix (UPD-INT-006) — MySQL reports days_outstanding as BIGINT through the
+      // window-function-based v_credit_balances view, which mysql2 decodes as a JS bigint.
+      daysOutstanding: Number(row.days_outstanding),
       optedOutOfReminders: Boolean(row.opted_out),
     }));
   }

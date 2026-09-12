@@ -118,19 +118,17 @@ export class CouponsService {
   }
 
   /**
-   * Validates a coupon code against real subtotal/usage-limit rules and increments its usage
-   * counter — called from inside `OrdersService.createSale`'s transaction, before
-   * `computeOrderTotals`, so the discount it produces feeds into tax/total math like any other
-   * discount. Never trusts a client-supplied discount amount — always recomputed here.
+   * All the real validation + discount math, shared by `validateAndApply` (which mutates
+   * `usedCount`) and `preview` (which doesn't) — kept as one path so the two can never drift.
    */
-  async validateAndApply(
+  private async checkAndCompute(
     businessId: string,
     code: string,
     subtotal: number,
     customerId: string | undefined,
-    tx: CouponTxClient,
-  ): Promise<{ couponId: string; discountAmount: number }> {
-    const coupon = await tx.coupon.findUnique({
+    client: CouponTxClient,
+  ): Promise<{ coupon: CouponRow; discountAmount: number }> {
+    const coupon = await client.coupon.findUnique({
       where: { businessId_code: { businessId, code } },
     });
     if (!coupon) {
@@ -185,7 +183,7 @@ export class CouponsService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const usedByCustomer = await tx.order.count({
+      const usedByCustomer = await client.order.count({
         where: { couponId: coupon.id, customerId },
       });
       if (usedByCustomer >= coupon.usageLimitPerCustomer) {
@@ -210,11 +208,57 @@ export class CouponsService {
     }
     discountAmount = Math.min(discountAmount, subtotal);
 
+    return { coupon, discountAmount };
+  }
+
+  /**
+   * Validates a coupon code against real subtotal/usage-limit rules and increments its usage
+   * counter — called from inside `OrdersService.createSale`'s transaction, before
+   * `computeOrderTotals`, so the discount it produces feeds into tax/total math like any other
+   * discount. Never trusts a client-supplied discount amount — always recomputed here.
+   */
+  async validateAndApply(
+    businessId: string,
+    code: string,
+    subtotal: number,
+    customerId: string | undefined,
+    tx: CouponTxClient,
+  ): Promise<{ couponId: string; discountAmount: number }> {
+    const { coupon, discountAmount } = await this.checkAndCompute(
+      businessId,
+      code,
+      subtotal,
+      customerId,
+      tx,
+    );
+
     await tx.coupon.update({
       where: { id: coupon.id },
       data: { usedCount: { increment: 1 } },
     });
 
     return { couponId: coupon.id, discountAmount };
+  }
+
+  /**
+   * Read-only preview for the POS checkout UI (Marketing depth fix, UPD-INT-009) — runs the exact
+   * same validation/discount math as `validateAndApply` (via `checkAndCompute`) but never touches
+   * `usedCount`, so staff can see the real discount before confirming the sale without consuming a
+   * real usage slot against the coupon's usage limits.
+   */
+  async preview(
+    businessId: string,
+    code: string,
+    subtotal: number,
+    customerId?: string,
+  ): Promise<{ couponId: string; code: string; discountAmount: number }> {
+    const { coupon, discountAmount } = await this.checkAndCompute(
+      businessId,
+      code,
+      subtotal,
+      customerId,
+      this.tenantPrisma.client,
+    );
+    return { couponId: coupon.id, code, discountAmount };
   }
 }

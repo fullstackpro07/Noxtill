@@ -18,6 +18,10 @@ export class CrmJobsScheduler implements OnModuleInit {
   onModuleInit() {
     this.register('tag-rules-tick', 'crm-tag-rules-hourly-tick');
     this.register('birthday-tick', 'crm-birthday-hourly-tick');
+    this.register(
+      'membership-expiry-tick',
+      'crm-membership-expiry-hourly-tick',
+    );
   }
 
   private register(name: string, jobId: string) {

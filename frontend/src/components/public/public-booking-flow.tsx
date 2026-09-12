@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import {
   fetchPublicServices,
   fetchPublicSlots,
@@ -58,6 +58,31 @@ export function PublicBookingFlow({
     enabled: !!service,
   });
   const slots = slotsData?.slots ?? [];
+
+  // A real business closed on the date the picker opens to (e.g. today is a weekend) must not
+  // look identical to a genuinely broken page — scan the same real slots endpoint across the
+  // visible date range so closed days can be dimmed/disabled and the first open day auto-selected,
+  // instead of defaulting to "today" and showing an empty day as the very first impression.
+  const availabilityScans = useQueries({
+    queries: DATES.map((d) => ({
+      queryKey: ["public-slots", slug, service?.id, d],
+      queryFn: () => fetchPublicSlots(slug, { service: service!.id, date: d }),
+      enabled: !!service,
+      staleTime: 60_000,
+    })),
+  });
+  const dateHasSlots = new Map(DATES.map((d, i) => [d, (availabilityScans[i].data?.slots.length ?? 0) > 0]));
+  const scanComplete = availabilityScans.every((q) => q.isFetched);
+
+  // React's "adjust state during render" pattern (not an effect, not a ref) — jumps to the first
+  // real open day exactly once per newly-selected service, the moment its availability scan
+  // finishes, guarded by tracking which service the jump has already run for as real state.
+  const [autoSelectedFor, setAutoSelectedFor] = useState<string | null>(null);
+  if (service && scanComplete && autoSelectedFor !== service.id) {
+    setAutoSelectedFor(service.id);
+    const firstOpenDate = DATES.find((d) => dateHasSlots.get(d));
+    if (firstOpenDate && firstOpenDate !== date) setDate(firstOpenDate);
+  }
 
   const bookMutation = useMutation({
     mutationFn: () =>
@@ -151,18 +176,28 @@ export function PublicBookingFlow({
               <div>
                 <p className="mb-1.5 text-sm font-medium text-[#1c231e]">Date</p>
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  {DATES.map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => {
-                        setDate(d);
-                        setSlot(null);
-                      }}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${date === d ? "border-[#0c4b3b] bg-[#0c4b3b]/8 text-[#0c4b3b]" : "border-[#e6dcc6] text-[#6b6353]"}`}
-                    >
-                      {formatDate(d).slice(0, 6)}
-                    </button>
-                  ))}
+                  {DATES.map((d) => {
+                    const known = scanComplete && dateHasSlots.get(d) === false;
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => {
+                          setDate(d);
+                          setSlot(null);
+                        }}
+                        title={known ? "Closed this day" : undefined}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                          date === d
+                            ? "border-[#0c4b3b] bg-[#0c4b3b]/8 text-[#0c4b3b]"
+                            : known
+                              ? "border-[#e6dcc6] text-[#c9c0aa]"
+                              : "border-[#e6dcc6] text-[#6b6353]"
+                        }`}
+                      >
+                        {formatDate(d).slice(0, 6)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -170,7 +205,11 @@ export function PublicBookingFlow({
                 <p className="mb-1.5 text-sm font-medium text-[#1c231e]">Time</p>
                 <div className="grid grid-cols-4 gap-1.5">
                   {slots.length === 0 ? (
-                    <p className="col-span-4 text-sm text-[#a89f8b]">No times available this day.</p>
+                    <p className="col-span-4 text-sm text-[#a89f8b]">
+                      {scanComplete && dateHasSlots.get(date) === false
+                        ? "Closed this day — pick another date above."
+                        : "No times available this day."}
+                    </p>
                   ) : (
                     slots.map((s) => (
                       <button

@@ -134,19 +134,22 @@ export class VouchersService {
   }
 
   /**
-   * Validates a voucher code and applies as much of `requestedAmount` as its real balance and
-   * the order's real total allow — called from inside `OrdersService.createSale`'s transaction,
-   * after `computeOrderTotals`. A voucher offsets the amount collected via payment/credit, it
-   * never changes `Order.total` itself (it's a payment method, not a discount).
+   * All the real validation + balance math, shared by `validateAndApply` (which mutates the
+   * voucher's balance/status) and `preview` (which doesn't) — kept as one path so the two can
+   * never drift.
    */
-  async validateAndApply(
+  private async checkAndCompute(
     businessId: string,
     code: string,
     requestedAmount: number,
     orderTotal: number,
-    tx: VoucherTxClient,
-  ): Promise<{ voucherId: string; amountApplied: number }> {
-    const voucher = await tx.voucher.findUnique({
+    client: VoucherTxClient,
+  ): Promise<{
+    voucher: VoucherRow;
+    amountApplied: number;
+    newBalance: number;
+  }> {
+    const voucher = await client.voucher.findUnique({
       where: { businessId_code: { businessId, code } },
     });
     if (!voucher) {
@@ -184,6 +187,30 @@ export class VouchersService {
     );
     const newBalance = round2(balance - amountApplied);
 
+    return { voucher, amountApplied, newBalance };
+  }
+
+  /**
+   * Validates a voucher code and applies as much of `requestedAmount` as its real balance and
+   * the order's real total allow — called from inside `OrdersService.createSale`'s transaction,
+   * after `computeOrderTotals`. A voucher offsets the amount collected via payment/credit, it
+   * never changes `Order.total` itself (it's a payment method, not a discount).
+   */
+  async validateAndApply(
+    businessId: string,
+    code: string,
+    requestedAmount: number,
+    orderTotal: number,
+    tx: VoucherTxClient,
+  ): Promise<{ voucherId: string; amountApplied: number }> {
+    const { voucher, amountApplied, newBalance } = await this.checkAndCompute(
+      businessId,
+      code,
+      requestedAmount,
+      orderTotal,
+      tx,
+    );
+
     await tx.voucher.update({
       where: { id: voucher.id },
       data: {
@@ -193,5 +220,37 @@ export class VouchersService {
     });
 
     return { voucherId: voucher.id, amountApplied };
+  }
+
+  /**
+   * Read-only preview for the POS checkout UI (Marketing depth fix, UPD-INT-009) — runs the exact
+   * same validation/balance math as `validateAndApply` (via `checkAndCompute`) but never writes
+   * the voucher's balance/status, so staff can see the real amount that would be applied before
+   * confirming the sale without spending down a real balance.
+   */
+  async preview(
+    businessId: string,
+    code: string,
+    requestedAmount: number,
+    orderTotal: number,
+  ): Promise<{
+    voucherId: string;
+    code: string;
+    amountApplied: number;
+    remainingBalance: number;
+  }> {
+    const { voucher, amountApplied, newBalance } = await this.checkAndCompute(
+      businessId,
+      code,
+      requestedAmount,
+      orderTotal,
+      this.tenantPrisma.client,
+    );
+    return {
+      voucherId: voucher.id,
+      code,
+      amountApplied,
+      remainingBalance: newBalance,
+    };
   }
 }

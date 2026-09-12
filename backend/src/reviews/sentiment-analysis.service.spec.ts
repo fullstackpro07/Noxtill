@@ -51,6 +51,7 @@ describe('SentimentAnalysisService (UPD-BE-076)', () => {
   afterAll(async () => {
     await prisma.reviewSentimentTheme.deleteMany({ where: { businessId } });
     await prisma.externalReview.deleteMany({ where: { businessId } });
+    await prisma.privateFeedback.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
@@ -166,5 +167,93 @@ describe('SentimentAnalysisService (UPD-BE-076)', () => {
     complete.mockRejectedValue(new Error('AI down'));
     const count = await service.generateForBusiness(businessId);
     expect(count).toBe(0);
+  });
+
+  describe('generateComplaintThemesForBusiness() (Private Reviews depth fix, UPD-INT-008)', () => {
+    it('clusters real PrivateFeedback messages under the private_feedback source, never touching public review themes', async () => {
+      await prisma.privateFeedback.createMany({
+        data: [
+          {
+            businessId,
+            stars: 2,
+            message:
+              'The staff was rude and dismissive when I asked for a refund.',
+          },
+          {
+            businessId,
+            stars: 1,
+            message: 'Rude staff again, nobody wanted to help me.',
+          },
+          {
+            businessId,
+            stars: 2,
+            message: 'Staff attitude was rude the whole visit.',
+          },
+        ],
+      });
+      complete.mockResolvedValue(
+        JSON.stringify([
+          {
+            theme: 'Rude staff',
+            sentiment: 'negative',
+            reviewIndices: [0],
+            exampleQuote: 'rude and dismissive when I asked for a refund',
+          },
+        ]),
+      );
+
+      const count =
+        await service.generateComplaintThemesForBusiness(businessId);
+      expect(count).toBe(1);
+
+      // The AI prompt itself must be told this is private feedback, not public reviews.
+      const lastCall = complete.mock.calls[complete.mock.calls.length - 1] as [
+        string,
+        string,
+      ];
+      expect(lastCall[1]).toContain('private customer feedback');
+
+      const complaintThemes = await service.list(
+        businessId,
+        'private_feedback',
+      );
+      expect(complaintThemes).toHaveLength(1);
+      expect(complaintThemes[0].theme).toBe('Rude staff');
+      expect(complaintThemes[0].source).toBe('private_feedback');
+
+      // Regenerating public-review themes must never wipe out or merge with the complaint themes.
+      complete.mockResolvedValue(
+        JSON.stringify([
+          {
+            theme: 'Unrelated public theme',
+            sentiment: 'positive',
+            reviewIndices: [0],
+            exampleQuote: 'anything',
+          },
+        ]),
+      );
+      await service.generateForBusiness(businessId);
+      const stillThere = await service.list(businessId, 'private_feedback');
+      expect(stillThere).toHaveLength(1);
+      expect(stillThere[0].theme).toBe('Rude staff');
+
+      const publicThemes = await service.list(businessId, 'public_review');
+      expect(publicThemes.every((t) => t.source === 'public_review')).toBe(
+        true,
+      );
+    });
+
+    it('returns 0 and never calls the AI with too few complaint messages to cluster honestly', async () => {
+      await prisma.privateFeedback.deleteMany({ where: { businessId } });
+      await prisma.privateFeedback.create({
+        data: { businessId, stars: 1, message: 'Only one complaint so far.' },
+      });
+      complete.mockClear();
+
+      const count =
+        await service.generateComplaintThemesForBusiness(businessId);
+      expect(count).toBe(0);
+      expect(complete).not.toHaveBeenCalled();
+    });
   });
 });

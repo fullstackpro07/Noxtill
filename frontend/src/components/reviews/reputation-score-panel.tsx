@@ -81,31 +81,32 @@ export function ReputationScorePanel() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+          <div className="flex justify-center">
             <HealthScoreGauge score={data.score} />
-            <div className="flex flex-1 flex-col gap-3">
-              {componentKeys.map((key) => {
-                const max = data.weights[key];
-                const value = data.components[key];
-                const fraction = max > 0 ? Math.min(1, value / max) : 0;
-                return (
-                  <div key={key}>
-                    <div className="mb-1 flex items-center justify-between text-sm">
-                      <span className="text-fg">{COMPONENT_LABEL[key]}</span>
-                      <span className="tabular-nums text-fg-muted">
-                        {value.toFixed(1)} / {max}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {componentKeys.map((key) => {
+              const max = data.weights[key];
+              const value = data.components[key];
+              const fraction = max > 0 ? Math.min(1, value / max) : 0;
+              return (
+                <Card key={key}>
+                  <CardContent className="p-3.5">
+                    <p className="mb-1.5 text-xs font-medium text-fg-faint">{COMPONENT_LABEL[key]}</p>
+                    <p className="mb-1.5 font-display text-lg font-bold tabular-nums text-fg">
+                      {value.toFixed(1)} <span className="text-sm font-normal text-fg-faint">/ {max}</span>
+                    </p>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                       <div
                         className="h-full rounded-full transition-[width]"
                         style={{ width: `${fraction * 100}%`, backgroundColor: COMPONENT_COLOR[key] }}
                       />
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           <div className="mt-6 border-t border-border pt-5">

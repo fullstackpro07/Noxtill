@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -54,5 +55,12 @@ export class VideoTestimonialsController {
     @Body() dto: RejectVideoTestimonialDto,
   ) {
     return this.videoTestimonialsService.reject(id, dto, user.sub);
+  }
+
+  /** Video Testimonials depth fix (UPD-INT-008) — real deletion, e.g. to take down a rejected upload or retract a previously-approved one from the real public gallery. */
+  @RequireCapability(CAPABILITIES.VIDEO_TESTIMONIALS_MODERATE)
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.videoTestimonialsService.remove(id);
   }
 }

@@ -1,4 +1,22 @@
-import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsArray,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class DenominationCountDto {
+  @IsNumber()
+  @Min(0)
+  value!: number;
+
+  @IsNumber()
+  @Min(0)
+  count!: number;
+}
 
 export class ReconcileShiftDto {
   @IsNumber()
@@ -9,4 +27,11 @@ export class ReconcileShiftDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  /** Shift Closing depth fix — the real denomination breakdown, persisted for later reprints. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DenominationCountDto)
+  denominations?: DenominationCountDto[];
 }

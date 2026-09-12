@@ -232,4 +232,73 @@ describe('CouponsService (UPD-BE-029)', () => {
       AppException,
     );
   });
+
+  describe('preview() (POS checkout preview, UPD-INT-009)', () => {
+    it('returns the same discount validateAndApply would, without incrementing usedCount', async () => {
+      const coupon = await service.create(businessId, {
+        code: `PREVIEW-${Date.now()}`,
+        type: 'percentage',
+        value: 50,
+        maxDiscountAmount: 20,
+      });
+
+      const preview = await service.preview(businessId, coupon.code, 100);
+      expect(preview.discountAmount).toBe(20);
+      expect(preview.couponId).toBe(coupon.id);
+
+      const afterPreview = await prisma.coupon.findUniqueOrThrow({
+        where: { id: coupon.id },
+      });
+      expect(afterPreview.usedCount).toBe(0);
+
+      // Previewing repeatedly never consumes a real usage slot.
+      await service.preview(businessId, coupon.code, 100);
+      await service.preview(businessId, coupon.code, 100);
+      const stillZero = await prisma.coupon.findUniqueOrThrow({
+        where: { id: coupon.id },
+      });
+      expect(stillZero.usedCount).toBe(0);
+
+      // The real applied path still works and increments exactly once.
+      const applied = await service.validateAndApply(
+        businessId,
+        coupon.code,
+        100,
+        undefined,
+        prisma,
+      );
+      expect(applied.discountAmount).toBe(20);
+      const afterApply = await prisma.coupon.findUniqueOrThrow({
+        where: { id: coupon.id },
+      });
+      expect(afterApply.usedCount).toBe(1);
+    });
+
+    it('rejects a preview the same way validateAndApply would (unknown code)', async () => {
+      await expect(
+        service.preview(businessId, 'NOT-REAL-PREVIEW', 100),
+      ).rejects.toBeInstanceOf(AppException);
+    });
+
+    it('honors usageLimitPerCustomer checks in preview without needing a mutating call first', async () => {
+      const coupon = await service.create(businessId, {
+        code: `PREVIEW-PERCUST-${Date.now()}`,
+        type: 'fixed',
+        value: 5,
+        usageLimitPerCustomer: 1,
+      });
+
+      await expect(
+        service.preview(businessId, coupon.code, 100, undefined),
+      ).rejects.toBeInstanceOf(AppException);
+
+      const preview = await service.preview(
+        businessId,
+        coupon.code,
+        100,
+        customerId,
+      );
+      expect(preview.discountAmount).toBe(5);
+    });
+  });
 });

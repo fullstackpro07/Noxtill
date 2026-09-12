@@ -31,7 +31,12 @@ function toLiveMovement(raw: RawCashMovement): LiveCashMovement {
   };
 }
 
-/** The staff-safe shape (see backend `stripVariance()`) simply omits these three keys entirely. */
+export interface DenominationCount {
+  value: number;
+  count: number;
+}
+
+/** The staff-safe shape (see backend `stripVariance()`) simply omits these keys entirely. */
 interface RawCashShift {
   id: string;
   openedByUserId: string | null;
@@ -40,6 +45,7 @@ interface RawCashShift {
   countedCash?: string | null;
   variance?: string | null;
   varianceNote?: string | null;
+  denominationCounts?: DenominationCount[] | null;
   movements: RawCashMovement[];
   openedAt: string;
   closedAt: string | null;
@@ -54,6 +60,8 @@ export interface LiveCashShift {
   countedCash?: number | null;
   variance?: number | null;
   varianceNote?: string | null;
+  /** Shift Closing depth fix — the real denomination breakdown persisted at close time, for reprints later. */
+  denominationCounts?: DenominationCount[] | null;
   hasVarianceData: boolean;
   movements: LiveCashMovement[];
   openedAt: string;
@@ -69,6 +77,7 @@ function toLiveShift(raw: RawCashShift): LiveCashShift {
     countedCash: raw.countedCash != null ? Number(raw.countedCash) : raw.countedCash,
     variance: raw.variance != null ? Number(raw.variance) : raw.variance,
     varianceNote: raw.varianceNote,
+    denominationCounts: raw.denominationCounts,
     hasVarianceData: "variance" in raw,
     movements: raw.movements.map(toLiveMovement),
     openedAt: raw.openedAt,
@@ -99,6 +108,6 @@ export function closeShiftBare(): Promise<LiveCashShift> {
   return apiFetch<RawCashShift>("/cash/shift/close", { method: "POST" }).then(toLiveShift);
 }
 
-export function reconcileShift(input: { countedCash: number; note?: string }): Promise<LiveCashShift> {
+export function reconcileShift(input: { countedCash: number; note?: string; denominations?: DenominationCount[] }): Promise<LiveCashShift> {
   return apiFetch<RawCashShift>("/cash-reconciliation", { method: "POST", body: JSON.stringify(input) }).then(toLiveShift);
 }

@@ -34,6 +34,7 @@ describe('VideoTestimonialsService (UPD-BE-027)', () => {
     getSignedDownloadUrl: jest
       .fn()
       .mockResolvedValue('https://signed.example/video.mp4'),
+    delete: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeAll(async () => {
@@ -75,6 +76,7 @@ describe('VideoTestimonialsService (UPD-BE-027)', () => {
     sendGate.send.mockClear();
     activity.record.mockClear();
     s3.getSignedDownloadUrl.mockClear();
+    s3.delete.mockClear();
   });
 
   afterAll(async () => {
@@ -161,5 +163,46 @@ describe('VideoTestimonialsService (UPD-BE-027)', () => {
 
     const requestedOnly = await service.list(VideoTestimonialStatus.requested);
     expect(requestedOnly.every((t) => t.status === 'requested')).toBe(true);
+  });
+
+  describe('remove() (Video Testimonials depth fix, UPD-INT-008)', () => {
+    it('deletes the real row and the real uploaded S3 object when one exists', async () => {
+      const testimonial = await service.request(businessId, { customerId });
+      await prisma.videoTestimonial.update({
+        where: { id: testimonial.id },
+        data: {
+          status: 'submitted',
+          videoKey: 'video-testimonials/to-delete.mp4',
+        },
+      });
+
+      await service.remove(testimonial.id);
+
+      expect(s3.delete).toHaveBeenCalledWith(
+        'video-testimonials/to-delete.mp4',
+      );
+      const stillExists = await prisma.videoTestimonial.findUnique({
+        where: { id: testimonial.id },
+      });
+      expect(stillExists).toBeNull();
+    });
+
+    it('deletes a testimonial with no uploaded video without calling S3 delete', async () => {
+      const testimonial = await service.request(businessId, { customerId });
+
+      await service.remove(testimonial.id);
+
+      expect(s3.delete).not.toHaveBeenCalled();
+      const stillExists = await prisma.videoTestimonial.findUnique({
+        where: { id: testimonial.id },
+      });
+      expect(stillExists).toBeNull();
+    });
+
+    it('rejects removing a testimonial that does not exist', async () => {
+      await expect(service.remove('not-a-real-id')).rejects.toBeInstanceOf(
+        AppException,
+      );
+    });
   });
 });

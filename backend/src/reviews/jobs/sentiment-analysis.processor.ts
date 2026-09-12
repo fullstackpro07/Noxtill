@@ -41,6 +41,19 @@ export class SentimentAnalysisProcessor extends WorkerHost {
           `Sentiment analysis failed for business ${businessId}: ${(error as Error).message}`,
         );
       }
+
+      // Private Reviews depth fix (UPD-INT-008) — a real, distinct clustering pass over private
+      // feedback, independent of the public-review pass above (one failing never blocks the other).
+      try {
+        totalThemes +=
+          await this.sentimentAnalysis.generateComplaintThemesForBusiness(
+            businessId,
+          );
+      } catch (error) {
+        this.logger.warn(
+          `Complaint theme clustering failed for business ${businessId}: ${(error as Error).message}`,
+        );
+      }
     }
 
     this.logger.debug(

@@ -44,3 +44,20 @@ export function rejectVideoTestimonial(id: string, reason?: string): Promise<Vid
     body: JSON.stringify({ reason }),
   });
 }
+
+/** DELETE /video-testimonials/:id — Video Testimonials depth fix: a real delete, e.g. to take an approved testimonial down from the public gallery or clear out a rejected upload. */
+export function deleteVideoTestimonial(id: string): Promise<void> {
+  return apiFetch<void>(`/video-testimonials/${id}`, { method: "DELETE" });
+}
+
+export interface VideoTestimonialGalleryItem {
+  id: string;
+  caption: string | null;
+  customerName: string | null;
+  videoUrl: string;
+}
+
+/** GET /reviews/video-gallery/:biz — the real public gallery an approval makes a testimonial appear in immediately, no separate "post" step. */
+export function fetchVideoTestimonialGallery(bizSlug: string): Promise<{ businessName: string; testimonials: VideoTestimonialGalleryItem[] }> {
+  return apiFetch(`/reviews/video-gallery/${bizSlug}`, {}, { skipAuth: true });
+}

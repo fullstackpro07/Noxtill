@@ -143,6 +143,27 @@ describe('CashRegisterService (UPD-BE-006/UPD-BE-007)', () => {
       expect(result.status).toBe('closed');
       expect(result.varianceNote).toContain('miscounted');
     });
+
+    it('persists the real denomination breakdown entered while counting the drawer (Shift Closing depth fix)', async () => {
+      await service.openShift(businessId, { openingFloat: 100 });
+      const result = await service.reconcile(businessId, {
+        countedCash: 105,
+        denominations: [
+          { value: 100, count: 1 },
+          { value: 5, count: 1 },
+        ],
+      });
+      expect(result.denominationCounts).toEqual([
+        { value: 100, count: 1 },
+        { value: 5, count: 1 },
+      ]);
+    });
+
+    it('leaves denominationCounts null when no breakdown is submitted', async () => {
+      await service.openShift(businessId, { openingFloat: 100 });
+      const result = await service.reconcile(businessId, { countedCash: 100 });
+      expect(result.denominationCounts).toBeNull();
+    });
   });
 
   describe('staff-safe views (UPD-FE-006e/007e)', () => {
@@ -152,6 +173,7 @@ describe('CashRegisterService (UPD-BE-006/UPD-BE-007)', () => {
       expect(staffView).not.toHaveProperty('variance');
       expect(staffView).not.toHaveProperty('countedCash');
       expect(staffView).not.toHaveProperty('varianceNote');
+      expect(staffView).not.toHaveProperty('denominationCounts');
 
       const ownerView = await service.getCurrentShift(businessId, Role.owner);
       expect(ownerView).toHaveProperty('variance');

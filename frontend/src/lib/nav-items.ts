@@ -103,6 +103,8 @@ import {
   Route,
   Target,
   Calculator,
+  Stamp,
+  StickyNote,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -241,6 +243,8 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Users,
     roles: ["owner", "manager", "staff"],
     children: [
+      { key: "loyalty", labelKey: "nav.loyalty", href: "/customers/loyalty", icon: Stamp },
+      { key: "memory-notes", labelKey: "nav.memoryNotes", href: "/customers/memory-notes", icon: StickyNote },
       { key: "segments", labelKey: "nav.segments", href: "/customers/segments", icon: Filter },
       { key: "import-customers", labelKey: "nav.importCustomers", href: "/customers/import", icon: Upload },
     ],

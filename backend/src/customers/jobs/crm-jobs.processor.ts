@@ -47,6 +47,27 @@ export class CrmJobsProcessor extends WorkerHost {
     if (job.name === 'birthday-tick') {
       return this.runBirthdayGreetings(now);
     }
+    if (job.name === 'membership-expiry-tick') {
+      await this.runMembershipExpiry(now);
+    }
+  }
+
+  /** Membership depth fix (UPD-INT-007) — a cash membership has no gateway to auto-charge it, so
+   * "charges on schedule" for cash means honestly lapsing it once its real due date passes with
+   * no renewal recorded (`MembershipsService.renewCash()`), rather than staying "active" forever. */
+  async runMembershipExpiry(now: Date = new Date()): Promise<number> {
+    const result = await this.prisma.membership.updateMany({
+      where: {
+        method: 'cash',
+        status: 'active',
+        currentPeriodEnd: { lt: now },
+      },
+      data: { status: 'expired' },
+    });
+    if (result.count > 0) {
+      this.logger.debug(`Expired ${result.count} lapsed cash membership(s)`);
+    }
+    return result.count;
   }
 
   async runTagRules(now: Date = new Date()): Promise<void> {

@@ -48,6 +48,8 @@ describe('CrmJobsProcessor (BE-041)', () => {
 
   afterAll(async () => {
     await prisma.activityEvent.deleteMany({ where: { businessId } });
+    await prisma.membership.deleteMany({ where: { businessId } });
+    await prisma.membershipPlan.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
@@ -124,5 +126,66 @@ describe('CrmJobsProcessor (BE-041)', () => {
     expect(sendGate.send).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: birthdayToday.id }),
     );
+  });
+
+  describe('runMembershipExpiry() (Membership depth fix, UPD-INT-007)', () => {
+    it('lapses a real cash membership whose due date has passed, leaves a future one and an online one alone', async () => {
+      const plan = await prisma.membershipPlan.create({
+        data: { businessId, name: 'Expiry Test Plan', price: 20 },
+      });
+      const customer = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}exp`,
+          name: 'Expiry Customer',
+        },
+      });
+
+      const lapsed = await prisma.membership.create({
+        data: {
+          businessId,
+          planId: plan.id,
+          customerId: customer.id,
+          status: 'active',
+          method: 'cash',
+          currentPeriodEnd: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      });
+      const notYetDue = await prisma.membership.create({
+        data: {
+          businessId,
+          planId: plan.id,
+          customerId: customer.id,
+          status: 'active',
+          method: 'cash',
+          currentPeriodEnd: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+        },
+      });
+      const onlinePastDue = await prisma.membership.create({
+        data: {
+          businessId,
+          planId: plan.id,
+          customerId: customer.id,
+          status: 'active',
+          method: 'online',
+          currentPeriodEnd: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const count = await processor.runMembershipExpiry();
+      expect(count).toBeGreaterThanOrEqual(1);
+
+      const [lapsedRow, notYetDueRow, onlineRow] = await Promise.all([
+        prisma.membership.findUniqueOrThrow({ where: { id: lapsed.id } }),
+        prisma.membership.findUniqueOrThrow({ where: { id: notYetDue.id } }),
+        prisma.membership.findUniqueOrThrow({
+          where: { id: onlinePastDue.id },
+        }),
+      ]);
+      expect(lapsedRow.status).toBe('expired');
+      expect(notYetDueRow.status).toBe('active');
+      // An online membership's expiry is Stripe's own webhook's job, not this cash-only tick.
+      expect(onlineRow.status).toBe('active');
+    });
   });
 });

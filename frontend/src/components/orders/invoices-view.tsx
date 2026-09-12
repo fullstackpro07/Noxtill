@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Receipt, Send, DollarSign } from "lucide-react";
+import { Receipt, Send, DollarSign, Download, MessageCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -17,6 +17,7 @@ import { fetchStaffList } from "@/lib/staff-api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
+import { generateInvoice } from "@/lib/orders-api";
 import {
   fetchInvoiceSummary,
   fetchInvoices,
@@ -152,12 +153,15 @@ export function InvoicesView() {
                         <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>
                       </td>
                       <td className="px-5 py-2.5 text-end">
-                        {row.status !== "paid" && (
-                          <Button variant="ghost" size="sm" onClick={() => setPaying(row)}>
-                            <DollarSign className="h-3.5 w-3.5" aria-hidden />
-                            Record payment
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          <InvoiceRowActions row={row} />
+                          {row.status !== "paid" && (
+                            <Button variant="ghost" size="sm" onClick={() => setPaying(row)}>
+                              <DollarSign className="h-3.5 w-3.5" aria-hidden />
+                              Record payment
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -192,6 +196,33 @@ export function InvoicesView() {
         }
       />
     </div>
+  );
+}
+
+/** Invoices depth fix — PDF download / WhatsApp send, reusing the same real per-order invoice generator the Orders Kanban board already uses. */
+function InvoiceRowActions({ row }: { row: LiveInvoiceRow }) {
+  const downloadMutation = useMutation({
+    mutationFn: () => generateInvoice(row.id, false),
+    onSuccess: ({ url }) => window.open(url, "_blank", "noopener,noreferrer"),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't generate the invoice PDF — please try again."),
+  });
+  const sendMutation = useMutation({
+    mutationFn: () => generateInvoice(row.id, true),
+    onSuccess: () => toast.success(`Invoice sent to ${row.customerName ?? "the customer"} on WhatsApp.`),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't send the invoice — please try again."),
+  });
+
+  return (
+    <>
+      <Button variant="ghost" size="icon" aria-label="Download invoice PDF" onClick={() => downloadMutation.mutate()} disabled={downloadMutation.isPending}>
+        <Download className="h-3.5 w-3.5" aria-hidden />
+      </Button>
+      {row.customerId && (
+        <Button variant="ghost" size="icon" aria-label="Send invoice via WhatsApp" onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending}>
+          <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+        </Button>
+      )}
+    </>
   );
 }
 

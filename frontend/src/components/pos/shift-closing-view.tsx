@@ -15,7 +15,7 @@ import { useSession } from "@/lib/session";
 import { formatCurrency, formatDate, formatTime } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
-import { closeShiftBare, fetchCurrentShift, fetchShiftHistory, reconcileShift, type LiveCashShift } from "@/lib/cash-register-api";
+import { closeShiftBare, fetchCurrentShift, fetchShiftHistory, reconcileShift, type LiveCashShift, type DenominationCount } from "@/lib/cash-register-api";
 
 interface DenominationRow {
   id: string;
@@ -36,7 +36,7 @@ export function ShiftClosingView() {
   const [denominations, setDenominations] = useState<DenominationRow[]>([newRow(), newRow()]);
   const [note, setNote] = useState("");
   const [confirmBareClose, setConfirmBareClose] = useState(false);
-  const [printOpen, setPrintOpen] = useState(false);
+  const [printTarget, setPrintTarget] = useState<"current" | LiveCashShift | null>(null);
 
   const { data: shift, isPending, isError, refetch } = useQuery({
     queryKey: ["cash-shift-current"],
@@ -68,7 +68,14 @@ export function ShiftClosingView() {
   });
 
   const reconcileMutation = useMutation({
-    mutationFn: () => reconcileShift({ countedCash: Math.round(countedCash * 100) / 100, note: note.trim() || undefined }),
+    mutationFn: () =>
+      reconcileShift({
+        countedCash: Math.round(countedCash * 100) / 100,
+        note: note.trim() || undefined,
+        denominations: denominations
+          .filter((d) => Number(d.value) > 0 && Number(d.count) > 0)
+          .map((d) => ({ value: Number(d.value), count: Number(d.count) })),
+      }),
     onSuccess: () => {
       invalidateAfterClose();
       toast.success("Shift closed and reconciled.");
@@ -112,7 +119,7 @@ export function ShiftClosingView() {
         <Card>
           <CardHeader>
             <CardTitle>Count the drawer</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setPrintTarget("current")}>
               <Printer className="h-3.5 w-3.5" aria-hidden />
               Print shift report
             </Button>
@@ -189,7 +196,9 @@ export function ShiftClosingView() {
             </div>
           )}
           {history && history.length === 0 && <EmptyState icon={Lock} title="No closed shifts yet" description="Closed shifts will show up here." />}
-          {history && history.length > 0 && <ShiftHistoryTable rows={history} currency={session.business.currency} />}
+          {history && history.length > 0 && (
+            <ShiftHistoryTable rows={history} currency={session.business.currency} onPrint={isOwnerOrManager ? (row) => setPrintTarget(row) : undefined} />
+          )}
         </CardContent>
       </Card>
 
@@ -210,21 +219,33 @@ export function ShiftClosingView() {
         }
       />
 
-      {shift && printOpen && (
+      {printTarget === "current" && shift && (
         <PrintReportDialog
           shift={shift}
-          denominations={denominations}
+          denominations={denominations
+            .filter((d) => Number(d.value) > 0 && Number(d.count) > 0)
+            .map((d) => ({ value: Number(d.value), count: Number(d.count) }))}
           countedCash={countedCash}
           currency={session.business.currency}
           businessName={session.business.name}
-          onClose={() => setPrintOpen(false)}
+          onClose={() => setPrintTarget(null)}
+        />
+      )}
+      {printTarget && printTarget !== "current" && (
+        <PrintReportDialog
+          shift={printTarget}
+          denominations={printTarget.denominationCounts ?? []}
+          countedCash={printTarget.countedCash ?? 0}
+          currency={session.business.currency}
+          businessName={session.business.name}
+          onClose={() => setPrintTarget(null)}
         />
       )}
     </div>
   );
 }
 
-function ShiftHistoryTable({ rows, currency }: { rows: LiveCashShift[]; currency: string }) {
+function ShiftHistoryTable({ rows, currency, onPrint }: { rows: LiveCashShift[]; currency: string; onPrint?: (row: LiveCashShift) => void }) {
   const showVariance = rows.some((r) => r.hasVarianceData);
   return (
     <div className="overflow-x-auto">
@@ -236,6 +257,7 @@ function ShiftHistoryTable({ rows, currency }: { rows: LiveCashShift[]; currency
             <th className="px-5 py-2 text-end font-medium">Opening float</th>
             {showVariance && <th className="px-5 py-2 text-end font-medium">Counted cash</th>}
             {showVariance && <th className="px-5 py-2 text-end font-medium">Variance</th>}
+            {onPrint && <th className="w-10 px-5 py-2" />}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -261,6 +283,15 @@ function ShiftHistoryTable({ rows, currency }: { rows: LiveCashShift[]; currency
                   )}
                 </td>
               )}
+              {onPrint && (
+                <td className="px-5 py-2.5 text-end">
+                  {r.countedCash != null && (
+                    <Button variant="ghost" size="icon" aria-label="Print shift report" onClick={() => onPrint(r)}>
+                      <Printer className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -278,7 +309,7 @@ function PrintReportDialog({
   onClose,
 }: {
   shift: LiveCashShift;
-  denominations: DenominationRow[];
+  denominations: DenominationCount[];
   countedCash: number;
   currency: string;
   businessName: string;
@@ -314,7 +345,7 @@ function PrintReportDialog({
           <p className="text-fg-muted">Counted so far</p>
           <p className="text-end tabular-nums text-fg">{formatCurrency(countedCash, currency)}</p>
         </div>
-        {denominations.some((d) => Number(d.value) > 0 && Number(d.count) > 0) && (
+        {denominations.length > 0 && (
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs text-fg-faint">
@@ -324,15 +355,13 @@ function PrintReportDialog({
               </tr>
             </thead>
             <tbody>
-              {denominations
-                .filter((d) => Number(d.value) > 0 && Number(d.count) > 0)
-                .map((d) => (
-                  <tr key={d.id}>
-                    <td className="py-1 tabular-nums">{formatCurrency(Number(d.value), currency)}</td>
-                    <td className="py-1 text-end tabular-nums">{d.count}</td>
-                    <td className="py-1 text-end tabular-nums">{formatCurrency(Number(d.value) * Number(d.count), currency)}</td>
-                  </tr>
-                ))}
+              {denominations.map((d, i) => (
+                <tr key={i}>
+                  <td className="py-1 tabular-nums">{formatCurrency(d.value, currency)}</td>
+                  <td className="py-1 text-end tabular-nums">{d.count}</td>
+                  <td className="py-1 text-end tabular-nums">{formatCurrency(d.value * d.count, currency)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
