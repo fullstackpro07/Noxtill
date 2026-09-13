@@ -52,7 +52,11 @@ describe('WidgetsService (BE-067)', () => {
 
   afterAll(async () => {
     await prisma.product.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -116,7 +120,11 @@ describe('WidgetsService (BE-067)', () => {
       await prisma.customer.deleteMany({
         where: { businessId: rangeBusinessId },
       });
-      await prisma.business.delete({ where: { id: rangeBusinessId } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: rangeBusinessId } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
 
     it('excludes a customer created 10 days ago from a 7-day window', async () => {

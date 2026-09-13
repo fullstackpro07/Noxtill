@@ -79,7 +79,11 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
     await prisma.rider.deleteMany({ where: { businessId } });
     await prisma.deliveryZone.deleteMany({ where: { businessId } });
     await prisma.deliverySettings.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -619,7 +623,11 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
       await prisma.delivery.deleteMany({ where: { businessId: business.id } });
       await prisma.order.deleteMany({ where: { businessId: business.id } });
       await prisma.rider.deleteMany({ where: { businessId: business.id } });
-      await prisma.business.delete({ where: { id: business.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: business.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
 
     it('returns a null rate (not zero) when there is no real sample yet', async () => {
@@ -627,7 +635,11 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
       const stats = await isolatedService.onTimeStats(business.id);
       expect(stats.onTimeRate).toBeNull();
       expect(stats.sampleSize).toBe(0);
-      await prisma.business.delete({ where: { id: business.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: business.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
   });
 

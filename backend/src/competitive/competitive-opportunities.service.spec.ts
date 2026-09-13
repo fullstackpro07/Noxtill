@@ -76,7 +76,11 @@ describe('CompetitiveOpportunitiesService (UPD-BE-054)', () => {
       where: { keyword: { businessId } },
     });
     await prisma.trackedKeyword.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -201,7 +205,11 @@ describe('CompetitiveOpportunitiesService (UPD-BE-054)', () => {
       await expect(service.dismiss(businessId, foreign.id)).rejects.toThrow();
 
       await prisma.competitiveOpportunity.delete({ where: { id: foreign.id } });
-      await prisma.business.delete({ where: { id: other.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: other.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
   });
 });

@@ -54,7 +54,11 @@ describe('LoyaltyService (UPD-BE-024)', () => {
       await prisma.loyaltyProgram.deleteMany({ where: { businessId: id } });
       await prisma.order.deleteMany({ where: { businessId: id } });
       await prisma.customer.deleteMany({ where: { businessId: id } });
-      await prisma.business.delete({ where: { id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     }
     await prisma.$disconnect();
   });

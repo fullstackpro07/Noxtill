@@ -39,13 +39,17 @@ describe('BranchManagementService (UPD-BE-036 follow-up)', () => {
   });
 
   afterAll(async () => {
-    await prisma.businessUser.deleteMany({
-      where: { businessId: { in: createdBusinessIds } },
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.businessUser.deleteMany({
+        where: { businessId: { in: createdBusinessIds } },
+      });
+      await tx.business.deleteMany({
+        where: { id: { in: createdBusinessIds } },
+      });
+      await tx.user.deleteMany({ where: { id: { in: createdUserIds } } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
-    await prisma.business.deleteMany({
-      where: { id: { in: createdBusinessIds } },
-    });
-    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     await prisma.$disconnect();
   });
 

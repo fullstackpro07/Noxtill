@@ -67,7 +67,11 @@ describe('HealthScoreService (UPD-BE-001)', () => {
     await prisma.expense.deleteMany({ where: { businessId } });
     await prisma.externalReview.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -290,7 +294,11 @@ describe('HealthScoreService (UPD-BE-001)', () => {
         expect(result.daysUntilReady).toBeLessThanOrEqual(14);
       }
     } finally {
-      await prisma.business.delete({ where: { id: newBusiness.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: newBusiness.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     }
   });
 });

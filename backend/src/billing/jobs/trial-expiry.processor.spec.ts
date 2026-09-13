@@ -50,7 +50,11 @@ describe('TrialExpiryProcessor (BE-065)', () => {
   });
 
   afterAll(async () => {
-    await prisma.business.deleteMany({ where: { id: { in: businessIds } } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.deleteMany({ where: { id: { in: businessIds } } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.plan.delete({ where: { id: otherPlanId } });
     await prisma.$disconnect();
   });

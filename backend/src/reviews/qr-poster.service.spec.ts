@@ -79,7 +79,11 @@ describe('QrPosterService', () => {
   afterAll(async () => {
     if (businessId) {
       await deleteCrossTestBusinessRows(prisma, businessId);
-      await prisma.business.delete({ where: { id: businessId } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: businessId } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     }
     await prisma?.$disconnect();
   });
@@ -147,7 +151,11 @@ describe('QrPosterService', () => {
     expect(htmlArg).toContain('&lt;script&gt;');
 
     await deleteCrossTestBusinessRows(prisma, evilBusiness.id);
-    await prisma.business.delete({ where: { id: evilBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: evilBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   }, 15_000);
 
   it('renders the real brandColor and a signed logo image when Review Settings has them set (UPD-FE-086)', async () => {

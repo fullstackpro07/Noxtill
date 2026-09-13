@@ -64,7 +64,11 @@ describe('GmbManagementService (UPD-BE-042)', () => {
     await prisma.gmbPhoto.deleteMany({ where: { businessId } });
     await prisma.gmbPost.deleteMany({ where: { businessId } });
     await prisma.integration.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -200,7 +204,11 @@ describe('GmbManagementService (UPD-BE-042)', () => {
     });
     const selected = await service.getSelectedLocation(otherBusiness.id);
     expect(selected).toEqual({ locationId: null });
-    await prisma.business.delete({ where: { id: otherBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: otherBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   it('photos: addPhoto() and removePhoto() are real local CRUD, no external call needed', async () => {

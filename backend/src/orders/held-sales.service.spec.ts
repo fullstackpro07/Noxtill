@@ -100,7 +100,11 @@ describe('HeldSalesService (UPD-BE-005)', () => {
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
     await prisma.auditLog.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -181,7 +185,11 @@ describe('HeldSalesService (UPD-BE-005)', () => {
     ).rejects.toThrow();
 
     await prisma.heldSale.delete({ where: { id: foreignHold.id } });
-    await prisma.business.delete({ where: { id: other.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: other.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   it("discardOlderThanToday() removes only real holds from before today, leaving today's alone", async () => {

@@ -77,7 +77,11 @@ describe('MediaLibraryService (UPD-BE-047)', () => {
 
   afterAll(async () => {
     await prisma.mediaAsset.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -169,7 +173,11 @@ describe('MediaLibraryService (UPD-BE-047)', () => {
     await expect(service.remove(businessId, otherAsset.id)).rejects.toThrow();
 
     await prisma.mediaAsset.delete({ where: { id: otherAsset.id } });
-    await prisma.business.delete({ where: { id: otherBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: otherBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   it('incrementUsage() bumps the real usage counter', async () => {

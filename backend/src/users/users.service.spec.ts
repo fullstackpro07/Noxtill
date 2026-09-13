@@ -142,9 +142,21 @@ describe('UsersService.me() — deactivated branches hidden (Branches depth fix,
 
   afterAll(async () => {
     await realPrisma.businessUser.deleteMany({ where: { userId } });
-    await realPrisma.business.delete({ where: { id: activeBranchId } });
-    await realPrisma.business.delete({ where: { id: deactivatedBranchId } });
-    await realPrisma.business.delete({ where: { id: parentId } });
+    await realPrisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: activeBranchId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
+    await realPrisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: deactivatedBranchId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
+    await realPrisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: parentId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await realPrisma.user.delete({ where: { id: userId } });
     await realPrisma.$disconnect();
   });

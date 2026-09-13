@@ -172,7 +172,11 @@ describe('ReportsService (INT-012)', () => {
     await prisma.order.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.businessUser.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.user.deleteMany({
       where: { id: { in: [ownerUserId, staffUserId] } },
     });
@@ -307,7 +311,11 @@ describe('ReportsService (INT-012)', () => {
 
     afterAll(async () => {
       await prisma.order.deleteMany({ where: { businessId: taxBusinessId } });
-      await prisma.business.delete({ where: { id: taxBusinessId } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: taxBusinessId } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
       cls.set(CLS_KEY_BUSINESS_ID, businessId);
     });
 
@@ -422,7 +430,11 @@ describe('ReportsService (INT-012)', () => {
         expect(summary.taxLabel).toBe('GST');
         expect(summary.taxRate).toBe(15);
       } finally {
-        await prisma.business.delete({ where: { id: branch.id } });
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+          await tx.business.delete({ where: { id: branch.id } });
+          await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+        });
         cls.set(CLS_KEY_BUSINESS_ID, taxBusinessId);
       }
     });

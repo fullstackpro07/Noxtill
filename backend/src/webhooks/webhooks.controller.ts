@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Logger,
   Post,
   Query,
   Req,
@@ -57,6 +58,8 @@ interface MetaWebhookBody {
  */
 @Controller('webhooks')
 export class WebhooksController {
+  private readonly logger = new Logger(WebhooksController.name);
+
   constructor(
     private readonly idempotency: WebhookIdempotencyService,
     private readonly config: ConfigService,
@@ -167,6 +170,9 @@ export class WebhooksController {
   ) {
     const publicKey = this.config.get<string>('TELNYX_PUBLIC_KEY');
     if (!publicKey) {
+      this.logger.error(
+        'Telnyx webhook hit but TELNYX_PUBLIC_KEY is not configured — rejecting with 503',
+      );
       throw new ServiceUnavailableException('Telnyx webhook is not configured');
     }
     if (
@@ -177,6 +183,7 @@ export class WebhooksController {
         publicKey,
       )
     ) {
+      this.logger.warn('Telnyx webhook signature verification failed');
       throw new ForbiddenException('Invalid signature');
     }
 
@@ -184,6 +191,9 @@ export class WebhooksController {
     const eventType = body.data?.event_type;
     const eventId = body.data?.id;
     const payload = body.data?.payload;
+    this.logger.log(
+      `Telnyx webhook accepted: event_type=${eventType} id=${eventId} from=${payload?.from?.phone_number}`,
+    );
     if (!eventType || !eventId) {
       return { received: true };
     }

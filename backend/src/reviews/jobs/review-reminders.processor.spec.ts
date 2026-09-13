@@ -49,7 +49,11 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
       await prisma.reviewRequest.deleteMany({ where: { businessId } });
       await prisma.customer.deleteMany({ where: { businessId } });
       await deleteCrossTestBusinessRows(prisma, businessId);
-      await prisma.business.delete({ where: { id: businessId } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: businessId } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     }
     await prisma?.$disconnect();
   });

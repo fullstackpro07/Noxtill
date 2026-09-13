@@ -31,9 +31,13 @@ describe('WhatsappWindowService (BE-016)', () => {
   });
 
   afterAll(async () => {
-    await prisma.whatsappWindow.deleteMany({ where: { businessId } });
-    await prisma.customer.deleteMany({ where: { businessId } });
-    await prisma.business.deleteMany({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.whatsappWindow.deleteMany({ where: { businessId } });
+      await tx.customer.deleteMany({ where: { businessId } });
+      await tx.business.deleteMany({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 

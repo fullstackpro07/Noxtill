@@ -52,11 +52,15 @@ describe('Tenancy isolation (BE-006)', () => {
   });
 
   afterAll(async () => {
-    await prisma.customer.deleteMany({
-      where: { businessId: { in: [businessAId, businessBId] } },
-    });
-    await prisma.business.deleteMany({
-      where: { id: { in: [businessAId, businessBId] } },
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.customer.deleteMany({
+        where: { businessId: { in: [businessAId, businessBId] } },
+      });
+      await tx.business.deleteMany({
+        where: { id: { in: [businessAId, businessBId] } },
+      });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
     await prisma.$disconnect();
   });

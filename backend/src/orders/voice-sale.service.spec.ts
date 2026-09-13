@@ -118,7 +118,11 @@ describe('VoiceSaleService (UPD-BE-008)', () => {
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
     await prisma.auditLog.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -234,6 +238,10 @@ describe('VoiceSaleService (UPD-BE-008)', () => {
     ).rejects.toThrow();
 
     await prisma.voiceSaleDraft.delete({ where: { id: foreignDraft.id } });
-    await prisma.business.delete({ where: { id: other.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: other.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 });

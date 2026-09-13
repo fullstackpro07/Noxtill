@@ -53,7 +53,11 @@ describe('AiInfraService (BE-075)', () => {
 
   afterAll(async () => {
     await prisma.aiCallLog.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -101,7 +105,11 @@ describe('AiInfraService (BE-075)', () => {
     await prisma.aiCallLog.deleteMany({
       where: { businessId: capBusiness.id },
     });
-    await prisma.business.delete({ where: { id: capBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: capBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   it('skips rate-limit/cost-cap checks entirely when no businessId is given (pre-signup calls)', async () => {
@@ -152,7 +160,11 @@ describe('AiInfraService (BE-075)', () => {
     await prisma.aiCallLog.deleteMany({
       where: { businessId: imageBusiness.id },
     });
-    await prisma.business.delete({ where: { id: imageBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: imageBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   it('generateImage() still enforces the rate limit before calling OpenAI', async () => {
@@ -168,7 +180,11 @@ describe('AiInfraService (BE-075)', () => {
       service.generateImage(rateLimitedBusiness.id, 'anything'),
     ).rejects.toBeInstanceOf(AppException);
 
-    await prisma.business.delete({ where: { id: rateLimitedBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: rateLimitedBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   describe('AI Settings feature toggles (UPD-BE-115)', () => {
@@ -192,7 +208,11 @@ describe('AiInfraService (BE-075)', () => {
       ).rejects.toBeInstanceOf(AppException);
       expect(claude.createMessage).not.toHaveBeenCalled();
 
-      await prisma.business.delete({ where: { id: toggledOffBusiness.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: toggledOffBusiness.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
 
     it('allows a call whose kind is not one of the 7 toggleable features, regardless of toggles', async () => {
@@ -209,7 +229,11 @@ describe('AiInfraService (BE-075)', () => {
       expect(text).toBe('hello');
 
       await prisma.aiCallLog.deleteMany({ where: { businessId: business.id } });
-      await prisma.business.delete({ where: { id: business.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: business.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
 
     it('allows a mapped kind when the toggle is left unset (defaults to enabled)', async () => {
@@ -230,7 +254,11 @@ describe('AiInfraService (BE-075)', () => {
       expect(text).toBe('hello');
 
       await prisma.aiCallLog.deleteMany({ where: { businessId: business.id } });
-      await prisma.business.delete({ where: { id: business.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: business.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
   });
 });

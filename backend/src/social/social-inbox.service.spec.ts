@@ -71,7 +71,11 @@ describe('SocialInboxService (UPD-BE-049)', () => {
   afterAll(async () => {
     await prisma.socialInboxItem.deleteMany({ where: { businessId } });
     await prisma.socialAccount.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -172,6 +176,10 @@ describe('SocialInboxService (UPD-BE-049)', () => {
     await expect(service.markRead(businessId, otherItem.id)).rejects.toThrow();
 
     await prisma.socialInboxItem.delete({ where: { id: otherItem.id } });
-    await prisma.business.delete({ where: { id: otherBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: otherBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 });

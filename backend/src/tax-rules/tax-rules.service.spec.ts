@@ -50,11 +50,15 @@ describe('TaxRulesService (UPD-BE-120)', () => {
   });
 
   afterAll(async () => {
-    await prisma.taxRule.deleteMany({
-      where: { businessId: { in: [businessId, otherBusinessId] } },
-    });
-    await prisma.business.deleteMany({
-      where: { id: { in: [businessId, otherBusinessId] } },
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.taxRule.deleteMany({
+        where: { businessId: { in: [businessId, otherBusinessId] } },
+      });
+      await tx.business.deleteMany({
+        where: { id: { in: [businessId, otherBusinessId] } },
+      });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
     await prisma.$disconnect();
   });

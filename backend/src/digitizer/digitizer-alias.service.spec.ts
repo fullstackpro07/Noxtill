@@ -42,7 +42,11 @@ describe('DigitizerAliasService (UPD-BE-063)', () => {
 
   afterAll(async () => {
     await prisma.digitizerAlias.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -113,7 +117,11 @@ describe('DigitizerAliasService (UPD-BE-063)', () => {
       await prisma.digitizerAlias.deleteMany({
         where: { businessId: otherBusiness.id },
       });
-      await prisma.business.delete({ where: { id: otherBusiness.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: otherBusiness.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
   });
 });

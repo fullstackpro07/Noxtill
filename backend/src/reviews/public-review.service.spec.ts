@@ -64,7 +64,11 @@ describe('PublicReviewService (BE-046)', () => {
     await prisma.videoTestimonial.deleteMany({ where: { businessId } });
     await prisma.businessUser.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -352,7 +356,11 @@ describe('PublicReviewService (BE-046)', () => {
     await prisma.reviewRequest.deleteMany({
       where: { businessId: capBusiness.id },
     });
-    await prisma.business.delete({ where: { id: capBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: capBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   describe('getVideoGallery() (Video Testimonials depth fix, UPD-INT-008)', () => {

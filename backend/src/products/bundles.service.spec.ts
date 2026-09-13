@@ -64,7 +64,11 @@ describe('BundlesService (UPD-BE-013)', () => {
     await prisma.bundleItem.deleteMany({ where: { bundle: { businessId } } });
     await prisma.bundle.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 

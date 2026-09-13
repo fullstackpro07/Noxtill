@@ -65,7 +65,11 @@ describe('ListingPhotosService (UPD-BE-124)', () => {
   afterAll(async () => {
     await prisma.listingPhoto.deleteMany({ where: { businessId } });
     await prisma.integration.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -112,7 +116,11 @@ describe('ListingPhotosService (UPD-BE-124)', () => {
     ).rejects.toBeInstanceOf(AppException);
 
     await prisma.listingPhoto.delete({ where: { id: otherPhoto.id } });
-    await prisma.business.delete({ where: { id: otherBusiness.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: otherBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   it('remove() really deletes the row', async () => {

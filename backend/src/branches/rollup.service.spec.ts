@@ -100,8 +100,16 @@ describe('RollupService (BE-059)', () => {
     await prisma.order.deleteMany({
       where: { businessId: { in: [parentId, branchId] } },
     });
-    await prisma.business.delete({ where: { id: branchId } });
-    await prisma.business.delete({ where: { id: parentId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: branchId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: parentId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 

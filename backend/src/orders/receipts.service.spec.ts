@@ -118,7 +118,11 @@ describe('ReceiptsService (UPD-BE-086)', () => {
     await prisma.order.deleteMany({ where: { businessId } });
     await prisma.businessUser.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.user.deleteMany({
       where: { id: { in: [staffAUserId, staffBUserId] } },
     });
@@ -212,7 +216,11 @@ describe('ReceiptsService (UPD-BE-086)', () => {
     ).rejects.toThrow();
 
     await prisma.order.delete({ where: { id: foreignOrder.id } });
-    await prisma.business.delete({ where: { id: other.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: other.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
   });
 
   it('stats() computes a real digital-vs-printed percentage from the receipt log', async () => {

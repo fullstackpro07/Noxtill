@@ -38,11 +38,20 @@ describe('SessionsService (UPD-BE-040)', () => {
   });
 
   afterAll(async () => {
-    await prisma.session.deleteMany({ where: { businessId } });
-    await prisma.user.deleteMany({
-      where: { id: { in: [userId, otherUserId] } },
+    // FK-checks-disabled transaction (not just ordered deletes): under the full suite's parallel
+    // workers, a plain `session.deleteMany` -> `business.delete` sequence has been observed to
+    // still hit a FK violation on the business delete — each statement auto-commits on its own
+    // pooled connection, so this guards against any stray row from that timing window rather than
+    // relying on statement order alone.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.session.deleteMany({ where: { businessId } });
+      await tx.user.deleteMany({
+        where: { id: { in: [userId, otherUserId] } },
+      });
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
-    await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
 

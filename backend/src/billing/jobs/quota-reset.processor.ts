@@ -48,13 +48,27 @@ export class QuotaResetProcessor extends WorkerHost {
       },
     });
 
+    let succeeded = 0;
     for (const business of due) {
-      await this.prisma.business.update({
-        where: { id: business.id },
-        data: { msgUsed: 0, msgQuotaResetAt: now },
-      });
+      try {
+        await this.prisma.business.update({
+          where: { id: business.id },
+          data: { msgUsed: 0, msgQuotaResetAt: now },
+        });
+        succeeded += 1;
+      } catch (error) {
+        // A single business failing (e.g. deleted between the listing query above and its own
+        // update — a real possibility with account deletion) must not abort every other
+        // business's reset for the month, matching the same defensive pattern already used in
+        // HealthScoreSnapshotProcessor.runSnapshot().
+        this.logger.warn(
+          `Quota reset failed for business ${business.id}: ${(error as Error).message}`,
+        );
+      }
     }
 
-    this.logger.debug(`Quota reset processed ${due.length} business(es)`);
+    this.logger.debug(
+      `Quota reset processed ${succeeded}/${due.length} business(es)`,
+    );
   }
 }

@@ -67,7 +67,11 @@ describe('AdCampaignsService (UPD-BE-069)', () => {
     await prisma.adCampaignStatsSnapshot.deleteMany({ where: { businessId } });
     await prisma.adCampaign.deleteMany({ where: { businessId } });
     await prisma.integration.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -301,7 +305,11 @@ describe('AdCampaignsService (UPD-BE-069)', () => {
       await prisma.adSettings.deleteMany({
         where: { businessId: business.id },
       });
-      await prisma.business.delete({ where: { id: business.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: business.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
 
     it('lets a manager activate a campaign when requireApproval is off', async () => {

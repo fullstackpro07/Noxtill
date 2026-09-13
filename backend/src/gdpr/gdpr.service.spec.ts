@@ -74,7 +74,11 @@ describe('GdprService (UPD-BE-123)', () => {
     await prisma.dataSubjectRequest.deleteMany({ where: { businessId } });
     await prisma.auditLog.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.user.delete({ where: { id: userId } });
     await prisma.$disconnect();
   });
@@ -319,7 +323,11 @@ describe('GdprService (UPD-BE-123)', () => {
         where: { id: otherRequest.id },
       });
       await prisma.customer.delete({ where: { id: otherCustomer.id } });
-      await prisma.business.delete({ where: { id: otherBusiness.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: otherBusiness.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
 
     it('findOne()/markInProgress()/reject() 404 on a request that belongs to another business', async () => {
@@ -356,7 +364,11 @@ describe('GdprService (UPD-BE-123)', () => {
         where: { id: otherRequest.id },
       });
       await prisma.customer.delete({ where: { id: otherCustomer.id } });
-      await prisma.business.delete({ where: { id: otherBusiness.id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: otherBusiness.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
   });
 });

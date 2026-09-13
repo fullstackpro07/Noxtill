@@ -72,20 +72,24 @@ describe('StockTransfersService (UPD-BE-036)', () => {
   });
 
   afterAll(async () => {
-    await prisma.stockMovement.deleteMany({
-      where: { businessId: { in: [parentId, branchId] } },
-    });
-    await prisma.stockTransferItem.deleteMany({
-      where: { transfer: { sourceBusinessId: parentId } },
-    });
-    await prisma.stockTransfer.deleteMany({
-      where: { sourceBusinessId: parentId },
-    });
-    await prisma.product.deleteMany({
-      where: { businessId: { in: [parentId, branchId] } },
-    });
-    await prisma.business.deleteMany({
-      where: { id: { in: [parentId, branchId, unrelatedId] } },
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.stockMovement.deleteMany({
+        where: { businessId: { in: [parentId, branchId] } },
+      });
+      await tx.stockTransferItem.deleteMany({
+        where: { transfer: { sourceBusinessId: parentId } },
+      });
+      await tx.stockTransfer.deleteMany({
+        where: { sourceBusinessId: parentId },
+      });
+      await tx.product.deleteMany({
+        where: { businessId: { in: [parentId, branchId] } },
+      });
+      await tx.business.deleteMany({
+        where: { id: { in: [parentId, branchId, unrelatedId] } },
+      });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
     await prisma.$disconnect();
   });

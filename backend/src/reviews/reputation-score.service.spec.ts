@@ -42,8 +42,17 @@ describe('ReputationScoreService (UPD-BE-103)', () => {
   });
 
   afterAll(async () => {
-    await prisma.externalReview.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    // FK-checks-disabled transaction (not just ordered deletes): under the full suite's parallel
+    // workers, a plain deleteMany-then-delete sequence has been observed (here and in several
+    // other spec files this session) to still hit a FK violation on the business delete — each
+    // statement auto-commits on its own pooled connection, so this guards against any stray row
+    // from that timing window rather than relying on statement order alone.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.externalReview.deleteMany({ where: { businessId } });
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 

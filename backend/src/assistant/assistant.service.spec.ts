@@ -168,8 +168,8 @@ describe('AssistantService (BE-074)', () => {
     await prisma.helpArticle.create({
       data: {
         slug: helpSlug,
-        title: 'How the frobnicator widget works',
-        body: 'The frobnicator widget frobnicates your gizmos automatically every night at midnight.',
+        title: 'How the widgetronizer widget works',
+        body: 'The widgetronizer widget widgetronizes your gizmos automatically every night at midnight.',
         url: `/help/${helpSlug}`,
       },
     });
@@ -191,7 +191,11 @@ describe('AssistantService (BE-074)', () => {
     });
     await prisma.assistantConversation.deleteMany({ where: { businessId } });
     await prisma.order.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.user.delete({ where: { id: userId } });
     await prisma.helpArticle.delete({ where: { slug: helpSlug } });
     await prisma.$disconnect();
@@ -327,14 +331,14 @@ describe('AssistantService (BE-074)', () => {
 
   it('search_help_docs retrieves a real help article for a matching query', async () => {
     claude.streamMessage.mockResolvedValueOnce(
-      toolUseTurnFor('tool_3', 'search_help_docs', '{"query":"frobnicator"}'),
+      toolUseTurnFor('tool_3', 'search_help_docs', '{"query":"widgetronizer"}'),
     );
     claude.streamMessage.mockResolvedValueOnce(finalTurn());
 
     const result = await service.chat(
       businessId,
       userId,
-      'How does the frobnicator work?',
+      'How does the widgetronizer work?',
     );
     const output = result.toolCalls[0].output as {
       found: boolean;
@@ -345,7 +349,7 @@ describe('AssistantService (BE-074)', () => {
     expect(output.found).toBe(true);
     expect(output.passages[0]).toEqual(
       expect.objectContaining({
-        title: 'How the frobnicator widget works',
+        title: 'How the widgetronizer widget works',
         url: `/help/${helpSlug}`,
       }),
     );

@@ -56,11 +56,15 @@ describe('HealthScoreSnapshotProcessor (UPD-BE-001)', () => {
   });
 
   afterAll(async () => {
-    await prisma.healthScoreSnapshot.deleteMany({
-      where: { businessId: { in: [businessId, otherBusinessId] } },
-    });
-    await prisma.business.deleteMany({
-      where: { id: { in: [businessId, otherBusinessId] } },
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.healthScoreSnapshot.deleteMany({
+        where: { businessId: { in: [businessId, otherBusinessId] } },
+      });
+      await tx.business.deleteMany({
+        where: { id: { in: [businessId, otherBusinessId] } },
+      });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
     await prisma.$disconnect();
   });

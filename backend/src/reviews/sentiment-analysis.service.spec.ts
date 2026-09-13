@@ -52,7 +52,11 @@ describe('SentimentAnalysisService (UPD-BE-076)', () => {
     await prisma.reviewSentimentTheme.deleteMany({ where: { businessId } });
     await prisma.externalReview.deleteMany({ where: { businessId } });
     await prisma.privateFeedback.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 

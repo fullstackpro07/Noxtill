@@ -111,7 +111,11 @@ describe('ExportsService (INT-012)', () => {
     await prisma.expense.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
-    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
     await prisma.$disconnect();
   });
 
@@ -271,7 +275,11 @@ describe('ExportsService (INT-012)', () => {
       await prisma.customer.deleteMany({
         where: { businessId: otherBusinessId },
       });
-      await prisma.business.delete({ where: { id: otherBusinessId } });
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: otherBusinessId } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
     });
 
     it('customers export scopes to the requested business only, even with zero CLS context', async () => {
