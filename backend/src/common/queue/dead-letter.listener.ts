@@ -13,6 +13,7 @@ import {
   DEMO_QUEUE,
   dlqName,
 } from './queue.constants';
+import { buildRedisConnection } from './redis-connection.util';
 
 /**
  * Watches a queue for exhausted-retry failures and lands the job onto its
@@ -40,18 +41,8 @@ export class DeadLetterListener implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
-    const tlsRaw = this.config.get<string>('REDIS_TLS', '');
-    const tlsEnabled = tlsRaw === 'true' || tlsRaw === '1' || tlsRaw === 'yes';
     this.events = new QueueEvents(DEMO_QUEUE, {
-      connection: {
-        host: this.config.get<string>('REDIS_HOST', 'localhost'),
-        port: Number(this.config.get('REDIS_PORT', 6379)),
-        username: this.config.get<string>('REDIS_USERNAME') || undefined,
-        password: this.config.get<string>('REDIS_PASSWORD') || undefined,
-        tls: tlsEnabled ? {} : undefined,
-        enableReadyCheck: false,
-        maxRetriesPerRequest: null,
-      },
+      connection: buildRedisConnection(this.config),
     });
 
     this.events.on('failed', ({ jobId, failedReason }) => {
