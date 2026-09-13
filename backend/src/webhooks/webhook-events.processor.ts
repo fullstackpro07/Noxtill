@@ -77,7 +77,11 @@ export class WebhookEventsProcessor extends WorkerHost {
         );
       case 'telnyx-status':
         return this.handleTelnyxStatus(
-          job.data as { messageId?: string; status?: string; hasErrors: boolean },
+          job.data as {
+            messageId?: string;
+            status?: string;
+            hasErrors: boolean;
+          },
         );
       case 'email-event':
         return this.handleEmailEvent(

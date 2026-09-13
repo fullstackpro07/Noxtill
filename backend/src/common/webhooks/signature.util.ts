@@ -74,7 +74,11 @@ export function verifyTelnyxSignature(
       ED25519_SPKI_PREFIX,
       Buffer.from(publicKeyBase64, 'base64'),
     ]);
-    const publicKey = createPublicKey({ key: der, format: 'der', type: 'spki' });
+    const publicKey = createPublicKey({
+      key: der,
+      format: 'der',
+      type: 'spki',
+    });
     const signedPayload = Buffer.concat([
       Buffer.from(`${timestampHeader}|`, 'utf8'),
       rawBody,

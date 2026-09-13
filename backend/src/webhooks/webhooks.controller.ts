@@ -196,7 +196,10 @@ export class WebhooksController {
           { jobId: `telnyx-inbound-${eventId}` },
         );
       });
-    } else if (eventType === 'message.sent' || eventType === 'message.finalized') {
+    } else if (
+      eventType === 'message.sent' ||
+      eventType === 'message.finalized'
+    ) {
       await this.idempotency.handle('telnyx', eventId, async () => {
         await this.webhookQueue.add(
           'telnyx-status',
