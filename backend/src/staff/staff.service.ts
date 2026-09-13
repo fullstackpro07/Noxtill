@@ -166,6 +166,7 @@ export class StaffService {
         userId: user.id,
         role: dto.role,
         commissionRule: (dto.commissionRule ?? {}) as Prisma.InputJsonValue,
+        hourlyRate: dto.hourlyRate,
       },
       include: { user: true },
     });
@@ -194,6 +195,7 @@ export class StaffService {
         commissionRule: dto.commissionRule as Prisma.InputJsonValue | undefined,
         customRoleId:
           dto.customRoleId === undefined ? undefined : dto.customRoleId,
+        hourlyRate: dto.hourlyRate === undefined ? undefined : dto.hourlyRate,
       },
       include: { user: true },
     });

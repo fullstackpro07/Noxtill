@@ -137,12 +137,19 @@ export class ScheduledExportsService {
       try {
         const { url, label } = await this.generateArtifact(schedule);
 
+        // Reports depth fix (UPD-INT-015): `lastRunAt` is now stamped only AFTER delivery
+        // genuinely succeeds — it used to be stamped right after generation and before delivery,
+        // so a delivery failure (e.g. the in-app-notification path throwing) still marked this
+        // cycle "run," silently skipping delivery with no retry until the next full
+        // weekly/monthly period. `deliver()` itself already never throws for the
+        // has-real-recipients branch (each recipient is individually try/caught) — this only
+        // changes what happens when the whole thing fails outright.
+        await this.deliver(schedule, url, label);
+
         await this.prisma.scheduledExport.update({
           where: { id: schedule.id },
           data: { lastRunAt: referenceDate },
         });
-
-        await this.deliver(schedule, url, label);
         ran += 1;
       } catch (error) {
         if (error instanceof SkipSchedule) {

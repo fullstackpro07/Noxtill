@@ -62,7 +62,10 @@ export class TenancyGuard implements CanActivate {
     const branch = await this.prisma.business.findUnique({
       where: { id: requested },
     });
-    return branch && branch.parentId === ownBusinessId
+    // Branches depth fix (UPD-INT-012): a deactivated branch can no longer be switched into via
+    // `X-Branch`/`?branch=` — silently falls back to the caller's own business, same as any other
+    // invalid/foreign branch id, rather than granting a live operating context inside it.
+    return branch && branch.parentId === ownBusinessId && branch.active
       ? branch.id
       : ownBusinessId;
   }

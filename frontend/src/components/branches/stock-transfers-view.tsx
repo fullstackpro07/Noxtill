@@ -50,6 +50,7 @@ export function StockTransfersView() {
   const [filter, setFilter] = useState<StockTransferStatus | "all">("all");
   const [creating, setCreating] = useState(false);
   const [rejecting, setRejecting] = useState<StockTransfer | null>(null);
+  const [receiving, setReceiving] = useState<StockTransfer | null>(null);
   const queryClient = useQueryClient();
 
   const { data: transfers = [], isPending, isError, refetch } = useQuery({
@@ -80,10 +81,12 @@ export function StockTransfersView() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't ship this transfer — please try again."),
   });
   const receiveMutation = useMutation({
-    mutationFn: (id: string) => receiveStockTransfer(id),
+    mutationFn: ({ id, overrides }: { id: string; overrides?: { itemId: string; receivedQty: number }[] }) =>
+      receiveStockTransfer(id, overrides),
     onSuccess: () => {
       invalidate();
       toast.success("Marked as received — stock added to your branch.");
+      setReceiving(null);
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't receive this transfer — please try again."),
   });
@@ -152,6 +155,11 @@ export function StockTransfersView() {
                     <td className="px-4 py-3 text-fg-muted">
                       {t.items.map((i) => i.sourceProduct.name).join(", ")}
                       <span className="ms-1 text-fg-faint">({t.items.reduce((s, i) => s + i.qty, 0)} units)</span>
+                      {t.status === "received" && t.items.some((i) => i.receivedQty != null && i.receivedQty < i.qty) && (
+                        <span className="ms-1 text-xs text-accent-foreground">
+                          — partial: {t.items.reduce((s, i) => s + (i.receivedQty ?? i.qty), 0)}/{t.items.reduce((s, i) => s + i.qty, 0)} received
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-1.5 text-xs text-fg-muted">
@@ -183,7 +191,7 @@ export function StockTransfersView() {
                           </Button>
                         )}
                         {t.status === "shipped" && (
-                          <Button size="sm" variant="outline" onClick={() => receiveMutation.mutate(t.id)} disabled={receiveMutation.isPending}>
+                          <Button size="sm" variant="outline" onClick={() => setReceiving(t)} disabled={receiveMutation.isPending}>
                             <PackageCheck className="h-3.5 w-3.5" aria-hidden />
                             Receive
                           </Button>
@@ -199,6 +207,15 @@ export function StockTransfersView() {
       )}
 
       <CreateTransferDialog open={creating} onClose={() => setCreating(false)} />
+
+      {receiving && (
+        <ReceiveTransferDialog
+          transfer={receiving}
+          onClose={() => setReceiving(null)}
+          onConfirm={(overrides) => receiveMutation.mutate({ id: receiving.id, overrides })}
+          confirming={receiveMutation.isPending}
+        />
+      )}
 
       <Dialog
         open={rejecting != null}
@@ -220,6 +237,71 @@ export function StockTransfersView() {
         }
       />
     </div>
+  );
+}
+
+/** Branches depth fix (UPD-INT-012): lets the receiving branch record a real partial receipt —
+ * defaults every item to a full receive, editable per item before confirming. */
+function ReceiveTransferDialog({
+  transfer,
+  onClose,
+  onConfirm,
+  confirming,
+}: {
+  transfer: StockTransfer;
+  onClose: () => void;
+  onConfirm: (overrides: { itemId: string; receivedQty: number }[]) => void;
+  confirming: boolean;
+}) {
+  const [receivedByItemId, setReceivedByItemId] = useState<Record<string, string>>(
+    Object.fromEntries(transfer.items.map((i) => [i.id, String(i.qty)])),
+  );
+
+  const overrides = transfer.items.map((i) => ({
+    itemId: i.id,
+    receivedQty: Number(receivedByItemId[i.id] ?? i.qty),
+  }));
+  const valid = overrides.every((o) => Number.isFinite(o.receivedQty) && o.receivedQty >= 0);
+  const hasShortfall = transfer.items.some(
+    (i) => Number(receivedByItemId[i.id] ?? i.qty) < i.qty,
+  );
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Confirm receipt"
+      description="Adjust any item that arrived short — the rest stay at their full shipped quantity."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={confirming}>
+            Cancel
+          </Button>
+          <Button onClick={() => onConfirm(overrides)} disabled={!valid || confirming}>
+            {confirming ? "Confirming…" : hasShortfall ? "Confirm partial receipt" : "Confirm receipt"}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {transfer.items.map((i) => (
+          <div key={i.id} className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-fg">{i.sourceProduct.name}</p>
+              <p className="text-xs text-fg-faint">Shipped: {i.qty}</p>
+            </div>
+            <Input
+              className="w-24"
+              type="number"
+              min={0}
+              max={i.qty}
+              value={receivedByItemId[i.id] ?? String(i.qty)}
+              onChange={(e) => setReceivedByItemId((prev) => ({ ...prev, [i.id]: e.target.value }))}
+            />
+          </div>
+        ))}
+      </div>
+    </Dialog>
   );
 }
 

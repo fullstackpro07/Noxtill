@@ -20,9 +20,24 @@ import { WebhookIdempotencyService } from '../common/webhooks/webhook-idempotenc
 import {
   verifyMetaSignature,
   verifyTwilioSignature,
+  verifyTelnyxSignature,
   safeEqual,
 } from '../common/webhooks/signature.util';
 import { WEBHOOK_EVENTS_QUEUE } from './webhooks.constants';
+
+interface TelnyxWebhookBody {
+  data?: {
+    event_type?: string;
+    id?: string;
+    payload?: {
+      id?: string;
+      type?: string;
+      from?: { phone_number?: string };
+      to?: { phone_number?: string; status?: string }[];
+      errors?: unknown[];
+    };
+  };
+}
 
 interface MetaWebhookBody {
   entry?: Array<{
@@ -130,6 +145,68 @@ export class WebhooksController {
         await this.webhookQueue.add('twilio-status', body, {
           jobId: `twilio-status-${eventId}`,
         });
+      });
+    }
+
+    return { received: true };
+  }
+
+  /**
+   * Telnyx inbound messaging (SMS/MMS/WhatsApp — testing setup, see UPD-BE note: this stands in
+   * for Twilio until the number moves back). Unlike Twilio's per-purpose webhooks, Telnyx posts
+   * every message lifecycle event (inbound + outbound status) to this one URL, disambiguated by
+   * `data.event_type`.
+   */
+  @Public()
+  @Post('telnyx')
+  @HttpCode(200)
+  async telnyx(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('telnyx-signature-ed25519') signature?: string,
+    @Headers('telnyx-timestamp') timestamp?: string,
+  ) {
+    const publicKey = this.config.get<string>('TELNYX_PUBLIC_KEY');
+    if (!publicKey) {
+      throw new ServiceUnavailableException('Telnyx webhook is not configured');
+    }
+    if (
+      !verifyTelnyxSignature(
+        req.rawBody ?? Buffer.from(''),
+        timestamp,
+        signature,
+        publicKey,
+      )
+    ) {
+      throw new ForbiddenException('Invalid signature');
+    }
+
+    const body = req.body as TelnyxWebhookBody;
+    const eventType = body.data?.event_type;
+    const eventId = body.data?.id;
+    const payload = body.data?.payload;
+    if (!eventType || !eventId) {
+      return { received: true };
+    }
+
+    if (eventType === 'message.received') {
+      await this.idempotency.handle('telnyx', eventId, async () => {
+        await this.webhookQueue.add(
+          'telnyx-inbound',
+          { type: payload?.type, from: payload?.from?.phone_number },
+          { jobId: `telnyx-inbound-${eventId}` },
+        );
+      });
+    } else if (eventType === 'message.sent' || eventType === 'message.finalized') {
+      await this.idempotency.handle('telnyx', eventId, async () => {
+        await this.webhookQueue.add(
+          'telnyx-status',
+          {
+            messageId: payload?.id,
+            status: payload?.to?.[0]?.status,
+            hasErrors: Boolean(payload?.errors?.length),
+          },
+          { jobId: `telnyx-status-${eventId}` },
+        );
       });
     }
 

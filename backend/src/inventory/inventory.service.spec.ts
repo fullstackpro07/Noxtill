@@ -98,6 +98,10 @@ describe('InventoryService (BE-033/BE-034)', () => {
     const movements = await inventoryService.getMovements(productId);
     const wastage = movements.find((m) => m.kind === 'wastage');
     expect(wastage?.reason).toBe('Damaged: dropped box');
+    // Inventory depth fix (UPD-INT-013): a structured reason + the real cost at the moment of
+    // loss, so this entry can be grouped correctly and priced into reported profit.
+    expect(wastage?.wastageReason).toBe('Damaged');
+    expect(Number(wastage?.unitCost)).toBe(1.5);
   });
 
   it('rejects wastage greater than on-hand stock', async () => {
@@ -125,13 +129,14 @@ describe('InventoryService (BE-033/BE-034)', () => {
     expect(item?.supplier).toBe('Acme');
   });
 
-  it('accepts a Theft wastage reason (UPD-BE-111)', async () => {
+  it('accepts a Theft wastage reason (UPD-BE-111), stored as a real structured category (UPD-INT-013)', async () => {
     const movement = await inventoryService.recordWastage(businessId, {
       productId,
       qty: 1,
       reason: 'Theft',
     });
     expect(movement.reason).toBe('Theft');
+    expect(movement.wastageReason).toBe('Theft');
 
     const product = await prisma.product.findUniqueOrThrow({
       where: { id: productId },

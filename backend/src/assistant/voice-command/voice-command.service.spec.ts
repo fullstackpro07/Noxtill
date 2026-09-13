@@ -286,6 +286,66 @@ describe('VoiceCommandService (UPD-BE-113)', () => {
     expect(customersService.create).not.toHaveBeenCalled();
   });
 
+  describe('concurrent double-confirm race and failure-revert (AI Assistant depth fix, UPD-INT-014)', () => {
+    it('lets only one of two concurrent confirm() calls actually execute the write', async () => {
+      speechToText.transcribe.mockResolvedValue('lost 1 loaf, damaged');
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          action: 'record_wastage',
+          args: { productName: 'bread', qty: 1, reason: 'Damaged' },
+        }),
+      );
+      const proposed = await service.propose(businessId, userId, fakeFile);
+      inventoryService.recordWastage.mockResolvedValue({ id: 'race-movement' });
+
+      const results = await Promise.allSettled([
+        service.confirm(user(), proposed.id, undefined),
+        service.confirm(user(), proposed.id, undefined),
+      ]);
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(inventoryService.recordWastage).toHaveBeenCalledTimes(1);
+
+      const draft = await prisma.voiceCommandDraft.findUnique({
+        where: { id: proposed.id },
+      });
+      expect(draft?.status).toBe('confirmed');
+    });
+
+    it('reverts the draft back to pending (not stuck as confirmed) when execute() genuinely fails, so it can be retried', async () => {
+      speechToText.transcribe.mockResolvedValue('lost 1 loaf, damaged');
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          action: 'record_wastage',
+          args: { productName: 'bread', qty: 1, reason: 'Damaged' },
+        }),
+      );
+      const proposed = await service.propose(businessId, userId, fakeFile);
+
+      inventoryService.recordWastage.mockRejectedValueOnce(
+        new Error('insufficient stock'),
+      );
+      await expect(
+        service.confirm(user(), proposed.id, undefined),
+      ).rejects.toThrow('insufficient stock');
+
+      const afterFailure = await prisma.voiceCommandDraft.findUnique({
+        where: { id: proposed.id },
+      });
+      expect(afterFailure?.status).toBe('pending'); // reverted, not stranded as "confirmed"
+      expect(afterFailure?.confirmedAt).toBeNull();
+
+      // A real retry, now that the underlying issue is resolved, succeeds normally.
+      inventoryService.recordWastage.mockResolvedValueOnce({
+        id: 'retry-movement',
+      });
+      const retried = await service.confirm(user(), proposed.id, undefined);
+      expect(retried).toEqual({ id: 'retry-movement' });
+    });
+  });
+
   it('record_cash_movement confirms through CashRegisterService with a normalized type/amount', async () => {
     speechToText.transcribe.mockResolvedValue(
       'take 20 out of the drawer for a supplier',

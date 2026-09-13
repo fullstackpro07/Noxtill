@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, JobsOptions } from 'bullmq';
 import {
@@ -17,10 +17,19 @@ import {
  */
 @Injectable()
 export class QueueService {
+  private readonly logger = new Logger(QueueService.name);
+
   constructor(
     @InjectQueue(DEMO_QUEUE)
     private readonly demoQueue: Queue<DemoJobData, unknown, string>,
-  ) {}
+  ) {
+    // Queue is an EventEmitter — an unhandled 'error' (e.g. Redis over quota,
+    // connection refused) throws and takes down the whole process, not just
+    // this queue. Log it instead so a Redis outage never crashes the app.
+    this.demoQueue.on('error', (error: Error) =>
+      this.logger.warn(`Demo queue connection error: ${error.message}`),
+    );
+  }
 
   async addJob<T>(
     queue: Queue<T, unknown, string, T, unknown, string>,

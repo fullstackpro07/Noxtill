@@ -80,6 +80,12 @@ export class InventoryService {
           kind: 'wastage',
           qty: -dto.qty,
           reason,
+          // Inventory depth fix (UPD-INT-013): `wastageReason` is the real, structured category
+          // (grouped correctly regardless of note text); `unitCost` snapshots the product's real
+          // cost at the moment of loss, so this movement's dollar value can be reported honestly
+          // instead of only being guessable later from whatever the product's cost is *today*.
+          wastageReason: dto.reason,
+          unitCost: product.costPrice,
         },
       }),
       this.tenantPrisma.client.product.update({

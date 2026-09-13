@@ -31,7 +31,11 @@ export class UsersService {
         timezone: true,
         country: true,
         parentId: true,
-        branches: { select: { id: true, name: true } },
+        // Branches depth fix (UPD-INT-012): a deactivated branch no longer appears as a
+        // selectable option in the branch switcher — `active` is checked on switch itself too
+        // (`TenancyGuard.resolveBranchId`), but hiding it here is what actually keeps it out of
+        // the dropdown a user would otherwise be able to click.
+        branches: { where: { active: true }, select: { id: true, name: true } },
       },
     });
     if (!business) throw new NotFoundException('Business not found');

@@ -5,6 +5,8 @@ export const PAYROLL_COLUMNS = [
   { header: 'Role', key: 'role', width: 12 },
   { header: 'Hours Worked', key: 'hoursWorked', width: 14 },
   { header: 'Overtime Hours', key: 'overtimeHours', width: 14 },
+  { header: 'Hourly Rate', key: 'hourlyRate', width: 14 },
+  { header: 'Hourly Pay', key: 'hourlyPay', width: 14 },
   { header: 'Commission', key: 'commission', width: 14 },
   { header: 'Advances Deducted', key: 'advancesDeducted', width: 18 },
   { header: 'Net Pay', key: 'netPay', width: 14 },

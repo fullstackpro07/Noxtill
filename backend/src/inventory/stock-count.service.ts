@@ -83,6 +83,15 @@ export class StockCountService {
     return count;
   }
 
+  /**
+   * Inventory depth fix (UPD-INT-013): the draft -> applied transition used to be checked before
+   * the transaction, not claimed atomically inside it — since each line write here is a `set`
+   * (not an `increment`), the final stock quantity would still land correctly under a concurrent
+   * double-apply, but each concurrent call would independently write its own `adjustment`
+   * `StockMovement`/activity-log row for the same physical count, corrupting the audit trail. The
+   * `updateMany` claim below (same shape as every other check-then-write fix this session) makes
+   * only one caller ever get past the guard.
+   */
   async apply(businessId: string, id: string, actorUserId: string) {
     const count = await this.findOne(id);
     if (count.status !== StockCountStatus.draft) {
@@ -95,6 +104,22 @@ export class StockCountService {
 
     let adjustedLines = 0;
     const applied = await this.tenantPrisma.client.$transaction(async (tx) => {
+      const claimed = await tx.stockCount.updateMany({
+        where: { id, status: StockCountStatus.draft },
+        data: {
+          status: StockCountStatus.applied,
+          appliedByUserId: actorUserId,
+          appliedAt: new Date(),
+        },
+      });
+      if (claimed.count === 0) {
+        throw new AppException(
+          STOCK_COUNT_ERROR_CODES.ALREADY_APPLIED,
+          'This stock count was already applied (possibly by a concurrent request)',
+          HttpStatus.CONFLICT,
+        );
+      }
+
       for (const line of count.lines) {
         const liveProduct = await tx.product.findUniqueOrThrow({
           where: { id: line.productId },
@@ -118,14 +143,7 @@ export class StockCountService {
         });
       }
 
-      return tx.stockCount.update({
-        where: { id },
-        data: {
-          status: StockCountStatus.applied,
-          appliedByUserId: actorUserId,
-          appliedAt: new Date(),
-        },
-      });
+      return tx.stockCount.findUniqueOrThrow({ where: { id } });
     });
 
     await this.activity.record(businessId, {

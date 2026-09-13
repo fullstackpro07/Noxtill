@@ -203,4 +203,143 @@ describe('ExportsService (INT-012)', () => {
       await prisma.product.delete({ where: { id: spikyProduct.id } });
     });
   });
+
+  describe('cross-tenant scoping with NO CLS bound (Reports depth fix, UPD-INT-015)', () => {
+    // `AccountZipProcessor` and `ScheduledExportsService.generateArtifact()` both call this
+    // service from a bare BullMQ job handler — no HTTP request, no CLS context ever bound. This
+    // block uses a service instance built exactly that way (a CLS that's never `.set()`), matching
+    // the real production call path, unlike every test above (which binds CLS in `beforeAll` and
+    // so never actually exercised the bug: every one of these fetchers except `fetchCreditRows`
+    // used to rely entirely on CLS auto-scoping and returned EVERY business's rows when CLS was
+    // unbound).
+    let unboundService: ExportsService;
+    let otherBusinessId: string;
+
+    beforeAll(async () => {
+      const unboundCls = new FakeClsService(); // deliberately never .set()
+      const unboundTenantPrisma = new TenantPrismaService(
+        prisma,
+        unboundCls as unknown as ClsService,
+      );
+      unboundService = new ExportsService(
+        unboundTenantPrisma,
+        s3 as unknown as S3Service,
+        pdfRenderer as unknown as PdfRendererService,
+        queue as unknown as Queue,
+      );
+
+      const otherBusiness = await prisma.business.create({
+        data: {
+          name: 'Other Tenant Biz',
+          slug: `exports-other-tenant-${Date.now()}`,
+        },
+      });
+      otherBusinessId = otherBusiness.id;
+      await prisma.customer.create({
+        data: {
+          businessId: otherBusinessId,
+          name: 'Should Never Leak Customer',
+          phone: `+1559${Date.now()}`,
+        },
+      });
+      await prisma.product.create({
+        data: {
+          businessId: otherBusinessId,
+          kind: 'product',
+          name: 'Should Never Leak Product',
+          sku: 'LEAK-1',
+        },
+      });
+      await prisma.expense.create({
+        data: {
+          businessId: otherBusinessId,
+          description: 'Should Never Leak Expense',
+          category: 'other',
+          amount: 999,
+          incurredOn: new Date(),
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.expense.deleteMany({
+        where: { businessId: otherBusinessId },
+      });
+      await prisma.product.deleteMany({
+        where: { businessId: otherBusinessId },
+      });
+      await prisma.customer.deleteMany({
+        where: { businessId: otherBusinessId },
+      });
+      await prisma.business.delete({ where: { id: otherBusinessId } });
+    });
+
+    it('customers export scopes to the requested business only, even with zero CLS context', async () => {
+      const buffer = await unboundService.buildXlsxBuffer(
+        businessId,
+        'customers',
+      );
+      const rows = await readSheetRows(buffer);
+      expect(rows.flat()).toContain('Export Customer'); // this business's own row
+      expect(rows.flat()).not.toContain('Should Never Leak Customer');
+    });
+
+    it('stock export scopes to the requested business only, even with zero CLS context', async () => {
+      const buffer = await unboundService.buildXlsxBuffer(businessId, 'stock');
+      const rows = await readSheetRows(buffer);
+      expect(rows.flat()).toContain('Export Widget');
+      expect(rows.flat()).not.toContain('Should Never Leak Product');
+      expect(rows.flat()).not.toContain('LEAK-1');
+    });
+
+    it('expenses export scopes to the requested business only, even with zero CLS context', async () => {
+      const buffer = await unboundService.buildXlsxBuffer(
+        businessId,
+        'expenses',
+      );
+      const rows = await readSheetRows(buffer);
+      expect(rows.flat()).toContain('Export Rent');
+      expect(rows.flat()).not.toContain('Should Never Leak Expense');
+    });
+
+    it('products export scopes to the requested business only, even with zero CLS context', async () => {
+      const buffer = await unboundService.buildXlsxBuffer(
+        businessId,
+        'products',
+      );
+      const rows = await readSheetRows(buffer);
+      expect(rows.flat()).toContain('Export Widget');
+      expect(rows.flat()).not.toContain('Should Never Leak Product');
+    });
+
+    it("sales export scopes to the requested business's own orders only, even with zero CLS context", async () => {
+      const order = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: 1,
+          status: 'completed',
+          subtotal: 10,
+          total: 10,
+        },
+      });
+      const otherOrder = await prisma.order.create({
+        data: {
+          businessId: otherBusinessId,
+          orderNo: 1,
+          status: 'completed',
+          subtotal: 20,
+          total: 20,
+        },
+      });
+
+      const buffer = await unboundService.buildXlsxBuffer(businessId, 'sales');
+      const rows = await readSheetRows(buffer);
+      const totals = rows.flat();
+      expect(totals).toContain('10');
+      expect(totals).not.toContain('20');
+
+      await prisma.order.delete({ where: { id: order.id } });
+      await prisma.order.delete({ where: { id: otherOrder.id } });
+    });
+  });
 });

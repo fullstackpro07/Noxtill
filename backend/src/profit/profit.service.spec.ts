@@ -187,12 +187,34 @@ describe('ProfitService (BE-036/BE-037)', () => {
     expect(pnl.revenue).toBe(236);
     expect(pnl.cogs).toBe(60);
     expect(pnl.totalExpenses).toBe(30);
+    expect(pnl.wastageCost).toBe(0); // no wastage seeded yet
     expect(pnl.netProfit).toBe(146);
     expect(pnl.expenses).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ category: 'Rent', amount: 30 }),
       ]),
     );
+  });
+
+  it('deducts real wastage/theft cost from netProfit (Inventory depth fix, UPD-INT-013)', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const wastage = await prisma.stockMovement.create({
+      data: {
+        businessId,
+        productId,
+        kind: 'wastage',
+        qty: -4,
+        unitCost: 5,
+        wastageReason: 'Theft',
+        reason: 'Theft: shoplifted at register',
+      },
+    });
+
+    const pnl = await profitService.pnl(businessId, month);
+    expect(pnl.wastageCost).toBe(20); // 4 * $5
+    expect(pnl.netProfit).toBe(126); // 146 (prior net) - 20
+
+    await prisma.stockMovement.delete({ where: { id: wastage.id } });
   });
 
   it('produces a time-of-day insight string without throwing', async () => {

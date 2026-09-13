@@ -90,3 +90,75 @@ describe('UsersService', () => {
     await expect(service.me(authUser)).rejects.toThrow(NotFoundException);
   });
 });
+
+describe('UsersService.me() — deactivated branches hidden (Branches depth fix, UPD-INT-012)', () => {
+  let service: UsersService;
+  let realPrisma: PrismaService;
+  let userId: string;
+  let parentId: string;
+  let activeBranchId: string;
+  let deactivatedBranchId: string;
+
+  beforeAll(async () => {
+    realPrisma = new PrismaService();
+    await realPrisma.$connect();
+    service = new UsersService(realPrisma);
+
+    const user = await realPrisma.user.create({
+      data: {
+        name: 'Branch Filter Owner',
+        phone: `+1${Date.now()}`,
+        passwordHash: 'test-hash',
+      },
+    });
+    userId = user.id;
+
+    const parent = await realPrisma.business.create({
+      data: { name: 'HQ', slug: `me-branches-hq-${Date.now()}` },
+    });
+    parentId = parent.id;
+    const activeBranch = await realPrisma.business.create({
+      data: {
+        name: 'Active Branch',
+        slug: `me-branches-active-${Date.now()}`,
+        parentId,
+      },
+    });
+    activeBranchId = activeBranch.id;
+    const deactivatedBranch = await realPrisma.business.create({
+      data: {
+        name: 'Deactivated Branch',
+        slug: `me-branches-inactive-${Date.now()}`,
+        parentId,
+        active: false,
+      },
+    });
+    deactivatedBranchId = deactivatedBranch.id;
+
+    await realPrisma.businessUser.create({
+      data: { businessId: parentId, userId, role: 'owner' },
+    });
+  });
+
+  afterAll(async () => {
+    await realPrisma.businessUser.deleteMany({ where: { userId } });
+    await realPrisma.business.delete({ where: { id: activeBranchId } });
+    await realPrisma.business.delete({ where: { id: deactivatedBranchId } });
+    await realPrisma.business.delete({ where: { id: parentId } });
+    await realPrisma.user.delete({ where: { id: userId } });
+    await realPrisma.$disconnect();
+  });
+
+  it('lists only the real active branch, not the real deactivated one', async () => {
+    const result = await service.me({
+      sub: userId,
+      businessId: parentId,
+      role: 'owner',
+      capabilities: [],
+    });
+
+    const branchIds = result.business.branches.map((b: { id: string }) => b.id);
+    expect(branchIds).toContain(activeBranchId);
+    expect(branchIds).not.toContain(deactivatedBranchId);
+  });
+});

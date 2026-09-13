@@ -21,6 +21,16 @@ const TWILIO_STATUS_MAP: Record<string, MessageStatus> = {
   undelivered: MessageStatus.failed,
 };
 
+const TELNYX_STATUS_MAP: Record<string, MessageStatus> = {
+  queued: MessageStatus.sent,
+  sending: MessageStatus.sent,
+  sent: MessageStatus.sent,
+  delivered: MessageStatus.delivered,
+  read: MessageStatus.read,
+  failed: MessageStatus.failed,
+  delivery_failed: MessageStatus.failed,
+};
+
 const RESEND_STATUS_MAP: Record<string, MessageStatus> = {
   'email.sent': MessageStatus.sent,
   'email.delivered': MessageStatus.delivered,
@@ -60,6 +70,14 @@ export class WebhookEventsProcessor extends WorkerHost {
             SmsSid?: string;
             MessageStatus: string;
           },
+        );
+      case 'telnyx-inbound':
+        return this.handleTelnyxInbound(
+          job.data as { type?: string; from?: string },
+        );
+      case 'telnyx-status':
+        return this.handleTelnyxStatus(
+          job.data as { messageId?: string; status?: string; hasErrors: boolean },
         );
       case 'email-event':
         return this.handleEmailEvent(
@@ -104,6 +122,42 @@ export class WebhookEventsProcessor extends WorkerHost {
     if (!mapped || !providerRef) return;
     await this.prisma.message
       .updateMany({ where: { providerRef }, data: { status: mapped } })
+      .catch(() => undefined);
+  }
+
+  private async handleTelnyxInbound(message: {
+    type?: string;
+    from?: string;
+  }): Promise<void> {
+    if (!message.from) return;
+    const customer = await this.prisma.customer.findFirst({
+      where: { phone: message.from },
+    });
+    if (!customer) return;
+    // Telnyx's WhatsApp product rides the same messaging window rule as Meta's — SMS/MMS have no
+    // such window, so only refresh it for whatsapp-typed inbound messages.
+    if (message.type === 'whatsapp') {
+      await this.whatsappWindow.refresh(customer.businessId, customer.id);
+    }
+  }
+
+  private async handleTelnyxStatus(body: {
+    messageId?: string;
+    status?: string;
+    hasErrors: boolean;
+  }): Promise<void> {
+    if (!body.messageId) return;
+    const mapped = body.hasErrors
+      ? MessageStatus.failed
+      : body.status
+        ? TELNYX_STATUS_MAP[body.status]
+        : undefined;
+    if (!mapped) return;
+    await this.prisma.message
+      .updateMany({
+        where: { providerRef: body.messageId },
+        data: { status: mapped },
+      })
       .catch(() => undefined);
   }
 

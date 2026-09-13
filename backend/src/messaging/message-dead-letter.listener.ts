@@ -38,7 +38,16 @@ export class MessageDeadLetterListener
     }>,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    // An unlistened 'error' event on either queue's connection (e.g. Redis
+    // over quota) throws and crashes the whole process, not just this listener.
+    this.messagesQueue.on('error', (error: Error) =>
+      this.logger.warn(`Messages queue connection error: ${error.message}`),
+    );
+    this.messagesDlq.on('error', (error: Error) =>
+      this.logger.warn(`Messages DLQ connection error: ${error.message}`),
+    );
+  }
 
   onModuleInit() {
     const tlsRaw = this.config.get<string>('REDIS_TLS', '');
@@ -58,6 +67,11 @@ export class MessageDeadLetterListener
     this.events.on('failed', ({ jobId, failedReason }) => {
       void this.moveToDlqIfExhausted(jobId, failedReason);
     });
+    this.events.on('error', (error: Error) =>
+      this.logger.warn(
+        `Messages queue events connection error: ${error.message}`,
+      ),
+    );
     // Do NOT await waitUntilReady() — blocks NestJS onModuleInit past Hostinger's
     // 3-second startup window. Events will start firing once connection is ready.
   }

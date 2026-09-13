@@ -48,6 +48,8 @@ export interface PnlStatement {
   cogs: number;
   expenses: { category: string; amount: number }[];
   totalExpenses: number;
+  /** Inventory depth fix (UPD-INT-013): real wastage/theft cost for the month, now deducted from netProfit. */
+  wastageCost: number;
   netProfit: number;
 }
 

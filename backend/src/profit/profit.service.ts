@@ -167,22 +167,35 @@ export class ProfitService {
     const start = new Date(Date.UTC(year, mon - 1, 1));
     const end = new Date(Date.UTC(year, mon, 1));
 
-    const [orderTotals, expensesByCategory] = await Promise.all([
-      this.tenantPrisma.client.order.aggregate({
-        where: {
-          businessId,
-          status: 'completed',
-          isQuotation: false,
-          createdAt: { gte: start, lt: end },
-        },
-        _sum: { total: true, cogs: true },
-      }),
-      this.tenantPrisma.client.expense.groupBy({
-        by: ['category'],
-        where: { businessId, incurredOn: { gte: start, lt: end } },
-        _sum: { amount: true },
-      }),
-    ]);
+    const [orderTotals, expensesByCategory, wastageMovements] =
+      await Promise.all([
+        this.tenantPrisma.client.order.aggregate({
+          where: {
+            businessId,
+            status: 'completed',
+            isQuotation: false,
+            createdAt: { gte: start, lt: end },
+          },
+          _sum: { total: true, cogs: true },
+        }),
+        this.tenantPrisma.client.expense.groupBy({
+          by: ['category'],
+          where: { businessId, incurredOn: { gte: start, lt: end } },
+          _sum: { amount: true },
+        }),
+        // Inventory depth fix (UPD-INT-013): wastage/theft was a real stock decrement that never
+        // showed up anywhere in reported profit — `unitCost` (snapshotted at write time by
+        // `InventoryService.recordWastage`) is real for every movement recorded since that fix;
+        // older rows without it honestly contribute $0 rather than guessing at a historical cost.
+        this.tenantPrisma.client.stockMovement.findMany({
+          where: {
+            businessId,
+            kind: 'wastage',
+            createdAt: { gte: start, lt: end },
+          },
+          select: { qty: true, unitCost: true },
+        }),
+      ]);
 
     const revenue = round2(Number(orderTotals._sum.total ?? 0));
     const cogs = round2(Number(orderTotals._sum.cogs ?? 0));
@@ -193,7 +206,13 @@ export class ProfitService {
     const totalExpenses = round2(
       expenseBreakdown.reduce((sum, row) => sum + row.amount, 0),
     );
-    const netProfit = round2(revenue - cogs - totalExpenses);
+    const wastageCost = round2(
+      wastageMovements.reduce(
+        (sum, m) => sum + Math.abs(m.qty) * Number(m.unitCost ?? 0),
+        0,
+      ),
+    );
+    const netProfit = round2(revenue - cogs - totalExpenses - wastageCost);
 
     return {
       month,
@@ -201,6 +220,7 @@ export class ProfitService {
       cogs,
       expenses: expenseBreakdown,
       totalExpenses,
+      wastageCost,
       netProfit,
     };
   }

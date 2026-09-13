@@ -1,4 +1,11 @@
-import { IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class UpdateStaffDto {
   @IsOptional()
@@ -13,4 +20,10 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsString()
   customRoleId?: string | null;
+
+  /** Staff depth fix (UPD-INT-011): `null` clears it back to purely-commission. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  hourlyRate?: number | null;
 }

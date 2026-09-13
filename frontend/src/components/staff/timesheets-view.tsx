@@ -140,11 +140,13 @@ function BreakRulesDialog({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [editedOvertimeThreshold, setEditedOvertimeThreshold] = useState<string | null>(null);
   const [editedBreakThreshold, setEditedBreakThreshold] = useState<string | null>(null);
   const [editedBreakMinutes, setEditedBreakMinutes] = useState<string | null>(null);
+  const [editedOvertimeMultiplier, setEditedOvertimeMultiplier] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const overtimeThreshold = editedOvertimeThreshold ?? String(settings?.overtimeThresholdHoursPerWeek ?? "");
   const breakThreshold = editedBreakThreshold ?? String(settings?.breakThresholdHours ?? "");
   const breakMinutes = editedBreakMinutes ?? String(settings?.breakMinutesPerShift ?? "");
+  const overtimeMultiplier = editedOvertimeMultiplier ?? String(settings?.overtimeRateMultiplier ?? "");
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -152,6 +154,7 @@ function BreakRulesDialog({ onClose, onSaved }: { onClose: () => void; onSaved: 
         overtimeThresholdHoursPerWeek: Number(overtimeThreshold),
         breakThresholdHours: Number(breakThreshold),
         breakMinutesPerShift: Number(breakMinutes),
+        overtimeRateMultiplier: Number(overtimeMultiplier),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["timesheet-settings"] });
@@ -205,6 +208,15 @@ function BreakRulesDialog({ onClose, onSaved }: { onClose: () => void; onSaved: 
             value={breakMinutes}
             onChange={(e) => setEditedBreakMinutes(e.target.value)}
             hint="Deducted from any single attendance session longer than the threshold above."
+          />
+          <Input
+            label="Overtime pay multiplier"
+            type="number"
+            min={1}
+            step={0.1}
+            value={overtimeMultiplier}
+            onChange={(e) => setEditedOvertimeMultiplier(e.target.value)}
+            hint="Applied to a staff member's hourly rate for overtime hours (1.5 = time-and-a-half). Only affects staff who have an hourly rate configured."
           />
         </div>
       )}

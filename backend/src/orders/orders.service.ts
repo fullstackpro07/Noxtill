@@ -2,7 +2,10 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_USER_ID,
+} from '../common/tenancy/tenant.constants';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
 import { ReferralsService } from '../marketing/referrals.service';
@@ -81,13 +84,28 @@ export class OrdersService {
 
   async createSale(businessId: string, dto: CreateSaleDto) {
     const actorUserId = this.cls.get<string>(CLS_KEY_USER_ID);
+    // Branches depth fix (UPD-INT-012): `businessId` here is the caller's home business — when a
+    // sale is rung up against a specific branch (`X-Branch` header), `Business`/`TaxRule` aren't
+    // tenant-scoped models (see `TENANT_SCOPED_MODELS`), so without this they'd silently read the
+    // home business's tax config instead of the actual selling branch's own. `Order`/`Product`
+    // themselves don't need this — the tenant-scoping extension already overrides their
+    // `businessId` from this same CLS value regardless of what's passed.
+    const activeBusinessId =
+      this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
 
     const { order, reviewToken, reviewCustomerId } = await withDeadlockRetry(
       () =>
         this.tenantPrisma.client.$transaction(async (tx) => {
           const business = await tx.business.findUniqueOrThrow({
-            where: { id: businessId },
+            where: { id: activeBusinessId },
           });
+          if (!business.active) {
+            throw new AppException(
+              ORDER_ERROR_CODES.BRANCH_DEACTIVATED,
+              'This branch has been deactivated and can no longer take sales',
+              HttpStatus.FORBIDDEN,
+            );
+          }
 
           const customerId = await this.resolveCustomerId(tx, businessId, dto);
 
@@ -104,7 +122,9 @@ export class OrdersService {
             where: { id: { in: productIds } },
           });
           const productMap = new Map(products.map((p) => [p.id, p]));
-          const taxRules = await tx.taxRule.findMany({ where: { businessId } });
+          const taxRules = await tx.taxRule.findMany({
+            where: { businessId: activeBusinessId },
+          });
 
           const itemsData = dto.items.map((item) => {
             const product = productMap.get(item.productId);
@@ -193,7 +213,7 @@ export class OrdersService {
           }
 
           const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
-        SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${businessId}
+        SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${activeBusinessId}
       `;
           // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
           // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
@@ -230,6 +250,7 @@ export class OrdersService {
               price: item.price,
               cost: item.cost,
               qty: item.qty,
+              taxRatePercent: item.taxRatePercent,
             })),
           });
 
@@ -385,9 +406,13 @@ export class OrdersService {
    * `convertDraft`, by handing off to the real `createSale`.
    */
   async createDraft(businessId: string, dto: HoldSaleDto) {
+    // Branches depth fix (UPD-INT-012): same branch-scoping fix as `createSale` — see its comment.
+    const activeBusinessId =
+      this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
+
     return this.tenantPrisma.client.$transaction(async (tx) => {
       const business = await tx.business.findUniqueOrThrow({
-        where: { id: businessId },
+        where: { id: activeBusinessId },
       });
       const customerId = await this.resolveCustomerId(tx, businessId, dto);
 
@@ -396,7 +421,9 @@ export class OrdersService {
         where: { id: { in: productIds } },
       });
       const productMap = new Map(products.map((p) => [p.id, p]));
-      const taxRules = await tx.taxRule.findMany({ where: { businessId } });
+      const taxRules = await tx.taxRule.findMany({
+        where: { businessId: activeBusinessId },
+      });
 
       const itemsData = dto.items.map((item) => {
         const product = productMap.get(item.productId);
@@ -460,6 +487,7 @@ export class OrdersService {
           price: item.price,
           cost: item.cost,
           qty: item.qty,
+          taxRatePercent: item.taxRatePercent,
         })),
       });
 

@@ -152,15 +152,7 @@ export class AuthService {
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
 
-    const businessUser = await this.prisma.businessUser.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (!businessUser) {
-      throw new UnauthorizedException(
-        'No business associated with this account',
-      );
-    }
+    const businessUser = await this.resolveActiveBusinessUser(user.id);
 
     if (user.twoFactorEnabled) {
       if (!user.phone) {
@@ -213,15 +205,7 @@ export class AuthService {
 
     await this.twoFactor.verify(payload.sub, code);
 
-    const businessUser = await this.prisma.businessUser.findFirst({
-      where: { userId: payload.sub },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (!businessUser) {
-      throw new UnauthorizedException(
-        'No business associated with this account',
-      );
-    }
+    const businessUser = await this.resolveActiveBusinessUser(payload.sub);
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: payload.sub },
     });
@@ -315,8 +299,15 @@ export class AuthService {
 
     // Re-fetched fresh (not trusted from the old token's payload) so a role or custom-role
     // change picks up the real current capability set on the next refresh, not just re-login.
+    // Branches depth fix (UPD-INT-012): also requires the business to still be `active` — if it
+    // was deactivated since this token was issued, refresh now fails instead of silently renewing
+    // access to a deactivated branch, bounding that staleness to this access token's TTL.
     const businessUser = await this.prisma.businessUser.findFirst({
-      where: { userId: payload.sub, businessId: payload.businessId },
+      where: {
+        userId: payload.sub,
+        businessId: payload.businessId,
+        business: { active: true },
+      },
     });
     if (!businessUser) {
       throw new UnauthorizedException('Invalid refresh token');
@@ -353,6 +344,35 @@ export class AuthService {
   async logout(sessionId?: string) {
     if (!sessionId) return;
     await this.sessions.revoke(sessionId);
+  }
+
+  /**
+   * Branches depth fix (UPD-INT-012): a deactivated branch's staff could previously still log in
+   * fully — this only resolves membership in a business that is really `active`, and distinguishes
+   * "no business at all" from "every business you belong to is deactivated" with an honest message
+   * rather than a generic "invalid credentials"-style dead end.
+   */
+  private async resolveActiveBusinessUser(userId: string) {
+    const businessUser = await this.prisma.businessUser.findFirst({
+      where: { userId, business: { active: true } },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (businessUser) {
+      return businessUser;
+    }
+
+    const anyMembership = await this.prisma.businessUser.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+    if (anyMembership) {
+      throw new AppException(
+        'BUSINESS_DEACTIVATED',
+        'This account is only linked to a deactivated business — contact the business owner',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    throw new UnauthorizedException('No business associated with this account');
   }
 
   private async registerFailedAttempt(userId: string, currentAttempts: number) {

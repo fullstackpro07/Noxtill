@@ -140,23 +140,46 @@ export function TaxReportsView({ currency }: { currency: string }) {
 
       {showRateBreakdown && summary && (
         <Dialog open onClose={() => setShowRateBreakdown(false)} title="Rate breakdown">
-          <div className="flex flex-col gap-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-fg-muted">{summary.taxLabel} rate</span>
-              <span className="font-medium text-fg">{summary.taxRate}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-fg-muted">Taxable sales ({summary.period})</span>
-              <span className="font-medium text-fg">{formatCurrency(summary.taxableSales, currency)}</span>
-            </div>
-            <div className="flex justify-between border-t border-border pt-2">
-              <span className="text-fg-muted">{summary.taxLabel} collected</span>
-              <span className="font-medium text-fg">{formatCurrency(summary.taxCollected, currency)}</span>
-            </div>
-          </div>
-          <p className="mt-3 text-xs text-fg-faint">
-            A single flat rate applies across this business — there&apos;s no per-category or multi-rate tax model yet.
-          </p>
+          {summary.rateBreakdown.length > 0 ? (
+            <>
+              <div className="flex flex-col gap-2 text-sm">
+                {summary.rateBreakdown.map((row) => (
+                  <div key={row.ratePercent} className="flex items-center justify-between border-b border-border pb-2 last:border-0">
+                    <span className="font-medium text-fg">{row.ratePercent}%</span>
+                    <div className="text-end">
+                      <p className="tabular-nums text-fg">{formatCurrency(row.taxCollected, currency)}</p>
+                      <p className="text-xs text-fg-faint">on {formatCurrency(row.taxableSales, currency)} taxable</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-fg-faint">
+                Real per-rate totals for {summary.period}, from each sale&apos;s own actual rate — a category can be taxed differently from the
+                business&apos;s default {summary.taxRate}% rate via Tax Rules.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-fg-muted">{summary.taxLabel} rate</span>
+                  <span className="font-medium text-fg">{summary.taxRate}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-fg-muted">Taxable sales ({summary.period})</span>
+                  <span className="font-medium text-fg">{formatCurrency(summary.taxableSales, currency)}</span>
+                </div>
+                <div className="flex justify-between border-t border-border pt-2">
+                  <span className="text-fg-muted">{summary.taxLabel} collected</span>
+                  <span className="font-medium text-fg">{formatCurrency(summary.taxCollected, currency)}</span>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-fg-faint">
+                No per-rate data for {summary.period} yet — this business&apos;s single default rate above is shown instead. Sales made under a
+                specific Tax Rule show up here as their own real rate once any exist for this period.
+              </p>
+            </>
+          )}
         </Dialog>
       )}
     </div>

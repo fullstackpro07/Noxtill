@@ -5,6 +5,14 @@ import { AskHelpDto } from './help.dto';
 import { buildFulltextBooleanQuery } from '../common/utils/mysql-fulltext.util';
 
 const TOP_K = 3;
+/** AI Assistant depth fix (UPD-INT-014): a secondary result must score at least this fraction of
+ * the top result's score to be returned at all — self-normalizing (MySQL boolean-mode relevance
+ * has no fixed range, so a hardcoded absolute floor would be fragile as the real corpus grows and
+ * its score distribution shifts) against a real remaining risk even after stopword-filtering: a
+ * genuine, non-filler word (e.g. "run") can still prefix-match an unrelated real word elsewhere
+ * (e.g. "running") via the `word*` wildcard, producing a real but weak/coincidental hit that the
+ * true best match's score should dwarf. */
+const MIN_RELATIVE_SCORE = 0.5;
 export const HELP_NOT_FOUND_MESSAGE =
   "I couldn't find anything about that in the help docs — try rephrasing, or contact support.";
 
@@ -38,7 +46,7 @@ export async function retrieveHelpPassages(
   const booleanQuery = buildFulltextBooleanQuery(question, false);
   if (!booleanQuery) return [];
 
-  return prisma.$queryRaw<RetrievedRow[]>`
+  const rows = await prisma.$queryRaw<RetrievedRow[]>`
     SELECT slug, title, url, body,
            (MATCH(title) AGAINST(${booleanQuery} IN BOOLEAN MODE) * 2 + MATCH(body) AGAINST(${booleanQuery} IN BOOLEAN MODE)) AS score
     FROM help_articles
@@ -46,6 +54,12 @@ export async function retrieveHelpPassages(
     ORDER BY score DESC
     LIMIT ${TOP_K}
   `;
+  if (rows.length === 0) return [];
+
+  const topScore = Number(rows[0].score);
+  return rows.filter(
+    (row) => Number(row.score) >= topScore * MIN_RELATIVE_SCORE,
+  );
 }
 
 /**

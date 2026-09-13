@@ -581,3 +581,135 @@ describe('OrdersService.createDraft/convertDraft/splitBill (UPD-BE-009/UPD-BE-01
     expect(Number(unchanged.total)).toBe(30);
   });
 });
+
+describe('OrdersService.createSale — branch tax scoping (Branches depth fix, UPD-INT-012)', () => {
+  let prisma: PrismaService;
+  let ordersService: OrdersService;
+  let cls: FakeClsService;
+  let parentId: string;
+  let branchId: string;
+  let branchProductId: string;
+  const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
+  const reviewRequests = {
+    scheduleSend: jest.fn().mockResolvedValue(undefined),
+  };
+  const referrals = {
+    issueRewardIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
+  const coupons = { validateAndApply: jest.fn() };
+  const vouchers = { validateAndApply: jest.fn() };
+  const loyalty = {
+    issueStampIfEligible: jest.fn().mockResolvedValue(undefined),
+  };
+  const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const cashRegister = {
+    recordSaleMovement: jest.fn().mockResolvedValue(undefined),
+  };
+
+  beforeAll(async () => {
+    prisma = new PrismaService();
+    await prisma.$connect();
+
+    cls = new FakeClsService();
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    ordersService = new OrdersService(
+      tenantPrisma,
+      cls as unknown as ClsService,
+      sendGate as unknown as SendGateService,
+      reviewRequests as unknown as ReviewRequestsService,
+      referrals as unknown as ReferralsService,
+      coupons as unknown as CouponsService,
+      vouchers as unknown as VouchersService,
+      loyalty as unknown as LoyaltyService,
+      activity as unknown as ActivityService,
+      cashRegister as unknown as CashRegisterService,
+    );
+
+    const parent = await prisma.business.create({
+      data: { name: 'HQ', slug: `branch-tax-hq-${Date.now()}`, taxRate: 10 },
+    });
+    parentId = parent.id;
+    const branch = await prisma.business.create({
+      data: {
+        name: 'Branch',
+        slug: `branch-tax-branch-${Date.now()}`,
+        parentId,
+        taxRate: 25,
+      },
+    });
+    branchId = branch.id;
+
+    const branchProduct = await prisma.product.create({
+      data: {
+        businessId: branchId,
+        kind: 'product',
+        name: 'Branch Widget',
+        costPrice: 40,
+        sellingPrice: 100,
+        stockQty: 5,
+      },
+    });
+    branchProductId = branchProduct.id;
+  });
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { businessId: branchId } });
+    await prisma.stockMovement.deleteMany({ where: { businessId: branchId } });
+    await prisma.payment.deleteMany({
+      where: { order: { businessId: branchId } },
+    });
+    await prisma.orderItem.deleteMany({
+      where: { order: { businessId: branchId } },
+    });
+    await prisma.order.deleteMany({ where: { businessId: branchId } });
+    await prisma.product.deleteMany({ where: { businessId: branchId } });
+    // Branch first — it has a `parentId` FK pointing at the parent, so deleting both in one
+    // `deleteMany` risks the parent going first and violating that constraint.
+    await prisma.business.delete({ where: { id: branchId } });
+    await prisma.business.delete({ where: { id: parentId } });
+    await prisma.$disconnect();
+  });
+
+  it("computes tax at the real operating branch's own taxRate, not the caller's home business's", async () => {
+    // The controller always passes the home business id (`parentId`) — CLS is what actually
+    // carries the real selling branch when `X-Branch` is set (`TenancyGuard`), so this is the
+    // exact call shape a real request against a selected branch produces.
+    cls.set(CLS_KEY_BUSINESS_ID, branchId);
+
+    const order = await ordersService.createSale(parentId, {
+      items: [{ productId: branchProductId, qty: 1 }],
+      payment: { method: 'cash' },
+    });
+
+    expect(Number(order.tax)).toBe(25); // the branch's 25%, not the parent's 10%
+    expect(Number(order.total)).toBe(125);
+
+    const stored = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect(stored.businessId).toBe(branchId); // the order itself is really attributed to the branch
+  });
+
+  it('refuses a sale once the real operating branch has been deactivated', async () => {
+    cls.set(CLS_KEY_BUSINESS_ID, branchId);
+    await prisma.business.update({
+      where: { id: branchId },
+      data: { active: false },
+    });
+
+    await expect(
+      ordersService.createSale(parentId, {
+        items: [{ productId: branchProductId, qty: 1 }],
+        payment: { method: 'cash' },
+      }),
+    ).rejects.toBeInstanceOf(AppException);
+
+    await prisma.business.update({
+      where: { id: branchId },
+      data: { active: true },
+    });
+  });
+});

@@ -200,6 +200,34 @@ describe('ScheduledExportsService (UPD-FE-071 recurring export)', () => {
       await prisma.scheduledExport.delete({ where: { id: schedule.id } });
     });
 
+    it('never stamps lastRunAt when delivery genuinely fails, so it retries on the next check (Reports depth fix, UPD-INT-015)', async () => {
+      const schedule = await service.create(businessId, userId, {
+        kind: 'sales',
+        format: 'xlsx',
+        frequency: 'weekly',
+      });
+
+      notifications.create.mockRejectedValueOnce(new Error('DB down'));
+      const ranWhileFailing = await service.runDueSchedules(new Date());
+      expect(ranWhileFailing).toBe(0);
+
+      const afterFailure = await prisma.scheduledExport.findUniqueOrThrow({
+        where: { id: schedule.id },
+      });
+      expect(afterFailure.lastRunAt).toBeNull(); // not falsely marked "run"
+
+      // A real retry on the very next check (not a full week later) now succeeds.
+      exportsService.generate.mockClear();
+      const ranOnRetry = await service.runDueSchedules(new Date());
+      expect(ranOnRetry).toBeGreaterThanOrEqual(1);
+      const afterRetry = await prisma.scheduledExport.findUniqueOrThrow({
+        where: { id: schedule.id },
+      });
+      expect(afterRetry.lastRunAt).not.toBeNull();
+
+      await prisma.scheduledExport.delete({ where: { id: schedule.id } });
+    });
+
     it('never runs a paused (inactive) schedule', async () => {
       const schedule = await service.create(businessId, userId, {
         kind: 'credit',

@@ -31,6 +31,8 @@ interface RawMovement {
   unitCost: string | null;
   supplier: string | null;
   reason: string | null;
+  /** Inventory depth fix (UPD-INT-013): only set for `kind: "wastage"`. */
+  wastageReason: WastageReason | null;
   createdAt: string;
 }
 
@@ -38,7 +40,9 @@ export interface LiveMovement {
   id: string;
   kind: MovementKind;
   qty: number;
+  unitCost: number | null;
   description: string;
+  wastageReason: WastageReason | null;
   createdAt: string;
 }
 
@@ -62,7 +66,15 @@ function describeMovement(m: RawMovement): string {
 }
 
 function toLiveMovement(m: RawMovement): LiveMovement {
-  return { id: m.id, kind: m.kind, qty: m.qty, description: describeMovement(m), createdAt: m.createdAt };
+  return {
+    id: m.id,
+    kind: m.kind,
+    qty: m.qty,
+    unitCost: m.unitCost != null ? Number(m.unitCost) : null,
+    description: describeMovement(m),
+    wastageReason: m.wastageReason,
+    createdAt: m.createdAt,
+  };
 }
 
 export function fetchMovements(productId: string): Promise<LiveMovement[]> {

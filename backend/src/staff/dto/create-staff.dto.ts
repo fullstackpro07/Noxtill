@@ -1,4 +1,11 @@
-import { IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class CreateStaffDto {
   @IsString()
@@ -19,4 +26,11 @@ export class CreateStaffDto {
   @IsOptional()
   @IsObject()
   commissionRule?: Record<string, unknown>;
+
+  /** Staff depth fix (UPD-INT-011): a base hourly wage, separate from and additive to
+   * `commissionRule` — omit for a purely-commission staff member. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  hourlyRate?: number;
 }

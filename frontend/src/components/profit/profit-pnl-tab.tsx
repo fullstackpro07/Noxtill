@@ -75,6 +75,17 @@ export function ProfitPnlTab({ currency }: { currency: string }) {
               <span className="text-fg-muted">Total expenses</span>
               <span className="tabular-nums text-destructive">−{formatCurrency(data.totalExpenses, currency)}</span>
             </div>
+            {data.wastageCost > 0 && (
+              <div className="flex items-center justify-between py-2.5 text-sm">
+                <span className="text-fg-muted">
+                  Wastage &amp; theft{" "}
+                  <Link href="/inventory/wastage" className="text-primary hover:underline">
+                    (view)
+                  </Link>
+                </span>
+                <span className="tabular-nums text-destructive">−{formatCurrency(data.wastageCost, currency)}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between py-3">
               <span className="font-semibold text-fg">Net profit</span>
               <span className={`font-display text-lg font-bold tabular-nums ${data.netProfit >= 0 ? "text-whatsapp" : "text-destructive"}`}>

@@ -1,5 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { LocaleService } from '../common/localization/locale.service';
 import { S3Service } from '../common/storage/s3.service';
 import { PdfRendererService } from '../common/pdf/pdf-renderer.service';
@@ -30,6 +32,7 @@ interface BusinessInfo {
 export class ReportsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
+    private readonly cls: ClsService,
     private readonly locale: LocaleService,
     private readonly s3: S3Service,
     private readonly pdfRenderer: PdfRendererService,
@@ -39,6 +42,16 @@ export class ReportsService {
     private readonly sendGate: SendGateService,
   ) {}
 
+  /** Reports depth fix (UPD-INT-015): `Business` isn't a tenant-scoped model (see
+   * `TENANT_SCOPED_MODELS`), so fetching it by the caller's home `businessId` — as every method
+   * here used to — shows the PARENT business's `taxLabel`/`taxRate`/`name`/`currency` even when the
+   * report is being generated for a branch that has its own real values for those (same root cause
+   * already fixed once this session in `OrdersService.createSale`). This resolves the real
+   * CLS-active (branch-aware, via `X-Branch`) business id instead. */
+  private activeBusinessId(fallback: string): string {
+    return this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? fallback;
+  }
+
   async generate(
     kind: ReportKind,
     month: string | undefined,
@@ -46,7 +59,7 @@ export class ReportsService {
   ): Promise<{ url: string }> {
     const resolvedMonth = month ?? currentMonth();
     const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
-      where: { id: authUser.businessId },
+      where: { id: this.activeBusinessId(authUser.businessId) },
     });
     const businessUser = await this.tenantPrisma.client.businessUser.findUnique(
       {
@@ -359,6 +372,46 @@ export class ReportsService {
     };
   }
 
+  /**
+   * Reports depth fix (UPD-INT-015): a real per-rate breakdown, grouped on the actual rate each
+   * `OrderItem` was taxed at (`OrderItem.taxRatePercent`, persisted at sale time since this fix —
+   * see `OrdersService.createSale`'s `resolveTaxRatePercent` call). Rows written before this
+   * column existed have `taxRatePercent: null` and are excluded here (there's no way to know what
+   * rate they were really taxed at), which is why the blended `computeTaxPeriod()` total remains
+   * the authoritative "tax collected" figure — this breakdown is a real, additional view into it,
+   * not a replacement.
+   */
+  private async computeTaxRateBreakdown(
+    businessId: string,
+    month: string,
+  ): Promise<
+    { ratePercent: number; taxableSales: number; taxCollected: number }[]
+  > {
+    const { start, end } = monthBounds(month);
+    const rows = await this.tenantPrisma.client.$queryRaw<
+      { rate: number; taxable: number; collected: number }[]
+    >`
+      SELECT oi.tax_rate_percent AS rate,
+             SUM(oi.price * oi.qty) AS taxable,
+             SUM(oi.price * oi.qty * oi.tax_rate_percent / 100) AS collected
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE o.business_id = ${businessId}
+        AND o.status = 'completed'
+        AND o.is_quotation = false
+        AND o.created_at >= ${start}
+        AND o.created_at < ${end}
+        AND oi.tax_rate_percent IS NOT NULL
+      GROUP BY oi.tax_rate_percent
+      ORDER BY rate DESC
+    `;
+    return rows.map((r) => ({
+      ratePercent: Number(r.rate),
+      taxableSales: round2(Number(r.taxable)),
+      taxCollected: round2(Number(r.collected)),
+    }));
+  }
+
   private async buildTax(
     businessId: string,
     month: string,
@@ -386,7 +439,7 @@ export class ReportsService {
   /** The real JSON summary behind the Tax Reports screen — same computation as `buildTax()`'s PDF, plus a trailing 6-month trend. */
   async taxSummary(businessId: string, period?: string) {
     const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
-      where: { id: businessId },
+      where: { id: this.activeBusinessId(businessId) },
     });
     const resolvedPeriod = period ?? currentMonth();
 
@@ -399,12 +452,15 @@ export class ReportsService {
       );
     }
 
-    const trend = await Promise.all(
-      months.map(async (m) => ({
-        period: m,
-        ...(await this.computeTaxPeriod(businessId, m)),
-      })),
-    );
+    const [trend, rateBreakdown] = await Promise.all([
+      Promise.all(
+        months.map(async (m) => ({
+          period: m,
+          ...(await this.computeTaxPeriod(businessId, m)),
+        })),
+      ),
+      this.computeTaxRateBreakdown(businessId, resolvedPeriod),
+    ]);
 
     const current = trend[trend.length - 1];
 
@@ -416,6 +472,11 @@ export class ReportsService {
       taxCollected: current.taxCollected,
       taxOnPurchasesTracked: false,
       netTaxDue: current.taxCollected,
+      // Reports depth fix (UPD-INT-015): real per-rate rows for this period, from orders taxed
+      // since `OrderItem.taxRatePercent` started being persisted — empty for a period entirely
+      // made up of pre-fix orders, in which case `taxRate` (the business's own blended/flat rate)
+      // above remains the only real figure available.
+      rateBreakdown,
       trend,
       // A generic monthly-filing assumption, not jurisdiction-specific — disclosed on the screen.
       nextFilingDate: this.nextGenericFilingDate(),

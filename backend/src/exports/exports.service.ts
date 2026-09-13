@@ -231,23 +231,36 @@ export class ExportsService {
   ): Promise<Record<string, unknown>[]> {
     switch (kind) {
       case 'sales':
-        return this.fetchSalesRows();
+        return this.fetchSalesRows(businessId);
       case 'customers':
-        return this.fetchCustomerRows();
+        return this.fetchCustomerRows(businessId);
       case 'credit':
         return this.fetchCreditRows(businessId);
       case 'stock':
-        return this.fetchStockRows();
+        return this.fetchStockRows(businessId);
       case 'expenses':
-        return this.fetchExpenseRows();
+        return this.fetchExpenseRows(businessId);
       case 'products':
-        return this.fetchProductRows();
+        return this.fetchProductRows(businessId);
     }
   }
 
-  private async fetchSalesRows(): Promise<Record<string, unknown>[]> {
+  /**
+   * Reports depth fix (UPD-INT-015): every fetcher here now takes `businessId` explicitly and
+   * scopes on it, rather than relying solely on `TenantPrismaService`'s CLS-based auto-scoping.
+   * `AccountZipProcessor` and `ScheduledExportsService.generateArtifact()` both call these from a
+   * bare BullMQ job handler with NO CLS context ever bound — per the extension's own documented
+   * behavior, an unbound query runs completely unscoped, so every one of these previously returned
+   * EVERY business's rows, not just the requesting business's, whenever generated via those two
+   * real, unbound-job production paths (masked in tests, which always bind CLS manually before
+   * calling this service directly). Explicit scoping is correct and redundant-but-harmless from an
+   * HTTP request too, matching the one fetcher (`fetchCreditRows`) that already did this right.
+   */
+  private async fetchSalesRows(
+    businessId: string,
+  ): Promise<Record<string, unknown>[]> {
     const orders = await this.tenantPrisma.client.order.findMany({
-      where: { isQuotation: false },
+      where: { businessId, isQuotation: false },
       include: { customer: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -263,8 +276,11 @@ export class ExportsService {
     }));
   }
 
-  private async fetchCustomerRows(): Promise<Record<string, unknown>[]> {
+  private async fetchCustomerRows(
+    businessId: string,
+  ): Promise<Record<string, unknown>[]> {
     const customers = await this.tenantPrisma.client.customer.findMany({
+      where: { businessId },
       orderBy: { name: 'asc' },
     });
     return customers.map((c) => ({
@@ -304,8 +320,11 @@ export class ExportsService {
     }));
   }
 
-  private async fetchStockRows(): Promise<Record<string, unknown>[]> {
+  private async fetchStockRows(
+    businessId: string,
+  ): Promise<Record<string, unknown>[]> {
     const products = await this.tenantPrisma.client.product.findMany({
+      where: { businessId },
       orderBy: { name: 'asc' },
     });
     return products.map((p) => ({
@@ -321,8 +340,11 @@ export class ExportsService {
 
   /** Owner-only end to end — `ExportsController` gates the whole controller on `EXPORTS_GENERATE`
    * (owner-only, see capabilities), so cost price never reaches a manager through this export. */
-  private async fetchProductRows(): Promise<Record<string, unknown>[]> {
+  private async fetchProductRows(
+    businessId: string,
+  ): Promise<Record<string, unknown>[]> {
     const products = await this.tenantPrisma.client.product.findMany({
+      where: { businessId },
       include: { categoryRef: true },
       orderBy: { name: 'asc' },
     });
@@ -338,8 +360,11 @@ export class ExportsService {
     }));
   }
 
-  private async fetchExpenseRows(): Promise<Record<string, unknown>[]> {
+  private async fetchExpenseRows(
+    businessId: string,
+  ): Promise<Record<string, unknown>[]> {
     const expenses = await this.tenantPrisma.client.expense.findMany({
+      where: { businessId },
       orderBy: { incurredOn: 'desc' },
     });
     return expenses.map((e) => ({

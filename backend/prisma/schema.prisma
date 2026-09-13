@@ -601,6 +601,11 @@ model Business {
   breakThresholdHours  Int @default(6) @map("break_threshold_hours")
   breakMinutesPerShift Int @default(30) @map("break_minutes_per_shift")
 
+  /// Staff depth fix (UPD-INT-011): multiplies `hourlyRate` for a staff member's overtime hours
+  /// (the standard "time-and-a-half" convention as the default) — only matters for staff who
+  /// actually have an `hourlyRate` set; purely-commission staff are unaffected either way.
+  overtimeRateMultiplier Decimal @default(1.5) @db.Decimal(3, 2) @map("overtime_rate_multiplier")
+
   parentId String?    @map("parent_id")
   parent   Business?  @relation("BusinessBranches", fields: [parentId], references: [id])
   branches Business[] @relation("BusinessBranches")
@@ -902,6 +907,11 @@ model BusinessUser {
   user           User     @relation(fields: [userId], references: [id])
   role           Role     @default(staff)
   commissionRule Json     @default("{}") @map("commission_rule")
+  /// Staff depth fix (UPD-INT-011): a base hourly wage, separate from and additive to
+  /// `commissionRule` — null (the default) means this staff member is paid purely on commission,
+  /// same as before this field existed. Set only when the owner deliberately configures a wage
+  /// for this specific person.
+  hourlyRate Decimal? @db.Decimal(10, 2) @map("hourly_rate")
 
   attendance         Attendance[]
   appointments       Appointment[]       @relation("StaffAppointments")
@@ -1290,6 +1300,12 @@ model OrderItem {
   price     Decimal  @db.Decimal(12, 2)
   cost      Decimal  @db.Decimal(12, 2)
   qty       Int
+  /// Reports depth fix (UPD-INT-015): the real per-line rate `computeOrderTotals` actually taxed
+  /// this line at (via `resolveTaxRatePercent`'s per-category `TaxRule` match, or the business's
+  /// flat rate) — previously computed at sale time but never persisted, so a tax report could only
+  /// ever show one blended business-level rate even when real multi-rate `TaxRule`s exist. Null on
+  /// rows written before this field existed.
+  taxRatePercent Decimal? @map("tax_rate_percent") @db.Decimal(5, 2)
 
   @@index([orderId])
   @@map("order_items")
@@ -2194,6 +2210,17 @@ model WorkflowRun {
 // BE-004 — Inventory & finance
 // ─────────────────────────────────────────────────────────────────────────
 
+/// Inventory depth fix (UPD-INT-013): a structured category for a `kind: wastage` movement,
+/// mirroring `CreateWastageDto`'s validated values — separate from the free-text `reason` column
+/// (which stays human-readable, note included) so "wastage by reason" can group real Theft entries
+/// together regardless of what note was attached to each one.
+enum WastageReason {
+  Expired
+  Damaged
+  Theft
+  Other
+}
+
 model StockMovement {
   id          String            @id @default(uuid())
   businessId  String            @map("business_id")
@@ -2208,9 +2235,11 @@ model StockMovement {
   supplier    String?
   /// Formal supplier reference (UPD-BE-014), set by supplier-driven purchases (quick-PO). Optional
   /// and independent of `supplier` above — a movement may have either, both, or neither.
-  supplierId  String?           @map("supplier_id")
-  supplierRef Supplier?         @relation(fields: [supplierId], references: [id])
-  reason      String?
+  supplierId    String?        @map("supplier_id")
+  supplierRef   Supplier?      @relation(fields: [supplierId], references: [id])
+  reason        String?
+  /// Only set for `kind: wastage` — see `WastageReason` above.
+  wastageReason WastageReason? @map("wastage_reason")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2257,6 +2286,12 @@ model StockTransferItem {
   sourceProductId String        @map("source_product_id")
   sourceProduct   Product       @relation(fields: [sourceProductId], references: [id])
   qty             Int
+
+  /// Branches depth fix (UPD-INT-012): the real quantity actually received at the destination
+  /// branch — null until `receive()` runs, then set to whatever the destination branch actually
+  /// confirmed (defaults to `qty` when the receiver doesn't override it, i.e. a full receipt).
+  /// Destination stock is incremented by this real number, never blindly by `qty`.
+  receivedQty Int? @map("received_qty")
 
   createdAt DateTime @default(now()) @map("created_at")
 

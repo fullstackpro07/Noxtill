@@ -28,7 +28,16 @@ export class DeadLetterListener implements OnModuleInit, OnModuleDestroy {
     @InjectQueue(dlqName(DEMO_QUEUE))
     private readonly demoDlq: Queue<DeadLetterJobData>,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    // Same rationale as QueueService — an unlistened 'error' event on either
+    // queue crashes the whole process, not just this listener.
+    this.demoQueue.on('error', (error: Error) =>
+      this.logger.warn(`Demo queue connection error: ${error.message}`),
+    );
+    this.demoDlq.on('error', (error: Error) =>
+      this.logger.warn(`Demo DLQ connection error: ${error.message}`),
+    );
+  }
 
   onModuleInit() {
     const tlsRaw = this.config.get<string>('REDIS_TLS', '');
@@ -48,6 +57,9 @@ export class DeadLetterListener implements OnModuleInit, OnModuleDestroy {
     this.events.on('failed', ({ jobId, failedReason }) => {
       void this.moveToDlqIfExhausted(jobId, failedReason);
     });
+    this.events.on('error', (error: Error) =>
+      this.logger.warn(`Demo queue events connection error: ${error.message}`),
+    );
     // Do NOT await waitUntilReady() — it blocks NestJS onModuleInit and prevents
     // app.listen() from being called within Hostinger's 3-second startup window.
   }

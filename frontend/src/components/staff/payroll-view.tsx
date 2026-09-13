@@ -44,8 +44,9 @@ export function PayrollView() {
     <div className="flex flex-col gap-5">
       <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
         <p className="mb-4 text-sm text-fg-muted">
-          Generates a real payroll workbook — hours, overtime, commission, and any outstanding advances deducted (oldest first). Advances
-          netted this way are marked deducted and won&apos;t be deducted again.
+          Generates a real payroll workbook — hours, overtime (priced at each staff member&apos;s hourly rate where one is configured),
+          commission, and any outstanding advances deducted (oldest first). Advances netted this way are marked deducted and won&apos;t be
+          deducted again.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Select value={month} onChange={(e) => setMonth(e.target.value)} className="w-48">

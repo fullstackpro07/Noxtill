@@ -6,6 +6,9 @@ interface RawTransferItem {
   id: string;
   sourceProductId: string;
   qty: number;
+  /** Branches depth fix (UPD-INT-012): the real quantity actually confirmed at receipt — null
+   * until received, may be less than `qty` for a partial receipt. */
+  receivedQty: number | null;
   sourceProduct: { id: string; name: string; sku: string | null };
 }
 
@@ -53,8 +56,13 @@ export function shipStockTransfer(id: string): Promise<StockTransfer> {
   return apiFetch<StockTransfer>(`/stock-transfers/${id}/ship`, { method: "PATCH" });
 }
 
-export function receiveStockTransfer(id: string): Promise<StockTransfer> {
-  return apiFetch<StockTransfer>(`/stock-transfers/${id}/receive`, { method: "PATCH" });
+/** Omit `overrides` (or leave an item out of it) to receive that item in full — same behavior as
+ * before partial-receive existed. Pass `{itemId, receivedQty}` for an item that arrived short. */
+export function receiveStockTransfer(id: string, overrides?: { itemId: string; receivedQty: number }[]): Promise<StockTransfer> {
+  return apiFetch<StockTransfer>(`/stock-transfers/${id}/receive`, {
+    method: "PATCH",
+    body: JSON.stringify({ items: overrides }),
+  });
 }
 
 export function rejectStockTransfer(id: string, reason?: string): Promise<StockTransfer> {

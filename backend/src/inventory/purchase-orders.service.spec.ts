@@ -259,4 +259,48 @@ describe('PurchaseOrdersService (UPD-BE-112)', () => {
       AppException,
     );
   });
+
+  describe('concurrent double-receive race (Inventory depth fix, UPD-INT-013)', () => {
+    it('lets only one of two concurrent receive() calls for the same line actually increment stock', async () => {
+      const po = await service.create(businessId, userId, {
+        supplierId,
+        items: [{ productId, qty: 10, unitCost: 3 }],
+      });
+      await service.send(businessId, po.id);
+      await service.confirm(po.id);
+      const itemId = po.items[0].id;
+
+      const before = await prisma.product.findUniqueOrThrow({
+        where: { id: productId },
+      });
+
+      const results = await Promise.allSettled([
+        service.receive(businessId, po.id, {
+          items: [{ itemId, qtyReceived: 10 }],
+        }),
+        service.receive(businessId, po.id, {
+          items: [{ itemId, qtyReceived: 10 }],
+        }),
+      ]);
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      const after = await prisma.product.findUniqueOrThrow({
+        where: { id: productId },
+      });
+      expect(after.stockQty).toBe(before.stockQty + 10); // incremented exactly once, not twice
+
+      const item = await prisma.purchaseOrderItem.findUniqueOrThrow({
+        where: { id: itemId },
+      });
+      expect(item.qtyReceived).toBe(10); // not 20
+
+      const movements = await prisma.stockMovement.findMany({
+        where: { businessId, productId, kind: 'purchase', unitCost: 3 },
+      });
+      expect(movements).toHaveLength(1);
+    });
+  });
 });

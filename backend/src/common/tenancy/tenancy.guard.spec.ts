@@ -102,4 +102,24 @@ describe('TenancyGuard branch scoping (BE-059)', () => {
     );
     expect(cls.get(CLS_KEY_BUSINESS_ID)).toBe(branchId);
   });
+
+  it('ignores X-Branch naming a real child branch that has been deactivated (Branches depth fix, UPD-INT-012)', async () => {
+    await prisma.business.update({
+      where: { id: branchId },
+      data: { active: false },
+    });
+
+    await guard.canActivate(
+      contextWith({
+        user: { sub: 'u1', businessId: parentId, role: Role.owner },
+        headers: { 'x-branch': branchId },
+      }),
+    );
+    expect(cls.get(CLS_KEY_BUSINESS_ID)).toBe(parentId); // falls back, does NOT grant the deactivated branch
+
+    await prisma.business.update({
+      where: { id: branchId },
+      data: { active: true },
+    });
+  });
 });

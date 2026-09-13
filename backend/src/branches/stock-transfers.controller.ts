@@ -10,6 +10,7 @@ import {
 import { StockTransfersService } from './stock-transfers.service';
 import {
   CreateStockTransferDto,
+  ReceiveStockTransferDto,
   RejectStockTransferDto,
 } from './dto/create-stock-transfer.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
@@ -57,8 +58,12 @@ export class StockTransfersController {
 
   @RequireCapability(CAPABILITIES.STOCK_TRANSFERS_APPROVE)
   @Patch(':id/receive')
-  receive(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.stockTransfers.receive(user.businessId, id, user.sub);
+  receive(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ReceiveStockTransferDto,
+  ) {
+    return this.stockTransfers.receive(user.businessId, id, user.sub, dto);
   }
 
   @RequireCapability(CAPABILITIES.STOCK_TRANSFERS_APPROVE)

@@ -195,6 +195,42 @@ describe('StockCountService (UPD-BE-037)', () => {
     expect(movements[0].qty).toBe(5);
   });
 
+  describe('concurrent double-apply race (Inventory depth fix, UPD-INT-013)', () => {
+    it('lets only one of two concurrent apply() calls actually write the adjustment movement', async () => {
+      await prisma.product.update({
+        where: { id: productAId },
+        data: { stockQty: 60 },
+      });
+      const count = await service.create(businessId, 'owner-1', {
+        lines: [{ productId: productAId, countedQty: 55 }],
+      });
+
+      const results = await Promise.allSettled([
+        service.apply(businessId, count.id, 'owner-1'),
+        service.apply(businessId, count.id, 'owner-1'),
+      ]);
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      const productA = await prisma.product.findUniqueOrThrow({
+        where: { id: productAId },
+      });
+      expect(productA.stockQty).toBe(55); // set once, correctly
+
+      const movements = await prisma.stockMovement.findMany({
+        where: {
+          businessId,
+          productId: productAId,
+          kind: 'adjustment',
+          reason: { contains: count.id },
+        },
+      });
+      expect(movements).toHaveLength(1); // not duplicated
+    });
+  });
+
   it('list() and findOne() return real rows', async () => {
     const list = await service.list();
     expect(list.length).toBeGreaterThan(0);

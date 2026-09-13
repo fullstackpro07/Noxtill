@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -5,6 +6,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { PayrollService } from './payroll.service';
 import { CommissionsService } from './commissions.service';
 import { TimesheetsService } from './timesheets.service';
+import { PAYROLL_SHEET_TITLE } from './payroll.constants';
 import { S3Service } from '../common/storage/s3.service';
 import { Role } from '@prisma/client';
 
@@ -197,6 +199,85 @@ describe('PayrollService (UPD-BE-034)', () => {
       await prisma.timesheetApproval.deleteMany({
         where: { businessId, staffUserId: ruledStaffId, month: '2026-12' },
       });
+    });
+  });
+
+  describe('hourly + overtime pay (Staff depth fix, UPD-INT-011)', () => {
+    it('prices real overtime hours into real pay for a staff member with an hourlyRate configured, added on top of netPay', async () => {
+      const hourlyUser = await prisma.user.create({
+        data: {
+          phone: `+1${Date.now()}3`,
+          name: 'Hourly Staff',
+          passwordHash: 'test-hash',
+        },
+      });
+      const hourlyStaff = await prisma.businessUser.create({
+        data: {
+          businessId,
+          userId: hourlyUser.id,
+          role: Role.staff,
+          hourlyRate: 20,
+        },
+      });
+
+      // A single 45-hour session: `breakThresholdHours` (default 6) triggers a 30-minute unpaid
+      // deduction, leaving 44.5 worked hours; 4.5 of those exceed the default 40h/week threshold.
+      await prisma.attendance.create({
+        data: {
+          businessId,
+          staffUserId: hourlyStaff.id,
+          checkIn: new Date('2026-12-10T00:00:00.000Z'),
+          checkOut: new Date('2026-12-11T21:00:00.000Z'),
+        },
+      });
+
+      await service.export(businessId, '2026-12');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- untyped jest mock call args
+      const [, buffer] =
+        s3.uploadAndSign.mock.calls[s3.uploadAndSign.mock.calls.length - 1];
+
+      const workbook = new ExcelJS.Workbook();
+      // exceljs's own .d.ts declares a non-Node local `Buffer` shadow that structurally conflicts
+      // with the real Node Buffer above, so the untyped jest-mock arg is left as `any` here.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      await workbook.xlsx.load(buffer);
+      const sheet = workbook.getWorksheet(PAYROLL_SHEET_TITLE)!;
+      const row = sheet
+        .getRows(2, sheet.rowCount - 1)!
+        .find((r) => r.getCell(1).value === 'Hourly Staff')!;
+
+      expect(row.getCell(3).value).toBe(44.5); // hoursWorked
+      expect(row.getCell(4).value).toBe(4.5); // overtimeHours
+      expect(row.getCell(5).value).toBe(20); // hourlyRate
+      // regular: 40h * $20 = $800; overtime: 4.5h * $20 * 1.5x = $135; total $935.
+      expect(row.getCell(6).value).toBe(935); // hourlyPay
+      expect(row.getCell(9).value).toBe(935); // netPay ($0 commission + $935 hourly)
+
+      await prisma.attendance.deleteMany({
+        where: { staffUserId: hourlyStaff.id },
+      });
+      await prisma.businessUser.delete({ where: { id: hourlyStaff.id } });
+      await prisma.user.delete({ where: { id: hourlyUser.id } });
+    });
+
+    it('leaves netPay exactly at the commission figure for a staff member with no hourlyRate configured', async () => {
+      await service.export(businessId, '2026-12');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- untyped jest mock call args
+      const [, buffer] =
+        s3.uploadAndSign.mock.calls[s3.uploadAndSign.mock.calls.length - 1];
+
+      const workbook = new ExcelJS.Workbook();
+      // exceljs's own .d.ts declares a non-Node local `Buffer` shadow that structurally conflicts
+      // with the real Node Buffer above, so the untyped jest-mock arg is left as `any` here.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      await workbook.xlsx.load(buffer);
+      const sheet = workbook.getWorksheet(PAYROLL_SHEET_TITLE)!;
+      const row = sheet
+        .getRows(2, sheet.rowCount - 1)!
+        .find((r) => r.getCell(1).value === 'Commissioned Staff')!;
+
+      expect(row.getCell(5).value).toBe(0); // hourlyRate — none configured
+      expect(row.getCell(6).value).toBe(0); // hourlyPay — unaffected
     });
   });
 });

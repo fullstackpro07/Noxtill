@@ -15,7 +15,13 @@ export class NightlyCloseScheduler implements OnModuleInit {
 
   constructor(
     @InjectQueue(NIGHTLY_CLOSE_QUEUE) private readonly queue: Queue,
-  ) {}
+  ) {
+    // An unlistened 'error' event on the queue's connection (e.g. Redis over
+    // quota) throws and crashes the whole process, not just this scheduler.
+    this.queue.on('error', (error: Error) =>
+      this.logger.warn(`Nightly close queue connection error: ${error.message}`),
+    );
+  }
 
   onModuleInit() {
     this.queue

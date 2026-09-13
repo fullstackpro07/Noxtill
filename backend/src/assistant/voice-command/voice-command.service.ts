@@ -114,6 +114,16 @@ export class VoiceCommandService {
     };
   }
 
+  /**
+   * AI Assistant depth fix (UPD-INT-014): the `pending -> confirmed` transition is claimed
+   * atomically (via the guarded `updateMany` below) BEFORE `execute()` runs, not after — two
+   * concurrent/duplicate confirm calls on the same draft (double-click, a retried request) could
+   * previously both pass the `status !== pending` check and both call `execute()`, double-writing
+   * the underlying wastage/expense/customer/cash movement. Only the caller that wins the atomic
+   * claim proceeds to `execute()`; if `execute()` then genuinely fails (e.g. a real validation
+   * error), the draft is reverted back to `pending` so it can still be retried — a failed write
+   * must never permanently strand a draft as "confirmed."
+   */
   async confirm(
     user: AuthenticatedUser,
     id: string,
@@ -153,14 +163,29 @@ export class VoiceCommandService {
       );
     }
 
-    const result = await this.execute(user.businessId, action, args);
+    const claimed = await this.tenantPrisma.client.voiceCommandDraft.updateMany(
+      {
+        where: { id, status: VoiceCommandStatus.pending },
+        data: { status: VoiceCommandStatus.confirmed, confirmedAt: new Date() },
+      },
+    );
+    if (claimed.count === 0) {
+      throw new AppException(
+        VOICE_COMMAND_ERROR_CODES.ALREADY_RESOLVED,
+        'This command was already resolved (possibly by a concurrent request).',
+        HttpStatus.CONFLICT,
+      );
+    }
 
-    await this.tenantPrisma.client.voiceCommandDraft.update({
-      where: { id },
-      data: { status: VoiceCommandStatus.confirmed, confirmedAt: new Date() },
-    });
-
-    return result;
+    try {
+      return await this.execute(user.businessId, action, args);
+    } catch (error) {
+      await this.tenantPrisma.client.voiceCommandDraft.update({
+        where: { id },
+        data: { status: VoiceCommandStatus.pending, confirmedAt: null },
+      });
+      throw error;
+    }
   }
 
   async cancel(businessId: string, id: string) {

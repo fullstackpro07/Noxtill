@@ -24,6 +24,7 @@ export function InviteStaffDialog({ open, onClose }: { open: boolean; onClose: (
   const [role, setRole] = useState<InvitableRole>("staff");
   const [commissionType, setCommissionType] = useState<CommissionType>("percent");
   const [rate, setRate] = useState("10");
+  const [hourlyRate, setHourlyRate] = useState("");
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -40,6 +41,7 @@ export function InviteStaffDialog({ open, onClose }: { open: boolean; onClose: (
             : commissionType === "percent"
               ? { type: "percent", rate: Number(rate) }
               : { type: "perService", amount: Number(rate) },
+        hourlyRate: hourlyRate.trim() ? Number(hourlyRate) : undefined,
       }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["staff-list"] });
@@ -56,6 +58,7 @@ export function InviteStaffDialog({ open, onClose }: { open: boolean; onClose: (
     setName("");
     setEmail("");
     setPhone("");
+    setHourlyRate("");
     setTempPassword(null);
     setCopied(false);
     onClose();
@@ -157,6 +160,20 @@ export function InviteStaffDialog({ open, onClose }: { open: boolean; onClose: (
               leadingSlot={<span className="text-sm">{commissionType === "percent" ? "%" : "$"}</span>}
             />
           )}
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <p className="mb-2 text-sm font-medium text-fg">Hourly wage (optional)</p>
+          <Input
+            label="Hourly rate"
+            type="number"
+            min={0}
+            step={0.5}
+            value={hourlyRate}
+            onChange={(e) => setHourlyRate(e.target.value)}
+            leadingSlot={<span className="text-sm">$</span>}
+            hint="Leave blank for purely-commission pay. When set, real overtime hours (Timesheets) are paid at this rate — or the business's overtime multiplier for hours over the weekly threshold — on top of any commission."
+          />
         </div>
 
         {inviteMutation.isError && (

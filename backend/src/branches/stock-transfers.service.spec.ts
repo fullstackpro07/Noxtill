@@ -242,4 +242,235 @@ describe('StockTransfersService (UPD-BE-036)', () => {
     // Clean up by finishing the lifecycle rather than leaving it stuck mid-flight.
     await service.receive(branchId, transfer.id, 'branch-user-1');
   });
+
+  describe('partial receive (Branches depth fix, UPD-INT-012)', () => {
+    it('increments destination stock by the real received qty, not always the full shipped qty', async () => {
+      const source = await prisma.product.create({
+        data: {
+          businessId: parentId,
+          kind: 'product',
+          name: 'Partial Widget',
+          sku: `PARTIAL-${Date.now()}`,
+          stockQty: 50,
+        },
+      });
+      const dest = await prisma.product.create({
+        data: {
+          businessId: branchId,
+          kind: 'product',
+          name: 'Partial Widget',
+          sku: source.sku,
+          stockQty: 0,
+        },
+      });
+
+      const transfer = await service.create(parentId, 'owner-1', {
+        destBusinessId: branchId,
+        items: [{ productId: source.id, qty: 10 }],
+      });
+      await service.approve(parentId, transfer.id, 'owner-1');
+      await service.ship(parentId, transfer.id, 'owner-1');
+
+      const received = await service.receive(
+        branchId,
+        transfer.id,
+        'branch-user-1',
+        {
+          items: [{ itemId: transfer.items[0].id, receivedQty: 7 }],
+        },
+      );
+      expect(received.status).toBe('received');
+      expect(received.items[0].receivedQty).toBe(7);
+
+      const destAfter = await prisma.product.findUniqueOrThrow({
+        where: { id: dest.id },
+      });
+      expect(destAfter.stockQty).toBe(7); // not 10 — only what really arrived
+
+      const inMovement = await prisma.stockMovement.findFirst({
+        where: {
+          businessId: branchId,
+          productId: dest.id,
+          kind: 'transfer_in',
+        },
+      });
+      expect(inMovement?.qty).toBe(7);
+      expect(inMovement?.reason).toContain('partial');
+
+      await prisma.stockMovement.deleteMany({
+        where: { productId: { in: [source.id, dest.id] } },
+      });
+      await prisma.stockTransferItem.deleteMany({
+        where: { transferId: transfer.id },
+      });
+      await prisma.stockTransfer.delete({ where: { id: transfer.id } });
+      await prisma.product.deleteMany({
+        where: { id: { in: [source.id, dest.id] } },
+      });
+    });
+
+    it('rejects receiving more than was actually shipped for an item', async () => {
+      const source = await prisma.product.create({
+        data: {
+          businessId: parentId,
+          kind: 'product',
+          name: 'Overreceive Widget',
+          sku: `OVERRECEIVE-${Date.now()}`,
+          stockQty: 50,
+        },
+      });
+      const dest = await prisma.product.create({
+        data: {
+          businessId: branchId,
+          kind: 'product',
+          name: 'Overreceive Widget',
+          sku: source.sku,
+          stockQty: 0,
+        },
+      });
+
+      const transfer = await service.create(parentId, 'owner-1', {
+        destBusinessId: branchId,
+        items: [{ productId: source.id, qty: 5 }],
+      });
+      await service.approve(parentId, transfer.id, 'owner-1');
+      await service.ship(parentId, transfer.id, 'owner-1');
+
+      await expect(
+        service.receive(branchId, transfer.id, 'branch-user-1', {
+          items: [{ itemId: transfer.items[0].id, receivedQty: 6 }],
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+
+      await service.receive(branchId, transfer.id, 'branch-user-1');
+      await prisma.stockMovement.deleteMany({
+        where: { productId: { in: [source.id, dest.id] } },
+      });
+      await prisma.stockTransferItem.deleteMany({
+        where: { transferId: transfer.id },
+      });
+      await prisma.stockTransfer.delete({ where: { id: transfer.id } });
+      await prisma.product.deleteMany({
+        where: { id: { in: [source.id, dest.id] } },
+      });
+    });
+  });
+
+  describe('concurrent double-ship/double-receive race (Branches depth fix, UPD-INT-012)', () => {
+    it('lets only one of two concurrent ship() calls actually decrement stock', async () => {
+      const source = await prisma.product.create({
+        data: {
+          businessId: parentId,
+          kind: 'product',
+          name: 'Race Widget',
+          sku: `RACE-SHIP-${Date.now()}`,
+          stockQty: 50,
+        },
+      });
+      const dest = await prisma.product.create({
+        data: {
+          businessId: branchId,
+          kind: 'product',
+          name: 'Race Widget',
+          sku: source.sku,
+          stockQty: 0,
+        },
+      });
+
+      const transfer = await service.create(parentId, 'owner-1', {
+        destBusinessId: branchId,
+        items: [{ productId: source.id, qty: 10 }],
+      });
+      await service.approve(parentId, transfer.id, 'owner-1');
+
+      const results = await Promise.allSettled([
+        service.ship(parentId, transfer.id, 'owner-1'),
+        service.ship(parentId, transfer.id, 'owner-1'),
+      ]);
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      const sourceAfter = await prisma.product.findUniqueOrThrow({
+        where: { id: source.id },
+      });
+      expect(sourceAfter.stockQty).toBe(40); // 50 - 10, decremented exactly once
+
+      const outMovements = await prisma.stockMovement.findMany({
+        where: { productId: source.id, kind: 'transfer_out' },
+      });
+      expect(outMovements).toHaveLength(1);
+
+      await service.receive(branchId, transfer.id, 'branch-user-1');
+      await prisma.stockMovement.deleteMany({
+        where: { productId: { in: [source.id, dest.id] } },
+      });
+      await prisma.stockTransferItem.deleteMany({
+        where: { transferId: transfer.id },
+      });
+      await prisma.stockTransfer.delete({ where: { id: transfer.id } });
+      await prisma.product.deleteMany({
+        where: { id: { in: [source.id, dest.id] } },
+      });
+    });
+
+    it('lets only one of two concurrent receive() calls actually increment stock', async () => {
+      const source = await prisma.product.create({
+        data: {
+          businessId: parentId,
+          kind: 'product',
+          name: 'Race Widget 2',
+          sku: `RACE-RECEIVE-${Date.now()}`,
+          stockQty: 50,
+        },
+      });
+      const dest = await prisma.product.create({
+        data: {
+          businessId: branchId,
+          kind: 'product',
+          name: 'Race Widget 2',
+          sku: source.sku,
+          stockQty: 0,
+        },
+      });
+
+      const transfer = await service.create(parentId, 'owner-1', {
+        destBusinessId: branchId,
+        items: [{ productId: source.id, qty: 10 }],
+      });
+      await service.approve(parentId, transfer.id, 'owner-1');
+      await service.ship(parentId, transfer.id, 'owner-1');
+
+      const results = await Promise.allSettled([
+        service.receive(branchId, transfer.id, 'branch-user-1'),
+        service.receive(branchId, transfer.id, 'branch-user-1'),
+      ]);
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      const destAfter = await prisma.product.findUniqueOrThrow({
+        where: { id: dest.id },
+      });
+      expect(destAfter.stockQty).toBe(10); // incremented exactly once
+
+      const inMovements = await prisma.stockMovement.findMany({
+        where: { productId: dest.id, kind: 'transfer_in' },
+      });
+      expect(inMovements).toHaveLength(1);
+
+      await prisma.stockMovement.deleteMany({
+        where: { productId: { in: [source.id, dest.id] } },
+      });
+      await prisma.stockTransferItem.deleteMany({
+        where: { transferId: transfer.id },
+      });
+      await prisma.stockTransfer.delete({ where: { id: transfer.id } });
+      await prisma.product.deleteMany({
+        where: { id: { in: [source.id, dest.id] } },
+      });
+    });
+  });
 });

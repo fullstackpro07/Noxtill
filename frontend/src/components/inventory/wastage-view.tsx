@@ -49,15 +49,22 @@ export function WastageView({ currency }: { currency: string }) {
     const productCostByName = new Map<string, number>();
     for (const p of products) productCostByName.set(p.name, p.costPrice);
 
-    const valueLost = wastageThisMonth.reduce((sum, m) => sum + Math.abs(m.qty) * (productCostByName.get(m.productName) ?? 0), 0);
+    // Real historical cost when the movement captured one (UPD-INT-013 fix); only pre-fix entries
+    // fall back to the product's current cost, which may no longer match what it cost back then.
+    const valueLost = wastageThisMonth.reduce(
+      (sum, m) => sum + Math.abs(m.qty) * (m.unitCost ?? productCostByName.get(m.productName) ?? 0),
+      0,
+    );
 
     const byProduct = new Map<string, number>();
     for (const m of movements) byProduct.set(m.productName, (byProduct.get(m.productName) ?? 0) + Math.abs(m.qty));
     const topWasted = [...byProduct.entries()].sort((a, b) => b[1] - a[1])[0];
 
+    // Grouped by the real structured reason (UPD-INT-013 fix), not the free-text description —
+    // two Theft entries with different notes used to land in two different bars.
     const byReason = new Map<string, number>();
     for (const m of movements) {
-      const reason = m.description || "Other";
+      const reason = m.wastageReason ?? "Other";
       byReason.set(reason, (byReason.get(reason) ?? 0) + Math.abs(m.qty));
     }
 

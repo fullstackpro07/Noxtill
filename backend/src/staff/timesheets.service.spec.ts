@@ -184,15 +184,18 @@ describe('TimesheetsService (UPD-BE-032)', () => {
         overtimeThresholdHoursPerWeek: 40,
         breakThresholdHours: 6,
         breakMinutesPerShift: 30,
+        overtimeRateMultiplier: 1.5,
       });
 
       const updated = await service.updateSettings(businessId, {
         breakThresholdHours: 3,
         breakMinutesPerShift: 60,
+        overtimeRateMultiplier: 2,
       });
       expect(updated.breakThresholdHours).toBe(3);
       expect(updated.breakMinutesPerShift).toBe(60);
       expect(updated.overtimeThresholdHoursPerWeek).toBe(40); // untouched field stays as-is
+      expect(updated.overtimeRateMultiplier).toBe(2);
 
       const checkIn = new Date('2026-04-10T09:00:00.000Z');
       await prisma.attendance.create({
@@ -213,6 +216,7 @@ describe('TimesheetsService (UPD-BE-032)', () => {
       await service.updateSettings(businessId, {
         breakThresholdHours: 6,
         breakMinutesPerShift: 30,
+        overtimeRateMultiplier: 1.5,
       });
     });
   });

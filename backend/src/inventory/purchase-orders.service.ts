@@ -160,7 +160,19 @@ export class PurchaseOrdersService {
     });
   }
 
-  /** The only method that ever touches real stock — full or partial, and only for quantities actually received this call. */
+  /**
+   * The only method that ever touches real stock — full or partial, and only for quantities
+   * actually received this call.
+   *
+   * Inventory depth fix (UPD-INT-013): the over-receive guard used to read `qtyReceived` before
+   * the transaction and then unconditionally `increment` inside it — two concurrent/duplicate
+   * calls for the same line could both pass the pre-check and both increment, double-counting
+   * stock and pushing `qtyReceived` past `qtyOrdered`. The real guard is now the atomic
+   * `updateMany` claim below (same shape as the stock-transfer ship()/receive() fix earlier this
+   * session): it only increments `qtyReceived` if doing so still fits within `qtyOrdered`, checked
+   * and written in one atomic statement. The pre-transaction check stays only as fast, friendly
+   * feedback for the common non-concurrent case.
+   */
   async receive(businessId: string, id: string, dto: ReceivePurchaseOrderDto) {
     const po = await this.findOne(id);
     if (
@@ -198,6 +210,21 @@ export class PurchaseOrdersService {
         if (line.qtyReceived <= 0) continue;
         const item = itemsById.get(line.itemId)!;
 
+        const claimed = await tx.purchaseOrderItem.updateMany({
+          where: {
+            id: item.id,
+            qtyReceived: { lte: item.qtyOrdered - line.qtyReceived },
+          },
+          data: { qtyReceived: { increment: line.qtyReceived } },
+        });
+        if (claimed.count === 0) {
+          throw new AppException(
+            PURCHASE_ORDER_ERROR_CODES.OVER_RECEIVE,
+            `Cannot receive ${line.qtyReceived} more of "${item.product.name}" — it may have just been received concurrently`,
+            HttpStatus.CONFLICT,
+          );
+        }
+
         await tx.stockMovement.create({
           data: {
             businessId,
@@ -215,10 +242,6 @@ export class PurchaseOrdersService {
             stockQty: { increment: line.qtyReceived },
             costPrice: item.unitCost,
           },
-        });
-        await tx.purchaseOrderItem.update({
-          where: { id: item.id },
-          data: { qtyReceived: { increment: line.qtyReceived } },
         });
       }
     });

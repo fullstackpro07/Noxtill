@@ -8,4 +8,7 @@ export const STOCK_TRANSFER_ERROR_CODES = {
   NO_SKU: 'stock_transfer.no_sku',
   NO_DEST_MATCH: 'stock_transfer.no_dest_match',
   INSUFFICIENT_STOCK: 'stock_transfer.insufficient_stock',
+  ALREADY_CLAIMED: 'stock_transfer.already_claimed',
+  INVALID_RECEIVED_QTY: 'stock_transfer.invalid_received_qty',
+  UNKNOWN_RECEIVE_ITEM: 'stock_transfer.unknown_receive_item',
 } as const;

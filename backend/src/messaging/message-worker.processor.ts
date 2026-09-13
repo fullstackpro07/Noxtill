@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -91,5 +91,12 @@ export class MessageWorkerProcessor extends WorkerHost {
       case MessageChannel.email:
         return this.email;
     }
+  }
+
+  // An unlistened 'error' event on the underlying Worker's connection (e.g.
+  // Redis over quota) throws and crashes the whole process, not just this worker.
+  @OnWorkerEvent('error')
+  onError(error: Error) {
+    this.logger.warn(`Message worker connection error: ${error.message}`);
   }
 }

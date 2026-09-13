@@ -60,10 +60,17 @@ export interface LiveStaffMember {
   phone: string | null;
   commissionRule: CommissionRule;
   customRoleId: string | null;
+  /** Staff depth fix (UPD-INT-011): null means purely-commission pay, unchanged from before this
+   * field existed. */
+  hourlyRate: number | null;
 }
 
 function toLiveStaffMember(
-  raw: RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null },
+  raw: RawStaffMember & {
+    commissionRule?: RawCommissionRule;
+    customRoleId?: string | null;
+    hourlyRate?: string | null;
+  },
 ): LiveStaffMember {
   return {
     id: raw.id,
@@ -74,11 +81,14 @@ function toLiveStaffMember(
     phone: raw.user.phone,
     commissionRule: toCommissionRule(raw.commissionRule),
     customRoleId: raw.customRoleId ?? null,
+    hourlyRate: raw.hourlyRate != null ? Number(raw.hourlyRate) : null,
   };
 }
 
 export async function fetchStaffList(): Promise<LiveStaffMember[]> {
-  const raw = await apiFetch<(RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null })[]>("/staff");
+  const raw = await apiFetch<
+    (RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null; hourlyRate?: string | null })[]
+  >("/staff");
   return raw.map(toLiveStaffMember);
 }
 
@@ -88,6 +98,7 @@ export interface StaffDraft {
   phone?: string;
   role: "manager" | "staff";
   commissionRule: CommissionRule;
+  hourlyRate?: number;
 }
 
 export interface InviteStaffResult extends LiveStaffMember {
@@ -95,26 +106,34 @@ export interface InviteStaffResult extends LiveStaffMember {
 }
 
 export async function inviteStaff(draft: StaffDraft): Promise<InviteStaffResult> {
-  const raw = await apiFetch<RawStaffMember & { commissionRule?: RawCommissionRule; tempPassword?: string }>("/staff", {
-    method: "POST",
-    body: JSON.stringify({
-      name: draft.name,
-      email: draft.email || undefined,
-      phone: draft.phone || undefined,
-      role: draft.role,
-      commissionRule: await toRawCommissionRule(draft.commissionRule),
-    }),
-  });
+  const raw = await apiFetch<RawStaffMember & { commissionRule?: RawCommissionRule; hourlyRate?: string | null; tempPassword?: string }>(
+    "/staff",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: draft.name,
+        email: draft.email || undefined,
+        phone: draft.phone || undefined,
+        role: draft.role,
+        commissionRule: await toRawCommissionRule(draft.commissionRule),
+        hourlyRate: draft.hourlyRate,
+      }),
+    },
+  );
   return { ...toLiveStaffMember(raw), tempPassword: raw.tempPassword };
 }
 
 export async function updateStaffMember(
   id: string,
-  draft: { role: "manager" | "staff"; commissionRule: CommissionRule },
+  draft: { role: "manager" | "staff"; commissionRule: CommissionRule; hourlyRate?: number | null },
 ): Promise<LiveStaffMember> {
-  const raw = await apiFetch<RawStaffMember & { commissionRule?: RawCommissionRule }>(`/staff/${id}`, {
+  const raw = await apiFetch<RawStaffMember & { commissionRule?: RawCommissionRule; hourlyRate?: string | null }>(`/staff/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ role: draft.role, commissionRule: await toRawCommissionRule(draft.commissionRule) }),
+    body: JSON.stringify({
+      role: draft.role,
+      commissionRule: await toRawCommissionRule(draft.commissionRule),
+      hourlyRate: draft.hourlyRate,
+    }),
   });
   return toLiveStaffMember(raw);
 }
@@ -125,7 +144,9 @@ export function removeStaffMember(id: string): Promise<{ success: boolean }> {
 
 /** UPD-FE-113 — sends only `customRoleId`, leaving role/commissionRule untouched (unlike `updateStaffMember`, which requires both). */
 export async function assignCustomRole(id: string, customRoleId: string | null): Promise<LiveStaffMember> {
-  const raw = await apiFetch<RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null }>(`/staff/${id}`, {
+  const raw = await apiFetch<
+    RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null; hourlyRate?: string | null }
+  >(`/staff/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ customRoleId }),
   });
@@ -338,6 +359,8 @@ export interface TimesheetSettings {
   overtimeThresholdHoursPerWeek: number;
   breakThresholdHours: number;
   breakMinutesPerShift: number;
+  /** Staff depth fix (UPD-INT-011): multiplies a staff member's `hourlyRate` for overtime hours. */
+  overtimeRateMultiplier: number;
 }
 
 export function fetchTimesheetSettings(): Promise<TimesheetSettings> {

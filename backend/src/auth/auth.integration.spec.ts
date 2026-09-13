@@ -127,6 +127,110 @@ describe('AuthService integration (BE-007)', () => {
   });
 });
 
+describe('AuthService — deactivated branch blocks login/refresh (Branches depth fix, UPD-INT-012)', () => {
+  let prisma: PrismaService;
+  let authService: AuthService;
+  let userId: string;
+  let businessId: string;
+  const email = `auth-deactivated-test-${Date.now()}@example.com`;
+
+  beforeAll(async () => {
+    prisma = new PrismaService();
+    await prisma.$connect();
+
+    const config = new ConfigService({
+      JWT_SECRET: 'test-secret',
+      JWT_REFRESH_SECRET: 'test-refresh-secret',
+      JWT_ACCESS_TTL: '15m',
+      JWT_REFRESH_TTL: '7d',
+    });
+    const jwt = new JwtService();
+    const sessions = new SessionsService(prisma);
+    const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
+    const twoFactor = new TwoFactorService(
+      prisma,
+      sendGate as unknown as SendGateService,
+    );
+    authService = new AuthService(
+      prisma,
+      jwt,
+      config,
+      new CapabilitiesService(prisma),
+      sessions,
+      twoFactor,
+    );
+
+    const signup = await authService.signup({
+      businessName: 'Deactivated Login Test Biz',
+      name: 'Test Owner',
+      email,
+      password: 'supersecret123',
+    });
+    userId = signup.user.id;
+    businessId = signup.business.id;
+  });
+
+  afterAll(async () => {
+    await prisma.session.deleteMany({ where: { userId } });
+    await prisma.businessUser.deleteMany({ where: { userId } });
+    await prisma.user.delete({ where: { id: userId } });
+    await prisma.business.delete({ where: { id: businessId } });
+    await prisma.$disconnect();
+  });
+
+  it('logs in fine while the business is active, is refused once deactivated, and works again once reactivated', async () => {
+    const first = await authService.login({
+      emailOrPhone: email,
+      password: 'supersecret123',
+    });
+    if (!('accessToken' in first)) throw new Error('Expected full tokens');
+    expect(first.accessToken).toBeDefined();
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { active: false },
+    });
+
+    await expect(
+      authService.login({ emailOrPhone: email, password: 'supersecret123' }),
+    ).rejects.toBeInstanceOf(AppException);
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { active: true },
+    });
+
+    const third = await authService.login({
+      emailOrPhone: email,
+      password: 'supersecret123',
+    });
+    if (!('accessToken' in third)) throw new Error('Expected full tokens');
+    expect(third.accessToken).toBeDefined();
+  });
+
+  it('refuses to refresh an already-issued token once its business is deactivated', async () => {
+    const login = await authService.login({
+      emailOrPhone: email,
+      password: 'supersecret123',
+    });
+    if (!('refreshToken' in login)) throw new Error('Expected full tokens');
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { active: false },
+    });
+
+    await expect(
+      authService.refresh(login.refreshToken),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { active: true },
+    });
+  });
+});
+
 describe('AuthService — sessions + 2FA (UPD-BE-040)', () => {
   let prisma: PrismaService;
   let authService: AuthService;

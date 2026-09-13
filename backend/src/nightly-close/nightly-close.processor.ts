@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
@@ -66,5 +66,12 @@ export class NightlyCloseProcessor extends WorkerHost {
     this.logger.debug(
       `Nightly close tick evaluated ${businesses.length} business(es)`,
     );
+  }
+
+  // An unlistened 'error' event on the underlying Worker's connection (e.g.
+  // Redis over quota) throws and crashes the whole process, not just this worker.
+  @OnWorkerEvent('error')
+  onError(error: Error) {
+    this.logger.warn(`Nightly close worker connection error: ${error.message}`);
   }
 }

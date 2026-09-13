@@ -67,6 +67,7 @@ describe('ReportsService (INT-012)', () => {
     );
     service = new ReportsService(
       tenantPrisma,
+      cls as unknown as ClsService,
       new LocaleService(),
       s3 as unknown as S3Service,
       pdfRenderer as unknown as PdfRendererService,
@@ -344,6 +345,86 @@ describe('ReportsService (INT-012)', () => {
     it('taxSummary() defaults to the current month when no period is given', async () => {
       const summary = await service.taxSummary(taxBusinessId);
       expect(summary.period).toMatch(/^\d{4}-\d{2}$/);
+    });
+
+    it('taxSummary() returns a real per-rate breakdown from real OrderItem.taxRatePercent rows (Reports depth fix, UPD-INT-015)', async () => {
+      const order = await prisma.order.create({
+        data: {
+          businessId: taxBusinessId,
+          orderNo: 4,
+          status: 'completed',
+          orderType: 'counter',
+          subtotal: 300,
+          tax: 38.5,
+          total: 338.5,
+          createdAt: new Date('2025-06-25T00:00:00Z'),
+        },
+      });
+      await prisma.orderItem.createMany({
+        data: [
+          {
+            orderId: order.id,
+            name: 'Flat-rate item',
+            price: 100,
+            cost: 0,
+            qty: 1,
+            taxRatePercent: 8.5,
+          },
+          {
+            orderId: order.id,
+            name: 'Rule-taxed item',
+            price: 200,
+            cost: 0,
+            qty: 1,
+            taxRatePercent: 15,
+          },
+        ],
+      });
+
+      try {
+        const summary = await service.taxSummary(taxBusinessId, month);
+        const byRate = new Map(
+          summary.rateBreakdown.map((r) => [r.ratePercent, r]),
+        );
+        expect(byRate.get(8.5)).toMatchObject({
+          taxableSales: 100,
+          taxCollected: 8.5,
+        });
+        expect(byRate.get(15)).toMatchObject({
+          taxableSales: 200,
+          taxCollected: 30,
+        });
+      } finally {
+        await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
+        await prisma.order.delete({ where: { id: order.id } });
+      }
+    });
+
+    it("uses the real CLS-active branch's own taxLabel/taxRate, not the caller's home business's (Reports depth fix, UPD-INT-015)", async () => {
+      // Simulates an HQ owner viewing this report while operating inside one of their own
+      // branches (a real X-Branch header, resolved into CLS by TenancyGuard) — the branch has its
+      // own real, different tax settings from both the home business AND `taxBusinessId` above.
+      const branch = await prisma.business.create({
+        data: {
+          name: 'Branch With Its Own Tax',
+          slug: `tax-report-branch-${Date.now()}`,
+          parentId: taxBusinessId,
+          taxRate: 15,
+          taxLabel: 'GST',
+        },
+      });
+      cls.set(CLS_KEY_BUSINESS_ID, branch.id);
+
+      try {
+        // The caller's home businessId (taxBusinessId) is passed explicitly, exactly like the
+        // real controller does — CLS is what must actually win here.
+        const summary = await service.taxSummary(taxBusinessId, month);
+        expect(summary.taxLabel).toBe('GST');
+        expect(summary.taxRate).toBe(15);
+      } finally {
+        await prisma.business.delete({ where: { id: branch.id } });
+        cls.set(CLS_KEY_BUSINESS_ID, taxBusinessId);
+      }
     });
   });
 

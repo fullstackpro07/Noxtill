@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { CreateStockTransferDto } from './dto/create-stock-transfer.dto';
+import {
+  CreateStockTransferDto,
+  ReceiveStockTransferDto,
+} from './dto/create-stock-transfer.dto';
 import { STOCK_TRANSFER_ERROR_CODES } from './stock-transfers.constants';
 import { StockMovementKind, StockTransferStatus } from '@prisma/client';
 
@@ -127,7 +130,16 @@ export class StockTransfersService {
     });
   }
 
-  /** Real stock leaves the source branch here — decrements source stock, writes a real `transfer_out` StockMovement. */
+  /**
+   * Real stock leaves the source branch here — decrements source stock, writes a real
+   * `transfer_out` StockMovement.
+   *
+   * Branches depth fix (UPD-INT-012): the `approved -> shipped` transition is claimed via a
+   * conditional `updateMany` inside the same transaction as the stock writes, not a separate
+   * check beforehand — two concurrent `ship()` calls on the same transfer can no longer both pass
+   * the status check and both decrement stock; only whichever commits first actually claims it,
+   * and the loser gets a real conflict error instead of silently double-shipping.
+   */
   async ship(businessId: string, id: string, actorUserId: string) {
     const transfer = await this.findWithStatus(
       businessId,
@@ -147,6 +159,21 @@ export class StockTransfersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.stockTransfer.updateMany({
+        where: { id, status: StockTransferStatus.approved },
+        data: {
+          status: StockTransferStatus.shipped,
+          shippedByUserId: actorUserId,
+        },
+      });
+      if (claimed.count === 0) {
+        throw new AppException(
+          STOCK_TRANSFER_ERROR_CODES.ALREADY_CLAIMED,
+          'This transfer was already shipped (possibly by a concurrent request)',
+          HttpStatus.CONFLICT,
+        );
+      }
+
       for (const item of transfer.items) {
         await tx.product.update({
           where: { id: item.sourceProductId },
@@ -162,19 +189,28 @@ export class StockTransfersService {
           },
         });
       }
-      return tx.stockTransfer.update({
+      return tx.stockTransfer.findUniqueOrThrow({
         where: { id },
-        data: {
-          status: StockTransferStatus.shipped,
-          shippedByUserId: actorUserId,
-        },
         include: { items: { include: { sourceProduct: true } } },
       });
     });
   }
 
-  /** Real stock arrives at the destination branch here — the cross-business side of the write. */
-  async receive(businessId: string, id: string, actorUserId: string) {
+  /**
+   * Real stock arrives at the destination branch here — the cross-business side of the write.
+   *
+   * Branches depth fix (UPD-INT-012): same atomic-claim pattern as `ship()` against double-receiving,
+   * plus real partial-receive support — `dto.items` lets the destination branch record an actual
+   * received quantity per item (never more than what was shipped); an item not named there defaults
+   * to a full receipt, same as this method's behavior before partial-receive existed. Destination
+   * stock is incremented by the real received amount, not blindly by the originally shipped `qty`.
+   */
+  async receive(
+    businessId: string,
+    id: string,
+    actorUserId: string,
+    dto: ReceiveStockTransferDto = {},
+  ) {
     const transfer = await this.findWithStatus(
       businessId,
       id,
@@ -182,8 +218,48 @@ export class StockTransfersService {
     );
     this.assertDestCaller(transfer, businessId);
 
+    const overrideByItemId = new Map(
+      (dto.items ?? []).map((i) => [i.itemId, i.receivedQty]),
+    );
+    const knownItemIds = new Set(transfer.items.map((i) => i.id));
+    for (const override of dto.items ?? []) {
+      if (!knownItemIds.has(override.itemId)) {
+        throw new AppException(
+          STOCK_TRANSFER_ERROR_CODES.UNKNOWN_RECEIVE_ITEM,
+          `"${override.itemId}" is not an item on this transfer`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+    for (const item of transfer.items) {
+      const receivedQty = overrideByItemId.get(item.id) ?? item.qty;
+      if (receivedQty > item.qty) {
+        throw new AppException(
+          STOCK_TRANSFER_ERROR_CODES.INVALID_RECEIVED_QTY,
+          `Cannot receive more than the ${item.qty} shipped for "${item.sourceProduct.name}"`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.stockTransfer.updateMany({
+        where: { id, status: StockTransferStatus.shipped },
+        data: {
+          status: StockTransferStatus.received,
+          receivedByUserId: actorUserId,
+        },
+      });
+      if (claimed.count === 0) {
+        throw new AppException(
+          STOCK_TRANSFER_ERROR_CODES.ALREADY_CLAIMED,
+          'This transfer was already received (possibly by a concurrent request)',
+          HttpStatus.CONFLICT,
+        );
+      }
+
       for (const item of transfer.items) {
+        const receivedQty = overrideByItemId.get(item.id) ?? item.qty;
         const destProduct = await this.resolveDestProduct(
           transfer.destBusinessId,
           item.sourceProduct,
@@ -191,24 +267,27 @@ export class StockTransfersService {
         );
         await tx.product.update({
           where: { id: destProduct.id },
-          data: { stockQty: { increment: item.qty } },
+          data: { stockQty: { increment: receivedQty } },
+        });
+        await tx.stockTransferItem.update({
+          where: { id: item.id },
+          data: { receivedQty },
         });
         await tx.stockMovement.create({
           data: {
             businessId: transfer.destBusinessId,
             productId: destProduct.id,
             kind: StockMovementKind.transfer_in,
-            qty: item.qty,
-            reason: `Stock transfer ${transfer.id} from branch ${transfer.sourceBusinessId}`,
+            qty: receivedQty,
+            reason:
+              receivedQty < item.qty
+                ? `Stock transfer ${transfer.id} from branch ${transfer.sourceBusinessId} (partial: ${receivedQty}/${item.qty})`
+                : `Stock transfer ${transfer.id} from branch ${transfer.sourceBusinessId}`,
           },
         });
       }
-      return tx.stockTransfer.update({
+      return tx.stockTransfer.findUniqueOrThrow({
         where: { id },
-        data: {
-          status: StockTransferStatus.received,
-          receivedByUserId: actorUserId,
-        },
         include: { items: { include: { sourceProduct: true } } },
       });
     });
