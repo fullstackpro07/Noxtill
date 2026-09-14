@@ -57,9 +57,12 @@ describe('MessageWorkerProcessor (UPD-BE-092 fix-it — custom message text)', (
     const email = {
       send: jest.fn().mockResolvedValue({ providerRef: 'email-ref' }),
     };
+    // Real default term resolution (no business override in play here) rather than a bare
+    // passthrough — booking_reminder now genuinely contains a real {{term:appointment}}
+    // placeholder (Terminology Engine, UPD-INT-016), so a passthrough would leave it unresolved.
     const terminology = {
       applyToText: jest.fn((_biz: string, text: string) =>
-        Promise.resolve(text),
+        Promise.resolve(text.replace(/\{\{term:(?:\w+\.)?(\w+)\}\}/g, '$1')),
       ),
     };
 

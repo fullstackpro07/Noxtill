@@ -6,6 +6,10 @@ import { OutboundWebhookDispatchService } from '../../integrations/automation/ou
 import { CrmJobsProcessor } from './crm-jobs.processor';
 import { VIP_LIFETIME_SPEND_THRESHOLD } from './crm-jobs.constants';
 
+// The processor's unscoped `business.findMany()` scans the whole shared test DB;
+// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+jest.setTimeout(20000);
+
 describe('CrmJobsProcessor (BE-041)', () => {
   let prisma: PrismaService;
   let processor: CrmJobsProcessor;

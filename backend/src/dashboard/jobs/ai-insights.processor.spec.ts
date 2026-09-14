@@ -2,6 +2,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AiInsightsService } from '../ai-insights.service';
 import { AiInsightsProcessor } from './ai-insights.processor';
 
+// The processor's unscoped `business.findMany()` scans the whole shared test DB;
+// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+jest.setTimeout(20000);
+
 describe('AiInsightsProcessor (UPD-BE-003)', () => {
   let prisma: PrismaService;
   let processor: AiInsightsProcessor;

@@ -2,6 +2,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SendGateService } from '../../messaging/send-gate.service';
 import { BookingRemindersProcessor } from './booking-reminders.processor';
 
+// The processor's unscoped `business.findMany()` scans the whole shared test DB;
+// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+jest.setTimeout(20000);
+
 describe('BookingRemindersProcessor (BE-055)', () => {
   let prisma: PrismaService;
   let processor: BookingRemindersProcessor;

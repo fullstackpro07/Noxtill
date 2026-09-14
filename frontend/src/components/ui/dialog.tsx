@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNxPortalTarget } from "@/hooks/use-nx-portal-target";
 
 export interface DialogProps {
   open: boolean;
@@ -41,7 +42,8 @@ export function Dialog({
     };
   }, [open, onClose, preventCasualDismiss]);
 
-  if (!open || typeof document === "undefined") return null;
+  const portalTarget = useNxPortalTarget();
+  if (!open || !portalTarget) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -75,6 +77,6 @@ export function Dialog({
         {footer && <div className="mt-6 flex items-center justify-end gap-2">{footer}</div>}
       </div>
     </div>,
-    document.body,
+    portalTarget,
   );
 }

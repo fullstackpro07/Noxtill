@@ -1,0 +1,78 @@
+/*
+  Dashboard app v2 theme (Sept 2026 redesign). Scoped to the `.nx-app` class applied once on
+  AppShell's root element — never touches the shared `globals.css` tokens the marketing site
+  depends on. Palette lifted directly from the client's design files (Noxtill Sidebar / Dashboard
+  / Orders .dc.html): navy sidebar, brighter green primary, neutral-gray content surfaces.
+*/
+
+.nx-app {
+  --app-font: var(--font-plus-jakarta), "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font);
+  /* Design uses one typeface (Plus Jakarta Sans, 400-800) everywhere — override the shared
+     display/body font tokens so every existing `font-display` heading picks it up for free. */
+  --font-display: var(--app-font);
+  --font-body: var(--app-font);
+
+  --app-sidebar-bg: #0a1b2a;
+  --app-sidebar-hover: #132c3e;
+  --app-sidebar-fg: #afc0ce;
+  --app-sidebar-fg-active: #ffffff;
+  --app-sidebar-border: #1d3547;
+  --app-sidebar-card-bg: #0f2434;
+
+  --app-primary: #12a150;
+  --app-primary-hover: #0e8442;
+  --app-primary-foreground: #ffffff;
+
+  --app-bg: #f7fcf9;
+  --app-surface: #ffffff;
+  --app-surface-2: #fafbfc;
+  --app-border: #e6eaf0;
+  --app-border-strong: #e1e7ee;
+
+  --app-text: #101828;
+  --app-text-muted: #344054;
+  --app-text-faint: #475467;
+  --app-text-faintest: #667085;
+  --app-text-disabled: #98a2b3;
+
+  --app-success-bg: #e8f7ee;
+  --app-success-border: #bfe7cf;
+  --app-success-text: #0e8442;
+
+  --app-warning-bg: #fef6e7;
+  --app-warning-border: #fde3b3;
+  --app-warning-text: #b54708;
+
+  --app-danger: #ef4444;
+  --app-danger-strong: #b42318;
+
+  --app-info: #2563eb;
+  --app-purple: #9333ea;
+  --app-orange: #f97316;
+
+  --app-new-badge-bg: #0e8442;
+  --app-new-badge-fg: #8ff0bb;
+}
+
+/* Exact match for the design's thin scrollbar spec (`::-webkit-scrollbar{width:8px;height:8px}`,
+   `::-webkit-scrollbar-thumb{background:#D5DCE4;border-radius:8px}`) — replaces the default fat
+   OS scrollbar everywhere inside the dashboard app, including the dark sidebar nav. */
+.nx-app ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.nx-app ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.nx-app ::-webkit-scrollbar-thumb {
+  background: #d5dce4;
+  border-radius: 8px;
+}
+.nx-app ::-webkit-scrollbar-thumb:hover {
+  background: #c6cfd8;
+}
+.nx-app {
+  scrollbar-width: thin;
+  scrollbar-color: #d5dce4 transparent;
+}

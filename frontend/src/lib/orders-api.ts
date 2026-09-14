@@ -39,6 +39,9 @@ export interface RawOrder {
   payments: RawPayment[];
   creditEntries: RawCreditEntry[];
   createdAt: string;
+  /** Real cost-of-goods figure the backend already returns on every order — not previously
+   * surfaced in `LiveOrder`, needed for a genuine (not fabricated) "today's profit" KPI. */
+  cogs?: string;
 }
 
 export type LivePaymentMethod = "cash" | "card" | "online" | "credit";
@@ -55,6 +58,7 @@ export interface LiveOrder {
   tax: number;
   discount: number;
   total: number;
+  cogs: number;
   paymentMethod: LivePaymentMethod;
   createdAt: string;
 }
@@ -72,6 +76,7 @@ export function toLiveOrder(raw: RawOrder): LiveOrder {
     tax: Number(raw.tax),
     discount: Number(raw.discount),
     total: Number(raw.total),
+    cogs: Number(raw.cogs ?? 0),
     paymentMethod: raw.payments[0]?.method ?? (raw.creditEntries.some((e) => e.kind === "credit") ? "credit" : "cash"),
     createdAt: raw.createdAt,
   };

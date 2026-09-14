@@ -16,6 +16,9 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+const ROLE_LABEL: Record<string, string> = { owner: "Admin", manager: "Manager", staff: "Staff" };
+
+/** Pixel-exact match: 34px navy avatar + name/role stacked beside it (not hidden behind the trigger). */
 export function UserMenu({ user }: { user: SessionUser }) {
   const router = useRouter();
 
@@ -32,8 +35,17 @@ export function UserMenu({ user }: { user: SessionUser }) {
   return (
     <DropdownMenu>
       <DropdownTrigger>
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-          {initials(user.name)}
+        <span className="flex items-center gap-[9px]">
+          <span
+            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
+            style={{ background: "var(--app-sidebar-bg, #0A1B2A)" }}
+          >
+            {initials(user.name)}
+          </span>
+          <span className="hidden text-start leading-tight sm:block">
+            <span className="block text-[12.5px] font-bold" style={{ color: "var(--app-text, #101828)" }}>{user.name}</span>
+            <span className="block text-[11px]" style={{ color: "var(--app-text-faintest, #667085)" }}>{ROLE_LABEL[user.role] ?? user.role}</span>
+          </span>
         </span>
       </DropdownTrigger>
       <DropdownContent className="w-56" align="end">

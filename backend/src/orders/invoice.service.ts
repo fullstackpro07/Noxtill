@@ -33,10 +33,15 @@ export class InvoiceService {
       }),
     ]);
 
-    // Terminology Engine (UPD-BE-038) — `getArea` already merges real defaults with any real
+    // Terminology Engine (UPD-BE-038) — `getAll` already merges real defaults with any real
     // override, so behavior is byte-for-byte unchanged unless a business has configured one.
-    const terms = await this.terminology.getArea(businessId, 'pdf');
-    const html = this.renderHtml(order, business, terms);
+    // Reads both `pdf` (existing line labels) and `general` (UPD-INT-016 depth fix: the invoice
+    // never actually rendered the word "Customer" anywhere, so relabeling it in Settings had no
+    // real, visible effect on this PDF — the customer's name/phone had no label in front of it).
+    const allTerms = await this.terminology.getAll(businessId);
+    const terms = allTerms.pdf ?? {};
+    const customerLabel = allTerms.general?.customer ?? 'Customer';
+    const html = this.renderHtml(order, business, terms, customerLabel);
     const pdfBuffer = await this.pdfRenderer.renderPdf(html);
 
     const key = `invoices/${businessId}/${order.id}.pdf`;
@@ -74,6 +79,7 @@ export class InvoiceService {
       taxLabel: string;
     },
     terms: Record<string, string>,
+    customerLabel: string,
   ): string {
     const rows = order.items
       .map(
@@ -96,7 +102,7 @@ export class InvoiceService {
           </div>
           <div style="padding:24px;">
             <p><strong>${terms.orderNumber}${order.orderNo}</strong> — ${new Date(order.createdAt).toLocaleDateString()}</p>
-            ${order.customer ? `<p>${order.customer.name} · ${order.customer.phone}</p>` : ''}
+            ${order.customer ? `<p>${customerLabel}: ${order.customer.name} · ${order.customer.phone}</p>` : ''}
             <table style="width:100%; border-collapse:collapse; margin-top:16px;">
               <thead>
                 <tr style="border-bottom:2px solid #D8D0BF;">

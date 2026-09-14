@@ -5,7 +5,7 @@ import type { NightlyCloseHistoryRow } from "@/lib/nightly-close-api";
 export function NightlyCloseTrendChart({ history }: { history: NightlyCloseHistoryRow[] }) {
   const points30d = [...history].reverse();
   if (points30d.length < 2) {
-    return <p className="py-8 text-center text-sm text-fg-faint">Not enough history yet to chart a trend.</p>;
+    return <p className="py-8 text-center text-[13px]" style={{ color: "var(--app-text-faintest)" }}>Not enough history yet to chart a trend.</p>;
   }
 
   const width = 560;
@@ -33,11 +33,11 @@ export function NightlyCloseTrendChart({ history }: { history: NightlyCloseHisto
         role="img"
         aria-label={`Sales trend over the last ${points30d.length} nightly closes`}
       >
-        <path d={areaPath} fill="var(--chart-1)" opacity={0.08} />
-        <path d={linePath} fill="none" stroke="var(--chart-1)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={last.x} cy={last.y} r={4} fill="var(--chart-1)" />
+        <path d={areaPath} fill="var(--app-primary)" opacity={0.1} />
+        <path d={linePath} fill="none" stroke="var(--app-primary)" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={last.x} cy={last.y} r={4} fill="var(--app-primary)" />
       </svg>
-      <div className="mt-1 flex justify-between text-xs text-fg-faint">
+      <div className="mt-1 flex justify-between text-[11.5px]" style={{ color: "var(--app-text-faintest)" }}>
         <span>{formatDate(points30d[0].date)}</span>
         <span>
           {formatDate(points30d[points30d.length - 1].date)} · {points30d[points30d.length - 1].sales} sale(s)

@@ -105,6 +105,11 @@ import {
   Calculator,
   Stamp,
   StickyNote,
+  Brain,
+  Radar,
+  FlaskConical,
+  Stethoscope,
+  Cpu,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -116,20 +121,43 @@ export interface NavChildItem {
   icon: LucideIcon;
 }
 
+export interface NavBadge {
+  /** Static label text (e.g. a live count). Left undefined for items with no badge. */
+  count?: string | number;
+  /** Tailwind-independent color for the badge pill background; defaults to the app's orange accent. */
+  color?: string;
+}
+
 export interface NavItem {
   key: string;
   labelKey: string;
   href: string;
   icon: LucideIcon;
   roles: Role[];
-  /** Rendered indented beneath the parent, expanded only while the parent or one of its children is the active route. */
+  /** Rendered as an in-page tab bar on the module's own page (NOT a sidebar dropdown in the v2 design) — each is its own route. */
   children?: NavChildItem[];
+  /** Live count badge shown at the end of the sidebar row (e.g. Orders, Reviews). */
+  badge?: NavBadge;
+  /** Shows a small "New" pill next to the label. */
+  isNew?: boolean;
+  /** Renders a literal 1px divider line above this item (exact match: height:1px;background:#1D3547;margin:9px 6px). */
+  dividerBefore?: boolean;
+  /** Renders an uppercase section label above this item instead of a line (exact match: the "Business intelligence" header). */
+  sectionLabel?: string;
+  /** Sidebar entry exists but has no page yet (v2 design lists it with no corresponding build) — rendered non-navigable with a "Soon" pill instead of linking anywhere. */
+  disabled?: boolean;
 }
 
-/** 13 top-level items; Staff sees the 8 day-to-day ones, Manager sees 11, Owner sees all 13 (FE-002).
- * labelKey resolves via useTranslation(). Module subscreens are sidebar dropdown children (not
- * in-page tabs) — each is its own route; this is the standing pattern for every module going forward. */
+/**
+ * Sidebar v2 (Sept 2026 redesign) — order and grouping match `Noxtill Sidebar.dc.html` exactly:
+ * Group 1 = core day-to-day modules, Group 2 = growth/channel modules + Unified Inbox, Group 3 =
+ * new AI modules. `labelKey` resolves via useTranslation(). Module subscreens (`children`) are no
+ * longer sidebar dropdowns — each module's own page renders them as an in-page tab bar instead
+ * (see `components/layout/module-tabs.tsx`), but the routes/keys/icons here are unchanged and are
+ * the single source of truth for both the sidebar and each page's tab bar.
+ */
 export const NAV_ITEMS: NavItem[] = [
+  // ---- Group 1 ----
   {
     key: "dashboard",
     labelKey: "nav.dashboard",
@@ -188,20 +216,6 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "categories", labelKey: "nav.categories", href: "/products/categories", icon: Tags },
       { key: "product-import", labelKey: "nav.productImport", href: "/products/import", icon: Upload },
       { key: "product-export", labelKey: "nav.productExport", href: "/products/export", icon: Download },
-    ],
-  },
-  {
-    key: "inventory",
-    labelKey: "nav.inventory",
-    href: "/inventory",
-    icon: Boxes,
-    roles: ["owner", "manager", "staff"],
-    children: [
-      { key: "stock-count", labelKey: "nav.stockCount", href: "/inventory/stock-count", icon: ClipboardCheck },
-      { key: "movements", labelKey: "nav.movements", href: "/inventory/movements", icon: History },
-      { key: "low-stock", labelKey: "nav.lowStock", href: "/inventory/low-stock", icon: AlertTriangle },
-      { key: "purchases", labelKey: "nav.purchases", href: "/inventory/purchases", icon: PackageCheck },
-      { key: "wastage", labelKey: "nav.wastage", href: "/inventory/wastage", icon: Trash2 },
     ],
   },
   {
@@ -284,78 +298,6 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    key: "advertising",
-    labelKey: "nav.advertising",
-    href: "/advertising",
-    icon: Target,
-    roles: ["owner", "manager"],
-    children: [
-      { key: "advertising-accounts", labelKey: "nav.advertisingAccounts", href: "/advertising", icon: Plug },
-      { key: "advertising-campaigns", labelKey: "nav.advertisingCampaigns", href: "/advertising/campaigns", icon: BarChart3 },
-      { key: "advertising-creatives", labelKey: "nav.advertisingCreatives", href: "/advertising/creatives", icon: ImageIcon },
-      { key: "advertising-performance", labelKey: "nav.advertisingPerformance", href: "/advertising/performance", icon: Wallet },
-      { key: "advertising-settings", labelKey: "nav.advertisingSettings", href: "/advertising/settings", icon: Settings2 },
-    ],
-  },
-  {
-    key: "integrations",
-    labelKey: "nav.integrations",
-    href: "/integrations",
-    icon: Plug,
-    roles: ["owner", "manager"],
-    children: [
-      { key: "integrations-directory", labelKey: "nav.integrationsDirectory", href: "/integrations", icon: Plug },
-      { key: "integrations-accounting-ecommerce", labelKey: "nav.integrationsAccountingEcommerce", href: "/integrations/accounting-ecommerce", icon: Calculator },
-      { key: "integrations-automation", labelKey: "nav.integrationsAutomation", href: "/integrations/automation", icon: Zap },
-    ],
-  },
-  {
-    key: "listings",
-    labelKey: "nav.listings",
-    href: "/listings",
-    icon: MapPin,
-    roles: ["owner", "manager"],
-    children: [
-      { key: "listings-google", labelKey: "nav.listingsGoogle", href: "/listings/google", icon: Building2 },
-      { key: "listings-sync", labelKey: "nav.listingsSync", href: "/listings/sync", icon: RefreshCw },
-      { key: "listings-photos", labelKey: "nav.listingsPhotos", href: "/listings/photos", icon: Camera },
-      { key: "listings-settings", labelKey: "nav.listingsSettings", href: "/listings/settings", icon: Sliders },
-    ],
-  },
-  {
-    key: "competitive",
-    labelKey: "nav.competitive",
-    href: "/competitive/visibility-score",
-    icon: Gauge,
-    roles: ["owner", "manager"],
-    children: [
-      { key: "competitive-visibility", labelKey: "nav.competitiveVisibility", href: "/competitive/visibility-score", icon: Gauge },
-      { key: "competitive-opportunities", labelKey: "nav.competitiveOpportunities", href: "/competitive/opportunities", icon: Lightbulb },
-      { key: "competitive-tracking", labelKey: "nav.competitiveTracking", href: "/competitive/tracking", icon: Building2 },
-      { key: "competitive-keywords", labelKey: "nav.competitiveKeywords", href: "/competitive/keywords", icon: Hash },
-      { key: "competitive-heatmap", labelKey: "nav.competitiveHeatmap", href: "/competitive/heatmap", icon: Map },
-    ],
-  },
-  {
-    key: "social",
-    labelKey: "nav.social",
-    href: "/social",
-    icon: Share2,
-    roles: ["owner", "manager"],
-    children: [
-      { key: "social-calendar", labelKey: "nav.socialCalendar", href: "/social/calendar", icon: CalendarRange },
-      { key: "social-create", labelKey: "nav.socialCreate", href: "/social/create", icon: PenSquare },
-      { key: "social-drafts", labelKey: "nav.socialDrafts", href: "/social/drafts", icon: FileEdit },
-      { key: "social-scheduled", labelKey: "nav.socialScheduled", href: "/social/scheduled", icon: CalendarClock },
-      { key: "social-published", labelKey: "nav.socialPublished", href: "/social/published", icon: Rocket },
-      { key: "social-media", labelKey: "nav.socialMedia", href: "/social/media", icon: Images },
-      { key: "social-studio", labelKey: "nav.socialStudio", href: "/social/studio", icon: Wand2 },
-      { key: "social-inbox", labelKey: "nav.socialInbox", href: "/social/inbox", icon: MessageCircle },
-      { key: "social-analytics", labelKey: "nav.socialAnalytics", href: "/social/analytics", icon: BarChart3 },
-      { key: "social-settings", labelKey: "nav.socialSettings", href: "/social/settings", icon: Settings },
-    ],
-  },
-  {
     key: "profit",
     labelKey: "nav.profit",
     href: "/profit",
@@ -368,17 +310,6 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "customer-analytics", labelKey: "nav.customerAnalytics", href: "/profit/customer-analytics", icon: Users },
       { key: "staff-analytics", labelKey: "nav.staffAnalytics", href: "/profit/staff-analytics", icon: BarChart3 },
       { key: "expenses", labelKey: "nav.expenses", href: "/expenses", icon: Receipt },
-    ],
-  },
-  {
-    key: "reports",
-    labelKey: "nav.reports",
-    href: "/reports",
-    icon: FileBarChart,
-    roles: ["owner", "manager"],
-    children: [
-      { key: "scheduled-reports", labelKey: "nav.scheduledReports", href: "/reports/scheduled", icon: Clock },
-      { key: "tax-reports", labelKey: "nav.taxReports", href: "/reports/tax", icon: Percent },
     ],
   },
   {
@@ -409,6 +340,20 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    key: "inventory",
+    labelKey: "nav.inventory",
+    href: "/inventory",
+    icon: Boxes,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "stock-count", labelKey: "nav.stockCount", href: "/inventory/stock-count", icon: ClipboardCheck },
+      { key: "movements", labelKey: "nav.movements", href: "/inventory/movements", icon: History },
+      { key: "low-stock", labelKey: "nav.lowStock", href: "/inventory/low-stock", icon: AlertTriangle },
+      { key: "purchases", labelKey: "nav.purchases", href: "/inventory/purchases", icon: PackageCheck },
+      { key: "wastage", labelKey: "nav.wastage", href: "/inventory/wastage", icon: Trash2 },
+    ],
+  },
+  {
     key: "ai-assistant",
     labelKey: "nav.aiAssistant",
     href: "/assistant/help",
@@ -419,6 +364,107 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "voice", labelKey: "nav.voiceAssistant", href: "/assistant/voice", icon: Mic },
       { key: "history", labelKey: "nav.chatHistory", href: "/assistant/history", icon: MessagesSquare },
       { key: "ai-settings", labelKey: "nav.aiSettings", href: "/assistant/settings", icon: Settings2 },
+    ],
+  },
+  {
+    key: "reports",
+    labelKey: "nav.reports",
+    href: "/reports",
+    icon: FileBarChart,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "scheduled-reports", labelKey: "nav.scheduledReports", href: "/reports/scheduled", icon: Clock },
+      { key: "tax-reports", labelKey: "nav.taxReports", href: "/reports/tax", icon: Percent },
+    ],
+  },
+  { key: "settings", labelKey: "nav.settings", href: "/settings", icon: Settings, roles: ["owner", "manager"] },
+
+  // ---- Group 2 ----
+  {
+    key: "social",
+    labelKey: "nav.social",
+    href: "/social",
+    icon: Share2,
+    roles: ["owner", "manager"],
+    dividerBefore: true,
+    children: [
+      { key: "social-calendar", labelKey: "nav.socialCalendar", href: "/social/calendar", icon: CalendarRange },
+      { key: "social-create", labelKey: "nav.socialCreate", href: "/social/create", icon: PenSquare },
+      { key: "social-drafts", labelKey: "nav.socialDrafts", href: "/social/drafts", icon: FileEdit },
+      { key: "social-scheduled", labelKey: "nav.socialScheduled", href: "/social/scheduled", icon: CalendarClock },
+      { key: "social-published", labelKey: "nav.socialPublished", href: "/social/published", icon: Rocket },
+      { key: "social-media", labelKey: "nav.socialMedia", href: "/social/media", icon: Images },
+      { key: "social-studio", labelKey: "nav.socialStudio", href: "/social/studio", icon: Wand2 },
+      { key: "social-inbox", labelKey: "nav.socialInbox", href: "/social/inbox", icon: MessageCircle },
+      { key: "social-analytics", labelKey: "nav.socialAnalytics", href: "/social/analytics", icon: BarChart3 },
+      { key: "social-settings", labelKey: "nav.socialSettings", href: "/social/settings", icon: Settings },
+    ],
+  },
+  {
+    key: "advertising",
+    labelKey: "nav.advertising",
+    href: "/advertising",
+    icon: Target,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "advertising-accounts", labelKey: "nav.advertisingAccounts", href: "/advertising", icon: Plug },
+      { key: "advertising-campaigns", labelKey: "nav.advertisingCampaigns", href: "/advertising/campaigns", icon: BarChart3 },
+      { key: "advertising-creatives", labelKey: "nav.advertisingCreatives", href: "/advertising/creatives", icon: ImageIcon },
+      { key: "advertising-performance", labelKey: "nav.advertisingPerformance", href: "/advertising/performance", icon: Wallet },
+      { key: "advertising-settings", labelKey: "nav.advertisingSettings", href: "/advertising/settings", icon: Settings2 },
+    ],
+  },
+  {
+    key: "listings",
+    labelKey: "nav.listings",
+    href: "/listings",
+    icon: MapPin,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "listings-google", labelKey: "nav.listingsGoogle", href: "/listings/google", icon: Building2 },
+      { key: "listings-sync", labelKey: "nav.listingsSync", href: "/listings/sync", icon: RefreshCw },
+      { key: "listings-photos", labelKey: "nav.listingsPhotos", href: "/listings/photos", icon: Camera },
+      { key: "listings-settings", labelKey: "nav.listingsSettings", href: "/listings/settings", icon: Sliders },
+    ],
+  },
+  {
+    key: "competitive",
+    labelKey: "nav.competitive",
+    href: "/competitive/visibility-score",
+    icon: Gauge,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "competitive-visibility", labelKey: "nav.competitiveVisibility", href: "/competitive/visibility-score", icon: Gauge },
+      { key: "competitive-opportunities", labelKey: "nav.competitiveOpportunities", href: "/competitive/opportunities", icon: Lightbulb },
+      { key: "competitive-tracking", labelKey: "nav.competitiveTracking", href: "/competitive/tracking", icon: Building2 },
+      { key: "competitive-keywords", labelKey: "nav.competitiveKeywords", href: "/competitive/keywords", icon: Hash },
+      { key: "competitive-heatmap", labelKey: "nav.competitiveHeatmap", href: "/competitive/heatmap", icon: Map },
+    ],
+  },
+  {
+    key: "receptionist",
+    labelKey: "nav.receptionist",
+    href: "/receptionist",
+    icon: PhoneCall,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "receptionist-overview", labelKey: "nav.receptionistOverview", href: "/receptionist", icon: PhoneCall },
+      { key: "receptionist-missed", labelKey: "nav.receptionistMissed", href: "/receptionist/missed-calls", icon: PhoneMissed },
+      { key: "receptionist-queue", labelKey: "nav.receptionistQueue", href: "/receptionist/queue", icon: Inbox },
+      { key: "receptionist-analytics", labelKey: "nav.receptionistAnalytics", href: "/receptionist/analytics", icon: BarChart3 },
+      { key: "receptionist-settings", labelKey: "nav.receptionistSettings", href: "/receptionist/settings", icon: Settings2 },
+    ],
+  },
+  {
+    key: "digitizer",
+    labelKey: "nav.digitizer",
+    href: "/digitizer",
+    icon: ScanLine,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "digitizer-scanner", labelKey: "nav.digitizerScanner", href: "/digitizer", icon: Camera },
+      { key: "digitizer-history", labelKey: "nav.digitizerHistory", href: "/digitizer/history", icon: History },
+      { key: "digitizer-settings", labelKey: "nav.digitizerSettings", href: "/digitizer/settings", icon: Settings2 },
     ],
   },
   {
@@ -436,32 +482,72 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    key: "digitizer",
-    labelKey: "nav.digitizer",
-    href: "/digitizer",
-    icon: ScanLine,
-    roles: ["owner", "manager", "staff"],
+    key: "integrations",
+    labelKey: "nav.integrations",
+    href: "/integrations",
+    icon: Plug,
+    roles: ["owner", "manager"],
     children: [
-      { key: "digitizer-scanner", labelKey: "nav.digitizerScanner", href: "/digitizer", icon: Camera },
-      { key: "digitizer-history", labelKey: "nav.digitizerHistory", href: "/digitizer/history", icon: History },
-      { key: "digitizer-settings", labelKey: "nav.digitizerSettings", href: "/digitizer/settings", icon: Settings2 },
+      { key: "integrations-directory", labelKey: "nav.integrationsDirectory", href: "/integrations", icon: Plug },
+      { key: "integrations-accounting-ecommerce", labelKey: "nav.integrationsAccountingEcommerce", href: "/integrations/accounting-ecommerce", icon: Calculator },
+      { key: "integrations-automation", labelKey: "nav.integrationsAutomation", href: "/integrations/automation", icon: Zap },
     ],
   },
   {
-    key: "receptionist",
-    labelKey: "nav.receptionist",
-    href: "/receptionist",
-    icon: PhoneCall,
+    key: "unified-inbox",
+    labelKey: "nav.unifiedInbox",
+    href: "/unified-inbox",
+    icon: Inbox,
     roles: ["owner", "manager", "staff"],
-    children: [
-      { key: "receptionist-overview", labelKey: "nav.receptionistOverview", href: "/receptionist", icon: PhoneCall },
-      { key: "receptionist-missed", labelKey: "nav.receptionistMissed", href: "/receptionist/missed-calls", icon: PhoneMissed },
-      { key: "receptionist-queue", labelKey: "nav.receptionistQueue", href: "/receptionist/queue", icon: Inbox },
-      { key: "receptionist-analytics", labelKey: "nav.receptionistAnalytics", href: "/receptionist/analytics", icon: BarChart3 },
-      { key: "receptionist-settings", labelKey: "nav.receptionistSettings", href: "/receptionist/settings", icon: Settings2 },
-    ],
+    isNew: true,
   },
-  { key: "settings", labelKey: "nav.settings", href: "/settings", icon: Settings, roles: ["owner", "manager"] },
+
+  // ---- Group 3 (all new AI modules) ----
+  {
+    key: "business-brain",
+    labelKey: "nav.businessBrain",
+    href: "/business-brain",
+    icon: Brain,
+    roles: ["owner", "manager"],
+    sectionLabel: "Business intelligence",
+    isNew: true,
+  },
+  {
+    key: "opportunity-radar",
+    labelKey: "nav.opportunityRadar",
+    href: "/opportunity-radar",
+    icon: Radar,
+    roles: ["owner", "manager"],
+    isNew: true,
+    disabled: true,
+  },
+  {
+    key: "business-simulator",
+    labelKey: "nav.businessSimulator",
+    href: "/business-simulator",
+    icon: FlaskConical,
+    roles: ["owner", "manager"],
+    isNew: true,
+    disabled: true,
+  },
+  {
+    key: "diagnosis-center",
+    labelKey: "nav.diagnosisCenter",
+    href: "/diagnosis-center",
+    icon: Stethoscope,
+    roles: ["owner", "manager"],
+    isNew: true,
+    disabled: true,
+  },
+  {
+    key: "digital-twin",
+    labelKey: "nav.digitalTwin",
+    href: "/digital-twin",
+    icon: Cpu,
+    roles: ["owner", "manager"],
+    isNew: true,
+    disabled: true,
+  },
 ];
 
 export function navItemsForRole(role: Role): NavItem[] {

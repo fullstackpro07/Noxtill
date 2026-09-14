@@ -156,6 +156,12 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.chatHistory": "Chat History",
     "nav.aiSettings": "AI Settings",
     "nav.settings": "Settings",
+    "nav.unifiedInbox": "Unified Inbox",
+    "nav.businessBrain": "Business Brain",
+    "nav.opportunityRadar": "Opportunity Radar",
+    "nav.businessSimulator": "Business Simulator",
+    "nav.diagnosisCenter": "Diagnosis Center",
+    "nav.digitalTwin": "Digital Twin",
 
     "topbar.searchPlaceholder": "Search customers, orders…",
     "topbar.openMenu": "Open menu",

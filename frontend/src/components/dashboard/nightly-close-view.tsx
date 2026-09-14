@@ -1,44 +1,78 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Moon, Eye, Send, Settings2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { Moon, Eye, Send } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorBanner } from "@/components/shared/error-states";
-import { SkeletonRow } from "@/components/shared/skeleton";
 import { useSession } from "@/lib/session";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { NightlyCloseTrendChart } from "./nightly-close-trend-chart";
 import {
   fetchNightlyCloseHistory,
+  fetchNightlyCloseSettings,
   previewNightlyClose,
   sendNightlyCloseTest,
-  type NightlyClosePreview,
+  type NightlyCloseHistoryRow,
 } from "@/lib/nightly-close-api";
+import { SlideDrawer } from "./slide-drawer";
+import { NightlyCloseTimeModal } from "./nightly-close-time-modal";
+import { NightlyCloseCustomLineModal } from "./nightly-close-custom-line-modal";
+import { NightlyCloseChannelDrawer } from "./nightly-close-channel-drawer";
+import { NightlyCloseVoiceDrawer } from "./nightly-close-voice-drawer";
+import { NightlyCloseSectionsDrawer } from "./nightly-close-sections-drawer";
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const outlineBtnStyle: React.CSSProperties = {
+  border: "1px solid var(--app-border)",
+  borderRadius: 10,
+  padding: "9px 14px",
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "var(--app-text-muted)",
+  background: "var(--app-surface)",
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const selectStyle: React.CSSProperties = {
+  border: "1px solid var(--app-border)",
+  borderRadius: 9,
+  padding: "7px 10px",
+  fontSize: 12,
+  fontWeight: 600,
+  color: "var(--app-text-muted)",
+  background: "var(--app-surface)",
+};
+
+function to12Hour(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+type Panel = "time" | "customLine" | "channel" | "voice" | "sections" | "preview" | null;
 
 export function NightlyCloseView() {
   const session = useSession();
   const queryClient = useQueryClient();
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [rangeDays, setRangeDays] = useState<7 | 30 | 90>(30);
+  const [statusFilter, setStatusFilter] = useState<"all" | NightlyCloseHistoryRow["deliveryStatus"]>("all");
+
+  const { data: settings } = useQuery({ queryKey: ["nightly-close-settings"], queryFn: fetchNightlyCloseSettings });
 
   const { data: history, isPending, isError, refetch } = useQuery({
-    queryKey: ["nightly-close-history"],
-    queryFn: () => fetchNightlyCloseHistory({ from: new Date(Date.now() - THIRTY_DAYS_MS).toISOString().slice(0, 10) }),
+    queryKey: ["nightly-close-history", rangeDays],
+    queryFn: () => fetchNightlyCloseHistory({ from: new Date(Date.now() - rangeDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) }),
   });
 
   const previewQuery = useQuery({
     queryKey: ["nightly-close-preview"],
     queryFn: previewNightlyClose,
-    enabled: previewOpen,
+    enabled: panel === "preview",
   });
 
   const testSendMutation = useMutation({
@@ -51,6 +85,11 @@ export function NightlyCloseView() {
       toast.error(err instanceof ApiError ? err.message : "Couldn't send the test close — please try again.");
     },
   });
+
+  const filteredHistory = useMemo(() => {
+    if (!history) return history;
+    return statusFilter === "all" ? history : history.filter((h) => h.deliveryStatus === statusFilter);
+  }, [history, statusFilter]);
 
   const stats = useMemo(() => {
     if (!history || history.length === 0) return null;
@@ -65,155 +104,227 @@ export function NightlyCloseView() {
   }, [history]);
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Moon className="h-4 w-4 text-fg-muted" aria-hidden />
-            <CardTitle>Nightly Close</CardTitle>
-            {stats && <Badge tone={stats.lastStatus === "sent" ? "success" : "danger"}>{stats.lastStatus === "sent" ? "Delivering" : "Last send failed"}</Badge>}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
-              <Eye className="h-3.5 w-3.5" aria-hidden />
-              Preview tonight&apos;s close
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => testSendMutation.mutate()} disabled={testSendMutation.isPending}>
-              <Send className="h-3.5 w-3.5" aria-hidden />
-              {testSendMutation.isPending ? "Sending…" : "Send test now"}
-            </Button>
-            {session.user.role === "owner" && (
-              <Link href="/settings/nightly-close">
-                <Button variant="ghost" size="sm">
-                  <Settings2 className="h-3.5 w-3.5" aria-hidden />
-                  Manage settings
-                </Button>
-              </Link>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <Moon className="h-4 w-4" style={{ color: "var(--app-text-faint)" }} aria-hidden />
+            <h2 className="text-[19px] font-extrabold tracking-tight" style={{ color: "var(--app-text)" }}>Nightly Close</h2>
+            {settings && (
+              <span className="rounded-full px-2.5 py-1 text-[11.5px] font-bold" style={{ background: "var(--app-success-bg)", color: "var(--app-success-text)" }}>
+                Scheduled · Sends at {to12Hour(settings.time)}
+              </span>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {stats ? (
-            <>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard label="Last sent" value={formatDate(stats.lastSent)} />
-                <StatCard label="Delivery status" value={stats.lastStatus === "sent" ? "Sent" : "Failed"} />
-                <StatCard label="Success rate (30 days)" value={`${stats.successRate}%`} />
-                <StatCard label="Channel" value={stats.channel} />
+          <p className="mt-[5px] text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>A daily wrap of your business, delivered to you every night.</p>
+        </div>
+        <div className="ms-auto flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setPanel("customLine")} style={outlineBtnStyle}>Add custom line</button>
+          <button type="button" onClick={() => setPanel("time")} style={outlineBtnStyle}>Change time</button>
+          <button type="button" onClick={() => setPanel("sections")} style={outlineBtnStyle}>Customize Report</button>
+          <button type="button" onClick={() => setPanel("channel")} style={outlineBtnStyle}>Change Channel</button>
+          <button type="button" onClick={() => setPanel("voice")} style={outlineBtnStyle}>Voice Note</button>
+          <button type="button" onClick={() => testSendMutation.mutate()} disabled={testSendMutation.isPending} style={{ ...outlineBtnStyle, opacity: testSendMutation.isPending ? 0.6 : 1 }}>
+            <Send className="h-3.5 w-3.5" aria-hidden />
+            {testSendMutation.isPending ? "Sending…" : "Send test now"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPanel("preview")}
+            className="flex items-center gap-1.5 rounded-[10px] px-4 py-[9px] text-[12.5px] font-bold text-white"
+            style={{ background: "var(--app-primary)" }}
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden />
+            Preview tonight&apos;s close
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-[14px] p-[18px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        {stats ? (
+          <>
+            <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+              <StatCard label="Last sent" value={formatDate(stats.lastSent)} />
+              <StatCard label="Delivery status" value={stats.lastStatus === "sent" ? "Sent" : "Failed"} />
+              <StatCard label="Success rate (30 days)" value={`${stats.successRate}%`} />
+              <StatCard label="Channel used" value={stats.channel} />
+            </div>
+            {history && (
+              <div className="mt-4">
+                <p className="mb-2 text-[13px] font-bold" style={{ color: "var(--app-text)" }}>Nightly sales trend — 30 days</p>
+                <NightlyCloseTrendBars history={history} />
               </div>
-              {history && (
-                <div className="mt-4">
-                  <p className="mb-2 text-xs font-medium text-fg-muted">Sales trend (30 days)</p>
-                  <NightlyCloseTrendChart history={history} />
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-fg-muted">No history yet — your first Nightly Close sends tonight.</p>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </>
+        ) : (
+          <p className="text-[13px]" style={{ color: "var(--app-text-faintest)" }}>No history yet — your first Nightly Close sends tonight.</p>
+        )}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>History</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isPending && (
-            <div className="flex flex-col gap-1 p-4">
-              <SkeletonRow />
-              <SkeletonRow />
-              <SkeletonRow />
-            </div>
-          )}
-          {isError && (
-            <div className="p-4">
-              <ErrorBanner title="Couldn't load Nightly Close history" onRetry={() => refetch()} />
-            </div>
-          )}
-          {history && history.length === 0 && (
-            <EmptyState icon={Moon} title="Your first Nightly Close sends tonight" description="A daily summary of sales, profit, reviews and bookings, delivered automatically." />
-          )}
-          {history && history.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-fg-faint">
-                    <th className="px-5 py-2 font-medium">Date</th>
-                    <th className="px-5 py-2 text-end font-medium">Sales</th>
-                    <th className="px-5 py-2 text-end font-medium">Profit</th>
-                    <th className="px-5 py-2 text-end font-medium">Reviews</th>
-                    <th className="px-5 py-2 text-end font-medium">Bookings tomorrow</th>
-                    <th className="px-5 py-2 text-end font-medium">Credit recovered</th>
-                    <th className="px-5 py-2 font-medium">Delivery</th>
+      <div className="rounded-[14px] overflow-hidden" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        <div className="flex flex-wrap items-center gap-2.5 p-[14px_18px]" style={{ borderBottom: "1px solid var(--app-surface-2)" }}>
+          <h3 className="text-[15px] font-bold" style={{ color: "var(--app-text)" }}>Close history</h3>
+          <div className="ms-auto flex flex-wrap items-center gap-2">
+            <select value={rangeDays} onChange={(e) => setRangeDays(Number(e.target.value) as 7 | 30 | 90)} style={selectStyle} aria-label="Date range">
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} style={selectStyle} aria-label="Delivery status">
+              <option value="all">All</option>
+              <option value="sent">Sent</option>
+              <option value="failed">Failed</option>
+            </select>
+            <button type="button" onClick={() => setPanel("sections")} style={selectStyle}>Reorder sections</button>
+          </div>
+        </div>
+        {isPending && (
+          <div className="flex flex-col gap-2 p-4">
+            {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 animate-pulse rounded-[10px]" style={{ background: "var(--app-surface-2)" }} />)}
+          </div>
+        )}
+        {isError && (
+          <div className="p-4">
+            <ErrorBanner title="Couldn't load Nightly Close history" onRetry={() => refetch()} />
+          </div>
+        )}
+        {filteredHistory && filteredHistory.length === 0 && (
+          <EmptyState icon={Moon} title="Your first Nightly Close sends tonight" description="A daily summary of sales, profit, reviews and bookings, delivered automatically." />
+        )}
+        {filteredHistory && filteredHistory.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr style={{ background: "var(--app-surface-2)" }}>
+                  <th className="px-[18px] py-2.5 text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Date</th>
+                  <th className="px-2.5 py-2.5 text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Sales</th>
+                  <th className="px-2.5 py-2.5 text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Profit</th>
+                  <th className="px-2.5 py-2.5 text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Reviews</th>
+                  <th className="px-2.5 py-2.5 text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Bookings tomorrow</th>
+                  <th className="px-2.5 py-2.5 text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Credit recovered</th>
+                  <th className="px-[18px] py-2.5 text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Delivery</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistory.map((row) => (
+                  <tr key={row.date} style={{ borderTop: "1px solid var(--app-surface-2)" }}>
+                    <td className="px-[18px] py-2.5 font-semibold" style={{ color: "var(--app-text-muted)" }}>{formatDate(row.date)}</td>
+                    <td className="px-2.5 py-2.5 text-end tabular-nums" style={{ color: "var(--app-text)" }}>{row.sales}</td>
+                    <td className="px-2.5 py-2.5 text-end tabular-nums" style={{ color: "var(--app-text)" }}>{formatCurrency(row.profit, session.business.currency)}</td>
+                    <td className="px-2.5 py-2.5 text-end tabular-nums" style={{ color: "var(--app-text)" }}>{row.newReviews}</td>
+                    <td className="px-2.5 py-2.5 text-end tabular-nums" style={{ color: "var(--app-text)" }}>{row.bookingsTomorrow}</td>
+                    <td className="px-2.5 py-2.5 text-end tabular-nums" style={{ color: "var(--app-text)" }}>{formatCurrency(row.creditRecovered, session.business.currency)}</td>
+                    <td className="px-[18px] py-2.5">
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10.5px] font-bold"
+                        style={
+                          row.deliveryStatus === "sent"
+                            ? { background: "var(--app-success-bg)", color: "var(--app-success-text)" }
+                            : { background: "#FEE4E2", color: "var(--app-danger-strong)" }
+                        }
+                      >
+                        {row.deliveryStatus}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {history.map((row) => (
-                    <tr key={row.date}>
-                      <td className="px-5 py-2.5 text-fg-muted">{formatDate(row.date)}</td>
-                      <td className="px-5 py-2.5 text-end tabular-nums text-fg">{row.sales}</td>
-                      <td className="px-5 py-2.5 text-end tabular-nums text-fg">{formatCurrency(row.profit, session.business.currency)}</td>
-                      <td className="px-5 py-2.5 text-end tabular-nums text-fg">{row.newReviews}</td>
-                      <td className="px-5 py-2.5 text-end tabular-nums text-fg">{row.bookingsTomorrow}</td>
-                      <td className="px-5 py-2.5 text-end tabular-nums text-fg">{formatCurrency(row.creditRecovered, session.business.currency)}</td>
-                      <td className="px-5 py-2.5">
-                        <Badge tone={row.deliveryStatus === "sent" ? "success" : "danger"}>{row.deliveryStatus}</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-      <PreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} data={previewQuery.data} isPending={previewQuery.isPending} currency={session.business.currency} />
+      <NightlyCloseTimeModal open={panel === "time"} onClose={() => setPanel(null)} current={settings} />
+      <NightlyCloseCustomLineModal open={panel === "customLine"} onClose={() => setPanel(null)} current={settings} />
+      <NightlyCloseChannelDrawer open={panel === "channel"} onClose={() => setPanel(null)} current={settings} />
+      <NightlyCloseVoiceDrawer open={panel === "voice"} onClose={() => setPanel(null)} current={settings} />
+      <NightlyCloseSectionsDrawer open={panel === "sections"} onClose={() => setPanel(null)} current={settings} />
+
+      <SlideDrawer open={panel === "preview"} onClose={() => setPanel(null)} title="Tonight's Nightly Close">
+        {previewQuery.isPending && <div className="h-24 animate-pulse rounded-[10px]" style={{ background: "var(--app-surface-2)" }} />}
+        {previewQuery.data && (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-[14px] p-4" style={{ background: "var(--app-sidebar-bg)" }}>
+              <p className="text-[11.5px] font-bold" style={{ color: "#8FF0BB" }}>
+                Nightly Close · {settings ? to12Hour(settings.time) : ""}
+              </p>
+              <p className="mt-1 text-[17px] font-extrabold text-white">{previewQuery.data.businessName} — daily wrap</p>
+            </div>
+            <PreviewRow label="Orders" value={String(previewQuery.data.ordersCount)} />
+            <PreviewRow label="Revenue" value={formatCurrency(previewQuery.data.revenue, session.business.currency)} />
+            <PreviewRow label="Gross profit" value={formatCurrency(previewQuery.data.grossProfit, session.business.currency)} />
+            <PreviewRow label="Bookings tomorrow" value={String(previewQuery.data.appointmentsTomorrowCount)} />
+            <PreviewRow label="New reviews" value={String(previewQuery.data.newReviewsCount)} />
+            <PreviewRow label="Credit recovered today" value={formatCurrency(previewQuery.data.creditPaymentsTodayTotal, session.business.currency)} last />
+            {previewQuery.data.lowStockProducts.length > 0 && (
+              <p className="text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>{previewQuery.data.lowStockProducts.length} low-stock item(s) will be flagged.</p>
+            )}
+            {settings?.config.voiceNoteEnabled && (
+              <div className="rounded-[12px] p-[14px]" style={{ background: "var(--app-success-bg)", border: "1px solid var(--app-success-border)" }}>
+                <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>Voice note attached — a spoken summary will be sent alongside this close.</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPanel("channel")}
+                className="flex-1 rounded-[10px] py-[10px] text-[12.5px] font-semibold"
+                style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}
+              >
+                Change Channel
+              </button>
+              <button
+                type="button"
+                onClick={() => testSendMutation.mutate()}
+                disabled={testSendMutation.isPending}
+                className="flex-1 rounded-[10px] py-[10px] text-[12.5px] font-bold text-white disabled:opacity-60"
+                style={{ background: "var(--app-primary)" }}
+              >
+                {testSendMutation.isPending ? "Sending…" : "Send test now"}
+              </button>
+            </div>
+          </div>
+        )}
+      </SlideDrawer>
     </div>
   );
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface-2/40 px-3.5 py-2.5">
-      <p className="font-display text-lg font-bold text-fg">{value}</p>
-      <p className="text-xs text-fg-muted">{label}</p>
+    <div className="rounded-[12px] px-3.5 py-2.5" style={{ background: "var(--app-surface-2)" }}>
+      <p className="text-[16px] font-bold" style={{ color: "var(--app-text)" }}>{value}</p>
+      <p className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>{label}</p>
     </div>
   );
 }
 
-function PreviewDialog({
-  open,
-  onClose,
-  data,
-  isPending,
-  currency,
-}: {
-  open: boolean;
-  onClose: () => void;
-  data?: NightlyClosePreview;
-  isPending: boolean;
-  currency: string;
-}) {
+function PreviewRow({ label, value, last }: { label: string; value: string; last?: boolean }) {
   return (
-    <Dialog open={open} onClose={onClose} title="Tonight's close preview">
-      {isPending && <SkeletonRow />}
-      {data && (
-        <div className="flex flex-col gap-3 text-sm">
-          <p className="text-fg-muted">{data.dateLabel}</p>
-          <div className="grid grid-cols-2 gap-2">
-            <StatCard label="Orders" value={String(data.ordersCount)} />
-            <StatCard label="Revenue" value={formatCurrency(data.revenue, currency)} />
-            <StatCard label="Gross profit" value={formatCurrency(data.grossProfit, currency)} />
-            <StatCard label="Bookings tomorrow" value={String(data.appointmentsTomorrowCount)} />
-          </div>
-          {data.lowStockProducts.length > 0 && (
-            <p className="text-xs text-fg-faint">{data.lowStockProducts.length} low-stock item(s) will be flagged.</p>
-          )}
-        </div>
-      )}
-    </Dialog>
+    <div className="flex justify-between p-[10px_0]" style={{ borderBottom: last ? "none" : "1px solid var(--app-surface-2)" }}>
+      <span className="text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>{label}</span>
+      <span className="text-[12.5px] font-bold" style={{ color: "var(--app-text)" }}>{value}</span>
+    </div>
   );
 }
 
+/** Bar-style trend, matching the design's exact chart type (not a line) — real 30-day sales counts. */
+function NightlyCloseTrendBars({ history }: { history: NightlyCloseHistoryRow[] }) {
+  const points = [...history].reverse();
+  if (points.length < 2) {
+    return <p className="py-8 text-center text-[13px]" style={{ color: "var(--app-text-faintest)" }}>Not enough history yet to chart a trend.</p>;
+  }
+  const max = Math.max(...points.map((p) => p.sales), 1);
+  return (
+    <div className="flex h-[150px] items-end gap-1">
+      {points.map((p, i) => (
+        <div key={p.date} className="group relative flex h-full flex-1 flex-col items-center justify-end" title={`${formatDate(p.date)} — ${p.sales} sale(s)`}>
+          <div
+            className="w-full rounded-t-[4px]"
+            style={{ height: `${Math.max(2, (p.sales / max) * 100)}%`, background: i === points.length - 1 ? "var(--app-primary-hover)" : "var(--app-success-border)" }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -12,6 +12,10 @@ class FakeClsService {
   }
 }
 
+// The processor's unscoped `business.findMany()` scans the whole shared test DB;
+// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+jest.setTimeout(20000);
+
 describe('HealthScoreSnapshotProcessor (UPD-BE-001)', () => {
   let prisma: PrismaService;
   let processor: HealthScoreSnapshotProcessor;

@@ -16,11 +16,9 @@ import {
   Pause,
   Play,
   ArrowDown,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PermissionLockCard } from "@/components/shared/permission-lock-card";
@@ -31,7 +29,7 @@ import { fetchStaffList } from "@/lib/staff-api";
 import { formatCurrency, formatRelativeTime, formatDate, formatTime } from "@/lib/format";
 import { ACTIVITY_EVENT_TYPE_LABEL, fetchOpenTablesCount, type ActivityEventType, type LiveActivityEvent } from "@/lib/activity-api";
 
-const TYPE_ICON: Record<ActivityEventType, LucideIcon> = {
+export const TYPE_ICON: Record<ActivityEventType, LucideIcon> = {
   sale: ShoppingCart,
   booking: Calendar,
   review: Star,
@@ -44,7 +42,7 @@ const TYPE_ICON: Record<ActivityEventType, LucideIcon> = {
   birthday: Cake,
 };
 
-const TYPE_TINT: Record<ActivityEventType, string> = {
+export const TYPE_TINT: Record<ActivityEventType, string> = {
   sale: "bg-whatsapp/12 text-whatsapp",
   booking: "bg-primary/10 text-primary",
   review: "bg-accent/20 text-accent-foreground",
@@ -104,75 +102,100 @@ export function LiveActivityFeed() {
 
   if (session.user.role === "staff") {
     return (
-      <Card>
-        <CardContent>
-          <PermissionLockCard description="Live activity is limited to owners and managers." />
-        </CardContent>
-      </Card>
+      <div className="rounded-[14px] p-5" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        <PermissionLockCard description="Live activity is limited to owners and managers." />
+      </div>
     );
   }
 
+  const selectStyle: React.CSSProperties = {
+    border: "1px solid var(--app-border)",
+    borderRadius: 9,
+    padding: "7px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--app-text-muted)",
+    background: "var(--app-surface)",
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle>Live activity</CardTitle>
-          <ConnectionDot status={status} />
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <h2 className="text-[19px] font-extrabold tracking-tight" style={{ color: "var(--app-text)" }}>Live Activity</h2>
+          <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>Real-time event stream from every module.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as ActivityEventType | "all")}
-            className="w-40"
-            aria-label="Filter by event type"
+        <ConnectionPill status={status} />
+        <div className="ms-auto flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={togglePause}
+            className="flex items-center gap-1.5 rounded-[10px] px-3.5 py-2 text-[12.5px] font-semibold"
+            style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)", background: "var(--app-surface)" }}
           >
-            <option value="all">All types</option>
-            {(Object.keys(ACTIVITY_EVENT_TYPE_LABEL) as ActivityEventType[]).map((type) => (
-              <option key={type} value={type}>
-                {ACTIVITY_EVENT_TYPE_LABEL[type]}
-              </option>
-            ))}
-          </Select>
-          {staff && staff.length > 0 && (
-            <Select value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} className="w-36" aria-label="Filter by staff">
-              <option value="all">All staff</option>
-              {staff.map((s) => (
-                <option key={s.userId} value={s.userId}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          )}
-          <Button variant="outline" size="sm" onClick={togglePause}>
             {paused ? <Play className="h-3.5 w-3.5" aria-hidden /> : <Pause className="h-3.5 w-3.5" aria-hidden />}
             {paused ? "Resume" : "Pause"}
-          </Button>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPaused(false);
+              setPausedAt(null);
+            }}
+            className="rounded-[10px] px-4 py-2 text-[12.5px] font-bold text-white"
+            style={{ background: "var(--app-primary)" }}
+          >
+            Jump to now
+          </button>
         </div>
-      </CardHeader>
-
-      <div className="flex gap-4 border-b border-border px-5 pb-4 text-sm text-fg-muted">
-        <span>
-          <span className="font-semibold tabular-nums text-fg">{eventsLastHour}</span> events last hour
-        </span>
-        <span>
-          <span className="font-semibold tabular-nums text-fg">{activeStaffLastHour}</span> active staff
-        </span>
-        <span>
-          <span className="font-semibold tabular-nums text-fg">{openTables?.count ?? "—"}</span> open tables
-        </span>
       </div>
 
-      {paused && pendingCount > 0 && (
-        <button
-          onClick={togglePause}
-          className="flex w-full items-center justify-center gap-1.5 border-b border-border bg-primary/6 py-2 text-xs font-medium text-primary hover:bg-primary/10"
-        >
-          <ArrowDown className="h-3.5 w-3.5" aria-hidden />
-          {pendingCount} new event{pendingCount === 1 ? "" : "s"} — Jump to now
-        </button>
-      )}
+      <div className="grid grid-cols-3 gap-3.5">
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <p className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Events last hour</p>
+          <p className="mt-1.5 text-[23px] font-extrabold tabular-nums" style={{ color: "var(--app-text)" }}>{eventsLastHour}</p>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <p className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Active staff</p>
+          <p className="mt-1.5 text-[23px] font-extrabold tabular-nums" style={{ color: "var(--app-text)" }}>{activeStaffLastHour}</p>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <p className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Open tables</p>
+          <p className="mt-1.5 text-[23px] font-extrabold tabular-nums" style={{ color: "var(--app-text)" }}>{openTables?.count ?? "—"}</p>
+        </div>
+      </div>
 
-      <CardContent className="p-0">
+      <div className="rounded-[14px] overflow-hidden" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        <div className="flex flex-wrap items-center gap-2.5 p-[14px_18px]" style={{ borderBottom: "1px solid var(--app-surface-2)" }}>
+          <h3 className="text-[15px] font-bold" style={{ color: "var(--app-text)" }}>Event stream</h3>
+          <div className="ms-auto flex flex-wrap items-center gap-2">
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as ActivityEventType | "all")} style={selectStyle} aria-label="Filter by event type">
+              <option value="all">All types</option>
+              {(Object.keys(ACTIVITY_EVENT_TYPE_LABEL) as ActivityEventType[]).map((type) => (
+                <option key={type} value={type}>{ACTIVITY_EVENT_TYPE_LABEL[type]}</option>
+              ))}
+            </select>
+            {staff && staff.length > 0 && (
+              <select value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} style={selectStyle} aria-label="Filter by staff">
+                <option value="all">All staff</option>
+                {staff.map((s) => (
+                  <option key={s.userId} value={s.userId}>{s.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+        {paused && pendingCount > 0 && (
+          <button
+            onClick={togglePause}
+            className="flex w-full items-center justify-center gap-1.5 py-2 text-[12px] font-semibold"
+            style={{ borderBottom: "1px solid var(--app-border)", background: "var(--app-success-bg)", color: "var(--app-primary)" }}
+          >
+            <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+            {pendingCount} new event{pendingCount === 1 ? "" : "s"} — Jump to now
+          </button>
+        )}
+
         {filtered.length === 0 ? (
           <EmptyState
             icon={Calendar}
@@ -180,7 +203,7 @@ export function LiveActivityFeed() {
             description={events.length === 0 ? "Real sales, bookings, reviews and more will stream in here as they happen." : undefined}
           />
         ) : (
-          <ul className="max-h-105 divide-y divide-border overflow-y-auto">
+          <ul className="max-h-[520px] overflow-y-auto">
             {filtered.map((event) => (
               <ActivityRow
                 key={event.id}
@@ -193,7 +216,7 @@ export function LiveActivityFeed() {
             ))}
           </ul>
         )}
-      </CardContent>
+      </div>
 
       <EventDetailDialog
         event={detailEvent}
@@ -201,16 +224,19 @@ export function LiveActivityFeed() {
         actorName={detailEvent?.actorUserId ? staffNameByUserId.get(detailEvent.actorUserId) : undefined}
         onClose={() => setDetailEvent(null)}
       />
-    </Card>
+    </div>
   );
 }
 
-function ConnectionDot({ status }: { status: "connecting" | "open" | "closed" }) {
+function ConnectionPill({ status }: { status: "connecting" | "open" | "closed" }) {
   const label = status === "open" ? "Live" : status === "connecting" ? "Connecting…" : "Reconnecting…";
-  const dotColor = status === "open" ? "bg-whatsapp" : "bg-accent";
+  const color = status === "open" ? "var(--app-primary)" : "var(--app-warning-text)";
   return (
-    <span className="flex items-center gap-1.5 text-xs text-fg-faint">
-      <span className={`h-1.5 w-1.5 rounded-full ${dotColor} ${status === "open" ? "animate-pulse" : ""}`} aria-hidden />
+    <span
+      className="flex items-center gap-2 rounded-full px-[13px] py-[7px] text-[11.5px] font-bold"
+      style={{ border: "1px solid var(--app-border)", background: "var(--app-surface)", color }}
+    >
+      <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: color }} aria-hidden />
       {label}
     </span>
   );
@@ -231,19 +257,23 @@ function ActivityRow({
 }) {
   const Icon = TYPE_ICON[event.type];
   return (
-    <li>
-      <button onClick={onOpenDetail} className="flex w-full items-start gap-3 px-5 py-3 text-start hover:bg-surface-2">
-        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${TYPE_TINT[event.type]}`}>
+    <li style={{ borderTop: "1px solid var(--app-surface-2)" }} className="first:border-t-0">
+      <button onClick={onOpenDetail} className="flex w-full items-center gap-3 px-[18px] py-3 text-start">
+        <span className="w-[68px] shrink-0 text-[11.5px] font-bold" style={{ color: "var(--app-text-disabled)" }}>
+          {formatRelativeTime(now - new Date(event.createdAt).getTime())}
+        </span>
+        <span className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] ${TYPE_TINT[event.type]}`}>
           <Icon className="h-4 w-4" aria-hidden />
         </span>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-bold ${TYPE_TINT[event.type]}`}>
+          {ACTIVITY_EVENT_TYPE_LABEL[event.type]}
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-fg">{event.description}</p>
-          <p className="text-xs text-fg-faint">
-            {formatRelativeTime(now - new Date(event.createdAt).getTime())}
-            {actorName && ` · ${actorName}`}
-          </p>
+          <p className="truncate text-[12.5px] font-semibold" style={{ color: "var(--app-text-muted)" }}>{event.description}</p>
+          {actorName && <p className="truncate text-[11.5px]" style={{ color: "var(--app-text-faintest)" }}>{actorName}</p>}
         </div>
-        {event.amount != null && <span className="shrink-0 text-sm font-medium tabular-nums text-fg">{formatCurrency(event.amount, currency)}</span>}
+        {event.amount != null && <span className="shrink-0 text-[12px] font-bold tabular-nums" style={{ color: "var(--app-text)" }}>{formatCurrency(event.amount, currency)}</span>}
+        <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
       </button>
     </li>
   );

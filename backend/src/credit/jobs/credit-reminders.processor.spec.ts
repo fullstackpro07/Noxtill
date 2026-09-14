@@ -3,6 +3,10 @@ import { SendGateService } from '../../messaging/send-gate.service';
 import { LocaleService } from '../../common/localization/locale.service';
 import { CreditRemindersProcessor } from './credit-reminders.processor';
 
+// The processor's unscoped `business.findMany()` scans the whole shared test DB;
+// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+jest.setTimeout(20000);
+
 describe('CreditRemindersProcessor (UPD-BE-095)', () => {
   let prisma: PrismaService;
   let processor: CreditRemindersProcessor;

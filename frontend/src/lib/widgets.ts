@@ -112,6 +112,25 @@ export function widgetByKey(key: string): WidgetDef | undefined {
   return WIDGETS.find((w) => w.key === key);
 }
 
+/** Presentational size label for the customize-layout list — derived from the widget's real grid
+ * footprint on the Overview screen, not a fabricated business figure. */
+const SIZE_BY_KIND: Record<WidgetKind, string> = {
+  currency: "1/6 width",
+  currencyPair: "1/3 width",
+  count: "1/6 width",
+  percent: "1/6 width",
+  average: "1/6 width",
+  productList: "1/3 width",
+  leaderboard: "1/3 width",
+  competitorList: "1/3 width",
+  quota: "1/6 width",
+  channelBreakdown: "1/3 width",
+};
+
+export function widgetSizeLabel(widget: WidgetDef): string {
+  return SIZE_BY_KIND[widget.kind];
+}
+
 /** The 6 widgets a brand-new dashboard ships with by default. */
 export const DEFAULT_LAYOUT = [
   "revenue_today",

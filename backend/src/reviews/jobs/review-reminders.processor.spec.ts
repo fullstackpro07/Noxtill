@@ -5,6 +5,10 @@ import { ReviewRemindersProcessor } from './review-reminders.processor';
 import { generateReviewToken } from '../review-token.util';
 import { deleteCrossTestBusinessRows } from '../../common/testing/cleanup-test-business';
 
+// The processor's unscoped `business.findMany()` scans the whole shared test DB;
+// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+jest.setTimeout(20000);
+
 describe('ReviewRemindersProcessor (BE-045)', () => {
   let prisma: PrismaService;
   let processor: ReviewRemindersProcessor;

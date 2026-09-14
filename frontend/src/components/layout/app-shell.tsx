@@ -14,7 +14,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-bg">
+    <div className="nx-app flex h-dvh w-full overflow-hidden bg-[var(--app-bg)]">
       <Sidebar
         role={session.user.role}
         businessName={session.business.name}
@@ -29,6 +29,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <DeepSearchOverlay />
       <AssistantPanel />
       <AssistantTriggerButton />
+      {/* Portal target for dashboard drawers/dialogs that use `var(--app-*)` tokens — those tokens
+          are scoped to `.nx-app`, so anything portaled straight to `document.body` (outside this
+          div) would silently fail to resolve them. See `portal-root.tsx`. */}
+      <div id="nx-portal-root" />
     </div>
   );
 }

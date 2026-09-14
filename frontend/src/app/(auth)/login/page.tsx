@@ -16,7 +16,8 @@ import { COUNTRIES, COUNTRY_TO_LOCALE, countryByCode } from "@/lib/countries";
 import { LOCALES } from "@/lib/locales";
 import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
-import { login as loginRequest, signup as signupRequest, fetchMe } from "@/lib/auth-api";
+import { login as loginRequest, signup as signupRequest, fetchMe, verifyTwoFactorLogin } from "@/lib/auth-api";
+import type { AuthTokens } from "@/lib/auth-api";
 import { useAuthStore } from "@/store/auth-store";
 
 /** Maps the backend's {fields: {name: [msg]}} validation shape onto react-hook-form fields; falls back to a toast for anything else. */
@@ -63,6 +64,14 @@ function LoginForm() {
   const router = useRouter();
   const setSession = useAuthStore((s) => s.setSession);
   const [showPassword, setShowPassword] = useState(false);
+  // UPD-INT-016 depth fix: the backend has always blocked login on a real 2FA-enabled account
+  // (auth.service.ts's login() returns `{pending2fa, tempToken}` instead of tokens), but this
+  // page previously assumed `login()` always returned tokens directly — a real 2FA user could
+  // not complete login through the product UI at all. This adds the missing second step.
+  const [pendingTempToken, setPendingTempToken] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [codeError, setCodeError] = useState<string | undefined>();
   const {
     register,
     handleSubmit,
@@ -71,21 +80,80 @@ function LoginForm() {
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
 
+  async function completeLogin(tokens: AuthTokens) {
+    useAuthStore.getState().setTokens(tokens);
+    const { user, business } = await fetchMe();
+    setSession({ ...tokens, user, business });
+    toast.success(`Welcome back, ${user.name}!`);
+    router.push("/dashboard");
+  }
+
   async function onSubmit(values: LoginValues) {
     try {
-      const tokens = await loginRequest({ emailOrPhone: values.identifier, password: values.password });
-      useAuthStore.getState().setTokens(tokens);
-      const { user, business } = await fetchMe();
-      setSession({ ...tokens, user, business });
-      toast.success(`Welcome back, ${user.name}!`);
-      router.push("/dashboard");
+      const result = await loginRequest({ emailOrPhone: values.identifier, password: values.password });
+      if ("pending2fa" in result) {
+        setPendingTempToken(result.tempToken);
+        return;
+      }
+      await completeLogin(result);
     } catch (err) {
       applyApiError(err, setError);
     }
   }
 
+  async function onVerifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pendingTempToken) return;
+    setCodeError(undefined);
+    setVerifying(true);
+    try {
+      const tokens = await verifyTwoFactorLogin({ tempToken: pendingTempToken, code });
+      await completeLogin(tokens);
+    } catch (err) {
+      setVerifying(false);
+      setCodeError(err instanceof ApiError ? err.message : "Something went wrong — please try again.");
+    }
+  }
+
+  if (pendingTempToken) {
+    return (
+      // Distinct `key` from the credentials form below — both forms are structurally similar
+      // (an <Input> at the same position), and without a key React reconciles them as the same
+      // node across the pending2fa transition, carrying the password field's uncontrolled
+      // `value={undefined}` into this controlled `value={code}` input (a real console warning
+      // caught via live browser testing, UPD-INT-016).
+      <form key="2fa-code" onSubmit={onVerifyCode} className="flex flex-col gap-4">
+        <p className="text-sm text-fg-muted">We sent a 6-digit verification code to finish signing in.</p>
+        <Input
+          label="Verification code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          autoFocus
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          error={codeError}
+        />
+        <Button type="submit" disabled={verifying || code.length !== 6} className="mt-1 w-full">
+          {verifying ? "Verifying…" : "Verify & sign in"}
+        </Button>
+        <button
+          type="button"
+          className="text-xs font-medium text-fg-faint hover:underline"
+          onClick={() => {
+            setPendingTempToken(null);
+            setCode("");
+            setCodeError(undefined);
+          }}
+        >
+          Back to login
+        </button>
+      </form>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form key="credentials" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <SmartIdentifierField
         value={watch("identifier") ?? ""}
         {...register("identifier")}

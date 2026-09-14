@@ -26,7 +26,8 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     key: 'booking_reminder',
     category: MessageCategory.utility,
     locales: {
-      en: 'Reminder: {{customerName}}, your {{serviceName}} appointment is at {{dateTime}}.',
+      // {{term:appointment}} (Terminology Engine, UPD-BE-038) — see order_status's comment above.
+      en: 'Reminder: {{customerName}}, your {{serviceName}} {{term:appointment}} is at {{dateTime}}.',
     },
   },
   /// Booking reminder rules (UPD-BE-092) — the shorter-fuse variant a rule can pick for
@@ -35,7 +36,7 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     key: 'booking_reminder_urgent',
     category: MessageCategory.utility,
     locales: {
-      en: 'Coming up soon: {{customerName}}, your {{serviceName}} appointment starts at {{dateTime}}. See you shortly!',
+      en: 'Coming up soon: {{customerName}}, your {{serviceName}} {{term:appointment}} starts at {{dateTime}}. See you shortly!',
     },
   },
   booking_declined: {
@@ -77,14 +78,16 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     key: 'order_status',
     category: MessageCategory.utility,
     locales: {
-      en: 'Hi {{customerName}}, your order #{{orderNo}} is now {{status}}.',
+      // {{term:order}} (Terminology Engine, UPD-BE-038): a business that relabels "Order" sees
+      // that word here too, not just in the settings screen — real word, not a payload variable.
+      en: 'Hi {{customerName}}, your {{term:order}} #{{orderNo}} is now {{status}}.',
     },
   },
   receipt: {
     key: 'receipt',
     category: MessageCategory.utility,
     locales: {
-      en: 'Thanks {{customerName}}! Your receipt for order #{{orderNo}} ({{total}}) is ready: {{receiptUrl}}',
+      en: 'Thanks {{customerName}}! Your receipt for {{term:order}} #{{orderNo}} ({{total}}) is ready: {{receiptUrl}}',
     },
   },
   credit_reminder: {

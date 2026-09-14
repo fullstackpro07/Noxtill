@@ -22,6 +22,17 @@ export interface LoginPayload {
   password: string;
 }
 
+/** 2FA is enabled on this account — a real code was just sent; exchange it via `verifyTwoFactorLogin`. */
+export interface Pending2fa {
+  pending2fa: true;
+  tempToken: string;
+}
+
+export interface Verify2faPayload {
+  tempToken: string;
+  code: string;
+}
+
 export interface MeResponse {
   user: AuthUser;
   business: AuthBusiness;
@@ -31,8 +42,14 @@ export function signup(payload: SignupPayload): Promise<AuthTokens> {
   return apiFetch<AuthTokens>("/auth/signup", { method: "POST", body: JSON.stringify(payload) }, { skipAuth: true });
 }
 
-export function login(payload: LoginPayload): Promise<AuthTokens> {
-  return apiFetch<AuthTokens>("/auth/login", { method: "POST", body: JSON.stringify(payload) }, { skipAuth: true });
+export function login(payload: LoginPayload): Promise<AuthTokens | Pending2fa> {
+  return apiFetch<AuthTokens | Pending2fa>("/auth/login", { method: "POST", body: JSON.stringify(payload) }, { skipAuth: true });
+}
+
+/** UPD-INT-016 depth fix: the login flow previously had no way to reach this endpoint at all — a
+ * real 2FA-enabled account could not actually complete login through the product UI. */
+export function verifyTwoFactorLogin(payload: Verify2faPayload): Promise<AuthTokens> {
+  return apiFetch<AuthTokens>("/auth/2fa/verify", { method: "POST", body: JSON.stringify(payload) }, { skipAuth: true });
 }
 
 /** Composes the full session (role + business + branches) — neither /auth/login nor /auth/signup returns this shape directly. */

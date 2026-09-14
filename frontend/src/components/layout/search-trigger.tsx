@@ -34,11 +34,15 @@ export function SearchTrigger() {
       id="global-search-trigger"
       type="button"
       onClick={() => setOpen(true)}
-      className="flex h-9 w-full max-w-72 items-center gap-2 rounded-full border border-border-strong bg-surface-2/60 px-3.5 text-sm text-fg-faint transition-colors hover:border-border-strong hover:bg-surface-2"
+      className="flex h-[42px] w-full max-w-[420px] items-center gap-2.5 rounded-[10px] px-3.5 text-[13px] transition-colors"
+      style={{ border: "1px solid var(--app-border, var(--border-strong))", background: "var(--app-surface-2, var(--surface-2))", color: "var(--app-text-disabled, var(--fg-faint))" }}
     >
       <Search className="h-4 w-4 shrink-0" aria-hidden />
       <span className="flex-1 truncate text-start">{t("topbar.searchPlaceholder")}</span>
-      <kbd className="hidden shrink-0 rounded-md border border-border-strong bg-surface px-1.5 py-0.5 font-sans text-[10px] font-medium text-fg-faint sm:inline-block">
+      <kbd
+        className="hidden shrink-0 rounded-[6px] px-1.5 py-0.5 font-sans text-[10px] font-medium sm:inline-block"
+        style={{ border: "1px solid var(--app-border, var(--border-strong))", background: "var(--app-surface, var(--surface))", color: "var(--app-text-disabled, var(--fg-faint))" }}
+      >
         {mac ? "⌘K" : "Ctrl K"}
       </kbd>
     </button>
