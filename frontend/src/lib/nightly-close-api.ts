@@ -11,6 +11,7 @@ export interface NightlyCloseHistoryRow {
   deliveryStatus: "sent" | "failed";
   deliveryError: string | null;
   channel: "whatsapp" | "sms" | "email";
+  channelResults: { channel: "whatsapp" | "sms" | "email"; status: "sent" | "failed"; error?: string }[] | null;
 }
 
 export interface NightlyClosePreview {
@@ -75,17 +76,23 @@ export interface NightlyCloseCustomLine {
   value: string;
 }
 
+export type NightlyCloseChannel = "whatsapp" | "sms" | "email";
+
 export interface NightlyCloseConfig {
   sections: NightlyCloseSection[];
   voiceNoteEnabled: boolean;
   voiceId: string | null;
   customLines: NightlyCloseCustomLine[];
+  /** Nightly-Close-only multi-channel override — `[]` means "use `channel` below, single-channel". */
+  channels: NightlyCloseChannel[];
 }
 
 export interface NightlyCloseSettings {
   time: string;
   channel: "whatsapp" | "sms" | "email";
   config: NightlyCloseConfig;
+  /** Whether TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_FROM_NUMBER are configured — when false, a real call is never attempted even if voiceNoteEnabled is on. */
+  voiceCallConfigured: boolean;
 }
 
 export interface NightlyCloseVoiceOption {
@@ -100,6 +107,7 @@ export interface UpdateNightlyCloseSettings {
   voiceNoteEnabled?: boolean;
   voiceId?: string | null;
   customLines?: NightlyCloseCustomLine[];
+  channels?: NightlyCloseChannel[];
 }
 
 /** GET /settings/nightly-close */

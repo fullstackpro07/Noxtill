@@ -1,10 +1,14 @@
-import { Controller, Get, Body, Put, Query } from '@nestjs/common';
+import { Controller, Get, Body, Patch, Put, Query } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { TodayBusinessService } from './today-business.service';
+import { BusinessGoalService } from './business-goal.service';
 import { UpdateDashboardConfigDto } from './dto/update-dashboard-config.dto';
+import { UpdateBusinessGoalDto } from './dto/update-business-goal.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { OrderType, PaymentMethod, Role } from '@prisma/client';
 
 @Controller('dashboard')
@@ -12,6 +16,7 @@ export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly todayBusinessService: TodayBusinessService,
+    private readonly businessGoalService: BusinessGoalService,
     private readonly tenantPrisma: TenantPrismaService,
   ) {}
 
@@ -31,6 +36,19 @@ export class DashboardController {
   @Get('today')
   today() {
     return this.dashboardService.today();
+  }
+
+  /** Today's Goals fix-it. */
+  @Get('goals')
+  getGoal() {
+    return this.businessGoalService.getGoal();
+  }
+
+  /** Today's Goals fix-it — same owner+manager tier as Nightly Close settings. */
+  @RequireCapability(CAPABILITIES.DASHBOARD_GOALS_MANAGE)
+  @Patch('goals')
+  updateGoal(@Body() dto: UpdateBusinessGoalDto) {
+    return this.businessGoalService.updateGoal(dto);
   }
 
   /** UPD-BE-082: staff see only their own transactions. */

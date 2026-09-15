@@ -101,6 +101,24 @@ export class CreditService {
     return round2(Number(result._sum.amount ?? 0));
   }
 
+  /** Credit Outstanding KPI drawer fix-it: a real day-over-day history from the nightly
+   * `CreditBalanceSnapshot` job, so the drawer can show a genuine delta instead of only ever a
+   * current value. Returns oldest-to-newest; a business younger than `days` just gets fewer rows. */
+  async balanceHistory(days = 8): Promise<{ date: string; balance: number }[]> {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const rows = await this.tenantPrisma.client.creditBalanceSnapshot.findMany(
+      {
+        where: { businessId, snapshotDate: { gte: since } },
+        orderBy: { snapshotDate: 'asc' },
+      },
+    );
+    return rows.map((r) => ({
+      date: r.snapshotDate.toISOString().slice(0, 10),
+      balance: round2(Number(r.balance)),
+    }));
+  }
+
   async getBalance(customerId: string): Promise<number> {
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
     const rows = await this.tenantPrisma.client.$queryRaw<

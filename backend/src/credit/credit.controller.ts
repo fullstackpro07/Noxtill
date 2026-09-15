@@ -38,6 +38,13 @@ export class CreditController {
     return this.creditService.collectedToday();
   }
 
+  /** Credit Outstanding KPI drawer fix-it (UPD-BE-125): real daily balance history for a
+   * week-over-week delta, backed by the nightly CreditBalanceSnapshot job. */
+  @Get('balance-history')
+  balanceHistory(@Query('days') days?: string) {
+    return this.creditService.balanceHistory(days ? Number(days) : undefined);
+  }
+
   /** Recovery Reports (UPD-BE-096) — Owner-only. */
   @RequireCapability(CAPABILITIES.CREDIT_RECOVERY_REPORT_VIEW)
   @Get('recovery-report')

@@ -20,6 +20,14 @@ export class AnalyticsController {
     return this.analyticsService.revenueSeries(days ? Number(days) : undefined);
   }
 
+  /** Business Overview chart fix-it — real per-day bookings count for the 3-series overlay. */
+  @Get('bookings-series')
+  bookingsSeries(@Query('days') days?: string) {
+    return this.analyticsService.bookingsSeries(
+      days ? Number(days) : undefined,
+    );
+  }
+
   @Get('cohorts')
   cohorts() {
     return this.analyticsService.cohorts();

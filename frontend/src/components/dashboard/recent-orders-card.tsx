@@ -22,11 +22,11 @@ export function RecentOrdersCard({ currency }: { currency: string }) {
       className="rounded-[14px] p-[18px]"
       style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}
     >
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-1">
         <h2 className="text-[15px] font-bold" style={{ color: "var(--app-text)" }}>
           Recent Orders
         </h2>
-        <Link href="/orders" className="text-[12px] font-bold" style={{ color: "var(--app-primary)" }}>
+        <Link href="/orders" className="flex-none whitespace-nowrap text-[12px] font-bold" style={{ color: "var(--app-primary)" }}>
           View All
         </Link>
       </div>
@@ -42,21 +42,24 @@ export function RecentOrdersCard({ currency }: { currency: string }) {
           No orders yet.
         </p>
       ) : (
-        <div className="flex flex-col divide-y" style={{ borderColor: "var(--app-border)" }}>
+        <div className="flex flex-col  divide-y" style={{ borderColor: "var(--app-border)" }}>
           {rows.map((o) => {
             const style = STATUS_STYLE[o.status] ?? STATUS_STYLE.pending;
             return (
-              <Link key={o.id} href="/orders" className="flex items-center justify-between gap-2 py-2 text-[12.5px]">
+              <Link key={o.id} href="/orders" className="flex  items-center justify-between gap-2 py-2 text-[12.5px]">
                 <span className="flex-none font-semibold" style={{ color: "var(--app-primary)" }}>
                   #{o.orderNo}
                 </span>
-                <span className="min-w-0 flex-1 truncate" style={{ color: "var(--app-text-muted)" }}>
+                <span className="min-w-7 flex-1 truncate" style={{ color: "var(--app-text-muted)" }}>
                   {o.customerName}
                 </span>
                 <span className="flex-none font-semibold" style={{ color: "var(--app-text)" }}>
                   {formatCurrency(o.total, currency)}
                 </span>
-                <span className="flex-none rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: style.bg, color: style.fg }}>
+                <span
+                  className="flex-none truncate rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{ background: style.bg, color: style.fg, maxWidth: 90 }}
+                >
                   {style.label}
                 </span>
               </Link>

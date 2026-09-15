@@ -6,13 +6,14 @@ import { ChevronRight } from "lucide-react";
 import { useWidgetData } from "@/hooks/use-widget-data";
 import { fetchOrders } from "@/lib/orders-api";
 import { fetchReviewsSummary, fetchReviews, type LiveInboxEntry } from "@/lib/reviews-api";
-import { fetchDebtors, fetchOverdueAgeing, fetchCollectedToday } from "@/lib/credit-api";
+import { fetchDebtors, fetchOverdueAgeing, fetchCollectedToday, fetchCreditBalanceHistory } from "@/lib/credit-api";
 import { fetchAppointments } from "@/lib/bookings-api";
 import { fetchRevenueSeries } from "@/lib/analytics-api";
 import { formatCurrency, formatNumber, formatDate, formatTime, formatRelativeTime } from "@/lib/format";
 import { useNow } from "@/hooks/use-now";
 import { SlideDrawer } from "./slide-drawer";
 import { KpiDrawerBody, type KpiDriver, type KpiSourceRecord } from "./kpi-drawer-body";
+import { KpiExtraCard } from "./kpi-extra-card";
 
 type KpiKey = "sales" | "profit" | "rating" | "credit" | "bookings" | "orders";
 
@@ -31,7 +32,7 @@ interface KpiCardProps {
 
 /** Exact 4-line structure from the design: label → value(+delta or +badge) → comparison caption →
  * record-count + real "updated" timestamp (from the query's own dataUpdatedAt, never fabricated). */
-function KpiCard({ label, value, placeholder, delta, badge, prev, recs, updatedAt, onOpen, needsAttention }: KpiCardProps) {
+export function KpiCard({ label, value, placeholder, delta, badge, prev, recs, updatedAt, onOpen, needsAttention }: KpiCardProps) {
   const now = useNow(15_000);
   return (
     <button
@@ -110,7 +111,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
  * exception is Credit Outstanding: the backend has no historical balance snapshot, so a weekly
  * delta for it would have to be fabricated, and it's left out on purpose (the real "Needs
  * attention" flag and current balance still show). */
-export function KpiRow({ currency }: { currency: string }) {
+export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraWidgetKeys?: string[] }) {
   const [drawer, setDrawer] = useState<KpiKey | null>(null);
   const now = useNow();
   const today = new Date();
@@ -129,6 +130,7 @@ export function KpiRow({ currency }: { currency: string }) {
   const { data: reviews } = useQuery({ queryKey: ["reviews", "kpi"], queryFn: fetchReviews });
   const { data: debtors } = useQuery({ queryKey: ["credit", "debtors", "kpi"], queryFn: () => fetchDebtors("balance"), enabled: drawer === "credit" });
   const { data: collectedToday } = useQuery({ queryKey: ["credit", "collected-today", "kpi"], queryFn: fetchCollectedToday, enabled: drawer === "credit" });
+  const { data: creditHistory } = useQuery({ queryKey: ["credit", "balance-history", "kpi"], queryFn: () => fetchCreditBalanceHistory(8) });
   const { data: todaysBookingsList } = useQuery({ queryKey: ["appointments", "kpi-today"], queryFn: () => fetchAppointments({ from: isoDate(), to: isoDate() }) });
   const { data: yesterdaysBookings } = useQuery({ queryKey: ["appointments", "kpi-yesterday"], queryFn: () => fetchAppointments({ from: isoDate(-1), to: isoDate(-1) }) });
 
@@ -203,6 +205,12 @@ export function KpiRow({ currency }: { currency: string }) {
 
   const creditRecords: KpiSourceRecord[] = (debtors ?? []).slice(0, 10).map((d) => ({ id: d.name, when: `${d.daysOutstanding}d outstanding`, who: d.phone, amount: formatCurrency(d.balance, currency) }));
 
+  // Credit Outstanding fix-it: real week-over-week delta from the daily CreditBalanceSnapshot job
+  // — `creditHistory` is oldest-to-newest and only accumulates from the day this shipped, so a
+  // business with under a week of snapshots honestly shows no delta yet rather than a padded one.
+  const creditWeekAgo = creditHistory && creditHistory.length >= 8 ? creditHistory[0] : null;
+  const creditDelta = creditWeekAgo && creditWeekAgo.balance > 0 && credit ? pctDelta(credit.balance ?? credit.amount ?? 0, creditWeekAgo.balance) : null;
+
   const bookingsDrivers: KpiDriver[] | undefined = (() => {
     if (!todaysBookingsList || !yesterdaysBookings) return undefined;
     const delta = todaysBookingsList.length - yesterdaysBookings.length;
@@ -253,6 +261,8 @@ export function KpiRow({ currency }: { currency: string }) {
         <KpiCard
           label="Credit Outstanding"
           value={credit ? formatCurrency(credit.balance ?? credit.amount ?? 0, currency) : null}
+          delta={creditDelta !== null ? { label: `${Math.abs(creditDelta).toFixed(1)}%`, up: creditDelta >= 0 } : undefined}
+          prev={creditWeekAgo ? `${formatCurrency(creditWeekAgo.balance, currency)} a week ago` : undefined}
           needsAttention={(overdueAgeing?.atRisk.count ?? 0) > 0}
           updatedAt={creditOutstanding.dataUpdatedAt}
           onOpen={() => setDrawer("credit")}
@@ -273,6 +283,10 @@ export function KpiRow({ currency }: { currency: string }) {
           updatedAt={pendingOrdersQ.dataUpdatedAt}
           onOpen={() => setDrawer("orders")}
         />
+        {/* Add Widget fix-it: extra real metric tiles a user chose to append to the KPI row. */}
+        {(extraWidgetKeys ?? []).map((key) => (
+          <KpiExtraCard key={key} widgetKey={key} currency={currency} />
+        ))}
       </div>
 
       <SlideDrawer open={drawer === "sales"} onClose={() => setDrawer(null)} title="Today's Sales">
@@ -311,14 +325,19 @@ export function KpiRow({ currency }: { currency: string }) {
       <SlideDrawer open={drawer === "credit"} onClose={() => setDrawer(null)} title="Credit Outstanding">
         <KpiDrawerBody
           value={credit ? formatCurrency(credit.balance ?? credit.amount ?? 0, currency) : "—"}
+          comparedWith={creditWeekAgo ? `${formatCurrency(creditWeekAgo.balance, currency)} a week ago` : undefined}
           source={`Credit ledger · ${debtors?.length ?? 0} customer(s) with a balance`}
           drivers={creditDrivers}
           records={creditRecords}
           emptyRecordsLabel="No outstanding credit."
         />
-        <p className="mt-3 text-[11px]" style={{ color: "var(--app-text-disabled)" }}>
-          There's no week-over-week comparison here yet — the backend doesn't keep a historical snapshot of this balance, only its current value.
-        </p>
+        {!creditWeekAgo && (
+          <p className="mt-3 text-[11px]" style={{ color: "var(--app-text-disabled)" }}>
+            {creditHistory && creditHistory.length > 0
+              ? `Building a week-over-week comparison — ${creditHistory.length}/8 day(s) of real balance history so far.`
+              : "A daily balance snapshot started today — a week-over-week comparison will appear here once a week of history builds up."}
+          </p>
+        )}
       </SlideDrawer>
 
       <SlideDrawer open={drawer === "bookings"} onClose={() => setDrawer(null)} title="Today's Bookings">

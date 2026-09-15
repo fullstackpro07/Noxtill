@@ -2,27 +2,39 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchRevenueSeries } from "@/lib/analytics-api";
+import { fetchRevenueSeries, fetchBookingsSeries } from "@/lib/analytics-api";
 import { fetchProfitByTime } from "@/lib/profit-api";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatNumber } from "@/lib/format";
 
 type Range = 7 | 30 | 90;
 type Mode = "trend" | "hour";
+type Overlay = "orders" | "bookings";
 
 const RANGES: Range[] = [7, 30, 90];
+const OVERLAY_COLOR: Record<Overlay, string> = { orders: "#2563EB", bookings: "#9333EA" };
+const OVERLAY_LABEL: Record<Overlay, string> = { orders: "Orders", bookings: "Bookings" };
 
 /** Real day-by-day revenue trend from /analytics/revenue-series — the design's 7D/30D/90D range
  * selector, backed by actual data instead of demo numbers. "Sales by hour" mode uses the same
- * real hourly-today source as before. There is no per-day Orders/Bookings series to overlay, so
- * only the Sales line is drawn (the design's 3-series overlay is not backed by data yet). */
+ * real hourly-today source as before. Fix-it: the design's 3-series overlay (Sales/Orders/Bookings)
+ * now has real data for all three — Orders comes free from revenue-series' own `orders` field,
+ * Bookings from the new /analytics/bookings-series. Orders/Bookings are drawn on their own
+ * independently-normalized scale (each line spans the chart on its own real min/max) since their
+ * units (counts) have nothing to do with Sales' currency scale — the left axis stays Sales-only. */
 export function BusinessOverviewCard({ currency }: { currency: string }) {
   const [mode, setMode] = useState<Mode>("trend");
   const [range, setRange] = useState<Range>(30);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [overlays, setOverlays] = useState<Set<Overlay>>(new Set(["orders", "bookings"]));
 
   const { data: series, isPending: seriesPending } = useQuery({
     queryKey: ["revenue-series", range],
     queryFn: () => fetchRevenueSeries(range),
+    enabled: mode === "trend",
+  });
+  const { data: bookingsSeries } = useQuery({
+    queryKey: ["bookings-series", range],
+    queryFn: () => fetchBookingsSeries(range),
     enabled: mode === "trend",
   });
   const { data: hourly, isPending: hourlyPending } = useQuery({
@@ -30,6 +42,15 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
     queryFn: fetchProfitByTime,
     enabled: mode === "hour",
   });
+
+  function toggleOverlay(key: Overlay) {
+    setOverlays((s) => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const chart = useMemo(() => {
     if (!series || series.length === 0) return null;
@@ -46,8 +67,32 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
     const xlabels = series
       .map((d, i) => ({ i, x: x(i), label: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) }))
       .filter((l) => l.i % labelEvery === 0);
-    return { pts, line, area, grid, xlabels, W, PH, T };
-  }, [series]);
+
+    const bookingsByDate = new Map((bookingsSeries ?? []).map((b) => [b.date, b.bookings]));
+    const ordersValues = series.map((d) => d.orders);
+    const bookingsValues = series.map((d) => bookingsByDate.get(d.date) ?? 0);
+
+    function normalizedLine(values: number[]): string {
+      const vmax = Math.max(1, ...values);
+      const pts2 = values.map((v, i) => ({ x: x(i), y: T + PH * (1 - v / vmax) }));
+      return pts2.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+    }
+
+    return {
+      pts,
+      line,
+      area,
+      grid,
+      xlabels,
+      W,
+      PH,
+      T,
+      ordersValues,
+      bookingsValues,
+      ordersLine: normalizedLine(ordersValues),
+      bookingsLine: normalizedLine(bookingsValues),
+    };
+  }, [series, bookingsSeries]);
 
   const total = series?.reduce((sum, d) => sum + d.revenue, 0) ?? 0;
   const isPending = mode === "trend" ? seriesPending : hourlyPending;
@@ -74,11 +119,24 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
           </div>
         )}
       </div>
-      <div className="mb-1 mt-3 flex items-center gap-[18px]">
+      <div className="mb-1 mt-3 flex flex-wrap items-center gap-[18px]">
         <span className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>
           <span className="h-2 w-2 rounded-full" style={{ background: "var(--app-primary)" }} />
           Sales ({currency})
         </span>
+        {mode === "trend" &&
+          (["orders", "bookings"] as Overlay[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggleOverlay(key)}
+              className="flex items-center gap-1.5 text-[11.5px] font-semibold"
+              style={{ color: overlays.has(key) ? "var(--app-text-faint)" : "var(--app-text-disabled)", opacity: overlays.has(key) ? 1 : 0.5 }}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: OVERLAY_COLOR[key], borderTop: overlays.has(key) ? "none" : `1.5px dashed ${OVERLAY_COLOR[key]}` }} />
+              {OVERLAY_LABEL[key]}
+            </button>
+          ))}
         <button
           type="button"
           onClick={() => setMode((m) => (m === "trend" ? "hour" : "trend"))}
@@ -106,6 +164,12 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
               </g>
             ))}
             <path d={chart.area} fill="var(--app-primary)" opacity={0.1} />
+            {overlays.has("orders") && (
+              <path d={chart.ordersLine} fill="none" stroke={OVERLAY_COLOR.orders} strokeWidth={1.6} strokeDasharray="4 3" strokeLinejoin="round" opacity={0.85} />
+            )}
+            {overlays.has("bookings") && (
+              <path d={chart.bookingsLine} fill="none" stroke={OVERLAY_COLOR.bookings} strokeWidth={1.6} strokeDasharray="4 3" strokeLinejoin="round" opacity={0.85} />
+            )}
             <path d={chart.line} fill="none" stroke="var(--app-primary)" strokeWidth={2} strokeLinejoin="round" />
             {chart.pts.map((p, i) => (
               <circle
@@ -127,6 +191,9 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
                 <line x1={chart.pts[hoverIdx].x} y1={14} x2={chart.pts[hoverIdx].x} y2={chart.PH + chart.T} stroke="var(--app-primary)" strokeDasharray="3 3" />
                 <text x={Math.min(chart.W - 70, Math.max(70, chart.pts[hoverIdx].x))} y={26} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="var(--app-text)">
                   {formatCurrency(series[hoverIdx].revenue, currency)}
+                </text>
+                <text x={Math.min(chart.W - 70, Math.max(70, chart.pts[hoverIdx].x))} y={40} textAnchor="middle" fontSize={10} fontWeight={600} fill="var(--app-text-faint)">
+                  {formatNumber(chart.ordersValues[hoverIdx])} order(s) · {formatNumber(chart.bookingsValues[hoverIdx])} booking(s)
                 </text>
               </>
             )}

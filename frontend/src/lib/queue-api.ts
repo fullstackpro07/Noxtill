@@ -31,7 +31,7 @@ function toQueueToken(raw: RawQueueToken): QueueToken {
   return {
     id: raw.id,
     number: raw.number,
-    customerName: raw.customer?.name ?? raw.customerName ?? "Walk-in",
+    customerName: raw.customer?.name || raw.customerName || "Walk-in",
     serviceName: raw.service?.name ?? null,
     status: raw.status,
     calledAt: raw.calledAt,

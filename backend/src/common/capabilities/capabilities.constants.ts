@@ -61,6 +61,9 @@ export const CAPABILITIES = {
   BUSINESS_PROFILE_MANAGE: 'business_profile.manage',
   MESSAGING_CHANNELS_MANAGE: 'messaging_channels.manage',
   NIGHTLY_CLOSE_MANAGE: 'nightly_close.manage',
+  /// Today's Goals (fix-it) — same owner+manager tier as NIGHTLY_CLOSE_MANAGE, the closest
+  /// existing precedent (a small standing dashboard setting, not a financial-write action).
+  DASHBOARD_GOALS_MANAGE: 'dashboard_goals.manage',
   TAX_RULES_MANAGE: 'tax_rules.manage',
   /// Owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below) — a data-subject
   /// request can end in real customer PII erasure, same tier as CUSTOMERS_ERASE itself.
@@ -104,6 +107,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.BUSINESS_PROFILE_MANAGE,
   CAPABILITIES.MESSAGING_CHANNELS_MANAGE,
   CAPABILITIES.NIGHTLY_CLOSE_MANAGE,
+  CAPABILITIES.DASHBOARD_GOALS_MANAGE,
   CAPABILITIES.TAX_RULES_MANAGE,
   CAPABILITIES.ACTIVITY_LOG_VIEW,
 ];

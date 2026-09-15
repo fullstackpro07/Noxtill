@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
 /**
- * Shared page wrapper for module subscreens (Dashboard/Sales/Orders/Products, etc.) — these are
- * now reached via the sidebar's dropdown under each module rather than in-page tabs, so every
- * subscreen is its own route with its own heading instead of a shared tab bar.
+ * Shared page-content header (title/description/actions) for a module's own pages. Subscreen
+ * *navigation* is handled separately by `<ModuleTabs/>`, rendered once per module in that route
+ * segment's `layout.tsx` — this component is just the heading block underneath it, not a nav.
  */
 export function SubscreenShell({
   title,

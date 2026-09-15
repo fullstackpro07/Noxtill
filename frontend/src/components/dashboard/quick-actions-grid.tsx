@@ -20,16 +20,16 @@ export function QuickActionsGrid() {
   return (
     <section className="rounded-[14px] p-[18px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
       <h2 className="mb-3.5 text-[15px] font-bold" style={{ color: "var(--app-text)" }}>Quick Actions (All Modules)</h2>
-      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-11">
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))" }}>
         {ACTIONS.map((a) => (
           <Link
             key={a.name}
             href={a.href}
-            className="flex flex-col items-center gap-2 rounded-[12px] px-1.5 py-3.5"
+            className="flex flex-col items-center justify-center gap-2 rounded-[12px] px-1.5 py-3.5"
             style={{ border: "1px solid var(--app-border)" }}
           >
             <a.icon className="h-[21px] w-[21px]" style={{ color: a.color }} strokeWidth={1.9} aria-hidden />
-            <span className="text-center text-[10.5px] font-semibold leading-tight" style={{ color: "var(--app-text-faint)" }}>{a.name}</span>
+            <span className="text-center text-[10.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{a.name}</span>
           </Link>
         ))}
       </div>

@@ -10,6 +10,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  NIGHTLY_CLOSE_CHANNELS,
   NIGHTLY_CLOSE_SECTIONS,
   NIGHTLY_CLOSE_VOICE_OPTIONS,
 } from '../nightly-close-sections.constants';
@@ -55,4 +56,11 @@ export class UpdateNightlyCloseDto {
   @ValidateNested({ each: true })
   @Type(() => NightlyCloseCustomLineDto)
   customLines?: NightlyCloseCustomLineDto[];
+
+  /** Nightly-Close-only multi-channel override — `[]` clears it back to single-channel `channel`. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(NIGHTLY_CLOSE_CHANNELS, { each: true })
+  channels?: (typeof NIGHTLY_CLOSE_CHANNELS)[number][];
 }

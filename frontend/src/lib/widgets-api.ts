@@ -11,8 +11,12 @@ export function fetchWidgetData(key: string, days?: DashboardRange): Promise<unk
   return apiFetch<unknown>(`/widgets/${key}${query}`);
 }
 
+import { DASHBOARD_LAYOUT_VERSION } from "@/lib/dashboard-rows";
+
 interface DashboardConfig {
   layout?: string[];
+  kpiExtras?: string[];
+  layoutVersion?: number;
   [key: string]: unknown;
 }
 
@@ -22,12 +26,14 @@ export function fetchDashboardConfig(): Promise<DashboardConfig> {
 }
 
 /**
- * PUT /dashboard/config — backend does zero shape validation on `config`, so `{ layout: string[] }` is a
- * frontend convention, not an enforced contract. Returns the saved config back, unwrapped (same shape as GET).
+ * PUT /dashboard/config — backend does zero shape validation on `config`, so this shape is a
+ * frontend convention, not an enforced contract. `layoutVersion` lets the reader recognize and
+ * ignore a config saved under an earlier, incompatible meaning of "layout" instead of applying it
+ * and silently corrupting the current one. Returns the saved config back, unwrapped (same shape as GET).
  */
-export function saveDashboardConfig(layout: string[]): Promise<DashboardConfig> {
+export function saveDashboardConfig(layout: string[], kpiExtras: string[]): Promise<DashboardConfig> {
   return apiFetch<DashboardConfig>("/dashboard/config", {
     method: "PUT",
-    body: JSON.stringify({ config: { layout } }),
+    body: JSON.stringify({ config: { layout, kpiExtras, layoutVersion: DASHBOARD_LAYOUT_VERSION } }),
   });
 }

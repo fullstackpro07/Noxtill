@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { SkeletonCard } from "@/components/shared/skeleton";
 import { DashboardTabs } from "./dashboard-tabs";
 import { KpiRow } from "./kpi-row";
 import { ExecSummaryBanner } from "./exec-summary-banner";
@@ -23,21 +22,72 @@ import { DashboardSidePanel } from "./side-panel";
 import { IntelligencePromoGrid } from "./intelligence-promo-grid";
 import { WidgetGridCustomize } from "./widget-grid-customize";
 import { AddWidgetDrawer } from "./add-widget-drawer";
-import { NewBusinessEmptyState } from "./new-business-empty-state";
 import { useDashboardStore } from "@/store/dashboard-store";
-import { useWidgetData } from "@/hooks/use-widget-data";
 import { fetchDashboardConfig, saveDashboardConfig } from "@/lib/widgets-api";
 import { toast } from "@/lib/toast";
+import { DASHBOARD_ROWS, DASHBOARD_LAYOUT_VERSION, type DashboardRowKey } from "@/lib/dashboard-rows";
+
+const KNOWN_ROW_KEYS = new Set<string>(DASHBOARD_ROWS.map((r) => r.key));
+
+const OUTER_ROW_KEYS = new Set<DashboardRowKey>(DASHBOARD_ROWS.filter((r) => r.scope === "outer").map((r) => r.key));
+const INNER_ROW_KEYS = new Set<DashboardRowKey>(DASHBOARD_ROWS.filter((r) => r.scope === "inner").map((r) => r.key));
+
+/** Customize Dashboard, row-level (fix-it v2): every row here is the exact, unmodified markup from
+ * the design — reordering swaps whole rows' positions; the cards *inside* a row (e.g. Business
+ * Health's fixed 292px column beside the flexible Business Overview chart) are never rearranged,
+ * since that inner grid is literal design markup, not driven by the reorder list. */
+function renderRow(key: DashboardRowKey, currency: string, extraWidgetKeys: string[]) {
+  switch (key) {
+    case "kpi":
+      return <KpiRow currency={currency} extraWidgetKeys={extraWidgetKeys} />;
+    case "insights":
+      return (
+        <div className="grid grid-cols-1 gap-[15px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_300px]">
+          <OpportunitiesCard currency={currency} />
+          <NeedsAttentionCard currency={currency} />
+          <BusinessHealthSnapshotCard />
+        </div>
+      );
+    case "overview":
+      return (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_292px]">
+          <BusinessOverviewCard currency={currency} />
+          <BusinessHealthGaugeCard />
+        </div>
+      );
+    case "products":
+      return (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px]">
+          <TopProductsCard currency={currency} />
+          <RecentOrdersCard currency={currency} />
+          <TopChannelsCard />
+        </div>
+      );
+    case "quick":
+      return <QuickActionsGrid />;
+    case "intelligence":
+      return <IntelligencePromoGrid />;
+    case "getting-started":
+      return <GettingStartedCard />;
+    default:
+      return null;
+  }
+}
 
 export function DashboardView({ currency }: { currency: string; businessName: string }) {
   const session = useSession();
   const layout = useDashboardStore((s) => s.layout);
   const setLayout = useDashboardStore((s) => s.setLayout);
+  const kpiExtras = useDashboardStore((s) => s.kpiExtras);
+  const setKpiExtras = useDashboardStore((s) => s.setKpiExtras);
   const isCustomizing = useDashboardStore((s) => s.isCustomizing);
   const cancelCustomize = useDashboardStore((s) => s.cancelCustomize);
   const saveCustomize = useDashboardStore((s) => s.saveCustomize);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const outerRows = layout.filter((k): k is DashboardRowKey => OUTER_ROW_KEYS.has(k as DashboardRowKey));
+  const innerRows = layout.filter((k): k is DashboardRowKey => INNER_ROW_KEYS.has(k as DashboardRowKey));
 
   // Hydrates the layout from the server's saved dashboard config, if one exists — server wins over whatever's locally cached.
   const { data: serverConfig } = useQuery({
@@ -47,23 +97,23 @@ export function DashboardView({ currency }: { currency: string; businessName: st
   });
 
   useEffect(() => {
-    if (serverConfig?.layout && serverConfig.layout.length > 0) {
-      setLayout(serverConfig.layout);
+    // A config saved under an earlier, incompatible meaning of "layout" (generic tiles, then
+    // bespoke sections) must never be applied here — layoutVersion lets that be recognized and
+    // ignored instead of silently corrupting the current row-based layout.
+    if (serverConfig?.layoutVersion !== DASHBOARD_LAYOUT_VERSION) return;
+    if (serverConfig.layout && serverConfig.layout.length > 0) {
+      setLayout(serverConfig.layout.filter((k) => KNOWN_ROW_KEYS.has(k)));
     }
-  }, [serverConfig, setLayout]);
-
-  const revenueToday = useWidgetData("revenue_today");
-  const ordersToday = useWidgetData("orders_today");
-  const newBusinessCheckPending = revenueToday.isPending || ordersToday.isPending;
-  const isBrandNewBusiness =
-    !newBusinessCheckPending &&
-    (revenueToday.data as { revenue: number } | undefined)?.revenue === 0 &&
-    (ordersToday.data as { count: number } | undefined)?.count === 0;
+    if (serverConfig.kpiExtras) {
+      setKpiExtras(serverConfig.kpiExtras);
+    }
+  }, [serverConfig, setLayout, setKpiExtras]);
 
   async function handleSaveLayout() {
     setSaving(true);
     try {
-      await saveDashboardConfig(useDashboardStore.getState().draftLayout ?? layout);
+      const state = useDashboardStore.getState();
+      await saveDashboardConfig(state.draftLayout ?? layout, state.draftKpiExtras ?? kpiExtras);
       saveCustomize();
       toast.success("Dashboard layout saved.");
     } catch {
@@ -77,19 +127,7 @@ export function DashboardView({ currency }: { currency: string; businessName: st
     <div className="flex min-h-full flex-col">
       <DashboardTabs />
 
-      {!isCustomizing && newBusinessCheckPending ? (
-        <div className="px-6 pb-7 pt-4.5">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
-        </div>
-      ) : !isCustomizing && isBrandNewBusiness ? (
-        <div className="mx-auto w-full max-w-3xl px-6 pb-7 pt-4.5">
-          <NewBusinessEmptyState />
-        </div>
-      ) : isCustomizing ? (
+      {isCustomizing ? (
         <>
           <div className="flex flex-col gap-4 px-6 pb-[70px] pt-4.5">
             <div className="flex flex-wrap items-center gap-3">
@@ -98,7 +136,7 @@ export function DashboardView({ currency }: { currency: string; businessName: st
                   Customize Dashboard
                 </h2>
                 <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>
-                  Drag to reorder, remove what you don&apos;t need, add widgets from any module.
+                  Drag to reorder whole rows, remove what you don&apos;t need, add extra KPI cards.
                 </p>
               </div>
               <div className="ms-auto flex items-center gap-2">
@@ -151,32 +189,28 @@ export function DashboardView({ currency }: { currency: string; businessName: st
         </>
       ) : (
         <div className="flex w-full flex-col gap-4 px-6 pb-7 pt-4.5">
-          <OverviewToolbar branches={session.business.branches} onAddWidget={() => setDrawerOpen(true)} />
+          <OverviewToolbar
+            branches={session.business.branches}
+            onAddWidget={() => {
+              // Add Widget fix-it: the drawer only ever writes into draftLayout/draftKpiExtras,
+              // which stay null until enterCustomize() seeds them — opening the drawer directly
+              // from here (outside Customize mode) silently discarded every addition.
+              useDashboardStore.getState().enterCustomize();
+              setDrawerOpen(true);
+            }}
+          />
 
           <ExecSummaryBanner currency={currency} />
 
-          <KpiRow currency={currency} />
-
-          <div className="grid grid-cols-1 gap-[15px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_300px]">
-            <OpportunitiesCard currency={currency} />
-            <NeedsAttentionCard currency={currency} />
-            <BusinessHealthSnapshotCard />
-          </div>
+          {outerRows.map((key) => (
+            <div key={key}>{renderRow(key, currency, kpiExtras)}</div>
+          ))}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_336px]">
             <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_292px]">
-                <BusinessOverviewCard currency={currency} />
-                <BusinessHealthGaugeCard />
-              </div>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px]">
-                <TopProductsCard currency={currency} />
-                <RecentOrdersCard currency={currency} />
-                <TopChannelsCard />
-              </div>
-              <IntelligencePromoGrid />
-              <QuickActionsGrid />
-              <GettingStartedCard />
+              {innerRows.map((key) => (
+                <div key={key}>{renderRow(key, currency, kpiExtras)}</div>
+              ))}
             </div>
             <DashboardSidePanel currency={currency} />
           </div>

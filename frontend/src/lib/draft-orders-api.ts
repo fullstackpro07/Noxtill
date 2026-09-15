@@ -5,6 +5,22 @@ export function fetchDraftOrders(): Promise<LiveOrder[]> {
   return apiFetch<RawOrder[]>("/orders?status=draft").then((rows) => rows.map(toLiveOrder));
 }
 
+export interface CreateDraftOrderInput {
+  orderType?: "counter" | "online" | "dine_in" | "takeaway" | "delivery";
+  tableNo?: string;
+  customerId?: string;
+  customerPhone?: string;
+  customerName?: string;
+  staffUserId?: string;
+  items: { productId: string; qty: number }[];
+  discount?: number;
+  note?: string;
+}
+
+export function createDraftOrder(input: CreateDraftOrderInput): Promise<LiveOrder> {
+  return apiFetch<RawOrder>("/orders/draft", { method: "POST", body: JSON.stringify(input) }).then(toLiveOrder);
+}
+
 export function convertDraftOrder(id: string, method: "cash" | "card" | "online" | "credit"): Promise<LiveOrder> {
   return apiFetch<RawOrder>(`/orders/${id}/convert`, {
     method: "POST",

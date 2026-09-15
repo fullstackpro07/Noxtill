@@ -2,12 +2,18 @@
 
 import { Sparkles } from "lucide-react";
 import { useAssistantStore } from "@/store/assistant-store";
+import { useDashboardStore } from "@/store/dashboard-store";
 
+/** Fix-it: this floating launcher sits at the same bottom-right corner as Customize Dashboard's
+ * own fixed Save/Cancel bar (z-40) — at z-[140] it was rendering on top of the real Save button,
+ * silently swallowing clicks meant for it. Hidden while customizing rather than re-juggling
+ * z-index/padding, since two floating action affordances in the same corner is bad UX regardless. */
 export function AssistantTriggerButton() {
   const open = useAssistantStore((s) => s.open);
   const setOpen = useAssistantStore((s) => s.setOpen);
+  const isCustomizing = useDashboardStore((s) => s.isCustomizing);
 
-  if (open) return null;
+  if (open || isCustomizing) return null;
 
   return (
     <button

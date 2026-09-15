@@ -5,6 +5,7 @@ import {
   SendGateParams,
 } from '../messaging/send-gate.service';
 import { NightlyCloseService } from './nightly-close.service';
+import { NightlyCloseVoiceCallService } from './nightly-close-voice-call.service';
 import { Message, Role } from '@prisma/client';
 
 describe('NightlyCloseService history/preview/test-send (UPD-BE-083)', () => {
@@ -17,6 +18,10 @@ describe('NightlyCloseService history/preview/test-send (UPD-BE-083)', () => {
       .fn<Promise<Message>, [SendGateParams]>()
       .mockResolvedValue(undefined as unknown as Message),
   };
+  const voiceCall = {
+    isConfigured: jest.fn().mockReturnValue(false),
+    callWithSummary: jest.fn().mockResolvedValue({ placed: false }),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -26,6 +31,7 @@ describe('NightlyCloseService history/preview/test-send (UPD-BE-083)', () => {
       prisma,
       new LocaleService(),
       sendGate as unknown as SendGateService,
+      voiceCall as unknown as NightlyCloseVoiceCallService,
     );
 
     const business = await prisma.business.create({

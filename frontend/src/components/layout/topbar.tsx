@@ -10,6 +10,7 @@ import { DataStatusPill } from "./data-status-pill";
 import { NAV_ITEMS } from "@/lib/nav-items";
 import type { Session } from "@/lib/session";
 import { useTranslation } from "@/hooks/use-translation";
+import { useModuleHeaderContent } from "./module-header-context";
 
 /** Page title matches whichever top-level nav item owns the current route (design's `<h1>Dashboard</h1>`
  * pattern) — falls back to the business name for routes with no sidebar entry (e.g. /settings/*). */
@@ -26,6 +27,8 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   const firstName = session.user.name.split(" ")[0];
+  const moduleHeader = useModuleHeaderContent();
+  const isCustom = moduleHeader.title !== undefined;
 
   return (
     <header
@@ -44,39 +47,60 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
 
       <div className="hidden min-w-0 shrink-0 flex-col sm:flex">
         <h1 className="truncate text-[23px] font-extrabold leading-tight tracking-[-.6px]" style={{ color: "var(--app-text)" }}>
-          {pageTitle}
+          {isCustom ? moduleHeader.title : pageTitle}
         </h1>
         <p className="mt-[3px] truncate text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>
-          {greeting}, <strong className="font-semibold" style={{ color: "var(--app-text-muted)" }}>{firstName}</strong> — {dateLabel} · {session.business.name}
+          {isCustom ? (
+            moduleHeader.subtitle
+          ) : (
+            <>
+              {greeting}, <strong className="font-semibold" style={{ color: "var(--app-text-muted)" }}>{firstName}</strong> — {dateLabel} · {session.business.name}
+            </>
+          )}
         </p>
       </div>
 
-      <div className="hidden min-w-0 flex-1 sm:block">
-        <SearchTrigger />
-      </div>
+      {!isCustom ? (
+        <div className="hidden min-w-0 flex-1 sm:block">
+          <SearchTrigger />
+        </div>
+      ) : moduleHeader.search ? (
+        <div className="hidden min-w-0 max-w-[360px] flex-1 sm:block">{moduleHeader.search}</div>
+      ) : null}
+
+      {isCustom && moduleHeader.stats ? <div className="hidden shrink-0 items-center gap-2.5 lg:flex">{moduleHeader.stats}</div> : null}
 
       <div className="ms-auto flex shrink-0 items-center gap-2 sm:gap-2.5">
-        <Link
-          href="/sales"
-          aria-label="Quick add"
-          className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-white transition-colors"
-          style={{ background: "var(--app-primary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--app-primary-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--app-primary)")}
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-        </Link>
+        {isCustom ? (
+          <>
+            {moduleHeader.actions}
+            {!moduleHeader.search && <SearchTrigger compact />}
+          </>
+        ) : (
+          <>
+            <Link
+              href="/sales"
+              aria-label="Quick add"
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-white transition-colors"
+              style={{ background: "var(--app-primary)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--app-primary-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--app-primary)")}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+            </Link>
 
-        <Link
-          href="/social/inbox"
-          aria-label="Messages"
-          className="hidden h-[34px] w-[34px] items-center justify-center rounded-[9px] sm:flex"
-          style={{ border: "1px solid var(--app-border)", color: "var(--app-text-faint)" }}
-        >
-          <Mail className="h-4 w-4" aria-hidden />
-        </Link>
+            <Link
+              href="/social/inbox"
+              aria-label="Messages"
+              className="hidden h-[34px] w-[34px] items-center justify-center rounded-[9px] sm:flex"
+              style={{ border: "1px solid var(--app-border)", color: "var(--app-text-faint)" }}
+            >
+              <Mail className="h-4 w-4" aria-hidden />
+            </Link>
 
-        <DataStatusPill />
+            <DataStatusPill />
+          </>
+        )}
 
         <NotificationBellV2 />
 

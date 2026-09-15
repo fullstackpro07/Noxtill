@@ -13,6 +13,9 @@ import { CreditReminderRulesController } from './credit-reminder-rules.controlle
 import { CreditRemindersScheduler } from './jobs/credit-reminders.scheduler';
 import { CreditRemindersProcessor } from './jobs/credit-reminders.processor';
 import { CREDIT_REMINDERS_QUEUE } from './jobs/credit-reminders.constants';
+import { CreditBalanceSnapshotScheduler } from './jobs/credit-balance-snapshot.scheduler';
+import { CreditBalanceSnapshotProcessor } from './jobs/credit-balance-snapshot.processor';
+import { CREDIT_BALANCE_SNAPSHOT_QUEUE } from './jobs/credit-balance-snapshot.constants';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ActivityModule } from '../activity/activity.module';
 
@@ -20,7 +23,10 @@ import { ActivityModule } from '../activity/activity.module';
   imports: [
     MessagingModule,
     ActivityModule,
-    BullModule.registerQueue({ name: CREDIT_REMINDERS_QUEUE }),
+    BullModule.registerQueue(
+      { name: CREDIT_REMINDERS_QUEUE },
+      { name: CREDIT_BALANCE_SNAPSHOT_QUEUE },
+    ),
   ],
   controllers: [
     CreditController,
@@ -37,6 +43,8 @@ import { ActivityModule } from '../activity/activity.module';
     PublicCreditService,
     CreditRemindersScheduler,
     CreditRemindersProcessor,
+    CreditBalanceSnapshotScheduler,
+    CreditBalanceSnapshotProcessor,
   ],
   exports: [CreditService],
 })

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { ModuleHeaderProvider } from "./module-header-context";
 import { OfflineBanner } from "@/components/shared/offline-banner";
 import { DeepSearchOverlay } from "@/components/search/deep-search-overlay";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
@@ -23,8 +24,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <OfflineBanner />
-        <Topbar session={session} onMenuClick={() => setMobileNavOpen(true)} />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <ModuleHeaderProvider>
+          <Topbar session={session} onMenuClick={() => setMobileNavOpen(true)} />
+          <main className="flex-1 overflow-y-auto">{children}</main>
+        </ModuleHeaderProvider>
       </div>
       <DeepSearchOverlay />
       <AssistantPanel />

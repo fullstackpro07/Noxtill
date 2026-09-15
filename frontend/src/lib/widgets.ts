@@ -70,7 +70,11 @@ export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
   messaging: "Messaging",
 };
 
-/** Mirrors the backend's widget registry (BE-067) key-for-key, so wiring live data in INT-002 is a drop-in. */
+/** Mirrors the backend's widget registry (BE-067) key-for-key. Used two ways: (1) real per-widget
+ * metadata lookups (`rangeAware`) by KpiRow/OpportunitiesCard/NeedsAttentionCard via
+ * `useWidgetData()`, and (2) the Add Widget gallery's "KPI Cards" tab, which lets a user append
+ * any of these as an extra real metric tile onto the KPI Row (see `kpi-extra-card.tsx`) — the
+ * `lib/dashboard-rows.ts` catalog is for whole-row reordering, a separate concern from this. */
 export const WIDGETS: WidgetDef[] = [
   { key: "revenue_today", title: "Today's Revenue", category: "sales", kind: "currency", icon: DollarSign },
   { key: "orders_today", title: "Today's Orders", category: "sales", kind: "count", icon: ShoppingCart },
@@ -110,74 +114,4 @@ export const WIDGETS: WidgetDef[] = [
 
 export function widgetByKey(key: string): WidgetDef | undefined {
   return WIDGETS.find((w) => w.key === key);
-}
-
-/** Presentational size label for the customize-layout list — derived from the widget's real grid
- * footprint on the Overview screen, not a fabricated business figure. */
-const SIZE_BY_KIND: Record<WidgetKind, string> = {
-  currency: "1/6 width",
-  currencyPair: "1/3 width",
-  count: "1/6 width",
-  percent: "1/6 width",
-  average: "1/6 width",
-  productList: "1/3 width",
-  leaderboard: "1/3 width",
-  competitorList: "1/3 width",
-  quota: "1/6 width",
-  channelBreakdown: "1/3 width",
-};
-
-export function widgetSizeLabel(widget: WidgetDef): string {
-  return SIZE_BY_KIND[widget.kind];
-}
-
-/** The 6 widgets a brand-new dashboard ships with by default. */
-export const DEFAULT_LAYOUT = [
-  "revenue_today",
-  "orders_today",
-  "upcoming_appointments",
-  "low_stock_count",
-  "credit_outstanding",
-  "reviews_average",
-  "message_quota_usage",
-  "open_complaints",
-];
-
-export interface WidgetAlert {
-  widgetKey: string;
-  message: string;
-  tone: "warning" | "danger";
-}
-
-/** Per-widget threshold logic for the alert stack (FE-007) — only alertWorthy widgets are ever checked. */
-export function getWidgetAlert(widget: WidgetDef, data: unknown): WidgetAlert | null {
-  if (!widget.alertWorthy) return null;
-
-  switch (widget.key) {
-    case "low_stock_count": {
-      const count = (data as { count: number }).count;
-      return count > 0
-        ? { widgetKey: widget.key, message: `${count} product${count === 1 ? "" : "s"} running low on stock`, tone: "warning" }
-        : null;
-    }
-    case "open_complaints": {
-      const count = (data as { count: number }).count;
-      return count > 0
-        ? { widgetKey: widget.key, message: `${count} private complaint${count === 1 ? "" : "s"} awaiting a response`, tone: "danger" }
-        : null;
-    }
-    case "message_quota_usage": {
-      const { used, quota } = data as { used: number; quota: number };
-      const percent = quota > 0 ? (used / quota) * 100 : 0;
-      return percent >= 80
-        ? {
-            widgetKey: widget.key,
-            message: `Message quota at ${Math.round(percent)}% — consider upgrading your plan`,
-            tone: percent >= 95 ? "danger" : "warning",
-          }
-        : null;
-    }
-    default:
-      return null;
-  }
 }

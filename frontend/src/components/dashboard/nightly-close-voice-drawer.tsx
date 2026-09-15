@@ -8,9 +8,10 @@ import { ApiError } from "@/lib/api-client";
 import { fetchNightlyCloseVoiceOptions, updateNightlyCloseSettings, type NightlyCloseSettings } from "@/lib/nightly-close-api";
 import { SlideDrawer } from "./slide-drawer";
 
-/** Real voice list from the backend (no fabricated "Calm — female" style names) and only the two
- * fields the real config actually supports (enabled + which voice) — the design's language/speed
- * controls aren't backed by any real setting, so they're left out rather than faked. */
+/** Real voice list from the backend and only the two fields the real config actually supports
+ * (enabled + which voice) — the design's language/speed controls aren't backed by any real
+ * setting, so they're left out rather than faked. Fix-it: enabling this now places a real outbound
+ * Twilio call reading the close aloud in the selected voice, via NightlyCloseVoiceCallService. */
 export function NightlyCloseVoiceDrawer({ open, onClose, current }: { open: boolean; onClose: () => void; current?: NightlyCloseSettings }) {
   const queryClient = useQueryClient();
   const { data: voices } = useQuery({ queryKey: ["nightly-close-voice-options"], queryFn: fetchNightlyCloseVoiceOptions, enabled: open });
@@ -43,7 +44,7 @@ export function NightlyCloseVoiceDrawer({ open, onClose, current }: { open: bool
           </span>
           <span className="flex-1">
             <span className="block text-[13px] font-bold" style={{ color: "var(--app-text)" }}>Enable voice note</span>
-            <span className="mt-0.5 block text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>A short spoken summary attached to each close</span>
+            <span className="mt-0.5 block text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>A real phone call reading a short spoken summary of each close</span>
           </span>
           <button
             type="button"
@@ -71,6 +72,11 @@ export function NightlyCloseVoiceDrawer({ open, onClose, current }: { open: bool
                 <option key={v.id} value={v.id}>{v.label}</option>
               ))}
             </select>
+            {current && !current.voiceCallConfigured && (
+              <p className="mt-2 text-[11px]" style={{ color: "var(--app-warning-text)" }}>
+                Voice calling isn&apos;t configured on this server yet — this will save, but no call will actually be placed until Twilio credentials are added.
+              </p>
+            )}
           </div>
         )}
 

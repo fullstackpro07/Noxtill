@@ -12,6 +12,18 @@ export function searchCustomers(q: string): Promise<CustomerSearchResult[]> {
   return apiFetch<CustomerSearchResult[]>(`/customers?q=${encodeURIComponent(q)}`);
 }
 
+export interface CreateCustomerInput {
+  name: string;
+  phone: string;
+  email?: string;
+  notes?: string;
+}
+
+/** POST /customers — Fast Sale's "+ Create Customer" drawer creates a real customer record immediately (not deferred to sale time). */
+export function createCustomer(input: CreateCustomerInput): Promise<CustomerSearchResult> {
+  return apiFetch<CustomerSearchResult>("/customers", { method: "POST", body: JSON.stringify(input) });
+}
+
 export interface DebtorRow {
   customerId: string;
   balance: number;

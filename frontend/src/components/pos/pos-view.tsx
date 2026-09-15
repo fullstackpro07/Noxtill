@@ -1,33 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, Minus, Trash2, Banknote, CreditCard, Wallet, HandCoins, Barcode, ShoppingCart, X, Tag, Ticket } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/shared/skeleton";
-import { InlineError } from "@/components/shared/error-states";
+import { Search, Plus, Minus, Trash2, MoreVertical, Package, Sparkles, ShoppingBag, PackageX, Wallet2 } from "lucide-react";
 import { fetchProducts } from "@/lib/products-api";
+import { fetchBusinessProfile } from "@/lib/businesses-api";
 import { createSale, type CreateSaleInput } from "@/lib/orders-api";
 import { holdSale } from "@/lib/held-sales-api";
-import { VoiceSaleRecorder } from "@/components/pos/voice-sale-recorder";
 import { useSession } from "@/lib/session";
-import { searchCustomers, fetchDebtors } from "@/lib/customers-api";
-import { previewCoupon, type CouponPreview } from "@/lib/coupons-api";
-import { previewVoucher, type VoucherPreview } from "@/lib/vouchers-api";
+import { fetchDebtors } from "@/lib/customers-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
-
-const CUSTOMER_SEARCH_DEBOUNCE_MS = 300;
-
-interface CustomerMatch {
-  id: string;
-  name: string;
-  phone: string;
-  creditBalance: number;
-}
+import type { Product } from "@/lib/products";
+import { CustomerDrawer, type PosCustomer } from "./customer-drawer";
+import { ScanModal } from "./scan-modal";
+import { DiscountModal, CashPaymentModal, TerminalPaymentModal, CreditPaymentModal, HoldModal, ClearSaleModal } from "./pos-payment-modals";
 
 interface CartLine {
   productId: string;
@@ -36,563 +25,454 @@ interface CartLine {
   qty: number;
 }
 
-type PaymentMethod = "cash" | "card" | "wallet" | "credit";
+type PaymentMethod = "cash" | "card" | "online" | "credit";
+type ActiveModal = "discount" | "cash" | "card" | "online" | "credit" | "hold" | "clear" | "scan" | "customer" | null;
 
-const PAYMENT_METHODS: { key: PaymentMethod; label: string; icon: typeof Banknote }[] = [
-  { key: "cash", label: "Cash", icon: Banknote },
-  { key: "card", label: "Card", icon: CreditCard },
-  { key: "wallet", label: "Wallet", icon: Wallet },
-  { key: "credit", label: "Credit", icon: HandCoins },
+const PAYMENT_TILES: { key: PaymentMethod; label: string; icon: typeof Wallet2 }[] = [
+  { key: "cash", label: "Cash", icon: Wallet2 },
+  { key: "card", label: "Card", icon: ShoppingBag },
+  { key: "online", label: "Online", icon: Package },
+  { key: "credit", label: "Credit", icon: Sparkles },
 ];
 
-function CartPanel({
-  cart,
-  onIncrement,
-  onDecrement,
-  onRemove,
-  currency,
-  customerQuery,
-  onCustomerQueryChange,
-  customer,
-  paymentMethod,
-  onPaymentMethodChange,
-  onConfirm,
-  confirming,
-  onHold,
-  holding,
-  total,
-  couponCode,
-  onCouponCodeChange,
-  couponPreview,
-  couponStale,
-  couponPending,
-  couponError,
-  onApplyCoupon,
-  onClearCoupon,
-  voucherCode,
-  onVoucherCodeChange,
-  voucherPreview,
-  voucherStale,
-  voucherPending,
-  voucherError,
-  onApplyVoucher,
-  onClearVoucher,
-}: {
-  cart: CartLine[];
-  onIncrement: (id: string) => void;
-  onDecrement: (id: string) => void;
-  onRemove: (id: string) => void;
-  currency: string;
-  customerQuery: string;
-  onCustomerQueryChange: (v: string) => void;
-  customer: CustomerMatch | undefined;
-  paymentMethod: PaymentMethod;
-  onPaymentMethodChange: (m: PaymentMethod) => void;
-  onConfirm: () => void;
-  confirming: boolean;
-  onHold: () => void;
-  holding: boolean;
-  total: number;
-  couponCode: string;
-  onCouponCodeChange: (v: string) => void;
-  couponPreview: CouponPreview | null;
-  couponStale: boolean;
-  couponPending: boolean;
-  couponError: string | null;
-  onApplyCoupon: () => void;
-  onClearCoupon: () => void;
-  voucherCode: string;
-  onVoucherCodeChange: (v: string) => void;
-  voucherPreview: VoucherPreview | null;
-  voucherStale: boolean;
-  voucherPending: boolean;
-  voucherError: string | null;
-  onApplyVoucher: () => void;
-  onClearVoucher: () => void;
-}) {
-  const discount = couponPreview && !couponStale ? couponPreview.discountAmount : 0;
-  const displayTotal = Math.max(0, total - discount);
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border p-4">
-        <Input
-          value={customerQuery}
-          onChange={(e) => onCustomerQueryChange(e.target.value)}
-          placeholder="Customer name or phone (optional)"
-          leadingSlot={<Search className="h-4 w-4" aria-hidden />}
-        />
-        {customerQuery.trim() && (
-          <p className="mt-1.5 text-xs text-fg-muted">
-            {customer ? (
-              <>
-                {customer.name} ·{" "}
-                <span className={customer.creditBalance > 0 ? "font-medium text-destructive" : "text-whatsapp"}>
-                  {customer.creditBalance > 0 ? `owes ${formatCurrency(customer.creditBalance, currency)}` : "no balance"}
-                </span>
-              </>
-            ) : (
-              "No match — sale will record as a new/walk-in customer."
-            )}
-          </p>
-        )}
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4">
-        {cart.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <ShoppingCart className="h-6 w-6 text-fg-faint" aria-hidden />
-            <p className="text-sm text-fg-faint">Tap a tile to add it to the sale.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {cart.map((line) => (
-              <div key={line.productId} className="flex items-center gap-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-fg">{line.name}</p>
-                  <p className="text-xs text-fg-faint">{formatCurrency(line.price, currency)} each</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <button
-                    onClick={() => onDecrement(line.productId)}
-                    aria-label="Decrease quantity"
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-border-strong text-fg-muted hover:bg-surface-2"
-                  >
-                    <Minus className="h-3 w-3" aria-hidden />
-                  </button>
-                  <span className="w-5 text-center text-sm tabular-nums text-fg">{line.qty}</span>
-                  <button
-                    onClick={() => onIncrement(line.productId)}
-                    aria-label="Increase quantity"
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-border-strong text-fg-muted hover:bg-surface-2"
-                  >
-                    <Plus className="h-3 w-3" aria-hidden />
-                  </button>
-                  <button
-                    onClick={() => onRemove(line.productId)}
-                    aria-label={`Remove ${line.name}`}
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-fg-faint hover:bg-destructive/8 hover:text-destructive"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="border-t border-border p-4">
-        <div className="mb-3 grid grid-cols-4 gap-1.5">
-          {PAYMENT_METHODS.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onPaymentMethodChange(key)}
-              className={cn(
-                "flex flex-col items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-2.5 text-xs font-medium transition-colors",
-                paymentMethod === key ? "border-primary bg-primary/8 text-primary" : "border-border text-fg-muted hover:bg-surface-2",
-              )}
-            >
-              <Icon className="h-4 w-4" aria-hidden />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {paymentMethod === "credit" && customer && customer.creditBalance > 0 && (
-          <p className="mb-3 rounded-[var(--radius-sm)] bg-destructive/6 px-3 py-2 text-xs text-destructive">
-            This will add to an existing balance of {formatCurrency(customer.creditBalance, currency)}.
-          </p>
-        )}
-
-        <div className="mb-3 flex flex-col gap-2">
-          {couponPreview ? (
-            <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-primary/30 bg-primary/6 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-xs">
-                <Tag className="h-3.5 w-3.5 text-primary" aria-hidden />
-                <span className="font-medium text-fg">{couponPreview.code}</span>
-                <span className="text-fg-muted">
-                  −{formatCurrency(couponPreview.discountAmount, currency)}
-                  {couponStale ? " (cart changed — re-apply)" : ""}
-                </span>
-              </div>
-              <button onClick={onClearCoupon} aria-label="Remove coupon" className="text-fg-faint hover:text-destructive">
-                <X className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <Input
-                value={couponCode}
-                onChange={(e) => onCouponCodeChange(e.target.value)}
-                placeholder="Coupon code"
-                leadingSlot={<Tag className="h-3.5 w-3.5" aria-hidden />}
-                className="h-9 text-sm"
-              />
-              <Button variant="outline" size="sm" disabled={!couponCode.trim() || couponPending} onClick={onApplyCoupon}>
-                {couponPending ? "…" : "Apply"}
-              </Button>
-            </div>
-          )}
-          {couponError && <p className="text-xs text-destructive">{couponError}</p>}
-
-          {voucherPreview ? (
-            <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-primary/30 bg-primary/6 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-xs">
-                <Ticket className="h-3.5 w-3.5 text-primary" aria-hidden />
-                <span className="font-medium text-fg">{voucherPreview.code}</span>
-                <span className="text-fg-muted">
-                  covers {formatCurrency(voucherPreview.amountApplied, currency)}
-                  {voucherStale ? " (cart changed — re-apply)" : ""}
-                </span>
-              </div>
-              <button onClick={onClearVoucher} aria-label="Remove voucher" className="text-fg-faint hover:text-destructive">
-                <X className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <Input
-                value={voucherCode}
-                onChange={(e) => onVoucherCodeChange(e.target.value)}
-                placeholder="Voucher code"
-                leadingSlot={<Ticket className="h-3.5 w-3.5" aria-hidden />}
-                className="h-9 text-sm"
-              />
-              <Button variant="outline" size="sm" disabled={!voucherCode.trim() || voucherPending} onClick={onApplyVoucher}>
-                {voucherPending ? "…" : "Apply"}
-              </Button>
-            </div>
-          )}
-          {voucherError && <p className="text-xs text-destructive">{voucherError}</p>}
-        </div>
-
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-fg-muted">
-            Total{voucherPreview && !voucherStale ? " (before voucher)" : ""}
-          </span>
-          <span className="font-display text-xl font-bold text-fg">{formatCurrency(displayTotal, currency)}</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" disabled={cart.length === 0 || holding} onClick={onHold}>
-            {holding ? "Holding…" : "Hold"}
-          </Button>
-          <Button className="flex-1" size="lg" disabled={cart.length === 0 || confirming} onClick={onConfirm}>
-            {confirming ? "Recording…" : "Confirm sale"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/** Fast Sale — New Sale screen, pixel-matched to the design (search + category/type filters over
+ * the real product catalog, product grid, sticky cart with real discount/tax preview and payment
+ * flow). Coupon/voucher code entry from the old build is intentionally not shown here — the
+ * design's cart only ever has one manual "Discount" affordance, backed by the real ad-hoc
+ * `discount` field `createSale`/`holdSale` already accept; coupon/voucher management stays where
+ * it's actually designed (Marketing), not fabricated into this screen to fill a slot. */
 export function PosView({ currency }: { currency: string }) {
   const session = useSession();
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [barcodeQuery, setBarcodeQuery] = useState("");
-  const [customerQuery, setCustomerQuery] = useState("");
-  const [debouncedCustomerQuery, setDebouncedCustomerQuery] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("All");
+  const [type, setType] = useState<"All" | "Products" | "Services">("All");
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [customer, setCustomer] = useState<PosCustomer | null>(null);
+  const [discount, setDiscount] = useState(0);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("cash");
+  // Header's "Barcode Scan" link always points at /sales?scan=1 so it works from any Fast Sale
+  // screen — the initial value reads that param directly (no effect needed for this part), and a
+  // separate effect below only handles the one-time URL cleanup.
+  const [activeModal, setActiveModal] = useState<ActiveModal>(() => (searchParams.get("scan") === "1" ? "scan" : null));
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedCustomerQuery(customerQuery), CUSTOMER_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [customerQuery]);
+    if (searchParams.get("scan") === "1") {
+      router.replace("/sales");
+    }
+  }, [searchParams, router]);
 
-  const {
-    data: products = [],
-    isPending: productsPending,
-    isError: productsError,
-  } = useQuery({ queryKey: ["products", "active"], queryFn: () => fetchProducts({ active: true }) });
-
-  const { data: customerMatches = [] } = useQuery({
-    queryKey: ["customer-search", debouncedCustomerQuery],
-    queryFn: () => searchCustomers(debouncedCustomerQuery),
-    enabled: debouncedCustomerQuery.trim().length > 0,
+  const { data: products = [], isPending: productsPending, isError: productsError } = useQuery({
+    queryKey: ["products", "active"],
+    queryFn: () => fetchProducts({ active: true }),
   });
-  const { data: debtors = [] } = useQuery({
-    queryKey: ["debtors"],
-    queryFn: fetchDebtors,
-    staleTime: 30_000,
-  });
+  const { data: businessProfile } = useQuery({ queryKey: ["business-profile"], queryFn: fetchBusinessProfile, staleTime: 5 * 60_000 });
+  const { data: debtors = [] } = useQuery({ queryKey: ["debtors"], queryFn: fetchDebtors, staleTime: 30_000 });
 
-  const firstMatch = customerMatches[0];
-  const customer: CustomerMatch | undefined = firstMatch
-    ? {
-        id: firstMatch.id,
-        name: firstMatch.name,
-        phone: firstMatch.phone,
-        creditBalance: debtors.find((d) => d.customerId === firstMatch.id)?.balance ?? 0,
-      }
-    : undefined;
+  const categories = useMemo(() => {
+    const set = new Set(products.map((p) => p.category).filter((c): c is string => !!c));
+    return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [products]);
+
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    return products.filter((p) => {
+      const okCat = cat === "All" || p.category === cat;
+      const okType = type === "All" || (type === "Products" ? p.kind === "product" : p.kind === "service");
+      const okQ = !query || p.name.toLowerCase().includes(query) || (p.sku ?? "").toLowerCase().includes(query) || String(p.price).includes(query);
+      return okCat && okType && okQ;
+    });
+  }, [products, q, cat, type]);
+
+  const cartMap = useMemo(() => new Map(cart.map((l) => [l.productId, l.qty])), [cart]);
 
   const saleMutation = useMutation({
     mutationFn: (payload: CreateSaleInput) => createSale(payload),
     onSuccess: (order) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["products", "active"] });
-      toast.success(`Sale #${order.orderNo} recorded — ${formatCurrency(order.total, currency)} via ${paymentMethod}.`);
-      setCart([]);
-      setCustomerQuery("");
-      setMobileCartOpen(false);
-      setCouponCode("");
-      setCouponPreview(null);
-      setCouponPreviewSubtotal(null);
-      setVoucherCode("");
-      setVoucherPreview(null);
-      setVoucherPreviewSubtotal(null);
+      queryClient.invalidateQueries({ queryKey: ["today-business"] });
+      toast.success(`Sale #${order.orderNo} recorded — ${formatCurrency(order.total, currency)} via ${selectedMethod}.`);
+      resetSale();
+      setActiveModal(null);
     },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't complete this sale — please try again.");
-    },
-  });
-
-  // Discount/payment-code previews (POS checkout preview, UPD-INT-009) — read-only calls against
-  // the real coupon/voucher validation logic, so staff see the real discount before confirming;
-  // the sale itself always recomputes for real, this is purely informational.
-  const [couponCode, setCouponCode] = useState("");
-  const [couponPreview, setCouponPreview] = useState<CouponPreview | null>(null);
-  const [couponPreviewSubtotal, setCouponPreviewSubtotal] = useState<number | null>(null);
-  const [couponError, setCouponError] = useState<string | null>(null);
-
-  const [voucherCode, setVoucherCode] = useState("");
-  const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
-  const [voucherPreviewSubtotal, setVoucherPreviewSubtotal] = useState<number | null>(null);
-  const [voucherError, setVoucherError] = useState<string | null>(null);
-
-  const couponPreviewMutation = useMutation({
-    mutationFn: (args: { code: string; subtotal: number }) => previewCoupon(args.code, args.subtotal, customer?.id),
-    onSuccess: (result, args) => {
-      setCouponPreview(result);
-      setCouponPreviewSubtotal(args.subtotal);
-      setCouponError(null);
-    },
-    onError: (err) => {
-      setCouponPreview(null);
-      setCouponPreviewSubtotal(null);
-      setCouponError(err instanceof ApiError ? err.message : "Couldn't apply this coupon.");
-    },
-  });
-
-  const voucherPreviewMutation = useMutation({
-    mutationFn: (args: { code: string; subtotal: number }) => previewVoucher(args.code, args.subtotal, args.subtotal),
-    onSuccess: (result, args) => {
-      setVoucherPreview(result);
-      setVoucherPreviewSubtotal(args.subtotal);
-      setVoucherError(null);
-    },
-    onError: (err) => {
-      setVoucherPreview(null);
-      setVoucherPreviewSubtotal(null);
-      setVoucherError(err instanceof ApiError ? err.message : "Couldn't apply this voucher.");
-    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't complete this sale — please try again."),
   });
 
   const holdMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (note: string) =>
       holdSale({
         items: cart.map((l) => ({ productId: l.productId, qty: l.qty })),
+        discount: discount || undefined,
         ...(session.user.businessUserId ? { staffUserId: session.user.businessUserId } : {}),
-        ...(customer ? { customerId: customer.id } : customerQuery.trim() ? { customerPhone: customerQuery.trim() } : {}),
+        ...(customer ? { customerId: customer.id } : {}),
+        ...(note ? { note } : {}),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["held-sales"] });
       toast.success("Sale held — find it in the Held Sales tab.");
-      setCart([]);
-      setCustomerQuery("");
-      setMobileCartOpen(false);
+      resetSale();
+      setActiveModal(null);
     },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't hold this sale — please try again.");
-    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't hold this sale — please try again."),
   });
 
-  const total = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
-  const couponStale = couponPreviewSubtotal !== null && couponPreviewSubtotal !== total;
-  const voucherStale = voucherPreviewSubtotal !== null && voucherPreviewSubtotal !== total;
-
-  function addToCart(productId: string) {
-    const product = products.find((p) => p.id === productId);
-    if (!product) return;
-    setCart((prev) => {
-      const existing = prev.find((l) => l.productId === productId);
-      if (existing) return prev.map((l) => (l.productId === productId ? { ...l, qty: l.qty + 1 } : l));
-      return [...prev, { productId, name: product.name, price: product.price, qty: 1 }];
-    });
+  function resetSale() {
+    setCart([]);
+    setCustomer(null);
+    setDiscount(0);
+    setSelectedMethod("cash");
   }
 
+  function addToCart(product: Product) {
+    if (product.kind === "product" && (product.stockOnHand ?? 0) <= 0) return;
+    setCart((prev) => {
+      const existing = prev.find((l) => l.productId === product.id);
+      if (existing) return prev.map((l) => (l.productId === product.id ? { ...l, qty: l.qty + 1 } : l));
+      return [...prev, { productId: product.id, name: product.name, price: product.price, qty: 1 }];
+    });
+  }
   function increment(id: string) {
     setCart((prev) => prev.map((l) => (l.productId === id ? { ...l, qty: l.qty + 1 } : l)));
   }
-
   function decrement(id: string) {
-    setCart((prev) =>
-      prev.flatMap((l) => (l.productId === id ? (l.qty > 1 ? [{ ...l, qty: l.qty - 1 }] : []) : [l])),
-    );
+    setCart((prev) => prev.flatMap((l) => (l.productId === id ? (l.qty > 1 ? [{ ...l, qty: l.qty - 1 }] : []) : [l])));
   }
-
   function remove(id: string) {
     setCart((prev) => prev.filter((l) => l.productId !== id));
   }
 
-  function handleBarcodeSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const bySku = products.find((p) => p.sku?.toLowerCase() === barcodeQuery.trim().toLowerCase());
-    if (bySku) {
-      addToCart(bySku.id);
-      setBarcodeQuery("");
-    } else {
-      toast.error(`No product found for "${barcodeQuery}".`);
-    }
-  }
+  const subtotal = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
+  const afterDiscount = Math.max(0, subtotal - discount);
+  const taxRate = businessProfile?.taxRate ?? 0;
+  const taxLabel = businessProfile?.taxLabel ?? "Tax";
+  const taxPreview = afterDiscount * (taxRate / 100);
+  const total = afterDiscount + taxPreview;
+  const itemCount = cart.reduce((n, l) => n + l.qty, 0);
+  const itemCountLabel = `${itemCount} item${itemCount === 1 ? "" : "s"}`;
+  const canComplete = cart.length > 0 && !saleMutation.isPending;
 
-  function handleConfirm() {
-    saleMutation.mutate({
+  function buildSalePayload(method: PaymentMethod, amountReceived?: number): CreateSaleInput {
+    return {
       items: cart.map((l) => ({ productId: l.productId, qty: l.qty })),
-      payment: { method: paymentMethod === "wallet" ? "online" : paymentMethod },
+      payment: { method, ...(amountReceived !== undefined ? { amount: amountReceived } : {}) },
+      discount: discount || undefined,
       ...(session.user.businessUserId ? { staffUserId: session.user.businessUserId } : {}),
-      ...(customer ? { customerId: customer.id } : customerQuery.trim() ? { customerPhone: customerQuery.trim() } : {}),
-      // The server always revalidates and recomputes the real discount/amount itself — the
-      // preview above is purely informational, never trusted as the source of truth.
-      ...(couponPreview && !couponStale ? { couponCode: couponPreview.code } : {}),
-      ...(voucherPreview && !voucherStale ? { voucherCode: voucherPreview.code } : {}),
-    });
+      ...(customer ? { customerId: customer.id } : {}),
+    };
   }
 
-  function handleApplyCoupon() {
-    couponPreviewMutation.mutate({ code: couponCode.trim(), subtotal: total });
+  function handleCompleteClick() {
+    setActiveModal(selectedMethod);
   }
-
-  function handleClearCoupon() {
-    setCouponPreview(null);
-    setCouponPreviewSubtotal(null);
-    setCouponCode("");
-    setCouponError(null);
-  }
-
-  function handleApplyVoucher() {
-    voucherPreviewMutation.mutate({ code: voucherCode.trim(), subtotal: total });
-  }
-
-  function handleClearVoucher() {
-    setVoucherPreview(null);
-    setVoucherPreviewSubtotal(null);
-    setVoucherCode("");
-    setVoucherError(null);
-  }
-
-  const cartPanelProps = {
-    cart,
-    onIncrement: increment,
-    onDecrement: decrement,
-    onRemove: remove,
-    currency,
-    customerQuery,
-    onCustomerQueryChange: setCustomerQuery,
-    customer,
-    paymentMethod,
-    onPaymentMethodChange: setPaymentMethod,
-    onConfirm: handleConfirm,
-    confirming: saleMutation.isPending,
-    onHold: () => holdMutation.mutate(),
-    holding: holdMutation.isPending,
-    total,
-    couponCode,
-    onCouponCodeChange: setCouponCode,
-    couponPreview,
-    couponStale,
-    couponPending: couponPreviewMutation.isPending,
-    couponError,
-    onApplyCoupon: handleApplyCoupon,
-    onClearCoupon: handleClearCoupon,
-    voucherCode,
-    onVoucherCodeChange: setVoucherCode,
-    voucherPreview,
-    voucherStale,
-    voucherPending: voucherPreviewMutation.isPending,
-    voucherError,
-    onApplyVoucher: handleApplyVoucher,
-    onClearVoucher: handleClearVoucher,
-  };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h1 className="font-display text-2xl font-bold text-fg">Fast Sale</h1>
-            <div className="flex items-center gap-2">
-              <form onSubmit={handleBarcodeSubmit} className="w-56">
-                <Input
-                  value={barcodeQuery}
-                  onChange={(e) => setBarcodeQuery(e.target.value)}
-                  placeholder="Scan or type SKU…"
-                  leadingSlot={<Barcode className="h-4 w-4" aria-hidden />}
-                />
-              </form>
-              <VoiceSaleRecorder currency={currency} />
-            </div>
-          </div>
+    <main className="grid min-w-0 items-start gap-4 px-[22px] pb-[22px] pt-4" style={{ gridTemplateColumns: "minmax(0,1fr) 372px" }}>
+      <section className="flex min-w-0 flex-col gap-[13px]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-[14px] top-[15px]" style={{ color: "var(--app-text-disabled)" }} width={18} height={18} aria-hidden />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search products, SKU, barcode or service..."
+            aria-label="Search products"
+            className="w-full min-h-[50px] rounded-[13px] py-[14px] ps-[44px] pe-[96px] text-[14px] font-medium"
+            style={{ border: "1px solid var(--app-border)", background: "var(--app-surface)" }}
+          />
+        </div>
 
-          {productsError ? (
-            <InlineError message="Couldn't load products — check your connection and reload." />
-          ) : (
-          <div className="grid flex-1 grid-cols-2 content-start gap-2.5 overflow-y-auto pb-4 sm:grid-cols-3 lg:grid-cols-4">
-            {productsPending
-              ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
-              : products.map((p) => (
+        <div className="flex flex-wrap items-center gap-2">
+          {categories.map((c) => {
+            const active = cat === c;
+            return (
               <button
-                key={p.id}
-                onClick={() => addToCart(p.id)}
-                className="flex flex-col items-start rounded-[var(--radius-noxtill)] border border-border bg-surface p-3.5 text-start transition-colors hover:border-primary hover:bg-primary/4 active:scale-[0.98]"
+                key={c}
+                onClick={() => setCat(c)}
+                className="min-h-10 rounded-full px-4 py-2.5 text-[12.5px] font-bold"
+                style={active ? { border: "1px solid var(--app-primary)", background: "var(--app-success-bg)", color: "var(--app-primary-hover, #0E8442)" } : { border: "1px solid var(--app-border)", background: "var(--app-surface)", color: "var(--app-text-muted)" }}
               >
-                <p className="line-clamp-2 text-sm font-medium text-fg">{p.name}</p>
-                <p className="mt-auto pt-2 font-display text-sm font-bold text-primary">{formatCurrency(p.price, currency)}</p>
+                {c}
+              </button>
+            );
+          })}
+          <div className="ms-auto flex gap-[3px] rounded-[10px] p-[3px]" style={{ background: "var(--app-surface-2)" }}>
+            {(["All", "Products", "Services"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className="rounded-[8px] px-3.5 py-2 text-[12px] font-bold"
+                style={type === t ? { background: "var(--app-surface)", color: "var(--app-primary-hover, #0E8442)" } : { background: "transparent", color: "var(--app-text-faint)" }}
+              >
+                {t}
               </button>
             ))}
           </div>
+        </div>
+
+        {productsError ? (
+          <p className="py-10 text-center text-[13px]" style={{ color: "var(--app-danger-strong)" }}>Couldn&apos;t load products — check your connection and reload.</p>
+        ) : !productsPending && filtered.length === 0 ? (
+          <div className="rounded-[14px] p-[56px_20px] text-center" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-[14px]" style={{ background: "var(--app-surface-2)" }}>
+              <PackageX className="h-[23px] w-[23px]" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
+            </div>
+            <div className="text-[14.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>Add your first product to start selling</div>
+            <div className="mt-[5px] text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Nothing matches this search or filter.</div>
+            <div className="mt-[15px] flex flex-wrap justify-center gap-2.5">
+              <a href="/products" className="min-h-11 rounded-[10px] px-[18px] py-[11px] text-[12.5px] font-bold text-white" style={{ background: "var(--app-primary)" }}>Add Product</a>
+              <a href="/products/import" className="min-h-11 rounded-[10px] px-[18px] py-[11px] text-[12.5px] font-semibold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Import Catalog</a>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-[13px]" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(168px,1fr))" }}>
+            {productsPending
+              ? Array.from({ length: 12 }).map((_, i) => <div key={i} className="h-[190px] animate-pulse rounded-[14px]" style={{ background: "var(--app-surface-2)" }} />)
+              : filtered.map((p) => {
+                  const qty = cartMap.get(p.id) ?? 0;
+                  const out = p.kind === "product" && (p.stockOnHand ?? 0) <= 0;
+                  const low = p.kind === "product" && !out && (p.stockOnHand ?? 0) <= (p.lowStockThreshold ?? 0);
+                  const Icon = p.kind === "service" ? Sparkles : Package;
+                  return (
+                    <div
+                      key={p.id}
+                      className="relative flex flex-col gap-2.5 rounded-[14px] p-[11px]"
+                      style={{ background: "var(--app-surface)", border: `1px solid ${out ? "var(--app-border)" : "var(--app-border)"}`, boxShadow: "0 1px 2px rgba(16,24,40,.04)", opacity: out ? 0.6 : 1 }}
+                    >
+                      <button
+                        onClick={() => addToCart(p)}
+                        disabled={out}
+                        aria-label={`Add ${p.name} to cart`}
+                        className="flex h-[86px] items-center justify-center rounded-[11px]"
+                        style={{ background: "var(--app-page-bg, #F4F6F8)", cursor: out ? "not-allowed" : "pointer" }}
+                      >
+                        <Icon className="h-7 w-7" style={{ color: "var(--app-text-disabled)" }} strokeWidth={1.7} aria-hidden />
+                      </button>
+                      <div className="flex items-start gap-1.5">
+                        <span className="flex-1 text-[12.5px] font-bold leading-[1.35]" style={{ color: "var(--app-text)" }}>{p.name}</span>
+                        <button onClick={() => setOpenMenuId(openMenuId === p.id ? null : p.id)} aria-label="Product actions" style={{ color: "var(--app-text-disabled)" }}>
+                          <MoreVertical className="h-[15px] w-[15px]" aria-hidden />
+                        </button>
+                      </div>
+                      <div className="-mt-0.5 flex items-center gap-1.5">
+                        <span className="text-[14px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-.3px" }}>{formatCurrency(p.price, currency)}</span>
+                        <span
+                          className="ms-auto rounded-full px-[7px] py-0.5 text-[10px] font-bold"
+                          style={out ? { color: "var(--app-danger-strong)", background: "#FEE4E2" } : low ? { color: "var(--app-warning-text)", background: "var(--app-warning-bg)" } : p.kind === "service" ? { color: "var(--app-text-faint)", background: "var(--app-surface-2)" } : { color: "var(--app-primary-hover, #0E8442)", background: "var(--app-success-bg)" }}
+                        >
+                          {p.kind === "service" ? "Service" : out ? "Out of Stock" : low ? "Low Stock" : `${p.stockOnHand} in stock`}
+                        </span>
+                      </div>
+                      {qty > 0 ? (
+                        <div className="flex items-center gap-2 rounded-[10px] p-[5px]" style={{ background: "var(--app-success-bg)", border: "1px solid var(--app-success-border)" }}>
+                          <button onClick={() => decrement(p.id)} aria-label="Decrease" className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[16px] font-extrabold" style={{ border: "1px solid var(--app-success-border)", background: "var(--app-surface)", color: "var(--app-primary-hover, #0E8442)" }}>−</button>
+                          <span className="flex-1 text-center text-[13.5px] font-extrabold" style={{ color: "var(--app-primary-hover, #0E8442)" }}>{qty}</span>
+                          <button onClick={() => addToCart(p)} aria-label="Increase" className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[16px] font-extrabold text-white" style={{ background: "var(--app-primary)" }}>+</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => addToCart(p)}
+                          disabled={out}
+                          className="min-h-10 rounded-[10px] p-2.5 text-[12px] font-bold"
+                          style={{ border: "1px solid var(--app-border)", background: out ? "var(--app-surface-2)" : "var(--app-surface)", color: out ? "var(--app-text-disabled)" : "var(--app-text-muted)", cursor: out ? "not-allowed" : "pointer" }}
+                        >
+                          {out ? "Out of Stock" : "Add to Cart"}
+                        </button>
+                      )}
+                      {openMenuId === p.id && (
+                        <div className="absolute right-2.5 top-11 z-[15] w-[158px] rounded-[11px] p-[5px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", boxShadow: "0 14px 34px rgba(16,24,40,.16)" }}>
+                          <button
+                            onClick={() => {
+                              addToCart(p);
+                              setOpenMenuId(null);
+                            }}
+                            className="block w-full rounded-[8px] p-[9px_10px] text-start text-[12px] font-semibold"
+                            style={{ color: "var(--app-text-muted)" }}
+                          >
+                            Add to Cart
+                          </button>
+                          <a href="/inventory" className="block w-full rounded-[8px] p-[9px_10px] text-start text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>View Stock</a>
+                          <a href="/products" className="block w-full rounded-[8px] p-[9px_10px] text-start text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Edit Product</a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+          </div>
+        )}
+      </section>
+
+      <aside className="sticky top-[60px] flex flex-col overflow-hidden rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}>
+        <div className="flex items-center gap-2.5 p-[15px_16px]" style={{ borderBottom: "1px solid var(--app-surface-2)" }}>
+          <ShoppingBag className="h-[18px] w-[18px]" style={{ color: "var(--app-primary)" }} aria-hidden />
+          <h2 className="m-0 flex-1 text-[15.5px] font-extrabold" style={{ color: "var(--app-text)" }}>Current Sale</h2>
+          <span className="rounded-full px-[10px] py-[3px] text-[11.5px] font-bold" style={{ color: "var(--app-primary-hover, #0E8442)", background: "var(--app-success-bg)" }}>{itemCountLabel}</span>
+        </div>
+
+        <button
+          onClick={() => setActiveModal("customer")}
+          className="flex min-h-[52px] w-full items-center gap-2.5 p-[12px_16px] text-start"
+          style={{ borderBottom: "1px solid var(--app-surface-2)" }}
+        >
+          <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+            <Search className="h-4 w-4" style={{ color: "var(--app-text-muted)" }} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[12.5px] font-bold" style={{ color: "var(--app-text)" }}>{customer?.name ?? "Walk-in customer"}</span>
+            <span className="mt-[1px] block text-[11px]" style={{ color: customer && customer.creditBalance > 0 ? "var(--app-danger-strong)" : "var(--app-text-disabled)" }}>
+              {customer ? (customer.creditBalance > 0 ? `Owes ${formatCurrency(customer.creditBalance, currency)}` : customer.phone) : "Tap to attach a customer"}
+            </span>
+          </span>
+        </button>
+
+        <div className="min-h-24 flex-1 overflow-y-auto" style={{ maxHeight: 330 }}>
+          {cart.length === 0 ? (
+            <div className="p-[42px_20px] text-center">
+              <div className="mx-auto mb-[11px] flex h-[46px] w-[46px] items-center justify-center rounded-[14px]" style={{ background: "var(--app-page-bg, #F4F6F8)" }}>
+                <ShoppingBag className="h-[22px] w-[22px]" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
+              </div>
+              <div className="text-[13.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>Your cart is empty</div>
+              <div className="mt-1 text-[12px]" style={{ color: "var(--app-text-disabled)" }}>Tap a product to start a sale.</div>
+            </div>
+          ) : (
+            cart.map((line) => (
+              <div key={line.productId} className="flex items-center gap-2.5 p-[11px_16px]" style={{ borderBottom: "1px solid var(--app-page-bg, #F6F8FA)" }}>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] font-bold leading-[1.35]" style={{ color: "var(--app-text)" }}>{line.name}</span>
+                  <span className="mt-0.5 block text-[11px]" style={{ color: "var(--app-text-disabled)" }}>{formatCurrency(line.price, currency)} each</span>
+                </span>
+                <span className="flex items-center gap-[5px]">
+                  <button onClick={() => decrement(line.productId)} aria-label="Decrease quantity" className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[15px] font-extrabold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Minus className="h-3.5 w-3.5" aria-hidden /></button>
+                  <span className="min-w-[22px] text-center text-[13px] font-extrabold" style={{ color: "var(--app-text)" }}>{line.qty}</span>
+                  <button onClick={() => increment(line.productId)} aria-label="Increase quantity" className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[15px] font-extrabold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Plus className="h-3.5 w-3.5" aria-hidden /></button>
+                </span>
+                <span className="w-[78px] text-right text-[13px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(line.price * line.qty, currency)}</span>
+                <button onClick={() => remove(line.productId)} aria-label={`Remove ${line.name}`} style={{ color: "var(--app-border-strong)" }}>
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            ))
           )}
         </div>
 
-        <div className="hidden w-80 shrink-0 border-s border-border bg-surface lg:block">
-          <CartPanel {...cartPanelProps} />
-        </div>
-      </div>
-
-      {!mobileCartOpen && cart.length > 0 && (
-        <button
-          onClick={() => setMobileCartOpen(true)}
-          className="fixed inset-x-4 bottom-4 z-40 flex items-center justify-between rounded-full bg-primary px-5 py-3.5 text-primary-foreground shadow-[var(--shadow-lg)] lg:hidden"
-        >
-          <span className="flex items-center gap-2 text-sm font-medium">
-            <ShoppingCart className="h-4 w-4" aria-hidden />
-            {cart.reduce((n, l) => n + l.qty, 0)} items
-          </span>
-          <span className="font-display font-bold">{formatCurrency(total, currency)}</span>
-        </button>
-      )}
-
-      {mobileCartOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button aria-label="Close cart" onClick={() => setMobileCartOpen(false)} className="absolute inset-0 bg-[#1c231e]/45" />
-          <div className="animate-sheet-in absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-[var(--radius-noxtill)] border-t border-border bg-surface shadow-[var(--shadow-lg)]">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <p className="font-display text-base font-semibold text-fg">Current sale</p>
-              <button
-                onClick={() => setMobileCartOpen(false)}
-                aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-fg-faint hover:bg-surface-2"
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-            <CartPanel {...cartPanelProps} />
+        <div className="p-[14px_16px]" style={{ borderTop: "1px solid var(--app-surface-2)", background: "var(--app-page-bg, #FCFDFD)" }}>
+          <div className="flex justify-between p-[4px_0] text-[12.5px]"><span style={{ color: "var(--app-text-faint)" }}>Subtotal</span><span className="font-bold" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(subtotal, currency)}</span></div>
+          <div className="flex items-center justify-between p-[4px_0]">
+            <button onClick={() => setActiveModal("discount")} className="flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: "var(--app-primary-hover, #0E8442)" }}>Discount {discount > 0 ? "· edit" : ""}</button>
+            <span className="text-[12.5px] font-bold" style={{ color: "var(--app-danger-strong)" }}>{discount > 0 ? `−${formatCurrency(discount, currency)}` : formatCurrency(0, currency)}</span>
+          </div>
+          <div className="flex justify-between p-[4px_0] text-[12.5px]"><span style={{ color: "var(--app-text-faint)" }}>{taxLabel}{taxRate > 0 ? ` (${taxRate}%)` : ""}</span><span className="font-bold" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(taxPreview, currency)}</span></div>
+          <div className="mt-[9px] flex items-baseline justify-between border-t pt-[11px]" style={{ borderColor: "var(--app-border-strong)", borderStyle: "dashed" }}>
+            <span className="text-[13px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>Total</span>
+            <span className="text-[27px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-1px" }}>{formatCurrency(total, currency)}</span>
           </div>
         </div>
-      )}
-    </div>
+
+        <div className="p-[0_16px_14px]">
+          <div className="grid grid-cols-2 gap-[9px]">
+            {PAYMENT_TILES.map((tile) => {
+              const active = selectedMethod === tile.key;
+              const Icon = tile.icon;
+              return (
+                <button
+                  key={tile.key}
+                  onClick={() => setSelectedMethod(tile.key)}
+                  className="flex min-h-[76px] flex-col items-center justify-center gap-[7px] rounded-[13px] p-[13px_8px]"
+                  style={{ border: `1.5px solid ${active ? "var(--app-primary)" : "var(--app-border)"}`, background: active ? "var(--app-success-bg)" : "var(--app-surface)" }}
+                >
+                  <Icon className="h-[21px] w-[21px]" style={{ color: active ? "var(--app-primary)" : "var(--app-text-muted)" }} aria-hidden />
+                  <span className="text-[12px] font-bold" style={{ color: active ? "var(--app-primary-hover, #0E8442)" : "var(--app-text-muted)" }}>{tile.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-2.5 flex gap-2">
+            <button onClick={() => setActiveModal("hold")} disabled={cart.length === 0} className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] p-2.5 text-[12px] font-bold disabled:opacity-50" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Hold</button>
+            <button onClick={() => setActiveModal("scan")} className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] p-2.5 text-[12px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Scan</button>
+            <button onClick={() => setActiveModal("clear")} disabled={cart.length === 0} className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] p-2.5 text-[12px] font-bold disabled:opacity-50" style={{ border: "1px solid var(--app-border)", color: cart.length === 0 ? "var(--app-text-disabled)" : "var(--app-danger-strong)" }}>Clear</button>
+          </div>
+          <button
+            onClick={handleCompleteClick}
+            disabled={!canComplete}
+            className="mt-[11px] flex min-h-14 w-full items-center justify-center gap-2 rounded-[13px] p-4 text-[15px] font-extrabold text-white disabled:opacity-50"
+            style={{ background: "var(--app-primary)", letterSpacing: "-.2px" }}
+          >
+            Complete Sale · {formatCurrency(total, currency)}
+          </button>
+          <div className="mt-2 text-center text-[11px]" style={{ color: "var(--app-text-disabled)" }}>
+            {cart.length === 0 ? "Add an item to the cart to continue" : `Paying with ${PAYMENT_TILES.find((t) => t.key === selectedMethod)?.label}`}
+          </div>
+        </div>
+      </aside>
+
+      <CustomerDrawer
+        open={activeModal === "customer"}
+        onClose={() => setActiveModal(null)}
+        currency={currency}
+        onPick={(c) => {
+          const balance = debtors.find((d) => d.customerId === c.id)?.balance ?? c.creditBalance;
+          setCustomer({ ...c, creditBalance: balance });
+        }}
+      />
+
+      <ScanModal
+        open={activeModal === "scan"}
+        onClose={() => setActiveModal(null)}
+        products={products}
+        onFound={(p) => addToCart(p)}
+      />
+
+      <DiscountModal
+        open={activeModal === "discount"}
+        onClose={() => setActiveModal(null)}
+        subtotal={subtotal}
+        currency={currency}
+        onApply={setDiscount}
+        onRemove={() => setDiscount(0)}
+      />
+
+      <CashPaymentModal
+        open={activeModal === "cash"}
+        onClose={() => setActiveModal(null)}
+        total={total}
+        currency={currency}
+        completing={saleMutation.isPending}
+        onComplete={(received) => saleMutation.mutate(buildSalePayload("cash", received))}
+      />
+
+      <TerminalPaymentModal
+        open={activeModal === "card" || activeModal === "online"}
+        onClose={() => setActiveModal(null)}
+        method={activeModal === "online" ? "online" : "card"}
+        total={total}
+        currency={currency}
+        completing={saleMutation.isPending}
+        onComplete={() => saleMutation.mutate(buildSalePayload(activeModal === "online" ? "online" : "card"))}
+      />
+
+      <CreditPaymentModal
+        open={activeModal === "credit"}
+        onClose={() => setActiveModal(null)}
+        customer={customer}
+        total={total}
+        currency={currency}
+        completing={saleMutation.isPending}
+        onComplete={() => saleMutation.mutate(buildSalePayload("credit"))}
+        onChooseCustomer={() => setActiveModal("customer")}
+      />
+
+      <HoldModal
+        open={activeModal === "hold"}
+        onClose={() => setActiveModal(null)}
+        itemCount={itemCountLabel}
+        holding={holdMutation.isPending}
+        onHold={(reference, note) => holdMutation.mutate([reference, note].filter(Boolean).join(" — "))}
+      />
+
+      <ClearSaleModal open={activeModal === "clear"} onClose={() => setActiveModal(null)} onClear={resetSale} />
+    </main>
   );
 }

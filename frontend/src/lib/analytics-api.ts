@@ -26,6 +26,17 @@ export function fetchRevenueSeries(days?: number): Promise<RevenueSeriesPoint[]>
   return apiFetch<RevenueSeriesPoint[]>(`/analytics/revenue-series${query}`);
 }
 
+export interface BookingsSeriesPoint {
+  date: string;
+  bookings: number;
+}
+
+/** GET /analytics/bookings-series — real per-day appointment counts, for Business Overview's Bookings overlay. */
+export function fetchBookingsSeries(days?: number): Promise<BookingsSeriesPoint[]> {
+  const query = days ? `?days=${days}` : "";
+  return apiFetch<BookingsSeriesPoint[]>(`/analytics/bookings-series${query}`);
+}
+
 export interface CohortRow {
   cohortMonth: string;
   size: number;

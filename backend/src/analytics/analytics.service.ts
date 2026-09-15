@@ -117,6 +117,39 @@ export class AnalyticsService {
     }));
   }
 
+  /** Business Overview chart fix-it: the design's 3-series overlay (Sales/Orders/Bookings) only
+   * ever had real per-day data for Sales — `revenueSeries()` above already carries real per-day
+   * Orders too (`orders_count`), but there was no real per-day Bookings series anywhere. This is
+   * a straightforward day-bucketed count of real appointments, not cancelled, by `startsAt` date —
+   * no new view needed since `Appointment.startsAt` already indexes on `[businessId, startsAt]`. */
+  async bookingsSeries(days = 30) {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const appointments = await this.tenantPrisma.client.appointment.findMany({
+      where: {
+        businessId,
+        startsAt: { gte: since },
+        status: { not: 'cancelled' },
+      },
+      select: { startsAt: true },
+    });
+
+    const counts = new Map<string, number>();
+    for (const a of appointments) {
+      const key = a.startsAt.toISOString().slice(0, 10);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    const result: { date: string; bookings: number }[] = [];
+    for (let i = days - 1; i >= 0; i -= 1) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const key = d.toISOString().slice(0, 10);
+      result.push({ date: key, bookings: counts.get(key) ?? 0 });
+    }
+    return result;
+  }
+
   /** Monthly-signup-cohort retention: % of each cohort with >=1 order in each month since signup. */
   async cohorts() {
     const client = this.tenantPrisma.client;

@@ -10,6 +10,7 @@ import {
 import { OrdersService } from './orders.service';
 import { InvoiceService } from './invoice.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { CreateOrderDto } from './dto/create-order.dto';
 import { HoldSaleDto } from './dto/hold-sale.dto';
 import { ResumeHeldSaleDto } from './dto/resume-held-sale.dto';
 import { SplitBillDto } from './dto/split-bill.dto';
@@ -17,7 +18,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { GenerateInvoiceDto } from './dto/generate-invoice.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, OrderType, PaymentMethod } from '@prisma/client';
 
 @Controller()
 export class OrdersController {
@@ -37,9 +38,41 @@ export class OrdersController {
     return this.ordersService.createSale(user.businessId, dto);
   }
 
+  @Post('orders')
+  createOrder(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateOrderDto,
+  ) {
+    return this.ordersService.createOrder(user.businessId, dto);
+  }
+
   @Get('orders')
-  findAll(@Query('status') status?: OrderStatus) {
-    return this.ordersService.findAll(status);
+  findAll(
+    @Query('status') status?: OrderStatus,
+    @Query('orderType') orderType?: OrderType,
+    @Query('paymentMethod') paymentMethod?: PaymentMethod,
+    @Query('paymentStatus')
+    paymentStatus?: 'paid' | 'unpaid' | 'partial' | 'refunded',
+    @Query('staffUserId') staffUserId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.ordersService.findAll({
+      status,
+      orderType,
+      paymentMethod,
+      paymentStatus,
+      staffUserId,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('orders/summary')
+  summary() {
+    return this.ordersService.summary();
   }
 
   @Get('orders/:id')
@@ -71,7 +104,12 @@ export class OrdersController {
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
   ) {
-    return this.ordersService.updateStatus(user.businessId, id, dto.status);
+    return this.ordersService.updateStatus(
+      user.businessId,
+      id,
+      dto.status,
+      dto.reason,
+    );
   }
 
   @Post('orders/:id/split-bill')

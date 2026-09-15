@@ -5,31 +5,38 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, MessageSquare, Mail, Check } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
-import { updateNightlyCloseSettings, type NightlyCloseSettings } from "@/lib/nightly-close-api";
+import { updateNightlyCloseSettings, type NightlyCloseChannel, type NightlyCloseSettings } from "@/lib/nightly-close-api";
 import { SlideDrawer } from "./slide-drawer";
 
-const CHANNELS: { key: "whatsapp" | "sms" | "email"; label: string; icon: typeof MessageCircle }[] = [
+const CHANNELS: { key: NightlyCloseChannel; label: string; icon: typeof MessageCircle }[] = [
   { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { key: "sms", label: "SMS", icon: MessageSquare },
   { key: "email", label: "Email", icon: Mail },
 ];
 
-/** Single-select, matching the real backend field (`channel: one value`) — the design's demo shows
- * a multi-select "sent on every selected channel" pattern, but there's no multi-channel delivery
- * capability on the backend to back that, so this stays honest to what's actually configurable. */
+/** Multi-select (fix-it) — Nightly Close now has its own `channels` override, separate from the
+ * shared `channelPref` field every other message type in the app still reads, so picking more than
+ * one channel here genuinely sends the close on every one of them without touching anything else. */
 export function NightlyCloseChannelDrawer({ open, onClose, current }: { open: boolean; onClose: () => void; current?: NightlyCloseSettings }) {
   const queryClient = useQueryClient();
-  const [selected, setSelected] = useState<"whatsapp" | "sms" | "email">(current?.channel ?? "whatsapp");
+  const [selected, setSelected] = useState<NightlyCloseChannel[]>(
+    current?.config.channels && current.config.channels.length > 0 ? current.config.channels : current ? [current.channel] : ["whatsapp"],
+  );
 
   useEffect(() => {
-    if (current) setSelected(current.channel);
+    if (!current) return;
+    setSelected(current.config.channels.length > 0 ? current.config.channels : [current.channel]);
   }, [current]);
 
+  function toggle(key: NightlyCloseChannel) {
+    setSelected((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));
+  }
+
   const mutation = useMutation({
-    mutationFn: () => updateNightlyCloseSettings({ channel: selected }),
+    mutationFn: () => updateNightlyCloseSettings({ channels: selected }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["nightly-close-settings"] });
-      toast.success("Delivery channel saved.");
+      toast.success(selected.length > 1 ? `Delivery channels saved — sends on all ${selected.length}.` : "Delivery channel saved.");
       onClose();
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't save the channel — please try again."),
@@ -38,14 +45,16 @@ export function NightlyCloseChannelDrawer({ open, onClose, current }: { open: bo
   return (
     <SlideDrawer open={open} onClose={onClose} title="Delivery Channel">
       <div className="flex flex-col gap-2.5">
-        <p className="mb-1 text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>Choose which channel your close is sent on.</p>
+        <p className="mb-1 text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>
+          Pick one channel, or select more than one to send the same close on every one of them.
+        </p>
         {CHANNELS.map((c) => {
-          const picked = selected === c.key;
+          const picked = selected.includes(c.key);
           return (
             <button
               key={c.key}
               type="button"
-              onClick={() => setSelected(c.key)}
+              onClick={() => toggle(c.key)}
               className="flex items-center gap-3 rounded-[12px] p-[13px] text-start"
               style={{ border: picked ? "1px solid var(--app-primary)" : "1px solid var(--app-border)", background: picked ? "var(--app-success-bg)" : "var(--app-surface)" }}
             >
@@ -65,11 +74,11 @@ export function NightlyCloseChannelDrawer({ open, onClose, current }: { open: bo
         <button
           type="button"
           onClick={() => mutation.mutate()}
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || selected.length === 0}
           className="mt-1.5 w-full rounded-[10px] py-[11px] text-[12.5px] font-bold text-white disabled:opacity-60"
           style={{ background: "var(--app-primary)" }}
         >
-          {mutation.isPending ? "Saving…" : "Save Channel"}
+          {mutation.isPending ? "Saving…" : selected.length > 1 ? `Save ${selected.length} Channels` : "Save Channel"}
         </button>
       </div>
     </SlideDrawer>

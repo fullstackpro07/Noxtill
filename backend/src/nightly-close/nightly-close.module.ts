@@ -4,6 +4,7 @@ import { NightlyCloseService } from './nightly-close.service';
 import { NightlyCloseScheduler } from './nightly-close.scheduler';
 import { NightlyCloseProcessor } from './nightly-close.processor';
 import { NightlyCloseController } from './nightly-close.controller';
+import { NightlyCloseVoiceCallService } from './nightly-close-voice-call.service';
 import { MessagingModule } from '../messaging/messaging.module';
 import { NIGHTLY_CLOSE_QUEUE } from './nightly-close.constants';
 
@@ -17,6 +18,7 @@ import { NIGHTLY_CLOSE_QUEUE } from './nightly-close.constants';
     NightlyCloseService,
     NightlyCloseScheduler,
     NightlyCloseProcessor,
+    NightlyCloseVoiceCallService,
   ],
 })
 export class NightlyCloseModule {}

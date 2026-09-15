@@ -126,6 +126,17 @@ export function fetchCollectedToday(): Promise<number> {
   return apiFetch<number>("/credit/collected-today");
 }
 
+export interface CreditBalanceHistoryPoint {
+  date: string;
+  balance: number;
+}
+
+/** GET /credit/balance-history — real daily snapshots from the CreditBalanceSnapshot job, for the KpiRow drawer's week-over-week delta. */
+export function fetchCreditBalanceHistory(days?: number): Promise<CreditBalanceHistoryPoint[]> {
+  const query = days ? `?days=${days}` : "";
+  return apiFetch<CreditBalanceHistoryPoint[]>(`/credit/balance-history${query}`);
+}
+
 export interface RecoveryReportTrendPoint {
   month: string;
   extended: number;

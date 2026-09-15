@@ -13,6 +13,7 @@ import {
   LogOut,
   History,
   ClipboardList,
+  KanbanSquare,
   Grid3x3,
   FileEdit,
   FileText,
@@ -180,6 +181,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ShoppingCart,
     roles: ["owner", "manager", "staff"],
     children: [
+      { key: "voice", labelKey: "nav.voiceSale", href: "/sales/voice", icon: Mic },
       { key: "held", labelKey: "nav.held", href: "/sales/held", icon: PackageOpen },
       { key: "cash-register", labelKey: "nav.cashRegister", href: "/sales/cash-register", icon: Banknote },
       { key: "shift-closing", labelKey: "nav.shiftClosing", href: "/sales/shift-closing", icon: LogOut },
@@ -193,12 +195,15 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ClipboardList,
     roles: ["owner", "manager", "staff"],
     children: [
-      { key: "tables", labelKey: "nav.tables", href: "/orders/tables", icon: Grid3x3 },
+      { key: "all", labelKey: "nav.allOrders", href: "/orders", icon: ListChecks },
+      { key: "board", labelKey: "nav.orderBoard", href: "/orders/board", icon: KanbanSquare },
       { key: "drafts", labelKey: "nav.drafts", href: "/orders/drafts", icon: FileEdit },
       { key: "quotations", labelKey: "nav.quotations", href: "/orders/quotations", icon: FileText },
-      { key: "returns", labelKey: "nav.returns", href: "/orders/returns", icon: Undo2 },
       { key: "invoices", labelKey: "nav.invoices", href: "/orders/invoices", icon: FileSpreadsheet },
+      { key: "returns", labelKey: "nav.returns", href: "/orders/returns", icon: Undo2 },
       { key: "receipts", labelKey: "nav.receipts", href: "/orders/receipts", icon: Receipt },
+      { key: "tables", labelKey: "nav.tables", href: "/orders/tables", icon: Grid3x3 },
+      { key: "exceptions", labelKey: "nav.exceptions", href: "/orders/exceptions", icon: AlertTriangle },
     ],
   },
   {

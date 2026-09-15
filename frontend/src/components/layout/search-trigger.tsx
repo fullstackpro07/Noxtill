@@ -5,8 +5,10 @@ import { Search } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
 import { useSearchStore } from "@/store/search-store";
 
-/** Ctrl/⌘K shortcut and click both open the Deep Search overlay (FE-032). */
-export function SearchTrigger() {
+/** Ctrl/⌘K shortcut and click both open the Deep Search overlay (FE-032). `compact` renders an
+ * icon-only button (same trigger, same shortcut) for headers with no room for the full-width
+ * search bar, e.g. a module's custom Topbar row that already carries stat boxes. */
+export function SearchTrigger({ compact = false }: { compact?: boolean }) {
   // Server always renders the Ctrl-K fallback (no `navigator` during SSR);
   // detecting the real platform is unavoidably a post-mount effect, not
   // something computable during render — swapping the label in an effect,
@@ -28,6 +30,21 @@ export function SearchTrigger() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  if (compact) {
+    return (
+      <button
+        id="global-search-trigger"
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={t("topbar.searchPlaceholder")}
+        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px]"
+        style={{ border: "1px solid var(--app-border)", color: "var(--app-text-faint)" }}
+      >
+        <Search className="h-4 w-4" aria-hidden />
+      </button>
+    );
+  }
 
   return (
     <button

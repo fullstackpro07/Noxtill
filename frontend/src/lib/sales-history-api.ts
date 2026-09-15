@@ -17,6 +17,7 @@ interface RawSalesHistoryRow {
   orderNo: number;
   createdAt: string;
   itemsCount: number;
+  customerName: string | null;
   staffName: string | null;
   method: LivePaymentMethod | null;
   discount: string | number;
@@ -30,6 +31,7 @@ export interface LiveSalesHistoryRow {
   orderNo: number;
   createdAt: string;
   itemsCount: number;
+  customerName: string | null;
   staffName: string | null;
   method: LivePaymentMethod | null;
   discount: number;

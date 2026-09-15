@@ -120,7 +120,7 @@ describe('OrdersService.createDraft/convertDraft (UPD-BE-009)', () => {
 
     expect(activity.record).not.toHaveBeenCalled();
 
-    const listed = await ordersService.findAll('draft');
+    const listed = await ordersService.findAll({ status: 'draft' });
     expect(listed.some((o) => o.id === draft.id)).toBe(true);
   });
 

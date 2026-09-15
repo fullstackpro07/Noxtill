@@ -261,7 +261,11 @@ export function NightlyCloseView() {
             )}
             {settings?.config.voiceNoteEnabled && (
               <div className="rounded-[12px] p-[14px]" style={{ background: "var(--app-success-bg)", border: "1px solid var(--app-success-border)" }}>
-                <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>Voice note attached — a spoken summary will be sent alongside this close.</p>
+                <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>
+                  {settings?.voiceCallConfigured
+                    ? "Voice note enabled — you'll also get a phone call reading a spoken summary of this close."
+                    : "Voice note enabled, but voice calling isn't configured on this server yet — no call will actually be placed."}
+                </p>
               </div>
             )}
             <div className="flex gap-2">

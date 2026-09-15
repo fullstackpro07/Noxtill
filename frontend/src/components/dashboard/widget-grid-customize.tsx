@@ -5,47 +5,140 @@ import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-ki
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, ChevronUp, ChevronDown, X } from "lucide-react";
-import { widgetByKey, widgetSizeLabel, CATEGORY_LABELS } from "@/lib/widgets";
+import { DASHBOARD_ROWS, dashboardRowByKey, type DashboardRowKey } from "@/lib/dashboard-rows";
+import { widgetByKey } from "@/lib/widgets";
 import { useDashboardStore } from "@/store/dashboard-store";
 
-/** Exact match for the design's "Live layout preview" — a plain reorderable row list (grip, name +
- * module · size, up/down arrows, remove), not a live-data preview grid. Drag-and-drop is layered on
- * via dnd-kit for smoother reordering; the up/down buttons are the same real `moveDraftWidget`
- * action, just keyboard/tap-friendly. */
+const OUTER_KEYS = new Set(DASHBOARD_ROWS.filter((r) => r.scope === "outer").map((r) => r.key));
+const INNER_KEYS = new Set(DASHBOARD_ROWS.filter((r) => r.scope === "inner").map((r) => r.key));
+
+/** Row-level Customize Dashboard (fix-it v2): the design's exact rows (KPI Row, Opportunities/
+ * Needs Attention/Business Health, Business Overview/Health Score, ...) are reordered as whole
+ * units, in two independent lists matching the page's own structure — "Top of page" rows are
+ * full-width above the main/sidebar split, "Main area" rows sit in the left column beside the
+ * fixed sidebar. Moving a row within its own list changes its real position on Overview; the two
+ * lists never mix, since crossing between them would require restructuring the sidebar layout the
+ * design itself doesn't show. A separate "Extra KPI cards" list manages small metric tiles
+ * appended to the end of the KPI Row (Add Widget → "KPI Cards" tab). */
 export function WidgetGridCustomize() {
   const draftLayout = useDashboardStore((s) => s.draftLayout) ?? [];
+  const draftKpiExtras = useDashboardStore((s) => s.draftKpiExtras) ?? [];
   const reorderDraft = useDashboardStore((s) => s.reorderDraft);
-  const moveDraftWidget = useDashboardStore((s) => s.moveDraftWidget);
   const removeWidget = useDashboardStore((s) => s.removeWidget);
+  const removeKpiExtra = useDashboardStore((s) => s.removeKpiExtra);
 
+  const outerRows = draftLayout.filter((k): k is DashboardRowKey => OUTER_KEYS.has(k as DashboardRowKey));
+  const innerRows = draftLayout.filter((k): k is DashboardRowKey => INNER_KEYS.has(k as DashboardRowKey));
+
+  function moveWithinScope(scopeRows: DashboardRowKey[], key: string, direction: -1 | 1) {
+    const i = scopeRows.indexOf(key as DashboardRowKey);
+    const j = i + direction;
+    if (i < 0 || j < 0 || j >= scopeRows.length) return;
+    const next = scopeRows.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    applyScopeOrder(scopeRows === outerRows ? next : outerRows, scopeRows === outerRows ? innerRows : next);
+  }
+
+  function applyScopeOrder(nextOuter: DashboardRowKey[], nextInner: DashboardRowKey[]) {
+    // Absolute interleaving in the stored array doesn't matter — the Overview page filters into
+    // outer/inner separately and renders each in its own relative order, so concatenating is safe.
+    reorderDraft([...nextOuter, ...nextInner]);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <RowList
+        title="Top of page"
+        hint="Full-width rows, above everything else"
+        rows={outerRows}
+        onMove={(key, dir) => moveWithinScope(outerRows, key, dir)}
+        onReorder={(next) => applyScopeOrder(next, innerRows)}
+        onRemove={removeWidget}
+      />
+      <RowList
+        title="Main area"
+        hint="Rows in the main column, beside the fixed sidebar"
+        rows={innerRows}
+        onMove={(key, dir) => moveWithinScope(innerRows, key, dir)}
+        onReorder={(next) => applyScopeOrder(outerRows, next)}
+        onRemove={removeWidget}
+      />
+
+      {draftKpiExtras.length > 0 && (
+        <section className="rounded-[14px] p-[18px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="mb-3.5 flex items-center gap-2.5">
+            <h3 className="text-[15px] font-bold" style={{ color: "var(--app-text)" }}>Extra KPI cards</h3>
+            <span className="text-[11.5px]" style={{ color: "var(--app-text-faintest)" }}>Appended to the end of the KPI row</span>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {draftKpiExtras.map((key) => {
+              const widget = widgetByKey(key);
+              if (!widget) return null;
+              return (
+                <div key={key} className="flex items-center gap-3 rounded-[12px] p-[12px_14px]" style={{ background: "#FCFDFD", border: "1px solid var(--app-border)" }}>
+                  <span className="min-w-0 flex-1 text-[13px] font-bold" style={{ color: "var(--app-text)" }}>{widget.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeKpiExtra(key)}
+                    aria-label="Remove widget"
+                    className="flex h-[30px] w-[30px] items-center justify-center"
+                    style={{ border: "1px solid var(--app-border)", borderRadius: 8, color: "var(--app-text-disabled)", background: "var(--app-surface)" }}
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function RowList({
+  title,
+  hint,
+  rows,
+  onMove,
+  onReorder,
+  onRemove,
+}: {
+  title: string;
+  hint: string;
+  rows: DashboardRowKey[];
+  onMove: (key: string, direction: -1 | 1) => void;
+  onReorder: (next: DashboardRowKey[]) => void;
+  onRemove: (key: string) => void;
+}) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = draftLayout.indexOf(String(active.id));
-    const newIndex = draftLayout.indexOf(String(over.id));
-    reorderDraft(arrayMove(draftLayout, oldIndex, newIndex));
+    const oldIndex = rows.indexOf(String(active.id) as DashboardRowKey);
+    const newIndex = rows.indexOf(String(over.id) as DashboardRowKey);
+    onReorder(arrayMove(rows, oldIndex, newIndex));
   }
 
   return (
     <section className="rounded-[14px] p-[18px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
       <div className="mb-3.5 flex items-center gap-2.5">
-        <h3 className="text-[15px] font-bold" style={{ color: "var(--app-text)" }}>Live layout preview</h3>
-        <span className="text-[11.5px]" style={{ color: "var(--app-text-faintest)" }}>Order here is the order on your Overview screen</span>
+        <h3 className="text-[15px] font-bold" style={{ color: "var(--app-text)" }}>{title}</h3>
+        <span className="text-[11.5px]" style={{ color: "var(--app-text-faintest)" }}>{hint}</span>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={draftLayout} strategy={verticalListSortingStrategy}>
+        <SortableContext items={rows} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-2.5">
-            {draftLayout.map((key, i) => (
-              <WidgetRow
+            {rows.map((key, i) => (
+              <RowItem
                 key={key}
                 id={key}
                 isFirst={i === 0}
-                isLast={i === draftLayout.length - 1}
-                onMoveUp={() => moveDraftWidget(key, -1)}
-                onMoveDown={() => moveDraftWidget(key, 1)}
-                onRemove={() => removeWidget(key)}
+                isLast={i === rows.length - 1}
+                onMoveUp={() => onMove(key, -1)}
+                onMoveDown={() => onMove(key, 1)}
+                onRemove={() => onRemove(key)}
               />
             ))}
           </div>
@@ -55,7 +148,7 @@ export function WidgetGridCustomize() {
   );
 }
 
-function WidgetRow({
+function RowItem({
   id,
   isFirst,
   isLast,
@@ -70,10 +163,10 @@ function WidgetRow({
   onMoveDown: () => void;
   onRemove: () => void;
 }) {
-  const widget = widgetByKey(id);
+  const row = dashboardRowByKey(id);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
 
-  if (!widget) return null;
+  if (!row) return null;
 
   const arrowBtnStyle: React.CSSProperties = {
     border: "1px solid var(--app-border)",
@@ -92,10 +185,8 @@ function WidgetRow({
         <GripVertical className="h-4 w-4" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-bold" style={{ color: "var(--app-text)" }}>{widget.title}</span>
-        <span className="mt-0.5 block text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>
-          {CATEGORY_LABELS[widget.category]} · {widgetSizeLabel(widget)}
-        </span>
+        <span className="block text-[13px] font-bold" style={{ color: "var(--app-text)" }}>{row.title}</span>
+        <span className="mt-0.5 block text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>{row.module}</span>
       </span>
       <button type="button" onClick={onMoveUp} disabled={isFirst} aria-label="Move up" className="flex h-[30px] w-[30px] items-center justify-center disabled:opacity-40" style={arrowBtnStyle}>
         <ChevronUp className="h-3.5 w-3.5" aria-hidden />

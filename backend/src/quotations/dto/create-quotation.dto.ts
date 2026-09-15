@@ -31,4 +31,12 @@ export class CreateQuotationDto {
   @IsNumber()
   @Min(0)
   discount?: number;
+
+  @IsOptional()
+  @IsString()
+  validUntil?: string;
+
+  @IsOptional()
+  @IsString()
+  terms?: string;
 }

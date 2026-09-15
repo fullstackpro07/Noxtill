@@ -47,6 +47,15 @@ enum PaymentMethod {
   credit
 }
 
+/// A quotation's own lifecycle, independent of `Order.status` — see `Order.quotationStatus`.
+enum QuotationStatus {
+  draft
+  sent
+  accepted
+  declined
+  expired
+}
+
 enum CreditEntryKind {
   credit
   payment
@@ -653,6 +662,8 @@ model Business {
   gmbPosts                 GmbPost[]
   notifications            Notification[]
   healthScoreSnapshots     HealthScoreSnapshot[]
+  creditBalanceSnapshots   CreditBalanceSnapshot[]
+  goal                     BusinessGoal?
   activityEvents           ActivityEvent[]
   aiInsights               AiInsight[]
   actionItemStates         ActionItemState[]
@@ -1267,6 +1278,22 @@ model Order {
   /// exactly what this constraint needs (only e-commerce-sourced orders are deduplicated by it).
   externalId       String?              @map("external_id")
   externalProvider IntegrationProvider? @map("external_provider")
+
+  /// Orders module redesign: the free-text reason recorded when an order's status is set to
+  /// `cancelled` — previously the cancel action had nowhere real to put one.
+  cancelReason String? @map("cancel_reason")
+  /// Free-text note captured when an order is created directly as an order (not rung up through
+  /// Fast Sale) — e.g. "leave at the gate". Null for every other order.
+  notes String? @db.Text
+
+  /// Quotations (only meaningful when `isQuotation` is true) — a quotation's own lifecycle is
+  /// independent of `status` (which still tracks fulfilment once/if it's converted to a real
+  /// order). Null on every non-quotation row and on quotations created before this field existed.
+  quotationStatus     QuotationStatus? @map("quotation_status")
+  quotationValidUntil DateTime?        @map("quotation_valid_until")
+  quotationSentAt     DateTime?        @map("quotation_sent_at")
+  quotationTerms      String?          @db.Text @map("quotation_terms")
+  declineReason       String?          @map("decline_reason")
 
   /// Accounting Sync (UPD-BE-072): set once this order has been pushed as a real invoice to the
   /// business's connected accounting provider — the guard against re-pushing the same order.
@@ -2689,6 +2716,11 @@ model NightlyCloseLog {
   channel    MessageChannel
   status     String
   error      String?        @db.Text
+  /// Multi-channel override history (fix-it): one entry per channel actually attempted when
+  /// `nightlyCloseConfig.channels` has more than one — `[{"channel":"whatsapp","status":"sent"},...]`.
+  /// Null for every pre-existing row and for ordinary single-channel sends, which still rely on the
+  /// `channel`/`status`/`error` columns above exactly as before.
+  channelResults Json?      @map("channel_results")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2989,6 +3021,37 @@ model HealthScoreSnapshot {
 
   @@index([businessId, capturedAt])
   @@map("health_score_snapshots")
+}
+
+/// Credit Outstanding, historical (fix-it): a daily snapshot of the real `v_credit_balances` total
+/// so the KPI drawer can show a genuine week-over-week delta instead of only ever a current value —
+/// the gap flagged in KpiRow's doc comment before this ticket.
+model CreditBalanceSnapshot {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  snapshotDate DateTime @map("snapshot_date") @db.Date
+  balance      Decimal  @db.Decimal(12, 2)
+  capturedAt   DateTime @default(now()) @map("captured_at")
+
+  @@unique([businessId, snapshotDate])
+  @@index([businessId, snapshotDate])
+  @@map("credit_balance_snapshots")
+}
+
+/// Today's Goals (fix-it): one standing daily target per business — revenue required, orders
+/// optional — so "Today's Goals" on the dashboard can track real progress instead of the
+/// "isn't available yet" placeholder it shipped with.
+model BusinessGoal {
+  id                 String   @id @default(uuid())
+  businessId         String   @unique @map("business_id")
+  business           Business @relation(fields: [businessId], references: [id])
+  dailyRevenueTarget Decimal  @default(0) @map("daily_revenue_target") @db.Decimal(12, 2)
+  dailyOrdersTarget  Int?     @map("daily_orders_target")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@map("business_goals")
 }
 
 /// Business Health Score, weight-change log (UPD-BE-001e) — one row per real

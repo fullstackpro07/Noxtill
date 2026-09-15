@@ -2,33 +2,28 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Receipt, Printer, Send, Search } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { SkeletonRow } from "@/components/shared/skeleton";
+import { Printer, Send, Receipt as ReceiptIcon } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { formatCurrency, formatDate, formatTime } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
 import { fetchReceiptStats, fetchReceipts, resendReceipt, type LiveReceiptRow } from "@/lib/receipts-api";
+import { useOrdersSearchStore } from "@/store/orders-search-store";
+import { PosModalShell } from "@/components/pos/pos-modal-shell";
+
+const outlineBtn: React.CSSProperties = { border: "1px solid var(--app-border)", background: "var(--app-surface)", borderRadius: 11, padding: "11px 15px", fontSize: 12.5, fontWeight: 700, color: "var(--app-text-muted)", minHeight: 44 };
+const primaryBtn: React.CSSProperties = { border: 0, background: "var(--app-primary)", borderRadius: 11, padding: "11px 20px", fontSize: 12.5, fontWeight: 800, color: "#fff" };
+const cancelBtn: React.CSSProperties = { background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: 11, padding: "11px 18px", fontSize: 12.5, fontWeight: 600, color: "var(--app-text-muted)" };
 
 export function ReceiptsView() {
   const session = useSession();
   const queryClient = useQueryClient();
-  const [q, setQ] = useState("");
+  const query = useOrdersSearchStore((s) => s.query);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
 
   const { data: stats } = useQuery({ queryKey: ["receipt-stats"], queryFn: fetchReceiptStats });
-  const { data: rows, isPending, isError, refetch } = useQuery({
-    queryKey: ["receipts", q],
-    queryFn: () => fetchReceipts({ q: q.trim() || undefined }),
-  });
+  const { data: rows } = useQuery({ queryKey: ["receipts", query], queryFn: () => fetchReceipts({ q: query.trim() || undefined }) });
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["receipts"] });
@@ -48,8 +43,8 @@ export function ReceiptsView() {
   const bulkMutation = useMutation({
     mutationFn: async () => {
       const ids = Array.from(selected);
-      await Promise.all(ids.map((id) => resendReceipt(id, "digital")));
-      return ids.length;
+      const results = await Promise.allSettled(ids.map((id) => resendReceipt(id, "digital")));
+      return results.filter((r) => r.status === "fulfilled").length;
     },
     onSuccess: (count) => {
       invalidate();
@@ -57,7 +52,6 @@ export function ReceiptsView() {
       setSelected(new Set());
       setConfirmBulk(false);
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't resend some receipts — please try again."),
   });
 
   function toggleRow(id: string) {
@@ -70,92 +64,86 @@ export function ReceiptsView() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by order # or phone…" className="w-64" leadingSlot={<Search className="h-4 w-4" aria-hidden />} />
+    <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h2 className="m-0 text-[19px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-.4px" }}>Receipts</h2>
+        <span className="text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>Search by order number or phone in the header search</span>
         {selected.size > 0 && (
-          <Button size="sm" onClick={() => setConfirmBulk(true)}>
-            <Send className="h-3.5 w-3.5" aria-hidden />
-            Resend {selected.size} selected
-          </Button>
+          <button type="button" onClick={() => setConfirmBulk(true)} className="ms-auto" style={outlineBtn}>Resend {selected.size} selected</button>
         )}
       </div>
 
-      {stats && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-6 p-4">
-            <div>
-              <p className="font-display text-xl font-bold text-fg">{stats.digitalPercent}%</p>
-              <p className="text-xs text-fg-muted">Sent digitally (30 days)</p>
-            </div>
-            <div className="text-sm text-fg-muted">
-              {stats.digitalCount} digital · {stats.printedCount} printed
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))" }}>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Sent Digitally (30d)</div>
+          <div className="mt-[5px] text-[21px] font-extrabold" style={{ color: "var(--app-primary)" }}>{stats?.digitalCount ?? "—"}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Printed (30d)</div>
+          <div className="mt-[5px] text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{stats?.printedCount ?? "—"}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>% Digital</div>
+          <div className="mt-[5px] text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{stats ? `${stats.digitalPercent}%` : "—"}</div>
+        </div>
+      </div>
 
-      {isError && <ErrorBanner title="Couldn't load receipts" onRetry={() => refetch()} />}
-
-      <Card>
-        <CardContent className="p-0">
-          {isPending && (
-            <div className="flex flex-col gap-1 p-4">
-              <SkeletonRow />
-              <SkeletonRow />
+      <div className="overflow-hidden rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        {rows && rows.length === 0 ? (
+          <div className="p-[52px_18px] text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-[14px]" style={{ background: "var(--app-surface-2)" }}>
+              <ReceiptIcon className="h-[23px] w-[23px]" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
             </div>
-          )}
-          {rows && rows.length === 0 && <EmptyState icon={Receipt} title="No sales found" description="Completed sales show up here — search by order # or phone." />}
-          {rows && rows.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-fg-faint">
-                    <th className="w-8 px-5 py-2" />
-                    <th className="px-5 py-2 font-medium">Order #</th>
-                    <th className="px-5 py-2 font-medium">Date</th>
-                    <th className="px-5 py-2 font-medium">Customer</th>
-                    <th className="px-5 py-2 text-end font-medium">Total</th>
-                    <th className="px-5 py-2 font-medium">Last sent</th>
-                    <th className="px-5 py-2" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {rows.map((row) => (
-                    <ReceiptRow
-                      key={row.id}
-                      row={row}
-                      currency={session.business.currency}
-                      checked={selected.has(row.id)}
-                      onToggle={() => toggleRow(row.id)}
-                      onResend={(channel) => resendMutation.mutate({ id: row.id, channel })}
-                      busy={resendMutation.isPending}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="text-[14.5px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>{query ? "No matching sales" : "No receipts today"}</div>
+            <div className="mt-[5px] text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Receipts appear here the moment a sale completes.</div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" style={{ minWidth: 820 }}>
+              <thead>
+                <tr style={{ background: "var(--app-surface-2)" }}>
+                  <th className="w-[34px] p-[10px_0_10px_17px]" />
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Order #</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Customer</th>
+                  <th className="p-[10px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Amount</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Last Sent</th>
+                  <th className="p-[10px_17px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(rows ?? []).map((row) => (
+                  <ReceiptRow
+                    key={row.id}
+                    row={row}
+                    currency={session.business.currency}
+                    checked={selected.has(row.id)}
+                    onToggle={() => toggleRow(row.id)}
+                    onResend={(channel) => resendMutation.mutate({ id: row.id, channel })}
+                    busy={resendMutation.isPending}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-      <Dialog
+      <PosModalShell
         open={confirmBulk}
         onClose={() => setConfirmBulk(false)}
-        title={`Resend ${selected.size} receipt(s)?`}
-        description="Each customer gets a fresh WhatsApp copy of their receipt."
+        title="Bulk Resend"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirmBulk(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => bulkMutation.mutate()} disabled={bulkMutation.isPending}>
+            <button type="button" onClick={() => setConfirmBulk(false)} style={cancelBtn}>Cancel</button>
+            <button type="button" onClick={() => bulkMutation.mutate()} disabled={bulkMutation.isPending} style={{ ...primaryBtn, opacity: bulkMutation.isPending ? 0.6 : 1 }}>
               {bulkMutation.isPending ? "Sending…" : "Resend"}
-            </Button>
+            </button>
           </>
         }
-      />
-    </div>
+      >
+        <p className="m-0 p-[17px] text-[13px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>Each customer gets a fresh digital copy of their receipt.</p>
+      </PosModalShell>
+    </main>
   );
 }
 
@@ -175,36 +163,33 @@ function ReceiptRow({
   busy: boolean;
 }) {
   return (
-    <tr>
-      <td className="px-5 py-2.5">
-        <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select order #${row.orderNo}`} />
-      </td>
-      <td className="px-5 py-2.5 font-medium text-fg">#{row.orderNo}</td>
-      <td className="px-5 py-2.5 text-fg-muted">{formatDate(row.createdAt)}</td>
-      <td className="px-5 py-2.5 text-fg-muted">
+    <tr style={{ borderTop: "1px solid var(--app-border-strong)" }}>
+      <td className="p-[12px_0_12px_17px]"><input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select order #${row.orderNo}`} style={{ accentColor: "var(--app-primary)" }} /></td>
+      <td className="p-[12px] text-[12.5px] font-extrabold" style={{ color: "var(--app-success-text)" }}>#{row.orderNo}</td>
+      <td className="p-[12px] text-[12.5px]" style={{ color: "var(--app-text-faint)" }}>
         {row.customerName ?? "Walk-in"}
-        {row.customerPhone && <span className="text-fg-faint"> · {row.customerPhone}</span>}
+        {row.customerPhone && <span style={{ color: "var(--app-text-disabled)" }}> · {row.customerPhone}</span>}
       </td>
-      <td className="px-5 py-2.5 text-end tabular-nums text-fg">{formatCurrency(row.total, currency)}</td>
-      <td className="px-5 py-2.5 text-fg-muted">
+      <td className="p-[12px] text-end text-[12.5px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(row.total, currency)}</td>
+      <td className="p-[12px] text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>
         {row.lastSentAt ? (
-          <span className="flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5">
             {formatDate(row.lastSentAt)} {formatTime(row.lastSentAt)}
-            <Badge tone={row.lastChannel === "digital" ? "primary" : "neutral"}>{row.lastChannel}</Badge>
+            <span className="rounded-full px-[8px] py-[2px] text-[10px] font-bold" style={{ background: row.lastChannel === "digital" ? "var(--app-success-bg)" : "var(--app-surface-2)", color: row.lastChannel === "digital" ? "var(--app-success-text)" : "var(--app-text-faint)" }}>{row.lastChannel}</span>
           </span>
         ) : (
           "Never sent"
         )}
       </td>
-      <td className="px-5 py-2.5 text-end">
-        <div className="flex items-center justify-end gap-1">
-          <Button variant="ghost" size="sm" onClick={() => onResend("print")} disabled={busy} aria-label="Reprint">
-            <Printer className="h-3.5 w-3.5" aria-hidden />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onResend("digital")} disabled={busy} aria-label="Resend">
-            <Send className="h-3.5 w-3.5" aria-hidden />
-          </Button>
-        </div>
+      <td className="p-[12px_17px] text-end">
+        <span className="inline-flex gap-1.5">
+          <button type="button" onClick={() => onResend("print")} disabled={busy} aria-label="Reprint" className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-faint)" }}>
+            <Printer className="h-4 w-4" aria-hidden />
+          </button>
+          <button type="button" onClick={() => onResend("digital")} disabled={busy} aria-label="Resend" className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white" style={{ background: "var(--app-primary)" }}>
+            <Send className="h-4 w-4" aria-hidden />
+          </button>
+        </span>
       </td>
     </tr>
   );

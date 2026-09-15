@@ -20,6 +20,7 @@ import { AiModule } from '../ai/ai.module';
 import { ActionCenterService } from './action-center.service';
 import { ActionCenterController } from './action-center.controller';
 import { TodayBusinessService } from './today-business.service';
+import { BusinessGoalService } from './business-goal.service';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { TodayBusinessService } from './today-business.service';
     AiInsightsProcessor,
     ActionCenterService,
     TodayBusinessService,
+    BusinessGoalService,
   ],
 })
 export class DashboardModule {}
