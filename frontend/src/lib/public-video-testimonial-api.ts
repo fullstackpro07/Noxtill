@@ -11,10 +11,21 @@ export function fetchPublicVideoTestimonial(token: string): Promise<PublicVideoT
   return apiFetch<PublicVideoTestimonialRequest>(`/t/${token}`, {}, { skipAuth: true });
 }
 
-/** POST /t/:token — multipart video upload; rate-limited server-side (5/min/IP). */
-export function uploadVideoTestimonial(token: string, file: File): Promise<{ thankYou: true }> {
+export interface VideoTestimonialConsent {
+  consentWebsite: boolean;
+  consentSocial: boolean;
+  consentPaidAds: boolean;
+}
+
+/** POST /t/:token — multipart video upload; rate-limited server-side (5/min/IP). Consent is real
+ * and captured right here, at the moment the customer themselves uploads — never editable by the
+ * business afterward (see `VideoTestimonial.consentWebsite` on the backend). */
+export function uploadVideoTestimonial(token: string, file: File, consent: VideoTestimonialConsent): Promise<{ thankYou: true }> {
   const formData = new FormData();
   formData.append("video", file);
+  formData.append("consentWebsite", String(consent.consentWebsite));
+  formData.append("consentSocial", String(consent.consentSocial));
+  formData.append("consentPaidAds", String(consent.consentPaidAds));
   return apiFetch<{ thankYou: true }>(
     `/t/${token}`,
     { method: "POST", body: formData },

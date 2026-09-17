@@ -46,6 +46,14 @@ export class MemoryNotesService {
     });
   }
 
+  /** Business Memory screen — every note across every subject type, most recent first. */
+  listAll() {
+    return this.tenantPrisma.client.memoryNote.findMany({
+      orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+      take: 500,
+    });
+  }
+
   async update(id: string, dto: UpdateMemoryNoteDto) {
     await this.findNote(id);
     return this.tenantPrisma.client.memoryNote.update({

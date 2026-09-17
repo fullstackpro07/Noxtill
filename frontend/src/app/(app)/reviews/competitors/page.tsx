@@ -1,12 +1,7 @@
 "use client";
 
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { CompetitorRatingsPanel } from "@/components/reviews/competitor-ratings-panel";
+import { CompetitorsView } from "@/components/reviews/competitors-view";
 
-export default function CompetitorRatingsPage() {
-  return (
-    <SubscreenShell title="Competitor Ratings">
-      <CompetitorRatingsPanel />
-    </SubscreenShell>
-  );
+export default function CompetitorsPage() {
+  return <CompetitorsView />;
 }

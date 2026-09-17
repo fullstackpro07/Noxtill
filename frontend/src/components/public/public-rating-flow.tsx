@@ -2,16 +2,29 @@
 
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { submitPublicReview, type PublicReviewBusiness } from "@/lib/public-review-api";
+import { submitPublicReview, type PublicReviewBusiness, type ReviewPlatformRedirect } from "@/lib/public-review-api";
 import { ApiError } from "@/lib/api-client";
 
-type Step = "rate" | "redirecting" | "thanks" | "feedback" | "feedback-sent" | "error";
+const PLATFORM_LABEL: Record<string, string> = {
+  primary: "Google",
+  google: "Google",
+  facebook: "Facebook",
+  yelp: "Yelp",
+  trustpilot: "Trustpilot",
+  tripadvisor: "TripAdvisor",
+};
+function platformLabel(platform: string): string {
+  return PLATFORM_LABEL[platform.toLowerCase()] ?? platform.charAt(0).toUpperCase() + platform.slice(1);
+}
+
+type Step = "rate" | "redirecting" | "choose" | "thanks" | "feedback" | "feedback-sent" | "error";
 
 export function PublicRatingFlow({ token, business }: { token: string; business: PublicReviewBusiness }) {
   const [step, setStep] = useState<Step>("rate");
   const [rating, setRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState("");
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [redirectChoices, setRedirectChoices] = useState<ReviewPlatformRedirect[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
 
   const submitMutation = useMutation({
@@ -20,6 +33,11 @@ export function PublicRatingFlow({ token, business }: { token: string; business:
       if ("redirect" in result) {
         setRedirectUrl(result.redirect);
         setStep("redirecting");
+      } else if ("redirects" in result) {
+        // Every customer sees the identical set of real platform choices, whatever star rating
+        // they gave — nobody is routed away from public platforms or shown a filtered list.
+        setRedirectChoices(result.redirects);
+        setStep("choose");
       } else {
         // The API only decides thank-you vs. redirect once the rating is submitted — a low
         // rating always lands here (routed to private feedback); a high rating lands here only
@@ -101,6 +119,25 @@ export function PublicRatingFlow({ token, business }: { token: string; business:
               Tap here if you&apos;re not redirected
             </a>
           )}
+        </>
+      )}
+
+      {step === "choose" && (
+        <>
+          <h1 className="text-xl font-bold text-[#1c231e]">Thank you!</h1>
+          <p className="text-sm text-[#6b6353]">Where would you like to leave your review?</p>
+          <div className="flex w-full flex-col gap-2.5">
+            {redirectChoices.map((r) => (
+              <a
+                key={r.platform}
+                href={r.url}
+                className="w-full rounded-full border px-5 py-3 text-sm font-medium text-[#1c231e]"
+                style={{ borderColor: "#d8caa8" }}
+              >
+                {platformLabel(r.platform)}
+              </a>
+            ))}
+          </div>
         </>
       )}
 

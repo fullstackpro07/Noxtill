@@ -4,6 +4,7 @@ import { PublicReviewService } from './public-review.service';
 import { generateReviewToken } from './review-token.util';
 import { ActivityService } from '../activity/activity.service';
 import type { S3Service } from '../common/storage/s3.service';
+import type { VideoTestimonialsService } from './video-testimonials.service';
 
 describe('PublicReviewService (BE-046)', () => {
   let prisma: PrismaService;
@@ -17,6 +18,7 @@ describe('PublicReviewService (BE-046)', () => {
       .fn()
       .mockResolvedValue('https://signed.example/logo.png'),
   };
+  const videoTestimonials = { request: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -26,6 +28,7 @@ describe('PublicReviewService (BE-046)', () => {
       sendGate as unknown as SendGateService,
       activity as unknown as ActivityService,
       s3 as unknown as S3Service,
+      videoTestimonials as unknown as VideoTestimonialsService,
     );
 
     const business = await prisma.business.create({
@@ -414,6 +417,118 @@ describe('PublicReviewService (BE-046)', () => {
       await expect(
         service.getVideoGallery('not-a-real-slug'),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('multi-platform redirects (UPD-BE-M31)', () => {
+    afterEach(async () => {
+      await prisma.reviewPlatformDestination.deleteMany({
+        where: { businessId },
+      });
+    });
+
+    it('returns every configured destination once more than one exists', async () => {
+      await prisma.reviewPlatformDestination.create({
+        data: {
+          businessId,
+          platform: 'facebook',
+          url: 'https://facebook.com/test-biz/reviews',
+        },
+      });
+
+      const request = await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          source: 'order',
+        },
+      });
+      const result = await service.submit(request.token, { stars: 5 });
+      expect(result).toEqual({
+        redirects: [
+          { platform: 'primary', url: 'https://g.page/test-biz/review' },
+          {
+            platform: 'facebook',
+            url: 'https://facebook.com/test-biz/reviews',
+          },
+        ],
+      });
+    });
+  });
+
+  describe('automatic video-testimonial trigger (UPD-BE-M31)', () => {
+    afterEach(async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { reviewSettings: {} },
+      });
+      videoTestimonials.request.mockClear();
+    });
+
+    it('never triggers when the setting is manual (the default)', async () => {
+      const request = await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          source: 'order',
+        },
+      });
+      await service.submit(request.token, { stars: 5 });
+      expect(videoTestimonials.request).not.toHaveBeenCalled();
+    });
+
+    it('auto-requests a testimonial for a 5-star rating when the trigger is five_star', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { reviewSettings: { videoTestimonialTrigger: 'five_star' } },
+      });
+      const request = await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          source: 'order',
+        },
+      });
+      await service.submit(request.token, { stars: 5 });
+      expect(videoTestimonials.request).toHaveBeenCalledWith(businessId, {
+        customerId,
+      });
+    });
+
+    it('does not trigger a five_star setting on a 4-star rating', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { reviewSettings: { videoTestimonialTrigger: 'five_star' } },
+      });
+      const request = await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          source: 'order',
+        },
+      });
+      await service.submit(request.token, { stars: 4 });
+      expect(videoTestimonials.request).not.toHaveBeenCalled();
+    });
+
+    it('never triggers for an anonymous QR-sourced rating (no customer to message)', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { reviewSettings: { videoTestimonialTrigger: 'four_star_plus' } },
+      });
+      const request = await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          token: generateReviewToken(),
+          source: 'qr',
+        },
+      });
+      await service.submit(request.token, { stars: 4 });
+      expect(videoTestimonials.request).not.toHaveBeenCalled();
     });
   });
 });

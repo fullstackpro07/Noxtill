@@ -1,4 +1,5 @@
-import { IsOptional, IsString, ValidateIf } from 'class-validator';
+import { IsEnum, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { MessageChannel } from '@prisma/client';
 
 export class CreateReviewRequestDto {
   @ValidateIf((o: CreateReviewRequestDto) => !o.phone)
@@ -15,4 +16,9 @@ export class CreateReviewRequestDto {
   @IsOptional()
   @IsString()
   sourceId?: string;
+
+  /** Overrides the normal channel-priority resolution — the customer picks a specific channel on the "Send Request" dialog rather than always getting whichever channel resolves first. */
+  @IsOptional()
+  @IsEnum(MessageChannel)
+  channel?: MessageChannel;
 }

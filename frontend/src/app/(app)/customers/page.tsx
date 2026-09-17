@@ -1,9 +1,12 @@
 "use client";
 
-import { CustomersView } from "@/components/customers/customers-view";
-import { useSession } from "@/lib/session";
+import { Suspense } from "react";
+import { AllCustomersPanel } from "@/components/customers/all-customers-panel";
 
 export default function CustomersPage() {
-  const session = useSession();
-  return <CustomersView currency={session.business.currency} />;
+  return (
+    <Suspense>
+      <AllCustomersPanel />
+    </Suspense>
+  );
 }

@@ -126,6 +126,54 @@ export function fetchCollectedToday(): Promise<number> {
   return apiFetch<number>("/credit/collected-today");
 }
 
+export interface CreditSaleRow {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  createdAt: string;
+  amount: number;
+  /** FIFO-allocated against this customer's own payments/write-offs — a display convention, not a
+   * stored fact (the schema only tracks one aggregate balance per customer). */
+  paid: number;
+  remaining: number;
+  orderNo: number | null;
+  staffName: string | null;
+}
+
+/** GET /credit/sales — every real credit-creating entry, cross-customer. */
+export function fetchCreditSales(): Promise<CreditSaleRow[]> {
+  return apiFetch<CreditSaleRow[]>("/credit/sales");
+}
+
+export interface CreditPaymentRow {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  createdAt: string;
+  amount: number;
+  method: "cash" | "card" | "online" | null;
+  note: string | null;
+  balanceAfter: number;
+}
+
+/** GET /credit/payments — every real payment entry, cross-customer. */
+export function fetchCreditPayments(): Promise<CreditPaymentRow[]> {
+  return apiFetch<CreditPaymentRow[]>("/credit/payments");
+}
+
+export interface StatementStats {
+  days: number;
+  sent: number;
+  delivered: number;
+}
+
+/** GET /credit/statement-stats — real Message-based counts (no persisted Statement record exists). */
+export function fetchStatementStats(days = 30): Promise<StatementStats> {
+  return apiFetch<StatementStats>(`/credit/statement-stats?days=${days}`);
+}
+
 export interface CreditBalanceHistoryPoint {
   date: string;
   balance: number;

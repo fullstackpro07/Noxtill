@@ -29,6 +29,12 @@ export class MemoryNotesController {
     return this.memoryNotesService.list(subjectType, subjectId);
   }
 
+  /** Business Memory screen — every note across every subject type, business-wide. */
+  @Get('all')
+  listAll() {
+    return this.memoryNotesService.listAll();
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateMemoryNoteDto) {
     return this.memoryNotesService.update(id, dto);

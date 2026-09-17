@@ -10,11 +10,14 @@ type Step = "pick" | "ready" | "uploading" | "thanks" | "error";
 export function PublicVideoTestimonialFlow({ token, business }: { token: string; business: PublicVideoTestimonialRequest }) {
   const [step, setStep] = useState<Step>("pick");
   const [file, setFile] = useState<File | null>(null);
+  const [consentWebsite, setConsentWebsite] = useState(true);
+  const [consentSocial, setConsentSocial] = useState(true);
+  const [consentPaidAds, setConsentPaidAds] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const uploadMutation = useMutation({
-    mutationFn: (f: File) => uploadVideoTestimonial(token, f),
+    mutationFn: (f: File) => uploadVideoTestimonial(token, f, { consentWebsite, consentSocial, consentPaidAds }),
     onSuccess: () => setStep("thanks"),
     onError: (err) => {
       setErrorMessage(err instanceof ApiError ? err.message : "Something went wrong — please try again.");
@@ -73,6 +76,24 @@ export function PublicVideoTestimonialFlow({ token, business }: { token: string;
           {step === "ready" && file && (
             <div className="flex w-full flex-col gap-3">
               <video src={URL.createObjectURL(file)} controls className="w-full rounded-xl bg-black" />
+
+              <div className="flex flex-col gap-1.5 rounded-xl border border-[#d8caa8] bg-white p-3.5 text-start">
+                <p className="text-xs font-medium text-[#1c231e]">Where {business.businessName} may use this video</p>
+                <label className="flex items-center gap-2 text-sm text-[#1c231e]">
+                  <input type="checkbox" checked={consentWebsite} onChange={(e) => setConsentWebsite(e.target.checked)} />
+                  Their website
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[#1c231e]">
+                  <input type="checkbox" checked={consentSocial} onChange={(e) => setConsentSocial(e.target.checked)} />
+                  Social media
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[#1c231e]">
+                  <input type="checkbox" checked={consentPaidAds} onChange={(e) => setConsentPaidAds(e.target.checked)} />
+                  Paid advertising
+                </label>
+                <p className="text-xs text-[#6b6353]">You can change your mind later by contacting the business directly.</p>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -87,7 +108,8 @@ export function PublicVideoTestimonialFlow({ token, business }: { token: string;
                 <button
                   type="button"
                   onClick={handleUpload}
-                  className="flex-1 rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0]"
+                  disabled={!consentWebsite && !consentSocial && !consentPaidAds}
+                  className="flex-1 rounded-full bg-[#0c4b3b] px-5 py-3 text-sm font-medium text-[#faf7f0] disabled:opacity-40"
                 >
                   Upload
                 </button>

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   Param,
@@ -10,6 +11,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { PublicVideoTestimonialService } from './public-video-testimonial.service';
+import { SubmitVideoConsentDto } from './dto/submit-video-consent.dto';
 import { Public } from '../common/decorators/public.decorator';
 
 @Controller()
@@ -31,9 +33,10 @@ export class PublicVideoTestimonialController {
   @UseInterceptors(FileInterceptor('video'))
   upload(
     @Param('token') token: string,
+    @Body() consent: SubmitVideoConsentDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('video file is required');
-    return this.publicVideoTestimonialService.upload(token, file);
+    return this.publicVideoTestimonialService.upload(token, file, consent);
   }
 }

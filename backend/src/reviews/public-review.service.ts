@@ -8,6 +8,7 @@ import { SubmitReviewDto } from './dto/submit-review.dto';
 import { generateReviewToken } from './review-token.util';
 import { ReviewRequestStatus, ReviewRoute, Role } from '@prisma/client';
 import { REVIEW_TOKEN_EXPIRY_DAYS } from './reviews.constants';
+import { VideoTestimonialsService } from './video-testimonials.service';
 
 /** Defense-in-depth against a distributed (multi-IP) abuser — the per-IP throttle on the mint endpoint can't catch this alone. */
 const QR_DAILY_CAP_PER_BUSINESS = 200;
@@ -29,6 +30,7 @@ export class PublicReviewService {
     private readonly sendGate: SendGateService,
     private readonly activity: ActivityService,
     private readonly s3: S3Service,
+    private readonly videoTestimonials: VideoTestimonialsService,
   ) {}
 
   /** UPD-FE-086: resolves the real `reviewSettings.brandColor`/`logoKey` into what the 3 public
@@ -219,11 +221,79 @@ export class PublicReviewService {
       entityId: reviewRequest.id,
     });
 
-    // 4-5 stars: send them on to the public listing if one is configured; otherwise private mode.
-    if (reviewRequest.business.publicReviewUrl) {
-      return { redirect: reviewRequest.business.publicReviewUrl };
+    await this.maybeTriggerVideoRequest(
+      reviewRequest.businessId,
+      reviewRequest.customerId,
+      dto.stars,
+    );
+
+    // 4-5 stars: send them on to whichever real public listing(s) are configured — the primary
+    // `publicReviewUrl` plus every `ReviewPlatformDestination` (UPD-BE-M31). A single destination
+    // keeps the original auto-redirect behavior; two or more offer a real choice instead of
+    // picking one arbitrarily.
+    const destinations = await this.resolvePlatformDestinations(
+      reviewRequest.businessId,
+      reviewRequest.business.publicReviewUrl,
+    );
+    if (destinations.length === 1) {
+      return { redirect: destinations[0].url };
+    }
+    if (destinations.length > 1) {
+      return { redirects: destinations };
     }
     return { thankYou: true };
+  }
+
+  private async resolvePlatformDestinations(
+    businessId: string,
+    primaryUrl: string | null,
+  ): Promise<{ platform: string; url: string }[]> {
+    const extra = await this.prisma.reviewPlatformDestination.findMany({
+      where: { businessId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const destinations: { platform: string; url: string }[] = [];
+    if (primaryUrl) {
+      destinations.push({ platform: 'primary', url: primaryUrl });
+    }
+    for (const row of extra) {
+      destinations.push({ platform: row.platform, url: row.url });
+    }
+    return destinations;
+  }
+
+  /** UPD-BE-M31: real automatic video-testimonial request — 'manual' (the default) never fires
+   * this. Best-effort and non-blocking, same convention as `alertOwner`; skipped entirely for an
+   * anonymous QR-sourced rating (no `customerId` to message). */
+  private async maybeTriggerVideoRequest(
+    businessId: string,
+    customerId: string | null,
+    stars: number,
+  ): Promise<void> {
+    if (!customerId) return;
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { reviewSettings: true },
+    });
+    const trigger = (business?.reviewSettings as Record<string, unknown> | null)
+      ?.videoTestimonialTrigger as string | undefined;
+    const shouldTrigger =
+      trigger === 'five_star'
+        ? stars === 5
+        : trigger === 'four_star_plus'
+          ? stars >= 4
+          : false;
+    if (!shouldTrigger) return;
+
+    // Never request twice for the same customer while a prior request is still outstanding.
+    const alreadyRequested = await this.prisma.videoTestimonial.findFirst({
+      where: { businessId, customerId, status: 'requested' },
+    });
+    if (alreadyRequested) return;
+
+    await this.videoTestimonials
+      .request(businessId, { customerId })
+      .catch(() => undefined);
   }
 
   private async loadValid(token: string) {

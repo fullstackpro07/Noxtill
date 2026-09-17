@@ -42,7 +42,13 @@ function activeTabIndex(pathname: string, tabs: ModuleTab[]): number {
  * `/dashboard` itself); modules where the base route already *is* one of the listed children
  * (e.g. AI Assistant's `/assistant/help`) skip that synthetic tab.
  */
-export function ModuleTabs({ moduleKey }: { moduleKey: string }) {
+export interface ModuleTabBadge {
+  count: number;
+  /** Defaults to the danger tint; "warning" matches the design's amber open/pending pills. */
+  tone?: "danger" | "warning";
+}
+
+export function ModuleTabs({ moduleKey, badges }: { moduleKey: string; badges?: Record<string, ModuleTabBadge> }) {
   const pathname = usePathname();
   const { t } = useTranslation();
   const item = NAV_ITEMS.find((i) => i.key === moduleKey);
@@ -63,6 +69,7 @@ export function ModuleTabs({ moduleKey }: { moduleKey: string }) {
       {tabs.map((tab, i) => {
         const active = i === activeIndex;
         const Icon = tab.icon;
+        const badge = badges?.[tab.key];
         return (
           <Link
             key={tab.key}
@@ -72,6 +79,17 @@ export function ModuleTabs({ moduleKey }: { moduleKey: string }) {
           >
             <Icon className="h-[15px] w-[15px]" aria-hidden />
             {tab.label}
+            {!!badge && badge.count > 0 && (
+              <span
+                className="rounded-full px-[7px] py-px text-[10px] font-extrabold"
+                style={{
+                  background: badge.tone === "warning" ? "var(--app-warning-bg)" : "#FEE4E2",
+                  color: badge.tone === "warning" ? "var(--app-warning-text)" : "var(--app-danger-strong)",
+                }}
+              >
+                {badge.count}
+              </span>
+            )}
             {active && <span className="absolute inset-x-2 bottom-0 h-[2.5px] rounded-t-[3px]" style={{ background: "var(--app-primary)" }} />}
           </Link>
         );

@@ -1,14 +1,7 @@
 "use client";
 
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { PrivateReviewsPanel } from "@/components/reviews/private-reviews-panel";
-import { useSession } from "@/lib/session";
+import { PrivateFeedbackView } from "@/components/reviews/private-feedback-view";
 
-export default function ReviewsComplaintsPage() {
-  const session = useSession();
-  return (
-    <SubscreenShell title="Private Reviews">
-      <PrivateReviewsPanel currency={session.business.currency} />
-    </SubscreenShell>
-  );
+export default function ReviewsPrivatePage() {
+  return <PrivateFeedbackView />;
 }

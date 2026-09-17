@@ -24,6 +24,8 @@ export interface LivePrivateFeedback {
   assignedTo: string | null;
   resolutionNote: string | null;
   createdAt: string;
+  /** Real Prisma column, always present in the raw row — just previously untyped on the frontend. Doubles as "resolved at" once `status` is `resolved`. */
+  updatedAt: string;
 }
 
 export type LiveInboxEntry = LiveExternalReview | LivePrivateFeedback;
@@ -143,10 +145,22 @@ export function bulkSendReviewRequests(customerIds: string[], source = "manual")
   });
 }
 
+export type MessageChannel = "whatsapp" | "sms" | "email";
+
+/** POST /reviews/requests — single-customer send; resolves by `customerId` or a real `phone` lookup (404s if no matching customer), same one-request-at-a-time flow used for a walk-in without a saved profile. */
+export function createReviewRequest(input: { customerId?: string; phone?: string; source?: string; channel?: MessageChannel }): Promise<LiveReviewRequest> {
+  return apiFetch<LiveReviewRequest>("/reviews/requests", {
+    method: "POST",
+    body: JSON.stringify({ source: "manual", ...input }),
+  });
+}
+
 export interface QrStats {
   windowDays: number;
   visits: number;
   ratingsSubmitted: number;
+  /** Real, distinct from `visits` (UPD-BE-M31): every request across every source whose rating page was actually opened in the window, not just QR-sourced mints. */
+  pageVisits: number;
   conversionRate: number;
 }
 
@@ -172,6 +186,8 @@ export function fetchReputationScore(): Promise<ReputationScoreResult> {
   return apiFetch<ReputationScoreResult>("/reviews/reputation-score");
 }
 
+export type VideoTestimonialTrigger = "manual" | "four_star_plus" | "five_star";
+
 export interface ReviewSettings {
   publicReviewUrl: string | null;
   publicReviewPlatform?: string;
@@ -180,6 +196,8 @@ export interface ReviewSettings {
   /** Actually rendered on the public rating page, the review widget, and the QR poster — not just stored. */
   brandColor?: string;
   logoUrl: string | null;
+  /** Real automatic video-testimonial trigger (UPD-BE-M31) — checked server-side in `PublicReviewService.submit()`; 'manual' (the default) never auto-requests anything. */
+  videoTestimonialTrigger?: VideoTestimonialTrigger;
 }
 
 export function fetchReviewSettings(): Promise<ReviewSettings> {
@@ -225,4 +243,41 @@ export function fetchReviewSentiment(): Promise<ReviewSentimentTheme[]> {
 /** GET /reviews/complaint-themes — Private Reviews depth fix: the real, distinct AI cluster over private-feedback messages, never the public-review themes above. */
 export function fetchComplaintThemes(): Promise<ReviewSentimentTheme[]> {
   return apiFetch<ReviewSentimentTheme[]>("/reviews/complaint-themes");
+}
+
+export interface ReviewMetricsSnapshotPoint {
+  capturedAt: string;
+  averageRating: number;
+  totalReviews: number;
+  positiveThemePct: number | null;
+  negativeThemePct: number | null;
+}
+
+/** GET /reviews/metrics-history — real weekly `ReviewMetricsSnapshot` rows (UPD-BE-M31), oldest first; can be empty for a brand-new business until the next Monday run. */
+export function fetchReviewMetricsHistory(): Promise<ReviewMetricsSnapshotPoint[]> {
+  return apiFetch<ReviewMetricsSnapshotPoint[]>("/reviews/metrics-history");
+}
+
+export interface ReviewPlatformDestination {
+  id: string;
+  platform: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /reviews/settings/platforms — additional real destinations beyond the single primary `publicReviewUrl` (UPD-BE-M31). */
+export function fetchReviewPlatformDestinations(): Promise<ReviewPlatformDestination[]> {
+  return apiFetch<ReviewPlatformDestination[]>("/reviews/settings/platforms");
+}
+
+export function upsertReviewPlatformDestination(input: { platform: string; url: string }): Promise<ReviewPlatformDestination> {
+  return apiFetch<ReviewPlatformDestination>("/reviews/settings/platforms", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function removeReviewPlatformDestination(platform: string): Promise<void> {
+  return apiFetch<void>(`/reviews/settings/platforms/${encodeURIComponent(platform)}`, { method: "DELETE" });
 }

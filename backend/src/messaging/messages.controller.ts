@@ -30,4 +30,10 @@ export class MessagesController {
   list(@Query('customer_id') customerId: string) {
     return this.messagesService.listByCustomer(customerId);
   }
+
+  /** Customers Activity feed — every real message across the business, most recent first. */
+  @Get('recent')
+  recent(@Query('limit') limit?: string) {
+    return this.messagesService.listRecent(limit ? Number(limit) : 50);
+  }
 }

@@ -8,7 +8,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { CreateInstallmentPlanDto } from './dto/create-installment-plan.dto';
 import { WriteOffCreditDto } from './dto/write-off-credit.dto';
-import { DebtorRow, buildLedgerRows } from './credit.types';
+import { DebtorRow, buildLedgerRows, allocateFifoForCustomer } from './credit.types';
 import {
   CREDIT_ERROR_CODES,
   OVERDUE_BUCKETS,
@@ -63,6 +63,114 @@ export class CreditService {
     }));
   }
 
+  /**
+   * Credit Sales screen — every real credit-creating entry, cross-customer, with the originating
+   * order (if any) and a FIFO-allocated paid/remaining per sale. See `allocateFifoForCustomer`'s
+   * doc comment: the paid/remaining split is a display-only convention, not a stored fact.
+   */
+  async listCreditSales() {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const creditEntries = await this.tenantPrisma.client.creditEntry.findMany({
+      where: { businessId, kind: 'credit' },
+      include: {
+        customer: true,
+        order: { include: { staffUser: { include: { user: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (creditEntries.length === 0) return [];
+
+    const customerIds = [...new Set(creditEntries.map((e) => e.customerId))];
+    const allEntries = await this.tenantPrisma.client.creditEntry.findMany({
+      where: { businessId, customerId: { in: customerIds } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const byCustomer = new Map<string, typeof allEntries>();
+    for (const entry of allEntries) {
+      const list = byCustomer.get(entry.customerId) ?? [];
+      list.push(entry);
+      byCustomer.set(entry.customerId, list);
+    }
+    const allocationByCustomer = new Map<
+      string,
+      Map<string, { paid: number; remaining: number }>
+    >();
+    for (const [customerId, list] of byCustomer) {
+      allocationByCustomer.set(
+        customerId,
+        allocateFifoForCustomer(
+          list.map((e) => ({
+            id: e.id,
+            kind: e.kind,
+            amount: Number(e.amount),
+            createdAt: e.createdAt,
+          })),
+        ),
+      );
+    }
+
+    return creditEntries.map((e) => {
+      const alloc = allocationByCustomer.get(e.customerId)?.get(e.id) ?? {
+        paid: 0,
+        remaining: Number(e.amount),
+      };
+      return {
+        id: e.id,
+        customerId: e.customerId,
+        customerName: e.customer.name,
+        customerPhone: e.customer.phone,
+        createdAt: e.createdAt,
+        amount: Number(e.amount),
+        paid: round2(alloc.paid),
+        remaining: round2(alloc.remaining),
+        orderNo: e.order?.orderNo ?? null,
+        staffName: e.order?.staffUser?.user.name ?? null,
+      };
+    });
+  }
+
+  /** Payments screen — every real payment entry, cross-customer, with the customer's own running
+   * balance immediately after that payment (from the same `buildLedgerRows` math the statement uses). */
+  async listPayments() {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const payments = await this.tenantPrisma.client.creditEntry.findMany({
+      where: { businessId, kind: 'payment' },
+      include: { customer: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (payments.length === 0) return [];
+
+    const customerIds = [...new Set(payments.map((p) => p.customerId))];
+    const allEntries = await this.tenantPrisma.client.creditEntry.findMany({
+      where: { businessId, customerId: { in: customerIds } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const byCustomer = new Map<string, typeof allEntries>();
+    for (const entry of allEntries) {
+      const list = byCustomer.get(entry.customerId) ?? [];
+      list.push(entry);
+      byCustomer.set(entry.customerId, list);
+    }
+    const balanceAfterById = new Map<string, number>();
+    for (const [, list] of byCustomer) {
+      for (const row of buildLedgerRows(list)) {
+        balanceAfterById.set(row.id, row.runningBalance);
+      }
+    }
+
+    return payments.map((p) => ({
+      id: p.id,
+      customerId: p.customerId,
+      customerName: p.customer.name,
+      customerPhone: p.customer.phone,
+      createdAt: p.createdAt,
+      amount: round2(Number(p.amount)),
+      method: p.method,
+      note: p.note,
+      balanceAfter: round2(balanceAfterById.get(p.id) ?? 0),
+    }));
+  }
+
   /** Same rows the PDF statement (BE-032) renders, as JSON — powers the credit screen's inline statement preview. */
   async getLedger(customerId: string) {
     const customer = await this.tenantPrisma.client.customer.findUnique({
@@ -86,6 +194,31 @@ export class CreditService {
       balance: rows.length ? rows[rows.length - 1].runningBalance : 0,
       entries: rows,
     };
+  }
+
+  /**
+   * Statements screen KPIs — real counts from the `Message` audit trail every statement send
+   * creates (`credit_statement_ready`). There's no persisted `Statement` record at all (every PDF
+   * is generated fresh on demand), so there's no "opened"/"pending"/"failed" status to surface —
+   * only "sent this period" and how many of those were actually delivered.
+   */
+  async statementStats(days: number) {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const [sent, delivered] = await Promise.all([
+      this.tenantPrisma.client.message.count({
+        where: { businessId, templateKey: 'credit_statement_ready', createdAt: { gte: since } },
+      }),
+      this.tenantPrisma.client.message.count({
+        where: {
+          businessId,
+          templateKey: 'credit_statement_ready',
+          createdAt: { gte: since },
+          status: { in: ['delivered', 'read'] },
+        },
+      }),
+    ]);
+    return { days, sent, delivered };
   }
 
   /** Due Today screen's "collected-today" card (UPD-FE-076) — real payments received today, from any source (direct record-payment or a paid instalment, both write `CreditEntry.kind = 'payment'`). */

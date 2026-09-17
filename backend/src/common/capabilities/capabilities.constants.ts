@@ -72,6 +72,10 @@ export const CAPABILITIES = {
   /// (financial mutations included), so viewing it is owner+manager, matching the tier every
   /// other cross-business oversight screen (Profit & Analytics, Expenses) already uses.
   ACTIVITY_LOG_VIEW: 'activity_log.view',
+  /// Customer Settings (UPD-BE-101) — custom fields, tags catalog, merge rules and privacy
+  /// toggles are all configuration a Staff user should never be able to change, even if a
+  /// privacy toggle later lets Staff export/merge/archive individual customers.
+  CUSTOMERS_MANAGE: 'customers.manage',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -110,6 +114,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.DASHBOARD_GOALS_MANAGE,
   CAPABILITIES.TAX_RULES_MANAGE,
   CAPABILITIES.ACTIVITY_LOG_VIEW,
+  CAPABILITIES.CUSTOMERS_MANAGE,
 ];
 
 /**

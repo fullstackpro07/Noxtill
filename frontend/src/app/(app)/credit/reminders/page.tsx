@@ -1,12 +1,5 @@
-"use client";
-
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { CreditRemindersPanel } from "@/components/credit/credit-reminders-panel";
+import { redirect } from "next/navigation";
 
 export default function CreditRemindersPage() {
-  return (
-    <SubscreenShell title="Reminders & Recovery">
-      <CreditRemindersPanel />
-    </SubscreenShell>
-  );
+  redirect("/credit/collections");
 }

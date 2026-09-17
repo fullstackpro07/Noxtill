@@ -3,8 +3,10 @@ import {
   IsBoolean,
   IsDateString,
   IsEmail,
+  IsNumber,
   IsOptional,
   IsString,
+  Min,
 } from 'class-validator';
 
 export class CreateCustomerDto {
@@ -38,4 +40,10 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsBoolean()
   consentMarketing?: boolean;
+
+  /** Same real mechanism as the import pipeline's opening balances — a real CreditEntry, not a stored field on Customer. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  openingBalance?: number;
 }

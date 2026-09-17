@@ -38,6 +38,24 @@ export class CreditController {
     return this.creditService.collectedToday();
   }
 
+  /** Credit Sales screen — every credit-creating entry, cross-customer. */
+  @Get('sales')
+  listCreditSales() {
+    return this.creditService.listCreditSales();
+  }
+
+  /** Payments screen — every payment entry, cross-customer. */
+  @Get('payments')
+  listPayments() {
+    return this.creditService.listPayments();
+  }
+
+  /** Statements screen KPIs — real Message-based sent/delivered counts. */
+  @Get('statement-stats')
+  statementStats(@Query('days') days?: string) {
+    return this.creditService.statementStats(days ? Number(days) : 30);
+  }
+
   /** Credit Outstanding KPI drawer fix-it (UPD-BE-125): real daily balance history for a
    * week-over-week delta, backed by the nightly CreditBalanceSnapshot job. */
   @Get('balance-history')

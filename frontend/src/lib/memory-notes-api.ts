@@ -39,3 +39,8 @@ export function updateMemoryNote(id: string, input: { body?: string; pinned?: bo
 export function deleteMemoryNote(id: string): Promise<void> {
   return apiFetch<void>(`/memory-notes/${id}`, { method: "DELETE" });
 }
+
+/** GET /memory-notes/all — every note across every subject type, business-wide (capped at 500, pinned first). */
+export function fetchAllMemoryNotes(): Promise<MemoryNote[]> {
+  return apiFetch<MemoryNote[]>("/memory-notes/all");
+}

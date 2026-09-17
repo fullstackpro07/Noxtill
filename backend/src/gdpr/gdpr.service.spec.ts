@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AuditService } from '../common/audit/audit.service';
 import { CustomersService } from '../customers/customers.service';
+import { CustomerTagsService } from '../customers/customer-tags.service';
 import { GdprService } from './gdpr.service';
 import type { S3Service } from '../common/storage/s3.service';
 import { AppException } from '../common/filters/app.exception';
@@ -43,7 +44,11 @@ describe('GdprService (UPD-BE-123)', () => {
       tenantPrisma,
       cls as unknown as ClsService,
     );
-    const customersService = new CustomersService(tenantPrisma, auditService);
+    const customersService = new CustomersService(
+      tenantPrisma,
+      auditService,
+      new CustomerTagsService(tenantPrisma),
+    );
     service = new GdprService(
       tenantPrisma,
       s3 as unknown as S3Service,

@@ -11,4 +11,13 @@ export class MessagesService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  /** Customers Activity feed — every real message across the business, not just one customer's. */
+  async listRecent(limit: number) {
+    return this.tenantPrisma.client.message.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: { customer: { select: { id: true, name: true, phone: true } } },
+    });
+  }
 }

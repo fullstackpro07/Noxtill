@@ -246,14 +246,41 @@ export class ReviewsService {
     };
   }
 
+  /** UPD-BE-M31: real weekly history for the Sentiment and Competitors screens' trend charts —
+   * `ReviewMetricsSnapshot` rows written by the Monday weekly job (mirrors `HealthScoreSnapshot`).
+   * Returns whatever real snapshots exist so far (could be zero for a brand-new business); the
+   * frontend is expected to show "not enough history yet" rather than this padding out fake points. */
+  async metricsHistory() {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const snapshots =
+      await this.tenantPrisma.client.reviewMetricsSnapshot.findMany({
+        where: { businessId },
+        orderBy: { capturedAt: 'asc' },
+        take: 26, // ~6 months of weekly points
+      });
+    return snapshots.map((s) => ({
+      capturedAt: s.capturedAt,
+      averageRating: Number(s.averageRating),
+      totalReviews: s.totalReviews,
+      positiveThemePct:
+        s.positiveThemePct != null ? Number(s.positiveThemePct) : null,
+      negativeThemePct:
+        s.negativeThemePct != null ? Number(s.negativeThemePct) : null,
+    }));
+  }
+
   /** UPD-BE-101: the QR poster's own analytics — "visits" is every anonymous link mint (one per real
    * scan, since the QR always points at `/rq/:slug`, which mints on load), scoped to `source: 'qr'`
-   * so it never mixes in requests sent after a sale. */
+   * so it never mixes in requests sent after a sale. `pageVisits` (UPD-BE-M31 depth fix) is a
+   * genuinely distinct real metric: every request across every source whose `/r/:token` page was
+   * actually opened (`openedAt` set) in the window — a QR scan mints the link but doesn't itself
+   * prove the page was opened, and a sale/booking-sourced link's opens were never counted here at
+   * all before this. */
   async qrStats() {
     const since = new Date(
       Date.now() - REVIEW_CONVERSION_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     );
-    const [visits, ratingsSubmitted] = await Promise.all([
+    const [visits, ratingsSubmitted, pageVisits] = await Promise.all([
       this.tenantPrisma.client.reviewRequest.count({
         where: { source: 'qr', createdAt: { gte: since } },
       }),
@@ -264,11 +291,15 @@ export class ReviewsService {
           status: ReviewRequestStatus.rated,
         },
       }),
+      this.tenantPrisma.client.reviewRequest.count({
+        where: { createdAt: { gte: since }, openedAt: { not: null } },
+      }),
     ]);
     return {
       windowDays: REVIEW_CONVERSION_WINDOW_DAYS,
       visits,
       ratingsSubmitted,
+      pageVisits,
       conversionRate:
         visits > 0 ? round2((ratingsSubmitted / visits) * 100) : 0,
     };

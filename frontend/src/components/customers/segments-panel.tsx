@@ -1,16 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users2, Plus, Trash2, Copy, Send, Download, Sparkles, Pencil } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Plus, Trash2, Copy, Send, Download, Sparkles, Pencil } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ErrorBanner } from "@/components/shared/error-states";
+import { Button } from "@/components/ui/button";
 import { SkeletonRow } from "@/components/shared/skeleton";
 import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
@@ -46,7 +42,7 @@ export function SegmentsPanel() {
   const [editing, setEditing] = useState<Segment | null>(null);
   const [messaging, setMessaging] = useState<Segment | null>(null);
 
-  const { data: segments, isPending, isError, refetch } = useQuery({ queryKey: ["segments"], queryFn: fetchSegments });
+  const { data: segments, isPending } = useQuery({ queryKey: ["segments"], queryFn: fetchSegments });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteSegment(id),
@@ -85,73 +81,112 @@ export function SegmentsPanel() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't export this segment's members."),
   });
 
+  const segList = useMemo(() => segments ?? [], [segments]);
+  const largest = useMemo(() => segList.reduce((best, s) => (s.count > (best?.count ?? -1) ? s : best), null as Segment | null), [segList]);
+  const mostEngaged = useMemo(
+    () => segList.reduce((best, s) => (s.rules.conditions.length > (best?.rules.conditions.length ?? -1) ? s : best), null as Segment | null),
+    [segList],
+  );
+  const maxCount = Math.max(...segList.map((s) => s.count), 1);
+
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          New segment
-        </Button>
+    <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+      <div className="flex flex-wrap items-center gap-[10px]">
+        <h2 className="m-0 text-[19px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-.4px" }}>Segments</h2>
+        <div className="ml-auto flex flex-wrap gap-[9px]">
+          <button type="button" onClick={() => setCreating(true)} className="flex h-11 items-center gap-1.5 rounded-[11px] px-[18px] text-[12.5px] font-extrabold text-white" style={{ background: "var(--app-primary)" }}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Create Segment
+          </button>
+        </div>
       </div>
 
-      {isError && <ErrorBanner title="Couldn't load segments" onRetry={() => refetch()} />}
-      {isPending && (
-        <Card>
-          <CardContent className="flex flex-col gap-1 p-4">
-            <SkeletonRow />
-            <SkeletonRow />
-          </CardContent>
-        </Card>
-      )}
-      {segments && segments.length === 0 && (
-        <Card>
-          <CardContent>
-            <EmptyState icon={Users2} title="No segments yet" description="Build a rule-based segment to target a specific group of customers." />
-          </CardContent>
-        </Card>
-      )}
-      {segments && segments.length > 0 && (
-        <div className="flex flex-col gap-2.5">
-          {segments.map((segment) => (
-            <Card key={segment.id}>
-              <CardContent className="flex flex-wrap items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-fg">{segment.name}</p>
-                  <p className="truncate text-xs text-fg-muted">
-                    {segment.rules.conditions
-                      .map((c) => `${SEGMENT_FIELD_LABELS[c.field]} ${SEGMENT_OPERATOR_LABELS[c.operator]} ${c.value}`)
-                      .join(` ${segment.rules.combinator} `)}
-                  </p>
-                </div>
-                <Badge tone="primary">{segment.count} customers</Badge>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => setMessaging(segment)} aria-label="Message segment">
-                    <Send className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setEditing(segment)} aria-label="Edit">
-                    <Pencil className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => duplicateMutation.mutate(segment.id)} aria-label="Duplicate">
-                    <Copy className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportMutation.mutate(segment)} aria-label="Export members">
-                    <Download className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(segment.id)} aria-label="Delete">
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))" }}>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Segments</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{segList.length}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Largest Segment</div>
+          <div className="mt-2 text-[14px] font-extrabold" style={{ color: "var(--app-text)" }}>{largest ? `${largest.name} (${largest.count})` : "—"}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Most Conditions</div>
+          <div className="mt-2 text-[14px] font-extrabold" style={{ color: "var(--app-text)" }}>{mostEngaged ? mostEngaged.name : "—"}</div>
+        </div>
+      </div>
+
+      {segList.length > 0 && (
+        <div className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <h3 className="m-0 mb-3 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>Segment size comparison</h3>
+          <div className="flex flex-col gap-[10px]">
+            {segList.map((s) => (
+              <div key={s.id} className="flex items-center gap-[11px]">
+                <span className="w-[150px] overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>{s.name}</span>
+                <span className="h-[9px] flex-1 overflow-hidden rounded-[6px]" style={{ background: "var(--app-surface-2)" }}>
+                  <span className="block h-full rounded-[6px]" style={{ width: `${(s.count / maxCount) * 100}%`, background: "var(--app-primary)" }} />
+                </span>
+                <span className="w-[56px] text-end text-[11.5px] font-extrabold" style={{ color: "var(--app-text)" }}>{s.count}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      <div className="overflow-hidden rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        {isPending && (
+          <div className="flex flex-col gap-1 p-4">
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        )}
+        {!isPending && segList.length === 0 && (
+          <div className="p-[52px_18px] text-center">
+            <div className="mx-auto max-w-[56ch] text-[14.5px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>Create a segment — for example customers who haven&apos;t visited in 60 days</div>
+            <button type="button" onClick={() => setCreating(true)} className="mt-[15px] rounded-[12px] px-[22px] py-3 text-[13px] font-extrabold text-white" style={{ background: "var(--app-primary)" }}>Create Segment</button>
+          </div>
+        )}
+        {segList.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" style={{ minWidth: 960 }}>
+              <thead>
+                <tr style={{ background: "var(--app-surface-2)" }}>
+                  <th className="p-[10px_17px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Segment Name</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Definition</th>
+                  <th className="p-[10px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Customers</th>
+                  <th className="p-[10px_17px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {segList.map((segment) => (
+                  <tr key={segment.id} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
+                    <td className="p-[12px_17px]"><button type="button" onClick={() => setEditing(segment)} className="text-[12.5px] font-extrabold" style={{ color: "var(--app-primary)" }}>{segment.name}</button></td>
+                    <td className="max-w-[360px] p-[12px] text-[12px]" style={{ color: "var(--app-text-disabled)" }}>
+                      {segment.rules.conditions.map((c) => `${SEGMENT_FIELD_LABELS[c.field]} ${SEGMENT_OPERATOR_LABELS[c.operator]} ${c.value}`).join(` ${segment.rules.combinator} `)}
+                    </td>
+                    <td className="p-[12px] text-end text-[12.5px] font-extrabold" style={{ color: "var(--app-text)" }}>{segment.count}</td>
+                    <td className="p-[12px_17px] text-end">
+                      <span className="inline-flex flex-wrap justify-end gap-[7px]">
+                        <button type="button" onClick={() => duplicateMutation.mutate(segment.id)} aria-label="Duplicate" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Copy className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" onClick={() => exportMutation.mutate(segment)} aria-label="Export members" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Download className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" onClick={() => setEditing(segment)} aria-label="Edit" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Pencil className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" onClick={() => deleteMutation.mutate(segment.id)} aria-label="Delete" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "#B42318" }}><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" onClick={() => setMessaging(segment)} className="flex h-10 items-center gap-1.5 rounded-[9px] px-[13px] text-[11.5px] font-extrabold text-white" style={{ background: "var(--app-primary)" }}><Send className="h-3.5 w-3.5" aria-hidden />Message</button>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {(creating || editing) && (
         <SegmentFormDialog segment={editing ?? undefined} onClose={() => (editing ? setEditing(null) : setCreating(false))} />
       )}
       {messaging && <MessageSegmentDialog segment={messaging} onClose={() => setMessaging(null)} />}
-    </div>
+    </main>
   );
 }
 

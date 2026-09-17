@@ -7,6 +7,7 @@ import {
   MAX_VIDEO_SIZE_BYTES,
   VIDEO_TESTIMONIAL_TOKEN_EXPIRY_DAYS,
 } from './video-testimonials.constants';
+import { SubmitVideoConsentDto } from './dto/submit-video-consent.dto';
 import { VideoTestimonialStatus } from '@prisma/client';
 
 const EXTENSION_BY_MIME: Record<string, string> = {
@@ -39,6 +40,7 @@ export class PublicVideoTestimonialService {
   async upload(
     token: string,
     file: { buffer: Buffer; size: number; mimetype: string },
+    consent: SubmitVideoConsentDto,
   ) {
     const testimonial = await this.loadValid(token);
     await validateUploadedFile(file, {
@@ -50,9 +52,18 @@ export class PublicVideoTestimonialService {
     const key = `video-testimonials/${testimonial.businessId}/${token}.${ext}`;
     await this.s3.upload(key, file.buffer, file.mimetype);
 
+    // Real consent, captured once at the moment the customer themselves uploads — never editable
+    // afterward by the business (see the schema comment on `VideoTestimonial.consentWebsite`).
     await this.prisma.videoTestimonial.update({
       where: { id: testimonial.id },
-      data: { videoKey: key, status: VideoTestimonialStatus.submitted },
+      data: {
+        videoKey: key,
+        status: VideoTestimonialStatus.submitted,
+        consentWebsite: consent.consentWebsite,
+        consentSocial: consent.consentSocial,
+        consentPaidAds: consent.consentPaidAds,
+        consentSignedAt: new Date(),
+      },
     });
 
     return { thankYou: true };

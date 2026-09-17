@@ -1,12 +1,7 @@
 "use client";
 
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { VideoTestimonialsPanel } from "@/components/reviews/video-testimonials-panel";
+import { VideoTestimonialsView } from "@/components/reviews/video-testimonials-view";
 
 export default function VideoTestimonialsPage() {
-  return (
-    <SubscreenShell title="Video Testimonials">
-      <VideoTestimonialsPanel />
-    </SubscreenShell>
-  );
+  return <VideoTestimonialsView />;
 }

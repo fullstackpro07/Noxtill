@@ -12,6 +12,11 @@ export interface VideoTestimonial {
   videoUrl: string | null;
   caption: string | null;
   approvedByUserId: string | null;
+  /** Real, captured from the customer at upload time — see `SubmitVideoConsentDto`. All false / `consentSignedAt` null until the customer actually uploads. */
+  consentWebsite: boolean;
+  consentSocial: boolean;
+  consentPaidAds: boolean;
+  consentSignedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
