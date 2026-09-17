@@ -4,6 +4,7 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateReviewRequestDto } from './dto/create-review-request.dto';
 import { generateReviewToken } from './review-token.util';
+import { MessageChannel } from '@prisma/client';
 
 const REVIEW_REQUEST_DELAY_MS = 2 * 60 * 60 * 1000; // +2h, per spec §4.1
 const REVIEW_REQUEST_QUOTA_EXCEEDED = 'REVIEW_REQUEST_QUOTA_EXCEEDED';
@@ -50,7 +51,7 @@ export class ReviewRequestsService {
       },
     });
 
-    await this.scheduleSend(businessId, customerId, token);
+    await this.scheduleSend(businessId, customerId, token, dto.channel);
 
     return reviewRequest;
   }
@@ -95,6 +96,7 @@ export class ReviewRequestsService {
     businessId: string,
     customerId: string,
     token: string,
+    channel?: MessageChannel,
   ): Promise<void> {
     await this.sendGate
       .send({
@@ -103,6 +105,7 @@ export class ReviewRequestsService {
         templateKey: 'review_request',
         scheduledFor: new Date(Date.now() + REVIEW_REQUEST_DELAY_MS),
         variables: { reviewUrl: `/r/${token}` },
+        ...(channel ? { channel } : {}),
       })
       .catch(() => undefined);
   }

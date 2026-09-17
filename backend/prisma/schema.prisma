@@ -544,11 +544,11 @@ model Business {
   phone   String?
   address String?
 
-  nightlyCloseTime String  @default("22:00") @map("nightly_close_time")
+  nightlyCloseTime   String @default("22:00") @map("nightly_close_time")
   /// Nightly Close, full (UPD-BE-119): `{"sections":["sales","lowStock","reviews","feedback","credit","appointmentsTomorrow"],"voiceNoteEnabled":false,"voiceId":null,"customLines":[{"label":"...","value":"..."}]}`.
   /// An empty `{}` (every pre-existing business) means "all real sections, in their original
   /// order, no custom lines" — `composeAndSend` falls back to that exact default.
-  nightlyCloseConfig Json @default("{}") @map("nightly_close_config")
+  nightlyCloseConfig Json   @default("{}") @map("nightly_close_config")
 
   taxLabel String  @default("Tax") @map("tax_label")
   taxRate  Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
@@ -556,7 +556,7 @@ model Business {
   /// Messages & Channels, configurable (UPD-BE-118): ordered `MessageChannel[]` overriding the
   /// hardcoded whatsapp→sms→email fallback in `channel-resolution.util.ts`. `[]` (every
   /// pre-existing business) means "use the original hardcoded order" — fully backward-compatible.
-  channelPriority Json @default("[]") @map("channel_priority")
+  channelPriority   Json @default("[]") @map("channel_priority")
   /// `{ [templateKey]: { status: "approved"|"pending"|"rejected", reason?: string } }` — a
   /// missing key defaults to "approved" (every template already in real use today was already
   /// being sent, so this never retroactively blocks anything).
@@ -613,7 +613,7 @@ model Business {
   /// Staff depth fix (UPD-INT-011): multiplies `hourlyRate` for a staff member's overtime hours
   /// (the standard "time-and-a-half" convention as the default) — only matters for staff who
   /// actually have an `hourlyRate` set; purely-commission staff are unaffected either way.
-  overtimeRateMultiplier Decimal @default(1.5) @db.Decimal(3, 2) @map("overtime_rate_multiplier")
+  overtimeRateMultiplier Decimal @default(1.5) @map("overtime_rate_multiplier") @db.Decimal(3, 2)
 
   parentId String?    @map("parent_id")
   parent   Business?  @relation("BusinessBranches", fields: [parentId], references: [id])
@@ -636,134 +636,142 @@ model Business {
   /// Last time msgUsed was reset to 0 for a new billing month (INT-014) — null until the first reset.
   msgQuotaResetAt      DateTime? @map("msg_quota_reset_at")
 
-  businessUsers            BusinessUser[]
-  customers                Customer[]
-  products                 Product[]
-  orders                   Order[]
-  creditEntries            CreditEntry[]
-  appointments             Appointment[]
-  messages                 Message[]
-  whatsappWindows          WhatsappWindow[]
-  reviewRequests           ReviewRequest[]
-  privateFeedback          PrivateFeedback[]
-  externalReviews          ExternalReview[]
-  stockMovements           StockMovement[]
-  expenses                 Expense[]
-  attendance               Attendance[]
-  campaigns                Campaign[]
-  competitors              Competitor[]
-  trackedKeywords          TrackedKeyword[]
-  auditLogs                AuditLog[]
-  importBatches            ImportBatch[]
-  integrations             Integration[]
-  adCampaigns              AdCampaign[]
-  emailCampaigns           EmailCampaign[]
-  productFeedItems         ProductFeedItem[]
-  gmbPosts                 GmbPost[]
-  notifications            Notification[]
-  healthScoreSnapshots     HealthScoreSnapshot[]
-  creditBalanceSnapshots   CreditBalanceSnapshot[]
-  goal                     BusinessGoal?
-  activityEvents           ActivityEvent[]
-  aiInsights               AiInsight[]
-  actionItemStates         ActionItemState[]
-  heldSales                HeldSale[]
-  cashShifts               CashShift[]
-  cashMovements            CashMovement[]
-  voiceSaleDrafts          VoiceSaleDraft[]
-  tables                   Table[]
-  returns                  Return[]
-  receiptLogs              ReceiptLog[]
-  variantSets              VariantSet[]
-  bundles                  Bundle[]
-  suppliers                Supplier[]
-  priceHistory             PriceHistory[]
-  categories               Category[]
-  scheduledExports         ScheduledExport[]
-  waitlistEntries          WaitlistEntry[]
-  purchaseOrders           PurchaseOrder[]
-  productWaitlistEntries   ProductWaitlistEntry[]
-  queueTokens              QueueToken[]
-  deposits                 Deposit[]
-  depositSettings          DepositSettings?
-  bookingLinkSettings      BookingLinkSettings?
-  bookingLinkVisits        BookingLinkVisit[]
-  reminderRules            ReminderRule[]
-  installmentPlans         InstallmentPlan[]
-  installments             Installment[]
-  creditShareLinks         CreditShareLink[]
-  creditReminderRules      CreditReminderRule[]
-  creditReminderLogs       CreditReminderLog[]
-  segments                 Segment[]
-  loyaltyPrograms          LoyaltyProgram[]
-  loyaltyMembers           LoyaltyMember[]
-  membershipPlans          MembershipPlan[]
-  memberships              Membership[]
-  memoryNotes              MemoryNote[]
-  videoTestimonials        VideoTestimonial[]
-  coupons                  Coupon[]
-  vouchers                 Voucher[]
-  workflows                Workflow[]
-  workflowRuns             WorkflowRun[]
-  staffShifts              StaffShift[]
-  timeOff                  TimeOff[]
-  timesheetApprovals       TimesheetApproval[]
-  staffAdvances            StaffAdvance[]
-  stockTransfersOut        StockTransfer[]           @relation("StockTransferSource")
-  stockTransfersIn         StockTransfer[]           @relation("StockTransferDest")
-  stockCounts              StockCount[]
-  customRoles              CustomRole[]
-  labelOverrides           LabelOverride[]
-  optionSets               OptionSet[]
-  sessions                 Session[]
-  masterListing            MasterListing?
-  listingSyncLogs          ListingSyncLog[]
-  citations                Citation[]
-  listingPhotos            ListingPhoto[]
-  listingSettings          ListingSettings?
-  gmbPhotos                GmbPhoto[]
-  gmbQnas                  GmbQna[]
-  gmbInsightsSnapshots     GmbInsightsSnapshot[]
-  socialAccounts           SocialAccount[]
-  mediaAssets              MediaAsset[]
-  socialPosts              SocialPost[]
-  socialInboxItems         SocialInboxItem[]
-  socialAnalyticsSnapshots SocialAnalyticsSnapshot[]
-  socialSettings           SocialSettings?
-  socialPostAnalytics      SocialPostAnalytics[]
-  socialCaptionGenerations SocialCaptionGeneration[]
-  visibilityScoreSnapshots VisibilityScoreSnapshot[]
-  competitiveOpportunities CompetitiveOpportunity[]
-  competitiveSettings      CompetitiveSettings?
-  voiceSettings            VoiceSettings?
-  phoneNumber              PhoneNumber?
-  phoneCalls               PhoneCall[]
-  digitizerAliases         DigitizerAlias[]
-  riders                   Rider[]
-  deliveries               Delivery[]
-  routes                   Route[]
-  deliveryZones            DeliveryZone[]
-  deliverySettings         DeliverySettings?
-  adCreatives              AdCreative[]
-  adAudiences              AdAudience[]
-  adLeads                  AdLead[]
-  adSettings               AdSettings?
-  integrationSyncLogs      IntegrationSyncLog[]
-  ecommerceSyncConflicts   EcommerceSyncConflict[]
-  adCampaignStatsSnapshots AdCampaignStatsSnapshot[]
-  accountingMappings       AccountingMapping[]
-  outboundWebhooks         OutboundWebhook[]
-  reviewSentimentThemes    ReviewSentimentTheme[]
-  recurringObligations     RecurringObligation[]
-  seoHeatmapPoints         SeoHeatmapPoint[]
-  apiKeys                  ApiKey[]
-  nightlyCloseLogs         NightlyCloseLog[]
-  healthScoreWeightChanges HealthScoreWeightChange[]
-  voiceCommandDrafts       VoiceCommandDraft[]
-  assistantConversations   AssistantConversation[]
-  notificationPreferences  NotificationPreference[]
-  dataSubjectRequests      DataSubjectRequest[]
-  taxRules                 TaxRule[]
+  businessUsers               BusinessUser[]
+  customers                   Customer[]
+  products                    Product[]
+  orders                      Order[]
+  creditEntries               CreditEntry[]
+  appointments                Appointment[]
+  messages                    Message[]
+  whatsappWindows             WhatsappWindow[]
+  reviewRequests              ReviewRequest[]
+  privateFeedback             PrivateFeedback[]
+  externalReviews             ExternalReview[]
+  reviewPlatformDestinations  ReviewPlatformDestination[]
+  reviewMetricsSnapshots      ReviewMetricsSnapshot[]
+  stockMovements              StockMovement[]
+  expenses                    Expense[]
+  attendance                  Attendance[]
+  campaigns                   Campaign[]
+  competitors                 Competitor[]
+  trackedKeywords             TrackedKeyword[]
+  auditLogs                   AuditLog[]
+  importBatches               ImportBatch[]
+  integrations                Integration[]
+  adCampaigns                 AdCampaign[]
+  emailCampaigns              EmailCampaign[]
+  productFeedItems            ProductFeedItem[]
+  gmbPosts                    GmbPost[]
+  notifications               Notification[]
+  healthScoreSnapshots        HealthScoreSnapshot[]
+  creditBalanceSnapshots      CreditBalanceSnapshot[]
+  goal                        BusinessGoal?
+  activityEvents              ActivityEvent[]
+  aiInsights                  AiInsight[]
+  actionItemStates            ActionItemState[]
+  heldSales                   HeldSale[]
+  cashShifts                  CashShift[]
+  cashMovements               CashMovement[]
+  voiceSaleDrafts             VoiceSaleDraft[]
+  tables                      Table[]
+  returns                     Return[]
+  receiptLogs                 ReceiptLog[]
+  variantSets                 VariantSet[]
+  bundles                     Bundle[]
+  suppliers                   Supplier[]
+  priceHistory                PriceHistory[]
+  categories                  Category[]
+  scheduledExports            ScheduledExport[]
+  waitlistEntries             WaitlistEntry[]
+  purchaseOrders              PurchaseOrder[]
+  productWaitlistEntries      ProductWaitlistEntry[]
+  queueTokens                 QueueToken[]
+  deposits                    Deposit[]
+  depositSettings             DepositSettings?
+  bookingLinkSettings         BookingLinkSettings?
+  bookingLinkVisits           BookingLinkVisit[]
+  reminderRules               ReminderRule[]
+  installmentPlans            InstallmentPlan[]
+  installments                Installment[]
+  creditShareLinks            CreditShareLink[]
+  creditReminderRules         CreditReminderRule[]
+  creditReminderLogs          CreditReminderLog[]
+  segments                    Segment[]
+  loyaltyPrograms             LoyaltyProgram[]
+  loyaltyMembers              LoyaltyMember[]
+  membershipPlans             MembershipPlan[]
+  memberships                 Membership[]
+  memoryNotes                 MemoryNote[]
+  customerCustomFields        CustomerCustomField[]
+  customerTags                CustomerTag[]
+  customerMergeSettings       CustomerMergeSettings?
+  customerPrivacySettings     CustomerPrivacySettings?
+  customerExportLogs          CustomerExportLog[]
+  customerDuplicateDismissals CustomerDuplicateDismissal[]
+  videoTestimonials           VideoTestimonial[]
+  coupons                     Coupon[]
+  vouchers                    Voucher[]
+  workflows                   Workflow[]
+  workflowRuns                WorkflowRun[]
+  staffShifts                 StaffShift[]
+  timeOff                     TimeOff[]
+  timesheetApprovals          TimesheetApproval[]
+  staffAdvances               StaffAdvance[]
+  stockTransfersOut           StockTransfer[]              @relation("StockTransferSource")
+  stockTransfersIn            StockTransfer[]              @relation("StockTransferDest")
+  stockCounts                 StockCount[]
+  customRoles                 CustomRole[]
+  labelOverrides              LabelOverride[]
+  optionSets                  OptionSet[]
+  sessions                    Session[]
+  masterListing               MasterListing?
+  listingSyncLogs             ListingSyncLog[]
+  citations                   Citation[]
+  listingPhotos               ListingPhoto[]
+  listingSettings             ListingSettings?
+  gmbPhotos                   GmbPhoto[]
+  gmbQnas                     GmbQna[]
+  gmbInsightsSnapshots        GmbInsightsSnapshot[]
+  socialAccounts              SocialAccount[]
+  mediaAssets                 MediaAsset[]
+  socialPosts                 SocialPost[]
+  socialInboxItems            SocialInboxItem[]
+  socialAnalyticsSnapshots    SocialAnalyticsSnapshot[]
+  socialSettings              SocialSettings?
+  socialPostAnalytics         SocialPostAnalytics[]
+  socialCaptionGenerations    SocialCaptionGeneration[]
+  visibilityScoreSnapshots    VisibilityScoreSnapshot[]
+  competitiveOpportunities    CompetitiveOpportunity[]
+  competitiveSettings         CompetitiveSettings?
+  voiceSettings               VoiceSettings?
+  phoneNumber                 PhoneNumber?
+  phoneCalls                  PhoneCall[]
+  digitizerAliases            DigitizerAlias[]
+  riders                      Rider[]
+  deliveries                  Delivery[]
+  routes                      Route[]
+  deliveryZones               DeliveryZone[]
+  deliverySettings            DeliverySettings?
+  adCreatives                 AdCreative[]
+  adAudiences                 AdAudience[]
+  adLeads                     AdLead[]
+  adSettings                  AdSettings?
+  integrationSyncLogs         IntegrationSyncLog[]
+  ecommerceSyncConflicts      EcommerceSyncConflict[]
+  adCampaignStatsSnapshots    AdCampaignStatsSnapshot[]
+  accountingMappings          AccountingMapping[]
+  outboundWebhooks            OutboundWebhook[]
+  reviewSentimentThemes       ReviewSentimentTheme[]
+  recurringObligations        RecurringObligation[]
+  seoHeatmapPoints            SeoHeatmapPoint[]
+  apiKeys                     ApiKey[]
+  nightlyCloseLogs            NightlyCloseLog[]
+  healthScoreWeightChanges    HealthScoreWeightChange[]
+  voiceCommandDrafts          VoiceCommandDraft[]
+  assistantConversations      AssistantConversation[]
+  notificationPreferences     NotificationPreference[]
+  dataSubjectRequests         DataSubjectRequest[]
+  taxRules                    TaxRule[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -922,7 +930,7 @@ model BusinessUser {
   /// `commissionRule` — null (the default) means this staff member is paid purely on commission,
   /// same as before this field existed. Set only when the owner deliberately configures a wage
   /// for this specific person.
-  hourlyRate Decimal? @db.Decimal(10, 2) @map("hourly_rate")
+  hourlyRate     Decimal? @map("hourly_rate") @db.Decimal(10, 2)
 
   attendance         Attendance[]
   appointments       Appointment[]       @relation("StaffAppointments")
@@ -973,24 +981,28 @@ model Notification {
 // ─────────────────────────────────────────────────────────────────────────
 
 model Customer {
-  id               String    @id @default(uuid())
-  businessId       String    @map("business_id")
-  business         Business  @relation(fields: [businessId], references: [id])
-  phone            String
-  name             String
-  email            String?
-  address          String?
-  birthday         DateTime? @db.Date
-  notes            String?   @db.Text
+  id                String         @id @default(uuid())
+  businessId        String         @map("business_id")
+  business          Business       @relation(fields: [businessId], references: [id])
+  phone             String
+  name              String
+  email             String?
+  address           String?
+  birthday          DateTime?      @db.Date
+  notes             String?        @db.Text
   /// MySQL migration: was a native `String[]` array (Postgres-only) — Prisma's MySQL connector has
   /// no scalar-list column type, so this is a JSON array instead. Read/written wholesale in JS
   /// (see `customers.service.ts`), not via Prisma's array `push`/`has` operators anymore.
-  tags             Json      @default("[]")
-  consentMarketing Boolean   @default(true) @map("consent_marketing")
-  optedOut         Boolean   @default(false) @map("opted_out")
-  lifetimeSpend    Decimal   @default(0) @map("lifetime_spend") @db.Decimal(12, 2)
-  visitCount       Int       @default(0) @map("visit_count")
-  lastVisitAt      DateTime? @map("last_visit_at")
+  tags              Json           @default("[]")
+  consentMarketing  Boolean        @default(true) @map("consent_marketing")
+  optedOut          Boolean        @default(false) @map("opted_out")
+  lifetimeSpend     Decimal        @default(0) @map("lifetime_spend") @db.Decimal(12, 2)
+  visitCount        Int            @default(0) @map("visit_count")
+  lastVisitAt       DateTime?      @map("last_visit_at")
+  /// Customer Settings (UPD-BE-101): real lifecycle status, distinct from `optedOut`/`consentMarketing`.
+  status            CustomerStatus @default(active)
+  /// Customer Settings (UPD-BE-101): values keyed by `CustomerCustomField.name`, e.g. `{"Preferred stylist":"Hina S."}`.
+  customFieldValues Json           @default("{}") @map("custom_field_values")
 
   /// Referrals (BE-062): the existing customer whose code brought this customer in, if any.
   referredByCustomerId String?    @map("referred_by_customer_id")
@@ -999,25 +1011,25 @@ model Customer {
   /// Set once this customer's first order triggers a reward to their referrer — prevents double-issuance.
   referralRewardedAt   DateTime?  @map("referral_rewarded_at")
 
-  orders            Order[]
-  creditEntries     CreditEntry[]
-  appointments      Appointment[]
-  messages          Message[]
-  whatsappWindows   WhatsappWindow[]
-  reviewRequests    ReviewRequest[]
-  privateFeedback   PrivateFeedback[]
-  returns           Return[]
-  waitlistEntries   WaitlistEntry[]
+  orders                 Order[]
+  creditEntries          CreditEntry[]
+  appointments           Appointment[]
+  messages               Message[]
+  whatsappWindows        WhatsappWindow[]
+  reviewRequests         ReviewRequest[]
+  privateFeedback        PrivateFeedback[]
+  returns                Return[]
+  waitlistEntries        WaitlistEntry[]
   productWaitlistEntries ProductWaitlistEntry[]
-  queueTokens       QueueToken[]
-  installmentPlans  InstallmentPlan[]
-  creditShareLinks  CreditShareLink[]
-  creditReminderLogs CreditReminderLog[]
-  loyaltyMembers    LoyaltyMember[]
-  memberships       Membership[]
-  videoTestimonials VideoTestimonial[]
-  dataSubjectRequests DataSubjectRequest[]
-  vouchers          Voucher[]
+  queueTokens            QueueToken[]
+  installmentPlans       InstallmentPlan[]
+  creditShareLinks       CreditShareLink[]
+  creditReminderLogs     CreditReminderLog[]
+  loyaltyMembers         LoyaltyMember[]
+  memberships            Membership[]
+  videoTestimonials      VideoTestimonial[]
+  dataSubjectRequests    DataSubjectRequest[]
+  vouchers               Voucher[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1046,6 +1058,157 @@ model Segment {
 
   @@index([businessId])
   @@map("segments")
+}
+
+enum CustomerStatus {
+  active
+  inactive
+  archived
+  blocked
+}
+
+/// Customer Settings — Custom fields (UPD-BE-101). Definitions only; the actual per-customer value
+/// lives in `Customer.customFieldValues`, keyed by `name` (same "definition table + JSON value bag"
+/// shape used nowhere else yet in this schema, chosen because field sets are small and per-business,
+/// not because it's an established idiom).
+model CustomerCustomField {
+  id         String                  @id @default(uuid())
+  businessId String                  @map("business_id")
+  business   Business                @relation(fields: [businessId], references: [id])
+  name       String
+  type       CustomerCustomFieldType @default(text)
+  /// Option labels for `type: select`; unused otherwise.
+  options    Json                    @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, name])
+  @@map("customer_custom_fields")
+}
+
+enum CustomerCustomFieldType {
+  text
+  select
+  date
+  number
+}
+
+/// Customer Settings — Tags catalog (UPD-BE-101). `Customer.tags` stays the JSON array actually
+/// applied to a customer (unchanged); this table exists only to give a tag a real "created"
+/// date and a real manual-vs-rule-based origin, matching the Tags screen's columns. Usage count is
+/// never stored here — always computed live via `customer.count({ where: { tags: { array_contains
+/// [name] } } })`, the same idiom `Segment.list()` already uses for its own live counts.
+model CustomerTag {
+  id         String          @id @default(uuid())
+  businessId String          @map("business_id")
+  business   Business        @relation(fields: [businessId], references: [id])
+  name       String
+  kind       CustomerTagKind @default(manual)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, name])
+  @@map("customer_tags")
+}
+
+enum CustomerTagKind {
+  manual
+  rule_based
+}
+
+/// Customer Settings — Merge rules (UPD-BE-101). One row per business; read/written via the same
+/// upsert-on-write singleton idiom as `CompetitiveSettings`/`DepositSettings`. `requireApproval` is
+/// deliberately NOT a column — the merge flow is always a human picking a primary record via
+/// `POST /customers/:id/merge`, never automated, so there is nothing real to toggle.
+model CustomerMergeSettings {
+  id                 String                     @id @default(uuid())
+  businessId         String                     @unique @map("business_id")
+  business           Business                   @relation(fields: [businessId], references: [id])
+  matchOn            CustomerMatchOn            @default(phone_or_email) @map("match_on")
+  conflictResolution CustomerConflictResolution @default(primary) @map("conflict_resolution")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("customer_merge_settings")
+}
+
+enum CustomerMatchOn {
+  phone_or_email
+  phone_only
+  name_and_phone
+}
+
+enum CustomerConflictResolution {
+  primary
+  most_recent
+  ask
+}
+
+/// Customer Settings — Privacy & staff access (UPD-BE-101). One row per business; the frontend
+/// reads these instead of hardcoding `role !== 'staff'` for money-visibility/export/merge/archive
+/// gating. Owner/manager are never restricted by this table — it only ever narrows what Staff can see/do.
+model CustomerPrivacySettings {
+  id                          String   @id @default(uuid())
+  businessId                  String   @unique @map("business_id")
+  business                    Business @relation(fields: [businessId], references: [id])
+  creditBalanceVisibleToStaff Boolean  @default(false) @map("credit_balance_visible_to_staff")
+  notesVisibleToStaff         Boolean  @default(true) @map("notes_visible_to_staff")
+  staffCanExport              Boolean  @default(false) @map("staff_can_export")
+  staffCanMerge               Boolean  @default(false) @map("staff_can_merge")
+  staffCanArchive             Boolean  @default(false) @map("staff_can_archive")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("customer_privacy_settings")
+}
+
+/// Customer Export screen's real export history (UPD-BE-101) — one row per bulk export actually
+/// run, written the moment the file is generated (see `CustomersExportService`).
+model CustomerExportLog {
+  id         String               @id @default(uuid())
+  businessId String               @map("business_id")
+  business   Business             @relation(fields: [businessId], references: [id])
+  userId     String               @map("user_id")
+  format     CustomerExportFormat @default(csv)
+  rowCount   Int                  @map("row_count")
+  fields     Json                 @default("[]")
+  fileUrl    String?              @map("file_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("customer_export_logs")
+}
+
+/// Matches the app-wide `ExportFormat` vocabulary used by `src/exports` (xlsx/csv/pdf), not a
+/// separate "excel" name.
+enum CustomerExportFormat {
+  csv
+  xlsx
+  pdf
+}
+
+/// Duplicates screen's "Not a duplicate" action (UPD-BE-101) — persists a dismissal so it survives
+/// a refresh/new session, unlike the previous client-only dismissal. `customerIdLow`/`customerIdHigh`
+/// are the pair's two ids in a fixed (sorted) order so the same pair can never be stored twice
+/// regardless of which side the caller passes first; deliberately not a Prisma relation (same
+/// "opaque id, checked at write time" convention as `MemoryNote.subjectId`) since a merged/erased
+/// customer should simply make the dismissal irrelevant, not cascade-fail.
+model CustomerDuplicateDismissal {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id])
+  customerIdLow     String   @map("customer_id_low")
+  customerIdHigh    String   @map("customer_id_high")
+  dismissedByUserId String   @map("dismissed_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, customerIdLow, customerIdHigh])
+  @@map("customer_duplicate_dismissals")
 }
 
 /// Loyalty punch cards/tiers (UPD-BE-024). One business can run multiple programs (e.g. a punch
@@ -1218,20 +1381,20 @@ model Product {
   depositRequired  Boolean  @default(false) @map("deposit_required")
   depositAmount    Decimal? @map("deposit_amount") @db.Decimal(12, 2)
 
-  orderItems         OrderItem[]
-  stockMovements     StockMovement[]
-  appointments       Appointment[]
-  productFeedItems   ProductFeedItem[]
+  orderItems             OrderItem[]
+  stockMovements         StockMovement[]
+  appointments           Appointment[]
+  productFeedItems       ProductFeedItem[]
   /// Set only when this product is the sellable, catalog-facing "face" of a bundle (UPD-BE-013).
-  bundle             Bundle?
-  bundleItems        BundleItem[]
-  priceHistory       PriceHistory[]
-  waitlistEntries    WaitlistEntry[]
-  purchaseOrderItems PurchaseOrderItem[]
+  bundle                 Bundle?
+  bundleItems            BundleItem[]
+  priceHistory           PriceHistory[]
+  waitlistEntries        WaitlistEntry[]
+  purchaseOrderItems     PurchaseOrderItem[]
   productWaitlistEntries ProductWaitlistEntry[]
-  queueTokens        QueueToken[]
-  stockTransferItems StockTransferItem[]
-  stockCountLines    StockCountLine[]
+  queueTokens            QueueToken[]
+  stockTransferItems     StockTransferItem[]
+  stockCountLines        StockCountLine[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1288,7 +1451,7 @@ model Order {
   cancelReason String? @map("cancel_reason")
   /// Free-text note captured when an order is created directly as an order (not rung up through
   /// Fast Sale) — e.g. "leave at the gate". Null for every other order.
-  notes String? @db.Text
+  notes        String? @db.Text
 
   /// Quotations (only meaningful when `isQuotation` is true) — a quotation's own lifecycle is
   /// independent of `status` (which still tracks fulfilment once/if it's converted to a real
@@ -1296,7 +1459,7 @@ model Order {
   quotationStatus     QuotationStatus? @map("quotation_status")
   quotationValidUntil DateTime?        @map("quotation_valid_until")
   quotationSentAt     DateTime?        @map("quotation_sent_at")
-  quotationTerms      String?          @db.Text @map("quotation_terms")
+  quotationTerms      String?          @map("quotation_terms") @db.Text
   declineReason       String?          @map("decline_reason")
 
   /// Accounting Sync (UPD-BE-072): set once this order has been pushed as a real invoice to the
@@ -1322,15 +1485,15 @@ model Order {
 }
 
 model OrderItem {
-  id        String   @id @default(uuid())
-  orderId   String   @map("order_id")
-  order     Order    @relation(fields: [orderId], references: [id])
-  productId String?  @map("product_id")
-  product   Product? @relation(fields: [productId], references: [id])
-  name      String
-  price     Decimal  @db.Decimal(12, 2)
-  cost      Decimal  @db.Decimal(12, 2)
-  qty       Int
+  id             String   @id @default(uuid())
+  orderId        String   @map("order_id")
+  order          Order    @relation(fields: [orderId], references: [id])
+  productId      String?  @map("product_id")
+  product        Product? @relation(fields: [productId], references: [id])
+  name           String
+  price          Decimal  @db.Decimal(12, 2)
+  cost           Decimal  @db.Decimal(12, 2)
+  qty            Int
   /// Reports depth fix (UPD-INT-015): the real per-line rate `computeOrderTotals` actually taxed
   /// this line at (via `resolveTaxRatePercent`'s per-category `TaxRule` match, or the business's
   /// flat rate) — previously computed at sale time but never persisted, so a tax report could only
@@ -1475,13 +1638,13 @@ model CashShift {
 
   /// Set only by a real reconciliation (UPD-BE-007) — a bare close via `POST /cash/shift/close`
   /// leaves these null, since no physical count was taken.
-  countedCash  Decimal? @map("counted_cash") @db.Decimal(12, 2)
-  variance     Decimal? @db.Decimal(12, 2)
-  varianceNote String?  @map("variance_note")
+  countedCash        Decimal? @map("counted_cash") @db.Decimal(12, 2)
+  variance           Decimal? @db.Decimal(12, 2)
+  varianceNote       String?  @map("variance_note")
   /// Shift Closing depth fix (UPD-INT-002) — the real denomination breakdown entered while
   /// counting the drawer, persisted so a shift report can be printed/reprinted later against
   /// history rather than only the ephemeral counting-session state. `[{value, count}]`.
-  denominationCounts Json? @map("denomination_counts")
+  denominationCounts Json?    @map("denomination_counts")
 
   movements CashMovement[]
 
@@ -1615,14 +1778,14 @@ model CreditShareLink {
 /// `customMessage` is honoured for SMS/email/WhatsApp-in-window, `tone` picks which pre-approved
 /// template variant WhatsApp falls back to outside its 24h window.
 model CreditReminderRule {
-  id                String             @id @default(uuid())
-  businessId        String             @map("business_id")
-  business          Business           @relation(fields: [businessId], references: [id])
-  daysOverdueTrigger Int               @map("days_overdue_trigger")
-  tone              CreditReminderTone @default(gentle)
-  channel           MessageChannel?
-  customMessage     String?            @map("custom_message") @db.Text
-  active            Boolean            @default(true)
+  id                 String             @id @default(uuid())
+  businessId         String             @map("business_id")
+  business           Business           @relation(fields: [businessId], references: [id])
+  daysOverdueTrigger Int                @map("days_overdue_trigger")
+  tone               CreditReminderTone @default(gentle)
+  channel            MessageChannel?
+  customMessage      String?            @map("custom_message") @db.Text
+  active             Boolean            @default(true)
 
   logs CreditReminderLog[]
 
@@ -1779,13 +1942,13 @@ model DepositSettings {
 /// Booking Link & QR (UPD-BE-090) — the public booking page's own customisation, distinct from
 /// `DepositSettings` (which governs the deposit *rule*, not page copy). One row per business.
 model BookingLinkSettings {
-  id               String   @id @default(uuid())
-  businessId       String   @unique @map("business_id")
-  business         Business @relation(fields: [businessId], references: [id])
-  welcomeText      String?  @map("welcome_text") @db.Text
+  id                String   @id @default(uuid())
+  businessId        String   @unique @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id])
+  welcomeText       String?  @map("welcome_text") @db.Text
   /// Empty = every active service shows.
-  visibleServiceIds Json    @default("[]") @map("visible_service_ids")
-  brandColor       String?  @map("brand_color")
+  visibleServiceIds Json     @default("[]") @map("visible_service_ids")
+  brandColor        String?  @map("brand_color")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1815,18 +1978,18 @@ model BookingLinkVisit {
 /// pre-approved variant, not writing new copy. A business with zero rules keeps the original
 /// hardcoded default behaviour (24h + 2h, `booking_reminder`) — see `DEFAULT_REMINDER_RULES`.
 model ReminderRule {
-  id          String         @id @default(uuid())
-  businessId  String         @map("business_id")
-  business    Business       @relation(fields: [businessId], references: [id])
-  offsetHours Int            @map("offset_hours")
-  channel     MessageChannel?
-  templateKey String         @default("booking_reminder") @map("template_key")
+  id            String          @id @default(uuid())
+  businessId    String          @map("business_id")
+  business      Business        @relation(fields: [businessId], references: [id])
+  offsetHours   Int             @map("offset_hours")
+  channel       MessageChannel?
+  templateKey   String          @default("booking_reminder") @map("template_key")
   /// Real custom wording (UPD-BE-092 fix-it), `{{customerName}}`/`{{serviceName}}`/`{{dateTime}}`
   /// placeholders. Used verbatim for SMS/email and WhatsApp inside the 24h customer-service
   /// window (see `WhatsappService`); outside that window Meta requires the pre-approved
   /// `templateKey` template instead, so this is null-safe rather than a universal override.
-  customMessage String?      @map("custom_message") @db.Text
-  active      Boolean        @default(true)
+  customMessage String?         @map("custom_message") @db.Text
+  active        Boolean         @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1988,23 +2151,59 @@ enum ReviewSentimentSource {
 }
 
 model ReviewSentimentTheme {
-  id           String                @id @default(uuid())
-  businessId   String                @map("business_id")
-  business     Business              @relation(fields: [businessId], references: [id])
-  source       ReviewSentimentSource @default(public_review)
-  theme        String
-  sentiment    String
-  exampleQuote String                @map("example_quote") @db.Text
-  reviewCount  Int                   @map("review_count")
+  id                  String                @id @default(uuid())
+  businessId          String                @map("business_id")
+  business            Business              @relation(fields: [businessId], references: [id])
+  source              ReviewSentimentSource @default(public_review)
+  theme               String
+  sentiment           String
+  exampleQuote        String                @map("example_quote") @db.Text
+  reviewCount         Int                   @map("review_count")
   /// Trend-arrows depth fix (UPD-FE-M25) — this same theme's `reviewCount` from the previous
   /// generation run (matched by normalized theme text), `null` when the theme is new. A real
   /// comparison across two real runs, never a fabricated trend.
-  previousReviewCount Int? @map("previous_review_count")
+  previousReviewCount Int?                  @map("previous_review_count")
 
   generatedAt DateTime @default(now()) @map("generated_at")
 
   @@index([businessId, source, generatedAt])
   @@map("review_sentiment_themes")
+}
+
+/// Additional public-review destinations beyond the single primary `Business.publicReviewUrl`/
+/// `publicReviewPlatform` — e.g. a business listed on both Google and Facebook. At submit time the
+/// public rating page offers every configured destination (primary plus these) as a real choice,
+/// never a fabricated single link. One row per platform per business.
+model ReviewPlatformDestination {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  platform   String
+  url        String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, platform])
+  @@map("review_platform_destinations")
+}
+
+/// Weekly snapshot of real review metrics (UPD-BE-M31) — mirrors `HealthScoreSnapshot`'s own
+/// pattern so the Sentiment and Competitors screens have real historical points to chart instead
+/// of a fabricated multi-month curve. `positiveThemePct`/`negativeThemePct` are null until the
+/// business has at least one AI-clustered theme to derive them from (see `SentimentAnalysisService`).
+model ReviewMetricsSnapshot {
+  id               String   @id @default(uuid())
+  businessId       String   @map("business_id")
+  business         Business @relation(fields: [businessId], references: [id])
+  averageRating    Decimal  @map("average_rating") @db.Decimal(3, 2)
+  totalReviews     Int      @map("total_reviews")
+  positiveThemePct Decimal? @map("positive_theme_pct") @db.Decimal(5, 2)
+  negativeThemePct Decimal? @map("negative_theme_pct") @db.Decimal(5, 2)
+  capturedAt       DateTime @default(now()) @map("captured_at")
+
+  @@index([businessId, capturedAt])
+  @@map("review_metrics_snapshots")
 }
 
 /// Video Testimonials (UPD-BE-027). `requested` -> `submitted` (customer uploads via the public,
@@ -2023,6 +2222,14 @@ model VideoTestimonial {
   videoKey         String?                @map("video_key")
   caption          String?                @db.Text
   approvedByUserId String?                @map("approved_by_user_id")
+
+  /// Real customer-granted consent, captured on the public upload page at the moment they submit —
+  /// never editable by the business afterward. All default false until the customer actually
+  /// checks a box; `consentSignedAt` is set once, at upload time, alongside them.
+  consentWebsite  Boolean   @default(false) @map("consent_website")
+  consentSocial   Boolean   @default(false) @map("consent_social")
+  consentPaidAds  Boolean   @default(false) @map("consent_paid_ads")
+  consentSignedAt DateTime? @map("consent_signed_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2058,35 +2265,35 @@ model PhoneNumber {
 /// recording, not Twilio's own URL — kept for as long as `RECORDING_RETENTION_DAYS`, then purged
 /// by the daily retention job alongside the row itself.
 model PhoneCall {
-  id            String           @id @default(uuid())
-  businessId    String           @map("business_id")
-  business      Business         @relation(fields: [businessId], references: [id])
-  callSid       String           @unique @map("call_sid")
-  fromNumber    String           @map("from_number")
-  status        PhoneCallStatus  @default(in_progress)
-  outcome       PhoneCallOutcome @default(none)
+  id                  String           @id @default(uuid())
+  businessId          String           @map("business_id")
+  business            Business         @relation(fields: [businessId], references: [id])
+  callSid             String           @unique @map("call_sid")
+  fromNumber          String           @map("from_number")
+  status              PhoneCallStatus  @default(in_progress)
+  outcome             PhoneCallOutcome @default(none)
   /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the
   /// AI matched this call to (Call Queue depth fix, UPD-BE-129).
-  customIntentName String?       @map("custom_intent_name")
-  transcript    Json             @default("[]")
-  recordingKey  String?          @map("recording_key")
-  appointmentId String?          @map("appointment_id")
-  appointment   Appointment?     @relation(fields: [appointmentId], references: [id])
-  startedAt     DateTime         @default(now()) @map("started_at")
-  endedAt       DateTime?        @map("ended_at")
+  customIntentName    String?          @map("custom_intent_name")
+  transcript          Json             @default("[]")
+  recordingKey        String?          @map("recording_key")
+  appointmentId       String?          @map("appointment_id")
+  appointment         Appointment?     @relation(fields: [appointmentId], references: [id])
+  startedAt           DateTime         @default(now()) @map("started_at")
+  endedAt             DateTime?        @map("ended_at")
   /// Call Queue fix (UPD-BE-129) — set when staff mark this "message"/"custom"/missed call as
   /// handled (manually called back, or otherwise resolved). NULL means it's still sitting in the
   /// real operational queue of calls needing human follow-up.
-  resolvedAt          DateTime? @map("resolved_at")
+  resolvedAt          DateTime?        @map("resolved_at")
   /// Set when staff explicitly log that a callback was promised, without yet marking it resolved —
   /// a distinct state from `resolvedAt` (a queue item can be "callback offered" but not yet done).
-  callbackRequestedAt DateTime? @map("callback_requested_at")
+  callbackRequestedAt DateTime?        @map("callback_requested_at")
   /// Live Calls listen/take-over fix — set the moment a staff member's own phone is bridged live
   /// into this call via a real Twilio conference redirect (Twilio's "modify a live call" REST
   /// action), replacing the earlier disclosed 15s-poll-only gap. Loose reference (no relation), same
   /// convention as `AuditLog.actorUserId`.
-  joinedAt       DateTime? @map("joined_at")
-  joinedByUserId String?   @map("joined_by_user_id")
+  joinedAt            DateTime?        @map("joined_at")
+  joinedByUserId      String?          @map("joined_by_user_id")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2253,24 +2460,24 @@ enum WastageReason {
 }
 
 model StockMovement {
-  id          String            @id @default(uuid())
-  businessId  String            @map("business_id")
-  business    Business          @relation(fields: [businessId], references: [id])
-  productId   String            @map("product_id")
-  product     Product           @relation(fields: [productId], references: [id])
-  kind        StockMovementKind
-  qty         Int
-  unitCost    Decimal?          @map("unit_cost") @db.Decimal(12, 2)
+  id            String            @id @default(uuid())
+  businessId    String            @map("business_id")
+  business      Business          @relation(fields: [businessId], references: [id])
+  productId     String            @map("product_id")
+  product       Product           @relation(fields: [productId], references: [id])
+  kind          StockMovementKind
+  qty           Int
+  unitCost      Decimal?          @map("unit_cost") @db.Decimal(12, 2)
   /// Free-text supplier name — kept for movements recorded before UPD-BE-014 formalized suppliers,
   /// and as a fallback for anyone not yet using the Supplier directory.
-  supplier    String?
+  supplier      String?
   /// Formal supplier reference (UPD-BE-014), set by supplier-driven purchases (quick-PO). Optional
   /// and independent of `supplier` above — a movement may have either, both, or neither.
-  supplierId    String?        @map("supplier_id")
-  supplierRef   Supplier?      @relation(fields: [supplierId], references: [id])
+  supplierId    String?           @map("supplier_id")
+  supplierRef   Supplier?         @relation(fields: [supplierId], references: [id])
   reason        String?
   /// Only set for `kind: wastage` — see `WastageReason` above.
-  wastageReason WastageReason? @map("wastage_reason")
+  wastageReason WastageReason?    @map("wastage_reason")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2513,7 +2720,7 @@ model PurchaseOrderItem {
   product         Product       @relation(fields: [productId], references: [id])
   qtyOrdered      Int           @map("qty_ordered")
   qtyReceived     Int           @default(0) @map("qty_received")
-  unitCost        Decimal       @db.Decimal(12, 2) @map("unit_cost")
+  unitCost        Decimal       @map("unit_cost") @db.Decimal(12, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2525,13 +2732,13 @@ model PurchaseOrderItem {
 /// a customer who asked in person/by phone, not a public storefront "notify me" widget (that would
 /// need its own public-facing flow, out of scope here).
 model ProductWaitlistEntry {
-  id         String   @id @default(uuid())
-  businessId String   @map("business_id")
-  business   Business @relation(fields: [businessId], references: [id])
-  customerId String   @map("customer_id")
-  customer   Customer @relation(fields: [customerId], references: [id])
-  productId  String   @map("product_id")
-  product    Product  @relation(fields: [productId], references: [id])
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  business   Business  @relation(fields: [businessId], references: [id])
+  customerId String    @map("customer_id")
+  customer   Customer  @relation(fields: [customerId], references: [id])
+  productId  String    @map("product_id")
+  product    Product   @relation(fields: [productId], references: [id])
   notifiedAt DateTime? @map("notified_at")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -2713,18 +2920,18 @@ model ApiKey {
 /// rather than silently absent. `@@unique([businessId, closeDate])` makes a same-day retry
 /// (the processor's own idempotency-keyed re-run) an update, not a duplicate history row.
 model NightlyCloseLog {
-  id         String         @id @default(uuid())
-  businessId String         @map("business_id")
-  business   Business       @relation(fields: [businessId], references: [id])
-  closeDate  DateTime       @map("close_date") @db.Date
-  channel    MessageChannel
-  status     String
-  error      String?        @db.Text
+  id             String         @id @default(uuid())
+  businessId     String         @map("business_id")
+  business       Business       @relation(fields: [businessId], references: [id])
+  closeDate      DateTime       @map("close_date") @db.Date
+  channel        MessageChannel
+  status         String
+  error          String?        @db.Text
   /// Multi-channel override history (fix-it): one entry per channel actually attempted when
   /// `nightlyCloseConfig.channels` has more than one — `[{"channel":"whatsapp","status":"sent"},...]`.
   /// Null for every pre-existing row and for ordinary single-channel sends, which still rely on the
   /// `channel`/`status`/`error` columns above exactly as before.
-  channelResults Json?      @map("channel_results")
+  channelResults Json?          @map("channel_results")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2787,7 +2994,7 @@ model StaffShift {
   /// that gets traded back on approval, making this a real reciprocal swap instead of a one-way
   /// handoff. Plain reference (no FK), same non-FK reviewer-reference convention as the fields
   /// above — null means a plain coverage request with nothing traded back.
-  swapWithShiftId String? @map("swap_with_shift_id")
+  swapWithShiftId       String?          @map("swap_with_shift_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3102,17 +3309,17 @@ model ActivityEvent {
 /// deterministically server-side from real data BEFORE the AI call, never trusted from the model's
 /// own output, so every insight is verifiably tied to a real number even though its phrasing is AI-written.
 model AiInsight {
-  id           String            @id @default(uuid())
-  businessId   String            @map("business_id")
-  business     Business          @relation(fields: [businessId], references: [id])
-  category     AiInsightCategory
-  observation  String
-  sourceFigure String            @map("source_figure")
+  id              String            @id @default(uuid())
+  businessId      String            @map("business_id")
+  business        Business          @relation(fields: [businessId], references: [id])
+  category        AiInsightCategory
+  observation     String
+  sourceFigure    String            @map("source_figure")
   /// Estimated-impact depth fix (UPD-INT-001) — a real dollar figure already present in the
   /// underlying fact (e.g. the real revenue delta or the real overdue balance), never a fabricated
   /// estimate. Null for categories with no natural dollar figure (stock/customers/marketing).
-  estimatedImpact Decimal?        @map("estimated_impact") @db.Decimal(12, 2)
-  status       AiInsightStatus   @default(new)
+  estimatedImpact Decimal?          @map("estimated_impact") @db.Decimal(12, 2)
+  status          AiInsightStatus   @default(new)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3158,22 +3365,22 @@ model TrackedKeyword {
 }
 
 model KeywordRankSnapshot {
-  id         String         @id @default(uuid())
-  keywordId  String         @map("keyword_id")
-  keyword    TrackedKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  id             String         @id @default(uuid())
+  keywordId      String         @map("keyword_id")
+  keyword        TrackedKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
   /// Null means not found in the checked results window.
-  rank       Int?
+  rank           Int?
   /// Keyword Rankings depth fix — the #1 organic result's title at check time, captured from the
   /// SAME SerpApi call already made for `rank` (no extra API call). A real "who currently dominates
   /// this keyword" figure, not a fabricated "difficulty" score — this app has no real
   /// keyword-difficulty data source (that needs proprietary backlink/authority data no free API
   /// exposes), so that column is deliberately not represented anywhere in this schema.
-  topResultTitle String? @map("top_result_title")
+  topResultTitle String?        @map("top_result_title")
   /// Google Trends "interest over time" (0-100 relative index, via SerpApi's `google_trends`
   /// engine) — a real, freely-available search-interest proxy. Deliberately NOT presented as an
   /// exact monthly search-volume count, which no accessible-without-payment API provides.
-  searchInterest Int?    @map("search_interest")
-  capturedAt DateTime       @default(now()) @map("captured_at")
+  searchInterest Int?           @map("search_interest")
+  capturedAt     DateTime       @default(now()) @map("captured_at")
 
   @@index([keywordId, capturedAt])
   @@map("keyword_rank_snapshots")
@@ -3315,12 +3522,12 @@ model DigitizerAlias {
 // ─────────────────────────────────────────────────────────────────────────
 
 model Rider {
-  id             String      @id @default(uuid())
-  businessId     String      @map("business_id")
-  business       Business    @relation(fields: [businessId], references: [id])
+  id             String            @id @default(uuid())
+  businessId     String            @map("business_id")
+  business       Business          @relation(fields: [businessId], references: [id])
   name           String
   phone          String
-  status         RiderStatus @default(active)
+  status         RiderStatus       @default(active)
   /// Riders screen depth fix (UPD-FE-127) — real fields the plan doc's spec named but the original
   /// model never had. `zoneIds` is a lightweight tag-style reference (like `VoiceSettings.customIntents`),
   /// not a join table — zone assignment here is informational grouping, not a query-heavy relation.
@@ -3328,9 +3535,9 @@ model Rider {
   commissionRate Decimal?          @map("commission_rate") @db.Decimal(5, 2)
   zoneIds        Json              @default("[]") @map("zone_ids")
   /// Last GPS fix pushed by the rider's own device (UPD-BE-065 live tracking) — null until their first check-in.
-  lastLat        Decimal?    @map("last_lat") @db.Decimal(9, 6)
-  lastLng        Decimal?    @map("last_lng") @db.Decimal(9, 6)
-  lastLocationAt DateTime?   @map("last_location_at")
+  lastLat        Decimal?          @map("last_lat") @db.Decimal(9, 6)
+  lastLng        Decimal?          @map("last_lng") @db.Decimal(9, 6)
+  lastLocationAt DateTime?         @map("last_location_at")
 
   deliveries Delivery[]
   routes     Route[]
@@ -3490,26 +3697,26 @@ model DeliverySettings {
 }
 
 model Integration {
-  id         String              @id @default(uuid())
-  businessId String              @map("business_id")
-  business   Business            @relation(fields: [businessId], references: [id])
-  provider   IntegrationProvider
-  status     IntegrationStatus   @default(not_connected)
+  id          String              @id @default(uuid())
+  businessId  String              @map("business_id")
+  business    Business            @relation(fields: [businessId], references: [id])
+  provider    IntegrationProvider
+  status      IntegrationStatus   @default(not_connected)
   /// `@db.Text` (UPD-BE-072 bug fix): a real encrypted `{accessToken, refreshToken, expiresAt,
   /// providerMeta}` blob routinely exceeds MySQL's default VARCHAR(191) once AES-256-GCM + base64
   /// overhead is applied — a real Google/Meta access+refresh token pair alone is often 200+ chars
   /// each. Found live: WooCommerce's connect flow overflowed the column and failed with a real
   /// Prisma P2000 error.
-  tokens     String?             @db.Text
-  meta       Json                @default("{}")
+  tokens      String?             @db.Text
+  meta        Json                @default("{}")
   /// Connection Detail depth fix (UPD-BE-132) — set the moment `status` actually becomes
   /// `connected` (a fresh OAuth exchange or non-OAuth connect), never backfilled; a reconnect
   /// after disconnecting resets it, since that's honestly a new connection period.
-  connectedAt DateTime?          @map("connected_at")
+  connectedAt DateTime?           @map("connected_at")
   /// Connection Detail depth fix — set by whichever real sync path actually ran for this
   /// provider's category (Accounting/E-commerce/Business Listings); NULL means never synced, not
   /// a fabricated "just now".
-  lastSyncAt  DateTime?          @map("last_sync_at")
+  lastSyncAt  DateTime?           @map("last_sync_at")
 
   adCampaigns AdCampaign[]
 
@@ -3909,12 +4116,12 @@ enum ListingPhotoCategory {
 /// already calls — real HTTP calls, untestable without a real partner credential in this
 /// environment, same disclosed constraint every connector's `pushListing` already carries.
 model ListingPhoto {
-  id               String               @id @default(uuid())
-  businessId       String               @map("business_id")
-  business         Business             @relation(fields: [businessId], references: [id])
-  url              String
-  category         ListingPhotoCategory
-  pushedProviders  Json                 @default("[]") @map("pushed_providers")
+  id              String               @id @default(uuid())
+  businessId      String               @map("business_id")
+  business        Business             @relation(fields: [businessId], references: [id])
+  url             String
+  category        ListingPhotoCategory
+  pushedProviders Json                 @default("[]") @map("pushed_providers")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3931,13 +4138,13 @@ model ListingPhoto {
 /// overwrites the real Master Listing's fields with theirs before pushing back out; `master_wins`
 /// (the default) skips that pull entirely, so the Master Listing is always the source of truth.
 model ListingSettings {
-  id                     String   @id @default(uuid())
-  businessId             String   @unique @map("business_id")
-  business               Business @relation(fields: [businessId], references: [id])
-  autoSyncEnabled        Boolean  @default(false) @map("auto_sync_enabled")
-  autoSyncFrequencyHours Int      @default(24) @map("auto_sync_frequency_hours")
-  fieldMapping           Json     @default("{}") @map("field_mapping")
-  conflictResolution     String   @default("master_wins") @map("conflict_resolution")
+  id                     String    @id @default(uuid())
+  businessId             String    @unique @map("business_id")
+  business               Business  @relation(fields: [businessId], references: [id])
+  autoSyncEnabled        Boolean   @default(false) @map("auto_sync_enabled")
+  autoSyncFrequencyHours Int       @default(24) @map("auto_sync_frequency_hours")
+  fieldMapping           Json      @default("{}") @map("field_mapping")
+  conflictResolution     String    @default("master_wins") @map("conflict_resolution")
   lastAutoSyncAt         DateTime? @map("last_auto_sync_at")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -4271,10 +4478,10 @@ model NotificationPreference {
   /// MySQL (like every SQL engine) never treats two NULLs as equal in a unique index, so multiple
   /// "default" rows for the same event/channel could silently slip past it. No `User` relation is
   /// declared here on purpose — membership is checked explicitly in `NotificationsService`.
-  userId  String  @default("") @map("user_id")
-  event   String
-  channel String  @default("in_app")
-  enabled Boolean @default(true)
+  userId     String   @default("") @map("user_id")
+  event      String
+  channel    String   @default("in_app")
+  enabled    Boolean  @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4299,18 +4506,18 @@ enum DsrRequestStatus {
 /// `CustomersService.export()`/`.erase()`, which stay exactly as-is; this only adds "a request
 /// exists, here's its status and legal-deadline urgency," fulfilled by calling those real methods.
 model DataSubjectRequest {
-  id                String            @id @default(uuid())
-  businessId        String            @map("business_id")
-  business          Business          @relation(fields: [businessId], references: [id])
-  customerId        String            @map("customer_id")
-  customer          Customer          @relation(fields: [customerId], references: [id])
+  id                String           @id @default(uuid())
+  businessId        String           @map("business_id")
+  business          Business         @relation(fields: [businessId], references: [id])
+  customerId        String           @map("customer_id")
+  customer          Customer         @relation(fields: [customerId], references: [id])
   kind              DsrRequestKind
-  status            DsrRequestStatus  @default(pending)
-  requestedByUserId String?           @map("requested_by_user_id")
-  fulfilledAt       DateTime?         @map("fulfilled_at")
+  status            DsrRequestStatus @default(pending)
+  requestedByUserId String?          @map("requested_by_user_id")
+  fulfilledAt       DateTime?        @map("fulfilled_at")
   /// Set only for a fulfilled `export` request — the real signed download link.
-  resultUrl         String?           @map("result_url")
-  note              String?           @db.Text
+  resultUrl         String?          @map("result_url")
+  note              String?          @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

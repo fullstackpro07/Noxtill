@@ -61,6 +61,11 @@ describe('PublicVideoTestimonialService (UPD-BE-027)', () => {
     size: 1000,
     mimetype: 'video/mp4',
   };
+  const consent = {
+    consentWebsite: true,
+    consentSocial: false,
+    consentPaidAds: false,
+  };
 
   it('getByToken resolves a real, requested testimonial', async () => {
     const testimonial = await prisma.videoTestimonial.create({
@@ -86,7 +91,7 @@ describe('PublicVideoTestimonialService (UPD-BE-027)', () => {
       data: { businessId, customerId, token: generateReviewToken() },
     });
 
-    const result = await service.upload(testimonial.token, videoFile);
+    const result = await service.upload(testimonial.token, videoFile, consent);
     expect(result.thankYou).toBe(true);
     expect(s3.upload).toHaveBeenCalledWith(
       expect.stringContaining(`video-testimonials/${businessId}/`),
@@ -105,10 +110,10 @@ describe('PublicVideoTestimonialService (UPD-BE-027)', () => {
     const testimonial = await prisma.videoTestimonial.create({
       data: { businessId, customerId, token: generateReviewToken() },
     });
-    await service.upload(testimonial.token, videoFile);
+    await service.upload(testimonial.token, videoFile, consent);
 
     await expect(
-      service.upload(testimonial.token, videoFile),
+      service.upload(testimonial.token, videoFile, consent),
     ).rejects.toThrow();
   });
 
@@ -116,7 +121,7 @@ describe('PublicVideoTestimonialService (UPD-BE-027)', () => {
     const testimonial = await prisma.videoTestimonial.create({
       data: { businessId, customerId, token: generateReviewToken() },
     });
-    await service.upload(testimonial.token, videoFile);
+    await service.upload(testimonial.token, videoFile, consent);
 
     await expect(service.getByToken(testimonial.token)).rejects.toThrow();
   });

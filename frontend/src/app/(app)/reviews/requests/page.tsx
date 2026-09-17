@@ -1,12 +1,7 @@
 "use client";
 
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { ReviewRequestsPanel } from "@/components/reviews/review-requests-panel";
+import { ReviewRequestsView } from "@/components/reviews/review-requests-view";
 
 export default function ReviewRequestsPage() {
-  return (
-    <SubscreenShell title="Review Requests">
-      <ReviewRequestsPanel />
-    </SubscreenShell>
-  );
+  return <ReviewRequestsView />;
 }

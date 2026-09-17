@@ -17,6 +17,9 @@ export interface CreateCustomerInput {
   phone: string;
   email?: string;
   notes?: string;
+  tags?: string[];
+  /** Same real mechanism as customer import's opening balances — recorded as a real CreditEntry. */
+  openingBalance?: number;
 }
 
 /** POST /customers — Fast Sale's "+ Create Customer" drawer creates a real customer record immediately (not deferred to sale time). */
@@ -34,6 +37,8 @@ export function fetchDebtors(): Promise<DebtorRow[]> {
   return apiFetch<DebtorRow[]>("/credit");
 }
 
+export type CustomerStatus = "active" | "inactive" | "archived" | "blocked";
+
 export interface LiveCustomer {
   id: string;
   name: string;
@@ -49,6 +54,8 @@ export interface LiveCustomer {
   visitCount: number;
   lastVisitAt: string | null;
   createdAt: string;
+  status: CustomerStatus;
+  customFieldValues: Record<string, string | number | null>;
 }
 
 interface RawCustomer {
@@ -66,6 +73,8 @@ interface RawCustomer {
   visitCount: number;
   lastVisitAt: string | null;
   createdAt: string;
+  status: CustomerStatus;
+  customFieldValues: Record<string, string | number | null>;
 }
 
 function toLiveCustomer(raw: RawCustomer): LiveCustomer {
@@ -136,6 +145,8 @@ export interface UpdateCustomerInput {
   notes?: string;
   tags?: string[];
   consentMarketing?: boolean;
+  status?: CustomerStatus;
+  customFieldValues?: Record<string, string | number | null>;
 }
 
 export function updateCustomer(id: string, input: UpdateCustomerInput): Promise<LiveCustomer> {

@@ -1,12 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Send, Lock } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { SkeletonRow } from "@/components/shared/skeleton";
+import { Lock } from "lucide-react";
 import { fetchRecoveryReport } from "@/lib/credit-api";
 import { sendReport } from "@/lib/reports-api";
 import { formatCurrency, formatPercent } from "@/lib/format";
@@ -14,10 +9,12 @@ import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 
+const outlineBtn: React.CSSProperties = { border: "1px solid var(--app-border)", background: "var(--app-surface)", borderRadius: 11, padding: "11px 15px", fontSize: 12.5, fontWeight: 700, color: "var(--app-text-muted)", minHeight: 44 };
+
 export function RecoveryReportsPanel({ currency }: { currency: string }) {
   const session = useSession();
 
-  const { data, isPending, isError, refetch } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["credit-recovery-report"],
     queryFn: () => fetchRecoveryReport(6),
     enabled: session.user.role === "owner",
@@ -31,87 +28,63 @@ export function RecoveryReportsPanel({ currency }: { currency: string }) {
 
   if (session.user.role !== "owner") {
     return (
-      <Card>
-        <CardContent>
-          <EmptyState icon={Lock} title="Owner only" description="Recovery Reports are only visible to the business owner." />
-        </CardContent>
-      </Card>
+      <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+        <div className="rounded-[16px] p-[40px] text-center" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <Lock className="mx-auto mb-2 h-6 w-6" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
+          <div className="text-[14.5px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>Owner only</div>
+          <div className="mt-1 text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Recovery Reports are only visible to the business owner.</div>
+        </div>
+      </main>
     );
   }
 
-  if (isError) return <ErrorBanner title="Couldn't load the recovery report" onRetry={() => refetch()} />;
-  if (isPending || !data) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col gap-1 p-4">
-          <SkeletonRow />
-          <SkeletonRow />
-        </CardContent>
-      </Card>
-    );
-  }
+  if (isPending || !data) return <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4" />;
 
   const maxExtended = Math.max(...data.trend.map((t) => t.extended), 1);
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending}>
-          <Send className="h-3.5 w-3.5" aria-hidden />
-          Send to accountant
-        </Button>
+    <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+      <div className="flex flex-wrap items-center gap-[10px]">
+        <h2 className="m-0 text-[19px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-.4px" }}>Recovery Reports</h2>
+        <button type="button" onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending} className="ml-auto" style={outlineBtn}>Send to accountant</button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-fg-muted">Extended</p>
-            <p className="font-display text-lg font-bold text-fg">{formatCurrency(data.extended, currency)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-fg-muted">Recovered</p>
-            <p className="font-display text-lg font-bold text-whatsapp">{formatCurrency(data.recovered, currency)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-fg-muted">Recovery rate</p>
-            <p className="font-display text-lg font-bold text-fg">{formatPercent(data.recoveryRate)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-fg-muted">Written off</p>
-            <p className="font-display text-lg font-bold text-destructive">{formatCurrency(data.writtenOff, currency)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-fg-muted">Net exposure</p>
-            <p className="font-display text-lg font-bold text-fg">{formatCurrency(data.netExposure, currency)}</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))" }}>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Recovered This Period</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-primary)" }}>{formatCurrency(data.recovered, currency)}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Recovery Rate</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatPercent(data.recoveryRate)}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Extended</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(data.extended, currency)}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1.5px solid #FDD9D6" }}>
+          <div className="text-[12px] font-bold" style={{ color: "#B42318" }}>Written Off</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(data.writtenOff, currency)}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Net Exposure</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(data.netExposure, currency)}</div>
+        </div>
       </div>
 
       {data.trend.length > 1 && (
-        <>
-          <Card>
-            <CardContent className="p-4">
-              <p className="mb-3 text-sm font-medium text-fg">Extended vs. recovered</p>
-              <ExtendedRecoveredChart trend={data.trend} max={maxExtended} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="mb-3 text-sm font-medium text-fg">Recovery rate trend</p>
-              <RecoveryRateChart trend={data.trend} />
-            </CardContent>
-          </Card>
-        </>
+        <div className="grid gap-[15px]" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }}>
+          <div className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 0 }}>
+            <h3 className="m-0 mb-3 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>Extended vs. recovered</h3>
+            <ExtendedRecoveredChart trend={data.trend} max={maxExtended} />
+          </div>
+          <div className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 0 }}>
+            <h3 className="m-0 mb-3 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>Recovery rate trend</h3>
+            <RecoveryRateChart trend={data.trend} />
+          </div>
+        </div>
       )}
-    </div>
+    </main>
   );
 }
 

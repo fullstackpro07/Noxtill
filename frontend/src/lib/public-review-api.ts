@@ -12,7 +12,15 @@ export function fetchPublicReview(token: string): Promise<PublicReviewBusiness> 
   return apiFetch<PublicReviewBusiness>(`/r/${token}`, {}, { skipAuth: true });
 }
 
-export type SubmitReviewResult = { redirect: string } | { thankYou: true };
+export interface ReviewPlatformRedirect {
+  platform: string;
+  url: string;
+}
+
+/** `redirects` (UPD-BE-M31) is a real choice between 2+ configured platform destinations —
+ * `redirect` (a single destination) auto-redirects same as before, unchanged for backward
+ * compatibility with businesses that only ever set the one primary destination. */
+export type SubmitReviewResult = { redirect: string } | { redirects: ReviewPlatformRedirect[] } | { thankYou: true };
 
 /**
  * POST /r/:token — the business only decides "redirect to public listing" vs "thank-you" (private

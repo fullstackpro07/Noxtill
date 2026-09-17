@@ -1,14 +1,7 @@
 "use client";
 
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { ReviewWidgetPanel } from "@/components/reviews/review-widget-panel";
-import { useSession } from "@/lib/session";
+import { ReviewWidgetView } from "@/components/reviews/review-widget-view";
 
 export default function ReviewsWidgetPage() {
-  const session = useSession();
-  return (
-    <SubscreenShell title="Review Widget">
-      <ReviewWidgetPanel businessSlug={session.business.slug} />
-    </SubscreenShell>
-  );
+  return <ReviewWidgetView />;
 }

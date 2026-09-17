@@ -1,12 +1,7 @@
 "use client";
 
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { ReviewSettingsPanel } from "@/components/reviews/review-settings-panel";
+import { ReviewSettingsView } from "@/components/reviews/review-settings-view";
 
 export default function ReviewSettingsPage() {
-  return (
-    <SubscreenShell title="Review Settings">
-      <ReviewSettingsPanel />
-    </SubscreenShell>
-  );
+  return <ReviewSettingsView />;
 }

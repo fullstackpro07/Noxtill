@@ -24,6 +24,8 @@ import { ReplyFeedbackDto } from './dto/reply-feedback.dto';
 import { GenerateQrPosterDto } from './dto/generate-qr-poster.dto';
 import { UpdateReviewSettingsDto } from './dto/update-review-settings.dto';
 import { BulkCreateReviewRequestsDto } from './dto/bulk-create-review-requests.dto';
+import { CreateReviewPlatformDestinationDto } from './dto/create-review-platform-destination.dto';
+import { ReviewPlatformDestinationsService } from './review-platform-destinations.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
@@ -35,6 +37,7 @@ export class ReviewsController {
     private readonly qrPoster: QrPosterService,
     private readonly sentimentAnalysis: SentimentAnalysisService,
     private readonly reputationScore: ReputationScoreService,
+    private readonly platformDestinations: ReviewPlatformDestinationsService,
   ) {}
 
   @Post('reviews/requests')
@@ -118,6 +121,32 @@ export class ReviewsController {
   @Get('reviews/complaint-themes')
   complaintThemes(@CurrentUser() user: AuthenticatedUser) {
     return this.sentimentAnalysis.list(user.businessId, 'private_feedback');
+  }
+
+  @Get('reviews/metrics-history')
+  metricsHistory() {
+    return this.reviewsService.metricsHistory();
+  }
+
+  @Get('reviews/settings/platforms')
+  listPlatformDestinations(@CurrentUser() user: AuthenticatedUser) {
+    return this.platformDestinations.list(user.businessId);
+  }
+
+  @Post('reviews/settings/platforms')
+  upsertPlatformDestination(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateReviewPlatformDestinationDto,
+  ) {
+    return this.platformDestinations.upsert(user.businessId, dto);
+  }
+
+  @Delete('reviews/settings/platforms/:platform')
+  removePlatformDestination(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('platform') platform: string,
+  ) {
+    return this.platformDestinations.remove(user.businessId, platform);
   }
 
   @Post('reviews/qr-poster')

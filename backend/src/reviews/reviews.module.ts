@@ -21,6 +21,10 @@ import { ReputationScoreService } from './reputation-score.service';
 import { SentimentAnalysisScheduler } from './jobs/sentiment-analysis.scheduler';
 import { SentimentAnalysisProcessor } from './jobs/sentiment-analysis.processor';
 import { SENTIMENT_ANALYSIS_QUEUE } from './sentiment-analysis.constants';
+import { ReviewMetricsSnapshotScheduler } from './jobs/review-metrics-snapshot.scheduler';
+import { ReviewMetricsSnapshotProcessor } from './jobs/review-metrics-snapshot.processor';
+import { REVIEW_METRICS_SNAPSHOT_QUEUE } from './jobs/review-metrics-snapshot.constants';
+import { ReviewPlatformDestinationsService } from './review-platform-destinations.service';
 import { MessagingModule } from '../messaging/messaging.module';
 import { AiModule } from '../ai/ai.module';
 import { ActivityModule } from '../activity/activity.module';
@@ -31,6 +35,7 @@ import { ActivityModule } from '../activity/activity.module';
       { name: REVIEW_REMINDERS_QUEUE },
       { name: GOOGLE_SYNC_QUEUE },
       { name: SENTIMENT_ANALYSIS_QUEUE },
+      { name: REVIEW_METRICS_SNAPSHOT_QUEUE },
     ),
     MessagingModule,
     AiModule,
@@ -57,6 +62,9 @@ import { ActivityModule } from '../activity/activity.module';
     SentimentAnalysisScheduler,
     SentimentAnalysisProcessor,
     ReputationScoreService,
+    ReviewMetricsSnapshotScheduler,
+    ReviewMetricsSnapshotProcessor,
+    ReviewPlatformDestinationsService,
   ],
   exports: [ReviewRequestsService],
 })

@@ -310,6 +310,65 @@ describe('ReviewsService (BE-047)', () => {
       expect(stats.ratingsSubmitted).toBeGreaterThanOrEqual(1);
       expect(stats.conversionRate).toBeGreaterThan(0);
     });
+
+    it('counts pageVisits from openedAt across every source, distinct from QR-only visits (UPD-BE-M31)', async () => {
+      await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          customerId,
+          token: `t-open-a-${Date.now()}`,
+          source: 'order',
+          openedAt: new Date(),
+        },
+      });
+      await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          customerId,
+          token: `t-open-b-${Date.now()}`,
+          source: 'order',
+        },
+      });
+
+      const stats = await reviewsService.qrStats();
+      expect(stats.pageVisits).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('metricsHistory (UPD-BE-M31)', () => {
+    it('returns real weekly snapshot rows, oldest first', async () => {
+      await prisma.reviewMetricsSnapshot.createMany({
+        data: [
+          {
+            businessId,
+            averageRating: 4.2,
+            totalReviews: 10,
+            capturedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+          },
+          {
+            businessId,
+            averageRating: 4.5,
+            totalReviews: 14,
+            positiveThemePct: 70.5,
+            negativeThemePct: 12.25,
+            capturedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          },
+        ],
+      });
+
+      const history = await reviewsService.metricsHistory();
+      expect(history.length).toBeGreaterThanOrEqual(2);
+      expect(history[0].capturedAt.getTime()).toBeLessThan(
+        history[history.length - 1].capturedAt.getTime(),
+      );
+      const latest = history[history.length - 1];
+      expect(latest.averageRating).toBe(4.5);
+      expect(latest.totalReviews).toBe(14);
+      expect(latest.positiveThemePct).toBe(70.5);
+      expect(latest.negativeThemePct).toBe(12.25);
+
+      await prisma.reviewMetricsSnapshot.deleteMany({ where: { businessId } });
+    });
   });
 
   describe('review settings (UPD-BE-104)', () => {

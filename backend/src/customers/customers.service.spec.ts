@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { CustomersService } from './customers.service';
+import { CustomerTagsService } from './customer-tags.service';
 import { AppException } from '../common/filters/app.exception';
 
 class FakeClsService {
@@ -34,7 +35,11 @@ describe('CustomersService (BE-040)', () => {
       tenantPrisma,
       cls as unknown as ClsService,
     );
-    customersService = new CustomersService(tenantPrisma, auditService);
+    customersService = new CustomersService(
+      tenantPrisma,
+      auditService,
+      new CustomerTagsService(tenantPrisma),
+    );
 
     const business = await prisma.business.create({
       data: {

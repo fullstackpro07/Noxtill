@@ -3,15 +3,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stamp, Plus, Gift, RefreshCw, X, Check, UserPlus } from "lucide-react";
-import { Tabs } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SkeletonRow } from "@/components/shared/skeleton";
-import { EmptyState } from "@/components/shared/empty-state";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -35,22 +31,29 @@ import {
   type MembershipPlan,
 } from "@/lib/memberships-api";
 
+const outlineBtn: React.CSSProperties = { border: "1px solid var(--app-border)", background: "var(--app-surface)", borderRadius: 11, padding: "11px 15px", fontSize: 12.5, fontWeight: 700, color: "var(--app-text-muted)", minHeight: 44 };
+const primaryBtn: React.CSSProperties = { border: 0, background: "var(--app-primary)", borderRadius: 11, padding: "11px 18px", fontSize: 12.5, fontWeight: 800, color: "#fff", minHeight: 44 };
+
 export function LoyaltyMembershipsView() {
   const [tab, setTab] = useState<"loyalty" | "memberships">("loyalty");
 
   return (
-    <div className="flex flex-col gap-6">
-      <Tabs
-        items={[
-          { key: "loyalty", label: "Loyalty" },
-          { key: "memberships", label: "Memberships" },
-        ]}
-        value={tab}
-        onChange={(k) => setTab(k as "loyalty" | "memberships")}
-        className="max-w-xs"
-      />
+    <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+      <div className="flex gap-[3px] self-start rounded-[10px] p-[3px]" style={{ background: "var(--app-surface-2)" }}>
+        {(["loyalty", "memberships"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setTab(k)}
+            className="rounded-[8px] px-[15px] py-[9px] text-[12px] font-bold"
+            style={{ background: tab === k ? "var(--app-surface)" : "transparent", color: tab === k ? "var(--app-text)" : "var(--app-text-muted)", minHeight: 40 }}
+          >
+            {k === "loyalty" ? "Loyalty" : "Memberships"}
+          </button>
+        ))}
+      </div>
       {tab === "loyalty" ? <LoyaltyTab /> : <MembershipsTab />}
-    </div>
+    </main>
   );
 }
 
@@ -81,101 +84,119 @@ function LoyaltyTab() {
 
   if (isPending) {
     return (
-      <Card>
-        <CardContent className="flex flex-col gap-1 p-4">
-          <SkeletonRow />
-          <SkeletonRow />
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-1 rounded-[16px] p-4" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        <SkeletonRow />
+        <SkeletonRow />
+      </div>
     );
   }
 
   if (!programs || programs.length === 0) {
     return (
       <>
-        <EmptyState icon={Stamp} title="No loyalty program yet" description="Set up a punch-card or tier program to start rewarding repeat customers." action={{ label: "Create program", onClick: () => setNewProgramOpen(true) }} />
+        <div className="rounded-[16px] p-[48px_24px] text-center" style={{ background: "var(--app-surface)", border: "1px dashed var(--app-border-strong)" }}>
+          <Stamp className="mx-auto mb-3 h-9 w-9" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
+          <div className="text-[14.5px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>No loyalty program yet</div>
+          <p className="mt-2 text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Set up a punch-card or tier program to start rewarding repeat customers.</p>
+          <button type="button" onClick={() => setNewProgramOpen(true)} className="mt-4" style={primaryBtn}>Create program</button>
+        </div>
         <NewProgramDialog open={newProgramOpen} onClose={() => setNewProgramOpen(false)} />
       </>
     );
   }
 
+  const stampsIssued = (members ?? []).reduce((s, m) => s + m.stampCount + m.redeemedCount * (program?.stampsRequired ?? 0), 0);
+  const rewardsClaimed = (members ?? []).reduce((s, m) => s + m.redeemedCount, 0);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-[15px]">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Select value={activeProgramId} onChange={(e) => setProgramId(e.target.value)} className="w-56">
+        <select value={activeProgramId} onChange={(e) => setProgramId(e.target.value)} aria-label="Loyalty program" style={{ border: "1px solid var(--app-border)", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, fontWeight: 700, color: "var(--app-text-muted)", background: "var(--app-surface)", minHeight: 44 }}>
           {programs.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.type === "punch_card" ? `${p.stampsRequired} stamps` : "tiers"})
-            </option>
+            <option key={p.id} value={p.id}>{p.name} ({p.type === "punch_card" ? `${p.stampsRequired} stamps` : "tiers"})</option>
           ))}
-        </Select>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
-            <UserPlus className="h-3.5 w-3.5" aria-hidden />
-            Enroll customer
-          </Button>
-          <Button size="sm" onClick={() => setNewProgramOpen(true)}>
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            New program
-          </Button>
+        </select>
+        <div className="flex gap-[9px]">
+          <button type="button" onClick={() => setEnrollOpen(true)} style={outlineBtn}><UserPlus className="mr-1 inline h-3.5 w-3.5" aria-hidden />Enroll Customer</button>
+          <button type="button" onClick={() => setNewProgramOpen(true)} style={primaryBtn}><Plus className="mr-1 inline h-3.5 w-3.5" aria-hidden />New Program</button>
         </div>
       </div>
 
-      {program?.rewardDescription && <p className="text-xs text-fg-faint">Reward: {program.rewardDescription}</p>}
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))" }}>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Active Members</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{members?.length ?? 0}</div>
+        </div>
+        {program?.type === "punch_card" && (
+          <>
+            <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+              <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Stamps Issued</div>
+              <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{stampsIssued}</div>
+            </div>
+            <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+              <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Rewards Claimed</div>
+              <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-primary)" }}>{rewardsClaimed}</div>
+            </div>
+          </>
+        )}
+        {program?.rewardDescription && (
+          <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+            <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Reward</div>
+            <div className="mt-1.5 text-[13px] font-bold" style={{ color: "var(--app-text)" }}>{program.rewardDescription}</div>
+          </div>
+        )}
+      </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {membersPending && (
-            <div className="flex flex-col gap-1 p-4">
-              <SkeletonRow />
-              <SkeletonRow />
-            </div>
-          )}
-          {members && members.length === 0 && <EmptyState icon={Gift} title="No members yet" description="Enroll a customer to start issuing real stamps on their purchases." />}
-          {members && members.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-fg-faint">
-                    <th className="px-4 py-2 font-medium">Customer</th>
-                    <th className="px-4 py-2 font-medium">Progress</th>
-                    <th className="px-4 py-2 text-end font-medium">Redeemed</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {members.map((m) => {
-                    const eligible = program?.type === "punch_card" && m.stampCount >= (program?.stampsRequired ?? Infinity);
-                    return (
-                      <tr key={m.id}>
-                        <td className="px-4 py-2 font-medium text-fg">{m.customer.name}</td>
-                        <td className="px-4 py-2 text-fg-muted">
-                          {program?.type === "punch_card" ? (
-                            <span className="tabular-nums">
-                              {m.stampCount} / {program.stampsRequired} stamps
-                            </span>
-                          ) : (
-                            <Badge tone={m.currentTier ? "primary" : "neutral"}>{m.currentTier ?? "No tier yet"}</Badge>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-end tabular-nums text-fg-muted">{m.redeemedCount}</td>
-                        <td className="px-4 py-2 text-end">
-                          {program?.type === "punch_card" && (
-                            <Button size="sm" variant={eligible ? "primary" : "ghost"} disabled={!eligible || redeemMutation.isPending} onClick={() => redeemMutation.mutate(m.id)}>
-                              <Gift className="h-3.5 w-3.5" aria-hidden />
-                              Redeem
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="overflow-hidden rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        {membersPending && (
+          <div className="flex flex-col gap-1 p-4">
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        )}
+        {members && members.length === 0 && (
+          <div className="p-[48px_18px] text-center">
+            <Gift className="mx-auto mb-2 h-7 w-7" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
+            <div className="text-[14px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>No members yet</div>
+            <div className="mt-1 text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Enroll a customer to start issuing real stamps on their purchases.</div>
+          </div>
+        )}
+        {members && members.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" style={{ minWidth: 640 }}>
+              <thead>
+                <tr style={{ background: "var(--app-surface-2)" }}>
+                  <th className="p-[10px_17px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Customer</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Progress</th>
+                  <th className="p-[10px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Redeemed</th>
+                  <th className="p-[10px_17px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((m) => {
+                  const eligible = program?.type === "punch_card" && m.stampCount >= (program?.stampsRequired ?? Infinity);
+                  return (
+                    <tr key={m.id} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
+                      <td className="p-[11px_17px] text-[12.5px] font-bold" style={{ color: "var(--app-text)" }}>{m.customer.name}</td>
+                      <td className="p-[11px] text-[12.5px]" style={{ color: "var(--app-text-muted)" }}>
+                        {program?.type === "punch_card" ? `${m.stampCount} / ${program.stampsRequired} stamps` : (
+                          <span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-bold" style={{ background: m.currentTier ? "#EEF4FF" : "var(--app-surface-2)", color: m.currentTier ? "#3538CD" : "var(--app-text-muted)" }}>{m.currentTier ?? "No tier yet"}</span>
+                        )}
+                      </td>
+                      <td className="p-[11px] text-end text-[12.5px]" style={{ color: "var(--app-text-muted)" }}>{m.redeemedCount}</td>
+                      <td className="p-[11px_17px] text-end">
+                        {program?.type === "punch_card" && (
+                          <button type="button" onClick={() => redeemMutation.mutate(m.id)} disabled={!eligible || redeemMutation.isPending} className="rounded-[9px] px-[13px] py-2 text-[11.5px] font-bold" style={eligible ? { border: 0, background: "var(--app-primary)", color: "#fff" } : { border: "1px solid var(--app-border)", color: "var(--app-text-disabled)" }}>Redeem</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <NewProgramDialog open={newProgramOpen} onClose={() => setNewProgramOpen(false)} />
       <EnrollLoyaltyDialog open={enrollOpen} onClose={() => setEnrollOpen(false)} programId={activeProgramId} />
@@ -339,93 +360,105 @@ function MembershipsTab() {
 
   if (isPending || plansPending) {
     return (
-      <Card>
-        <CardContent className="flex flex-col gap-1 p-4">
-          <SkeletonRow />
-          <SkeletonRow />
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-1 rounded-[16px] p-4" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        <SkeletonRow />
+        <SkeletonRow />
+      </div>
     );
   }
 
   if (!plans || plans.length === 0) {
     return (
       <>
-        <EmptyState icon={Gift} title="No membership plan yet" description="Create a recurring plan customers can enroll in with cash or a real Stripe subscription." action={{ label: "Create plan", onClick: () => setNewPlanOpen(true) }} />
+        <div className="rounded-[16px] p-[48px_24px] text-center" style={{ background: "var(--app-surface)", border: "1px dashed var(--app-border-strong)" }}>
+          <Gift className="mx-auto mb-3 h-9 w-9" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
+          <div className="text-[14.5px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>No membership plan yet</div>
+          <p className="mt-2 text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Create a recurring plan customers can enroll in with cash or a real Stripe subscription.</p>
+          <button type="button" onClick={() => setNewPlanOpen(true)} className="mt-4" style={primaryBtn}>Create plan</button>
+        </div>
         <NewPlanDialog open={newPlanOpen} onClose={() => setNewPlanOpen(false)} />
       </>
     );
   }
 
+  const mrr = (memberships ?? [])
+    .filter((m) => m.status === "active")
+    .reduce((s, m) => s + (m.plan.interval === "monthly" ? Number(m.plan.price) : Number(m.plan.price) / 12), 0);
+
+  const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
+    active: { bg: "#E8F7EE", fg: "#0E8442" },
+    pending: { bg: "#FEF6E7", fg: "#B54708" },
+    expired: { bg: "#FEF3F2", fg: "#B42318" },
+    cancelled: { bg: "var(--app-surface-2)", fg: "var(--app-text-muted)" },
+  };
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
-          <UserPlus className="h-3.5 w-3.5" aria-hidden />
-          Enroll customer
-        </Button>
-        <Button size="sm" onClick={() => setNewPlanOpen(true)}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          New plan
-        </Button>
+    <div className="flex flex-col gap-[15px]">
+      <div className="flex justify-end gap-[9px]">
+        <button type="button" onClick={() => setEnrollOpen(true)} style={outlineBtn}><UserPlus className="mr-1 inline h-3.5 w-3.5" aria-hidden />Enroll Customer</button>
+        <button type="button" onClick={() => setNewPlanOpen(true)} style={primaryBtn}><Plus className="mr-1 inline h-3.5 w-3.5" aria-hidden />New Plan</button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {(!memberships || memberships.length === 0) && <EmptyState icon={Gift} title="No memberships yet" description="Enroll a customer above." />}
-          {memberships && memberships.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-fg-faint">
-                    <th className="px-4 py-2 font-medium">Customer</th>
-                    <th className="px-4 py-2 font-medium">Plan</th>
-                    <th className="px-4 py-2 font-medium">Method</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
-                    <th className="px-4 py-2 font-medium">Due</th>
-                    <th className="px-4 py-2" />
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))" }}>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Active Memberships</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{(memberships ?? []).filter((m) => m.status === "active").length}</div>
+        </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Membership MRR</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(mrr, session.business.currency)}</div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        {(!memberships || memberships.length === 0) && (
+          <div className="p-[48px_18px] text-center">
+            <Gift className="mx-auto mb-2 h-7 w-7" style={{ color: "var(--app-text-disabled)" }} aria-hidden />
+            <div className="text-[14px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>No memberships yet</div>
+            <div className="mt-1 text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Enroll a customer above.</div>
+          </div>
+        )}
+        {memberships && memberships.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" style={{ minWidth: 780 }}>
+              <thead>
+                <tr style={{ background: "var(--app-surface-2)" }}>
+                  <th className="p-[10px_17px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Customer</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Plan</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Method</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Status</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Due</th>
+                  <th className="p-[10px_17px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {memberships.map((m) => (
+                  <tr key={m.id} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
+                    <td className="p-[11px_17px] text-[12.5px] font-bold" style={{ color: "var(--app-text)" }}>{m.customer.name}</td>
+                    <td className="p-[11px] text-[12.5px]" style={{ color: "var(--app-text-muted)" }}>{planById.get(m.planId)?.name ?? m.plan.name}</td>
+                    <td className="p-[11px] text-[12.5px] capitalize" style={{ color: "var(--app-text-muted)" }}>{m.method}</td>
+                    <td className="p-[11px]"><span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-bold capitalize" style={{ background: STATUS_TONE[m.status].bg, color: STATUS_TONE[m.status].fg }}>{m.status}</span></td>
+                    <td className="p-[11px] text-[12.5px]" style={{ color: "var(--app-text-muted)" }}>{m.currentPeriodEnd ? formatDate(m.currentPeriodEnd) : "—"}</td>
+                    <td className="p-[11px_17px] text-end">
+                      <span className="inline-flex justify-end gap-[7px]">
+                        {m.status === "pending" && m.method === "online" && (
+                          <button type="button" onClick={() => activateMutation.mutate(m.id)} disabled={activateMutation.isPending} className="rounded-[9px] px-[11px] py-2 text-[11.5px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Check className="mr-1 inline h-3 w-3" aria-hidden />Activate</button>
+                        )}
+                        {m.method === "cash" && (m.status === "active" || m.status === "expired") && (
+                          <button type="button" onClick={() => renewMutation.mutate(m.id)} disabled={renewMutation.isPending} className="rounded-[9px] px-[11px] py-2 text-[11.5px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><RefreshCw className="mr-1 inline h-3 w-3" aria-hidden />Renew</button>
+                        )}
+                        {(m.status === "active" || m.status === "pending") && (
+                          <button type="button" onClick={() => cancelMutation.mutate(m.id)} disabled={cancelMutation.isPending} className="rounded-[9px] px-[11px] py-2 text-[11.5px] font-bold" style={{ border: "1px solid var(--app-border)", color: "#B42318" }}><X className="mr-1 inline h-3 w-3" aria-hidden />Cancel</button>
+                        )}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {memberships.map((m) => (
-                    <tr key={m.id}>
-                      <td className="px-4 py-2 font-medium text-fg">{m.customer.name}</td>
-                      <td className="px-4 py-2 text-fg-muted">{planById.get(m.planId)?.name ?? m.plan.name}</td>
-                      <td className="px-4 py-2 text-fg-muted capitalize">{m.method}</td>
-                      <td className="px-4 py-2">
-                        <Badge tone={m.status === "active" ? "success" : m.status === "pending" ? "warning" : m.status === "expired" ? "danger" : "neutral"}>{m.status}</Badge>
-                      </td>
-                      <td className="px-4 py-2 text-fg-muted">{m.currentPeriodEnd ? formatDate(m.currentPeriodEnd) : "—"}</td>
-                      <td className="px-4 py-2 text-end">
-                        <div className="flex justify-end gap-1">
-                          {m.status === "pending" && m.method === "online" && (
-                            <Button size="sm" variant="ghost" onClick={() => activateMutation.mutate(m.id)} disabled={activateMutation.isPending}>
-                              <Check className="h-3.5 w-3.5" aria-hidden />
-                              Activate
-                            </Button>
-                          )}
-                          {m.method === "cash" && (m.status === "active" || m.status === "expired") && (
-                            <Button size="sm" variant="ghost" onClick={() => renewMutation.mutate(m.id)} disabled={renewMutation.isPending}>
-                              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                              Renew
-                            </Button>
-                          )}
-                          {(m.status === "active" || m.status === "pending") && (
-                            <Button size="sm" variant="ghost" onClick={() => cancelMutation.mutate(m.id)} disabled={cancelMutation.isPending}>
-                              <X className="h-3.5 w-3.5" aria-hidden />
-                              Cancel
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <NewPlanDialog open={newPlanOpen} onClose={() => setNewPlanOpen(false)} />
       <EnrollMembershipDialog open={enrollOpen} onClose={() => setEnrollOpen(false)} plans={plans} currency={session.business.currency} />

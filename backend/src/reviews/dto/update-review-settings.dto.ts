@@ -40,4 +40,9 @@ export class UpdateReviewSettingsDto {
   @IsOptional()
   @IsHexColor()
   brandColor?: string;
+
+  /** Real automatic video-testimonial trigger (UPD-BE-M31) — checked in `PublicReviewService.submit()` right after a public-routed rating; 'manual' (the default) never auto-requests anything. */
+  @IsOptional()
+  @IsIn(['manual', 'four_star_plus', 'five_star'])
+  videoTestimonialTrigger?: string;
 }

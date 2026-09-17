@@ -3,6 +3,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
 import { normalizePhoneE164 } from '../common/utils/phone.util';
+import { CustomerTagsService } from './customer-tags.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
@@ -15,6 +16,7 @@ export class CustomersService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly auditService: AuditService,
+    private readonly customerTags: CustomerTagsService,
   ) {}
 
   async create(businessId: string, dto: CreateCustomerDto) {
@@ -30,7 +32,7 @@ export class CustomersService {
       );
     }
 
-    return this.tenantPrisma.client.customer.create({
+    const customer = await this.tenantPrisma.client.customer.create({
       data: {
         phone,
         name: dto.name,
@@ -42,6 +44,26 @@ export class CustomersService {
         consentMarketing: dto.consentMarketing ?? true,
       } as unknown as Prisma.CustomerUncheckedCreateInput,
     });
+
+    // Same real mechanism the import pipeline uses for opening balances (BE-099) — a real
+    // CreditEntry, so it shows up in the customer's own ledger rather than a stored Customer field.
+    if (dto.openingBalance && dto.openingBalance > 0) {
+      await this.tenantPrisma.client.creditEntry.create({
+        data: {
+          businessId,
+          customerId: customer.id,
+          kind: 'credit',
+          amount: dto.openingBalance,
+          note: 'Opening balance',
+        },
+      });
+    }
+
+    if (dto.tags?.length) {
+      await Promise.all(dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)));
+    }
+
+    return customer;
   }
 
   findAll(query: QueryCustomersDto) {
@@ -79,9 +101,9 @@ export class CustomersService {
     return customer;
   }
 
-  async update(id: string, dto: UpdateCustomerDto) {
+  async update(businessId: string, id: string, dto: UpdateCustomerDto) {
     await this.assertExists(id);
-    return this.tenantPrisma.client.customer.update({
+    const updated = await this.tenantPrisma.client.customer.update({
       where: { id },
       data: {
         notes: dto.notes,
@@ -89,8 +111,16 @@ export class CustomersService {
         consentMarketing: dto.consentMarketing,
         name: dto.name,
         address: dto.address,
+        status: dto.status,
+        customFieldValues: dto.customFieldValues as Prisma.InputJsonValue | undefined,
       },
     });
+
+    if (dto.tags?.length) {
+      await Promise.all(dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)));
+    }
+
+    return updated;
   }
 
   /** GDPR erasure: wipes PII, keeps anonymized transaction history, requires the customer's own phone as confirmation. */

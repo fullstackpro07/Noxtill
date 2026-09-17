@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
+import { CustomerPrivacySettingsService } from './customer-privacy-settings.service';
 
 describe('CustomersController', () => {
   let controller: CustomersController;
@@ -18,6 +19,10 @@ describe('CustomersController', () => {
             update: jest.fn(),
             erase: jest.fn(),
           },
+        },
+        {
+          provide: CustomerPrivacySettingsService,
+          useValue: { get: jest.fn() },
         },
       ],
     }).compile();

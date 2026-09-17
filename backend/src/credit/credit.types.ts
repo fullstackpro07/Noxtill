@@ -46,3 +46,42 @@ export function buildLedgerRows(
     };
   });
 }
+
+/**
+ * Credit Sales screen (per-sale paid/remaining) — the schema only tracks one aggregate balance
+ * per customer, never which specific sale a payment settled, so there's no stored per-sale
+ * allocation to read. This applies each customer's own payments/write-offs to their OLDEST open
+ * credit entries first (a standard, disclosed FIFO convention for display only) — never persisted,
+ * recomputed fresh on every read, and clearly labeled as an approximation wherever it's shown.
+ */
+export function allocateFifoForCustomer(
+  entries: {
+    id: string;
+    kind: 'credit' | 'payment' | 'write_off';
+    amount: number;
+    createdAt: Date;
+  }[],
+): Map<string, { paid: number; remaining: number }> {
+  const lots: { id: string; remaining: number }[] = [];
+  const result = new Map<string, { paid: number; remaining: number }>();
+
+  for (const entry of entries) {
+    if (entry.kind === 'credit') {
+      lots.push({ id: entry.id, remaining: entry.amount });
+      result.set(entry.id, { paid: 0, remaining: entry.amount });
+      continue;
+    }
+    let toConsume = entry.amount;
+    for (const lot of lots) {
+      if (toConsume <= 0) break;
+      if (lot.remaining <= 0) continue;
+      const consumed = Math.min(lot.remaining, toConsume);
+      lot.remaining -= consumed;
+      toConsume -= consumed;
+      const row = result.get(lot.id)!;
+      row.paid += consumed;
+      row.remaining -= consumed;
+    }
+  }
+  return result;
+}
