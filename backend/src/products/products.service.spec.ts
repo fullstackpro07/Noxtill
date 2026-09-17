@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ProductsService } from './products.service';
+import type { S3Service } from '../common/storage/s3.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -18,6 +19,11 @@ describe('ProductsService (BE-023 + UPD-BE-087/088)', () => {
   let prisma: PrismaService;
   let service: ProductsService;
   let businessId: string;
+  const s3 = {
+    getSignedDownloadUrl: jest
+      .fn()
+      .mockResolvedValue('https://signed.example/photo.jpg'),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -28,7 +34,7 @@ describe('ProductsService (BE-023 + UPD-BE-087/088)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new ProductsService(tenantPrisma);
+    service = new ProductsService(tenantPrisma, s3 as unknown as S3Service);
 
     const business = await prisma.business.create({
       data: { name: 'Products Test Biz', slug: `products-test-${Date.now()}` },

@@ -1198,6 +1198,10 @@ model Product {
   durationMin       Int?        @map("duration_min")
   active            Boolean     @default(true)
 
+  /// Product photo — an S3/local-disk object key, never a raw URL, same convention as
+  /// `Expense.receiptKey`: the key is resolved to a fresh signed URL lazily on read.
+  photoKey String? @map("photo_key")
+
   /// Category, formalized (UPD-BE-088) — the real, canonical category once set; `category` (the
   /// free-text field above) stays as-is for backward compatibility with every existing reader, but
   /// new code should prefer this relation.

@@ -1,9 +1,7 @@
 "use client";
 
-import { ProductsView } from "@/components/products/products-view";
-import { useSession } from "@/lib/session";
+import { AllProductsView } from "@/components/products/all-products-view";
 
 export default function ProductsPage() {
-  const session = useSession();
-  return <ProductsView currency={session.business.currency} />;
+  return <AllProductsView />;
 }

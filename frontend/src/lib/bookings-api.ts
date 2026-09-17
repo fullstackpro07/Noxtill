@@ -10,6 +10,7 @@ interface RawService {
 interface RawCustomer {
   id: string;
   name: string;
+  phone: string;
 }
 
 interface RawStaffUser {
@@ -29,13 +30,18 @@ interface RawAppointment {
   endsAt: string;
   status: AppointmentStatus;
   source: "link" | "qr" | "walk_in" | "waitlist" | "phone";
+  depositPaid: string;
+  createdAt: string;
 }
 
 export interface LiveAppointment {
   id: string;
   staffId?: string;
   staffName?: string;
+  customerId: string;
   customerName: string;
+  customerPhone: string;
+  serviceId: string;
   serviceName: string;
   date: string;
   startHour: number;
@@ -43,6 +49,9 @@ export interface LiveAppointment {
   status: AppointmentStatus;
   source: RawAppointment["source"];
   startsAt: string;
+  endsAt: string;
+  depositPaid: number;
+  createdAt: string;
 }
 
 /** Local-time hour math (matches the calendar's existing browser-local assumption) — startHour/durationHours may be fractional for non-hour-aligned service durations. */
@@ -62,7 +71,10 @@ function toLiveAppointment(raw: RawAppointment): LiveAppointment {
     id: raw.id,
     staffId: raw.staffUserId ?? undefined,
     staffName: raw.staffUser?.user.name,
+    customerId: raw.customerId,
     customerName: raw.customer.name,
+    customerPhone: raw.customer.phone,
+    serviceId: raw.serviceId,
     serviceName: raw.service.name,
     date: `${year}-${month}-${day}`,
     startHour,
@@ -70,6 +82,9 @@ function toLiveAppointment(raw: RawAppointment): LiveAppointment {
     status: raw.status,
     source: raw.source,
     startsAt: raw.startsAt,
+    endsAt: raw.endsAt,
+    depositPaid: Number(raw.depositPaid),
+    createdAt: raw.createdAt,
   };
 }
 

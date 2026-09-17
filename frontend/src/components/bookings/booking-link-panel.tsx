@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Settings2, Copy, Download } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { SkeletonRow } from "@/components/shared/skeleton";
+import { PosModalShell } from "@/components/pos/pos-modal-shell";
 import { formatPercent } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
@@ -25,195 +18,190 @@ import { updateDepositSettings, fetchDepositSettings } from "@/lib/deposits-api"
 import { fetchProducts } from "@/lib/products-api";
 import { useSession } from "@/lib/session";
 
+const outlineBtn: React.CSSProperties = { border: "1px solid var(--app-border)", background: "var(--app-surface)", borderRadius: 11, padding: "11px 15px", fontSize: 12.5, fontWeight: 700, color: "var(--app-text-muted)", minHeight: 44 };
+const primaryHeaderBtn: React.CSSProperties = { border: 0, background: "var(--app-primary)", borderRadius: 11, padding: "11px 18px", fontSize: 12.5, fontWeight: 800, color: "#fff", minHeight: 44 };
+const selectStyle: React.CSSProperties = { border: "1px solid var(--app-border)", borderRadius: 11, padding: "10px 12px", fontSize: 12.5, fontWeight: 600, color: "var(--app-text-muted)", background: "var(--app-surface)", minHeight: 44 };
+const cancelBtn: React.CSSProperties = { background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: 11, padding: "11px 18px", fontSize: 12.5, fontWeight: 600, color: "var(--app-text-muted)" };
+const primaryBtn: React.CSSProperties = { background: "var(--app-primary)", border: 0, borderRadius: 11, padding: "11px 20px", fontSize: 12.5, fontWeight: 800, color: "#fff" };
+
+const RANGE_OPTIONS = [
+  { key: 1, label: "Last 30 days" },
+  { key: 6, label: "Last 6 months" },
+  { key: 12, label: "Last 12 months" },
+] as const;
+
 export function BookingLinkPanel() {
   const session = useSession();
+  const [months, setMonths] = useState<number>(6);
   const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [format, setFormat] = useState<GenerateQrInput["format"]>("a5");
-  const [fileType, setFileType] = useState<GenerateQrInput["fileType"]>("png");
+  const [qrOpen, setQrOpen] = useState(false);
 
-  const { data: stats, isPending, isError, refetch } = useQuery({ queryKey: ["booking-link-stats"], queryFn: () => fetchBookingLinkStats(6) });
-
+  const { data: stats } = useQuery({ queryKey: ["booking-link-stats", months], queryFn: () => fetchBookingLinkStats(months) });
   const bookingUrl = `${window.location.origin}/book/${session.business.slug}`;
 
-  const qrMutation = useMutation({
-    mutationFn: () => generateBookingQr({ format, fileType }),
-    onSuccess: (result) => {
-      window.open(result.url, "_blank", "noopener,noreferrer");
-      toast.success("QR poster generated.");
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't generate the QR poster."),
-  });
-
   return (
-    <div className="flex flex-col gap-5">
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-fg-muted">Your public booking link</p>
-            <p className="truncate text-sm font-medium text-fg">{bookingUrl}</p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(bookingUrl).catch(() => undefined);
-                toast.success("Link copied.");
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" aria-hidden />
-              Copy
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setCustomiseOpen(true)}>
-              <Settings2 className="h-3.5 w-3.5" aria-hidden />
-              Customise
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h2 className="m-0 text-[19px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-.4px" }}>Booking Link</h2>
+        <select value={months} onChange={(e) => setMonths(Number(e.target.value))} aria-label="Date range" style={selectStyle}>
+          {RANGE_OPTIONS.map((r) => (
+            <option key={r.key} value={r.key}>{r.label}</option>
+          ))}
+        </select>
+      </div>
 
-      {isError && <ErrorBanner title="Couldn't load booking link stats" onRetry={() => refetch()} />}
-      {isPending && (
-        <Card>
-          <CardContent className="flex flex-col gap-1 p-4">
-            <SkeletonRow />
-            <SkeletonRow />
-          </CardContent>
-        </Card>
-      )}
+      <div className="flex flex-wrap items-center gap-3.5 rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]" style={{ background: "var(--app-success-bg)", color: "var(--app-primary)" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1L11 4.9M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1L13 19.1" /></svg>
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[11px] font-extrabold uppercase tracking-[.4px]" style={{ color: "var(--app-text-disabled)" }}>Your public booking page</span>
+          <span className="mt-0.5 block truncate text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>{bookingUrl}</span>
+        </span>
+        <span className="ms-auto flex flex-wrap gap-2.5">
+          <button
+            type="button"
+            onClick={() => { navigator.clipboard.writeText(bookingUrl).catch(() => undefined); toast.success("Link copied."); }}
+            style={primaryHeaderBtn}
+          >
+            Copy Link
+          </button>
+          <button type="button" onClick={() => setQrOpen(true)} style={outlineBtn}>Download QR</button>
+          <button type="button" onClick={() => window.open(bookingUrl, "_blank", "noopener,noreferrer")} style={outlineBtn}>Preview Public Page</button>
+          <button type="button" onClick={() => setCustomiseOpen(true)} style={outlineBtn}>Customise Page</button>
+        </span>
+      </div>
 
       {stats && (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-fg-muted">Visits (6mo)</p>
-                <p className="font-display text-xl font-bold text-fg">{stats.totalVisits}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-fg-muted">Bookings</p>
-                <p className="font-display text-xl font-bold text-fg">{stats.totalBookings}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-fg-muted">Conversion</p>
-                <p className="font-display text-xl font-bold text-fg">{formatPercent(stats.conversion)}</p>
-              </CardContent>
-            </Card>
+          <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))" }}>
+            <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+              <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Link Visits</div>
+              <div className="mt-[5px] text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{stats.totalVisits}</div>
+            </div>
+            <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+              <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Bookings From Link</div>
+              <div className="mt-[5px] text-[21px] font-extrabold" style={{ color: "var(--app-primary)" }}>{stats.totalBookings}</div>
+            </div>
+            <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+              <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-faintest)" }}>Conversion</div>
+              <div className="mt-[5px] text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatPercent(stats.conversion)}</div>
+            </div>
           </div>
 
           {stats.trend.length > 1 && (
-            <Card>
-              <CardContent className="p-4">
-                <p className="mb-3 text-sm font-medium text-fg">Visits vs. bookings</p>
-                <VisitsTrendChart trend={stats.trend} />
-              </CardContent>
-            </Card>
+            <div className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+              <div className="mb-1.5 flex flex-wrap items-center gap-3.5">
+                <h3 className="m-0 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>Visits vs bookings</h3>
+                <span className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}><span className="h-2 w-2 rounded-[2px]" style={{ background: "var(--app-border-strong)" }} />Visits</span>
+                <span className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}><span className="h-2 w-2 rounded-[2px]" style={{ background: "var(--app-primary)" }} />Bookings</span>
+              </div>
+              <VisitsChart trend={stats.trend} />
+            </div>
           )}
         </>
       )}
 
-      <Card>
-        <CardContent className="flex flex-col gap-3.5 p-4">
-          <p className="text-sm font-medium text-fg">Generate a QR poster</p>
-          <div className="flex flex-wrap items-end gap-3">
-            <Select label="Size" value={format} onChange={(e) => setFormat(e.target.value as GenerateQrInput["format"])} className="w-32">
-              <option value="a5">A5</option>
-              <option value="a4">A4</option>
-              <option value="sticker">Sticker</option>
-            </Select>
-            <Select label="File type" value={fileType} onChange={(e) => setFileType(e.target.value as GenerateQrInput["fileType"])} className="w-32">
-              <option value="png">PNG</option>
-              <option value="pdf">PDF</option>
-            </Select>
-            <Button onClick={() => qrMutation.mutate()} disabled={qrMutation.isPending}>
-              <Download className="h-3.5 w-3.5" aria-hidden />
-              {qrMutation.isPending ? "Generating…" : "Generate"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+        <h3 className="m-0 mb-1.5 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>Generate a QR poster</h3>
+        <p className="m-0 mb-3 text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>Real signed file from your public page — print it and post it wherever customers can scan it.</p>
+        <QrGenerator />
+      </div>
 
-      <CustomiseDialog open={customiseOpen} onClose={() => setCustomiseOpen(false)} />
-    </div>
+      {customiseOpen && <CustomiseModal onClose={() => setCustomiseOpen(false)} />}
+      {qrOpen && <QrModal onClose={() => setQrOpen(false)} />}
+    </main>
   );
 }
 
-function VisitsTrendChart({ trend }: { trend: { month: string; visits: number; bookings: number }[] }) {
-  const width = 560;
-  const height = 140;
-  const max = Math.max(...trend.map((t) => t.visits), 1);
-  const visitPoints = trend.map((t, i) => ({ x: (i / (trend.length - 1)) * width, y: height - (t.visits / max) * height }));
-  const bookingPoints = trend.map((t, i) => ({ x: (i / (trend.length - 1)) * width, y: height - (t.bookings / max) * height }));
-  const path = (pts: { x: number; y: number }[]) => pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+function QrGenerator() {
+  const [format, setFormat] = useState<GenerateQrInput["format"]>("a5");
+  const [fileType, setFileType] = useState<GenerateQrInput["fileType"]>("png");
+
+  const mutation = useMutation({
+    mutationFn: () => generateBookingQr({ format, fileType }),
+    onSuccess: (result) => { window.open(result.url, "_blank", "noopener,noreferrer"); toast.success("QR poster generated."); },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't generate the QR poster."),
+  });
 
   return (
-    <div>
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Visits vs bookings trend">
-        <path d={path(visitPoints)} fill="none" stroke="var(--chart-1)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        <path d={path(bookingPoints)} fill="none" stroke="var(--chart-2, var(--primary))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div className="mt-2 flex items-center gap-4 text-xs text-fg-muted">
-        <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full" style={{ background: "var(--chart-1)" }} /> Visits
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full" style={{ background: "var(--chart-2, var(--primary))" }} /> Bookings
-        </span>
-      </div>
+    <div className="flex flex-wrap items-end gap-2.5">
+      <select value={format} onChange={(e) => setFormat(e.target.value as GenerateQrInput["format"])} aria-label="Size" style={selectStyle}>
+        <option value="a5">A5</option>
+        <option value="a4">A4</option>
+        <option value="sticker">Sticker</option>
+      </select>
+      <select value={fileType} onChange={(e) => setFileType(e.target.value as GenerateQrInput["fileType"])} aria-label="File type" style={selectStyle}>
+        <option value="png">PNG</option>
+        <option value="pdf">PDF</option>
+      </select>
+      <button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending} style={{ ...primaryHeaderBtn, opacity: mutation.isPending ? 0.6 : 1 }}>
+        {mutation.isPending ? "Generating…" : "Generate"}
+      </button>
     </div>
   );
 }
 
-function CustomiseDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { data: settings, isPending: settingsPending } = useQuery({ queryKey: ["booking-link-settings"], queryFn: fetchBookingLinkSettings, enabled: open });
-  const { data: depositSettings, isPending: depositPending } = useQuery({ queryKey: ["deposit-settings"], queryFn: fetchDepositSettings, enabled: open });
-  const { data: services } = useQuery({ queryKey: ["products", "services-for-booking-link"], queryFn: () => fetchProducts({ kind: "service" }), enabled: open });
+function QrModal({ onClose }: { onClose: () => void }) {
+  return (
+    <PosModalShell open onClose={onClose} title="Download QR" footer={<button type="button" onClick={onClose} style={cancelBtn}>Close</button>}>
+      <div className="p-[17px]">
+        <QrGenerator />
+      </div>
+    </PosModalShell>
+  );
+}
 
-  if (!open) return null;
+function VisitsChart({ trend }: { trend: { month: string; visits: number; bookings: number }[] }) {
+  const width = 620;
+  const height = 150;
+  const max = Math.max(...trend.map((t) => t.visits), 1);
+  const barWidth = width / trend.length;
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }}>
+      {trend.map((t, i) => {
+        const vH = (t.visits / max) * (height - 20);
+        const bH = (t.bookings / max) * (height - 20);
+        const x = i * barWidth;
+        return (
+          <g key={t.month}>
+            <rect x={x + 4} y={height - 20 - vH} width={Math.max(barWidth - 8, 2)} height={vH} rx={4} fill="var(--app-border-strong)" />
+            <rect x={x + 4} y={height - 20 - bH} width={Math.max((barWidth - 8) / 2, 2)} height={bH} rx={4} fill="var(--app-primary)" />
+            <text x={x + barWidth / 2} y={height - 4} textAnchor="middle" fontSize="10.5" fill="var(--app-text-faint)" fontWeight={600}>{t.month}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function CustomiseModal({ onClose }: { onClose: () => void }) {
+  const { data: settings, isPending: settingsPending } = useQuery({ queryKey: ["booking-link-settings"], queryFn: fetchBookingLinkSettings });
+  const { data: depositSettings, isPending: depositPending } = useQuery({ queryKey: ["deposit-settings"], queryFn: fetchDepositSettings });
+  const { data: services } = useQuery({ queryKey: ["products", "service"], queryFn: () => fetchProducts({ kind: "service" }) });
+
   if (settingsPending || depositPending || !settings || !depositSettings) {
     return (
-      <Dialog open onClose={onClose} title="Customise your booking page">
-        <SkeletonRow />
-      </Dialog>
+      <PosModalShell open onClose={onClose} title="Customise Your Booking Page" footer={<button type="button" onClick={onClose} style={cancelBtn}>Close</button>}>
+        <p className="m-0 p-[17px] text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>Loading…</p>
+      </PosModalShell>
     );
   }
-  return (
-    <CustomiseForm
-      settings={settings}
-      depositRequired={depositSettings.required}
-      services={services ?? []}
-      onClose={onClose}
-    />
-  );
+  return <CustomiseForm settings={settings} depositRequired={depositSettings.required} services={services ?? []} onClose={onClose} />;
 }
 
-function CustomiseForm({
-  settings,
-  depositRequired,
-  services,
-  onClose,
-}: {
-  settings: BookingLinkSettings;
-  depositRequired: boolean;
-  services: { id: string; name: string }[];
-  onClose: () => void;
-}) {
+function CustomiseForm({ settings, depositRequired, services, onClose }: { settings: BookingLinkSettings; depositRequired: boolean; services: { id: string; name: string }[]; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [welcomeText, setWelcomeText] = useState(settings.welcomeText ?? "");
   const [visibleServiceIds, setVisibleServiceIds] = useState<string[]>(settings.visibleServiceIds);
-  const [brandColor, setBrandColor] = useState(settings.brandColor ?? "#0C4B3B");
+  const [brandColor, setBrandColor] = useState(settings.brandColor ?? "#12A150");
   const [requireDeposit, setRequireDeposit] = useState(depositRequired);
 
   const mutation = useMutation({
     mutationFn: async () => {
       await updateBookingLinkSettings({ welcomeText: welcomeText || undefined, visibleServiceIds, brandColor });
-      if (requireDeposit !== depositRequired) {
-        await updateDepositSettings({ required: requireDeposit });
-      }
+      if (requireDeposit !== depositRequired) await updateDepositSettings({ required: requireDeposit });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["booking-link-settings"] });
@@ -229,45 +217,44 @@ function CustomiseForm({
   }
 
   return (
-    <Dialog
+    <PosModalShell
       open
       onClose={onClose}
-      title="Customise your booking page"
+      title="Customise Your Booking Page"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          <button type="button" onClick={onClose} style={cancelBtn}>Cancel</button>
+          <button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending} style={{ ...primaryBtn, opacity: mutation.isPending ? 0.6 : 1 }}>
             {mutation.isPending ? "Saving…" : "Save"}
-          </Button>
+          </button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
-        <Input label="Welcome text" value={welcomeText} onChange={(e) => setWelcomeText(e.target.value)} placeholder="Welcome! Book your appointment below." />
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-fg" htmlFor="brand-color">
-            Brand colour
-          </label>
-          <input id="brand-color" type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} className="h-9 w-14 cursor-pointer rounded-[var(--radius-sm)] border border-border-strong" />
-        </div>
-        <label className="flex items-center gap-2 text-sm font-medium text-fg">
-          <input type="checkbox" checked={requireDeposit} onChange={(e) => setRequireDeposit(e.target.checked)} />
-          Require a deposit to book
+      <div className="flex flex-col gap-3 p-[17px]">
+        <label className="block">
+          <span className="mb-1.5 block text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>WELCOME TEXT</span>
+          <textarea value={welcomeText} onChange={(e) => setWelcomeText(e.target.value)} rows={2} placeholder="Book with us in under a minute." className="w-full rounded-[11px] p-3 text-[13px]" style={{ border: "1px solid var(--app-border)" }} />
         </label>
         <div>
-          <p className="mb-1.5 text-sm font-medium text-fg">Visible services (blank = every active service)</p>
-          <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+          <span className="mb-1.5 block text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>WHICH SERVICES SHOW (BLANK = ALL)</span>
+          <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto rounded-[11px] p-1" style={{ border: "1px solid var(--app-border)" }}>
             {services.map((s) => (
-              <label key={s.id} className="flex items-center gap-2 text-sm text-fg">
-                <input type="checkbox" checked={visibleServiceIds.includes(s.id)} onChange={() => toggleService(s.id)} />
+              <label key={s.id} className="flex items-center gap-2.5 p-2 text-[12.5px] font-semibold" style={{ color: "var(--app-text-muted)" }}>
+                <input type="checkbox" checked={visibleServiceIds.includes(s.id)} onChange={() => toggleService(s.id)} style={{ accentColor: "var(--app-primary)" }} />
                 {s.name}
               </label>
             ))}
           </div>
         </div>
+        <div>
+          <span className="mb-1.5 block text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>BRAND COLOUR</span>
+          <input type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} className="h-9 w-14 cursor-pointer rounded-[9px]" style={{ border: "1px solid var(--app-border)" }} />
+        </div>
+        <label className="flex items-center gap-3 rounded-[12px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+          <span className="flex-1 text-[12.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>Require a deposit to book</span>
+          <input type="checkbox" checked={requireDeposit} onChange={(e) => setRequireDeposit(e.target.checked)} style={{ accentColor: "var(--app-primary)", width: 18, height: 18 }} />
+        </label>
       </div>
-    </Dialog>
+    </PosModalShell>
   );
 }

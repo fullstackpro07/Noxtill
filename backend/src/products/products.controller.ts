@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -105,5 +106,22 @@ export class ProductsController {
   @Patch(':id/deactivate')
   deactivate(@Param('id') id: string) {
     return this.productsService.deactivate(id);
+  }
+
+  @Post(':id/photo')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('file is required');
+    }
+    return this.productsService.uploadPhoto(id, file);
+  }
+
+  @Delete(':id/photo')
+  removePhoto(@Param('id') id: string) {
+    return this.productsService.removePhoto(id);
   }
 }

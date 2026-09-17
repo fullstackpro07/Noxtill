@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ReminderRulesService } from './reminder-rules.service';
 import { CreateReminderRuleDto } from './dto/create-reminder-rule.dto';
@@ -23,6 +24,11 @@ export class ReminderRulesController {
   @Get()
   list() {
     return this.reminderRules.list();
+  }
+
+  @Get('stats')
+  stats(@Query('days') days?: string) {
+    return this.reminderRules.stats(days ? Number(days) : 30);
   }
 
   @RequireCapability(CAPABILITIES.BOOKINGS_MANAGE)

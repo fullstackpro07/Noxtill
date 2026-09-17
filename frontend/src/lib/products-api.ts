@@ -21,6 +21,7 @@ interface RawProduct {
   bufferAfterMin: number | null;
   depositRequired: boolean;
   depositAmount: string | null;
+  photoUrl: string | null;
 }
 
 /**
@@ -52,6 +53,7 @@ function toProduct(raw: RawProduct): Product {
     bufferAfterMin: raw.bufferAfterMin ?? undefined,
     depositRequired: raw.depositRequired,
     depositAmount: raw.depositAmount != null ? Number(raw.depositAmount) : undefined,
+    photoUrl: raw.photoUrl,
   };
 }
 
@@ -142,6 +144,33 @@ export async function updateProduct(id: string, draft: ProductDraft): Promise<Pr
 
 export async function deactivateProduct(id: string): Promise<Product> {
   const raw = await apiFetch<RawProduct>(`/products/${id}/deactivate`, { method: "PATCH" });
+  return toProduct(raw);
+}
+
+export async function reactivateProduct(id: string): Promise<Product> {
+  const raw = await apiFetch<RawProduct>(`/products/${id}`, { method: "PATCH", body: JSON.stringify({ active: true }) });
+  return toProduct(raw);
+}
+
+/** Bulk Category Change — no dedicated bulk endpoint exists, so this sends the same real partial
+ * PATCH (the backend's `UpdateProductDto` makes every field optional) once per product. */
+export async function updateProductCategory(id: string, categoryId: string, categoryName: string): Promise<Product> {
+  const raw = await apiFetch<RawProduct>(`/products/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ categoryId, category: categoryName }),
+  });
+  return toProduct(raw);
+}
+
+export async function uploadProductPhoto(id: string, file: File): Promise<Product> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const raw = await apiFetch<RawProduct>(`/products/${id}/photo`, { method: "POST", body: formData });
+  return toProduct(raw);
+}
+
+export async function removeProductPhoto(id: string): Promise<Product> {
+  const raw = await apiFetch<RawProduct>(`/products/${id}/photo`, { method: "DELETE" });
   return toProduct(raw);
 }
 

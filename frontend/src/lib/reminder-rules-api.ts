@@ -48,3 +48,16 @@ export function deleteReminderRule(id: string): Promise<void> {
 export function testSendReminderRule(id: string, target: { phone?: string; email?: string }): Promise<void> {
   return apiFetch(`/reminder-rules/${id}/test-send`, { method: "POST", body: JSON.stringify(target) });
 }
+
+export interface ReminderStats {
+  days: number;
+  sent: number;
+  delivered: number;
+}
+
+/** Real counts from the `Message` audit trail every reminder send creates — there's no field
+ * anywhere that attributes a reschedule or a prevented no-show back to a specific reminder, so
+ * those numbers are deliberately not surfaced here rather than guessed. */
+export function fetchReminderStats(days = 30): Promise<ReminderStats> {
+  return apiFetch<ReminderStats>(`/reminder-rules/stats?days=${days}`);
+}

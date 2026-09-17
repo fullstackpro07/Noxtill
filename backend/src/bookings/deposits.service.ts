@@ -33,10 +33,15 @@ export class DepositsService {
     });
   }
 
+  /** Includes the parent appointment's customer/service so the Deposits screen can show who and
+   * what a deposit belongs to without a separate round-trip per row. */
   list(appointmentId?: string) {
     return this.tenantPrisma.client.deposit.findMany({
       where: { appointmentId },
       orderBy: { createdAt: 'desc' },
+      include: {
+        appointment: { include: { customer: true, service: true } },
+      },
     });
   }
 

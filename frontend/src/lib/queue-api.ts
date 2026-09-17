@@ -40,8 +40,12 @@ function toQueueToken(raw: RawQueueToken): QueueToken {
   };
 }
 
-export async function fetchQueue(): Promise<QueueToken[]> {
-  const raw = await apiFetch<RawQueueToken[]>("/queue");
+export async function fetchQueue(filters: { from?: string; to?: string } = {}): Promise<QueueToken[]> {
+  const params = new URLSearchParams();
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  const query = params.toString();
+  const raw = await apiFetch<RawQueueToken[]>(`/queue${query ? `?${query}` : ""}`);
   return raw.map(toQueueToken);
 }
 

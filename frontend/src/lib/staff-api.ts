@@ -333,6 +333,74 @@ export function notifyShifts(from: string, to: string): Promise<NotifyShiftsResu
   return apiFetch<NotifyShiftsResult>("/shifts/notify", { method: "POST", body: JSON.stringify({ from, to }) });
 }
 
+// --- Time Off (real backend, UPD-BE-031 — no prior frontend consumer existed for this) ---
+
+interface RawTimeOff {
+  id: string;
+  staffUserId: string;
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+  approved: boolean;
+  reviewedByUserId: string | null;
+  createdAt: string;
+  staffUser: { id: string; user: { id: string; name: string } };
+}
+
+export type TimeOffStatus = "pending" | "approved" | "rejected";
+
+export interface TimeOff {
+  id: string;
+  staffUserId: string;
+  staffName: string;
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+  status: TimeOffStatus;
+  createdAt: string;
+}
+
+function toTimeOff(raw: RawTimeOff): TimeOff {
+  return {
+    id: raw.id,
+    staffUserId: raw.staffUserId,
+    staffName: raw.staffUser.user.name,
+    startsAt: raw.startsAt,
+    endsAt: raw.endsAt,
+    reason: raw.reason,
+    status: raw.reviewedByUserId == null ? "pending" : raw.approved ? "approved" : "rejected",
+    createdAt: raw.createdAt,
+  };
+}
+
+export async function fetchTimeOff(staffUserId?: string): Promise<TimeOff[]> {
+  const query = staffUserId ? `?staffUserId=${staffUserId}` : "";
+  const raw = await apiFetch<RawTimeOff[]>(`/time-off${query}`);
+  return raw.map(toTimeOff);
+}
+
+export interface CreateTimeOffInput {
+  staffUserId?: string;
+  startsAt: string;
+  endsAt: string;
+  reason?: string;
+}
+
+export async function requestTimeOff(input: CreateTimeOffInput): Promise<TimeOff> {
+  const raw = await apiFetch<RawTimeOff>("/time-off", { method: "POST", body: JSON.stringify(input) });
+  return toTimeOff(raw);
+}
+
+export async function approveTimeOff(id: string): Promise<TimeOff> {
+  const raw = await apiFetch<RawTimeOff>(`/time-off/${id}/approve`, { method: "PATCH" });
+  return toTimeOff(raw);
+}
+
+export async function rejectTimeOff(id: string): Promise<TimeOff> {
+  const raw = await apiFetch<RawTimeOff>(`/time-off/${id}/reject`, { method: "PATCH" });
+  return toTimeOff(raw);
+}
+
 // --- Timesheets (UPD-BE-032, extended UPD-BE/FE-113) ---
 
 export interface TimesheetRow {

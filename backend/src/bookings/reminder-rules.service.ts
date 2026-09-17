@@ -5,7 +5,10 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { CreateReminderRuleDto } from './dto/create-reminder-rule.dto';
 import { UpdateReminderRuleDto } from './dto/update-reminder-rule.dto';
 import { TestSendReminderRuleDto } from './dto/test-send-reminder-rule.dto';
-import { REMINDER_RULE_ERROR_CODES } from './bookings.constants';
+import {
+  REMINDER_RULE_ERROR_CODES,
+  REMINDER_TEMPLATE_KEYS,
+} from './bookings.constants';
 
 /**
  * Booking reminder rules (UPD-BE-092) — CRUD for the rules the reminders job
@@ -76,6 +79,39 @@ export class ReminderRulesService {
         ).toISOString(),
       },
     });
+  }
+
+  /**
+   * Real send counts from the `Message` audit trail (UPD-FE-bookings-reminders-stats) — every
+   * booking reminder, scheduled or test-sent, goes through `SendGateService` and leaves a row here.
+   * Scoped to the reminder template keys plus any custom `templateKey` a rule was created with;
+   * "delivered" counts `delivered`/`read` statuses. There's no field anywhere that attributes a
+   * reschedule or a prevented no-show back to a specific reminder, so those numbers are
+   * deliberately not computed here rather than guessed.
+   */
+  async stats(days: number) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const rules = await this.tenantPrisma.client.reminderRule.findMany({
+      select: { templateKey: true },
+    });
+    const templateKeys = [
+      ...new Set([...REMINDER_TEMPLATE_KEYS, ...rules.map((r) => r.templateKey)]),
+    ];
+
+    const [sent, delivered] = await Promise.all([
+      this.tenantPrisma.client.message.count({
+        where: { templateKey: { in: templateKeys }, createdAt: { gte: since } },
+      }),
+      this.tenantPrisma.client.message.count({
+        where: {
+          templateKey: { in: templateKeys },
+          createdAt: { gte: since },
+          status: { in: ['delivered', 'read'] },
+        },
+      }),
+    ]);
+
+    return { days, sent, delivered };
   }
 
   private async findRule(id: string) {

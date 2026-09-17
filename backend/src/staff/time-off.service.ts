@@ -34,6 +34,7 @@ export class TimeOffService {
         endsAt: new Date(dto.endsAt),
         reason: dto.reason,
       },
+      include: { staffUser: { include: { user: true } } },
     });
   }
 
@@ -51,6 +52,7 @@ export class TimeOffService {
     return this.tenantPrisma.client.timeOff.update({
       where: { id },
       data: { approved: true, reviewedByUserId: actorUserId },
+      include: { staffUser: { include: { user: true } } },
     });
   }
 
@@ -60,6 +62,7 @@ export class TimeOffService {
     return this.tenantPrisma.client.timeOff.update({
       where: { id },
       data: { approved: false, reviewedByUserId: actorUserId },
+      include: { staffUser: { include: { user: true } } },
     });
   }
 

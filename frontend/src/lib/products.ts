@@ -19,6 +19,7 @@ export interface Product {
   durationMinutes?: number;
   variations: ProductVariation[];
   active: boolean;
+  photoUrl?: string | null;
   /** Services, formal fields (UPD-BE-087) — only meaningful for kind: "service". */
   eligibleStaffIds?: string[];
   bufferBeforeMin?: number;
@@ -29,7 +30,10 @@ export interface Product {
 
 export const PRODUCT_CATEGORIES = ["Hair", "Skin", "Nails", "Retail", "Color"] as const;
 
-/** Mock catalog for Sunset Hair Studio — real CRUD wires up in INT-003. */
+/** Fabricated placeholder catalog — NOT used by the real Products module (which fetches from
+ * `products-api.ts`). Still referenced by `integrations/merchant-center` and `integrations/tiktok-ads`
+ * previews, which is a pre-existing fabrication issue in those modules, out of scope for this pass;
+ * kept here only so those two files keep compiling. */
 export const PRODUCTS: Product[] = [
   { id: "p1", name: "Signature Haircut", category: "Hair", kind: "service", price: 45, costPrice: 12, durationMinutes: 45, variations: [], active: true },
   { id: "p2", name: "Beard Trim", category: "Hair", kind: "service", price: 20, costPrice: 5, durationMinutes: 20, variations: [], active: true },
