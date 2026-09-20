@@ -65,6 +65,10 @@ export interface Workflow {
   conditions: WorkflowCondition[];
   actions: WorkflowAction[];
   active: boolean;
+  /** Real count of successful `WorkflowRun`s — the only runs that actually executed an action. */
+  sentCount: number;
+  /** Most recent run of any status, or null if it has never fired. */
+  lastFiredAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

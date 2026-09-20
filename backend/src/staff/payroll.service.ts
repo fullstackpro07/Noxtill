@@ -17,6 +17,20 @@ function hasRecognizedCommissionRule(rule: unknown): boolean {
   return type === 'percent' || type === 'per_service';
 }
 
+export interface PayrollRow {
+  businessUserId: string;
+  name: string;
+  role: string;
+  hoursWorked: number;
+  overtimeHours: number;
+  hourlyRate: number;
+  hourlyPay: number;
+  commission: number;
+  advancesDeducted: number;
+  otherAdjustments: number;
+  netPay: number;
+}
+
 /**
  * Payroll Export (UPD-BE-034) — the one real place a "payout" is materialized in this codebase
  * (`CommissionsService.report()` is a stateless read-only projection otherwise). Generating an
@@ -26,17 +40,10 @@ function hasRecognizedCommissionRule(rule: unknown): boolean {
  * deducting a single advance) — one that doesn't fully fit in the remaining commission stays
  * outstanding for a future payout.
  *
- * Staff depth fix (UPD-INT-011): an unapproved timesheet for the month is surfaced as a real
- * `warnings` entry (same mechanism already used for a missing commission rule) rather than
- * silently paying out — approval previously had no effect anywhere downstream of the timesheet
- * screen. This is a warning, not a hard block: the export still runs (an owner may need the
- * numbers before chasing down an approval), but the gap is no longer invisible.
- *
- * Staff depth fix (UPD-INT-011): overtime hours are real (`TimesheetsService.report()`) but were
- * never priced into pay anywhere — `hourlyPay` now turns a staff member's real `hourlyRate` (opt-in,
- * null for purely-commission staff — unaffected either way) and real overtime hours into an actual
- * dollar amount, added on top of `netPay`. Advances still net only against commission, unchanged —
- * hourly/overtime pay is a separate, additive component, never touched by advance netting.
+ * Staff module v2 (UPD-BE-STAFF-06): `computeRows` is now shared between `preview()` (read-only,
+ * for the screen's own KPI tiles/table before anyone commits to anything) and `export()` (which
+ * additionally nets advances and generates/uploads the file) — same numbers either way, since
+ * `commit=false` skips only the `staffAdvance.updateMany` write, not the math.
  */
 @Injectable()
 export class PayrollService {
@@ -47,76 +54,20 @@ export class PayrollService {
     private readonly timesheets: TimesheetsService,
   ) {}
 
+  /** Read-only preview — computes the exact same numbers as `export()` without netting advances
+   * or generating a file. Safe to call on every page load. */
+  async preview(
+    businessId: string,
+    month: string,
+  ): Promise<{ rows: PayrollRow[]; warnings: string[] }> {
+    return this.computeRows(businessId, month, false);
+  }
+
   async export(
     businessId: string,
     month: string,
   ): Promise<{ url: string; warnings: string[] }> {
-    const [commissionRows, timesheetRows, staffRules, business] =
-      await Promise.all([
-        this.commissions.report(month),
-        this.timesheets.report(businessId, month),
-        this.tenantPrisma.client.businessUser.findMany({
-          where: { role: { in: [Role.manager, Role.staff] } },
-          select: { id: true, commissionRule: true, hourlyRate: true },
-        }),
-        this.tenantPrisma.client.business.findUniqueOrThrow({
-          where: { id: businessId },
-          select: { overtimeRateMultiplier: true },
-        }),
-      ]);
-    const overtimeRateMultiplier = Number(business.overtimeRateMultiplier);
-    const timesheetByStaffId = new Map(
-      timesheetRows.map((t) => [t.businessUserId, t]),
-    );
-    const ruleByStaffId = new Map(
-      staffRules.map((s) => [s.id, s.commissionRule]),
-    );
-    const hourlyRateByStaffId = new Map(
-      staffRules.map((s) => [s.id, s.hourlyRate ? Number(s.hourlyRate) : null]),
-    );
-
-    const warnings: string[] = [];
-    const rows: Record<string, unknown>[] = [];
-
-    for (const c of commissionRows) {
-      if (!hasRecognizedCommissionRule(ruleByStaffId.get(c.businessUserId))) {
-        warnings.push(
-          `${c.name} has no commission rule configured — commission calculated as $0`,
-        );
-      }
-
-      const { deducted, netPay: commissionNetPay } = await this.netAdvances(
-        c.businessUserId,
-        c.commission,
-        month,
-      );
-      const timesheet = timesheetByStaffId.get(c.businessUserId);
-      if (timesheet && !timesheet.approved) {
-        warnings.push(
-          `${c.name}'s timesheet for ${month} has not been approved yet`,
-        );
-      }
-
-      const hourlyRate = hourlyRateByStaffId.get(c.businessUserId) ?? null;
-      const hourlyPay = this.computeHourlyPay(
-        timesheet?.hoursWorked ?? 0,
-        timesheet?.overtimeHours ?? 0,
-        hourlyRate,
-        overtimeRateMultiplier,
-      );
-
-      rows.push({
-        name: c.name,
-        role: c.role,
-        hoursWorked: timesheet?.hoursWorked ?? 0,
-        overtimeHours: timesheet?.overtimeHours ?? 0,
-        hourlyRate: hourlyRate ?? 0,
-        hourlyPay,
-        commission: c.commission,
-        advancesDeducted: deducted,
-        netPay: round2(commissionNetPay + hourlyPay),
-      });
-    }
+    const { rows, warnings } = await this.computeRows(businessId, month, true);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet(PAYROLL_SHEET_TITLE);
@@ -132,6 +83,97 @@ export class PayrollService {
     );
 
     return { url, warnings };
+  }
+
+  private async computeRows(
+    businessId: string,
+    month: string,
+    commit: boolean,
+  ): Promise<{ rows: PayrollRow[]; warnings: string[] }> {
+    const [commissionRows, timesheetRows, staffRules, business, lineItems] =
+      await Promise.all([
+        this.commissions.report(month),
+        this.timesheets.report(businessId, month),
+        this.tenantPrisma.client.businessUser.findMany({
+          where: { role: { in: [Role.manager, Role.staff] } },
+          select: { id: true, commissionRule: true, hourlyRate: true },
+        }),
+        this.tenantPrisma.client.business.findUniqueOrThrow({
+          where: { id: businessId },
+          select: { overtimeRateMultiplier: true },
+        }),
+        this.tenantPrisma.client.payrollLineItem.findMany({
+          where: { month },
+        }),
+      ]);
+    const overtimeRateMultiplier = Number(business.overtimeRateMultiplier);
+    const timesheetByStaffId = new Map(
+      timesheetRows.map((t) => [t.businessUserId, t]),
+    );
+    const ruleByStaffId = new Map(
+      staffRules.map((s) => [s.id, s.commissionRule]),
+    );
+    const hourlyRateByStaffId = new Map(
+      staffRules.map((s) => [s.id, s.hourlyRate ? Number(s.hourlyRate) : null]),
+    );
+    const lineItemTotalByStaffId = new Map<string, number>();
+    for (const item of lineItems) {
+      const signed =
+        item.type === 'deduct' ? -Number(item.amount) : Number(item.amount);
+      lineItemTotalByStaffId.set(
+        item.staffUserId,
+        round2((lineItemTotalByStaffId.get(item.staffUserId) ?? 0) + signed),
+      );
+    }
+
+    const warnings: string[] = [];
+    const rows: PayrollRow[] = [];
+
+    for (const c of commissionRows) {
+      if (!hasRecognizedCommissionRule(ruleByStaffId.get(c.businessUserId))) {
+        warnings.push(
+          `${c.name} has no commission rule configured — commission calculated as $0`,
+        );
+      }
+
+      const { deducted, netPay: commissionNetPay } = await this.netAdvances(
+        c.businessUserId,
+        c.commission,
+        month,
+        commit,
+      );
+      const timesheet = timesheetByStaffId.get(c.businessUserId);
+      if (timesheet && !timesheet.approved) {
+        warnings.push(
+          `${c.name}'s timesheet for ${month} has not been approved yet`,
+        );
+      }
+
+      const hourlyRate = hourlyRateByStaffId.get(c.businessUserId) ?? null;
+      const hourlyPay = this.computeHourlyPay(
+        timesheet?.hoursWorked ?? 0,
+        timesheet?.overtimeHours ?? 0,
+        hourlyRate,
+        overtimeRateMultiplier,
+      );
+      const otherAdjustments = lineItemTotalByStaffId.get(c.businessUserId) ?? 0;
+
+      rows.push({
+        businessUserId: c.businessUserId,
+        name: c.name,
+        role: c.role,
+        hoursWorked: timesheet?.hoursWorked ?? 0,
+        overtimeHours: timesheet?.overtimeHours ?? 0,
+        hourlyRate: hourlyRate ?? 0,
+        hourlyPay,
+        commission: c.commission,
+        advancesDeducted: deducted,
+        otherAdjustments,
+        netPay: round2(commissionNetPay + hourlyPay + otherAdjustments),
+      });
+    }
+
+    return { rows, warnings };
   }
 
   /**
@@ -157,6 +199,7 @@ export class PayrollService {
     staffUserId: string,
     commission: number,
     month: string,
+    commit: boolean,
   ): Promise<{ deducted: number; netPay: number }> {
     const outstanding = await this.tenantPrisma.client.staffAdvance.findMany({
       where: { staffUserId, status: StaffAdvanceStatus.outstanding },
@@ -175,7 +218,7 @@ export class PayrollService {
       }
     }
 
-    if (toMarkDeducted.length > 0) {
+    if (commit && toMarkDeducted.length > 0) {
       await this.tenantPrisma.client.staffAdvance.updateMany({
         where: { id: { in: toMarkDeducted } },
         data: { status: StaffAdvanceStatus.deducted, deductedInMonth: month },

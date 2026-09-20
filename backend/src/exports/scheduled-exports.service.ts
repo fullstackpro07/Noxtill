@@ -8,7 +8,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ExportsService } from './exports.service';
-import { ReportsService } from '../reports/reports.service';
+import { ReportRunsService } from '../reports/report-runs.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import {
   CreateScheduledExportDto,
@@ -16,18 +16,23 @@ import {
 } from './dto/create-scheduled-export.dto';
 import { UpdateScheduledExportDto } from './dto/update-scheduled-export.dto';
 import { isExportFormat, isExportKind } from './exports.constants';
-import { isReportKind, REPORT_LABELS } from '../reports/reports.types';
+import {
+  currentMonth,
+  isReportKind,
+  monthLabel,
+  previousMonth,
+  REPORT_LABELS,
+} from '../reports/reports.types';
+import {
+  computeNextRun,
+  isScheduleDue,
+  SCHEDULE_RUN_HOUR,
+} from './schedule-timing';
 import {
   Prisma,
   Role,
   ScheduledExport,
-  ScheduledExportFrequency,
 } from '@prisma/client';
-
-const FREQUENCY_DAYS: Record<ScheduledExportFrequency, number> = {
-  weekly: 7,
-  monthly: 28,
-};
 
 /** Schedule recurring export (UPD-FE-071), generalized (UPD-BE-116) to also schedule real
  * reports via the same infrastructure — one CRUD, one daily cron, one delivery path — rather
@@ -44,7 +49,7 @@ export class ScheduledExportsService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly prisma: PrismaService,
     private readonly exportsService: ExportsService,
-    private readonly reportsService: ReportsService,
+    private readonly reportRuns: ReportRunsService,
     private readonly sendGate: SendGateService,
     private readonly notifications: NotificationsService,
   ) {}
@@ -75,16 +80,36 @@ export class ScheduledExportsService {
         reportKind: dto.reportKind,
         format,
         frequency: dto.frequency,
+        dayOfWeek: dto.frequency === 'weekly' ? (dto.dayOfWeek ?? 1) : null,
+        dayOfMonth: dto.frequency === 'monthly' ? (dto.dayOfMonth ?? 1) : null,
         createdByUserId: userId,
         recipients: (dto.recipients ?? []) as unknown as Prisma.InputJsonValue,
       },
     });
   }
 
-  list() {
-    return this.tenantPrisma.client.scheduledExport.findMany({
+  async list() {
+    const rows = await this.tenantPrisma.client.scheduledExport.findMany({
       orderBy: { createdAt: 'desc' },
     });
+    const now = new Date();
+    return rows.map((row) => {
+      const next = computeNextRun(row, now);
+      const period = row.reportKind ? this.periodFor(row.frequency) : null;
+      return {
+        ...row,
+        runHour: SCHEDULE_RUN_HOUR,
+        nextRunAt: next ? next.toISOString() : null,
+        period,
+        periodLabel: period ? monthLabel(period) : null,
+      };
+    });
+  }
+
+  /** Weekly reports cover the month so far; monthly ones the last full month. */
+  private periodFor(frequency: 'weekly' | 'monthly'): string {
+    const now = currentMonth();
+    return frequency === 'weekly' ? now : previousMonth(now);
   }
 
   async update(id: string, dto: UpdateScheduledExportDto) {
@@ -94,6 +119,8 @@ export class ScheduledExportsService {
       data: {
         active: dto.active,
         frequency: dto.frequency,
+        dayOfWeek: dto.dayOfWeek,
+        dayOfMonth: dto.dayOfMonth,
         format: dto.format,
         recipients: dto.recipients as unknown as
           Prisma.InputJsonValue | undefined,
@@ -116,10 +143,9 @@ export class ScheduledExportsService {
     return schedule;
   }
 
-  /** The daily job's real work: find every active schedule due for its frequency, generate the
-   * real underlying artifact (data export or report, whichever this schedule is for), and deliver
-   * it — to explicit recipients over WhatsApp/email if any are set, else the original in-app
-   * notify-the-creator behavior. Returns how many actually ran, for the job log. */
+  /** The daily job's real work: find every active schedule that is due (its weekday / day of the
+   * month, with catch-up for a missed day), generate the real artifact and deliver it. Every
+   * outcome, sent or failed and why, is recorded on the schedule. Returns how many ran. */
   async runDueSchedules(referenceDate: Date = new Date()): Promise<number> {
     const schedules = await this.prisma.scheduledExport.findMany({
       where: { active: true },
@@ -127,48 +153,69 @@ export class ScheduledExportsService {
 
     let ran = 0;
     for (const schedule of schedules) {
-      const dueDays = FREQUENCY_DAYS[schedule.frequency];
-      const daysSinceLastRun = schedule.lastRunAt
-        ? (referenceDate.getTime() - schedule.lastRunAt.getTime()) /
-          (24 * 60 * 60 * 1000)
-        : Infinity;
-      if (daysSinceLastRun < dueDays) continue;
-
-      try {
-        const { url, label } = await this.generateArtifact(schedule);
-
-        // Reports depth fix (UPD-INT-015): `lastRunAt` is now stamped only AFTER delivery
-        // genuinely succeeds — it used to be stamped right after generation and before delivery,
-        // so a delivery failure (e.g. the in-app-notification path throwing) still marked this
-        // cycle "run," silently skipping delivery with no retry until the next full
-        // weekly/monthly period. `deliver()` itself already never throws for the
-        // has-real-recipients branch (each recipient is individually try/caught) — this only
-        // changes what happens when the whole thing fails outright.
-        await this.deliver(schedule, url, label);
-
-        await this.prisma.scheduledExport.update({
-          where: { id: schedule.id },
-          data: { lastRunAt: referenceDate },
-        });
-        ran += 1;
-      } catch (error) {
-        if (error instanceof SkipSchedule) {
-          this.logger.warn(
-            `Skipping scheduled export ${schedule.id}: ${error.message}`,
-          );
-          continue;
-        }
-        this.logger.error(
-          `Scheduled export ${schedule.id} failed: ${(error as Error).message}`,
-        );
-      }
+      if (!isScheduleDue(schedule, referenceDate)) continue;
+      if (await this.execute(schedule, referenceDate, 'schedule')) ran += 1;
     }
     return ran;
   }
 
+  /** "Run now": runs one schedule immediately, regardless of when it is next due. */
+  async runNow(id: string) {
+    const schedule = await this.findOwned(id);
+    const ok = await this.execute(schedule, new Date(), 'manual');
+    const after = await this.prisma.scheduledExport.findUniqueOrThrow({
+      where: { id },
+    });
+    return {
+      ok,
+      lastResult: after.lastResult,
+      lastError: after.lastError,
+      lastReportRunId: after.lastReportRunId,
+    };
+  }
+
+  /** `lastRunAt` is stamped only on success, so a failure is retried by the next daily check
+   * rather than silently skipping a whole period. */
+  private async execute(
+    schedule: ScheduledExport,
+    at: Date,
+    trigger: 'schedule' | 'manual',
+  ): Promise<boolean> {
+    try {
+      const { url, label, reportRunId } = await this.generateArtifact(
+        schedule,
+        trigger,
+      );
+      await this.deliver(schedule, url, label, reportRunId);
+      await this.prisma.scheduledExport.update({
+        where: { id: schedule.id },
+        data: {
+          lastRunAt: at,
+          lastResult: 'sent',
+          lastError: null,
+          lastReportRunId: reportRunId ?? null,
+        },
+      });
+      return true;
+    } catch (error) {
+      const message = (error as Error).message;
+      if (error instanceof SkipSchedule) {
+        this.logger.warn(`Skipping scheduled export ${schedule.id}: ${message}`);
+      } else {
+        this.logger.error(`Scheduled export ${schedule.id} failed: ${message}`);
+      }
+      await this.prisma.scheduledExport.update({
+        where: { id: schedule.id },
+        data: { lastResult: 'failed', lastError: message.slice(0, 1000) },
+      });
+      return false;
+    }
+  }
+
   private async generateArtifact(
     schedule: ScheduledExport,
-  ): Promise<{ url: string; label: string }> {
+    trigger: 'schedule' | 'manual',
+  ): Promise<{ url: string; label: string; reportRunId?: string }> {
     if (schedule.reportKind) {
       if (!isReportKind(schedule.reportKind)) {
         throw new SkipSchedule(`unknown report kind "${schedule.reportKind}"`);
@@ -183,22 +230,24 @@ export class ScheduledExportsService {
             },
           })
         : null;
-      // Reconstructs the minimal `AuthenticatedUser` shape `ReportsService.generate()` actually
-      // reads (businessId/role/sub) from real DB state — there's no live HTTP request to take one
-      // from in a background job. Falls back to `owner` when the creator's own membership can't
-      // be found (e.g. since removed), matching this job's existing "best-effort, log and skip on
-      // real failure" convention rather than silently under-scoping the report.
-      const { url } = await this.reportsService.generate(
-        schedule.reportKind,
-        undefined,
-        {
-          sub: schedule.createdByUserId ?? '',
-          businessId: schedule.businessId,
+      // No request is bound in a background job, so the business is passed explicitly and the run
+      // service scopes every query to it. Falls back to owner when the creator's membership is gone.
+      const { url, run } = await this.reportRuns.generate({
+        businessId: schedule.businessId,
+        kind: schedule.reportKind,
+        month: this.periodFor(schedule.frequency),
+        actor: {
+          userId: schedule.createdByUserId ?? undefined,
           role: businessUser?.role ?? Role.owner,
-          capabilities: [],
         },
-      );
-      return { url, label: REPORT_LABELS[schedule.reportKind] };
+        trigger,
+        scheduleId: schedule.id,
+      });
+      return {
+        url,
+        label: REPORT_LABELS[schedule.reportKind],
+        reportRunId: run.id,
+      };
     }
 
     if (
@@ -222,6 +271,7 @@ export class ScheduledExportsService {
     schedule: ScheduledExport,
     url: string,
     label: string,
+    reportRunId?: string,
   ): Promise<void> {
     const recipients =
       (schedule.recipients as unknown as ScheduleRecipientDto[]) ?? [];
@@ -245,12 +295,23 @@ export class ScheduledExportsService {
     for (const recipient of recipients) {
       if (!recipient.phone && !recipient.email) continue;
       try {
-        await this.sendGate.send({
-          businessId: schedule.businessId,
-          templateKey: 'report_ready',
-          to: { phone: recipient.phone, email: recipient.email },
-          variables: { reportLabel: label, url },
-        });
+        if (reportRunId && schedule.createdByUserId) {
+          // Through the run's own send, so the message id is stored on the run and its delivery
+          // state is later read from the real message. Scheduling is owner-only.
+          await this.reportRuns.send(
+            schedule.businessId,
+            { userId: schedule.createdByUserId, role: Role.owner },
+            reportRunId,
+            { phone: recipient.phone, email: recipient.email },
+          );
+        } else {
+          await this.sendGate.send({
+            businessId: schedule.businessId,
+            templateKey: 'report_ready',
+            to: { phone: recipient.phone, email: recipient.email },
+            variables: { reportLabel: label, url },
+          });
+        }
       } catch (error) {
         this.logger.warn(
           `Scheduled export ${schedule.id}: delivery to ${recipient.phone ?? recipient.email} failed: ${(error as Error).message}`,

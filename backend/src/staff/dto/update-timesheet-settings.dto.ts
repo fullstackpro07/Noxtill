@@ -22,4 +22,11 @@ export class UpdateTimesheetSettingsDto {
   @IsNumber()
   @Min(1)
   overtimeRateMultiplier?: number;
+
+  /** Attendance (UPD-BE-STAFF-03): minutes after a scheduled shift's start before a check-in
+   * counts as "Late" instead of "In". */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  lateThresholdMinutes?: number;
 }

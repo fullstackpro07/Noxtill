@@ -44,6 +44,11 @@ export function fetchCampaigns(): Promise<LiveCampaign[]> {
   return apiFetch<LiveCampaign[]>("/campaigns");
 }
 
+/** Real AI draft, grounded in the objective/audience/offer the builder already has — never invents a price or offer. */
+export function draftCampaignMessage(input: { objective: string; audienceLabel: string; couponCode?: string }): Promise<{ body: string }> {
+  return apiFetch<{ body: string }>("/campaigns/draft-message", { method: "POST", body: JSON.stringify(input) });
+}
+
 export interface CampaignReport {
   campaignId: string;
   segment: string;

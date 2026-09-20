@@ -41,8 +41,8 @@ export class DeadHoursOfferService {
   ) {}
 
   async generate(): Promise<DeadHoursOfferDraft> {
-    const { hourly, weekday } = await this.profit.byTime();
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const { hourly, weekday } = await this.profit.byTime(businessId);
 
     if (hourly.length === 0) {
       return {

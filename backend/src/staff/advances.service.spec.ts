@@ -123,4 +123,32 @@ describe('AdvancesService (UPD-BE-033)', () => {
       );
     }
   });
+
+  it('persists category and recorded-by, and listAll() resolves the recorder name (UPD-BE-STAFF-05)', async () => {
+    const advance = await service.create(
+      businessId,
+      staffUserId,
+      { amount: 40, category: 'Emergency' },
+      userId,
+    );
+    expect(advance.category).toBe('Emergency');
+    expect(advance.recordedByUserId).toBe(userId);
+
+    const all = await service.listAll();
+    const row = all.find((a) => a.id === advance.id);
+    expect(row?.recordedByName).toBe('Advance Staff');
+  });
+
+  it('settle() flips an outstanding advance to deducted without going through payroll', async () => {
+    const advance = await service.create(businessId, staffUserId, {
+      amount: 60,
+    });
+    const settled = await service.settle(advance.id);
+    expect(settled.status).toBe('deducted');
+    expect(settled.deductedInMonth).not.toBeNull();
+
+    await expect(service.settle(advance.id)).rejects.toBeInstanceOf(
+      AppException,
+    );
+  });
 });

@@ -100,7 +100,9 @@ describe('MarketingAssetsService (UPD-BE-105)', () => {
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
-    ownerPhone = `+1415555${String(Date.now()).slice(-4)}`;
+    // Unique per run: this spec's owner rows are not cleaned up, so a fixed-width clock suffix
+    // eventually collides with a leftover user on the users_phone unique index.
+    ownerPhone = `+1415555${String(Date.now()).slice(-6)}${Math.floor(Math.random() * 1000)}`;
     const owner = await prisma.user.create({
       data: {
         email: `owner-${Date.now()}@example.com`,
@@ -122,6 +124,7 @@ describe('MarketingAssetsService (UPD-BE-105)', () => {
 
   afterAll(async () => {
     await prisma.businessUser.deleteMany({ where: { businessId } });
+    await prisma.user.deleteMany({ where: { phone: ownerPhone } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });

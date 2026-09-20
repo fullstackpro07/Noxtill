@@ -157,7 +157,7 @@ export function AllOrdersView() {
   const [newOrderOpen, setNewOrderOpen] = useState(false);
 
   const { data: summary } = useQuery({ queryKey: ["orders-summary"], queryFn: fetchOrdersSummary });
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60_000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60_000 });
 
   const filters: OrdersFilters = useMemo(() => {
     const range = dateRangeFor(datePreset);

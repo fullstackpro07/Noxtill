@@ -1,12 +1,7 @@
 "use client";
 
-import { SubscreenShell } from "@/components/layout/subscreen-shell";
-import { CampaignsTab } from "@/components/marketing/campaigns-tab";
+import { MarketingCampaignsView } from "@/components/marketing/marketing-campaigns-view";
 
 export default function MarketingCampaignsPage() {
-  return (
-    <SubscreenShell title="Campaigns">
-      <CampaignsTab />
-    </SubscreenShell>
-  );
+  return <MarketingCampaignsView />;
 }

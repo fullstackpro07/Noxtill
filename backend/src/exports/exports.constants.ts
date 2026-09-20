@@ -1,4 +1,5 @@
 export const EXPORTS_QUEUE = 'account-zip-export';
+export const DATA_EXPORTS_QUEUE = 'data-exports';
 
 export type ExportKind =
   'sales' | 'customers' | 'credit' | 'stock' | 'expenses' | 'products';

@@ -8,6 +8,7 @@ import {
 import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { OrderStatus } from '@prisma/client';
+import { resolvePolicies } from '../common/policies/policies.service';
 
 /**
  * Public online-ordering / dine-in endpoints (BE-029). No auth — the
@@ -40,7 +41,8 @@ export class PublicOrderingService {
         locale: business.locale,
         branding: business.branding,
       },
-      products,
+      // Cost is the business's own margin — a public storefront has no use for it.
+      products: products.map(({ costPrice: _cost, ...rest }) => rest),
     };
   }
 
@@ -99,10 +101,12 @@ export class PublicOrderingService {
         };
       });
 
+      const taxInclusive = resolvePolicies(business).bool('sales.pricesIncludeTax');
       const { subtotal, tax, total, cogs } = computeOrderTotals(
         itemsData,
         0,
         Number(business.taxRate),
+        taxInclusive,
       );
 
       const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
@@ -124,6 +128,7 @@ export class PublicOrderingService {
           tax,
           discount: 0,
           total,
+          taxInclusive,
           cogs,
         },
       });

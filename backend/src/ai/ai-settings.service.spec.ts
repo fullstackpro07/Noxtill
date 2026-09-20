@@ -92,17 +92,34 @@ describe('AiSettingsService (UPD-BE-115)', () => {
     expect(settings.usageThisMonth.other.calls).toBe(1);
     expect(settings.usageThisMonth.other.costUsd).toBeCloseTo(0.04, 4);
     expect(settings.usageThisMonth.totalCostUsd).toBeCloseTo(0.1, 4);
+    expect(settings.usageThisMonth.totalCalls).toBe(4);
+    expect(settings.aiQueryQuota).toBe(500);
+    expect(settings.usageThisMonth.queryQuotaUsedPercent).toBe(1);
+    expect(new Date(settings.usageThisMonth.limitResetsAt).getUTCDate()).toBe(1);
+    expect(settings.queriesThisWeek).toHaveLength(7);
+    expect(settings.queriesThisWeek.map((d) => d.day)).toEqual([
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+      'Sun',
+    ]);
+    expect(settings.queriesThisWeek.reduce((sum, d) => sum + d.count, 0)).toBe(4);
   });
 
   it('updates the cost cap, rate limit, and merges partial feature toggles without clobbering the rest', async () => {
     const updated = await service.updateSettings(businessId, {
       aiMonthlyCostCapUsd: 25,
       aiRateLimitPerMinute: 30,
+      aiQueryQuota: 1000,
       featureToggles: { reviewReplies: false },
     });
 
     expect(updated.aiMonthlyCostCapUsd).toBe(25);
     expect(updated.aiRateLimitPerMinute).toBe(30);
+    expect(updated.aiQueryQuota).toBe(1000);
     expect(updated.featureToggles.reviewReplies).toBe(false);
     expect(updated.featureToggles.insights).toBe(true);
 

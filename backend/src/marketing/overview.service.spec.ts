@@ -207,6 +207,7 @@ describe('MarketingOverviewService (BE-089, extended UPD-BE-105a)', () => {
     expect(result.totals.spend).toBe(100);
     expect(result.totals.results).toBe(35); // 10 + 5 + 20
     expect(result.totals.delivered).toBe(3); // 2 whatsapp + 1 email
+    expect(result.totals.read).toBe(2); // 1 whatsapp `read` message + 1 email `open` event
     expect(result.totals.blendedCostPerResult).toBe(
       Math.round((100 / 35) * 100) / 100,
     );

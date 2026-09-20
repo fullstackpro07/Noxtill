@@ -36,6 +36,12 @@ const TOOL_DEEP_LINKS: Record<string, DeepLink> = {
   get_new_customers_this_month: { label: "View customers", href: "/customers" },
   find_customer_by_phone: { label: "View customers", href: "/customers" },
   get_order_by_number: { label: "View orders", href: "/orders" },
+  get_expenses_this_month: { label: "View expenses", href: "/expenses" },
+  get_top_products_month: { label: "View product profitability", href: "/profit/product-profitability" },
+  get_top_customers: { label: "View customers", href: "/customers" },
+  get_bookings_on_date: { label: "Open calendar", href: "/bookings" },
+  get_low_stock_products: { label: "View inventory", href: "/inventory" },
+  get_top_debtors: { label: "View credit", href: "/credit" },
 };
 
 /** Derives deep-link chips + help-doc source labels from the real tool trace — the backend's `toolCalls[]` carries no suggested link itself. */

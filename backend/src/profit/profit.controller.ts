@@ -19,13 +19,35 @@ export class ProfitController {
   ) {}
 
   @Get('products')
-  byProduct(@Query() query: QueryProfitProductsDto) {
-    return this.profitService.byProduct(query.window ?? 30);
+  byProduct(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: QueryProfitProductsDto,
+  ) {
+    return this.profitService.byProduct(
+      user.businessId,
+      query.branchId,
+      query.window ?? 30,
+    );
+  }
+
+  @Get('products/suggestions')
+  productSuggestions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: QueryProfitProductsDto,
+  ) {
+    return this.profitService.productSuggestions(
+      user.businessId,
+      query.branchId,
+      query.window ?? 30,
+    );
   }
 
   @Get('time')
-  byTime() {
-    return this.profitService.byTime();
+  byTime(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.profitService.byTime(user.businessId, branchId);
   }
 
   @Post('time/dead-hours-offer')
@@ -40,7 +62,12 @@ export class ProfitController {
 
   @Get('pnl')
   pnl(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryPnlDto) {
-    return this.profitService.pnl(user.businessId, query.month);
+    return this.profitService.pnl(
+      user.businessId,
+      query.month,
+      query.period,
+      query.branchId,
+    );
   }
 
   @Get('bundle-suggestions')

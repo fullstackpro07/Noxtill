@@ -14,6 +14,9 @@ export interface LiveActionItem {
   ageMs: number;
   occurredAt: string;
   deepLink: string;
+  /** UPD-BE-STAFF-07: only ever set for a `complaint` — every other type has no real staff
+   * assignment concept in the backend. */
+  assigneeStaffId: string | null;
 }
 
 export interface LiveActionCenter {

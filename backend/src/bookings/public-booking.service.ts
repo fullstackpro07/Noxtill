@@ -13,6 +13,14 @@ import {
   DEFAULT_BOOKING_LINK_SETTINGS,
 } from './bookings.constants';
 import { assertSlotAvailable } from './booking-lock.util';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  assertBookingWindow,
+  assertChangeWindow,
+  assertDayNotFull,
+  countBookingsOnDay,
+  windowViolation,
+} from './booking-policy.util';
 import {
   AppointmentSource,
   AppointmentStatus,
@@ -142,7 +150,20 @@ export class PublicBookingService {
       })),
     });
 
-    return { slots: slots.map((s) => s.toISOString()) };
+    // Owner policies (notice, how far ahead, daily cap): never offer a slot the booking would refuse.
+    const policies = resolvePolicies(business);
+    const now = new Date();
+    const max = policies.num('bookings.maxDailyBookings');
+    const dayFull =
+      max !== null &&
+      slots.length > 0 &&
+      (await countBookingsOnDay(this.prisma, business.id, slots[0], business.timezone)) >= max;
+
+    return {
+      slots: dayFull
+        ? []
+        : slots.filter((s) => windowViolation(policies, s, now) === null).map((s) => s.toISOString()),
+    };
   }
 
   async createBooking(slug: string, dto: CreatePublicBookingDto) {
@@ -166,6 +187,8 @@ export class PublicBookingService {
     const endsAt = new Date(
       startsAt.getTime() + (service.durationMin ?? 30) * 60 * 1000,
     );
+    const policies = resolvePolicies(business);
+    assertBookingWindow(policies, startsAt, new Date());
 
     const appointment = await this.prisma.$transaction(async (tx) => {
       await assertSlotAvailable(tx, {
@@ -175,6 +198,7 @@ export class PublicBookingService {
         startsAt,
         endsAt,
       });
+      await assertDayNotFull(tx, policies, business.id, startsAt, business.timezone);
 
       const customer = await tx.customer.upsert({
         where: {
@@ -226,6 +250,11 @@ export class PublicBookingService {
       appointment.endsAt.getTime() - appointment.startsAt.getTime();
     const newStart = new Date(startsAt);
     const newEnd = new Date(newStart.getTime() + durationMs);
+    const business = await this.prisma.business.findUniqueOrThrow({ where: { id: appointment.businessId } });
+    const policies = resolvePolicies(business);
+    const now = new Date();
+    assertChangeWindow(policies, 'reschedule', appointment.startsAt, now);
+    assertBookingWindow(policies, newStart, now);
 
     return this.prisma.$transaction(async (tx) => {
       await assertSlotAvailable(tx, {
@@ -236,6 +265,7 @@ export class PublicBookingService {
         endsAt: newEnd,
         excludeAppointmentId: appointment.id,
       });
+      await assertDayNotFull(tx, policies, appointment.businessId, newStart, business.timezone, appointment.id);
 
       return tx.appointment.update({
         where: { id: appointment.id },
@@ -246,6 +276,8 @@ export class PublicBookingService {
 
   async cancel(token: string) {
     const appointment = await this.loadByToken(token);
+    const business = await this.prisma.business.findUniqueOrThrow({ where: { id: appointment.businessId } });
+    assertChangeWindow(resolvePolicies(business), 'cancel', appointment.startsAt, new Date());
     const updated = await this.prisma.appointment.update({
       where: { id: appointment.id },
       data: { status: AppointmentStatus.cancelled },

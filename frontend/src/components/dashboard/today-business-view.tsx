@@ -75,7 +75,7 @@ export function TodayBusinessView() {
   const [filters, setFilters] = useState<TodayBusinessFilters>({});
   const now = useNow(60_000);
 
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60 * 1000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60 * 1000 });
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["today-business", filters],
     queryFn: () => fetchTodayBusiness(filters),

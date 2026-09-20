@@ -1,6 +1,7 @@
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AuditService } from '../common/audit/audit.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AttendanceService } from './attendance.service';
 
@@ -29,7 +30,8 @@ describe('AttendanceService (BE-057)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new AttendanceService(tenantPrisma);
+    const audit = new AuditService(tenantPrisma, cls as unknown as ClsService);
+    service = new AttendanceService(tenantPrisma, audit);
 
     const business = await prisma.business.create({
       data: {
@@ -101,5 +103,87 @@ describe('AttendanceService (BE-057)', () => {
     const filtered = await service.list(businessUser.id);
     expect(filtered.every((r) => r.staffUserId === businessUser.id)).toBe(true);
     expect(filtered.length).toBe(all.length);
+  });
+
+  describe('manualEntry() / correct() (UPD-BE-STAFF-03)', () => {
+    it('manualEntry() creates a complete, edited-flagged row and writes a real audit entry', async () => {
+      const businessUser = await prisma.businessUser.findFirstOrThrow({
+        where: { businessId, userId },
+      });
+      const checkIn = new Date('2026-08-20T09:00:00.000Z').toISOString();
+      const checkOut = new Date('2026-08-20T17:00:00.000Z').toISOString();
+
+      const created = await service.manualEntry(
+        businessUser.id,
+        checkIn,
+        checkOut,
+        'Forgot to clock in',
+      );
+
+      expect(created.edited).toBe(true);
+      expect(created.checkOut?.toISOString()).toBe(checkOut);
+
+      const auditRow = await prisma.auditLog.findFirst({
+        where: { businessId, entity: 'attendance', entityId: created.id },
+      });
+      expect(auditRow?.action).toBe('attendance.manual_entry');
+    });
+
+    it('manualEntry() rejects a check-out at or before check-in', async () => {
+      const businessUser = await prisma.businessUser.findFirstOrThrow({
+        where: { businessId, userId },
+      });
+      await expect(
+        service.manualEntry(
+          businessUser.id,
+          new Date('2026-08-20T09:00:00.000Z').toISOString(),
+          new Date('2026-08-20T08:00:00.000Z').toISOString(),
+          'Bad entry',
+        ),
+      ).rejects.toBeInstanceOf(Error);
+    });
+
+    it("correct() updates the row, preserves the original in the audit log's before, and flags edited", async () => {
+      const businessUser = await prisma.businessUser.findFirstOrThrow({
+        where: { businessId, userId },
+      });
+      const original = await service.manualEntry(
+        businessUser.id,
+        new Date('2026-08-21T09:00:00.000Z').toISOString(),
+        new Date('2026-08-21T17:00:00.000Z').toISOString(),
+        'Initial entry',
+      );
+
+      const correctedCheckOut = new Date(
+        '2026-08-21T18:20:00.000Z',
+      ).toISOString();
+      const corrected = await service.correct(
+        original.id,
+        original.checkIn.toISOString(),
+        correctedCheckOut,
+        'Actually left later',
+      );
+
+      expect(corrected.edited).toBe(true);
+      expect(corrected.checkOut?.toISOString()).toBe(correctedCheckOut);
+
+      const auditRow = await prisma.auditLog.findFirst({
+        where: { businessId, entity: 'attendance', entityId: original.id, action: 'attendance.correct' },
+      });
+      expect(
+        (auditRow?.before as { checkOut: string } | null)?.checkOut,
+      ).toBe('2026-08-21T17:00:00.000Z');
+    });
+
+    it('correct() 404s for an entry that does not exist', async () => {
+      await expect(
+        service.correct(
+          'not-a-real-id',
+          new Date().toISOString(),
+          null,
+          'note',
+        ),
+      ).rejects.toThrow();
+    });
   });
 });

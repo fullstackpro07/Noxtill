@@ -53,6 +53,8 @@ export function computeOrderTotals(
   }[],
   discount: number,
   defaultTaxRatePercent: number,
+  /** Prices already contain tax: tax is extracted from them and the total does not add it again. */
+  taxInclusive = false,
 ): OrderTotals {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const cogs = items.reduce((sum, item) => sum + item.cost * item.qty, 0);
@@ -62,10 +64,11 @@ export function computeOrderTotals(
     items.reduce((sum, item) => {
       const lineAmount = item.price * item.qty;
       const rate = item.taxRatePercent ?? defaultTaxRatePercent;
-      return sum + lineAmount * (1 - discountRatio) * (rate / 100);
+      const afterDiscount = lineAmount * (1 - discountRatio);
+      return sum + (taxInclusive ? (afterDiscount * rate) / (100 + rate) : afterDiscount * (rate / 100));
     }, 0),
   );
-  const total = round2(subtotal - discount + tax);
+  const total = round2(taxInclusive ? subtotal - discount : subtotal - discount + tax);
 
   return { subtotal: round2(subtotal), tax, total, cogs: round2(cogs) };
 }

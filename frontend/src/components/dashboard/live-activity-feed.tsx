@@ -67,7 +67,7 @@ export function LiveActivityFeed() {
   const [detailEvent, setDetailEvent] = useState<LiveActivityEvent | null>(null);
   const now = useNow();
 
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60 * 1000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60 * 1000 });
   const { data: openTables } = useQuery({ queryKey: ["open-tables-count"], queryFn: fetchOpenTablesCount, refetchInterval: 30_000 });
   const staffNameByUserId = useMemo(() => new Map((staff ?? []).map((s) => [s.userId, s.name])), [staff]);
 

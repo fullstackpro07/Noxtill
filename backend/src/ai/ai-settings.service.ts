@@ -8,6 +8,8 @@ import {
   KIND_TO_FEATURE,
 } from './ai-infra.constants';
 
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 type FeatureToggles = Record<AiFeatureKey, boolean>;
 
 function resolveToggles(raw: unknown): FeatureToggles {
@@ -29,6 +31,29 @@ function resolveToggles(raw: unknown): FeatureToggles {
 export class AiSettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Real per-day counts for the current calendar week (Monday–Sunday), for the AI Settings
+   * "Queries this week" chart. MySQL's `WEEKDAY()` returns 0=Monday..6=Sunday directly, matching
+   * `WEEKDAY_LABELS`'s order, so no remapping is needed the way `DAYOFWEEK()` needs elsewhere. */
+  private async getQueriesThisWeek(
+    businessId: string,
+  ): Promise<{ day: string; count: number }[]> {
+    const now = new Date();
+    const isoDow = (now.getUTCDay() + 6) % 7; // 0=Monday..6=Sunday
+    const weekStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - isoDow),
+    );
+
+    const rows = await this.prisma.$queryRaw<{ dow: number; count: bigint }[]>`
+      SELECT WEEKDAY(created_at) AS dow, COUNT(*) AS count
+      FROM ai_call_logs
+      WHERE business_id = ${businessId} AND created_at >= ${weekStart}
+      GROUP BY dow
+    `;
+
+    const countByDow = new Map(rows.map((r) => [Number(r.dow), Number(r.count)]));
+    return WEEKDAY_LABELS.map((day, i) => ({ day, count: countByDow.get(i) ?? 0 }));
+  }
+
   async getSettings(businessId: string) {
     const business = await this.prisma.business.findUniqueOrThrow({
       where: { id: businessId },
@@ -37,13 +62,19 @@ export class AiSettingsService {
     const monthStart = new Date();
     monthStart.setUTCDate(1);
     monthStart.setUTCHours(0, 0, 0, 0);
+    const limitResetsAt = new Date(
+      Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1),
+    );
 
-    const grouped = await this.prisma.aiCallLog.groupBy({
-      by: ['kind'],
-      where: { businessId, createdAt: { gte: monthStart } },
-      _sum: { estimatedCostUsd: true },
-      _count: { _all: true },
-    });
+    const [grouped, queriesThisWeek] = await Promise.all([
+      this.prisma.aiCallLog.groupBy({
+        by: ['kind'],
+        where: { businessId, createdAt: { gte: monthStart } },
+        _sum: { estimatedCostUsd: true },
+        _count: { _all: true },
+      }),
+      this.getQueriesThisWeek(businessId),
+    ]);
 
     const usageByFeature: Record<
       AiFeatureKey,
@@ -71,16 +102,27 @@ export class AiSettingsService {
     const totalCostUsd =
       Object.values(usageByFeature).reduce((sum, u) => sum + u.costUsd, 0) +
       otherCostUsd;
+    const totalCalls =
+      Object.values(usageByFeature).reduce((sum, u) => sum + u.calls, 0) +
+      otherCalls;
 
     return {
       aiMonthlyCostCapUsd: Number(business.aiMonthlyCostCapUsd),
       aiRateLimitPerMinute: business.aiRateLimitPerMinute,
+      aiQueryQuota: business.aiQueryQuota,
       featureToggles: resolveToggles(business.aiFeatureToggles),
       usageThisMonth: {
         byFeature: usageByFeature,
         other: { costUsd: otherCostUsd, calls: otherCalls },
         totalCostUsd,
+        totalCalls,
+        queryQuotaUsedPercent:
+          business.aiQueryQuota > 0
+            ? Math.min(100, Math.round((totalCalls / business.aiQueryQuota) * 100))
+            : 0,
+        limitResetsAt: limitResetsAt.toISOString(),
       },
+      queriesThisWeek,
       disclosureText: AI_USAGE_DISCLOSURE_TEXT,
     };
   }
@@ -99,6 +141,7 @@ export class AiSettingsService {
       data: {
         aiMonthlyCostCapUsd: dto.aiMonthlyCostCapUsd,
         aiRateLimitPerMinute: dto.aiRateLimitPerMinute,
+        aiQueryQuota: dto.aiQueryQuota,
         aiFeatureToggles: nextToggles,
       },
     });

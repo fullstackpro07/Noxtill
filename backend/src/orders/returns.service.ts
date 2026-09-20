@@ -2,7 +2,8 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
+import { CLS_KEY_BUSINESS_ID, CLS_KEY_ROLE, CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
+import { resolvePolicies } from '../common/policies/policies.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateReturnDto } from './dto/create-return.dto';
@@ -11,6 +12,7 @@ import {
   Prisma,
   ProductKind,
   ReturnStatus,
+  Role,
   StockMovementKind,
 } from '@prisma/client';
 
@@ -36,6 +38,8 @@ export class ReturnsService {
       where: { id: dto.orderId },
       include: {
         items: true,
+        payments: true,
+        creditEntries: true,
         returns: {
           where: { status: { not: ReturnStatus.rejected } },
           include: { items: true },
@@ -44,6 +48,20 @@ export class ReturnsService {
     });
     if (!order || order.businessId !== businessId) {
       throw new NotFoundException('Order not found');
+    }
+
+    // Owner policy: refund the way the customer paid. An order with no recorded payment
+    // (e.g. still unpaid) has no "original method" to hold the refund to.
+    if ((await this.policies(businessId)).bool('returns.refundToOriginalMethod')) {
+      const original = new Set<string>(order.payments.map((p) => p.method));
+      if (order.creditEntries.some((e) => e.kind === 'credit')) original.add('credit');
+      if (original.size > 0 && !original.has(dto.refundMethod)) {
+        throw new AppException(
+          RETURN_ERROR_CODES.METHOD_NOT_ORIGINAL,
+          `This order was paid by ${[...original].join(' / ')}; refunds must go back the same way`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
     }
 
     if (
@@ -123,6 +141,20 @@ export class ReturnsService {
   async approve(businessId: string, id: string) {
     const actorUserId = this.cls.get<string>(CLS_KEY_USER_ID);
     const ret = await this.findPending(businessId, id);
+
+    // Owner policy: a refund above the limit is the owner's call, whoever holds returns.approve.
+    const refundLimit = (await this.policies(businessId)).num('returns.refundLimit');
+    if (
+      refundLimit !== null &&
+      Number(ret.refundAmount) > refundLimit &&
+      this.cls.get<Role | undefined>(CLS_KEY_ROLE) !== Role.owner
+    ) {
+      throw new AppException(
+        RETURN_ERROR_CODES.ABOVE_REFUND_LIMIT,
+        `Refunds above ${refundLimit.toFixed(2)} need the owner's approval (this one is ${Number(ret.refundAmount).toFixed(2)})`,
+        HttpStatus.FORBIDDEN,
+      );
+    }
 
     // Card/online refunds hit a real external gateway — done BEFORE any DB write below, so a
     // failed gateway call (e.g. the disclosed Payment.providerRef gap) leaves this return
@@ -235,6 +267,13 @@ export class ReturnsService {
         reason: reason ? `${ret.reason}\n\nRejected: ${reason}` : ret.reason,
       },
     });
+  }
+
+  private async policies(businessId: string) {
+    const activeId = this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
+    return resolvePolicies(
+      await this.tenantPrisma.client.business.findUnique({ where: { id: activeId }, select: { policies: true } }),
+    );
   }
 
   private async findPending(businessId: string, id: string) {

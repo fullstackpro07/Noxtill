@@ -4,17 +4,12 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, ArrowRight, Check, Truck, PackageCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorBanner } from "@/components/shared/error-states";
-import { SkeletonRow } from "@/components/shared/skeleton";
-import { BranchDropdown } from "./branch-dropdown";
 import {
   fetchStockTransfers,
-  createStockTransfer,
   approveStockTransfer,
   shipStockTransfer,
   receiveStockTransfer,
@@ -23,17 +18,18 @@ import {
   type StockTransferStatus,
 } from "@/lib/stock-transfers-api";
 import { fetchBranches } from "@/lib/branches-api";
-import { fetchProducts } from "@/lib/products-api";
 import { formatDate } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
+import { BR, KpiTile, KpiSkeleton, Chip, th, type Tone } from "@/components/branches/branches-ui";
+import { useBranchDrawer } from "@/components/branches/branch-drawer-context";
 
-const STATUS_TONE: Record<StockTransferStatus, "primary" | "success" | "neutral" | "danger" | "warning"> = {
-  pending: "warning",
-  approved: "primary",
-  shipped: "primary",
-  received: "success",
-  rejected: "danger",
+const STATUS_TONE: Record<StockTransferStatus, Tone> = {
+  pending: "amber",
+  approved: "blue",
+  shipped: "blue",
+  received: "green",
+  rejected: "red",
   cancelled: "neutral",
 };
 
@@ -47,8 +43,8 @@ const STATUS_FILTERS: { key: StockTransferStatus | "all"; label: string }[] = [
 ];
 
 export function StockTransfersView() {
+  const { openTransfer } = useBranchDrawer();
   const [filter, setFilter] = useState<StockTransferStatus | "all">("all");
-  const [creating, setCreating] = useState(false);
   const [rejecting, setRejecting] = useState<StockTransfer | null>(null);
   const [receiving, setReceiving] = useState<StockTransfer | null>(null);
   const queryClient = useQueryClient();
@@ -57,8 +53,16 @@ export function StockTransfersView() {
     queryKey: ["stock-transfers", filter],
     queryFn: () => fetchStockTransfers(filter === "all" ? undefined : filter),
   });
+  const { data: allTransfers = [] } = useQuery({ queryKey: ["stock-transfers", "all"], queryFn: () => fetchStockTransfers() });
   const { data: branches = [] } = useQuery({ queryKey: ["branches"], queryFn: fetchBranches });
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? "—";
+
+  const kpis = [
+    { label: "Pending approval", value: allTransfers.filter((t) => t.status === "pending").length, tone: "amber" as const },
+    { label: "In transit", value: allTransfers.filter((t) => t.status === "shipped").length, tone: "blue" as const },
+    { label: "Received", value: allTransfers.filter((t) => t.status === "received").length, tone: undefined },
+    { label: "Rejected / cancelled", value: allTransfers.filter((t) => t.status === "rejected" || t.status === "cancelled").length, tone: undefined },
+  ];
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["stock-transfers"] });
@@ -101,77 +105,74 @@ export function StockTransfersView() {
   });
 
   return (
-    <div className="flex flex-col gap-5">
+    <main className="flex flex-col gap-[18px] px-6 pb-[30px] pt-[18px]">
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
+        {isPending ? <KpiSkeleton count={4} /> : kpis.map((k) => <KpiTile key={k.label} label={k.label} value={String(k.value)} tone={k.tone} />)}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1">
+        <div style={{ display: "inline-flex", padding: 3, background: "#F1F3F6", borderRadius: 10, gap: 2, overflowX: "auto" }}>
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.key}
               type="button"
               onClick={() => setFilter(f.key)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                filter === f.key ? "bg-surface text-fg shadow-[var(--shadow-sm)]" : "text-fg-muted hover:text-fg"
-              }`}
+              style={{ height: 26, flexShrink: 0, display: "flex", alignItems: "center", padding: "0 10px", borderRadius: 8, fontSize: 11.5, cursor: "pointer", fontWeight: filter === f.key ? 700 : 600, color: filter === f.key ? BR.text : BR.textMuted, background: filter === f.key ? "#fff" : "transparent", boxShadow: filter === f.key ? "0 1px 2px rgba(16,24,40,.08)" : "none", border: 0 }}
             >
               {f.label}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <BranchDropdown />
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            New transfer
-          </Button>
-        </div>
+        <button type="button" onClick={() => openTransfer()} style={{ height: 34, display: "flex", alignItems: "center", gap: 6, padding: "0 13px", borderRadius: 10, background: BR.primary, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: 0 }}>
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          New transfer
+        </button>
       </div>
 
       {isError ? (
         <ErrorBanner title="Couldn't load stock transfers" description="Check your connection and try again." onRetry={() => refetch()} />
       ) : isPending ? (
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <SkeletonRow key={i} />
-          ))}
-        </div>
+        <div style={{ borderRadius: 13, border: `1px solid ${BR.border}`, background: "#fff", height: 160 }} />
       ) : transfers.length === 0 ? (
-        <EmptyState icon={Truck} title="No stock transfers" description="Move inventory between branches — request, approve, ship, and receive." action={{ label: "New transfer", onClick: () => setCreating(true) }} />
+        <EmptyState icon={Truck} title="No stock transfers" description="Move inventory between branches — request, approve, ship, and receive." action={{ label: "New transfer", onClick: () => openTransfer() }} />
       ) : (
-        <div className="overflow-x-auto rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-start text-xs font-medium uppercase tracking-wide text-fg-faint">
-                <th className="px-4 py-3 text-start">Items</th>
-                <th className="px-4 py-3 text-start">Route</th>
-                <th className="px-4 py-3 text-start">Status</th>
-                <th className="px-4 py-3 text-start">Created</th>
-                <th className="px-4 py-3 text-end">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transfers.map((t) => {
-                return (
-                  <tr key={t.id} className="border-b border-border last:border-0 hover:bg-surface-2/50">
-                    <td className="px-4 py-3 text-fg-muted">
+        <div style={{ background: "#fff", border: `1px solid ${BR.border}`, borderRadius: 13, boxShadow: "0 1px 2px rgba(16,24,40,.05)", overflow: "hidden" }}>
+          <div className="overflow-x-auto nx-scroll">
+            <table style={{ width: "100%", minWidth: 1140, borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#FAFBFC", borderBottom: `1px solid ${BR.border}` }}>
+                  <th style={th("left")}>Items</th>
+                  <th style={th("left")}>Route</th>
+                  <th style={th("left")}>Status</th>
+                  <th style={th("left")}>Created</th>
+                  <th style={th("right")}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.map((t) => (
+                  <tr key={t.id} style={{ borderBottom: "1px solid #F3F4F7", background: t.status === "pending" ? "#FFFDF5" : "#fff" }}>
+                    <td style={{ padding: "11px 12px 11px 18px", fontSize: 12, color: "#45505F" }}>
                       {t.items.map((i) => i.sourceProduct.name).join(", ")}
-                      <span className="ms-1 text-fg-faint">({t.items.reduce((s, i) => s + i.qty, 0)} units)</span>
+                      <span style={{ marginLeft: 4, color: BR.textFaint }}>({t.items.reduce((s, i) => s + i.qty, 0)} units)</span>
                       {t.status === "received" && t.items.some((i) => i.receivedQty != null && i.receivedQty < i.qty) && (
-                        <span className="ms-1 text-xs text-accent-foreground">
+                        <span style={{ marginLeft: 4, fontSize: 11, color: "#B54708" }}>
                           — partial: {t.items.reduce((s, i) => s + (i.receivedQty ?? i.qty), 0)}/{t.items.reduce((s, i) => s + i.qty, 0)} received
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-1.5 text-xs text-fg-muted">
+                    <td style={{ padding: "11px 12px" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#45505F" }}>
                         {branchName(t.sourceBusinessId)} <ArrowRight className="h-3 w-3 shrink-0" aria-hidden /> {branchName(t.destBusinessId)}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={STATUS_TONE[t.status]}>{t.status}</Badge>
-                      {t.note && <p className="mt-1 max-w-48 truncate text-xs text-fg-faint">{t.note}</p>}
+                    <td style={{ padding: "11px 12px" }}>
+                      <Chip tone={STATUS_TONE[t.status]} style={{ height: 21, fontSize: 10 }}>
+                        {t.status}
+                      </Chip>
+                      {t.note && <p style={{ marginTop: 4, maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11, color: BR.textFaint }}>{t.note}</p>}
                     </td>
-                    <td className="px-4 py-3 text-fg-muted">{formatDate(t.createdAt)}</td>
-                    <td className="px-4 py-3">
+                    <td style={{ padding: "11px 12px", fontSize: 11.5, color: BR.textFaint }}>{formatDate(t.createdAt)}</td>
+                    <td style={{ padding: "11px 18px 11px 12px" }}>
                       <div className="flex items-center justify-end gap-1.5">
                         {t.status === "pending" && (
                           <>
@@ -199,14 +200,15 @@ export function StockTransfersView() {
                       </div>
                     </td>
                   </tr>
-                );
-              })}
+                ))}
             </tbody>
           </table>
+          </div>
+          <div style={{ padding: "12px 18px", borderTop: "1px solid #F0F2F5", background: "#FCFCFD", fontSize: 11, color: BR.textFaint }}>
+            Request → approval → shipment → receipt, each step with its own user and timestamp. Stock leaves the source only on shipment and arrives only on receipt.
+          </div>
         </div>
       )}
-
-      <CreateTransferDialog open={creating} onClose={() => setCreating(false)} />
 
       {receiving && (
         <ReceiveTransferDialog
@@ -236,7 +238,7 @@ export function StockTransfersView() {
           </>
         }
       />
-    </div>
+    </main>
   );
 }
 
@@ -305,77 +307,3 @@ function ReceiveTransferDialog({
   );
 }
 
-function CreateTransferDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
-  return <CreateTransferDialogBody onClose={onClose} />;
-}
-
-function CreateTransferDialogBody({ onClose }: { onClose: () => void }) {
-  const [destBusinessId, setDestBusinessId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [qty, setQty] = useState("1");
-  const [note, setNote] = useState("");
-  const queryClient = useQueryClient();
-
-  const { data: branches = [] } = useQuery({ queryKey: ["branches"], queryFn: fetchBranches });
-  const { data: products = [] } = useQuery({ queryKey: ["products", "active"], queryFn: () => fetchProducts({ active: true }) });
-
-  const valid = destBusinessId !== "" && productId !== "" && Number(qty) > 0;
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      createStockTransfer({
-        destBusinessId,
-        note: note.trim() || undefined,
-        items: [{ productId, qty: Number(qty) }],
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["stock-transfers"] });
-      toast.success("Transfer requested.");
-      onClose();
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't create this transfer — please try again."),
-  });
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="New stock transfer"
-      description="Sends from your currently selected branch. The destination must match a product by SKU."
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={!valid || mutation.isPending}>
-            {mutation.isPending ? "Requesting…" : "Request transfer"}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3.5">
-        <Select label="Destination branch" value={destBusinessId} onChange={(e) => setDestBusinessId(e.target.value)}>
-          <option value="">Select…</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
-        <div className="grid grid-cols-[2fr_1fr] gap-3">
-          <Select label="Product" value={productId} onChange={(e) => setProductId(e.target.value)}>
-            <option value="">Select…</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.sku ? `(${p.sku})` : "— no SKU"}
-              </option>
-            ))}
-          </Select>
-          <Input label="Qty" type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} />
-        </div>
-        <Input label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-      </div>
-    </Dialog>
-  );
-}

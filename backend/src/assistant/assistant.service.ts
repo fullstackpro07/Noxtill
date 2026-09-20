@@ -1,3 +1,5 @@
+import { resolvePolicies } from '../common/policies/policies.service';
+import { maskContacts } from './contact-redaction';
 import {
   HttpStatus,
   Injectable,
@@ -117,7 +119,9 @@ export class AssistantService {
       let stream: NodeJS.ReadableStream;
       try {
         stream = await this.claude.streamMessage({
-          system: SYSTEM_PROMPT,
+          // Without the real date the model cannot resolve "tomorrow"/"yesterday" into the
+          // YYYY-MM-DD `get_bookings_on_date` needs — it would have to guess.
+          system: `${SYSTEM_PROMPT} Today's date is ${new Date().toISOString().slice(0, 10)}.`,
           messages,
           tools: toAnthropicTools(),
         });
@@ -256,10 +260,13 @@ export class AssistantService {
       return { error: `Unknown tool: ${name}` };
     }
     try {
-      return await tool.execute(
+      const output = await tool.execute(
         { businessId, tenantPrisma: this.tenantPrisma, prisma: this.prisma },
         input,
       );
+      // Owner policy: customer phone/email never reach the model.
+      const business = await this.prisma.business.findUnique({ where: { id: businessId }, select: { policies: true } });
+      return resolvePolicies(business).bool('ai.redactContacts') ? maskContacts(output) : output;
     } catch (error) {
       this.logger.error(`Tool "${name}" failed: ${(error as Error).message}`);
       return { error: 'Tool execution failed' };

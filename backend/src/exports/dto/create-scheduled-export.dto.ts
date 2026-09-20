@@ -2,8 +2,11 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { EXPORT_FORMATS, EXPORT_KINDS } from '../exports.constants';
@@ -43,6 +46,20 @@ export class CreateScheduledExportDto {
 
   @IsIn(FREQUENCIES)
   frequency!: (typeof FREQUENCIES)[number];
+
+  /** Weekly schedules: 0 (Sunday) to 6 (Saturday). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  dayOfWeek?: number;
+
+  /** Monthly schedules: 1 to 28, so every month has the day. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(28)
+  dayOfMonth?: number;
 
   /** Real WhatsApp/email recipients — omitted or empty keeps the original in-app-notify-the-creator behavior. */
   @IsOptional()

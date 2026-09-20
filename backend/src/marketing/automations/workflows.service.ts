@@ -31,11 +31,34 @@ export class WorkflowsService {
     });
   }
 
-  list(triggerKey?: WorkflowTriggerKey) {
-    return this.tenantPrisma.client.workflow.findMany({
+  /** `sentCount`/`lastFiredAt` (Marketing module v2) are real, derived from `WorkflowRun` —
+   * `sentCount` counts successful runs (the only ones that actually executed an action),
+   * `lastFiredAt` is the most recent run of any status so a chronically-failing automation still
+   * shows when it last tried. */
+  async list(triggerKey?: WorkflowTriggerKey) {
+    const workflows = await this.tenantPrisma.client.workflow.findMany({
       where: { triggerKey },
       orderBy: { createdAt: 'desc' },
     });
+    return Promise.all(
+      workflows.map(async (workflow) => {
+        const [sentCount, lastRun] = await Promise.all([
+          this.tenantPrisma.client.workflowRun.count({
+            where: { workflowId: workflow.id, status: 'success' },
+          }),
+          this.tenantPrisma.client.workflowRun.findFirst({
+            where: { workflowId: workflow.id },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+          }),
+        ]);
+        return {
+          ...workflow,
+          sentCount,
+          lastFiredAt: lastRun?.createdAt ?? null,
+        };
+      }),
+    );
   }
 
   async findOne(id: string) {

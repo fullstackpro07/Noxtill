@@ -68,18 +68,29 @@ export class SegmentsService {
     }
   }
 
-  /** Real, persisted segments (UPD-BE-098). */
+  /** Real, persisted segments (UPD-BE-098). `spend` (Marketing module v2's Audiences tab) is the
+   * real sum of `lifetimeSpend` across today's matching members — what this group has already
+   * spent, not a forecast of what a campaign to them would earn. */
   async list() {
     const segments = await this.tenantPrisma.client.segment.findMany({
       orderBy: { createdAt: 'desc' },
     });
     return Promise.all(
-      segments.map(async (segment) => ({
-        ...segment,
-        count: await this.tenantPrisma.client.customer.count({
-          where: rulesToWhere(segment.rules as unknown as SegmentRules),
-        }),
-      })),
+      segments.map(async (segment) => {
+        const where = rulesToWhere(segment.rules as unknown as SegmentRules);
+        const [count, spend] = await Promise.all([
+          this.tenantPrisma.client.customer.count({ where }),
+          this.tenantPrisma.client.customer.aggregate({
+            where,
+            _sum: { lifetimeSpend: true },
+          }),
+        ]);
+        return {
+          ...segment,
+          count,
+          spend: Number(spend._sum.lifetimeSpend ?? 0),
+        };
+      }),
     );
   }
 

@@ -18,6 +18,10 @@ interface RawActionItem {
   reason: string;
   occurredAt: Date;
   deepLink: string;
+  /** Staff module v2 (UPD-BE-STAFF-07): only a `complaint` item carries a real assignee — every
+   * other type (low_stock/overdue_credit/unreplied_review) has no staff-attribution concept in
+   * the backend, so this stays null for those rather than guessing. */
+  assigneeStaffId?: string | null;
 }
 
 interface LowStockRow {
@@ -112,6 +116,7 @@ export class ActionCenterService {
         ageMs: now.getTime() - item.occurredAt.getTime(),
         occurredAt: item.occurredAt,
         deepLink: item.deepLink,
+        assigneeStaffId: item.assigneeStaffId ?? null,
       }))
       .sort((a, b) => {
         const priorityRank: Record<ActionItemPriority, number> = {
@@ -223,6 +228,7 @@ export class ActionCenterService {
       reason: row.message ?? 'No comment left',
       occurredAt: row.createdAt,
       deepLink: '/reviews',
+      assigneeStaffId: row.assignedTo,
     }));
   }
 

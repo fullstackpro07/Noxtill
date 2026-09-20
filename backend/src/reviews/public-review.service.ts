@@ -234,6 +234,7 @@ export class PublicReviewService {
     const destinations = await this.resolvePlatformDestinations(
       reviewRequest.businessId,
       reviewRequest.business.publicReviewUrl,
+      reviewRequest.business.reviewSettings,
     );
     if (destinations.length === 1) {
       return { redirect: destinations[0].url };
@@ -247,6 +248,7 @@ export class PublicReviewService {
   private async resolvePlatformDestinations(
     businessId: string,
     primaryUrl: string | null,
+    reviewSettings: unknown,
   ): Promise<{ platform: string; url: string }[]> {
     const extra = await this.prisma.reviewPlatformDestination.findMany({
       where: { businessId },
@@ -254,9 +256,17 @@ export class PublicReviewService {
     });
     const destinations: { platform: string; url: string }[] = [];
     if (primaryUrl) {
-      destinations.push({ platform: 'primary', url: primaryUrl });
+      // The real configured platform for the primary destination, not an assumed one — it's just
+      // as likely to be Facebook or Yelp as Google.
+      const primaryPlatform =
+        ((reviewSettings as Record<string, unknown> | null)
+          ?.publicReviewPlatform as string | undefined) ?? 'google';
+      destinations.push({ platform: primaryPlatform, url: primaryUrl });
     }
     for (const row of extra) {
+      // A business could configure the same platform as both primary and an extra row (e.g. after
+      // changing their mind) — de-duplicate so the customer is never offered the same platform twice.
+      if (destinations.some((d) => d.platform === row.platform)) continue;
       destinations.push({ platform: row.platform, url: row.url });
     }
     return destinations;

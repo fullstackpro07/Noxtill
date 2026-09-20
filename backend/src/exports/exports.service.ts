@@ -162,6 +162,17 @@ export class ExportsService {
     return { url };
   }
 
+  /** Adds one module's rows as its own worksheet (used to build a multi-sheet workbook). */
+  addSheet(
+    workbook: ExcelJS.Workbook,
+    kind: ExportKind,
+    rows: Record<string, unknown>[],
+  ): void {
+    const sheet = workbook.addWorksheet(SHEET_TITLE[kind]);
+    sheet.columns = SHEET_COLUMNS[kind];
+    sheet.addRows(rows);
+  }
+
   async buildXlsxBuffer(
     businessId: string,
     kind: ExportKind,
@@ -176,7 +187,7 @@ export class ExportsService {
     return Buffer.from(buffer);
   }
 
-  private async buildCsvBuffer(
+  async buildCsvBuffer(
     kind: ExportKind,
     rows: Record<string, unknown>[],
   ): Promise<Buffer> {
@@ -225,7 +236,7 @@ export class ExportsService {
     return this.pdfRenderer.renderPdf(html);
   }
 
-  private async fetchRows(
+  async fetchRows(
     businessId: string,
     kind: ExportKind,
   ): Promise<Record<string, unknown>[]> {

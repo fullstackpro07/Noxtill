@@ -37,7 +37,7 @@ export function DraftOrdersPanel() {
   const [deleteOldOpen, setDeleteOldOpen] = useState(false);
 
   const { data: drafts } = useQuery({ queryKey: ["draft-orders"], queryFn: fetchDraftOrders });
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60_000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60_000 });
 
   const filtered = useMemo(() => {
     if (!drafts) return [];

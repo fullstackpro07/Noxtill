@@ -8,6 +8,10 @@ export class CreateAdvanceDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
 }
 
 export class UpdateAdvanceDto {
@@ -19,4 +23,8 @@ export class UpdateAdvanceDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
 }

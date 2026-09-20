@@ -39,7 +39,7 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
   });
   const { data: hourly, isPending: hourlyPending } = useQuery({
     queryKey: ["profit-by-time"],
-    queryFn: fetchProfitByTime,
+    queryFn: () => fetchProfitByTime(),
     enabled: mode === "hour",
   });
 

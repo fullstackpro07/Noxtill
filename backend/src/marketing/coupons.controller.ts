@@ -30,6 +30,11 @@ export class CouponsController {
     return this.coupons.list();
   }
 
+  @Get('stats/discount-given')
+  discountGiven() {
+    return this.coupons.discountGiven();
+  }
+
   // POS checkout preview (Marketing depth fix, UPD-INT-009) — no capability guard, same as
   // `POST /sales` itself: any staff member ringing up a sale can check a coupon code before
   // confirming, they just can't create/edit/delete coupons (that's COUPONS_MANAGE).

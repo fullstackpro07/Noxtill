@@ -8,6 +8,8 @@ import { CommissionsService } from './commissions.service';
 import { TimesheetsService } from './timesheets.service';
 import { PAYROLL_SHEET_TITLE } from './payroll.constants';
 import { S3Service } from '../common/storage/s3.service';
+import type { AuditService } from '../common/audit/audit.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 import { Role } from '@prisma/client';
 
 class FakeClsService {
@@ -43,7 +45,11 @@ describe('PayrollService (UPD-BE-034)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    const commissions = new CommissionsService(tenantPrisma);
+    const commissions = new CommissionsService(
+      tenantPrisma,
+      { log: jest.fn() } as unknown as AuditService,
+      { create: jest.fn() } as unknown as NotificationsService,
+    );
     const timesheets = new TimesheetsService(tenantPrisma);
     service = new PayrollService(
       tenantPrisma,
@@ -107,6 +113,7 @@ describe('PayrollService (UPD-BE-034)', () => {
   });
 
   afterAll(async () => {
+    await prisma.payrollLineItem.deleteMany({ where: { businessId } });
     await prisma.staffAdvance.deleteMany({ where: { businessId } });
     await prisma.order.deleteMany({ where: { businessId } });
     await prisma.businessUser.deleteMany({ where: { businessId } });
@@ -255,7 +262,7 @@ describe('PayrollService (UPD-BE-034)', () => {
       expect(row.getCell(5).value).toBe(20); // hourlyRate
       // regular: 40h * $20 = $800; overtime: 4.5h * $20 * 1.5x = $135; total $935.
       expect(row.getCell(6).value).toBe(935); // hourlyPay
-      expect(row.getCell(9).value).toBe(935); // netPay ($0 commission + $935 hourly)
+      expect(row.getCell(10).value).toBe(935); // netPay ($0 commission + $935 hourly)
 
       await prisma.attendance.deleteMany({
         where: { staffUserId: hourlyStaff.id },
@@ -282,6 +289,59 @@ describe('PayrollService (UPD-BE-034)', () => {
 
       expect(row.getCell(5).value).toBe(0); // hourlyRate — none configured
       expect(row.getCell(6).value).toBe(0); // hourlyPay — unaffected
+    });
+  });
+
+  describe('preview() (Staff module v2, UPD-BE-STAFF-06)', () => {
+    it('computes the same numbers as export() without netting any advances', async () => {
+      const advance = await prisma.staffAdvance.create({
+        data: { businessId, staffUserId: ruledStaffId, amount: 15 },
+      });
+
+      const preview = await service.preview(businessId, '2026-12');
+      const row = preview.rows.find((r) => r.name === 'Commissioned Staff')!;
+      expect(row.advancesDeducted).toBe(15);
+
+      const refreshed = await prisma.staffAdvance.findUniqueOrThrow({
+        where: { id: advance.id },
+      });
+      expect(refreshed.status).toBe('outstanding'); // preview never commits
+
+      await prisma.staffAdvance.delete({ where: { id: advance.id } });
+    });
+  });
+
+  describe('payroll line items (Staff module v2, UPD-BE-STAFF-06)', () => {
+    it('folds a real "add" and "deduct" line item into otherAdjustments and netPay', async () => {
+      await prisma.payrollLineItem.create({
+        data: {
+          businessId,
+          staffUserId: ruledStaffId,
+          month: '2026-12',
+          label: 'Bonus',
+          amount: 50,
+          type: 'add',
+        },
+      });
+      await prisma.payrollLineItem.create({
+        data: {
+          businessId,
+          staffUserId: ruledStaffId,
+          month: '2026-12',
+          label: 'Uniform deduction',
+          amount: 20,
+          type: 'deduct',
+        },
+      });
+
+      const preview = await service.preview(businessId, '2026-12');
+      const row = preview.rows.find((r) => r.name === 'Commissioned Staff')!;
+      expect(row.otherAdjustments).toBe(30); // +50 - 20
+      expect(row.netPay).toBe(row.commission - row.advancesDeducted + 30);
+
+      await prisma.payrollLineItem.deleteMany({
+        where: { businessId, staffUserId: ruledStaffId, month: '2026-12' },
+      });
     });
   });
 });

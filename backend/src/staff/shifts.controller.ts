@@ -39,6 +39,14 @@ export class ShiftsController {
     return this.shifts.list(staffUserId, from, to);
   }
 
+  @Get('shifts/publish-status')
+  publishStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('weekStart') weekStart: string,
+  ) {
+    return this.shifts.publishStatus(user.businessId, weekStart);
+  }
+
   @Get('shifts/:id')
   findOne(@Param('id') id: string) {
     return this.shifts.findOne(id);

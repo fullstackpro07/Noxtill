@@ -4,7 +4,7 @@ describe('buildFulltextBooleanQuery (AI Assistant depth fix, UPD-INT-014)', () =
   it('strips real stopwords out before wildcarding, in both requireAll modes', () => {
     expect(
       buildFulltextBooleanQuery('When does the frobnicator run?', false),
-    ).toBe('does* frobnicator* run*');
+    ).toBe('frobnicator* run*');
     expect(
       buildFulltextBooleanQuery(
         'What is the airspeed velocity of an unladen swallow?',
@@ -13,6 +13,19 @@ describe('buildFulltextBooleanQuery (AI Assistant depth fix, UPD-INT-014)', () =
     ).toBe('airspeed* velocity* unladen* swallow*');
     expect(buildFulltextBooleanQuery('the John Doe', true)).toBe(
       '+John* +Doe*',
+    );
+  });
+
+  it('also drops question filler words in question mode only, so "and"/"up" cannot prefix-match unrelated articles', () => {
+    expect(
+      buildFulltextBooleanQuery('How do coupons and vouchers differ?', false),
+    ).toBe('coupons* vouchers* differ*');
+    expect(
+      buildFulltextBooleanQuery('How do I set up a nightly close?', false),
+    ).toBe('nightly* close*');
+    // A short structured search (requireAll) keeps every real word — "Set" and "and" can be part of a name.
+    expect(buildFulltextBooleanQuery('Salt and Pepper', true)).toBe(
+      '+Salt* +and* +Pepper*',
     );
   });
 

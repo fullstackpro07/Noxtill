@@ -41,10 +41,26 @@ export interface CohortRow {
   cohortMonth: string;
   size: number;
   retention: number[];
+  /** Real all-time lifetime spend of this cohort's own customers. */
+  revenue: number;
 }
 
-export function fetchCohorts(): Promise<CohortRow[]> {
-  return apiFetch<CohortRow[]>("/analytics/cohorts");
+/** `branchId` omitted means just this business; `"all"` means the caller's whole real branch group; a specific id means one validated sibling branch. */
+export function fetchCohorts(branchId?: string): Promise<CohortRow[]> {
+  const query = branchId ? `?branchId=${branchId}` : "";
+  return apiFetch<CohortRow[]>(`/analytics/cohorts${query}`);
+}
+
+export interface NewVsReturningPoint {
+  month: string;
+  newCount: number;
+  returningCount: number;
+}
+
+/** GET /analytics/customers/new-vs-returning — real distinct-customer split per month (new = first-ever order that month). See `fetchCohorts` for what `branchId` means. */
+export function fetchNewVsReturning(branchId?: string): Promise<NewVsReturningPoint[]> {
+  const query = branchId ? `?branchId=${branchId}` : "";
+  return apiFetch<NewVsReturningPoint[]>(`/analytics/customers/new-vs-returning${query}`);
 }
 
 export interface AnalyticsCampaignRow {
@@ -80,16 +96,25 @@ export async function fetchChannelStats(days?: number): Promise<ChannelStat[]> {
 export interface StaffAnalyticsRow {
   staffUserId: string;
   name: string;
+  /** Real BusinessUser.role — "owner" | "manager" | "staff". */
+  role: string;
   totalSales: number;
   orders: number;
   avgTicketSize: number;
   noShowCount: number;
+  appointmentsCount: number;
   reviewMentionCount: number;
 }
 
-/** GET /analytics/staff — real sales/no-show/review-mention figures per staff member, this month. */
-export function fetchStaffAnalytics(): Promise<StaffAnalyticsRow[]> {
-  return apiFetch<StaffAnalyticsRow[]>("/analytics/staff");
+/** GET /analytics/staff — real sales/no-show/review-mention figures per staff member. Defaults to
+ * this month; pass `month` ("YYYY-MM", UPD-BE-STAFF-08) for an arbitrary past month instead. See
+ * `fetchCohorts` for what `branchId` means. */
+export function fetchStaffAnalytics(branchId?: string, month?: string): Promise<StaffAnalyticsRow[]> {
+  const params = new URLSearchParams();
+  if (branchId) params.set("branchId", branchId);
+  if (month) params.set("month", month);
+  const query = params.toString();
+  return apiFetch<StaffAnalyticsRow[]>(`/analytics/staff${query ? `?${query}` : ""}`);
 }
 
 export interface LtvBucket {
@@ -109,9 +134,10 @@ export interface CustomerAnalyticsSummary {
   atRiskCount: number;
 }
 
-/** GET /analytics/customers/summary */
-export function fetchCustomerSummary(): Promise<CustomerAnalyticsSummary> {
-  return apiFetch<CustomerAnalyticsSummary>("/analytics/customers/summary");
+/** GET /analytics/customers/summary — see `fetchCohorts` for what `branchId` means. */
+export function fetchCustomerSummary(branchId?: string): Promise<CustomerAnalyticsSummary> {
+  const query = branchId ? `?branchId=${branchId}` : "";
+  return apiFetch<CustomerAnalyticsSummary>(`/analytics/customers/summary${query}`);
 }
 
 export interface CohortCustomer {
@@ -123,9 +149,10 @@ export interface CohortCustomer {
   lastVisitAt: string | null;
 }
 
-/** GET /analytics/cohorts/:cohortMonth/customers — the real customers behind one cohort row. */
-export function fetchCohortCustomers(cohortMonth: string): Promise<CohortCustomer[]> {
-  return apiFetch<CohortCustomer[]>(`/analytics/cohorts/${cohortMonth}/customers`);
+/** GET /analytics/cohorts/:cohortMonth/customers — the real customers behind one cohort row. Pass the same `branchId` the cohort grid was fetched with, so the drill-down matches the same scope. */
+export function fetchCohortCustomers(cohortMonth: string, branchId?: string): Promise<CohortCustomer[]> {
+  const query = branchId ? `?branchId=${branchId}` : "";
+  return apiFetch<CohortCustomer[]>(`/analytics/cohorts/${cohortMonth}/customers${query}`);
 }
 
 export interface AtRiskCampaignResult {

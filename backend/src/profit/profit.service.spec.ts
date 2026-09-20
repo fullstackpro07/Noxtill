@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ProfitService } from './profit.service';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 import { withDeadlockRetry } from '../common/utils/prisma-transaction-retry.util';
 
 class FakeClsService {
@@ -35,6 +36,8 @@ describe('ProfitService (BE-036/BE-037)', () => {
     );
     profitService = new ProfitService(
       tenantPrisma,
+      prisma,
+      new BranchScopeService(prisma),
       cls as unknown as ClsService,
       aiInfra as unknown as AiInfraService,
     );
@@ -170,7 +173,7 @@ describe('ProfitService (BE-036/BE-037)', () => {
   });
 
   it('computes per-product profit and margin, flagging low-margin/top performers', async () => {
-    const { products } = await profitService.byProduct(90);
+    const { products } = await profitService.byProduct(businessId, undefined, 90);
     const row = products.find((p) => p.productId === productId);
 
     expect(row).toBeDefined();
@@ -222,14 +225,14 @@ describe('ProfitService (BE-036/BE-037)', () => {
   });
 
   it('produces a time-of-day insight string without throwing', async () => {
-    const { insight, hourly } = await profitService.byTime();
+    const { insight, hourly } = await profitService.byTime(businessId);
     expect(typeof insight).toBe('string');
     expect(insight.length).toBeGreaterThan(0);
     expect(hourly.length).toBeGreaterThan(0);
   });
 
   it('returns real JSON-serializable numbers for hour/weekday — not raw MySQL bigints (UPD-BE-106 regression)', async () => {
-    const { hourly, weekday } = await profitService.byTime();
+    const { hourly, weekday } = await profitService.byTime(businessId);
 
     expect(hourly.length).toBeGreaterThan(0);
     for (const row of hourly) {

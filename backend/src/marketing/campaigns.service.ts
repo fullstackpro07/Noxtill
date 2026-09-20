@@ -3,7 +3,9 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { SendGateService } from '../messaging/send-gate.service';
 import { SegmentsService } from '../customers/segments.service';
+import { AiInfraService } from '../ai/ai-infra.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
+import { DraftCampaignMessageDto } from './dto/draft-campaign-message.dto';
 import {
   CAMPAIGN_TEMPLATE_KEY,
   MARKETING_ERROR_CODES,
@@ -23,6 +25,7 @@ export class CampaignsService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly sendGate: SendGateService,
     private readonly segments: SegmentsService,
+    private readonly aiInfra: AiInfraService,
   ) {}
 
   async create(businessId: string, dto: CreateCampaignDto) {
@@ -116,5 +119,46 @@ export class CampaignsService {
       read: byStatus.get(MessageStatus.read) ?? 0,
       failed: byStatus.get(MessageStatus.failed) ?? 0,
     };
+  }
+
+  /**
+   * Real AI draft (Campaign Builder's "Draft it for me") — grounded in the objective/audience the
+   * builder is already on and, if given, a coupon this business actually has (re-looked-up here,
+   * never trusted as the client described it). Falls back to an honest unavailable message on
+   * failure, same convention as `MarketingOverviewService.suggestReallocation`.
+   */
+  async draftMessage(
+    businessId: string,
+    dto: DraftCampaignMessageDto,
+  ): Promise<{ body: string }> {
+    let offerLine = 'No offer is attached to this campaign.';
+    if (dto.couponCode) {
+      const coupon = await this.tenantPrisma.client.coupon.findFirst({
+        where: { businessId, code: dto.couponCode, active: true },
+      });
+      if (coupon) {
+        offerLine =
+          coupon.type === 'percentage'
+            ? `A real active coupon "${coupon.code}" gives ${Number(coupon.value)}% off.`
+            : `A real active coupon "${coupon.code}" gives a fixed discount of ${Number(coupon.value)}.`;
+      }
+    }
+
+    const prompt = [
+      `Write a short WhatsApp/email marketing message for a small business.`,
+      `Objective: ${dto.objective}`,
+      `Audience: ${dto.audienceLabel}`,
+      offerLine,
+      'Use the placeholders {{customerName}} for the customer name and {{couponCode}} for the offer code if one is attached — do not invent a price, product, or offer that was not given above.',
+      'Return ONLY the message body text, 2-3 sentences, no quotes, no preamble.',
+    ].join('\n');
+
+    const body = await this.aiInfra.complete(
+      businessId,
+      prompt,
+      0.6,
+      'campaign_draft',
+    );
+    return { body: body.trim() };
   }
 }

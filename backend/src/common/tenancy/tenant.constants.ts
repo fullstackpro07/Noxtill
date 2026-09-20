@@ -74,6 +74,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'Workflow',
   'WorkflowRun',
   'StaffShift',
+  'SchedulePublish',
   'TimeOff',
   'TimesheetApproval',
   'StaffAdvance',

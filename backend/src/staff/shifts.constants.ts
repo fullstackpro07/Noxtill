@@ -5,4 +5,5 @@ export const SHIFT_ERROR_CODES = {
   NO_COVERING_STAFF: 'shift.no_covering_staff',
   INVALID_PAIRED_SHIFT: 'shift.invalid_paired_shift',
   PAIRED_SHIFT_CHANGED: 'shift.paired_shift_changed',
+  OVERLAPPING_SHIFT: 'shift.overlapping_shift',
 } as const;

@@ -107,7 +107,7 @@ export function CashRegisterView() {
   const [typeFilter, setTypeFilter] = useState<CashMovementType | "all">("all");
 
   const { data: shift } = useQuery({ queryKey: ["cash-shift-current"], queryFn: fetchCurrentShift, refetchInterval: 30_000 });
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60 * 1000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60 * 1000 });
   const staffNameByUserId = useMemo(() => new Map((staff ?? []).map((s) => [s.userId, s.name])), [staff]);
 
   const openMutation = useMutation({

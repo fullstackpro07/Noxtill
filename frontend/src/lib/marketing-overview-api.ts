@@ -13,6 +13,8 @@ export interface MarketingOverviewTotals {
   spend: number;
   results: number;
   delivered: number;
+  /** WhatsApp `read` message status + Email `open` events — a subset of delivered. */
+  read: number;
   blendedCostPerResult: number | null;
   /** Real orders that used a coupon or voucher — the only attribution link this schema has. */
   redemptions: number;

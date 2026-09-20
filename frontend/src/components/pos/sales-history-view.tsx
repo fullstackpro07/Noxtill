@@ -77,7 +77,7 @@ export function SalesHistoryView() {
   const [filters, setFilters] = useState<SalesHistoryFilters>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60 * 1000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60 * 1000 });
   const { data: rows } = useQuery({ queryKey: ["sales-history", filters], queryFn: () => fetchSalesHistory(filters) });
   const { data: summary } = useQuery({ queryKey: ["sales-history-summary", filters.from, filters.to], queryFn: () => fetchSalesHistorySummary({ from: filters.from, to: filters.to }) });
 

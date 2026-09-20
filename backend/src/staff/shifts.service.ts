@@ -44,17 +44,50 @@ export class ShiftsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  create(businessId: string, dto: CreateShiftDto) {
+  async create(businessId: string, dto: CreateShiftDto) {
+    const startsAt = new Date(dto.startsAt);
+    const endsAt = new Date(dto.endsAt);
+    await this.assertNoOverlap(dto.staffUserId, startsAt, endsAt);
     return this.tenantPrisma.client.staffShift.create({
       data: {
         businessId,
         staffUserId: dto.staffUserId,
-        startsAt: new Date(dto.startsAt),
-        endsAt: new Date(dto.endsAt),
+        startsAt,
+        endsAt,
         note: dto.note,
       },
       include: { staffUser: { include: { user: true } } },
     });
+  }
+
+  /**
+   * Settings' "Block double bookings" is a real, always-on policy (the toggle is shown
+   * permanently on and disabled to communicate that, not because nothing backs it) — a staff
+   * member can't be scheduled onto two shifts whose time ranges overlap. Cancelled shifts don't
+   * count as a conflict, and a shift is never compared against itself on update.
+   */
+  private async assertNoOverlap(
+    staffUserId: string,
+    startsAt: Date,
+    endsAt: Date,
+    excludeShiftId?: string,
+  ) {
+    const conflict = await this.tenantPrisma.client.staffShift.findFirst({
+      where: {
+        staffUserId,
+        status: { not: 'cancelled' },
+        id: excludeShiftId ? { not: excludeShiftId } : undefined,
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+    });
+    if (conflict) {
+      throw new AppException(
+        SHIFT_ERROR_CODES.OVERLAPPING_SHIFT,
+        'This staff member already has a shift that overlaps this time range',
+        HttpStatus.CONFLICT,
+      );
+    }
   }
 
   list(staffUserId?: string, from?: string, to?: string) {
@@ -81,12 +114,17 @@ export class ShiftsService {
   }
 
   async update(id: string, dto: UpdateShiftDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    const startsAt = dto.startsAt ? new Date(dto.startsAt) : existing.startsAt;
+    const endsAt = dto.endsAt ? new Date(dto.endsAt) : existing.endsAt;
+    if ((dto.startsAt || dto.endsAt) && dto.status !== 'cancelled') {
+      await this.assertNoOverlap(existing.staffUserId, startsAt, endsAt, id);
+    }
     return this.tenantPrisma.client.staffShift.update({
       where: { id },
       data: {
-        startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        startsAt: dto.startsAt ? startsAt : undefined,
+        endsAt: dto.endsAt ? endsAt : undefined,
         status: dto.status,
         note: dto.note,
       },
@@ -312,6 +350,33 @@ export class ShiftsService {
       notified.push({ staffUserId, name: entry.name });
     }
 
+    const actorUserId = this.cls.get<string>(CLS_KEY_USER_ID);
+    await this.tenantPrisma.client.schedulePublish.upsert({
+      where: {
+        businessId_weekStart: { businessId, weekStart: new Date(from) },
+      },
+      create: {
+        businessId,
+        weekStart: new Date(from),
+        publishedByUserId: actorUserId,
+      },
+      update: { publishedByUserId: actorUserId, publishedAt: new Date() },
+    });
+
     return { notifiedCount: notified.length, notified };
+  }
+
+  /**
+   * Real, shared "has this week been published" state — a row only exists once `notify` has
+   * actually been called for that week's start, so this reflects the same real action the
+   * "Publish Schedule" button performs, visible to every viewer (not per-browser localStorage).
+   */
+  async publishStatus(businessId: string, weekStart: string) {
+    const row = await this.tenantPrisma.client.schedulePublish.findUnique({
+      where: {
+        businessId_weekStart: { businessId, weekStart: new Date(weekStart) },
+      },
+    });
+    return { published: !!row, publishedAt: row?.publishedAt ?? null };
   }
 }

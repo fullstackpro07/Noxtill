@@ -23,6 +23,8 @@ export interface MarketingOverviewTotals {
   spend: number;
   results: number;
   delivered: number;
+  /** WhatsApp `read` message status + Email `open` events — read/opened is a subset of delivered. */
+  read: number;
   blendedCostPerResult: number | null;
   /** Real orders that used a coupon or voucher — the only attribution link that actually exists in this schema. */
   redemptions: number;
@@ -92,8 +94,10 @@ export class MarketingOverviewService {
     const [
       whatsapp,
       whatsappDelivered,
+      whatsappRead,
       email,
       emailDelivered,
+      emailOpened,
       adCampaigns,
       redemptions,
     ] = await Promise.all([
@@ -106,11 +110,17 @@ export class MarketingOverviewService {
           status: { in: [MessageStatus.delivered, MessageStatus.read] },
         },
       }),
+      this.tenantPrisma.client.message.count({
+        where: { campaignId: { not: null }, status: MessageStatus.read },
+      }),
       this.tenantPrisma.client.emailCampaign.aggregate({
         _sum: { sentCount: true },
       }),
       this.tenantPrisma.client.emailEvent.count({
         where: { type: EmailEventType.delivered },
+      }),
+      this.tenantPrisma.client.emailEvent.count({
+        where: { type: EmailEventType.open },
       }),
       this.tenantPrisma.client.adCampaign.findMany({
         where: { provider: { in: AD_PROVIDERS } },
@@ -161,6 +171,7 @@ export class MarketingOverviewService {
         spend: totalSpend,
         results: totalResults,
         delivered: totalDelivered,
+        read: whatsappRead + emailOpened,
         blendedCostPerResult:
           totalResults > 0 ? round2(totalSpend / totalResults) : null,
         redemptions: redemptions._count,

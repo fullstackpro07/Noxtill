@@ -130,7 +130,7 @@ export class MarketingAssetsService {
         ? this.s3.getSignedDownloadUrl(dto.backgroundKey)
         : Promise.resolve(null),
       dto.contentBlocks.includes('top_products')
-        ? this.profit.byProduct(30).then((r) => r.products)
+        ? this.profit.byProduct(businessId, undefined, 30).then((r) => r.products)
         : Promise.resolve([]),
     ]);
     const qrDataUrl =

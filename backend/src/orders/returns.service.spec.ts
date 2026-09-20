@@ -1,4 +1,6 @@
 import { ClsService } from 'nestjs-cls';
+import { PoliciesService } from '../common/policies/policies.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import {
@@ -72,6 +74,11 @@ describe('ReturnsService (UPD-BE-011)', () => {
         record: jest.fn().mockResolvedValue(undefined),
       } as unknown as ActivityService,
       cashRegister as unknown as CashRegisterService,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        {} as unknown as CapabilitiesService,
+      ),
     );
     returnsService = new ReturnsService(
       tenantPrisma,

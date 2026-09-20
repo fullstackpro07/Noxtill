@@ -13,6 +13,7 @@ import { TimesheetsController } from './timesheets.controller';
 import { AdvancesService } from './advances.service';
 import { AdvancesController } from './advances.controller';
 import { PayrollService } from './payroll.service';
+import { PayrollLineItemsService } from './payroll-line-items.service';
 import { PayrollController } from './payroll.controller';
 
 @Module({
@@ -34,6 +35,7 @@ import { PayrollController } from './payroll.controller';
     TimesheetsService,
     AdvancesService,
     PayrollService,
+    PayrollLineItemsService,
   ],
   exports: [StaffService, CommissionsService],
 })

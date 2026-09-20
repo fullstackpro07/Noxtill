@@ -35,6 +35,12 @@ import { ProfitModule } from '../profit/profit.module';
 import { AiModule } from '../ai/ai.module';
 import { MarketingAssetsService } from './marketing-assets.service';
 import { MarketingAssetsController } from './marketing-assets.controller';
+import { ContentItemsService } from './content-items.service';
+import { ContentItemsController } from './content-items.controller';
+import { MarketingTasksService } from './marketing-tasks.service';
+import { MarketingTasksController } from './marketing-tasks.controller';
+import { MarketingSettingsService } from './marketing-settings.service';
+import { MarketingSettingsController } from './marketing-settings.controller';
 
 @Module({
   imports: [
@@ -56,6 +62,9 @@ import { MarketingAssetsController } from './marketing-assets.controller';
     VouchersController,
     SeoHeatmapController,
     MarketingAssetsController,
+    ContentItemsController,
+    MarketingTasksController,
+    MarketingSettingsController,
   ],
   providers: [
     CampaignsService,
@@ -75,6 +84,9 @@ import { MarketingAssetsController } from './marketing-assets.controller';
     VouchersService,
     SeoHeatmapService,
     MarketingAssetsService,
+    ContentItemsService,
+    MarketingTasksService,
+    MarketingSettingsService,
   ],
   exports: [ReferralsService, CouponsService, VouchersService],
 })

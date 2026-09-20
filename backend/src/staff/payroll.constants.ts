@@ -9,5 +9,6 @@ export const PAYROLL_COLUMNS = [
   { header: 'Hourly Pay', key: 'hourlyPay', width: 14 },
   { header: 'Commission', key: 'commission', width: 14 },
   { header: 'Advances Deducted', key: 'advancesDeducted', width: 18 },
+  { header: 'Other Adjustments', key: 'otherAdjustments', width: 16 },
   { header: 'Net Pay', key: 'netPay', width: 14 },
 ];

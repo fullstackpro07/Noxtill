@@ -26,8 +26,8 @@ export function createCheckout(planKey: string, gateway?: string): Promise<{ url
     body: JSON.stringify({
       planKey,
       gateway,
-      successUrl: `${origin}/settings/billing?checkout=success`,
-      cancelUrl: `${origin}/settings/billing?checkout=cancel`,
+      successUrl: `${origin}/settings/tools/billing?checkout=success`,
+      cancelUrl: `${origin}/settings/tools/billing?checkout=cancel`,
     }),
   });
 }

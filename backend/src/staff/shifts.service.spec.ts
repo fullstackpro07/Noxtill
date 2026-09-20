@@ -293,6 +293,118 @@ describe('ShiftsService (UPD-BE-031)', () => {
     expect(rejected.staffUser.user.name).toBe('Requester Staff');
   });
 
+  describe('overlap prevention (Settings\' "Block double bookings")', () => {
+    it('rejects creating a shift that overlaps an existing one for the same staff member', async () => {
+      const first = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-05T09:00:00.000Z',
+        endsAt: '2026-09-05T17:00:00.000Z',
+      });
+
+      await expect(
+        service.create(businessId, {
+          staffUserId: requesterBusinessUserId,
+          startsAt: '2026-09-05T12:00:00.000Z',
+          endsAt: '2026-09-05T20:00:00.000Z',
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+
+      // Back-to-back (no overlap) and a different staff member at the same time are both fine.
+      const backToBack = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-05T17:00:00.000Z',
+        endsAt: '2026-09-05T20:00:00.000Z',
+      });
+      const otherStaff = await service.create(businessId, {
+        staffUserId: coveringBusinessUserId,
+        startsAt: '2026-09-05T09:00:00.000Z',
+        endsAt: '2026-09-05T17:00:00.000Z',
+      });
+
+      await service.remove(first.id);
+      await service.remove(backToBack.id);
+      await service.remove(otherStaff.id);
+    });
+
+    it("rejects updating a shift into a time range that overlaps another of that staff member's shifts", async () => {
+      const fixed = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-06T09:00:00.000Z',
+        endsAt: '2026-09-06T17:00:00.000Z',
+      });
+      const movable = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-07T09:00:00.000Z',
+        endsAt: '2026-09-07T17:00:00.000Z',
+      });
+
+      await expect(
+        service.update(movable.id, {
+          startsAt: '2026-09-06T12:00:00.000Z',
+          endsAt: '2026-09-06T20:00:00.000Z',
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+
+      // A no-op status update on the untouched shift is unaffected by its own existence.
+      const unchanged = await service.update(movable.id, {
+        note: 'still fine',
+      });
+      expect(unchanged.note).toBe('still fine');
+
+      await service.remove(fixed.id);
+      await service.remove(movable.id);
+    });
+
+    it('does not treat a cancelled shift as a conflict', async () => {
+      const cancelled = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-08T09:00:00.000Z',
+        endsAt: '2026-09-08T17:00:00.000Z',
+      });
+      await service.update(cancelled.id, { status: 'cancelled' });
+
+      const overlapping = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-08T10:00:00.000Z',
+        endsAt: '2026-09-08T18:00:00.000Z',
+      });
+
+      await service.remove(cancelled.id);
+      await service.remove(overlapping.id);
+    });
+  });
+
+  describe('publishStatus (Schedule\'s real, shared "Approved/Pending" state)', () => {
+    it('is unpublished until notify() is called for that week, then reflects it for every viewer', async () => {
+      const weekStart = '2026-09-14T00:00:00.000Z';
+      const before = await service.publishStatus(businessId, weekStart);
+      expect(before.published).toBe(false);
+      expect(before.publishedAt).toBeNull();
+
+      const shift = await service.create(businessId, {
+        staffUserId: requesterBusinessUserId,
+        startsAt: '2026-09-14T09:00:00.000Z',
+        endsAt: '2026-09-14T17:00:00.000Z',
+      });
+
+      await service.notify(businessId, weekStart, '2026-09-21T00:00:00.000Z');
+
+      const after = await service.publishStatus(businessId, weekStart);
+      expect(after.published).toBe(true);
+      expect(after.publishedAt).not.toBeNull();
+
+      // Calling notify again for the same week updates the row rather than duplicating it.
+      await service.notify(businessId, weekStart, '2026-09-21T00:00:00.000Z');
+      const again = await service.publishStatus(businessId, weekStart);
+      expect(again.published).toBe(true);
+
+      await service.remove(shift.id);
+      await prisma.schedulePublish.deleteMany({
+        where: { businessId, weekStart: new Date(weekStart) },
+      });
+    });
+  });
+
   it('notifies each distinct staff member with a shift in range exactly once, listing all their shifts in one notification', async () => {
     notifications.create.mockClear();
     const shiftA = await service.create(businessId, {

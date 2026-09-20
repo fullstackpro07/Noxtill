@@ -50,6 +50,11 @@ export class UpdateAiSettingsDto {
   aiRateLimitPerMinute?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(1)
+  aiQueryQuota?: number;
+
+  @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => AiFeatureTogglesDto)

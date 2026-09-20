@@ -57,6 +57,8 @@ export interface Segment {
   name: string;
   rules: SegmentRules;
   count: number;
+  /** Real sum of matching members' lifetime spend — what this group has already spent, not a forecast. */
+  spend: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { S3Service } from '../common/storage/s3.service';
 import { validateUploadedFile } from '../common/utils/file-validation.util';
+import { PoliciesService } from '../common/policies/policies.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product, Prisma, ProductKind } from '@prisma/client';
@@ -29,6 +30,7 @@ export class ProductsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly s3: S3Service,
+    private readonly policies: PoliciesService,
   ) {}
 
   /** `photoKey` is an S3/local-disk object key, never a raw URL — resolved to a fresh signed URL
@@ -58,7 +60,10 @@ export class ProductsService {
           costPrice: dto.costPrice,
           sellingPrice: dto.sellingPrice,
           stockQty: dto.stockQty ?? 0,
-          lowStockThreshold: dto.lowStockThreshold ?? 5,
+          lowStockThreshold:
+            dto.lowStockThreshold ??
+            (await this.policies.current()).num('catalog.defaultLowStockThreshold') ??
+            5,
           durationMin: dto.kind === 'service' ? dto.durationMin : undefined,
           active: dto.active ?? true,
           // Needed for the outer `as Prisma.ProductUncheckedCreateInput` cast below to type-check —

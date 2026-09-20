@@ -1,300 +1,267 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Plus, Trash2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { SkeletonCard, SkeletonRow } from "@/components/shared/skeleton";
-import { REPORT_DEFS, type ReportKind } from "@/lib/reports";
-import type { ExportFormat } from "@/lib/exports-api";
-import {
-  createScheduledExport,
-  deleteScheduledExport,
-  fetchScheduledExports,
-  updateScheduledExport,
-  type LiveScheduledExport,
-  type ScheduleFrequency,
-  type ScheduleRecipient,
-} from "@/lib/scheduled-exports-api";
-import { formatDate } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
-import { toast } from "@/lib/toast";
+import { fetchReportsLibrary } from "@/lib/reports-api";
+import { REPORT_KIND_LABELS } from "@/lib/reports";
+import { fetchScheduledExports, runScheduleNow, updateScheduledExport, type LiveScheduledExport } from "@/lib/scheduled-exports-api";
+import {
+  BannerCard,
+  ErrorCard,
+  Kpi,
+  KpiGrid,
+  KpiSkeletons,
+  R,
+  RIcon,
+  WEEKDAYS,
+  cardShellStyle,
+  chipStyle,
+  filterBtnStyle,
+  hourLabel,
+  ordinal,
+  primaryBtnStyle,
+  relativeDateTime,
+  smallBtnStyle,
+  thStyle,
+} from "./reports-ui";
+import { useActiveBusinessName, useReports } from "./reports-context";
 
-const EXPORT_KINDS: { key: string; label: string }[] = [
-  { key: "sales", label: "Sales" },
-  { key: "customers", label: "Customers" },
-  { key: "credit", label: "Credit" },
-  { key: "stock", label: "Stock" },
-  { key: "expenses", label: "Expenses" },
-  { key: "products", label: "Products" },
-];
-
-const FREQUENCY_DAYS: Record<ScheduleFrequency, number> = { weekly: 7, monthly: 28 };
-
-function scheduleLabel(s: LiveScheduledExport): string {
-  if (s.reportKind) return REPORT_DEFS.find((r) => r.key === s.reportKind)?.label ?? s.reportKind;
-  return EXPORT_KINDS.find((k) => k.key === s.kind)?.label ?? s.kind ?? "—";
+function scheduleName(s: LiveScheduledExport): string {
+  return s.reportKind ? REPORT_KIND_LABELS[s.reportKind] : `${s.kind ?? "Data"} export`;
 }
 
-function recipientLabel(r: ScheduleRecipient): string {
-  return r.label || r.email || r.phone || "—";
+function frequencyText(s: LiveScheduledExport): string {
+  const day = s.frequency === "weekly" ? (s.dayOfWeek !== null ? WEEKDAYS[s.dayOfWeek] : null) : s.dayOfMonth !== null ? ordinal(s.dayOfMonth) : null;
+  return `${s.frequency === "weekly" ? "Weekly" : "Monthly"}${day ? ` · ${day}` : ""} ${hourLabel(s.runHour)}`;
 }
 
-function estimateNextDelivery(s: LiveScheduledExport): Date | null {
-  if (!s.active) return null;
-  const dueDays = FREQUENCY_DAYS[s.frequency];
-  const base = s.lastRunAt ? new Date(s.lastRunAt) : new Date(s.createdAt);
-  return new Date(base.getTime() + dueDays * 24 * 60 * 60 * 1000);
+function recipientsText(s: LiveScheduledExport): string {
+  if (s.recipients.length === 0) return "You (in Noxtill)";
+  return s.recipients.map((r) => r.label ?? r.email ?? r.phone).join(" · ");
+}
+
+function channelOf(s: LiveScheduledExport): { label: string; icon: string } {
+  const hasEmail = s.recipients.some((r) => r.email);
+  const hasPhone = s.recipients.some((r) => r.phone);
+  if (hasEmail && hasPhone) return { label: "Email + phone", icon: "mail" };
+  if (hasEmail) return { label: "Email", icon: "mail" };
+  if (hasPhone) return { label: "Phone", icon: "message-circle" };
+  return { label: "In-app", icon: "circle-check" };
+}
+
+function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  const active = value !== "all";
+  return (
+    <label style={{ ...filterBtnStyle, position: "relative", borderColor: active ? R.green : R.btnBorder, background: active ? R.greenSoft : "#fff" }}>
+      <span>{label}</span>
+      <RIcon name="chevron-down" size={13} style={{ color: R.label }} />
+      <select aria-label={`Filter by ${label.toLowerCase()}`} value={value} onChange={(e) => onChange(e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 export function ScheduledReportsView() {
-  const [creating, setCreating] = useState(false);
-  const queryClient = useQueryClient();
+  const { openPanel, openConfirm, notify, period } = useReports();
+  const branch = useActiveBusinessName();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["reports", "schedules"], queryFn: fetchScheduledExports });
+  const lib = useQuery({ queryKey: ["reports", "library", period], queryFn: () => fetchReportsLibrary(period) });
+  const [report, setReport] = useState("all");
+  const [frequency, setFrequency] = useState("all");
+  const [channel, setChannel] = useState("all");
+  const [status, setStatus] = useState("all");
 
-  const { data: schedules = [], isPending, isError, refetch } = useQuery({
-    queryKey: ["scheduled-exports"],
-    queryFn: fetchScheduledExports,
-  });
+  const all = useMemo(() => (q.data ?? []).filter((s) => s.reportKind), [q.data]);
+  const rows = useMemo(
+    () =>
+      all.filter((s) => {
+        if (report !== "all" && s.reportKind !== report) return false;
+        if (frequency !== "all" && s.frequency !== frequency) return false;
+        if (channel !== "all" && channelOf(s).label !== channel) return false;
+        if (status === "active" && !s.active) return false;
+        if (status === "paused" && s.active) return false;
+        if (status === "failed" && s.lastResult !== "failed") return false;
+        return true;
+      }),
+    [all, report, frequency, channel, status],
+  );
 
-  const toggleMutation = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) => updateScheduledExport(id, { active }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["scheduled-exports"] }),
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't update this schedule — please try again."),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteScheduledExport(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scheduled-exports"] });
-      toast.success("Schedule removed.");
+  const refresh = () => qc.invalidateQueries({ queryKey: ["reports"] });
+  const toggle = useMutation({
+    mutationFn: (s: LiveScheduledExport) => updateScheduledExport(s.id, { active: !s.active }),
+    onSuccess: (_r, s) => {
+      void refresh();
+      notify(`${s.active ? "Paused" : "Resumed"} · ${scheduleName(s)}`, s.active ? "Future runs stop. History and the schedule are kept." : "It will run on its next scheduled day.");
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't remove this schedule — please try again."),
+    onError: (e) => notify("Couldn't update the schedule", e instanceof ApiError ? e.message : "Please try again."),
   });
 
-  const activeCount = schedules.filter((s) => s.active).length;
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const sentThisMonth = schedules.filter((s) => s.lastRunAt?.slice(0, 7) === thisMonth).length;
-  const nextDeliveries = schedules.map(estimateNextDelivery).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime());
+  const runNow = (s: LiveScheduledExport) =>
+    openConfirm({
+      title: `Run ${scheduleName(s)} now?`,
+      tone: "green",
+      icon: "history",
+      body: "This generates one report immediately and delivers it to the configured recipients. Future scheduled days still run as planned.",
+      rows: [
+        { label: "Report", value: scheduleName(s) },
+        { label: "Period covered", value: s.periodLabel ?? "—" },
+        { label: "Recipients", value: recipientsText(s) },
+        { label: "Channel", value: channelOf(s).label },
+        { label: "Next scheduled run", value: s.nextRunAt ? relativeDateTime(s.nextRunAt) : "Paused" },
+      ],
+      primary: "Generate once",
+      cancel: "Cancel",
+      onConfirm: async () => {
+        try {
+          const r = await runScheduleNow(s.id);
+          void refresh();
+          if (r.ok) notify(`${scheduleName(s)} generated`, "Recorded as a new version and delivered.");
+          else notify(`${scheduleName(s)} failed`, r.lastError ?? "The run failed.");
+        } catch (e) {
+          notify("Couldn't run the schedule", e instanceof ApiError ? e.message : "Please try again.");
+        }
+      },
+    });
 
-  if (isError) {
-    return <ErrorBanner title="Couldn't load scheduled reports" description="Check your connection and try again." onRetry={() => refetch()} />;
-  }
+  if (q.isError) return <ErrorCard message={q.error instanceof ApiError ? q.error.message : "Schedules could not be loaded."} onRetry={() => void q.refetch()} />;
+
+  const active = all.filter((s) => s.active);
+  const paused = all.filter((s) => !s.active);
+  const failed = all.filter((s) => s.lastResult === "failed");
+  const next = active
+    .filter((s) => s.nextRunAt)
+    .sort((a, b) => (a.nextRunAt as string).localeCompare(b.nextRunAt as string))[0];
+  const stop = (fn: () => void) => (e: MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
+  const firstFailed = failed[0];
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {isPending ? (
-          Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-        ) : (
-          <>
-            <StatCard label="Active schedules" value={String(activeCount)} />
-            <StatCard label="Sent this month" value={String(sentThisMonth)} />
-            <StatCard label="Next delivery" value={nextDeliveries[0] ? formatDate(nextDeliveries[0].toISOString()) : "—"} />
-          </>
-        )}
-      </div>
-
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          New schedule
-        </Button>
-      </div>
-
-      {isPending ? (
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <SkeletonRow key={i} />
-          ))}
-        </div>
-      ) : schedules.length === 0 ? (
-        <EmptyState icon={Clock} title="No recurring reports or exports" description="Get a fresh report or data export delivered automatically, weekly or monthly." action={{ label: "New schedule", onClick: () => setCreating(true) }} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {!q.data ? (
+        <KpiSkeletons count={5} min={165} />
       ) : (
-        <div className="overflow-x-auto rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <table className="w-full text-sm">
+        <KpiGrid min={165}>
+          <Kpi label="Active schedules" value={String(active.length)} meta={`${paused.length} paused`} />
+          <Kpi label="Paused" value={String(paused.length)} meta={paused.length ? paused.map(scheduleName).join(", ") : "none paused"} tone={paused.length ? "amber" : "neutral"} compact={paused.length > 0 && String(paused.length).length > 10} />
+          <Kpi label="Runs this month" value={String(lib.data?.kpis.automatedThisMonth ?? 0)} meta="generated by schedule" />
+          <Kpi label="Next delivery" value={next?.nextRunAt ? relativeDateTime(next.nextRunAt) : "—"} meta={next ? `${scheduleName(next)} · ${channelOf(next).label}` : "nothing scheduled"} compact />
+          <Kpi label="Failed runs" value={String(failed.length)} meta={failed.length ? failed.map(scheduleName).join(", ") : "last run of every schedule succeeded"} tone={failed.length ? "red" : "neutral"} />
+        </KpiGrid>
+      )}
+
+      {firstFailed ? (
+        <BannerCard
+          tone="red"
+          icon="circle-alert"
+          title={`${scheduleName(firstFailed)} failed to generate`}
+          text={`${firstFailed.lastError ?? "The last run failed."} The report was not sent, and nothing was estimated in its place.`}
+        >
+          <button type="button" onClick={() => openPanel({ type: "schedule", id: firstFailed.id })} style={smallBtnStyle}>
+            View failure
+          </button>
+          <button type="button" onClick={() => runNow(firstFailed)} style={{ ...primaryBtnStyle }}>
+            Retry
+          </button>
+        </BannerCard>
+      ) : null}
+
+      <div style={{ ...cardShellStyle, overflow: "hidden" }}>
+        <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>Schedules</div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 7, flexWrap: "wrap" }}>
+            <FilterSelect label="Report" value={report} onChange={setReport} options={[{ value: "all", label: "All reports" }, ...[...new Set(all.map((s) => s.reportKind as string))].map((k) => ({ value: k, label: REPORT_KIND_LABELS[k as keyof typeof REPORT_KIND_LABELS] ?? k }))]} />
+            <FilterSelect label="Frequency" value={frequency} onChange={setFrequency} options={[{ value: "all", label: "Any frequency" }, { value: "weekly", label: "Weekly" }, { value: "monthly", label: "Monthly" }]} />
+            <FilterSelect label="Channel" value={channel} onChange={setChannel} options={[{ value: "all", label: "Any channel" }, ...[...new Set(all.map((s) => channelOf(s).label))].map((c) => ({ value: c, label: c }))]} />
+            <FilterSelect label="Status" value={status} onChange={setStatus} options={[{ value: "all", label: "Any status" }, { value: "active", label: "Active" }, { value: "paused", label: "Paused" }, { value: "failed", label: "Last run failed" }]} />
+            <button type="button" onClick={() => openPanel({ type: "schedule-new" })} style={primaryBtnStyle}>
+              <RIcon name="plus" size={14} strokeWidth={2.25} />
+              New schedule
+            </button>
+          </div>
+        </div>
+        <div className="nx-scroll" style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 1240, borderCollapse: "collapse" }}>
             <thead>
-              <tr className="border-b border-border text-start text-xs font-medium uppercase tracking-wide text-fg-faint">
-                <th className="px-4 py-3 text-start">Schedule</th>
-                <th className="px-4 py-3 text-start">Frequency</th>
-                <th className="px-4 py-3 text-start">Delivery</th>
-                <th className="px-4 py-3 text-start">Last sent</th>
-                <th className="px-4 py-3 text-start">Status</th>
-                <th className="px-4 py-3 text-end">Actions</th>
+              <tr style={{ background: "#FAFBFC", borderTop: `1px solid ${R.divider}`, borderBottom: `1px solid ${R.border}` }}>
+                {["Report", "Frequency", "Branch", "Recipients", "Channel", "Format", "Next run", "Last run", "Last result"].map((h, i) => (
+                  <th key={h} style={{ ...thStyle("left"), paddingLeft: i === 0 ? 18 : 12 }}>
+                    {h}
+                  </th>
+                ))}
+                <th style={{ ...thStyle("right"), paddingRight: 18 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {schedules.map((s) => (
-                <tr key={s.id} className="border-b border-border last:border-0 hover:bg-surface-2/50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-fg">{scheduleLabel(s)}</p>
-                    <p className="text-xs text-fg-faint">{s.reportKind ? "Report" : "Export"} · {s.format.toUpperCase()}</p>
-                  </td>
-                  <td className="px-4 py-3 capitalize text-fg-muted">{s.frequency}</td>
-                  <td className="px-4 py-3 text-fg-muted">
-                    {s.recipients.length === 0 ? "In-app notification" : s.recipients.map(recipientLabel).join(", ")}
-                  </td>
-                  <td className="px-4 py-3 text-fg-muted">{s.lastRunAt ? formatDate(s.lastRunAt) : "Not sent yet"}</td>
-                  <td className="px-4 py-3">
-                    <Badge tone={s.active ? "success" : "neutral"}>{s.active ? "Active" : "Paused"}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button variant="ghost" size="sm" onClick={() => toggleMutation.mutate({ id: s.id, active: !s.active })}>
-                        {s.active ? "Pause" : "Resume"}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(s.id)} aria-label="Delete schedule">
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                      </Button>
-                    </div>
+              {!q.data ? (
+                <tr>
+                  <td colSpan={10} style={{ padding: 28, textAlign: "center", fontSize: 12.5, color: R.faint }}>
+                    Loading schedules…
                   </td>
                 </tr>
-              ))}
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={10} style={{ padding: "34px 18px", textAlign: "center", fontSize: 12.5, color: R.muted }}>
+                    {all.length === 0 ? "No report is scheduled yet. Use “New schedule” to have a report generated and delivered automatically." : "No schedule matches these filters."}
+                  </td>
+                </tr>
+              ) : (
+                rows.map((s) => {
+                  const ch = channelOf(s);
+                  const bad = s.lastResult === "failed";
+                  return (
+                    <tr key={s.id} onClick={() => openPanel({ type: "schedule", id: s.id })} style={{ borderBottom: `1px solid ${R.rowLine}`, cursor: "pointer", background: bad ? "#FEFBFB" : "#fff" }}>
+                      <td style={{ padding: "11px 12px 11px 18px" }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700 }}>{scheduleName(s)}</div>
+                        <div style={{ fontSize: 10, color: R.faint, marginTop: 2 }}>{s.periodLabel ?? "—"}</div>
+                      </td>
+                      <td style={{ padding: "11px 12px", fontSize: 12, color: R.text }}>{frequencyText(s)}</td>
+                      <td style={{ padding: "11px 12px", fontSize: 12, color: R.text }}>{branch}</td>
+                      <td style={{ padding: "11px 12px", fontSize: 11.5, color: R.text }}>{recipientsText(s)}</td>
+                      <td style={{ padding: "11px 12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <RIcon name={ch.icon} size={13} style={{ color: R.text }} />
+                          <span style={{ fontSize: 12, color: R.text }}>{ch.label}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: "11px 12px", fontSize: 11.5, color: R.text }}>{s.format.toUpperCase()}</td>
+                      <td style={{ padding: "11px 12px", fontSize: 11.5, fontWeight: 700 }}>{s.active ? (s.nextRunAt ? relativeDateTime(s.nextRunAt) : "—") : "Paused"}</td>
+                      <td style={{ padding: "11px 12px", fontSize: 11.5, color: R.faint }}>{s.lastRunAt ? relativeDateTime(s.lastRunAt) : "Never"}</td>
+                      <td style={{ padding: "11px 12px" }}>
+                        <span style={chipStyle(bad ? "red" : s.lastResult === "sent" ? "green" : "neutral", { height: 21, fontSize: 10 })}>
+                          <RIcon name={bad ? "circle-alert" : s.lastResult === "sent" ? "circle-check" : "clock-3"} size={11} />
+                          {bad ? "Failed" : s.lastResult === "sent" ? "Sent" : "Not run yet"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "11px 18px 11px 12px", textAlign: "right" }}>
+                        <div style={{ display: "inline-flex", gap: 6 }}>
+                          <button type="button" onClick={stop(() => runNow(s))} style={smallBtnStyle}>
+                            Run now
+                          </button>
+                          <button type="button" disabled={toggle.isPending} onClick={stop(() => toggle.mutate(s))} style={{ ...smallBtnStyle, display: "inline-flex" }}>
+                            {s.active ? "Pause" : "Resume"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
-      )}
-
-      <p className="text-xs text-fg-faint">
-        &ldquo;Next delivery&rdquo; is estimated from the schedule&apos;s own frequency, not an exact send time — the real daily check runs at 6am.
-      </p>
-
-      {creating && <NewScheduleDialog onClose={() => setCreating(false)} />}
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-      <span className="text-xs font-medium text-fg-faint">{label}</span>
-      <p className="mt-1 font-display text-xl font-bold text-fg">{value}</p>
-    </div>
-  );
-}
-
-function NewScheduleDialog({ onClose }: { onClose: () => void }) {
-  const [pipeline, setPipeline] = useState<"export" | "report">("export");
-  const [kind, setKind] = useState(EXPORT_KINDS[0].key);
-  const [reportKind, setReportKind] = useState<ReportKind>(REPORT_DEFS[0].key);
-  const [format, setFormat] = useState<ExportFormat>("xlsx");
-  const [frequency, setFrequency] = useState<ScheduleFrequency>("weekly");
-  const [recipients, setRecipients] = useState<ScheduleRecipient[]>([]);
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      createScheduledExport({
-        kind: pipeline === "export" ? kind : undefined,
-        reportKind: pipeline === "report" ? reportKind : undefined,
-        format: pipeline === "export" ? format : undefined,
-        frequency,
-        recipients: recipients.filter((r) => r.phone || r.email),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scheduled-exports"] });
-      toast.success("Schedule created.");
-      onClose();
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't create this schedule — please try again."),
-  });
-
-  function updateRecipient(i: number, patch: Partial<ScheduleRecipient>) {
-    setRecipients((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  }
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="New recurring schedule"
-      description="Delivered automatically on schedule — to explicit recipients if you add any, otherwise as an in-app notification."
-      className="max-w-lg"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-            {mutation.isPending ? "Creating…" : "Schedule"}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3.5">
-        <div className="flex gap-1 rounded-full bg-surface-2 p-1">
-          <button
-            type="button"
-            onClick={() => setPipeline("export")}
-            className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${pipeline === "export" ? "bg-surface text-fg shadow-[var(--shadow-sm)]" : "text-fg-muted"}`}
-          >
-            Data export
-          </button>
-          <button
-            type="button"
-            onClick={() => setPipeline("report")}
-            className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${pipeline === "report" ? "bg-surface text-fg shadow-[var(--shadow-sm)]" : "text-fg-muted"}`}
-          >
-            Report (PDF)
-          </button>
-        </div>
-
-        {pipeline === "export" ? (
-          <>
-            <Select label="Export" value={kind} onChange={(e) => setKind(e.target.value)}>
-              {EXPORT_KINDS.map((k) => (
-                <option key={k.key} value={k.key}>
-                  {k.label}
-                </option>
-              ))}
-            </Select>
-            <Select label="Format" value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
-              <option value="xlsx">Excel</option>
-              <option value="csv">CSV</option>
-              <option value="pdf">PDF</option>
-            </Select>
-          </>
-        ) : (
-          <Select label="Report" value={reportKind} onChange={(e) => setReportKind(e.target.value as ReportKind)}>
-            {REPORT_DEFS.map((r) => (
-              <option key={r.key} value={r.key}>
-                {r.label}
-              </option>
-            ))}
-          </Select>
-        )}
-
-        <Select label="Frequency" value={frequency} onChange={(e) => setFrequency(e.target.value as ScheduleFrequency)}>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </Select>
-
-        <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-xs font-medium text-fg-muted">Recipients (optional — leave empty for an in-app notification)</span>
-            <Button variant="ghost" size="sm" onClick={() => setRecipients((r) => [...r, {}])}>
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              Add
-            </Button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {recipients.map((r, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Input placeholder="Phone" value={r.phone ?? ""} onChange={(e) => updateRecipient(i, { phone: e.target.value })} className="flex-1" />
-                <Input placeholder="Email" value={r.email ?? ""} onChange={(e) => updateRecipient(i, { email: e.target.value })} className="flex-1" />
-                <Button variant="ghost" size="sm" onClick={() => setRecipients((rows) => rows.filter((_, idx) => idx !== i))} aria-label="Remove recipient">
-                  <X className="h-3.5 w-3.5" aria-hidden />
-                </Button>
-              </div>
-            ))}
-          </div>
+        <div style={{ padding: "12px 18px", borderTop: `1px solid ${R.divider}`, background: "#FCFCFD", fontSize: 11, color: R.faint }}>
+          Every schedule runs at {hourLabel(6)} server time. Run now generates and delivers one report immediately; future scheduled days still run. A failed run keeps its reason and is retried by the next daily check.
         </div>
       </div>
-    </Dialog>
+    </div>
   );
 }

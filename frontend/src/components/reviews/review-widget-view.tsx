@@ -107,7 +107,14 @@ export function ReviewWidgetView() {
                 </div>
               ) : layout === "Badge" ? (
                 <div className="inline-flex items-center gap-3.5 rounded-[14px] p-[17px]" style={{ background: wgBg, border: `1px solid ${wgBd}` }}>
-                  <span className="flex h-10 w-10 items-center justify-center rounded-[11px] text-[18px] font-extrabold text-white" style={{ background: "linear-gradient(145deg,#16B85C,#0E8442)" }}>N</span>
+                  {data?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- external S3-signed URL
+                    <img src={data.logoUrl} alt="" className="h-10 w-10 rounded-[11px] object-cover" />
+                  ) : (
+                    <span className="flex h-10 w-10 items-center justify-center rounded-[11px] text-[18px] font-extrabold text-white" style={{ background: data?.brandColor || "var(--app-primary)" }}>
+                      {(data?.businessName ?? session.business.name).slice(0, 1)}
+                    </span>
+                  )}
                   <span>
                     <span className="flex items-center gap-1.5"><span className="text-[19px] font-extrabold" style={{ color: wgFg }}>{avgRating.toFixed(1)}</span><Stars n={Math.round(avgRating)} /></span>
                     <span className="mt-0.5 block text-[11.5px]" style={{ color: wgSub }}>{reviews.length} reviews on Noxtill</span>

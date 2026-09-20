@@ -5,6 +5,8 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { TemplateRegistryService } from './templates/template-registry.service';
 import { resolveChannel } from './channel-resolution.util';
+import { deferOutOfQuietHours } from './send-policy.util';
+import { resolvePolicies } from '../common/policies/policies.service';
 import { MESSAGE_ERROR_CODES, MESSAGES_QUEUE } from './messaging.constants';
 import { Message, Prisma } from '@prisma/client';
 
@@ -77,6 +79,30 @@ export class SendGateService {
       );
     }
 
+    const policies = resolvePolicies(business);
+
+    // Owner policy: at most N marketing messages per customer in a rolling window.
+    const capMax = policies.num('marketing.frequencyCapMax');
+    if (definition.category === 'marketing' && capMax !== null && params.customerId) {
+      const since = new Date(Date.now() - (policies.num('marketing.frequencyCapDays') ?? 30) * 24 * 60 * 60 * 1000);
+      const recent = await this.tenantPrisma.client.message.count({
+        where: {
+          businessId: params.businessId,
+          customerId: params.customerId,
+          category: 'marketing',
+          status: { not: 'failed' },
+          createdAt: { gte: since },
+        },
+      });
+      if (recent >= capMax) {
+        throw new AppException(
+          MESSAGE_ERROR_CODES.FREQUENCY_CAP_REACHED,
+          `This customer already received ${recent} marketing message(s) in the last ${policies.num('marketing.frequencyCapDays')} days (limit ${capMax})`,
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+
     if (business.msgUsed >= business.msgQuota) {
       throw new AppException(
         MESSAGE_ERROR_CODES.QUOTA_EXCEEDED,
@@ -97,11 +123,23 @@ export class SendGateService {
       ? { phone: customer.phone, email: customer.email }
       : { phone: params.to?.phone, email: params.to?.email };
 
-    const channel = resolveChannel(
-      params.channel ?? business.channelPref,
-      contact,
-      (business.channelPriority as Message['channel'][] | null) ?? undefined,
-    );
+    const priority = (business.channelPriority as Message['channel'][] | null) ?? undefined;
+    let channel = resolveChannel(params.channel ?? business.channelPref, contact, priority);
+
+    // A WhatsApp template the owner marked pending/rejected must not go out over WhatsApp; use
+    // the next channel the customer can be reached on instead, or refuse if there is none.
+    const approval = (business.templateApprovals as Record<string, { status?: string }> | null)?.[params.templateKey];
+    if (channel === 'whatsapp' && approval?.status && approval.status !== 'approved') {
+      const alternatives = [...(priority ?? []), 'sms', 'email'].filter((c) => c !== 'whatsapp') as Message['channel'][];
+      channel = alternatives.find((c) => resolveChannel(c, contact, [c]) === c);
+      if (!channel) {
+        throw new AppException(
+          MESSAGE_ERROR_CODES.TEMPLATE_NOT_APPROVED,
+          `Template "${params.templateKey}" is ${approval.status} for WhatsApp and the customer has no other channel`,
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
     if (!channel) {
       throw new AppException(
         MESSAGE_ERROR_CODES.NO_CHANNEL_AVAILABLE,
@@ -115,6 +153,17 @@ export class SendGateService {
       __to: contact.phone ?? contact.email ?? '',
     };
 
+    // Owner policy: marketing waits out quiet hours (in the business's own timezone) rather than
+    // waking the customer.
+    let scheduledFor = params.scheduledFor;
+    const quietFrom = policies.time('marketing.quietFrom');
+    const quietTo = policies.time('marketing.quietTo');
+    if (definition.category === 'marketing' && quietFrom && quietTo) {
+      const intended = scheduledFor ?? new Date();
+      const allowed = deferOutOfQuietHours(intended, quietFrom, quietTo, business.timezone);
+      if (allowed.getTime() !== intended.getTime()) scheduledFor = allowed;
+    }
+
     const [message] = await this.tenantPrisma.client.$transaction([
       this.tenantPrisma.client.message.create({
         data: {
@@ -127,7 +176,7 @@ export class SendGateService {
           locale: business.locale,
           payload,
           status: 'queued',
-          scheduledFor: params.scheduledFor,
+          scheduledFor,
           customBody: params.customBody,
         },
       }),
@@ -137,8 +186,8 @@ export class SendGateService {
       }),
     ]);
 
-    const delay = params.scheduledFor
-      ? Math.max(0, params.scheduledFor.getTime() - Date.now())
+    const delay = scheduledFor
+      ? Math.max(0, scheduledFor.getTime() - Date.now())
       : 0;
     await this.messagesQueue.add(
       'send',

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AnalyticsService } from './analytics.service';
+import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 import { SegmentsService } from '../customers/segments.service';
 import type { SendGateService } from '../messaging/send-gate.service';
 import type { AiInfraService } from '../ai/ai-infra.service';
@@ -39,6 +40,8 @@ describe('AnalyticsService (BE-071)', () => {
     );
     service = new AnalyticsService(
       tenantPrisma,
+      prisma,
+      new BranchScopeService(prisma),
       cls as unknown as ClsService,
       segments,
       sendGate as unknown as SendGateService,
@@ -210,7 +213,7 @@ describe('AnalyticsService (BE-071)', () => {
     });
 
     it('keeps two staff with the same name as separate rows, grouped by id not name', async () => {
-      const rows = await service.staff();
+      const rows = await service.staff(businessId);
       const staffRows = rows.filter(
         (r) => r.staffUserId === staffAId || r.staffUserId === staffBId,
       );
@@ -218,7 +221,7 @@ describe('AnalyticsService (BE-071)', () => {
     });
 
     it('computes a real avg ticket size per staff member', async () => {
-      const rows = await service.staff();
+      const rows = await service.staff(businessId);
       const rowA = rows.find((r) => r.staffUserId === staffAId)!;
       expect(rowA.totalSales).toBe(150);
       expect(rowA.orders).toBe(1);
@@ -226,7 +229,7 @@ describe('AnalyticsService (BE-071)', () => {
     });
 
     it('counts real no-shows scoped to this staff member', async () => {
-      const rows = await service.staff();
+      const rows = await service.staff(businessId);
       const rowA = rows.find((r) => r.staffUserId === staffAId)!;
       const rowB = rows.find((r) => r.staffUserId === staffBId)!;
       expect(rowA.noShowCount).toBe(1);
@@ -234,13 +237,32 @@ describe('AnalyticsService (BE-071)', () => {
     });
 
     it('counts real (approximate, name-substring) review mentions for both staff sharing the name', async () => {
-      const rows = await service.staff();
+      const rows = await service.staff(businessId);
       const staffRows = rows.filter(
         (r) => r.staffUserId === staffAId || r.staffUserId === staffBId,
       );
       // Both share the exact name "Sam Staff", so the substring match legitimately counts for both —
       // this is the disclosed approximation (no structured staff-tagging on reviews exists).
       expect(staffRows.every((r) => r.reviewMentionCount >= 1)).toBe(true);
+    });
+
+    describe('month scoping (Staff module v2, UPD-BE-STAFF-08)', () => {
+      it('an explicit past month with no real activity returns none of this month\'s real rows', async () => {
+        const rows = await service.staff(businessId, undefined, '2020-01');
+        const staffRows = rows.filter(
+          (r) => r.staffUserId === staffAId || r.staffUserId === staffBId,
+        );
+        expect(staffRows).toHaveLength(0);
+      });
+
+      it('an explicit month matching real activity reproduces the same figures as the default (this month) call', async () => {
+        const now = new Date();
+        const thisMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+        const rows = await service.staff(businessId, undefined, thisMonth);
+        const rowA = rows.find((r) => r.staffUserId === staffAId)!;
+        expect(rowA.totalSales).toBe(150);
+        expect(rowA.orders).toBe(1);
+      });
     });
   });
 
@@ -291,7 +313,7 @@ describe('AnalyticsService (BE-071)', () => {
     });
 
     it('computes real new/returning/retention/LTV/at-risk from real customer rows', async () => {
-      const summary = await service.customerSummary();
+      const summary = await service.customerSummary(businessId);
       expect(summary.totalCustomers).toBeGreaterThanOrEqual(3);
       expect(summary.newCount).toBeGreaterThanOrEqual(1); // "New Nina" and "Lapsed Leo" both signed up just now
       expect(summary.returningCount).toBeGreaterThanOrEqual(1); // "Regular Rita" has visitCount 3
@@ -307,7 +329,7 @@ describe('AnalyticsService (BE-071)', () => {
 
     it('drills down a cohort month to the real customers who signed up in it', async () => {
       const thisMonth = new Date().toISOString().slice(0, 7);
-      const customers = await service.cohortCustomers(thisMonth);
+      const customers = await service.cohortCustomers(businessId, thisMonth);
       const ids = customers.map((c) => c.id);
       expect(ids).toEqual(expect.arrayContaining([regularId, newId, lapsedId]));
     });

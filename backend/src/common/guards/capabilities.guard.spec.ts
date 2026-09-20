@@ -37,7 +37,7 @@ describe('CapabilitiesGuard (UPD-BE-035)', () => {
     ).toBe(true);
   });
 
-  it('allows a caller whose resolved capabilities include the required one', () => {
+  it('allows an owner whose cached JWT capabilities include the required one (fast path, zero I/O)', () => {
     const reflector = {
       getAllAndOverride: () => CAPABILITIES.RETURNS_APPROVE,
     } as unknown as Reflector;
@@ -50,14 +50,14 @@ describe('CapabilitiesGuard (UPD-BE-035)', () => {
         makeContext({
           sub: 'u1',
           businessId: 'b1',
-          role: Role.manager,
+          role: Role.owner,
           capabilities: [CAPABILITIES.RETURNS_APPROVE],
         }),
       ),
     ).toBe(true);
   });
 
-  it('rejects a caller whose resolved capabilities do not include the required one', () => {
+  it('rejects an owner whose cached JWT capabilities do not include the required one', () => {
     const reflector = {
       getAllAndOverride: () => CAPABILITIES.BILLING_MANAGE,
     } as unknown as Reflector;
@@ -70,11 +70,62 @@ describe('CapabilitiesGuard (UPD-BE-035)', () => {
         makeContext({
           sub: 'u1',
           businessId: 'b1',
-          role: Role.manager,
+          role: Role.owner,
           capabilities: [CAPABILITIES.RETURNS_APPROVE],
         }),
       ),
     ).toThrow(ForbiddenException);
+  });
+
+  describe('live manager/staff enforcement (Roles & Permissions overrides, UPD-BE-STAFF-01)', () => {
+    it('allows a manager/staff caller whose live-resolved capabilities include the required one, even with a stale empty JWT snapshot', async () => {
+      const reflector = {
+        getAllAndOverride: () => CAPABILITIES.RETURNS_APPROVE,
+      } as unknown as Reflector;
+      const resolve = jest
+        .fn()
+        .mockResolvedValue([CAPABILITIES.RETURNS_APPROVE]);
+      const guard = new CapabilitiesGuard(reflector, {
+        resolve,
+      } as unknown as CapabilitiesService);
+
+      const result = await guard.canActivate(
+        makeContext({
+          sub: 'u1',
+          businessId: 'b1',
+          role: Role.manager,
+          capabilities: [],
+        }),
+      );
+
+      expect(result).toBe(true);
+      expect(resolve).toHaveBeenCalledWith({
+        businessId: 'b1',
+        role: Role.manager,
+        customRoleId: null,
+      });
+    });
+
+    it('rejects a manager/staff caller once a RoleCapabilityOverride removes the required capability, even though their cached JWT snapshot still has it', async () => {
+      const reflector = {
+        getAllAndOverride: () => CAPABILITIES.BILLING_MANAGE,
+      } as unknown as Reflector;
+      const resolve = jest.fn().mockResolvedValue([]);
+      const guard = new CapabilitiesGuard(reflector, {
+        resolve,
+      } as unknown as CapabilitiesService);
+
+      await expect(
+        guard.canActivate(
+          makeContext({
+            sub: 'u1',
+            businessId: 'b1',
+            role: Role.manager,
+            capabilities: [CAPABILITIES.BILLING_MANAGE],
+          }),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   it('rejects an unauthenticated request against a gated route', () => {
@@ -115,6 +166,7 @@ describe('CapabilitiesGuard (UPD-BE-035)', () => {
 
       expect(result).toBe(true);
       expect(resolve).toHaveBeenCalledWith({
+        businessId: 'b1',
         role: Role.staff,
         customRoleId: 'cr1',
       });

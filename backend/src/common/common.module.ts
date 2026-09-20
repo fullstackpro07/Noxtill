@@ -11,6 +11,7 @@ import { AuditService } from './audit/audit.service';
 import { WebhookIdempotencyService } from './webhooks/webhook-idempotency.service';
 import { CapabilitiesService } from './capabilities/capabilities.service';
 import { ApiKeyAuthService } from '../developer/api-key-auth.service';
+import { PoliciesService } from './policies/policies.service';
 
 /**
  * Wires the global request pipeline in guard-execution order (BE-006/008/009/013/UPD-BE-035):
@@ -28,6 +29,7 @@ import { ApiKeyAuthService } from '../developer/api-key-auth.service';
     AuditService,
     WebhookIdempotencyService,
     CapabilitiesService,
+    PoliciesService,
     ApiKeyAuthService,
     { provide: APP_GUARD, useClass: BusinessThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
@@ -40,6 +42,7 @@ import { ApiKeyAuthService } from '../developer/api-key-auth.service';
     AuditService,
     WebhookIdempotencyService,
     CapabilitiesService,
+    PoliciesService,
     ApiKeyAuthService,
   ],
 })

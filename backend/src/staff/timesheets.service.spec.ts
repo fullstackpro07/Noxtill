@@ -189,6 +189,7 @@ describe('TimesheetsService (UPD-BE-032)', () => {
         breakThresholdHours: 6,
         breakMinutesPerShift: 30,
         overtimeRateMultiplier: 1.5,
+        lateThresholdMinutes: 10,
       });
 
       const updated = await service.updateSettings(businessId, {

@@ -3,7 +3,10 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { EXPORT_FORMATS } from '../exports.constants';
@@ -19,6 +22,20 @@ export class UpdateScheduledExportDto {
   @IsOptional()
   @IsIn(FREQUENCIES)
   frequency?: (typeof FREQUENCIES)[number];
+
+  /** Weekly schedules: 0 (Sunday) to 6 (Saturday). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  dayOfWeek?: number;
+
+  /** Monthly schedules: 1 to 28, so every month has the day. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(28)
+  dayOfMonth?: number;
 
   @IsOptional()
   @IsIn(EXPORT_FORMATS)

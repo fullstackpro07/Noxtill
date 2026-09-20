@@ -447,12 +447,50 @@ describe('PublicReviewService (BE-046)', () => {
       const result = await service.submit(request.token, { stars: 5 });
       expect(result).toEqual({
         redirects: [
-          { platform: 'primary', url: 'https://g.page/test-biz/review' },
+          { platform: 'google', url: 'https://g.page/test-biz/review' },
           {
             platform: 'facebook',
             url: 'https://facebook.com/test-biz/reviews',
           },
         ],
+      });
+    });
+
+    it('labels the primary destination with its real configured platform, not an assumed one', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { reviewSettings: { publicReviewPlatform: 'yelp' } },
+      });
+      await prisma.reviewPlatformDestination.create({
+        data: {
+          businessId,
+          platform: 'facebook',
+          url: 'https://facebook.com/test-biz/reviews',
+        },
+      });
+
+      const request = await prisma.reviewRequest.create({
+        data: {
+          businessId,
+          customerId,
+          token: generateReviewToken(),
+          source: 'order',
+        },
+      });
+      const result = await service.submit(request.token, { stars: 5 });
+      expect(result).toEqual({
+        redirects: [
+          { platform: 'yelp', url: 'https://g.page/test-biz/review' },
+          {
+            platform: 'facebook',
+            url: 'https://facebook.com/test-biz/reviews',
+          },
+        ],
+      });
+
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { reviewSettings: {} },
       });
     });
   });

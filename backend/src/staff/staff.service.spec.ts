@@ -119,6 +119,65 @@ describe('StaffService (BE-056)', () => {
     expect(list.find((m) => m.id === created.id)).toBeUndefined();
   });
 
+  describe('deactivate/reactivate (UPD-BE-STAFF-02)', () => {
+    it('remove() deactivates rather than deleting — the row and its real history survive', async () => {
+      const created = await service.create(businessId, {
+        name: 'Soft Removable',
+        email: `soft-removable-${Date.now()}@example.com`,
+        role: 'staff',
+      });
+
+      await service.remove(created.id);
+
+      const stillThere = await prisma.businessUser.findUnique({
+        where: { id: created.id },
+      });
+      expect(stillThere).not.toBeNull();
+      expect(stillThere?.active).toBe(false);
+
+      // Excluded by default (booking/schedule pickers), but visible with includeInactive.
+      expect((await service.list()).find((m) => m.id === created.id)).toBeUndefined();
+      expect((await service.list(true)).find((m) => m.id === created.id)?.id).toBe(created.id);
+    });
+
+    it('reactivate() restores access without creating a new record', async () => {
+      const created = await service.create(businessId, {
+        name: 'Reactivatable',
+        email: `reactivatable-${Date.now()}@example.com`,
+        role: 'staff',
+      });
+      await service.remove(created.id);
+
+      const reactivated = await service.reactivate(created.id);
+      expect(reactivated.id).toBe(created.id);
+      expect(reactivated.active).toBe(true);
+      expect((await service.list()).find((m) => m.id === created.id)?.id).toBe(created.id);
+    });
+
+    it('re-inviting a deactivated person by the same email reactivates them instead of erroring or duplicating', async () => {
+      const email = `re-invite-${Date.now()}@example.com`;
+      const created = await service.create(businessId, {
+        name: 'Re-invited',
+        email,
+        role: 'staff',
+      });
+      await service.remove(created.id);
+
+      const reinvited = await service.create(businessId, {
+        name: 'Re-invited',
+        email,
+        role: 'manager',
+      });
+
+      expect(reinvited.id).toBe(created.id);
+      expect(reinvited.role).toBe('manager');
+      const count = await prisma.businessUser.count({
+        where: { businessId, userId: created.userId },
+      });
+      expect(count).toBe(1);
+    });
+  });
+
   describe('inbox()', () => {
     it('composes upcoming appointments, unresolved complaints, and low-stock alerts', async () => {
       const staffMember = await service.create(businessId, {

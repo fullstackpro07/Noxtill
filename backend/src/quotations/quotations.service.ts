@@ -8,6 +8,7 @@ import {
 import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { InvoiceService } from '../orders/invoice.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
+import { resolvePolicies } from '../common/policies/policies.service';
 import { OrderStatus, Prisma, QuotationStatus } from '@prisma/client';
 
 /** A quotation's real, user-facing status: `quotationStatus` plus a read-time "expired" check
@@ -45,7 +46,7 @@ interface QuotationBuildTxClient {
   business: {
     findUniqueOrThrow(args: {
       where: { id: string };
-    }): Promise<{ taxRate: Prisma.Decimal | number }>;
+    }): Promise<{ taxRate: Prisma.Decimal | number; policies?: Prisma.JsonValue }>;
   };
   product: {
     findMany(args: {
@@ -151,14 +152,15 @@ export class QuotationsService {
     });
 
     const discount = dto.discount ?? 0;
-    const totals = computeOrderTotals(itemsData, discount, Number(business.taxRate));
+    const taxInclusive = resolvePolicies(business).bool('sales.pricesIncludeTax');
+    const totals = computeOrderTotals(itemsData, discount, Number(business.taxRate), taxInclusive);
 
-    return { customerId, itemsData, discount, totals };
+    return { customerId, itemsData, discount, totals, taxInclusive };
   }
 
   async create(businessId: string, dto: CreateQuotationDto) {
     return this.tenantPrisma.client.$transaction(async (tx) => {
-      const { customerId, itemsData, discount, totals } =
+      const { customerId, itemsData, discount, totals, taxInclusive } =
         await this.buildQuotationData(businessId, dto, tx);
 
       const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
@@ -181,6 +183,7 @@ export class QuotationsService {
           tax: totals.tax,
           discount,
           total: totals.total,
+          taxInclusive,
           cogs: totals.cogs,
         },
       });
@@ -283,6 +286,7 @@ export class QuotationsService {
           tax: quotation.tax,
           discount: quotation.discount,
           total: quotation.total,
+          taxInclusive: quotation.taxInclusive,
           cogs: quotation.cogs,
         },
       });

@@ -137,6 +137,7 @@ export class TimesheetsService {
       breakThresholdHours: business.breakThresholdHours,
       breakMinutesPerShift: business.breakMinutesPerShift,
       overtimeRateMultiplier: Number(business.overtimeRateMultiplier),
+      lateThresholdMinutes: business.lateThresholdMinutes,
     };
   }
 
@@ -147,6 +148,7 @@ export class TimesheetsService {
       breakThresholdHours: number;
       breakMinutesPerShift: number;
       overtimeRateMultiplier: number;
+      lateThresholdMinutes: number;
     }>,
   ) {
     const business = await this.tenantPrisma.client.business.update({
@@ -158,6 +160,7 @@ export class TimesheetsService {
       breakThresholdHours: business.breakThresholdHours,
       breakMinutesPerShift: business.breakMinutesPerShift,
       overtimeRateMultiplier: Number(business.overtimeRateMultiplier),
+      lateThresholdMinutes: business.lateThresholdMinutes,
     };
   }
 }

@@ -38,9 +38,18 @@ const BCRYPT_ROUNDS = 10;
 export class StaffService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
-  list() {
+  /**
+   * `includeInactive` defaults to false so every existing caller (booking/schedule staff pickers,
+   * etc.) keeps seeing only people who can actually take a booking or a shift, same as before
+   * `active` existed. The Roster screen is the one real caller that needs to see deactivated staff
+   * too (to reactivate them), and passes `includeInactive: true` explicitly.
+   */
+  list(includeInactive = false) {
     return this.tenantPrisma.client.businessUser.findMany({
-      where: { role: { in: [Role.owner, Role.manager, Role.staff] } },
+      where: {
+        role: { in: [Role.owner, Role.manager, Role.staff] },
+        ...(includeInactive ? {} : { active: true }),
+      },
       include: { user: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -140,12 +149,30 @@ export class StaffService {
         await this.tenantPrisma.client.businessUser.findUnique({
           where: { businessId_userId: { businessId, userId: user.id } },
         });
-      if (existingLink) {
+      if (existingLink?.active) {
         throw new AppException(
           STAFF_ERROR_CODES.ALREADY_STAFF,
           'This person is already staff at this business',
           HttpStatus.CONFLICT,
         );
+      }
+      // A previously-deactivated staff member re-invited by email/phone comes back as themself —
+      // a new BusinessUser row would collide with the `[businessId, userId]` unique constraint,
+      // and re-creating a new "person" would orphan their real attendance/commission/order history.
+      if (existingLink) {
+        const reactivated = await this.tenantPrisma.client.businessUser.update(
+          {
+            where: { id: existingLink.id },
+            data: {
+              active: true,
+              role: dto.role,
+              commissionRule: (dto.commissionRule ?? {}) as Prisma.InputJsonValue,
+              hourlyRate: dto.hourlyRate,
+            },
+            include: { user: true },
+          },
+        );
+        return { ...reactivated, tempPassword };
       }
     } else {
       tempPassword = randomBytes(TEMP_PASSWORD_BYTES).toString('hex');
@@ -201,12 +228,29 @@ export class StaffService {
     });
   }
 
+  /**
+   * Deactivates (never hard-deletes) a staff member (UPD-BE-STAFF-02) — their attendance,
+   * commissions, shifts, orders and activity log entries all stay exactly as they are; only
+   * `active` flips, which the auth layer checks on every future login/refresh. Replaces the
+   * previous `businessUser.delete`, which would have thrown a foreign-key error for anyone with
+   * real history anyway.
+   */
   async remove(id: string) {
     const existing = await this.loadNonOwner(id);
-    await this.tenantPrisma.client.businessUser.delete({
+    await this.tenantPrisma.client.businessUser.update({
       where: { id: existing.id },
+      data: { active: false },
     });
     return { success: true };
+  }
+
+  async reactivate(id: string) {
+    const existing = await this.loadNonOwner(id);
+    return this.tenantPrisma.client.businessUser.update({
+      where: { id: existing.id },
+      data: { active: true },
+      include: { user: true },
+    });
   }
 
   private async loadNonOwner(id: string) {

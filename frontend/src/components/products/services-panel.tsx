@@ -34,7 +34,7 @@ export function ServicesPanel() {
 
   const { data: services } = useQuery({ queryKey: ["products", "services"], queryFn: () => fetchProducts({ kind: "service" }) });
   const { data: categories } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, staleTime: 5 * 60_000 });
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60_000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60_000 });
   const { data: appointments } = useQuery({ queryKey: ["appointments", "last-90-days"], queryFn: () => fetchAppointments({ from: new Date(Date.now() - NINETY_DAYS_MS).toISOString() }) });
 
   const staffNameById = useMemo(() => new Map((staff ?? []).map((s) => [s.id, s.name])), [staff]);

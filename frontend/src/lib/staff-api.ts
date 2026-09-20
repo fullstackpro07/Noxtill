@@ -63,6 +63,9 @@ export interface LiveStaffMember {
   /** Staff depth fix (UPD-INT-011): null means purely-commission pay, unchanged from before this
    * field existed. */
   hourlyRate: number | null;
+  /** UPD-BE-STAFF-02: false means deactivated — access revoked, but every historical record
+   * (attendance, commissions, shifts, orders) stays intact. Reactivatable via `reactivateStaffMember`. */
+  active: boolean;
 }
 
 function toLiveStaffMember(
@@ -70,6 +73,7 @@ function toLiveStaffMember(
     commissionRule?: RawCommissionRule;
     customRoleId?: string | null;
     hourlyRate?: string | null;
+    active?: boolean;
   },
 ): LiveStaffMember {
   return {
@@ -82,13 +86,16 @@ function toLiveStaffMember(
     commissionRule: toCommissionRule(raw.commissionRule),
     customRoleId: raw.customRoleId ?? null,
     hourlyRate: raw.hourlyRate != null ? Number(raw.hourlyRate) : null,
+    active: raw.active ?? true,
   };
 }
 
-export async function fetchStaffList(): Promise<LiveStaffMember[]> {
+/** `includeInactive` defaults to false, matching the backend default — pass true only for
+ * screens (the Roster) that need to show and reactivate deactivated staff. */
+export async function fetchStaffList(includeInactive = false): Promise<LiveStaffMember[]> {
   const raw = await apiFetch<
-    (RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null; hourlyRate?: string | null })[]
-  >("/staff");
+    (RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null; hourlyRate?: string | null; active?: boolean })[]
+  >(`/staff${includeInactive ? "?includeInactive=true" : ""}`);
   return raw.map(toLiveStaffMember);
 }
 
@@ -138,8 +145,18 @@ export async function updateStaffMember(
   return toLiveStaffMember(raw);
 }
 
+/** Deactivates (never hard-deletes, UPD-BE-STAFF-02) — the route stays DELETE for URL stability, but
+ * the backend flips `active` to false; every historical record for this person is kept. */
 export function removeStaffMember(id: string): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>(`/staff/${id}`, { method: "DELETE" });
+}
+
+export async function reactivateStaffMember(id: string): Promise<LiveStaffMember> {
+  const raw = await apiFetch<RawStaffMember & { commissionRule?: RawCommissionRule; customRoleId?: string | null; hourlyRate?: string | null; active?: boolean }>(
+    `/staff/${id}/reactivate`,
+    { method: "PATCH" },
+  );
+  return toLiveStaffMember(raw);
 }
 
 /** UPD-FE-113 — sends only `customRoleId`, leaving role/commissionRule untouched (unlike `updateStaffMember`, which requires both). */
@@ -159,10 +176,25 @@ export interface CommissionEntry {
   role: string;
   totalSales: number;
   commission: number;
+  /** UPD-BE-STAFF-04: real label derived from the staff member's own `commissionRule`. */
+  ruleLabel: string;
+  /** UPD-BE-STAFF-04: real all-time outstanding advances for this person — informational only,
+   * "Mark Paid" here never settles advances (see `CommissionPayment`'s backend doc comment). */
+  advancesOutstanding: number;
+  /** UPD-BE-STAFF-04: whether this specific month's commission has been marked paid. */
+  paid: boolean;
 }
 
 export function fetchCommissions(month: string): Promise<CommissionEntry[]> {
   return apiFetch<CommissionEntry[]>(`/staff/commissions?month=${month}`);
+}
+
+export function markCommissionPaid(staffUserId: string, month: string): Promise<{ id: string; paidAt: string }> {
+  return apiFetch("/staff/commissions/mark-paid", { method: "POST", body: JSON.stringify({ staffUserId, month }) });
+}
+
+export function sendCommissionStatement(staffUserId: string, month: string): Promise<unknown> {
+  return apiFetch("/staff/commissions/send-statement", { method: "POST", body: JSON.stringify({ staffUserId, month }) });
 }
 
 export interface TeamInboxTask {
@@ -189,6 +221,7 @@ interface RawAttendanceRow {
   staffUserId: string;
   checkIn: string;
   checkOut: string | null;
+  edited?: boolean;
   staffUser: { id: string; user: { id: string; name: string } };
 }
 
@@ -198,6 +231,9 @@ export interface AttendanceRow {
   staffName: string;
   checkIn: string;
   checkOut: string | null;
+  /** UPD-BE-STAFF-03: true only for a manually-added or corrected row — the original value stays
+   * in the real audit log either way. */
+  edited: boolean;
 }
 
 function toAttendanceRow(raw: RawAttendanceRow): AttendanceRow {
@@ -205,6 +241,7 @@ function toAttendanceRow(raw: RawAttendanceRow): AttendanceRow {
     id: raw.id,
     staffUserId: raw.staffUserId,
     staffName: raw.staffUser.user.name,
+    edited: raw.edited ?? false,
     checkIn: raw.checkIn,
     checkOut: raw.checkOut,
   };
@@ -218,6 +255,31 @@ export async function fetchAttendance(params: { staffUserId?: string; from?: str
   const qs = query.toString();
   const raw = await apiFetch<RawAttendanceRow[]>(`/attendance${qs ? `?${qs}` : ""}`);
   return raw.map(toAttendanceRow);
+}
+
+// --- Manual entry / correction (UPD-BE-STAFF-03) ---
+
+export interface ManualAttendanceInput {
+  staffUserId: string;
+  checkIn: string;
+  checkOut: string;
+  reason: string;
+}
+
+export async function createManualAttendance(input: ManualAttendanceInput): Promise<AttendanceRow> {
+  const raw = await apiFetch<RawAttendanceRow>("/attendance/manual", { method: "POST", body: JSON.stringify(input) });
+  return toAttendanceRow(raw);
+}
+
+export interface CorrectAttendanceInput {
+  checkIn: string;
+  checkOut?: string | null;
+  note: string;
+}
+
+export async function correctAttendance(id: string, input: CorrectAttendanceInput): Promise<AttendanceRow> {
+  const raw = await apiFetch<RawAttendanceRow>(`/attendance/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+  return toAttendanceRow(raw);
 }
 
 // --- Shifts & Schedule (UPD-BE-031, extended UPD-BE/FE-113) ---
@@ -333,6 +395,17 @@ export function notifyShifts(from: string, to: string): Promise<NotifyShiftsResu
   return apiFetch<NotifyShiftsResult>("/shifts/notify", { method: "POST", body: JSON.stringify({ from, to }) });
 }
 
+export interface SchedulePublishStatus {
+  published: boolean;
+  publishedAt: string | null;
+}
+
+/** Real, shared publish status for a week — a row exists only once `notifyShifts` has actually
+ * been called for that week, visible to every viewer (not per-browser localStorage). */
+export function fetchSchedulePublishStatus(weekStart: string): Promise<SchedulePublishStatus> {
+  return apiFetch<SchedulePublishStatus>(`/shifts/publish-status?weekStart=${encodeURIComponent(weekStart)}`);
+}
+
 // --- Time Off (real backend, UPD-BE-031 — no prior frontend consumer existed for this) ---
 
 interface RawTimeOff {
@@ -429,6 +502,8 @@ export interface TimesheetSettings {
   breakMinutesPerShift: number;
   /** Staff depth fix (UPD-INT-011): multiplies a staff member's `hourlyRate` for overtime hours. */
   overtimeRateMultiplier: number;
+  /** UPD-BE-STAFF-03: minutes after a scheduled shift's start before a check-in counts as Late. */
+  lateThresholdMinutes: number;
 }
 
 export function fetchTimesheetSettings(): Promise<TimesheetSettings> {
@@ -448,6 +523,8 @@ interface RawAdvance {
   staffUserId: string;
   amount: string;
   reason: string | null;
+  category: string | null;
+  recordedByName?: string | null;
   status: AdvanceStatus;
   deductedInMonth: string | null;
   createdAt: string;
@@ -460,6 +537,8 @@ export interface Advance {
   staffName: string | null;
   amount: number;
   reason: string | null;
+  category: string | null;
+  recordedByName: string | null;
   status: AdvanceStatus;
   deductedInMonth: string | null;
   createdAt: string;
@@ -472,6 +551,8 @@ function toAdvance(raw: RawAdvance): Advance {
     staffName: raw.staffUser?.user.name ?? null,
     amount: Number(raw.amount),
     reason: raw.reason,
+    category: raw.category,
+    recordedByName: raw.recordedByName ?? null,
     status: raw.status,
     deductedInMonth: raw.deductedInMonth,
     createdAt: raw.createdAt,
@@ -486,6 +567,7 @@ export async function fetchAllAdvances(): Promise<Advance[]> {
 export interface AdvanceDraft {
   amount: number;
   reason?: string;
+  category?: string;
 }
 
 export async function createAdvance(staffUserId: string, draft: AdvanceDraft): Promise<Advance> {
@@ -502,13 +584,99 @@ export function cancelAdvance(staffUserId: string, advanceId: string): Promise<v
   return apiFetch<void>(`/staff/${staffUserId}/advances/${advanceId}`, { method: "DELETE" });
 }
 
-// --- Payroll Export (UPD-BE-034) ---
+export async function settleAdvance(staffUserId: string, advanceId: string): Promise<Advance> {
+  const raw = await apiFetch<RawAdvance>(`/staff/${staffUserId}/advances/${advanceId}/settle`, { method: "PATCH" });
+  return toAdvance(raw);
+}
+
+// --- Payroll Export (UPD-BE-034, extended UPD-BE-STAFF-06) ---
 
 export interface PayrollExportResult {
   url: string;
   warnings: string[];
 }
 
+export interface PayrollRow {
+  businessUserId: string;
+  name: string;
+  role: string;
+  hoursWorked: number;
+  overtimeHours: number;
+  hourlyRate: number;
+  hourlyPay: number;
+  commission: number;
+  advancesDeducted: number;
+  otherAdjustments: number;
+  netPay: number;
+}
+
+export interface PayrollPreview {
+  rows: PayrollRow[];
+  warnings: string[];
+}
+
+/** Read-only — computes the same numbers `exportPayroll` would, without netting advances or
+ * generating a file. Safe to call on every page load. */
+export function fetchPayrollPreview(month: string): Promise<PayrollPreview> {
+  return apiFetch<PayrollPreview>(`/payroll/preview?month=${month}`);
+}
+
 export function exportPayroll(month: string): Promise<PayrollExportResult> {
   return apiFetch<PayrollExportResult>(`/payroll/export.xlsx?month=${month}`);
+}
+
+export type PayrollLineItemType = "add" | "deduct";
+
+interface RawPayrollLineItem {
+  id: string;
+  staffUserId: string;
+  month: string;
+  label: string;
+  amount: string;
+  type: PayrollLineItemType;
+  staffUser: { id: string; user: { id: string; name: string } };
+}
+
+export interface PayrollLineItem {
+  id: string;
+  staffUserId: string;
+  staffName: string;
+  month: string;
+  label: string;
+  amount: number;
+  type: PayrollLineItemType;
+}
+
+function toPayrollLineItem(raw: RawPayrollLineItem): PayrollLineItem {
+  return {
+    id: raw.id,
+    staffUserId: raw.staffUserId,
+    staffName: raw.staffUser.user.name,
+    month: raw.month,
+    label: raw.label,
+    amount: Number(raw.amount),
+    type: raw.type,
+  };
+}
+
+export async function fetchPayrollLineItems(month: string): Promise<PayrollLineItem[]> {
+  const raw = await apiFetch<RawPayrollLineItem[]>(`/payroll/line-items?month=${month}`);
+  return raw.map(toPayrollLineItem);
+}
+
+export interface PayrollLineItemDraft {
+  staffUserId: string;
+  month: string;
+  label: string;
+  amount: number;
+  type: PayrollLineItemType;
+}
+
+export async function createPayrollLineItem(draft: PayrollLineItemDraft): Promise<PayrollLineItem> {
+  const raw = await apiFetch<RawPayrollLineItem>("/payroll/line-items", { method: "POST", body: JSON.stringify(draft) });
+  return toPayrollLineItem(raw);
+}
+
+export function deletePayrollLineItem(id: string): Promise<void> {
+  return apiFetch<void>(`/payroll/line-items/${id}`, { method: "DELETE" });
 }

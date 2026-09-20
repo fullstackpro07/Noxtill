@@ -136,6 +136,42 @@ describe('ActionCenterService (UPD-BE-004)', () => {
     expect(complaintItems[0].priority).toBe('urgent'); // 1-star
   });
 
+  it('exposes a real assigneeStaffId for a complaint, and null for every other item type (UPD-BE-STAFF-07)', async () => {
+    const customer = await prisma.customer.create({
+      data: { businessId, name: 'Assignee Complainer', phone: '+10000000099' },
+    });
+    const assignedStaffUser = await prisma.user.create({
+      data: {
+        name: 'Assignee Staffer',
+        email: `assignee-${Date.now()}@example.com`,
+        passwordHash: 'x',
+      },
+    });
+    const assignedBusinessUser = await prisma.businessUser.create({
+      data: { businessId, userId: assignedStaffUser.id, role: Role.staff },
+    });
+    const assignedFeedback = await prisma.privateFeedback.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        stars: 2,
+        status: 'assigned',
+        assignedTo: assignedBusinessUser.id,
+      },
+    });
+
+    const result = await service.list(businessId, Role.owner, null, {});
+    const complaintItem = result.items.find(
+      (i) => i.id === `complaint:${assignedFeedback.id}`,
+    );
+    expect(complaintItem?.assigneeStaffId).toBe(assignedBusinessUser.id);
+
+    const nonComplaintItem = result.items.find((i) => i.type !== 'complaint');
+    if (nonComplaintItem) {
+      expect(nonComplaintItem.assigneeStaffId).toBeNull();
+    }
+  });
+
   it('surfaces a real overdue debtor only once past the notable-days threshold', async () => {
     const customer = await prisma.customer.create({
       data: { businessId, name: 'Debtor Customer', phone: '+10000000021' },

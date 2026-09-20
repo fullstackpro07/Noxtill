@@ -9,6 +9,7 @@ export const NOTIFICATION_EVENTS = [
   'export_ready',
   'scheduled_delivery_ready',
   'schedule_updated',
+  'tax_filing_reminder',
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
@@ -17,6 +18,17 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   export_ready: 'Data export ready',
   scheduled_delivery_ready: 'Scheduled report/export ready',
   schedule_updated: 'Your shift schedule changed',
+  tax_filing_reminder: 'Tax filing reminder',
+};
+
+export type NotificationPriority = 'low' | 'normal' | 'high';
+
+/** Fixed per event — set on the notification when it is created, and shown in the bell and Settings. */
+export const NOTIFICATION_EVENT_PRIORITY: Record<NotificationEvent, NotificationPriority> = {
+  export_ready: 'normal',
+  scheduled_delivery_ready: 'normal',
+  schedule_updated: 'high',
+  tax_filing_reminder: 'high',
 };
 
 export function isNotificationEvent(value: string): value is NotificationEvent {

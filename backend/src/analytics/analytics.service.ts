@@ -1,6 +1,8 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 import { SegmentsService } from '../customers/segments.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { AppException } from '../common/filters/app.exception';
@@ -42,6 +44,7 @@ interface CampaignRow {
 interface StaffRow {
   staff_user_id: string;
   name: string;
+  role: string;
   total: string;
   orders: bigint;
 }
@@ -51,11 +54,18 @@ interface NoShowRow {
   no_shows: bigint;
 }
 
+interface AppointmentCountRow {
+  staff_user_id: string;
+  appointments: bigint;
+}
+
 /** Analytics/KPI endpoints (BE-071) — every method is tenant-scoped via CLS, same as ProfitService. */
 @Injectable()
 export class AnalyticsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
+    private readonly prisma: PrismaService,
+    private readonly branchScope: BranchScopeService,
     private readonly cls: ClsService,
     private readonly segments: SegmentsService,
     private readonly sendGate: SendGateService,
@@ -151,8 +161,9 @@ export class AnalyticsService {
   }
 
   /** Monthly-signup-cohort retention: % of each cohort with >=1 order in each month since signup. */
-  async cohorts() {
-    const client = this.tenantPrisma.client;
+  async cohorts(businessId: string, branchId?: string) {
+    const ids = await this.branchScope.resolveIds(businessId, branchId);
+    const client = this.prisma;
 
     const cohortStarts = Array.from({ length: COHORT_MONTHS_BACK }, (_, i) =>
       startOfMonth(COHORT_MONTHS_BACK - 1 - i),
@@ -168,11 +179,15 @@ export class AnalyticsService {
           ),
         );
         const cohortCustomers = await client.customer.findMany({
-          where: { createdAt: { gte: cohortStart, lt: cohortEnd } },
-          select: { id: true },
+          where: { businessId: { in: ids }, createdAt: { gte: cohortStart, lt: cohortEnd } },
+          select: { id: true, lifetimeSpend: true },
         });
         const customerIds = cohortCustomers.map((c) => c.id);
         const cohortSize = customerIds.length;
+        // Real lifetime revenue from this cohort's own customers (all-time, not just this month).
+        const revenue = round2(
+          cohortCustomers.reduce((sum, c) => sum + Number(c.lifetimeSpend), 0),
+        );
 
         const retention: number[] = [];
         for (let m = 0; m < COHORT_RELATIVE_MONTHS; m++) {
@@ -197,6 +212,7 @@ export class AnalyticsService {
           const activeCount = await client.order.groupBy({
             by: ['customerId'],
             where: {
+              businessId: { in: ids },
               customerId: { in: customerIds },
               createdAt: { gte: windowStart, lt: windowEnd },
               status: OrderStatus.completed,
@@ -213,11 +229,78 @@ export class AnalyticsService {
           cohortMonth: cohortStart.toISOString().slice(0, 7),
           size: cohortSize,
           retention,
+          revenue,
         };
       }),
     );
 
     return cohorts;
+  }
+
+  /**
+   * Customer Analytics' "New vs returning" chart (UPD-BE-113): for each of `monthsBack` months, a
+   * real distinct-customer split among customers who actually bought that month — "new" is a
+   * customer whose earliest-ever completed order falls in that month, "returning" is an
+   * active-that-month customer whose earliest order was earlier. A single global
+   * first-order-per-customer map avoids N+1 queries across the months.
+   */
+  private async computeNewVsReturning(ids: string[], monthsBack: number) {
+    const client = this.prisma;
+    const monthStarts = Array.from({ length: monthsBack }, (_, i) =>
+      startOfMonth(monthsBack - 1 - i),
+    );
+    const rangeStart = monthStarts[0];
+
+    const [firstOrders, ordersInRange] = await Promise.all([
+      client.order.groupBy({
+        by: ['customerId'],
+        where: {
+          businessId: { in: ids },
+          status: OrderStatus.completed,
+          isQuotation: false,
+          customerId: { not: null },
+        },
+        _min: { createdAt: true },
+      }),
+      client.order.findMany({
+        where: {
+          businessId: { in: ids },
+          status: OrderStatus.completed,
+          isQuotation: false,
+          customerId: { not: null },
+          createdAt: { gte: rangeStart },
+        },
+        select: { customerId: true, createdAt: true },
+      }),
+    ]);
+
+    const firstOrderByCustomer = new Map(
+      firstOrders
+        .filter((r) => r.customerId && r._min.createdAt)
+        .map((r) => [r.customerId as string, r._min.createdAt as Date]),
+    );
+
+    return monthStarts.map((start) => {
+      const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+      const activeCustomerIds = new Set(
+        ordersInRange
+          .filter((o) => o.createdAt >= start && o.createdAt < end)
+          .map((o) => o.customerId as string),
+      );
+      let newCount = 0;
+      let returningCount = 0;
+      for (const customerId of activeCustomerIds) {
+        const firstOrder = firstOrderByCustomer.get(customerId);
+        if (firstOrder && firstOrder >= start && firstOrder < end) newCount += 1;
+        else returningCount += 1;
+      }
+      return { month: start.toISOString().slice(0, 7), newCount, returningCount };
+    });
+  }
+
+  async newVsReturningByMonth(businessId: string, branchId?: string) {
+    const ids = await this.branchScope.resolveIds(businessId, branchId);
+    return this.computeNewVsReturning(ids, COHORT_MONTHS_BACK);
   }
 
   async campaigns() {
@@ -252,24 +335,39 @@ export class AnalyticsService {
    * structured staff-tagging on reviews in this schema, so this is disclosed as approximate, never
    * claimed exact). Grouped by `bu.id` now, not `u.name` — two staff sharing a name used to
    * silently merge into one row. */
-  async staff() {
-    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
-    const since = startOfMonth();
+  /**
+   * Staff module v2 (UPD-BE-STAFF-08): `month` ("YYYY-MM") lets a caller ask for an arbitrary past
+   * month instead of always "this month so far" — omitted keeps the original behavior exactly
+   * (current month, no upper bound needed since nothing dated in the future exists yet). An
+   * explicit past month gets a real upper bound too, so it can never leak into the following
+   * month's data. `reviewMentionCount` stays all-time regardless — see its own read below.
+   */
+  async staff(businessId: string, branchId?: string, month?: string) {
+    const ids = await this.branchScope.resolveIds(businessId, branchId);
+    const { since, until } = this.staffMonthRange(month);
 
-    const [salesRows, noShowRows] = await Promise.all([
-      this.tenantPrisma.client.$queryRaw<StaffRow[]>`
-        SELECT bu.id AS staff_user_id, u.name, SUM(o.total) AS total, COUNT(*) AS orders
+    const [salesRows, noShowRows, appointmentRows] = await Promise.all([
+      this.prisma.$queryRaw<StaffRow[]>`
+        SELECT bu.id AS staff_user_id, u.name, bu.role, SUM(o.total) AS total, COUNT(*) AS orders
         FROM orders o
         JOIN business_users bu ON bu.id = o.staff_user_id
         JOIN users u ON u.id = bu.user_id
-        WHERE o.business_id = ${businessId} AND o.status = 'completed' AND o.is_quotation = false AND o.created_at >= ${since}
-        GROUP BY bu.id, u.name
+        WHERE o.business_id IN (${Prisma.join(ids)}) AND o.status = 'completed' AND o.is_quotation = false AND o.created_at >= ${since} AND o.created_at < ${until}
+        GROUP BY bu.id, u.name, bu.role
         ORDER BY total DESC
       `,
-      this.tenantPrisma.client.$queryRaw<NoShowRow[]>`
+      this.prisma.$queryRaw<NoShowRow[]>`
         SELECT staff_user_id, COUNT(*) AS no_shows
         FROM appointments
-        WHERE business_id = ${businessId} AND status = 'no_show' AND staff_user_id IS NOT NULL AND starts_at >= ${since}
+        WHERE business_id IN (${Prisma.join(ids)}) AND status = 'no_show' AND staff_user_id IS NOT NULL AND starts_at >= ${since} AND starts_at < ${until}
+        GROUP BY staff_user_id
+      `,
+      // Every real appointment on the books this period, regardless of status — the Staff
+      // Analytics table's "Appointments" column, distinct from the no-shows already broken out.
+      this.prisma.$queryRaw<AppointmentCountRow[]>`
+        SELECT staff_user_id, COUNT(*) AS appointments
+        FROM appointments
+        WHERE business_id IN (${Prisma.join(ids)}) AND staff_user_id IS NOT NULL AND starts_at >= ${since} AND starts_at < ${until}
         GROUP BY staff_user_id
       `,
     ]);
@@ -277,26 +375,47 @@ export class AnalyticsService {
     const noShowByStaff = new Map(
       noShowRows.map((r) => [r.staff_user_id, Number(r.no_shows)]),
     );
+    const appointmentsByStaff = new Map(
+      appointmentRows.map((r) => [r.staff_user_id, Number(r.appointments)]),
+    );
 
     return Promise.all(
       salesRows.map(async (r) => {
         const totalSales = round2(Number(r.total));
         const orders = Number(r.orders);
-        const reviewMentions =
-          await this.tenantPrisma.client.externalReview.count({
-            where: { text: { contains: r.name } },
-          });
+        const reviewMentions = await this.prisma.externalReview.count({
+          where: { businessId: { in: ids }, text: { contains: r.name } },
+        });
         return {
           staffUserId: r.staff_user_id,
           name: r.name,
+          role: r.role,
           totalSales,
           orders,
           avgTicketSize: orders > 0 ? round2(totalSales / orders) : 0,
           noShowCount: noShowByStaff.get(r.staff_user_id) ?? 0,
+          appointmentsCount: appointmentsByStaff.get(r.staff_user_id) ?? 0,
           reviewMentionCount: reviewMentions,
         };
       }),
     );
+  }
+
+  private staffMonthRange(month?: string): { since: Date; until: Date } {
+    if (month) {
+      const [year, mon] = month.split('-').map(Number);
+      return {
+        since: new Date(Date.UTC(year, mon - 1, 1)),
+        until: new Date(Date.UTC(year, mon, 1)),
+      };
+    }
+    const since = startOfMonth();
+    return {
+      since,
+      until: new Date(
+        Date.UTC(since.getUTCFullYear(), since.getUTCMonth() + 1, 1),
+      ),
+    };
   }
 
   async channels(days = 30) {
@@ -320,12 +439,28 @@ export class AnalyticsService {
    * (`Customer.visitCount`/`lifetimeSpend`, and the real `Lapsed` tag `CrmJobsProcessor` already
    * maintains — reused via `SegmentsService`, not a re-derived "days since last visit" guess that
    * could disagree with what the Customers screen shows for the same customer). */
-  async customerSummary() {
-    const [newSegment, lapsedSegment, customers] = await Promise.all([
-      this.segments.getSegment('new'),
+  async customerSummary(businessId: string, branchId?: string) {
+    const ids = await this.branchScope.resolveIds(businessId, branchId);
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+    // `atRiskCount` deliberately stays scoped to the caller's own business only, not the resolved
+    // branch group: `SegmentsService` (shared with Marketing's Audiences feature) has no
+    // multi-business concept, and giving it one is a larger change than this screen's branch
+    // filter warrants. Every other figure below respects the real branch selection.
+    const [lapsedSegment, customers, newThisMonth] = await Promise.all([
       this.segments.getSegment('lapsed'),
-      this.tenantPrisma.client.customer.findMany({
+      this.prisma.customer.findMany({
+        where: { businessId: { in: ids } },
         select: { id: true, visitCount: true, lifetimeSpend: true },
+      }),
+      // Same real "signed up this calendar month" definition `cohorts()` uses for a cohort's own
+      // size (UPD-BE-113b) — before this, "New Customers" used a different, unrelated window
+      // (signed up in the trailing 30 days), which didn't line up with the "New vs returning"
+      // chart's current-month bar directly below it on the same screen.
+      this.prisma.customer.count({
+        where: { businessId: { in: ids }, createdAt: { gte: monthStart, lt: monthEnd } },
       }),
     ]);
 
@@ -345,7 +480,7 @@ export class AnalyticsService {
 
     return {
       totalCustomers: customers.length,
-      newCount: newSegment.count,
+      newCount: newThisMonth,
       returningCount: returning.length,
       retentionRate,
       avgLTV,
@@ -371,14 +506,21 @@ export class AnalyticsService {
     });
   }
 
-  /** UPD-FE-098's cohort-table drill-down — the real customers behind one cohort month's %. */
-  async cohortCustomers(cohortMonth: string) {
+  /** UPD-FE-098's cohort-table drill-down — the real customers behind one cohort month's %. Takes
+   * the same businessId/branchId as `cohorts()` so drilling into a cohort computed under a
+   * specific branch selection shows that branch's own customers, not a different scope. */
+  async cohortCustomers(
+    businessId: string,
+    cohortMonth: string,
+    branchId?: string,
+  ) {
+    const ids = await this.branchScope.resolveIds(businessId, branchId);
     const [year, month] = cohortMonth.split('-').map(Number);
     const start = new Date(Date.UTC(year, month - 1, 1));
     const end = new Date(Date.UTC(year, month, 1));
 
-    return this.tenantPrisma.client.customer.findMany({
-      where: { createdAt: { gte: start, lt: end } },
+    return this.prisma.customer.findMany({
+      where: { businessId: { in: ids }, createdAt: { gte: start, lt: end } },
       select: {
         id: true,
         name: true,

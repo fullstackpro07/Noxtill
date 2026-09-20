@@ -39,6 +39,11 @@ export class ScheduledExportsController {
     return this.scheduledExports.update(id, dto);
   }
 
+  @Post(':id/run')
+  runNow(@Param('id') id: string) {
+    return this.scheduledExports.runNow(id);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.scheduledExports.remove(id);

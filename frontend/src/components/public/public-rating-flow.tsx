@@ -6,10 +6,10 @@ import { submitPublicReview, type PublicReviewBusiness, type ReviewPlatformRedir
 import { ApiError } from "@/lib/api-client";
 
 const PLATFORM_LABEL: Record<string, string> = {
-  primary: "Google",
   google: "Google",
   facebook: "Facebook",
   yelp: "Yelp",
+  other: "This platform",
   trustpilot: "Trustpilot",
   tripadvisor: "TripAdvisor",
 };

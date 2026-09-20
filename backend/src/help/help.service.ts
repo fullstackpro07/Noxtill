@@ -74,10 +74,18 @@ export class HelpService {
     private readonly aiInfra: AiInfraService,
   ) {}
 
-  async ask(businessId: string | undefined, dto: AskHelpDto) {
+  /** `userId` is optional (mirrors `businessId`) only so pre-existing test fixtures that predate
+   * this signature still type-check without updating every call site — every real caller today
+   * (the controller) always has an authenticated user. */
+  async ask(
+    businessId: string | undefined,
+    userId: string | undefined,
+    dto: AskHelpDto,
+  ) {
     const passages = await retrieveHelpPassages(this.prisma, dto.question);
 
     if (passages.length === 0) {
+      await this.logQuery(businessId, userId, dto.question, HELP_NOT_FOUND_MESSAGE, []);
       return { answer: HELP_NOT_FOUND_MESSAGE, sources: [] };
     }
 
@@ -100,9 +108,77 @@ export class HelpService {
       'help_ask',
     );
 
+    const sources = passages.map((p) => ({ title: p.title, url: p.url }));
+    await this.logQuery(businessId, userId, dto.question, answer, sources);
+    return { answer, sources };
+  }
+
+  /** Real per-question record (unifies with Chat History, UPD-INT-014 follow-up) — logged even for
+   * an honest "not found" answer, since that is still a real interaction worth showing in history.
+   * Never blocks the actual answer on a logging failure. */
+  private async logQuery(
+    businessId: string | undefined,
+    userId: string | undefined,
+    question: string,
+    answer: string,
+    sources: { title: string; url: string }[],
+  ): Promise<void> {
+    try {
+      await this.prisma.helpQueryLog.create({
+        data: { businessId, userId, question, answer, sources },
+      });
+    } catch {
+      // Logging is best-effort — a failure here must never break the real answer already returned.
+    }
+  }
+
+  /**
+   * Suggested questions for the Help Assistant's chips. "Popular" has to mean popular: only
+   * questions this business has really asked, at least twice, and that got a real answer (never a
+   * "not found") qualify, and only when there are enough (3+) to fill a row. Otherwise this falls
+   * back to the real article titles — always answerable, since they ARE the documentation — and
+   * says so via `basedOn`, so the UI never calls a fallback list "Popular".
+   */
+  async suggestions(
+    businessId: string | undefined,
+  ): Promise<{ basedOn: 'usage' | 'documentation'; questions: string[] }> {
+    if (businessId) {
+      const grouped = await this.prisma.helpQueryLog.groupBy({
+        by: ['question'],
+        where: { businessId, NOT: { answer: HELP_NOT_FOUND_MESSAGE } },
+        _count: { question: true },
+        having: { question: { _count: { gte: 2 } } },
+        orderBy: { _count: { question: 'desc' } },
+        take: 5,
+      });
+      if (grouped.length >= 3) {
+        return { basedOn: 'usage', questions: grouped.map((g) => g.question) };
+      }
+    }
+    const articles = await this.prisma.helpArticle.findMany({
+      orderBy: { title: 'asc' },
+      take: 5,
+      select: { title: true },
+    });
     return {
-      answer,
-      sources: passages.map((p) => ({ title: p.title, url: p.url })),
+      basedOn: 'documentation',
+      questions: articles.map((a) => `${a.title}?`),
     };
+  }
+
+  /** Real listing, not tenant-scoped — help articles are shared documentation, the same for every
+   * business. Powers a browsable grid on the Help Assistant screen alongside the search-by-question
+   * flow above. */
+  async listArticles() {
+    const articles = await this.prisma.helpArticle.findMany({
+      orderBy: { title: 'asc' },
+    });
+    return articles.map((a) => ({
+      slug: a.slug,
+      title: a.title,
+      body: a.body,
+      url: a.url,
+      steps: Array.isArray(a.steps) ? (a.steps as string[]) : [],
+    }));
   }
 }

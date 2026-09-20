@@ -61,3 +61,8 @@ export function previewCoupon(code: string, subtotal: number, customerId?: strin
     body: JSON.stringify({ code, subtotal, customerId }),
   });
 }
+
+/** Real sum of `Order.couponDiscountAmount` — discount actually given at sale time. */
+export function fetchCouponDiscountGiven(): Promise<{ discountGiven: number }> {
+  return apiFetch<{ discountGiven: number }>("/coupons/stats/discount-given");
+}

@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { MessageAtRiskDto } from './dto/message-at-risk.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 /** UPD-BE-108 fix-it: no capability gate previously existed on real KPI/cohort/staff-sales data. */
@@ -29,18 +31,43 @@ export class AnalyticsController {
   }
 
   @Get('cohorts')
-  cohorts() {
-    return this.analyticsService.cohorts();
+  cohorts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.analyticsService.cohorts(user.businessId, branchId);
+  }
+
+  @Get('customers/new-vs-returning')
+  newVsReturning(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.analyticsService.newVsReturningByMonth(
+      user.businessId,
+      branchId,
+    );
   }
 
   @Get('cohorts/:cohortMonth/customers')
-  cohortCustomers(@Param('cohortMonth') cohortMonth: string) {
-    return this.analyticsService.cohortCustomers(cohortMonth);
+  cohortCustomers(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('cohortMonth') cohortMonth: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.analyticsService.cohortCustomers(
+      user.businessId,
+      cohortMonth,
+      branchId,
+    );
   }
 
   @Get('customers/summary')
-  customerSummary() {
-    return this.analyticsService.customerSummary();
+  customerSummary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.analyticsService.customerSummary(user.businessId, branchId);
   }
 
   @Post('customers/message-at-risk')
@@ -54,8 +81,12 @@ export class AnalyticsController {
   }
 
   @Get('staff')
-  staff() {
-    return this.analyticsService.staff();
+  staff(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+    @Query('month') month?: string,
+  ) {
+    return this.analyticsService.staff(user.businessId, branchId, month);
   }
 
   @Get('channels')

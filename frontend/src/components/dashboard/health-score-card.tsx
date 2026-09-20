@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Settings2, Sparkles } from "lucide-react";
+import { Settings2, Sparkles, HelpCircle } from "lucide-react";
 import { ErrorBanner } from "@/components/shared/error-states";
 import { useSession } from "@/lib/session";
 import { formatDate } from "@/lib/format";
@@ -67,6 +67,7 @@ export function HealthScoreCard() {
   const session = useSession();
   const isOwner = session.user.role === "owner";
   const [weightsOpen, setWeightsOpen] = useState(false);
+  const [methodologyOpen, setMethodologyOpen] = useState(false);
   const [periodMonths, setPeriodMonths] = useState<HealthScorePeriodMonths>(3);
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ["health-score", periodMonths],
@@ -124,6 +125,10 @@ export function HealthScoreCard() {
               </button>
             ))}
           </div>
+          <button type="button" onClick={() => setMethodologyOpen(true)} style={outlineBtnStyle}>
+            <HelpCircle className="me-1.5 inline h-3.5 w-3.5" aria-hidden />
+            How this works
+          </button>
           {isOwner && (
             <button type="button" onClick={() => setWeightsOpen(true)} style={outlineBtnStyle}>
               <Settings2 className="me-1.5 inline h-3.5 w-3.5" aria-hidden />
@@ -240,6 +245,63 @@ export function HealthScoreCard() {
       )}
 
       <HealthScoreWeightsDialog open={weightsOpen} onClose={() => setWeightsOpen(false)} weights={data.weights} />
+      {methodologyOpen && <MethodologyDialog components={componentKeys} onClose={() => setMethodologyOpen(false)} />}
+    </div>
+  );
+}
+
+const COMPONENT_EXPLANATION: Record<keyof HealthScoreComponents, string> = {
+  ratingTrend: "Average review rating over the last 6 months, scaled from the 1-5 star scale. No reviews yet scores 0.",
+  repeatCustomerRate: "% of customers with more than one visit, among customers with at least one visit.",
+  margin: "Net margin for the current calendar month, scaled so 25%+ net margin scores 100.",
+  creditRecovery: "Amount recovered vs. amount extended on credit in the window. Nothing extended scores 100 (nothing to recover from).",
+};
+
+function MethodologyDialog({ components, onClose }: { components: (keyof HealthScoreComponents)[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(10,27,42,.42)" }} onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[490px] max-h-[88vh] overflow-y-auto rounded-[18px]"
+        style={{ background: "var(--app-surface)", boxShadow: "0 30px 80px rgba(10,27,42,.32)" }}
+      >
+        <div className="p-[17px]" style={{ borderBottom: "1px solid var(--app-surface-2)" }}>
+          <h3 className="m-0 text-[16px] font-extrabold" style={{ color: "var(--app-text)" }}>How this works</h3>
+        </div>
+        <div className="flex flex-col gap-3 p-[17px]">
+          <p className="m-0 rounded-[12px] p-3 text-[12px]" style={{ background: "var(--app-warning-bg)", color: "var(--app-warning-text)" }}>
+            This is Noxtill&apos;s own internal measure, built from your own real data — not an external certification or industry benchmark.
+          </p>
+          <div className="flex flex-col gap-2">
+            {components.map((key) => (
+              <p key={key} className="m-0 text-[12px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                <span className="font-bold" style={{ color: "var(--app-text)" }}>{HEALTH_SCORE_COMPONENT_LABEL[key]}: </span>
+                {COMPONENT_EXPLANATION[key]}
+              </p>
+            ))}
+          </div>
+          <p className="m-0 text-[12.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+            Each component is scored 0-100 first, then scaled by its weight (default 25 each) to produce a total out of 100.
+          </p>
+          <div className="rounded-[11px] p-3" style={{ background: "var(--app-surface-2)" }}>
+            <p className="m-0 text-[12px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>
+              Below 14 days of business history, no score is shown at all — a low score from thin data would be misleading.
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end p-[14px_17px]" style={{ borderTop: "1px solid var(--app-surface-2)" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-[10px] px-4 py-2.5 text-[12.5px] font-extrabold text-white"
+            style={{ background: "var(--app-primary)" }}
+          >
+            Got it
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

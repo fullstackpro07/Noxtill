@@ -5,4 +5,6 @@ export const RETURN_ERROR_CODES = {
   QTY_EXCEEDS_SOLD: 'returns.qty_exceeds_sold',
   CUSTOMER_REQUIRED: 'returns.customer_required',
   PROVIDER_REF_MISSING: 'returns.provider_ref_missing',
+  ABOVE_REFUND_LIMIT: 'returns.above_refund_limit',
+  METHOD_NOT_ORIGINAL: 'returns.method_not_original',
 };

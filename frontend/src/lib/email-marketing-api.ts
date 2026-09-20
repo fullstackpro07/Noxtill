@@ -22,6 +22,10 @@ export function createEmailCampaign(input: CreateEmailCampaignInput): Promise<Li
   });
 }
 
+export function fetchEmailCampaigns(): Promise<LiveEmailCampaign[]> {
+  return apiFetch<LiveEmailCampaign[]>("/integrations/email/campaigns");
+}
+
 export interface EmailFunnel {
   campaignId: string;
   sent: number;

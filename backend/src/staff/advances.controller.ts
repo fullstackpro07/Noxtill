@@ -30,7 +30,7 @@ export class AdvancesController {
     @Param('id') staffUserId: string,
     @Body() dto: CreateAdvanceDto,
   ) {
-    return this.advances.create(user.businessId, staffUserId, dto);
+    return this.advances.create(user.businessId, staffUserId, dto, user.sub);
   }
 
   @Get('staff/:id/advances')
@@ -46,5 +46,10 @@ export class AdvancesController {
   @Delete('staff/:id/advances/:advanceId')
   cancel(@Param('advanceId') advanceId: string) {
     return this.advances.cancel(advanceId);
+  }
+
+  @Patch('staff/:id/advances/:advanceId/settle')
+  settle(@Param('advanceId') advanceId: string) {
+    return this.advances.settle(advanceId);
   }
 }

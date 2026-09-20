@@ -118,6 +118,10 @@ function Kpi({ label, value, color }: { label: string; value: string; color?: st
   );
 }
 
+/** Mirrors the real public flow's actual copy and behavior (`components/public/public-rating-flow.tsx`)
+ * exactly — this is a preview, so it must show customers what they really see, not a fabricated
+ * mockup step (there's no separate "Continue" button in the real flow; tapping a star submits or
+ * opens the private-feedback form immediately). */
 function RatingPagePreview({ businessName, logoUrl, brandColor, starDist, big }: { businessName: string; logoUrl: string | null; brandColor: string; starDist: number[]; big?: boolean }) {
   return (
     <div className="rounded-[14px] p-[18px] text-center" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
@@ -129,8 +133,8 @@ function RatingPagePreview({ businessName, logoUrl, brandColor, starDist, big }:
           {businessName.slice(0, 1)}
         </div>
       )}
-      <div className="mt-2.5 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>{businessName}</div>
-      <div className="mt-1.5 text-[12.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>How was your visit? Your rating helps us improve.</div>
+      <div className="mt-2.5 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>How was your visit to {businessName}?</div>
+      <div className="mt-1.5 text-[12.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>Tap a star to rate your experience.</div>
       <div className="mt-3.5 flex justify-center gap-1.5">
         {starDist.map((n) => (
           <svg key={n} width={big ? 30 : 26} height={big ? 30 : 26} viewBox="0 0 24 24" fill="#F59E0B" stroke="#F59E0B">
@@ -138,8 +142,7 @@ function RatingPagePreview({ businessName, logoUrl, brandColor, starDist, big }:
           </svg>
         ))}
       </div>
-      <div className="mt-3.5 rounded-[11px] py-3 text-[12.5px] font-extrabold text-white" style={{ background: brandColor }}>Continue</div>
-      <div className="mt-2.5 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-disabled)" }}>Every rating goes through the same flow — no one is filtered out.</div>
+      <div className="mt-3.5 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-disabled)" }}>4-5★ goes straight to your public platforms below; 1-3★ opens a private feedback box instead.</div>
     </div>
   );
 }
@@ -221,11 +224,13 @@ function BrandingDrawer({ businessName, onClose, onPreview }: { businessName: st
 function PublicUrlDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ["review-settings"], queryFn: fetchReviewSettings });
-  const [platform, setPlatform] = useState(settings?.publicReviewPlatform ?? "google");
-  const [url, setUrl] = useState(settings?.publicReviewUrl ?? "");
+  const [platform, setPlatform] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const effectivePlatform = platform ?? settings?.publicReviewPlatform ?? "google";
+  const effectiveUrl = url ?? settings?.publicReviewUrl ?? "";
 
   const mutation = useMutation({
-    mutationFn: () => updateReviewSettings({ publicReviewPlatform: platform, publicReviewUrl: url.trim() }),
+    mutationFn: () => updateReviewSettings({ publicReviewPlatform: effectivePlatform, publicReviewUrl: effectiveUrl.trim() }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["review-settings"] }); toast.success("Public review URL saved."); onClose(); },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't save this — please try again."),
   });
@@ -240,7 +245,7 @@ function PublicUrlDialog({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-3 p-[17px]">
           <div>
             <label className="mb-[5px] block text-[11px] font-extrabold uppercase tracking-[.4px]" style={{ color: "var(--app-text-disabled)" }}>Platform</label>
-            <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="w-full rounded-[11px] p-3 text-[13px] font-bold" style={{ border: "1px solid var(--app-border)", background: "var(--app-surface)", color: "var(--app-text-muted)", minHeight: 48 }}>
+            <select value={effectivePlatform} onChange={(e) => setPlatform(e.target.value)} className="w-full rounded-[11px] p-3 text-[13px] font-bold" style={{ border: "1px solid var(--app-border)", background: "var(--app-surface)", color: "var(--app-text-muted)", minHeight: 48 }}>
               <option value="google">Google</option>
               <option value="facebook">Facebook</option>
               <option value="yelp">Yelp</option>
@@ -249,7 +254,7 @@ function PublicUrlDialog({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-[5px] block text-[11px] font-extrabold uppercase tracking-[.4px]" style={{ color: "var(--app-text-disabled)" }}>Public review URL</label>
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="w-full rounded-[11px] p-3 text-[13.5px]" style={{ border: "1px solid var(--app-border)" }} />
+            <input value={effectiveUrl} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="w-full rounded-[11px] p-3 text-[13.5px]" style={{ border: "1px solid var(--app-border)" }} />
           </div>
           <div className="rounded-[12px] p-[13px]" style={{ background: "var(--app-warning-bg)", border: "1px solid var(--app-warning-border)" }}>
             <div className="text-[12px] font-extrabold" style={{ color: "#93370D" }}>No listing on this platform yet?</div>

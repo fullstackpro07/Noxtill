@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { AppointmentStatus, OrderStatus } from '@prisma/client';
+import { AuditService } from '../common/audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AppointmentStatus, OrderStatus, StaffAdvanceStatus } from '@prisma/client';
 
 interface PercentRule {
   type: 'percent';
@@ -44,9 +46,20 @@ function monthBounds(month: string): { start: Date; end: Date } {
  * per completed appointment of that service. A staff member with no rule
  * (or an unrecognized shape) simply reports zero commission.
  */
+/** Cosmetic-only label surfaced to the UI (UPD-BE-STAFF-04) — the real gate is `commissionRule` itself. */
+function ruleLabel(rule: CommissionRule): string {
+  if (isPercentRule(rule)) return `${rule.value}% of sales`;
+  if (isPerServiceRule(rule)) return 'Per service';
+  return 'No rule set';
+}
+
 @Injectable()
 export class CommissionsService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async report(month: string) {
     const { start, end } = monthBounds(month);
@@ -56,19 +69,33 @@ export class CommissionsService {
       include: { user: true },
     });
 
+    const payments = await this.tenantPrisma.client.commissionPayment.findMany(
+      { where: { month } },
+    );
+    const paidStaffIds = new Set(payments.map((p) => p.staffUserId));
+
     return Promise.all(
       staff.map(async (member) => {
         const rule = member.commissionRule as CommissionRule;
 
-        const salesTotal = await this.tenantPrisma.client.order.aggregate({
-          where: {
-            staffUserId: member.id,
-            status: OrderStatus.completed,
-            isQuotation: false,
-            createdAt: { gte: start, lt: end },
-          },
-          _sum: { total: true },
-        });
+        const [salesTotal, outstandingAdvances] = await Promise.all([
+          this.tenantPrisma.client.order.aggregate({
+            where: {
+              staffUserId: member.id,
+              status: OrderStatus.completed,
+              isQuotation: false,
+              createdAt: { gte: start, lt: end },
+            },
+            _sum: { total: true },
+          }),
+          this.tenantPrisma.client.staffAdvance.aggregate({
+            where: {
+              staffUserId: member.id,
+              status: StaffAdvanceStatus.outstanding,
+            },
+            _sum: { amount: true },
+          }),
+        ]);
         const totalSales = Number(salesTotal._sum.total ?? 0);
 
         let commission = 0;
@@ -98,9 +125,66 @@ export class CommissionsService {
           role: member.role,
           totalSales,
           commission,
+          ruleLabel: ruleLabel(rule),
+          advancesOutstanding: Number(outstandingAdvances._sum.amount ?? 0),
+          paid: paidStaffIds.has(member.id),
         };
       }),
     );
+  }
+
+  /**
+   * Real, standalone "Mark Paid" (UPD-BE-STAFF-04) — deliberately does not touch `StaffAdvance`;
+   * see `CommissionPayment`'s own doc comment for why. Idempotent: marking an already-paid month
+   * paid again just refreshes `paidAt`/`paidByUserId`.
+   */
+  async markPaid(
+    businessId: string,
+    staffUserId: string,
+    month: string,
+    paidByUserId?: string,
+  ) {
+    const saved = await this.tenantPrisma.client.commissionPayment.upsert({
+      where: {
+        businessId_staffUserId_month: { businessId, staffUserId, month },
+      },
+      create: { businessId, staffUserId, month, paidByUserId },
+      update: { paidByUserId, paidAt: new Date() },
+    });
+
+    await this.audit.log({
+      entity: 'commission_payment',
+      entityId: saved.id,
+      action: 'commission.mark_paid',
+      after: { staffUserId, month },
+    });
+
+    return saved;
+  }
+
+  /**
+   * Real in-app notification (UPD-BE-STAFF-04) — reuses `NotificationsService`, the same
+   * mechanism `ShiftsService.notify` already sends real schedule notifications through. The
+   * figures in the message are this exact month's real `report()` numbers, not a template.
+   */
+  async sendStatement(businessId: string, staffUserId: string, month: string) {
+    const member = await this.tenantPrisma.client.businessUser.findUnique({
+      where: { id: staffUserId },
+      include: { user: true },
+    });
+    if (!member) {
+      throw new NotFoundException('Staff member not found');
+    }
+
+    const report = await this.report(month);
+    const row = report.find((r) => r.businessUserId === staffUserId);
+    const commission = row?.commission ?? 0;
+
+    return this.notifications.create(businessId, member.userId, {
+      title: `Commission statement — ${month}`,
+      body: `Your commission for ${month} is Rs. ${commission.toLocaleString('en-US')}, based on Rs. ${(row?.totalSales ?? 0).toLocaleString('en-US')} in attributed sales.`,
+      link: '/staff/commissions',
+    });
   }
 }
 

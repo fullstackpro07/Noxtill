@@ -82,7 +82,7 @@ export function InvoicesView() {
   const range = rangeFor(dateRange);
   const filters: InvoiceFilters = { from: range.from, to: range.to, status: statusFilter === "all" ? undefined : statusFilter, staffUserId: staffFilter === "all" ? undefined : staffFilter };
 
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60_000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60_000 });
   const { data: rows } = useQuery({ queryKey: ["invoices", filters], queryFn: () => fetchInvoices(filters) });
   const { data: summary } = useQuery({ queryKey: ["invoices-summary", range.from, range.to], queryFn: () => fetchInvoiceSummary({ from: range.from, to: range.to }) });
 

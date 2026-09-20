@@ -45,6 +45,7 @@ import { HelpModule } from './help/help.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReportsModule } from './reports/reports.module';
+import { SettingsHubModule } from './settings-hub/hub.module';
 import { ExportsModule } from './exports/exports.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { ActivityModule } from './activity/activity.module';
@@ -115,6 +116,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     AssistantModule,
     NotificationsModule,
     ReportsModule,
+    SettingsHubModule,
     ExportsModule,
     IntegrationsModule,
     RolesModule,

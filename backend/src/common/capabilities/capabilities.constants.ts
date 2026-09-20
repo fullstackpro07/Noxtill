@@ -76,6 +76,17 @@ export const CAPABILITIES = {
   /// toggles are all configuration a Staff user should never be able to change, even if a
   /// privacy toggle later lets Staff export/merge/archive individual customers.
   CUSTOMERS_MANAGE: 'customers.manage',
+  /// Marketing Content Planner (v2) — same owner+manager tier as AUTOMATIONS_MANAGE/COUPONS_MANAGE:
+  /// creating/editing/deleting a scheduled content item is configuration, while reading the
+  /// calendar and marking a task complete stay open to any authenticated user.
+  CONTENT_PLANNER_MANAGE: 'content_planner.manage',
+  /// Settings policies: what a business's own limits let someone step past. Owner and manager hold
+  /// them by default; the policies that consult them (discount limit, price-override restriction,
+  /// credit limit, cost visibility) are off until the owner turns them on.
+  DISCOUNT_OVERRIDE: 'discounts.override',
+  PRICE_OVERRIDE: 'prices.override',
+  CREDIT_LIMIT_OVERRIDE: 'credit.limit_override',
+  COST_VIEW: 'products.view_cost',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -115,6 +126,11 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.TAX_RULES_MANAGE,
   CAPABILITIES.ACTIVITY_LOG_VIEW,
   CAPABILITIES.CUSTOMERS_MANAGE,
+  CAPABILITIES.CONTENT_PLANNER_MANAGE,
+  CAPABILITIES.DISCOUNT_OVERRIDE,
+  CAPABILITIES.PRICE_OVERRIDE,
+  CAPABILITIES.CREDIT_LIMIT_OVERRIDE,
+  CAPABILITIES.COST_VIEW,
 ];
 
 /**

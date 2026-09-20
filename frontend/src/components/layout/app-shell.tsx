@@ -9,6 +9,7 @@ import { DeepSearchOverlay } from "@/components/search/deep-search-overlay";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { AssistantTriggerButton } from "@/components/assistant/assistant-trigger-button";
 import { useSession } from "@/lib/session";
+import { UiPreferencesApplier } from "./ui-preferences-applier";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const session = useSession();
@@ -29,6 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <main className="flex-1 overflow-y-auto">{children}</main>
         </ModuleHeaderProvider>
       </div>
+      <UiPreferencesApplier />
       <DeepSearchOverlay />
       <AssistantPanel />
       <AssistantTriggerButton />

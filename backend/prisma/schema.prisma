@@ -552,6 +552,9 @@ model Business {
 
   taxLabel String  @default("Tax") @map("tax_label")
   taxRate  Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  /// Day of the month after a tax period ends that the owner files by (1-28). Noxtill only
+  /// reminds — it does not know or verify any tax authority's real deadline.
+  taxFilingDay Int @default(15) @map("tax_filing_day")
 
   /// Messages & Channels, configurable (UPD-BE-118): ordered `MessageChannel[]` overriding the
   /// hardcoded whatsapp→sms→email fallback in `channel-resolution.util.ts`. `[]` (every
@@ -566,6 +569,10 @@ model Business {
   /// add-ons, e.g. `["extra_branch","priority_support"]` — disclosed as config flags this
   /// business has opted into, not (yet) live Stripe subscription line items.
   addOns Json @default("[]") @map("add_ons")
+
+  /// Settings hub policies (see `common/policies`): the owner-tunable rules that sales, returns,
+  /// stock, bookings, marketing, AI and backups actually enforce. A missing key means the default.
+  policies Json @default("{}")
 
   msgQuota Int @default(600) @map("msg_quota")
   msgUsed  Int @default(0) @map("msg_used")
@@ -595,6 +602,12 @@ model Business {
   aiMonthlyCostCapUsd  Decimal @default(5.00) @map("ai_monthly_cost_cap_usd") @db.Decimal(8, 2)
   aiRateLimitPerMinute Int     @default(10) @map("ai_rate_limit_per_minute")
 
+  /// AI Settings query allowance (UPD-BE-115 design): a real, owner-configurable monthly cap on AI
+  /// queries, separate from `aiMonthlyCostCapUsd` (a dollar cap on the same usage). Backs the
+  /// AI Settings screen's "Queries this month / of {quota}" and "Plan usage %" tiles — the count
+  /// itself comes from `AiCallLog`, this is only the ceiling it's measured against.
+  aiQueryQuota Int @default(500) @map("ai_query_quota")
+
   /// AI Settings (UPD-BE-115): per-feature on/off toggle, one key per named feature in the spec
   /// ("Voice entry","Photo digitizer","Review replies","Campaign copy","Insights","What-if",
   /// "Assistant") — a missing key defaults to enabled (`AiInfraService.isFeatureEnabled`), so this
@@ -614,6 +627,10 @@ model Business {
   /// (the standard "time-and-a-half" convention as the default) — only matters for staff who
   /// actually have an `hourlyRate` set; purely-commission staff are unaffected either way.
   overtimeRateMultiplier Decimal @default(1.5) @map("overtime_rate_multiplier") @db.Decimal(3, 2)
+
+  /// Attendance (UPD-BE-STAFF-03): minutes after a scheduled shift's start before a real check-in
+  /// counts as "Late" rather than "In" — compared against `StaffShift.startsAt` for that day.
+  lateThresholdMinutes Int @default(10) @map("late_threshold_minutes")
 
   parentId String?    @map("parent_id")
   parent   Business?  @relation("BusinessBranches", fields: [parentId], references: [id])
@@ -713,14 +730,19 @@ model Business {
   vouchers                    Voucher[]
   workflows                   Workflow[]
   workflowRuns                WorkflowRun[]
+  contentItems                ContentItem[]
   staffShifts                 StaffShift[]
   timeOff                     TimeOff[]
   timesheetApprovals          TimesheetApproval[]
+  commissionPayments          CommissionPayment[]
   staffAdvances               StaffAdvance[]
+  payrollLineItems            PayrollLineItem[]
+  schedulePublishes           SchedulePublish[]
   stockTransfersOut           StockTransfer[]              @relation("StockTransferSource")
   stockTransfersIn            StockTransfer[]              @relation("StockTransferDest")
   stockCounts                 StockCount[]
   customRoles                 CustomRole[]
+  roleCapabilityOverrides     RoleCapabilityOverride[]
   labelOverrides              LabelOverride[]
   optionSets                  OptionSet[]
   sessions                    Session[]
@@ -791,6 +813,8 @@ model User {
   /// each login now creates its own `Session` row instead of overwriting one shared hash, which
   /// also fixes the pre-existing "logging in on a second device silently kills the first" bug.
   twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
+  /// Per-user interface preferences (motion, text size, notification sounds) the app applies.
+  uiPreferences       Json      @default("{}") @map("ui_preferences")
 
   businessUsers          BusinessUser[]
   notifications          Notification[]
@@ -925,6 +949,12 @@ model BusinessUser {
   userId         String   @map("user_id")
   user           User     @relation(fields: [userId], references: [id])
   role           Role     @default(staff)
+  /// Staff module v2 (UPD-BE-STAFF-02): a deactivated staff member loses access immediately
+  /// (see `AuthService` — a login/refresh only finds an active `BusinessUser` row) but every
+  /// historical Attendance/StaffShift/Order/Advance/etc. row stays intact, since none of those
+  /// are deleted — only this flag flips. Replaces the previous hard `businessUser.delete`, which
+  /// would have thrown a foreign-key error for any staff member with real history anyway.
+  active         Boolean  @default(true)
   commissionRule Json     @default("{}") @map("commission_rule")
   /// Staff depth fix (UPD-INT-011): a base hourly wage, separate from and additive to
   /// `commissionRule` — null (the default) means this staff member is paid purely on commission,
@@ -939,7 +969,10 @@ model BusinessUser {
   staffShifts        StaffShift[]
   timeOff            TimeOff[]
   timesheetApprovals TimesheetApproval[]
+  commissionPayments CommissionPayment[]
   staffAdvances      StaffAdvance[]
+  payrollLineItems   PayrollLineItem[]
+  contentItems       ContentItem[]
 
   /// Roles & Permissions matrix (UPD-BE-035). Null (the default for every existing/new
   /// BusinessUser) means "use `role`'s fixed system capability set" — set only for a user
@@ -969,6 +1002,8 @@ model Notification {
   body       String   @db.Text
   link       String?
   read       Boolean  @default(false)
+  /// low | normal | high, set from the event's fixed priority when the alert is created.
+  priority   String   @default("normal")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -997,6 +1032,8 @@ model Customer {
   consentMarketing  Boolean        @default(true) @map("consent_marketing")
   optedOut          Boolean        @default(false) @map("opted_out")
   lifetimeSpend     Decimal        @default(0) @map("lifetime_spend") @db.Decimal(12, 2)
+  /// Most this customer may owe on credit; null means the business default applies (or none).
+  creditLimit       Decimal?       @map("credit_limit") @db.Decimal(12, 2)
   visitCount        Int            @default(0) @map("visit_count")
   lastVisitAt       DateTime?      @map("last_visit_at")
   /// Customer Settings (UPD-BE-101): real lifecycle status, distinct from `optedOut`/`consentMarketing`.
@@ -1421,6 +1458,9 @@ model Order {
   total       Decimal     @default(0) @db.Decimal(12, 2)
   cogs        Decimal     @default(0) @db.Decimal(12, 2)
   isQuotation Boolean     @default(false) @map("is_quotation")
+  /// True when prices on this order include tax: `tax` is the portion inside `total`, so
+  /// `total = subtotal − discount` rather than `subtotal − discount + tax`.
+  taxInclusive Boolean    @default(false) @map("tax_inclusive")
 
   /// Staff member who rang up the sale, if any — drives commission attribution (BE-058).
   staffUserId String?       @map("staff_user_id")
@@ -2444,6 +2484,56 @@ model WorkflowRun {
   @@map("workflow_runs")
 }
 
+enum ContentItemType {
+  social_post
+  story
+  reel
+  email
+  sms
+  whatsapp
+  article
+}
+
+enum ContentItemChannel {
+  instagram
+  facebook
+  email
+  whatsapp
+  sms
+}
+
+enum ContentItemStatus {
+  draft
+  needs_approval
+  scheduled
+  published
+  failed
+}
+
+/// Content Planner (Marketing module v2) — a real, minimal content-calendar entry. Deliberately
+/// flat (no per-platform publish integration): saving/scheduling here is the plan of record a
+/// person works from, not an auto-publish pipeline this schema doesn't otherwise have.
+model ContentItem {
+  id         String             @id @default(uuid())
+  businessId String             @map("business_id")
+  business   Business           @relation(fields: [businessId], references: [id])
+  title      String
+  type       ContentItemType
+  channel    ContentItemChannel
+  body       String             @db.Text
+  scheduledFor DateTime?        @map("scheduled_for")
+  status     ContentItemStatus  @default(draft)
+  ownerUserId String?           @map("owner_user_id")
+  ownerUser   BusinessUser?     @relation(fields: [ownerUserId], references: [id])
+  aiGenerated Boolean           @default(false) @map("ai_generated")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, scheduledFor])
+  @@map("content_items")
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // BE-004 — Inventory & finance
 // ─────────────────────────────────────────────────────────────────────────
@@ -2792,6 +2882,15 @@ model ScheduledExport {
   createdByUserId String?                  @map("created_by_user_id")
   lastRunAt       DateTime?                @map("last_run_at")
   recipients      Json                     @default("[]")
+  /// Reports module redesign: a weekly schedule fires on this weekday (0=Sunday..6=Saturday), a
+  /// monthly one on this day of the month (1-28, capped so every month has it). Null on rows that
+  /// predate this — those keep the original "7 / 28 days since last run" behavior.
+  dayOfWeek       Int?                     @map("day_of_week")
+  dayOfMonth      Int?                     @map("day_of_month")
+  /// What actually happened on the last run — `sent` or `failed` (with `lastError` the real reason).
+  lastResult      String?                  @map("last_result")
+  lastError       String?                  @map("last_error") @db.Text
+  lastReportRunId String?                  @map("last_report_run_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2948,6 +3047,11 @@ model Attendance {
   staffUser   BusinessUser @relation(fields: [staffUserId], references: [id])
   checkIn     DateTime     @map("check_in")
   checkOut    DateTime?    @map("check_out")
+  /// Staff module v2 (UPD-BE-STAFF-03): true only for a manually-added or manager-corrected row —
+  /// a normal self clock-in/out via `AttendanceService.toggle` leaves this false. The corrected
+  /// value replaces this row's own checkIn/checkOut, but the original is never lost: every manual
+  /// entry and correction is also written to the real append-only `AuditLog`.
+  edited      Boolean      @default(false)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -3044,6 +3148,28 @@ model TimesheetApproval {
   @@map("timesheet_approvals")
 }
 
+/// Staff module v2 (UPD-BE-STAFF-04) — real "Mark Paid" tracking for commission, one row per
+/// staff member per month. Same pattern as `TimesheetApproval`: `CommissionsService.report()`
+/// stays a live read-only projection of real sales, and this is the one persisted fact layered on
+/// top ("has this month's commission actually been paid out"). Deliberately independent of
+/// `PayrollService`'s own advance-netting, which only runs at export time — marking a commission
+/// paid here (e.g. a cash payout outside the formal payroll flow) does not touch advances, so the
+/// two mechanisms never double-book the same deduction.
+model CommissionPayment {
+  id           String       @id @default(uuid())
+  businessId   String       @map("business_id")
+  business     Business     @relation(fields: [businessId], references: [id])
+  staffUserId  String       @map("staff_user_id")
+  staffUser    BusinessUser @relation(fields: [staffUserId], references: [id])
+  /// "YYYY-MM", same convention as `TimesheetApproval.month`.
+  month        String
+  paidByUserId String?      @map("paid_by_user_id")
+  paidAt       DateTime     @default(now()) @map("paid_at")
+
+  @@unique([businessId, staffUserId, month])
+  @@map("commission_payments")
+}
+
 enum StaffAdvanceStatus {
   outstanding
   deducted
@@ -3063,6 +3189,14 @@ model StaffAdvance {
   staffUser       BusinessUser       @relation(fields: [staffUserId], references: [id])
   amount          Decimal            @db.Decimal(12, 2)
   reason          String?
+  /// Staff module v2 (UPD-BE-STAFF-05): a small closed-ish set from the UI (e.g. "Salary Advance",
+  /// "Emergency", "Festival") — free text, not an enum, since the real business need is a label,
+  /// not a fixed vocabulary tied to code elsewhere the way `Role`/`Capability` are.
+  category        String?
+  /// UPD-BE-STAFF-05: who recorded this advance — `User.id`, no Prisma relation (same reason
+  /// `AuditLog.actorUserId` has none: `User` isn't tenant-scoped). Resolved to a name the same way
+  /// `AuditService.list` already does, via one batched follow-up query.
+  recordedByUserId String?           @map("recorded_by_user_id")
   status          StaffAdvanceStatus @default(outstanding)
   deductedInMonth String?            @map("deducted_in_month")
 
@@ -3071,6 +3205,53 @@ model StaffAdvance {
 
   @@index([businessId, staffUserId, status])
   @@map("staff_advances")
+}
+
+enum PayrollLineItemType {
+  add
+  deduct
+}
+
+/// Staff module v2 (UPD-BE-STAFF-06) — a one-off manual adjustment (a bonus, a reimbursement, an
+/// ad-hoc deduction) folded into a specific staff member's payroll sheet for one month, since real
+/// pay is otherwise entirely derived (hours × wage, commission, advances) with no room for a
+/// case-by-case extra. Purely additive to `PayrollService`'s computation — never touches
+/// `StaffAdvance`/`CommissionPayment`, which have their own real lifecycles.
+model PayrollLineItem {
+  id              String              @id @default(uuid())
+  businessId      String              @map("business_id")
+  business        Business            @relation(fields: [businessId], references: [id])
+  staffUserId     String              @map("staff_user_id")
+  staffUser       BusinessUser        @relation(fields: [staffUserId], references: [id])
+  /// "YYYY-MM", same convention as `TimesheetApproval.month`/`CommissionPayment.month`.
+  month           String
+  label           String
+  amount          Decimal             @db.Decimal(12, 2)
+  type            PayrollLineItemType
+  createdByUserId String?             @map("created_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, staffUserId, month])
+  @@map("payroll_line_items")
+}
+
+/// Staff module v2 — real, shared "has this week's schedule been published" state. Shifts
+/// themselves have no draft/published distinction (every created shift is immediately real, see
+/// `ShiftsService.notify`'s own comment); this row is written only when a manager actually sends
+/// the notify-staff call, so it's the same real action the "Publish Schedule" button already
+/// performs, just now durable and visible to every viewer instead of living in one browser's
+/// localStorage.
+model SchedulePublish {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id])
+  weekStart         DateTime @map("week_start")
+  publishedByUserId String?  @map("published_by_user_id")
+  publishedAt       DateTime @default(now()) @map("published_at")
+
+  @@unique([businessId, weekStart])
+  @@map("schedule_publishes")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -3100,6 +3281,27 @@ model CustomRole {
 
   @@unique([businessId, name])
   @@map("custom_roles")
+}
+
+/// A per-business override of one of the 2 overridable system roles' fixed capability set
+/// (`SYSTEM_ROLE_CAPABILITIES` in `capabilities.constants.ts`). `owner` is never a row here —
+/// it always keeps every capability, matching the anti-lockout design already established for
+/// `CustomRole` (see `CapabilitiesService.resolve`), so it can't be reduced by an override either.
+/// Absence of a row for a given (businessId, role) means "use the hardcoded default" — an owner
+/// who never touches the Roles screen sees identical behavior to before this model existed.
+model RoleCapabilityOverride {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  role         Role
+  /// MySQL migration: see `CustomRole.capabilities` for why this is JSON, not a native array.
+  capabilities Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, role])
+  @@map("role_capability_overrides")
 }
 
 /// Terminology Engine (UPD-BE-038) — one row per overridden term. `area` scopes the same `key`
@@ -4454,6 +4656,10 @@ model HelpArticle {
   title     String
   body      String   @db.Text
   url       String
+  /// Ordered string[] breaking `body`'s explanation into scannable steps, e.g.
+  /// `["A slot is only offered inside your working hours", ...]` — restates the real body content,
+  /// never a fabricated task list.
+  steps     Json     @default("[]")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -4462,6 +4668,23 @@ model HelpArticle {
   @@fulltext([title])
   @@fulltext([body])
   @@map("help_articles")
+}
+
+/// Real per-question log for the Help Assistant (unifies with `AssistantConversation` and
+/// `VoiceCommandDraft` in Chat History) — `/help/ask` had been stateless before this; every ask is
+/// now recorded, including a genuine "not found" answer, so Chat History can show real Help entries
+/// instead of omitting that interaction type. `sources` mirrors `HelpAnswer.sources` exactly.
+model HelpQueryLog {
+  id         String   @id @default(uuid())
+  businessId String?  @map("business_id")
+  userId     String?  @map("user_id")
+  question   String   @db.Text
+  answer     String   @db.Text
+  sources    Json     @default("[]")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, userId, createdAt])
+  @@map("help_query_logs")
 }
 
 /// Notifications, preference matrix (UPD-BE-122). `userId` null = the business-wide default for
@@ -4547,4 +4770,140 @@ model TaxRule {
 
   @@index([businessId, category])
   @@map("tax_rules")
+}
+
+enum ReportRunStatus {
+  ready
+  failed
+}
+
+/// One generation of one report for one period (Reports module redesign). `version` counts up per
+/// (business, kind, period) — regenerating never overwrites, it adds a row. `snapshot` is the exact
+/// structured data the PDF and the on-screen preview were both rendered from (so a report sent last
+/// month still shows what the recipient saw), and doubles as the source for version comparison.
+/// A failed run is kept with its real `errorMessage`; nothing is estimated to fill the gap.
+model ReportRun {
+  id                String          @id @default(uuid())
+  businessId        String          @map("business_id")
+  kind              String
+  period            String
+  version           Int
+  status            ReportRunStatus
+  /// `manual`, `schedule` or `ai_builder` — how this run came to exist.
+  trigger           String          @default("manual")
+  generatedByUserId String?         @map("generated_by_user_id")
+  scheduleId        String?         @map("schedule_id")
+  fileKey           String?         @map("file_key")
+  recordsCount      Int             @default(0) @map("records_count")
+  /// Denormalised from `snapshot` so list views never have to load it: `reconciled`, `warning` or
+  /// `critical`, how many records were left out of the calculation, and the executive summary.
+  validationStatus  String?         @map("validation_status")
+  exclusionsCount   Int             @default(0) @map("exclusions_count")
+  summary           String?         @db.Text
+  snapshot          Json?
+  errorMessage      String?         @map("error_message") @db.Text
+  /// `[{at, channel, recipient, state, error?, byUserId}]` — only states the send path really
+  /// returned (`queued`/`sent`/`failed`); never "delivered" or "opened" unless a channel reports it.
+  deliveries        Json            @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, kind, period])
+  @@index([businessId, createdAt])
+  @@map("report_runs")
+}
+
+model ReportFavorite {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  userId     String   @map("user_id")
+  kind       String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, userId, kind])
+  @@map("report_favorites")
+}
+
+/// "Record as filed" — the owner's own record that they filed a return for `period`. Noxtill
+/// never submits anything to a tax authority; this only remembers that the owner says they did.
+model TaxFiling {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  period         String
+  filedOn        DateTime @map("filed_on")
+  reference      String?
+  notes          String?  @db.Text
+  netTaxAtFiling Decimal  @map("net_tax_at_filing") @db.Decimal(14, 2)
+  filedByUserId  String?  @map("filed_by_user_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, period])
+  @@map("tax_filings")
+}
+
+/// "Remind me" for a filing date — a real reminder the daily job turns into an in-app notification
+/// on `remindOn`, then stamps `sentAt` so it is never sent twice.
+model TaxReminder {
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  userId     String    @map("user_id")
+  period     String
+  remindOn   DateTime  @map("remind_on") @db.Date
+  sentAt     DateTime? @map("sent_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([sentAt, remindOn])
+  @@map("tax_reminders")
+}
+
+enum DataExportStatus {
+  queued
+  preparing
+  ready
+  failed
+}
+
+/// Data Export history (Reports > Data Export). Each row is one real export run: which modules,
+/// how many records and bytes it actually produced, and when its secure link stops working
+/// (24 hours after `readyAt` — enforced when the download link is requested, not just displayed).
+model DataExportJob {
+  id                String           @id @default(uuid())
+  businessId        String           @map("business_id")
+  requestedByUserId String           @map("requested_by_user_id")
+  /// `everything` (every supported module) or `selected`.
+  scope             String
+  modules           Json             @default("[]")
+  format            String
+  status            DataExportStatus @default(queued)
+  recordsCount      Int              @default(0) @map("records_count")
+  sizeBytes         Int              @default(0) @map("size_bytes")
+  fileKey           String?          @map("file_key")
+  readyAt           DateTime?        @map("ready_at")
+  errorMessage      String?          @map("error_message") @db.Text
+  /// Whether the selection included credit/expenses/customer contact data (owner-only, audited).
+  sensitive         Boolean          @default(false)
+  /// `manual` (someone asked for it) or `backup` (the scheduled data backup).
+  trigger           String           @default("manual")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("data_export_jobs")
+}
+
+/// Settings hub: which settings a user pinned, and how often they opened each one (the source of
+/// "Pinned and frequent" on Settings Home — nothing here is inferred, only counted).
+model SettingPin {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  userId       String    @map("user_id")
+  category     String
+  rowKey       String    @map("row_key")
+  pinned       Boolean   @default(false)
+  opens        Int       @default(0)
+  lastOpenedAt DateTime? @map("last_opened_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([businessId, userId, category, rowKey])
+  @@map("setting_pins")
 }

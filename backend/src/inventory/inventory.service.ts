@@ -109,16 +109,31 @@ export class InventoryService {
       where: { kind: ProductKind.product },
       orderBy: { name: 'asc' },
     });
+    const productIds = products.map((p) => p.id);
 
-    const lastPurchases = await this.tenantPrisma.client.stockMovement.findMany(
-      {
-        where: {
-          productId: { in: products.map((p) => p.id) },
-          kind: 'purchase',
-        },
-        orderBy: { createdAt: 'desc' },
-      },
+    const cutoff = new Date(
+      Date.now() - REORDER_VELOCITY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     );
+
+    const [lastPurchases, salesAgg, lastSales] = await Promise.all([
+      this.tenantPrisma.client.stockMovement.findMany({
+        where: { productId: { in: productIds }, kind: 'purchase' },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.tenantPrisma.client.stockMovement.groupBy({
+        by: ['productId'],
+        where: {
+          productId: { in: productIds },
+          kind: StockMovementKind.sale,
+          createdAt: { gte: cutoff },
+        },
+        _sum: { qty: true },
+      }),
+      this.tenantPrisma.client.stockMovement.findMany({
+        where: { productId: { in: productIds }, kind: 'sale' },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
     const lastPurchaseMap = new Map<
       string,
       { at: Date; supplier: string | null }
@@ -131,23 +146,51 @@ export class InventoryService {
         });
       }
     }
+    const velocityByProduct = new Map(
+      salesAgg.map((r) => [
+        r.productId,
+        Math.abs(r._sum.qty ?? 0) / REORDER_VELOCITY_WINDOW_DAYS,
+      ]),
+    );
+    const lastSoldMap = new Map<string, Date>();
+    for (const movement of lastSales) {
+      if (!lastSoldMap.has(movement.productId)) {
+        lastSoldMap.set(movement.productId, movement.createdAt);
+      }
+    }
 
-    return products.map((product) => ({
-      id: product.id,
-      name: product.name,
-      stockQty: product.stockQty,
-      lowStockThreshold: product.lowStockThreshold,
-      costPrice: Number(product.costPrice),
-      stockValue: product.stockQty * Number(product.costPrice),
-      lastPurchaseAt: lastPurchaseMap.get(product.id)?.at ?? null,
-      supplier: lastPurchaseMap.get(product.id)?.supplier ?? null,
-      status:
-        product.stockQty <= 0
-          ? 'out_of_stock'
-          : product.stockQty <= product.lowStockThreshold
-            ? 'low_stock'
-            : 'ok',
-    }));
+    return products.map((product) => {
+      const velocityPerDay = velocityByProduct.get(product.id) ?? 0;
+      const daysOfCover =
+        velocityPerDay > 0
+          ? Math.floor(product.stockQty / velocityPerDay)
+          : null;
+      return {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        category: product.category,
+        stockQty: product.stockQty,
+        lowStockThreshold: product.lowStockThreshold,
+        costPrice: Number(product.costPrice),
+        stockValue: product.stockQty * Number(product.costPrice),
+        lastPurchaseAt: lastPurchaseMap.get(product.id)?.at ?? null,
+        supplier: lastPurchaseMap.get(product.id)?.supplier ?? null,
+        lastSoldAt: lastSoldMap.get(product.id) ?? null,
+        velocityPerDay: round2(velocityPerDay),
+        daysOfCover,
+        // Overstocked: real sales velocity supports it, but current stock covers more than 120
+        // days at that pace — 4x the 30-day reorder-suggestion window, disclosed in the UI rather
+        // than presented as an unexplained system judgement.
+        overstocked: daysOfCover != null && daysOfCover > 120,
+        status:
+          product.stockQty <= 0
+            ? 'out_of_stock'
+            : product.stockQty <= product.lowStockThreshold
+              ? 'low_stock'
+              : 'ok',
+      };
+    });
   }
 
   async getMovements(productId: string) {

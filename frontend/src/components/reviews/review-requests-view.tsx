@@ -226,13 +226,14 @@ function TableSelect({ value, onChange, options }: { value: string; onChange: (v
 function TimingDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ["review-settings"], queryFn: fetchReviewSettings });
-  const [days, setDays] = useState(3);
+  const [days, setDays] = useState<number | null>(null);
+  const effectiveDays = days ?? settings?.reminderDayOffsets?.[0] ?? 3;
 
   const mutation = useMutation({
-    mutationFn: () => updateReviewSettings({ reminderDayOffsets: [days] }),
+    mutationFn: () => updateReviewSettings({ reminderDayOffsets: [effectiveDays] }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["review-settings"] });
-      toast.success(`Reminder timing saved: follow up after ${days} day${days === 1 ? "" : "s"}.`);
+      toast.success(`Reminder timing saved: follow up after ${effectiveDays} day${effectiveDays === 1 ? "" : "s"}.`);
       onClose();
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't save this — please try again."),
@@ -251,7 +252,7 @@ function TimingDialog({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-[5px] block text-[11px] font-extrabold uppercase tracking-[.4px]" style={{ color: "var(--app-text-disabled)" }}>Reminder — days after the first request</label>
-            <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-full rounded-[11px] p-3 text-[13px] font-bold" style={{ border: "1px solid var(--app-border)", background: "var(--app-surface)", color: "var(--app-text-muted)", minHeight: 48 }}>
+            <select value={effectiveDays} onChange={(e) => setDays(Number(e.target.value))} className="w-full rounded-[11px] p-3 text-[13px] font-bold" style={{ border: "1px solid var(--app-border)", background: "var(--app-surface)", color: "var(--app-text-muted)", minHeight: 48 }}>
               <option value={2}>2 days later</option>
               <option value={3}>3 days later</option>
               <option value={7}>7 days later</option>

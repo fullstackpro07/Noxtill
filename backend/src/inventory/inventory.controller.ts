@@ -6,7 +6,9 @@ import {
   Param,
   Post,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
+import { CostVisibilityInterceptor } from '../common/policies/cost-visibility.interceptor';
 import { InventoryService } from './inventory.service';
 import { StockCountService } from './stock-count.service';
 import { ReorderSuggestionsService } from './reorder-suggestions.service';
@@ -23,6 +25,7 @@ import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { StockCountStatus } from '@prisma/client';
 
 @Controller()
+@UseInterceptors(CostVisibilityInterceptor)
 export class InventoryController {
   constructor(
     private readonly inventoryService: InventoryService,

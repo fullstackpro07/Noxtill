@@ -8,6 +8,7 @@ import { AppException } from '../common/filters/app.exception';
 import type { AiInfraService } from '../ai/ai-infra.service';
 import type { SegmentsService } from '../customers/segments.service';
 import type { SendGateService } from '../messaging/send-gate.service';
+import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -48,6 +49,8 @@ describe('DeadHoursOfferService (UPD-BE-106)', () => {
     );
     const profitService = new ProfitService(
       tenantPrisma,
+      prisma,
+      new BranchScopeService(prisma),
       cls as unknown as ClsService,
       aiInfra as unknown as AiInfraService,
     );

@@ -5,12 +5,22 @@ export type InventoryStatus = "out_of_stock" | "low_stock" | "ok";
 export interface LiveInventoryItem {
   id: string;
   name: string;
+  sku: string | null;
+  category: string | null;
   stockQty: number;
   lowStockThreshold: number;
   costPrice: number;
   stockValue: number;
   lastPurchaseAt: string | null;
   supplier: string | null;
+  /** Most recent `sale`-kind movement's date, or null if this product has never sold. */
+  lastSoldAt: string | null;
+  /** Units sold per day, trailing 30 days — same window as reorder suggestions. */
+  velocityPerDay: number;
+  /** stockQty / velocityPerDay, or null when there's no recent sales velocity to divide by. */
+  daysOfCover: number | null;
+  /** Real velocity exists but current stock covers more than 120 days at that pace. */
+  overstocked: boolean;
   status: InventoryStatus;
 }
 

@@ -127,6 +127,10 @@ export interface AssistantMessageRecord {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Real tool-call trace (name/input/output), persisted per assistant turn — `getConversation`
+   * returns the full Prisma row, which includes this column even though older call sites only
+   * destructured a narrower shape. Null for user messages and for turns that used no tools. */
+  toolCalls: AssistantToolCall[] | null;
   createdAt: string;
 }
 
@@ -146,6 +150,86 @@ export function fetchAssistantConversation(id: string): Promise<AssistantConvers
   return apiFetch<AssistantConversationDetail>(`/assistant/conversations/${id}`);
 }
 
-export function deleteAssistantConversation(id: string): Promise<void> {
-  return apiFetch<void>(`/assistant/conversations/${id}`, { method: "DELETE" });
+// --- Chat attachments (read-only file-to-text) ---
+
+export interface ExtractedAttachment {
+  filename: string;
+  mimeType: string;
+  kind: "pdf" | "docx" | "text" | "image";
+  text: string;
+  charCount: number;
+  truncated: boolean;
+}
+
+/** POST /assistant/attachments — reads a PDF, Word doc, CSV/text file or photo into plain text.
+ * Nothing is written to any business table; the caller prepends the text to their next chat question. */
+export function extractAssistantAttachment(file: File): Promise<ExtractedAttachment> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<ExtractedAttachment>("/assistant/attachments", { method: "POST", body: formData });
+}
+
+// --- Reports (real one-page PDF per Q&A turn) ---
+
+export interface GenerateReportInput {
+  question: string;
+  answer: string;
+  toolCalls: AssistantToolCall[];
+  helpSources: { title: string; url: string }[];
+}
+
+/** POST /assistant/report — a real PDF built from exactly the tool trace and sources this answer
+ * already carried, uploaded and returned as a signed, downloadable URL. */
+export function generateAssistantReport(input: GenerateReportInput): Promise<{ url: string }> {
+  return apiFetch<{ url: string }>("/assistant/report", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// --- Unified Chat History (Business + Help + Voice) ---
+
+export type HistoryKind = "business" | "help" | "voice";
+
+export interface HistoryRow {
+  id: string;
+  kind: HistoryKind;
+  title: string;
+  topic: string;
+  questionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HelpQueryDetail {
+  id: string;
+  question: string;
+  answer: string;
+  sources: { title: string; url: string }[];
+  createdAt: string;
+}
+
+export interface VoiceCommandDetail {
+  id: string;
+  transcript: string;
+  action: string;
+  args: Record<string, unknown>;
+  humanSummary: string;
+  status: "pending" | "confirmed" | "rejected";
+  createdAt: string;
+  confirmedAt: string | null;
+}
+
+/** GET /assistant/history — real rows merged from `AssistantConversation`, `HelpQueryLog` and
+ * `VoiceCommandDraft`, each with a real topic derived from what was actually read or done. */
+export function fetchAssistantHistory(): Promise<HistoryRow[]> {
+  return apiFetch<HistoryRow[]>("/assistant/history");
+}
+
+export function fetchHistoryDetail(kind: HistoryKind, id: string): Promise<AssistantConversationDetail | HelpQueryDetail | VoiceCommandDetail> {
+  return apiFetch(`/assistant/history/${kind}/${id}`);
+}
+
+export function deleteHistoryEntry(kind: HistoryKind, id: string): Promise<void> {
+  return apiFetch<void>(`/assistant/history/${kind}/${id}`, { method: "DELETE" });
 }

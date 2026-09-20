@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/api-client";
 export interface ProfitProductRow {
   productId: string;
   name: string;
+  category: string;
   units: number;
   revenue: number;
   cost: number;
@@ -10,6 +11,8 @@ export interface ProfitProductRow {
   margin: number;
   reviewPricing: boolean;
   isTopPerformer: boolean;
+  /** Real comparison against the equal-length window immediately before this one. */
+  trend: "up" | "down" | "flat";
 }
 
 export interface ProfitByProduct {
@@ -17,19 +20,39 @@ export interface ProfitByProduct {
   products: ProfitProductRow[];
 }
 
-/** GET /profit/products?window=30|90 — computed from completed, non-quotation orders in that window. */
-export function fetchProfitByProduct(window: 30 | 90 = 30): Promise<ProfitByProduct> {
-  return apiFetch<ProfitByProduct>(`/profit/products?window=${window}`);
+/** GET /profit/products?window=30|90&branchId= — computed from completed, non-quotation orders in that window. `branchId` omitted means just this business; `"all"` means the caller's whole real branch group; a specific id means one validated sibling branch. */
+export function fetchProfitByProduct(window: 30 | 90 = 30, branchId?: string): Promise<ProfitByProduct> {
+  const branchParam = branchId ? `&branchId=${branchId}` : "";
+  return apiFetch<ProfitByProduct>(`/profit/products?window=${window}${branchParam}`);
+}
+
+export interface ProductSuggestion {
+  productId: string;
+  name: string;
+  currentPrice: number;
+  suggestedPrice: number;
+  currentMargin: number;
+  pitch: string;
+}
+
+/** GET /profit/products/suggestions?window=30|90&branchId= — a real deterministic target price (to reach a healthier margin) per low-margin product, AI-phrased. */
+export function fetchProductSuggestions(window: 30 | 90 = 30, branchId?: string): Promise<ProductSuggestion[]> {
+  const branchParam = branchId ? `&branchId=${branchId}` : "";
+  return apiFetch<ProductSuggestion[]>(`/profit/products/suggestions?window=${window}${branchParam}`);
 }
 
 export interface HourlyRevenue {
   hour: number;
   revenue: number;
+  salesCount: number;
+  avgTicket: number;
 }
 
 export interface WeekdayRevenue {
   day: string;
   revenue: number;
+  salesCount: number;
+  avgTicket: number;
 }
 
 export interface ProfitByTime {
@@ -38,24 +61,56 @@ export interface ProfitByTime {
   insight: string;
 }
 
-export function fetchProfitByTime(): Promise<ProfitByTime> {
-  return apiFetch<ProfitByTime>("/profit/time");
+/** GET /profit/time?branchId= — see `fetchProfitByProduct` for what `branchId` means. */
+export function fetchProfitByTime(branchId?: string): Promise<ProfitByTime> {
+  const query = branchId ? `?branchId=${branchId}` : "";
+  return apiFetch<ProfitByTime>(`/profit/time${query}`);
 }
 
-export interface PnlStatement {
+export interface PnlCategoryRow {
+  category: string;
+  revenue: number;
+  cost: number;
+  grossProfit: number;
+  /** Real overhead-expense total split proportionally by this category's revenue share — not a tracked per-category figure. */
+  allocatedExpenses: number;
+  netProfit: number;
+  /** Net margin (netProfit / revenue), matching the category's own net profit above. */
+  margin: number;
+}
+
+export interface PnlTrendPoint {
   month: string;
   revenue: number;
   cogs: number;
-  expenses: { category: string; amount: number }[];
   totalExpenses: number;
-  /** Inventory depth fix (UPD-INT-013): real wastage/theft cost for the month, now deducted from netProfit. */
   wastageCost: number;
   netProfit: number;
 }
 
-/** GET /profit/pnl?month=YYYY-MM */
-export function fetchPnl(month: string): Promise<PnlStatement> {
-  return apiFetch<PnlStatement>(`/profit/pnl?month=${month}`);
+export const PNL_PERIODS = ["today", "week", "month", "quarter", "year"] as const;
+export type PnlPeriod = (typeof PNL_PERIODS)[number];
+
+export interface PnlStatement {
+  month: string;
+  period: PnlPeriod;
+  revenue: number;
+  cogs: number;
+  expenses: { category: string; amount: number }[];
+  totalExpenses: number;
+  /** Inventory depth fix (UPD-INT-013): real wastage/theft cost for the period, now deducted from netProfit. */
+  wastageCost: number;
+  netProfit: number;
+  /** Real revenue/cost/gross-profit (and a proportionally-allocated share of overhead) per product category, for the selected period. */
+  categoryBreakdown: PnlCategoryRow[];
+  /** The current calendar month plus the 5 preceding it, always real and period-independent. */
+  trend: PnlTrendPoint[];
+}
+
+/** GET /profit/pnl?month=YYYY-MM&period=today|week|month|quarter|year&branchId= — `month` anchors the trend's 6 calendar months; `period` scopes the headline figures and category breakdown; `branchId` see `fetchProfitByProduct`. */
+export function fetchPnl(month: string, period: PnlPeriod = "month", branchId?: string): Promise<PnlStatement> {
+  const branchParam = branchId ? `&branchId=${branchId}` : "";
+  return apiFetch<PnlStatement>(`/profit/pnl?month=${month}&period=${period}${branchParam}`);
 }
 
 export interface WhatIfResult {

@@ -87,6 +87,16 @@ export class CouponsService {
     });
   }
 
+  /** Offers & Promotions overview (Marketing module v2) — the real sum of `Order.couponDiscountAmount`,
+   * i.e. discount actually given at sale time, not a projection from face-value × usage count. */
+  async discountGiven(): Promise<{ discountGiven: number }> {
+    const result = await this.tenantPrisma.client.order.aggregate({
+      where: { couponId: { not: null } },
+      _sum: { couponDiscountAmount: true },
+    });
+    return { discountGiven: Number(result._sum.couponDiscountAmount ?? 0) };
+  }
+
   async findOne(id: string) {
     const coupon = await this.tenantPrisma.client.coupon.findUnique({
       where: { id },

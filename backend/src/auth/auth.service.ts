@@ -301,11 +301,14 @@ export class AuthService {
     // change picks up the real current capability set on the next refresh, not just re-login.
     // Branches depth fix (UPD-INT-012): also requires the business to still be `active` — if it
     // was deactivated since this token was issued, refresh now fails instead of silently renewing
-    // access to a deactivated branch, bounding that staleness to this access token's TTL.
+    // access to a deactivated branch, bounding that staleness to this access token's TTL. Staff
+    // module v2 (UPD-BE-STAFF-02): same bound now applies to a deactivated staff member's own
+    // `active` flag, not just the business's.
     const businessUser = await this.prisma.businessUser.findFirst({
       where: {
         userId: payload.sub,
         businessId: payload.businessId,
+        active: true,
         business: { active: true },
       },
     });
@@ -314,6 +317,7 @@ export class AuthService {
     }
 
     const capabilities = await this.capabilities.resolve({
+      businessId: businessUser.businessId,
       role: businessUser.role,
       customRoleId: businessUser.customRoleId,
     });
@@ -350,11 +354,13 @@ export class AuthService {
    * Branches depth fix (UPD-INT-012): a deactivated branch's staff could previously still log in
    * fully — this only resolves membership in a business that is really `active`, and distinguishes
    * "no business at all" from "every business you belong to is deactivated" with an honest message
-   * rather than a generic "invalid credentials"-style dead end.
+   * rather than a generic "invalid credentials"-style dead end. Staff module v2 (UPD-BE-STAFF-02):
+   * extended the same way for a deactivated staff member — their own `BusinessUser.active` flag,
+   * separate from the business's.
    */
   private async resolveActiveBusinessUser(userId: string) {
     const businessUser = await this.prisma.businessUser.findFirst({
-      where: { userId, business: { active: true } },
+      where: { userId, active: true, business: { active: true } },
       orderBy: { createdAt: 'asc' },
     });
     if (businessUser) {
@@ -363,8 +369,15 @@ export class AuthService {
 
     const anyMembership = await this.prisma.businessUser.findFirst({
       where: { userId },
-      select: { id: true },
+      select: { id: true, active: true, business: { select: { active: true } } },
     });
+    if (anyMembership?.active === false) {
+      throw new AppException(
+        'STAFF_DEACTIVATED',
+        'This account has been deactivated — contact the business owner',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     if (anyMembership) {
       throw new AppException(
         'BUSINESS_DEACTIVATED',
@@ -400,6 +413,7 @@ export class AuthService {
     meta: RequestMeta = {},
   ): Promise<TokenPair> {
     const capabilities = await this.capabilities.resolve({
+      businessId,
       role,
       customRoleId,
     });

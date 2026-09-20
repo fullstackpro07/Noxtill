@@ -11,6 +11,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { CostVisibilityInterceptor } from '../common/policies/cost-visibility.interceptor';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { ProductsImportService } from './products-import.service';
@@ -22,6 +23,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
 @Controller('products')
+@UseInterceptors(CostVisibilityInterceptor)
 export class ProductsController {
   constructor(
     private readonly productsService: ProductsService,

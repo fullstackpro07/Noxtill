@@ -100,7 +100,7 @@ export function CompetitorsView() {
         <div className="min-w-0 rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
           <div className="mb-1.5 flex flex-wrap items-center gap-3.5">
             <h3 className="m-0 text-[14.5px] font-extrabold" style={{ color: "var(--app-text)" }}>Rating comparison</h3>
-            <Legend color="var(--app-primary)" label="You (current)" />
+            <Legend color="var(--app-primary)" label={yourHistory.length >= 2 ? "You" : "You (current)"} />
             {competitors.slice(0, 4).map((c, i) => (
               <Legend key={c.id} color={COMPETITOR_COLORS[i % COMPETITOR_COLORS.length]} label={c.name} />
             ))}

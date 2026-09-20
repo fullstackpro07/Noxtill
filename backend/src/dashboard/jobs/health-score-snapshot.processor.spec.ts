@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
 import { ProfitService } from '../../profit/profit.service';
 import { AiInfraService } from '../../ai/ai-infra.service';
+import { BranchScopeService } from '../../common/tenancy/branch-scope.service';
 import { HealthScoreService } from '../health-score.service';
 import { HealthScoreSnapshotProcessor } from './health-score-snapshot.processor';
 
@@ -28,7 +29,7 @@ describe('HealthScoreSnapshotProcessor (UPD-BE-001)', () => {
 
     const cls = new FakeClsService() as unknown as ClsService;
     const tenantPrisma = new TenantPrismaService(prisma, cls);
-    const profitService = new ProfitService(tenantPrisma, cls, {
+    const profitService = new ProfitService(tenantPrisma, prisma, new BranchScopeService(prisma), cls, {
       complete: jest.fn(),
     } as unknown as AiInfraService);
     const healthScoreService = new HealthScoreService(

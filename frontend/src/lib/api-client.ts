@@ -34,6 +34,13 @@ interface ApiFetchOptions {
   skipAuth?: boolean;
   /** Internal: marks a request as already having gone through one refresh-and-retry cycle. */
   isRetry?: boolean;
+  /** Override X-Branch for just this one call, without touching the global branch-context store
+   * (which drives what branch the rest of the app — e.g. Fast Sale — believes it's acting as).
+   * Used by read-only cross-branch drill-downs (Branch 360, cross-branch tables) that pull another
+   * branch's data via the same TenancyGuard mechanism the branch switcher uses, without silently
+   * switching the whole app's operating context. TenancyGuard only honors it for the caller's own
+   * business or a direct child, so this is safe to send unconditionally. */
+  branchId?: string;
 }
 
 /** Dedupes concurrent 401s during a page's initial burst of requests into a single refresh call. */
@@ -63,7 +70,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, options:
   const headers = new Headers(init.headers);
   if (!(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (accessToken && !options.skipAuth) headers.set("Authorization", `Bearer ${accessToken}`);
-  const selectedBranchId = useBranchContextStore.getState().selectedBranchId;
+  const selectedBranchId = options.branchId ?? useBranchContextStore.getState().selectedBranchId;
   if (selectedBranchId) headers.set("X-Branch", selectedBranchId);
 
   const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });

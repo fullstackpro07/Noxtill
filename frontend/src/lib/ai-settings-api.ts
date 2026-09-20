@@ -15,15 +15,25 @@ export interface AiFeatureUsage {
   calls: number;
 }
 
+export interface AiQueryDay {
+  day: string;
+  count: number;
+}
+
 export interface AiSettings {
   aiMonthlyCostCapUsd: number;
   aiRateLimitPerMinute: number;
+  aiQueryQuota: number;
   featureToggles: AiFeatureToggles;
   usageThisMonth: {
     byFeature: Record<keyof AiFeatureToggles, AiFeatureUsage>;
     other: AiFeatureUsage;
     totalCostUsd: number;
+    totalCalls: number;
+    queryQuotaUsedPercent: number;
+    limitResetsAt: string;
   };
+  queriesThisWeek: AiQueryDay[];
   disclosureText: string;
 }
 
@@ -34,6 +44,7 @@ export function fetchAiSettings(): Promise<AiSettings> {
 export interface UpdateAiSettingsInput {
   aiMonthlyCostCapUsd?: number;
   aiRateLimitPerMinute?: number;
+  aiQueryQuota?: number;
   featureToggles?: Partial<AiFeatureToggles>;
 }
 

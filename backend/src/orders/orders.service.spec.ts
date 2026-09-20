@@ -1,4 +1,6 @@
 import { ClsService } from 'nestjs-cls';
+import { PoliciesService } from '../common/policies/policies.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
@@ -70,6 +72,11 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
       loyalty as unknown as LoyaltyService,
       activity as unknown as ActivityService,
       cashRegister as unknown as CashRegisterService,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        {} as unknown as CapabilitiesService,
+      ),
     );
 
     const business = await prisma.business.create({
@@ -360,6 +367,11 @@ describe('OrdersService.updateStatus (BE-026 flow guard)', () => {
       loyalty as unknown as LoyaltyService,
       activity as unknown as ActivityService,
       cashRegister as unknown as CashRegisterService,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        {} as unknown as CapabilitiesService,
+      ),
     );
 
     const business = await prisma.business.create({
@@ -482,6 +494,11 @@ describe('OrdersService.createDraft/convertDraft/splitBill (UPD-BE-009/UPD-BE-01
       loyalty as unknown as LoyaltyService,
       activity as unknown as ActivityService,
       cashRegister as unknown as CashRegisterService,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        {} as unknown as CapabilitiesService,
+      ),
     );
 
     const business = await prisma.business.create({
@@ -638,6 +655,11 @@ describe('OrdersService.createSale — branch tax scoping (Branches depth fix, U
       loyalty as unknown as LoyaltyService,
       activity as unknown as ActivityService,
       cashRegister as unknown as CashRegisterService,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        {} as unknown as CapabilitiesService,
+      ),
     );
 
     const parent = await prisma.business.create({

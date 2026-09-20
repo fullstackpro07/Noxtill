@@ -5,6 +5,7 @@ import * as path from 'path';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -71,6 +72,11 @@ export class S3Service {
     }
   }
 
+  /** Whether files are kept on this server's disk (development) or in S3-compatible object storage. */
+  storageMode(): 'local' | 's3' {
+    return this.useLocalStorage ? 'local' : 's3';
+  }
+
   async upload(key: string, body: Buffer, contentType: string): Promise<void> {
     if (this.useLocalStorage) {
       await this.localWrite(key, body, contentType);
@@ -108,6 +114,72 @@ export class S3Service {
   ): Promise<string> {
     await this.upload(key, body, contentType);
     return this.getSignedDownloadUrl(key);
+  }
+
+  /**
+   * Bytes stored under this business's own folder in each top-level area (`exports/<id>/…`,
+   * `media/<id>/…`, …), which is how nearly every upload is keyed. Files stored outside that layout
+   * are not counted, and a very large folder stops being walked at MAX_LISTED objects (`truncated`).
+   */
+  async usageForBusiness(businessId: string): Promise<{
+    bytes: number;
+    objects: number;
+    truncated: boolean;
+    areas: { area: string; bytes: number; objects: number }[];
+  }> {
+    const MAX_LISTED = 20_000;
+    const areas: { area: string; bytes: number; objects: number }[] = [];
+    let truncated = false;
+    let listed = 0;
+
+    if (this.useLocalStorage) {
+      const walk = async (dir: string): Promise<{ bytes: number; objects: number }> => {
+        let bytes = 0;
+        let objects = 0;
+        for (const entry of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            const sub = await walk(full);
+            bytes += sub.bytes;
+            objects += sub.objects;
+          } else if (!entry.name.endsWith('.meta.json')) {
+            bytes += (await fs.stat(full)).size;
+            objects += 1;
+          }
+        }
+        return { bytes, objects };
+      };
+      for (const top of await fs.readdir(this.localRoot, { withFileTypes: true }).catch(() => [])) {
+        if (!top.isDirectory()) continue;
+        const dir = path.join(this.localRoot, top.name, businessId);
+        const used = await walk(dir);
+        if (used.objects > 0) areas.push({ area: top.name, ...used });
+      }
+    } else {
+      const roots = await this.client!.send(new ListObjectsV2Command({ Bucket: this.bucket, Delimiter: '/' }));
+      for (const prefix of roots.CommonPrefixes ?? []) {
+        if (!prefix.Prefix) continue;
+        let bytes = 0;
+        let objects = 0;
+        let token: string | undefined;
+        do {
+          const page = await this.client!.send(
+            new ListObjectsV2Command({ Bucket: this.bucket, Prefix: `${prefix.Prefix}${businessId}/`, ContinuationToken: token }),
+          );
+          for (const o of page.Contents ?? []) {
+            bytes += o.Size ?? 0;
+            objects += 1;
+          }
+          listed += page.Contents?.length ?? 0;
+          token = page.IsTruncated && listed < MAX_LISTED ? page.NextContinuationToken : undefined;
+          if (page.IsTruncated && listed >= MAX_LISTED) truncated = true;
+        } while (token);
+        if (objects > 0) areas.push({ area: prefix.Prefix.replace(/\/$/, ''), bytes, objects });
+      }
+    }
+
+    areas.sort((a, b) => b.bytes - a.bytes);
+    return { bytes: areas.reduce((n, a) => n + a.bytes, 0), objects: areas.reduce((n, a) => n + a.objects, 0), truncated, areas };
   }
 
   /** Used by retention/purge jobs (e.g. UPD-BE-059's voice recording retention) — permanent, not a soft-delete. */

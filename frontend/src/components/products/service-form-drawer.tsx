@@ -59,7 +59,7 @@ function ServiceFormBody({ product, onClose }: { product: Product | null; onClos
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<ServiceDraft>(() => toDraft(product));
   const { data: categories } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, staleTime: 5 * 60_000 });
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60_000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60_000 });
 
   const mutation = useMutation({
     mutationFn: () => {

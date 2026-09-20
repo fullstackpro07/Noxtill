@@ -1,9 +1,7 @@
 "use client";
 
-import { ReportsView } from "@/components/reports/reports-view";
-import { useSession } from "@/lib/session";
+import { AllReportsView } from "@/components/reports/all-reports-view";
 
 export default function ReportsPage() {
-  const session = useSession();
-  return <ReportsView role={session.user.role} />;
+  return <AllReportsView />;
 }

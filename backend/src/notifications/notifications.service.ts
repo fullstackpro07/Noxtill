@@ -7,6 +7,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import {
   NOTIFICATION_CHANNELS,
   NOTIFICATION_EVENTS,
+  NOTIFICATION_EVENT_PRIORITY,
   NotificationChannel,
   NotificationEvent,
 } from './notification-preferences.constants';
@@ -62,7 +63,12 @@ export class NotificationsService {
       return null;
     }
     return this.tenantPrisma.client.notification.create({
-      data: { businessId, userId, ...input },
+      data: {
+        businessId,
+        userId,
+        ...input,
+        priority: event ? NOTIFICATION_EVENT_PRIORITY[event] : 'normal',
+      },
     });
   }
 

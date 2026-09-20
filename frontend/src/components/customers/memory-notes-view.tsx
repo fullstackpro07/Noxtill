@@ -58,7 +58,7 @@ export function MemoryNotesView() {
   const { data: suppliers = [] } = useQuery({ queryKey: ["suppliers"], queryFn: fetchSuppliers });
   const { data: products = [] } = useQuery({ queryKey: ["products", "all"], queryFn: () => fetchProducts() });
   const { data: tables = [] } = useQuery({ queryKey: ["tables"], queryFn: fetchTables });
-  const { data: staff = [] } = useQuery({ queryKey: ["staff"], queryFn: fetchStaffList });
+  const { data: staff = [] } = useQuery({ queryKey: ["staff"], queryFn: () => fetchStaffList() });
 
   const staffById = useMemo(() => new Map(staff.map((s) => [s.userId, s.name])), [staff]);
   const subjectName = useMemo(() => {

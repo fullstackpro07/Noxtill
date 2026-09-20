@@ -76,3 +76,63 @@
   scrollbar-width: thin;
   scrollbar-color: #d5dce4 transparent;
 }
+
+/* Reports module overlays (drawer / modal / toast entrance animations). */
+@keyframes nxToastIn {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes nxDrawerIn {
+  from { transform: translateX(28px); opacity: 0.4; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes nxModalIn {
+  from { transform: translateY(8px) scale(0.985); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes nxPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ---------------------------------------------------------------------------
+   Personal preferences (Settings → Appearance / Accessibility). The applier
+   sets data-nx-motion and data-nx-font on <html> from the signed-in person's
+   saved choice; nothing here applies unless one of them is set.
+--------------------------------------------------------------------------- */
+html[data-nx-motion="reduced"] *,
+html[data-nx-motion="reduced"] *::before,
+html[data-nx-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.12s !important;
+  scroll-behavior: auto !important;
+}
+html[data-nx-motion="off"] *,
+html[data-nx-motion="off"] *::before,
+html[data-nx-motion="off"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* Larger text scales the whole app shell (text and spacing together). The shell is sized against
+   the viewport, so width/height are divided by the zoom to keep it exactly filling the window. */
+html[data-nx-font="large"] .nx-app {
+  zoom: 1.125;
+  width: calc(100% / 1.125);
+  height: calc(100dvh / 1.125);
+}
+html[data-nx-font="xlarge"] .nx-app {
+  zoom: 1.25;
+  width: calc(100% / 1.25);
+  height: calc(100dvh / 1.25);
+}
+html[data-nx-font="large"] .nx-app .h-dvh:not(.nx-app),
+html[data-nx-font="xlarge"] .nx-app .h-dvh:not(.nx-app) {
+  height: 100%;
+}

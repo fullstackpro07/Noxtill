@@ -56,7 +56,7 @@ export function HeldSalesView() {
   const [discardAllOpen, setDiscardAllOpen] = useState(false);
 
   const { data: holds } = useQuery({ queryKey: ["held-sales"], queryFn: fetchHeldSales, refetchInterval: 60_000 });
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60 * 1000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60 * 1000 });
   const staffNameByUserId = useMemo(() => new Map((staff ?? []).map((s) => [s.userId, s.name])), [staff]);
 
   const filtered = useMemo(() => {

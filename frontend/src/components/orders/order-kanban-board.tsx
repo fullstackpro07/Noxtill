@@ -56,7 +56,7 @@ export function OrderKanbanBoard() {
     queryFn: () => fetchOrders(),
     refetchInterval: 20_000,
   });
-  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: fetchStaffList, staleTime: 5 * 60_000 });
+  const { data: staff } = useQuery({ queryKey: ["staff-roster"], queryFn: () => fetchStaffList(), staleTime: 5 * 60_000 });
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {

@@ -26,6 +26,8 @@ import {
 import { computeOrderTotals, resolveTaxRatePercent } from './order-totals.util';
 import { OrderStatus, OrderType, PaymentMethod, Prisma, ProductKind } from '@prisma/client';
 import { withDeadlockRetry } from '../common/utils/prisma-transaction-retry.util';
+import { PoliciesService } from '../common/policies/policies.service';
+import { enforceCreditLimit, enforceSaleRules } from './order-policy.util';
 
 /**
  * Narrow shape of the transaction client actually used by `resolveCustomerId` — the tenant-scoped
@@ -61,6 +63,7 @@ export class OrdersService {
     private readonly loyalty: LoyaltyService,
     private readonly activity: ActivityService,
     private readonly cashRegister: CashRegisterService,
+    private readonly policies: PoliciesService,
   ) {}
 
   /** Shared by createSale and createDraft — a draft's cart may also name a customer by phone. */
@@ -108,6 +111,8 @@ export class OrdersService {
             );
           }
 
+          const policies = this.policies.resolve(business);
+          const taxInclusive = policies.bool('sales.pricesIncludeTax');
           const customerId = await this.resolveCustomerId(tx, businessId, dto);
 
           if (dto.payment.method === 'credit' && !customerId) {
@@ -138,7 +143,8 @@ export class OrdersService {
             }
             if (
               product.kind === ProductKind.product &&
-              product.stockQty < item.qty
+              product.stockQty < item.qty &&
+              !policies.bool('sales.allowNegativeStock')
             ) {
               throw new AppException(
                 ORDER_ERROR_CODES.INSUFFICIENT_STOCK,
@@ -153,6 +159,9 @@ export class OrdersService {
             return {
               productId: product.id,
               name: product.name,
+              overridden:
+                item.priceOverride !== undefined &&
+                item.priceOverride !== Number(product.sellingPrice),
               price,
               cost,
               qty: item.qty,
@@ -171,6 +180,17 @@ export class OrdersService {
           const rawSubtotal = itemsData.reduce(
             (sum, item) => sum + item.price * item.qty,
             0,
+          );
+
+          await enforceSaleRules(
+            policies,
+            {
+              hasCustomer: !!customerId,
+              overriddenPriceNames: itemsData.filter((i) => i.overridden).map((i) => i.name),
+              manualDiscount: dto.discount ?? 0,
+              rawSubtotal,
+            },
+            (c) => this.policies.actorCan(c),
           );
 
           let couponId: string | undefined;
@@ -195,6 +215,7 @@ export class OrdersService {
             itemsData,
             discount,
             Number(business.taxRate),
+            taxInclusive,
           );
 
           // Vouchers (UPD-BE-030): a payment method, not a discount — offsets the amount collected
@@ -220,6 +241,22 @@ export class OrdersService {
           // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
           const orderNo = Number(orderNoRaw);
 
+          if (dto.payment.method === 'credit' && customerId) {
+            const [customerRow] = await tx.$queryRaw<{ credit_limit: string | null; balance: string | null }[]>`
+              SELECT c.credit_limit, (SELECT balance FROM v_credit_balances v WHERE v.business_id = c.business_id AND v.customer_id = c.id) AS balance
+              FROM customers c WHERE c.id = ${customerId}
+            `;
+            await enforceCreditLimit(
+              policies,
+              {
+                customerLimit: customerRow?.credit_limit != null ? Number(customerRow.credit_limit) : null,
+                balance: Number(customerRow?.balance ?? 0),
+                amountDue: Math.round((total - voucherAmountApplied) * 100) / 100,
+              },
+              (c) => this.policies.actorCan(c),
+            );
+          }
+
           const order = await tx.order.create({
             data: {
               businessId,
@@ -233,6 +270,7 @@ export class OrdersService {
               tax,
               discount,
               total,
+              taxInclusive,
               cogs,
               couponId,
               couponDiscountAmount: couponId ? couponDiscountAmount : undefined,
@@ -415,6 +453,8 @@ export class OrdersService {
       const business = await tx.business.findUniqueOrThrow({
         where: { id: activeBusinessId },
       });
+      const policies = this.policies.resolve(business);
+      const taxInclusive = policies.bool('sales.pricesIncludeTax');
       const customerId = await this.resolveCustomerId(tx, businessId, dto);
 
       const productIds = [...new Set(dto.items.map((i) => i.productId))];
@@ -438,6 +478,9 @@ export class OrdersService {
         return {
           productId: product.id,
           name: product.name,
+          overridden:
+            item.priceOverride !== undefined &&
+            item.priceOverride !== Number(product.sellingPrice),
           price: item.priceOverride ?? Number(product.sellingPrice),
           cost: Number(product.costPrice),
           qty: item.qty,
@@ -450,10 +493,22 @@ export class OrdersService {
       });
 
       const discount = dto.discount ?? 0;
+      await enforceSaleRules(
+        policies,
+        {
+          // A draft is a saved cart, not a sale; a customer is required when it is converted.
+          hasCustomer: true,
+          overriddenPriceNames: itemsData.filter((i) => i.overridden).map((i) => i.name),
+          manualDiscount: discount,
+          rawSubtotal: itemsData.reduce((sum, i) => sum + i.price * i.qty, 0),
+        },
+        (c) => this.policies.actorCan(c),
+      );
       const { subtotal, tax, total, cogs } = computeOrderTotals(
         itemsData,
         discount,
         Number(business.taxRate),
+        taxInclusive,
       );
 
       const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
@@ -476,6 +531,7 @@ export class OrdersService {
           tax,
           discount,
           total,
+          taxInclusive,
           cogs,
         },
       });
@@ -514,6 +570,8 @@ export class OrdersService {
       const business = await tx.business.findUniqueOrThrow({
         where: { id: activeBusinessId },
       });
+      const policies = this.policies.resolve(business);
+      const taxInclusive = policies.bool('sales.pricesIncludeTax');
       const customerId = await this.resolveCustomerId(tx, businessId, dto);
 
       if (dto.paymentMethod === 'credit' && !customerId) {
@@ -544,7 +602,8 @@ export class OrdersService {
         }
         if (
           product.kind === ProductKind.product &&
-          product.stockQty < item.qty
+          product.stockQty < item.qty &&
+          !policies.bool('sales.allowNegativeStock')
         ) {
           throw new AppException(
             ORDER_ERROR_CODES.INSUFFICIENT_STOCK,
@@ -555,6 +614,9 @@ export class OrdersService {
         return {
           productId: product.id,
           name: product.name,
+          overridden:
+            item.priceOverride !== undefined &&
+            item.priceOverride !== Number(product.sellingPrice),
           price: item.priceOverride ?? Number(product.sellingPrice),
           cost: Number(product.costPrice),
           qty: item.qty,
@@ -568,10 +630,21 @@ export class OrdersService {
       });
 
       const discount = dto.discount ?? 0;
+      await enforceSaleRules(
+        policies,
+        {
+          hasCustomer: !!customerId,
+          overriddenPriceNames: itemsData.filter((i) => i.overridden).map((i) => i.name),
+          manualDiscount: discount,
+          rawSubtotal: itemsData.reduce((sum, i) => sum + i.price * i.qty, 0),
+        },
+        (c) => this.policies.actorCan(c),
+      );
       const { subtotal, tax, total, cogs } = computeOrderTotals(
         itemsData,
         discount,
         Number(business.taxRate),
+        taxInclusive,
       );
 
       const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
@@ -592,6 +665,7 @@ export class OrdersService {
           tax,
           discount,
           total,
+          taxInclusive,
           cogs,
           notes: dto.notes,
         },
@@ -625,6 +699,22 @@ export class OrdersService {
             },
           });
         }
+      }
+
+      if (dto.paymentMethod === 'credit' && customerId) {
+        const [customerRow] = await tx.$queryRaw<{ credit_limit: string | null; balance: string | null }[]>`
+          SELECT c.credit_limit, (SELECT balance FROM v_credit_balances v WHERE v.business_id = c.business_id AND v.customer_id = c.id) AS balance
+          FROM customers c WHERE c.id = ${customerId}
+        `;
+        await enforceCreditLimit(
+          policies,
+          {
+            customerLimit: customerRow?.credit_limit != null ? Number(customerRow.credit_limit) : null,
+            balance: Number(customerRow?.balance ?? 0),
+            amountDue: total,
+          },
+          (c) => this.policies.actorCan(c),
+        );
       }
 
       if (dto.paymentMethod === 'credit') {

@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ProfitService } from '../profit/profit.service';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 import { HealthScoreService, HealthScoreReady } from './health-score.service';
 import { DEFAULT_HEALTH_SCORE_WEIGHTS } from './dashboard.constants';
 
@@ -41,6 +42,8 @@ describe('HealthScoreService (UPD-BE-001)', () => {
     );
     const profitService = new ProfitService(
       tenantPrisma,
+      prisma,
+      new BranchScopeService(prisma),
       cls as unknown as ClsService,
       { complete: jest.fn() } as unknown as AiInfraService,
     );

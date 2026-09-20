@@ -10,7 +10,7 @@ const MONTH_LABELS = ["Month 0", "Month 1", "Month 2", "Month 3", "Month 4", "Mo
 export function CohortGrid() {
   const { data: cohorts = [], isPending, isError, refetch } = useQuery({
     queryKey: ["analytics-cohorts"],
-    queryFn: fetchCohorts,
+    queryFn: () => fetchCohorts(),
   });
 
   if (isError) {

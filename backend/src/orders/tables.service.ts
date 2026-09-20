@@ -199,6 +199,7 @@ export class TablesService {
         })),
         Number(destinationOrder.discount),
         Number(business.taxRate),
+        destinationOrder.taxInclusive,
       );
 
       await tx.order.update({

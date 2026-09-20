@@ -39,6 +39,7 @@ describe('CampaignsService (BE-061)', () => {
       new SegmentsService(tenantPrisma, {
         complete: jest.fn(),
       } as unknown as AiInfraService),
+      { complete: jest.fn() } as unknown as AiInfraService,
     );
 
     const business = await prisma.business.create({

@@ -48,6 +48,10 @@ export const BOOKING_ERROR_CODES = {
   STAFF_NOT_ELIGIBLE: 'BOOKING_STAFF_NOT_ELIGIBLE',
   /** Services, formal fields depth fix (UPD-INT-004) — the service's own `depositRequired`/`depositAmount` (not the separate, out-of-scope-by-design DepositSettings trigger) has no captured deposit covering it yet. */
   DEPOSIT_REQUIRED: 'BOOKING_DEPOSIT_REQUIRED',
+  TOO_SOON: 'BOOKING_TOO_SOON',
+  TOO_FAR: 'BOOKING_TOO_FAR',
+  DAY_FULL: 'BOOKING_DAY_FULL',
+  CHANGE_WINDOW_CLOSED: 'BOOKING_CHANGE_WINDOW_CLOSED',
 } as const;
 
 export const REMINDER_RULE_ERROR_CODES = {

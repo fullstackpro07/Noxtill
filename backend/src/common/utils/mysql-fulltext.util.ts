@@ -22,6 +22,9 @@ const STOPWORDS = new Set([
   'by',
   'com',
   'de',
+  'did',
+  'do',
+  'does',
   'en',
   'for',
   'from',
@@ -47,6 +50,51 @@ const STOPWORDS = new Set([
   'with',
   'und',
   'www',
+]);
+
+/**
+ * Common English function words that are NOT in InnoDB's stopword list but are pure filler in a
+ * natural-language question — as `word*` prefix wildcards they match unrelated real words ("up*"
+ * hits "upgrade", "set*" hits "Settings", "and*" hits nearly every article), so an unanswerable
+ * question was being handed unrelated passages. Applied only when `requireAll` is false (a whole
+ * question, i.e. help retrieval) — short structured searches like a customer or product name keep
+ * every word, since "Salt and Pepper" or "Set Menu" are legitimate names there.
+ */
+const QUESTION_FILLER_WORDS = new Set([
+  'all',
+  'also',
+  'and',
+  'any',
+  'but',
+  'can',
+  'could',
+  'get',
+  'had',
+  'has',
+  'have',
+  'if',
+  'just',
+  'make',
+  'me',
+  'my',
+  'not',
+  'our',
+  'out',
+  'set',
+  'should',
+  'so',
+  'than',
+  'then',
+  'there',
+  'they',
+  'up',
+  'use',
+  'we',
+  'which',
+  'why',
+  'would',
+  'you',
+  'your',
 ]);
 
 /**
@@ -76,7 +124,8 @@ export function buildFulltextBooleanQuery(
     .trim()
     .split(/\s+/)
     .filter(Boolean)
-    .filter((word) => !STOPWORDS.has(word.toLowerCase()));
+    .filter((word) => !STOPWORDS.has(word.toLowerCase()))
+    .filter((word) => requireAll || !QUESTION_FILLER_WORDS.has(word.toLowerCase()));
   if (words.length === 0) return null;
   return words.map((word) => (requireAll ? `+${word}*` : `${word}*`)).join(' ');
 }

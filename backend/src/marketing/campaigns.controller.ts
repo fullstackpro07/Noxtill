@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
+import { DraftCampaignMessageDto } from './dto/draft-campaign-message.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
@@ -24,5 +25,13 @@ export class CampaignsController {
   @Get(':id/report')
   report(@Param('id') id: string) {
     return this.campaignsService.report(id);
+  }
+
+  @Post('draft-message')
+  draftMessage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DraftCampaignMessageDto,
+  ) {
+    return this.campaignsService.draftMessage(user.businessId, dto);
   }
 }

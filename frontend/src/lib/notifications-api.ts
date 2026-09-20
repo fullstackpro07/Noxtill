@@ -6,6 +6,8 @@ export interface LiveNotification {
   body: string;
   link: string | null;
   read: boolean;
+  /** Fixed by the kind of alert: low, normal or high. */
+  priority: "low" | "normal" | "high";
   createdAt: string;
 }
 

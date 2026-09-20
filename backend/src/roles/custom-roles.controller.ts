@@ -8,10 +8,12 @@ import {
   Post,
 } from '@nestjs/common';
 import { CustomRolesService } from './custom-roles.service';
+import { SystemRoleOverridesService } from './system-role-overrides.service';
 import {
   CreateCustomRoleDto,
   UpdateCustomRoleDto,
 } from './dto/create-custom-role.dto';
+import { UpdateSystemRoleCapabilitiesDto } from './dto/update-system-role-capabilities.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -24,11 +26,44 @@ import {
 @Controller()
 @RequireCapability(CAPABILITIES.ROLES_MANAGE)
 export class CustomRolesController {
-  constructor(private readonly customRoles: CustomRolesService) {}
+  constructor(
+    private readonly customRoles: CustomRolesService,
+    private readonly systemRoleOverrides: SystemRoleOverridesService,
+  ) {}
 
   @Get('capabilities')
   listCapabilities() {
     return ALL_CAPABILITIES;
+  }
+
+  /**
+   * Staff module v2 — Roles & Permissions (UPD-BE-STAFF-01). Declared before `roles/:id` below so
+   * the literal `system` segment is matched first, not swallowed by the `:id` param route.
+   */
+  @Get('roles/system')
+  listSystemRoles(@CurrentUser() user: AuthenticatedUser) {
+    return this.systemRoleOverrides.list(user.businessId);
+  }
+
+  @Patch('roles/system/:role')
+  updateSystemRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('role') role: string,
+    @Body() dto: UpdateSystemRoleCapabilitiesDto,
+  ) {
+    return this.systemRoleOverrides.update(
+      user.businessId,
+      role,
+      dto.capabilities,
+    );
+  }
+
+  @Delete('roles/system/:role')
+  resetSystemRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('role') role: string,
+  ) {
+    return this.systemRoleOverrides.reset(user.businessId, role);
   }
 
   @Post('roles')

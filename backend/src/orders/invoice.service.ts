@@ -116,7 +116,7 @@ export class InvoiceService {
             </table>
             <div style="margin-top:16px; text-align:right;">
               <p>${terms.subtotal}: ${this.locale.formatCurrency(Number(order.subtotal), business)}</p>
-              <p>${business.taxLabel}: ${this.locale.formatCurrency(Number(order.tax), business)}</p>
+              <p>${business.taxLabel}${order.taxInclusive ? ' (included in prices)' : ''}: ${this.locale.formatCurrency(Number(order.tax), business)}</p>
               <p>${terms.discount}: -${this.locale.formatCurrency(Number(order.discount), business)}</p>
               <h3>${terms.total}: ${this.locale.formatCurrency(Number(order.total), business)}</h3>
             </div>

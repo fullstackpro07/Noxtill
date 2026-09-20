@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -6,16 +7,51 @@ import {
   Param,
   Post,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AssistantService } from './assistant.service';
+import { AssistantAttachmentService } from './attachment.service';
+import { AssistantReportService } from './assistant-report.service';
 import { AssistantChatDto } from './dto/assistant-chat.dto';
+import { GenerateReportDto } from './dto/generate-report.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
 @Controller('assistant')
 export class AssistantController {
-  constructor(private readonly assistantService: AssistantService) {}
+  constructor(
+    private readonly assistantService: AssistantService,
+    private readonly attachments: AssistantAttachmentService,
+    private readonly reports: AssistantReportService,
+  ) {}
+
+  /** Business Chat's "Generate report" action — a real one-page PDF built from exactly the
+   * tool-call trace and help sources the caller's own answer already carried. */
+  @Post('report')
+  generateReport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: GenerateReportDto,
+  ) {
+    return this.reports.generate(user, dto);
+  }
+
+  /**
+   * Reads a PDF, Word document, CSV/text file or photo into plain text so the caller can prepend
+   * it to their next `/assistant/chat` question. Read-only: nothing from the file is written to
+   * any business table (that is the Photo Digitizer's separate, confirmed-import flow).
+   */
+  @Post('attachments')
+  @UseInterceptors(FileInterceptor('file'))
+  extractAttachment(
+    @CurrentUser() user: AuthenticatedUser,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('file is required');
+    return this.attachments.extract(user.businessId, file);
+  }
 
   @Get('tools')
   tools() {
