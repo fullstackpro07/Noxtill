@@ -149,12 +149,32 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
         },
         {
           title: 'Refunds and credit sales',
-          hint: 'Fixed rules enforced today',
+          hint: 'Some fixed, some set in Sales & POS',
           rows: [
             capabilityRow(d, { key: CAPABILITIES.RETURNS_APPROVE, label: 'Approve returns and refunds', description: 'A return creates a pending request; only a role holding this permission can approve it.', impact: 'Approving a return refunds money and puts stock back.' }),
             row({ key: 'refund-amount', label: 'Refund amount', description: 'The refund is recomputed from the order’s recorded prices — it can never exceed what was sold.', risk: 'High', state: () => ({ value: 'Computed by Noxtill', tone: 'green' }) }),
-            row({ key: 'refund-limit', label: 'Refund limit', description: 'A maximum refund amount before extra approval.', state: () => ({ value: 'Not configured', tone: 'amber' }) }),
-            row({ key: 'refund-original', label: 'Refund to original method', description: 'Whether refunds must go back the way they were paid.', state: () => ({ value: 'Not enforced', tone: 'amber' }) }),
+            row({
+              key: 'refund-limit',
+              label: 'Refund limit',
+              description: 'A maximum refund amount before the owner must approve it. Set in Sales & POS.',
+              link: { label: 'Open Sales & POS settings', href: '/settings/sales' },
+              state: async (ctx) => {
+                const b = await d.prisma.business.findUniqueOrThrow({ where: { id: ctx.businessId }, select: { policies: true } });
+                const limit = (b.policies as Record<string, unknown> | null)?.['returns.refundLimit'];
+                return typeof limit === 'number' ? { value: limit.toFixed(2), tone: 'green' } : { value: 'No limit set', tone: 'amber' };
+              },
+            }),
+            row({
+              key: 'refund-original',
+              label: 'Refund to original method',
+              description: 'Whether refunds must go back the way they were paid. Set in Sales & POS.',
+              link: { label: 'Open Sales & POS settings', href: '/settings/sales' },
+              state: async (ctx) => {
+                const b = await d.prisma.business.findUniqueOrThrow({ where: { id: ctx.businessId }, select: { policies: true } });
+                const on = (b.policies as Record<string, unknown> | null)?.['returns.refundToOriginalMethod'] === true;
+                return { value: on ? 'Enforced' : 'Not enforced', tone: on ? 'green' : 'amber' };
+              },
+            }),
             row({ key: 'credit-customer', label: 'Credit sales', description: 'A sale on credit must be linked to a customer.', state: () => ({ value: 'Customer required', tone: 'green' }) }),
           ],
         },

@@ -1,5 +1,7 @@
-import { AiStudioView } from "@/components/social/ai-studio-view";
+"use client";
+
+import { StudioScreen } from "@/components/social/screens/studio-screen";
 
 export default function SocialStudioPage() {
-  return <AiStudioView />;
+  return <StudioScreen />;
 }

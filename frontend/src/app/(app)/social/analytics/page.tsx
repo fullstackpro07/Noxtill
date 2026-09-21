@@ -1,5 +1,7 @@
-import { AnalyticsView } from "@/components/social/analytics-view";
+"use client";
+
+import { AnalyticsScreen } from "@/components/social/screens/analytics-screen";
 
 export default function SocialAnalyticsPage() {
-  return <AnalyticsView />;
+  return <AnalyticsScreen />;
 }

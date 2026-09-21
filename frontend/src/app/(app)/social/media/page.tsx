@@ -1,5 +1,7 @@
-import { MediaLibraryView } from "@/components/social/media-library-view";
+"use client";
+
+import { MediaScreen } from "@/components/social/screens/media-screen";
 
 export default function SocialMediaPage() {
-  return <MediaLibraryView />;
+  return <MediaScreen />;
 }

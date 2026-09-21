@@ -1,5 +1,7 @@
-import { SocialSettingsView } from "@/components/social/settings-view";
+"use client";
+
+import { SettingsScreen } from "@/components/social/screens/settings-screen";
 
 export default function SocialSettingsPage() {
-  return <SocialSettingsView />;
+  return <SettingsScreen />;
 }

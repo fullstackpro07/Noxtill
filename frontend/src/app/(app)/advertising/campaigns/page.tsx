@@ -1,5 +1,8 @@
-import { AllCampaignsView } from "@/components/advertising/all-campaigns-view";
+"use client";
 
-export default function AllCampaignsPage() {
-  return <AllCampaignsView />;
+import React from "react";
+import { CampaignsScreen } from "@/components/advertising/screens/campaigns-screen";
+
+export default function AdvertisingCampaignsPage() {
+  return <CampaignsScreen />;
 }

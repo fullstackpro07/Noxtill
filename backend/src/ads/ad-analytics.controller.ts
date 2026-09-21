@@ -14,4 +14,19 @@ export class AdAnalyticsController {
   performance() {
     return this.analytics.performance();
   }
+
+  @Get('analytics/funnel')
+  funnel() {
+    return this.analytics.funnel();
+  }
+
+  @Get('analytics/product-profitability')
+  productProfitability() {
+    return this.analytics.productProfitability();
+  }
+
+  @Get('analytics/attribution')
+  attribution() {
+    return this.analytics.attribution();
+  }
 }

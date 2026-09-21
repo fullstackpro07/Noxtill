@@ -1,5 +1,8 @@
-import { BudgetPerformanceView } from "@/components/advertising/budget-performance-view";
+"use client";
+
+import React from "react";
+import { AnalyticsScreen } from "@/components/advertising/screens/analytics-screen";
 
 export default function BudgetPerformancePage() {
-  return <BudgetPerformanceView />;
+  return <AnalyticsScreen />;
 }

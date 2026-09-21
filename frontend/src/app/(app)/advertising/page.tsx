@@ -1,5 +1,8 @@
-import { AdAccountsView } from "@/components/advertising/ad-accounts-view";
+"use client";
+
+import React from "react";
+import { OverviewScreen } from "@/components/advertising/screens/overview-screen";
 
 export default function AdvertisingPage() {
-  return <AdAccountsView />;
+  return <OverviewScreen />;
 }

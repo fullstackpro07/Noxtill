@@ -1,5 +1,6 @@
-import { ScheduledView } from "@/components/social/scheduled-view";
+import { redirect } from "next/navigation";
 
 export default function SocialScheduledPage() {
-  return <ScheduledView />;
+  redirect("/social/queue");
 }
+

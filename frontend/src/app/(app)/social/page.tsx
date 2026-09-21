@@ -1,5 +1,7 @@
-import { SocialAccountsView } from "@/components/social/social-accounts-view";
+"use client";
 
-export default function SocialPage() {
-  return <SocialAccountsView />;
+import { OverviewScreen } from "@/components/social/screens/overview-screen";
+
+export default function SocialOverviewPage() {
+  return <OverviewScreen />;
 }

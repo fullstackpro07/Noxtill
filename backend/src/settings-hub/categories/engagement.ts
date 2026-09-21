@@ -265,7 +265,7 @@ export function engagementCategories(d: HubDeps): CategoryDef[] {
           hint: 'What is and is not available',
           rows: [
             row({ key: 'inbox-auto', label: 'Auto-reply', description: 'Automatic replies outside business hours.', state: () => ({ value: 'Not available', tone: 'neutral' }) }),
-            row({ key: 'inbox-ai', label: 'AI replies', description: 'AI can draft a reply; a person always sends it.', risk: 'High', state: () => ({ value: 'Draft only', tone: 'green' }) }),
+            row({ key: 'inbox-ai', label: 'AI replies', description: 'AI drafting a reply to a social message. Every reply here is typed and sent by a person; this is different from the AI review-reply drafts in Reviews.', state: () => ({ value: 'Not available', tone: 'neutral' }) }),
           ],
         },
       ],

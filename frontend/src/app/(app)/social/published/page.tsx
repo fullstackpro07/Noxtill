@@ -1,5 +1,6 @@
-import { PublishedView } from "@/components/social/published-view";
+import { redirect } from "next/navigation";
 
 export default function SocialPublishedPage() {
-  return <PublishedView />;
+  redirect("/social/content");
 }
+

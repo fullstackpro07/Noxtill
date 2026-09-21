@@ -1,5 +1,6 @@
-import { CreatePostView } from "@/components/social/create-post-view";
+import { redirect } from "next/navigation";
 
 export default function SocialCreatePage() {
-  return <CreatePostView />;
+  redirect("/social/studio");
 }
+

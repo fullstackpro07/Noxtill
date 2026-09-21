@@ -18,7 +18,10 @@ import { AdAutoPauseScheduler } from './jobs/ad-auto-pause.scheduler';
 import { AdAutoPauseProcessor } from './jobs/ad-auto-pause.processor';
 import { AdStatsSyncScheduler } from './jobs/ad-stats-sync.scheduler';
 import { AdStatsSyncProcessor } from './jobs/ad-stats-sync.processor';
-import { AD_AUTO_PAUSE_QUEUE, AD_STATS_SYNC_QUEUE } from './ads.constants';
+import { AdRulesService } from './ad-rules.service';
+import { AdRulesController } from './ad-rules.controller';
+import { AdExperimentsService } from './ad-experiments.service';
+import { AdExperimentsController } from './ad-experiments.controller';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { CustomersModule } from '../customers/customers.module';
 
@@ -39,6 +42,8 @@ import { CustomersModule } from '../customers/customers.module';
     AdAnalyticsController,
     AdLeadsController,
     AdSettingsController,
+    AdRulesController,
+    AdExperimentsController,
   ],
   providers: [
     AdAccountsService,
@@ -48,6 +53,8 @@ import { CustomersModule } from '../customers/customers.module';
     AdAnalyticsService,
     AdLeadsService,
     AdSettingsService,
+    AdRulesService,
+    AdExperimentsService,
     AdAutoPauseScheduler,
     AdAutoPauseProcessor,
     AdStatsSyncScheduler,

@@ -1,5 +1,6 @@
-import { DraftsView } from "@/components/social/drafts-view";
+import { redirect } from "next/navigation";
 
 export default function SocialDraftsPage() {
-  return <DraftsView />;
+  redirect("/social/content");
 }
+

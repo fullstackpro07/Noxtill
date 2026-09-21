@@ -1,5 +1,7 @@
-import { InboxView } from "@/components/social/inbox-view";
+"use client";
+
+import { InboxScreen } from "@/components/social/screens/inbox-screen";
 
 export default function SocialInboxPage() {
-  return <InboxView />;
+  return <InboxScreen />;
 }

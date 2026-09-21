@@ -220,3 +220,119 @@ export function updateAdSettings(input: {
 }): Promise<AdSettings> {
   return apiFetch<AdSettings>("/ads/settings", { method: "PATCH", body: JSON.stringify(input) });
 }
+
+export interface AdExperimentItem {
+  id: string;
+  name: string;
+  type: string;
+  metric: string;
+  spend: number;
+  days: number;
+  variantA: string;
+  variantB: string;
+  valA: string;
+  valB: string;
+  winner: string;
+  confidence: "Sufficient data" | "Not enough data";
+  done: boolean;
+  creatives?: Array<{
+    id: string;
+    headline: string;
+    body: string;
+    provider: string;
+    status: string;
+  }>;
+}
+
+export function fetchAdExperiments(): Promise<AdExperimentItem[]> {
+  return apiFetch<AdExperimentItem[]>("/ads/experiments");
+}
+
+export function createAdExperiment(input: {
+  name: string;
+  provider: AdProvider;
+  campaignId?: string;
+  variantAHeadline: string;
+  variantABody: string;
+  variantBHeadline: string;
+  variantBBody: string;
+}): Promise<any> {
+  return apiFetch("/ads/experiments", { method: "POST", body: JSON.stringify(input) });
+}
+
+export interface AdRuleRecord {
+  id: string;
+  name: string;
+  when: string;
+  then: string;
+  guard: string;
+  fired: number;
+  on: boolean;
+  locked?: boolean;
+}
+
+export interface AdRulesResponse {
+  kpis: Array<{ label: string; value: string; color: string }>;
+  rules: AdRuleRecord[];
+  pendingApproval: {
+    id: string;
+    title: string;
+    why: string;
+    impact: string;
+    confidence: "High" | "Medium" | "Low";
+    suggestedBudget?: number;
+  } | null;
+}
+
+export function fetchAdRules(): Promise<AdRulesResponse> {
+  return apiFetch<AdRulesResponse>("/ads/rules");
+}
+
+export function toggleAdRule(id: string): Promise<{ success: boolean; rule: AdRuleRecord }> {
+  return apiFetch(`/ads/rules/${id}/toggle`, { method: "POST" });
+}
+
+export function approveAdRule(id: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch(`/ads/rules/${id}/approve`, { method: "POST" });
+}
+
+export function declineAdRule(id: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch(`/ads/rules/${id}/decline`, { method: "POST" });
+}
+
+export interface FunnelStage {
+  l: string;
+  v: string;
+  w: string;
+  color: string;
+}
+
+export function fetchAdFunnel(): Promise<FunnelStage[]> {
+  return apiFetch<FunnelStage[]>("/ads/analytics/funnel");
+}
+
+export interface ProductProfitabilityRow {
+  id?: string;
+  n: string;
+  spend: number;
+  rev: number;
+  profit: number;
+}
+
+export function fetchProductProfitability(): Promise<ProductProfitabilityRow[]> {
+  return apiFetch<ProductProfitabilityRow[]>("/ads/analytics/product-profitability");
+}
+
+export interface AdAttributionRow {
+  c: string;
+  ad: string;
+  cust: string;
+  touch: string;
+  order: string;
+  rev: string;
+}
+
+export function fetchAdAttribution(): Promise<AdAttributionRow[]> {
+  return apiFetch<AdAttributionRow[]>("/ads/analytics/attribution");
+}
+
