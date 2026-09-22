@@ -9,6 +9,7 @@ import { ListingPhotosService } from './listing-photos.service';
 import { ListingSettingsService } from './listing-settings.service';
 import { ListingAutoSyncScheduler } from './listing-auto-sync.scheduler';
 import { ListingAutoSyncProcessor } from './listing-auto-sync.processor';
+import { ListingsRollupService } from './listings-rollup.service';
 import { ListingsController } from './listings.controller';
 import {
   GMB_INSIGHTS_QUEUE,
@@ -33,6 +34,7 @@ import { IntegrationsModule } from '../integrations/integrations.module';
     ListingSettingsService,
     ListingAutoSyncScheduler,
     ListingAutoSyncProcessor,
+    ListingsRollupService,
   ],
   exports: [
     MasterListingService,
@@ -40,6 +42,7 @@ import { IntegrationsModule } from '../integrations/integrations.module';
     GmbManagementService,
     ListingPhotosService,
     ListingSettingsService,
+    ListingsRollupService,
   ],
 })
 export class ListingsModule {}

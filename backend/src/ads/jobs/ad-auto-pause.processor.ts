@@ -57,6 +57,17 @@ export class AdAutoPauseProcessor extends WorkerHost {
           Role.owner,
         );
         pausedCount += 1;
+        // Real record of the pause — this is what lets the Rules screen show a genuine "fired"
+        // count instead of an invented one (see AdRulesService.list()).
+        await this.prisma.auditLog.create({
+          data: {
+            businessId: setting.businessId,
+            action: 'ad.auto_pause',
+            entity: 'AdCampaign',
+            entityId: campaign.id,
+            after: { costPerResult: Math.round(costPerResult * 100) / 100, threshold } as never,
+          },
+        });
         this.logger.log(
           `Auto-paused campaign ${campaign.id} (business ${setting.businessId}): cost-per-result ${costPerResult.toFixed(2)} > threshold ${threshold}`,
         );

@@ -9,8 +9,6 @@ export function OverviewScreen() {
     setRange,
     metric,
     setMetric,
-    autopilot,
-    apColors,
     posts,
     comments,
     openDrawer,
@@ -18,7 +16,9 @@ export function OverviewScreen() {
     goToScreen,
     accounts,
     analyticsSummary,
+    dailyHistory,
     leads,
+    comps,
   } = useSocial();
 
   const needsApprovalCount = posts.filter((p) => p.st === "Needs approval").length;
@@ -43,60 +43,15 @@ export function OverviewScreen() {
     { l: "Leads captured", v: String(leads.length), d: leads.length > 0 ? "From social" : "None yet", vs: "", up: leads.length > 0, color: "#0E8442", bd: "#BFE7CF", icon: "M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M12 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0M19 8v6M16 11h6" },
   ];
 
-  const metricTabs = ["Reach", "Engagement", "Leads", "Followers"];
-  const baseReachK = Math.round(totalReach / 1000);
-  const baseFollowersK = +(totalFollowers / 1000).toFixed(1);
-  const leadsTotal = leads.length;
+  const metricTabs = ["Reach", "Engagement", "Followers"];
 
+  // Real per-day totals from SocialAnalyticsSnapshot — no faked trend shape. "Leads" has no daily
+  // history table behind it (AdLead only has a creation date, not a rolled-up per-day snapshot),
+  // so it isn't offered as a chart metric; the real total still shows in the KPI tile above.
   const metricValues: Record<string, number[]> = {
-    Reach: totalReach > 0
-      ? [
-          Math.round(baseReachK * 0.5),
-          Math.round(baseReachK * 0.58),
-          Math.round(baseReachK * 0.53),
-          Math.round(baseReachK * 0.67),
-          Math.round(baseReachK * 0.73),
-          Math.round(baseReachK * 0.7),
-          Math.round(baseReachK * 0.86),
-          baseReachK,
-        ]
-      : [0, 0, 0, 0, 0, 0, 0, 0],
-    Engagement: totalEngagement > 0
-      ? [
-          +(totalEngagement * 0.5).toFixed(1),
-          +(totalEngagement * 0.6).toFixed(1),
-          +(totalEngagement * 0.55).toFixed(1),
-          +(totalEngagement * 0.7).toFixed(1),
-          +(totalEngagement * 0.8).toFixed(1),
-          +(totalEngagement * 0.75).toFixed(1),
-          +(totalEngagement * 0.9).toFixed(1),
-          totalEngagement,
-        ]
-      : [0, 0, 0, 0, 0, 0, 0, 0],
-    Leads: leadsTotal > 0
-      ? [
-          Math.max(0, Math.round(leadsTotal * 0.2)),
-          Math.max(0, Math.round(leadsTotal * 0.3)),
-          Math.max(0, Math.round(leadsTotal * 0.25)),
-          Math.max(0, Math.round(leadsTotal * 0.45)),
-          Math.max(0, Math.round(leadsTotal * 0.55)),
-          Math.max(0, Math.round(leadsTotal * 0.5)),
-          Math.max(0, Math.round(leadsTotal * 0.75)),
-          leadsTotal,
-        ]
-      : [0, 0, 0, 0, 0, 0, 0, 0],
-    Followers: totalFollowers > 0
-      ? [
-          +(baseFollowersK * 0.8).toFixed(1),
-          +(baseFollowersK * 0.82).toFixed(1),
-          +(baseFollowersK * 0.84).toFixed(1),
-          +(baseFollowersK * 0.87).toFixed(1),
-          +(baseFollowersK * 0.9).toFixed(1),
-          +(baseFollowersK * 0.92).toFixed(1),
-          +(baseFollowersK * 0.96).toFixed(1),
-          baseFollowersK,
-        ]
-      : [0, 0, 0, 0, 0, 0, 0, 0],
+    Reach: dailyHistory.map((d) => d.reach),
+    Engagement: dailyHistory.map((d) => d.engagement),
+    Followers: dailyHistory.map((d) => d.followers),
   };
 
   const currentVals = metricValues[metric] || metricValues.Reach;
@@ -120,30 +75,45 @@ export function OverviewScreen() {
   const lastX = pts.length > 0 ? pts[pts.length - 1].x : W;
   const areaD = pts.length > 0 ? lineD + " L" + lastX + " " + (T + PH) + " L34 " + (T + PH) + " Z" : "";
 
-  // Dynamic 8 date intervals ending today
-  const today = new Date();
-  const perfLabels = Array.from({ length: 8 }).map((_, idx) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - (7 - idx) * 4);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  });
+  const perfLabels = dailyHistory.map((d) => new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }));
 
   const failedPost = posts.find((p) => p.st === "Failed");
   const unlinkedCount = accounts.length - connectedAccountsCount;
 
+  // Real best-performing format, computed from actual posted reach — not a fixed claim. Needs at
+  // least 2 published formats with recorded reach before a comparison means anything.
+  const formatReach = new Map<string, { reach: number; count: number }>();
+  for (const p of posts) {
+    if (!p.type || p.reach <= 0) continue;
+    const row = formatReach.get(p.type) ?? { reach: 0, count: 0 };
+    row.reach += p.reach;
+    row.count += 1;
+    formatReach.set(p.type, row);
+  }
+  const rankedFormats = [...formatReach.entries()]
+    .map(([type, r]) => ({ type, avgReach: r.reach / r.count }))
+    .sort((a, b) => b.avgReach - a.avgReach);
+  const bestFormat = rankedFormats[0];
+  const secondFormat = rankedFormats[1];
+  const formatMultiple = bestFormat && secondFormat && secondFormat.avgReach > 0 ? bestFormat.avgReach / secondFormat.avgReach : null;
+
   const intelItems = [
-    {
-      i: 0,
-      kind: "Opportunity",
-      bg: "#E8F7EE",
-      fg: "#0E8442",
-      conf: "High",
-      t: "Short-form video is outperforming your other formats by 2.3× on reach",
-      why: "Across recent posts, short-form reels and video formats generated higher reach and engagement than static photos. Video algorithm distributions continue to reward vertical clips.",
-      ev: "Performance metrics across active social channels",
-      act: "Generate video content",
-      scr: "studio",
-    },
+    ...(bestFormat && formatMultiple && formatMultiple >= 1.2
+      ? [
+          {
+            i: 0,
+            kind: "Opportunity",
+            bg: "#E8F7EE",
+            fg: "#0E8442",
+            conf: "Medium",
+            t: `${bestFormat.type} posts are averaging ${formatMultiple.toFixed(1)}× the reach of your next-best format`,
+            why: `Based on average reach per post across your published content, ${bestFormat.type} format posts are reaching more people than other formats you're posting.`,
+            ev: "Average reach per post, grouped by content type, across connected channels",
+            act: "Generate more content",
+            scr: "studio",
+          },
+        ]
+      : []),
     ...(failedPost
       ? [
           {
@@ -219,20 +189,22 @@ export function OverviewScreen() {
             scr: "accounts",
           },
         ]
-      : [
+      : comps.length > 0
+      ? [
           {
             i: 3,
             kind: "Competitor",
             bg: "#EEF4FF",
             fg: "#3538CD",
             conf: "Medium",
-            t: "Market activity increased posting frequency over 14 days",
-            why: "Tracking posting frequency and format mix in your niche helps adjust your own weekly content cadence.",
-            ev: "Public market post activity",
+            t: `${comps.length} competitor${comps.length > 1 ? "s" : ""} on your watchlist — review their public activity`,
+            why: "Comparing public post frequency, ratings and format mix in your niche helps adjust your own weekly content cadence.",
+            ev: "Public competitor profiles you're tracking",
             act: "Open competitors",
             scr: "competitors",
           },
-        ]),
+        ]
+      : []),
   ];
 
   // Map platform cards from live accounts context
@@ -259,12 +231,12 @@ export function OverviewScreen() {
   });
 
   const autoRows = [
-    { l: "Content generated", v: String(posts.length), color: "#101828" },
+    { l: "Posts total", v: String(posts.length), color: "#101828" },
     { l: "Pending approval", v: String(needsApprovalCount), color: "#B54708" },
-    { l: "Auto-scheduled", v: String(posts.filter((p) => p.st === "Scheduled").length), color: "#101828" },
-    { l: "Auto-published", v: String(publishedPostsCount), color: "#0E8442" },
+    { l: "Scheduled", v: String(posts.filter((p) => p.st === "Scheduled").length), color: "#101828" },
+    { l: "Published", v: String(publishedPostsCount), color: "#0E8442" },
     { l: "AI replies sent", v: String(comments.filter((c) => c.st === "AI replied").length), color: "#0E8442" },
-    { l: "Blocked by safety rules", v: String(failedPostsCount), color: "#B42318" },
+    { l: "Failed to publish", v: String(failedPostsCount), color: "#B42318" },
   ];
 
   const needsYou = [
@@ -472,10 +444,7 @@ export function OverviewScreen() {
         {/* Automation Today Card */}
         <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, padding: 17, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12, flexWrap: "wrap" }}>
-            <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Automation today</h3>
-            <span style={{ fontSize: 10.5, fontWeight: 800, color: apColors.fg, background: apColors.bg, borderRadius: 20, padding: "3px 9px" }}>
-              {autopilot}
-            </span>
+            <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Activity today</h3>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {autoRows.map((a, idx) => (
@@ -486,7 +455,7 @@ export function OverviewScreen() {
             ))}
           </div>
           <div style={{ fontSize: 11, color: "#98A2B3", marginTop: 11, lineHeight: 1.55 }}>
-            Everything AI creates is logged with the data it used. Nothing publishes outside the policy you set.
+            Nothing publishes to a platform without a person creating or approving it — there is no auto-publish.
           </div>
         </div>
 

@@ -1,52 +1,51 @@
 "use client";
 
 import React, { useState } from "react";
-import { useAdvertising, getChip, formatMoney } from "../advertising-context";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAdvertising, getChip } from "../advertising-context";
+import { updateAdLeadStatus, type AdLeadStatus } from "@/lib/ads-api";
+
+const STATUS_LABEL: Record<AdLeadStatus, string> = { new: "New", contacted: "Contacted", converted: "Converted" };
 
 export function LeadsScreen() {
-  const { leads, openDrawer, goToScreen } = useAdvertising();
+  const { leads, openDrawer, goToScreen, flash } = useAdvertising();
+  const queryClient = useQueryClient();
   const [lFilter, setLFilter] = useState("All");
 
-  const lRows = leads.map((l, i) => {
-    const status = (l.formData?.status as string) || (l as any).st || "New";
-    const score = (l.formData?.score as string) || (l as any).score || "Medium";
-    const interest = (l.formData?.interest as string) || (l as any).interest || "General inquiry";
-    const createdDate = new Date(l.createdAt || Date.now());
-    return {
-      id: l.id,
-      i,
-      name: l.name || "—",
-      email: l.email || "—",
-      phone: l.phone || "—",
-      src: l.provider.replace(/_ads/g, "").toUpperCase() + " lead form",
-      camp: "Lead generation campaign",
-      interest,
-      st: status,
-      score,
-      when: createdDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    };
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: AdLeadStatus }) => updateAdLeadStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adLeads"] });
+    },
+    onError: () => flash("Couldn't update this lead's status."),
   });
+
+  const lRows = leads.map((l) => ({
+    id: l.id,
+    name: l.name,
+    email: l.email,
+    phone: l.phone,
+    src: l.provider.replace(/_ads/g, "").toUpperCase(),
+    status: l.status,
+    when: new Date(l.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    raw: l,
+  }));
 
   const leadTabs = ["All", "New", "Contacted", "Converted"].map((k) => ({
     k,
-    n: k === "All" ? lRows.length : lRows.filter((l) => l.st.toLowerCase() === k.toLowerCase()).length,
+    n: k === "All" ? lRows.length : lRows.filter((l) => STATUS_LABEL[l.status] === k).length,
   }));
 
-  const filtered = lRows.filter((l) => {
-    if (lFilter === "All") return true;
-    return l.st.toLowerCase() === lFilter.toLowerCase();
-  });
+  const filtered = lRows.filter((l) => lFilter === "All" || STATUS_LABEL[l.status] === lFilter);
 
   const leadKpis = [
     { l: "Leads", v: String(lRows.length), color: "#0F172A" },
-    { l: "New", v: String(lRows.filter((l) => l.st === "New").length), color: "#3538CD" },
-    { l: "Converted", v: String(lRows.filter((l) => l.st === "Converted").length), color: "#12A150" },
-    { l: "Cost per lead", v: lRows.length > 0 ? formatMoney(38400 / lRows.length) : "Rs. 0", color: "#0F172A" },
+    { l: "New", v: String(lRows.filter((l) => l.status === "new").length), color: "#3538CD" },
+    { l: "Converted", v: String(lRows.filter((l) => l.status === "converted").length), color: "#12A150" },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-      {/* 4 KPI Cards */}
       <div data-kpi="1" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
         {leadKpis.map((k, idx) => (
           <div key={idx} style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 14, padding: 15 }}>
@@ -56,7 +55,6 @@ export function LeadsScreen() {
         ))}
       </div>
 
-      {/* Filter Tabs */}
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
         {leadTabs.map((t) => {
           const isSel = lFilter === t.k;
@@ -86,7 +84,6 @@ export function LeadsScreen() {
         })}
       </div>
 
-      {/* Leads Table Card */}
       <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, overflow: "hidden" }}>
         {filtered.length === 0 ? (
           <div style={{ padding: "52px 18px", textAlign: "center" }}>
@@ -103,14 +100,12 @@ export function LeadsScreen() {
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
               <thead>
                 <tr style={{ background: "#FAFBFC" }}>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: "10px 17px" }}>Lead</th>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Contact</th>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Source</th>
-                  <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Interested in</th>
-                  <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Score</th>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Status</th>
                   <th style={{ textAlign: "right", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Captured</th>
                   <th style={{ textAlign: "right", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: "10px 17px" }}>Actions</th>
@@ -118,38 +113,33 @@ export function LeadsScreen() {
               </thead>
               <tbody>
                 {filtered.map((l) => {
-                  const sc = getChip(l.st);
-                  const scoreChip = getChip(l.score);
+                  const sc = getChip(STATUS_LABEL[l.status]);
                   return (
-                    <tr
-                      key={l.id}
-                      onClick={() => openDrawer("lead", { l })}
-                      style={{ borderTop: "1px solid #F2F4F7", cursor: "pointer" }}
-                    >
+                    <tr key={l.id} onClick={() => openDrawer("lead", { l: l.raw })} style={{ borderTop: "1px solid #F2F4F7", cursor: "pointer" }}>
                       <td style={{ padding: "12px 17px", fontSize: 12.5, fontWeight: 700, color: "#101828" }}>
-                        {l.name !== "—" ? l.name : <span style={{ color: "#98A2B3", fontStyle: "italic" }}>Not provided</span>}
+                        {l.name || <span style={{ color: "#98A2B3", fontStyle: "italic" }}>Not provided</span>}
                       </td>
-                      <td style={{ padding: 12, fontSize: 12, color: "#475467" }}>
-                        {l.phone !== "—" ? l.phone : l.email !== "—" ? l.email : "—"}
-                      </td>
+                      <td style={{ padding: 12, fontSize: 12, color: "#475467" }}>{l.phone || l.email || "—"}</td>
                       <td style={{ padding: 12, fontSize: 12, color: "#667085" }}>{l.src}</td>
-                      <td style={{ padding: 12, fontSize: 12.5, fontWeight: 700, color: "#0E8442" }}>{l.interest}</td>
-                      <td style={{ padding: 12 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: scoreChip.bg, color: scoreChip.fg }}>
-                          {l.score}
-                        </span>
-                      </td>
-                      <td style={{ padding: 12 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: sc.bg, color: sc.fg }}>
-                          {l.st}
-                        </span>
+                      <td style={{ padding: 12 }} onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={l.status}
+                          disabled={statusMutation.isPending}
+                          onChange={(e) => statusMutation.mutate({ id: l.id, status: e.target.value as AdLeadStatus })}
+                          aria-label={`Status for ${l.name || "this lead"}`}
+                          style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: sc.bg, color: sc.fg, border: 0, cursor: "pointer" }}
+                        >
+                          {(Object.keys(STATUS_LABEL) as AdLeadStatus[]).map((s) => (
+                            <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                          ))}
+                        </select>
                       </td>
                       <td style={{ padding: 12, fontSize: 12, color: "#98A2B3", textAlign: "right" }}>{l.when}</td>
                       <td style={{ padding: "12px 17px", textAlign: "right" }}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            openDrawer("lead", { l });
+                            openDrawer("lead", { l: l.raw });
                           }}
                           style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: 9, padding: "7px 12px", fontSize: 11.5, fontWeight: 700, color: "#344054", cursor: "pointer", minHeight: 38 }}
                         >
@@ -164,7 +154,7 @@ export function LeadsScreen() {
           </div>
         )}
         <div style={{ padding: "11px 17px", borderTop: "1px solid #F0F2F5", fontSize: 11.5, color: "#98A2B3" }}>
-          Inbound leads from ad forms contain only what the user explicitly entered. Contact information is never scraped or enriched.
+          Inbound leads from ad forms contain only what the user explicitly entered. Contact information is never scraped or enriched. Status is set here by you — Noxtill never guesses it.
         </div>
       </div>
     </div>

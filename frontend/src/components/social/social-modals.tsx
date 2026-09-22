@@ -4,18 +4,15 @@ import React, { useState, useMemo } from "react";
 import { useSocial } from "./social-context";
 
 export function SocialModals() {
-  const { modal, modalData, closeModal, closeAll, flash, autopilot, setAutopilot, bulkApprove, disconnectAccount, addCompetitor, goToScreen } = useSocial();
+  const { modal, modalData, closeModal, closeAll, flash, bulkApprove, disconnectAccount, addCompetitor, goToScreen } = useSocial();
 
   if (!modal) return null;
 
   const modalTitleMap: Record<string, string> = {
-    autopilot: "Social autopilot",
     autoplan: "AI content plan",
     repurpose: "Repurpose for other platforms",
     bulkapprove: "Approve selected posts",
     failure: "Why this failed",
-    capture: "Capture this as a lead",
-    dupe: "Possible duplicate",
     disconnect: "Disconnect account",
     addcomp: "Add competitor",
   };
@@ -78,73 +75,12 @@ export function SocialModals() {
         </div>
 
         {/* Modal Content */}
-        {modal === "autopilot" && <AutopilotModalContent />}
         {modal === "autoplan" && <AutoplanModalContent />}
         {modal === "repurpose" && <RepurposeModalContent post={modalData?.p} />}
         {modal === "bulkapprove" && <BulkApproveModalContent />}
         {modal === "failure" && <FailureModalContent post={modalData?.p} />}
-        {modal === "capture" && <CaptureModalContent comment={modalData?.c} />}
-        {modal === "dupe" && <DupeModalContent lead={modalData?.l} />}
         {modal === "disconnect" && <DisconnectModalContent account={modalData?.a} />}
         {modal === "addcomp" && <AddCompModalContent />}
-      </div>
-    </div>
-  );
-}
-
-function AutopilotModalContent() {
-  const { autopilot, setAutopilot, closeModal, flash } = useSocial();
-  const [selected, setSelected] = useState(autopilot);
-
-  const apModes = [
-    { k: "Off", note: "Nothing automated — you create and publish everything" },
-    { k: "Assisted", note: "AI suggests, you do the rest" },
-    { k: "Approval mode", note: "AI creates and schedules, you approve before publishing" },
-    { k: "Autopilot", note: "AI publishes low-risk content within your rules" },
-  ];
-
-  return (
-    <div>
-      <div style={{ padding: 17, display: "flex", flexDirection: "column", gap: 9 }}>
-        {apModes.map((m) => {
-          const isSel = selected === m.k;
-          return (
-            <button
-              key={m.k}
-              onClick={() => setSelected(m.k)}
-              style={{
-                textAlign: "left",
-                border: `1px solid ${isSel ? "#12A150" : "#E6EAF0"}`,
-                background: isSel ? "#F7FCF9" : "#fff",
-                borderRadius: 12,
-                padding: 13,
-                cursor: "pointer",
-                minHeight: 44,
-              }}
-            >
-              <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: isSel ? "#0E8442" : "#475467" }}>{m.k}</span>
-              <span style={{ display: "block", fontSize: 11.5, color: "#667085", marginTop: 4, lineHeight: 1.5 }}>{m.note}</span>
-            </button>
-          );
-        })}
-        <div style={{ background: "#FFFBF2", border: "1px solid #FDE3B3", borderRadius: 11, padding: "11px 13px", fontSize: 11.5, color: "#93370D", lineHeight: 1.55 }}>
-          Even on autopilot, the fixed safety rules apply — out-of-stock products, expired offers, complaints and low-confidence content never go out unattended.
-        </div>
-      </div>
-      <div style={{ padding: "14px 17px", borderTop: "1px solid #F0F2F5", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-        <button onClick={closeModal} style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 11, padding: "11px 18px", fontSize: 12.5, fontWeight: 600, color: "#344054", cursor: "pointer", minHeight: 44 }}>
-          Cancel
-        </button>
-        <button
-          onClick={() => {
-            setAutopilot(selected);
-            closeModal();
-            flash(`Autopilot set to ${selected}.`);
-          }}
-          style={{ background: "#12A150", border: 0, borderRadius: 11, padding: "11px 20px", fontSize: 12.5, fontWeight: 800, color: "#fff", cursor: "pointer", minHeight: 44 }}
-        >
-          Save mode
-        </button>
       </div>
     </div>
   );
@@ -200,7 +136,7 @@ function AutoplanModalContent() {
   return (
     <div>
       <div style={{ padding: 17, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontSize: 12.5, color: "#475467", lineHeight: 1.6 }}>Five posts drafted from your products, reviews and booking availability. Nothing is scheduled until you approve.</div>
+        <div style={{ fontSize: 12.5, color: "#475467", lineHeight: 1.6 }}>{planRows.length} post{planRows.length !== 1 ? "s" : ""} drafted from your product catalog, with a suggested day, platform and time. Nothing is scheduled until you approve.</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
           {planRows.map((r, idx) => (
             <div key={idx} style={{ border: "1px solid #E6EAF0", borderRadius: 12, padding: 12 }}>
@@ -225,7 +161,7 @@ function AutoplanModalContent() {
           onClick={handleDraftAll}
           style={{ background: "#12A150", border: 0, borderRadius: 11, padding: "11px 20px", fontSize: 12.5, fontWeight: 800, color: "#fff", cursor: isDrafting ? "not-allowed" : "pointer", opacity: isDrafting ? 0.6 : 1, minHeight: 44 }}
         >
-          {isDrafting ? "Drafting…" : "Draft all 5"}
+          {isDrafting ? "Drafting…" : `Draft all ${planRows.length}`}
         </button>
       </div>
     </div>
@@ -379,132 +315,6 @@ function FailureModalContent({ post }: { post?: any }) {
         </button>
         <button onClick={() => goToScreen("accounts")} style={{ background: "#12A150", border: 0, borderRadius: 11, padding: "11px 20px", fontSize: 12.5, fontWeight: 800, color: "#fff", cursor: "pointer", minHeight: 44 }}>
           Reconnect account
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function CaptureModalContent({ comment }: { comment?: any }) {
-  const { closeModal, flash } = useSocial();
-  const c = comment || {};
-
-  return (
-    <div>
-      <div style={{ padding: 17, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ background: "#FAFBFC", border: "1px solid #F0F2F5", borderRadius: 11, padding: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#98A2B3" }}>
-            {c.who || "User"} · {c.pf || "Social"}
-          </div>
-          <div style={{ fontSize: 12.5, color: "#344054", marginTop: 6, lineHeight: 1.55 }}>{c.msg || "Inquiry"}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".4px", textTransform: "uppercase", color: "#98A2B3", marginBottom: 9 }}>What will be saved</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #F2F4F7" }}>
-              <span style={{ fontSize: 12, color: "#667085" }}>Handle</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#344054" }}>{c.who || "—"}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #F2F4F7" }}>
-              <span style={{ fontSize: 12, color: "#667085" }}>Interest</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#344054" }}>{c.post || "General"}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #F2F4F7" }}>
-              <span style={{ fontSize: 12, color: "#667085" }}>Intent</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#344054" }}>{c.intent || "Product inquiry"}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #F2F4F7" }}>
-              <span style={{ fontSize: 12, color: "#667085" }}>Name</span>
-              <span style={{ fontSize: 12, color: "#98A2B3", fontStyle: "italic" }}>Not provided</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #F2F4F7" }}>
-              <span style={{ fontSize: 12, color: "#667085" }}>Email</span>
-              <span style={{ fontSize: 12, color: "#98A2B3", fontStyle: "italic" }}>Not provided</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0" }}>
-              <span style={{ fontSize: 12, color: "#667085" }}>Phone</span>
-              <span style={{ fontSize: 12, color: "#98A2B3", fontStyle: "italic" }}>Not provided</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ background: "#EEF4FF", border: "1px solid #C7D7FE", borderRadius: 11, padding: "11px 13px", fontSize: 11.5, color: "#3538CD", lineHeight: 1.55 }}>
-          Only the handle and what they wrote are available. Ask them directly for contact details — nothing will be looked up or guessed.
-        </div>
-      </div>
-      <div style={{ padding: "14px 17px", borderTop: "1px solid #F0F2F5", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-        <button onClick={closeModal} style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 11, padding: "11px 18px", fontSize: 12.5, fontWeight: 600, color: "#344054", cursor: "pointer", minHeight: 44 }}>
-          Cancel
-        </button>
-        <button
-          onClick={() => {
-            closeModal();
-            flash("Lead captured with only the fields this person actually provided.");
-          }}
-          style={{ background: "#12A150", border: 0, borderRadius: 11, padding: "11px 20px", fontSize: 12.5, fontWeight: 800, color: "#fff", cursor: "pointer", minHeight: 44 }}
-        >
-          Capture lead
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function DupeModalContent({ lead }: { lead?: any }) {
-  const { closeModal, flash } = useSocial();
-  const contactInfo = lead?.phone || lead?.email || lead?.who || "Customer identifier";
-  const matchedCustomer = lead?.match && lead.match !== "—" ? lead.match : "Matched customer profile";
-
-  return (
-    <div>
-      <div style={{ padding: 17, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontSize: 12.5, color: "#475467", lineHeight: 1.6 }}>This inquiry matches an existing customer identifier, but other fields are unconfirmed. Merging on one field alone risks joining two different people.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div style={{ border: "1px solid #E6EAF0", borderRadius: 12, padding: 12 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".4px", textTransform: "uppercase", color: "#98A2B3" }}>This lead</div>
-            <div style={{ fontSize: 12, color: "#344054", marginTop: 7, lineHeight: 1.6 }}>
-              Name — {lead?.name && lead.name !== "—" ? lead.name : "not provided"}
-              <br />
-              {contactInfo}
-              <br />
-              {lead?.pf || "Social"} inquiry
-            </div>
-          </div>
-          <div style={{ border: "1px solid #E6EAF0", borderRadius: 12, padding: 12 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".4px", textTransform: "uppercase", color: "#98A2B3" }}>Existing customer</div>
-            <div style={{ fontSize: 12, color: "#344054", marginTop: 7, lineHeight: 1.6 }}>
-              {matchedCustomer}
-              <br />
-              {contactInfo}
-              <br />
-              Verified customer record
-            </div>
-          </div>
-        </div>
-        <div style={{ background: "#FFFBF2", border: "1px solid #FDE3B3", borderRadius: 11, padding: "11px 13px", fontSize: 11.5, color: "#93370D", lineHeight: 1.55 }}>
-          Shared identifiers are common. Keeping them separate is safe — you can always merge later once identity is confirmed.
-        </div>
-      </div>
-      <div style={{ padding: "14px 17px", borderTop: "1px solid #F0F2F5", display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-        <button onClick={closeModal} style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 11, padding: "11px 18px", fontSize: 12.5, fontWeight: 600, color: "#344054", cursor: "pointer", minHeight: 44 }}>
-          Cancel
-        </button>
-        <button
-          onClick={() => {
-            closeModal();
-            flash("Kept separate — nothing was merged.");
-          }}
-          style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 11, padding: "11px 16px", fontSize: 12.5, fontWeight: 700, color: "#344054", cursor: "pointer", minHeight: 44 }}
-        >
-          Keep separate
-        </button>
-        <button
-          onClick={() => {
-            closeModal();
-            flash(`Merged into ${matchedCustomer}.`);
-          }}
-          style={{ background: "#12A150", border: 0, borderRadius: 11, padding: "11px 20px", fontSize: 12.5, fontWeight: 800, color: "#fff", cursor: "pointer", minHeight: 44 }}
-        >
-          Same person — merge
         </button>
       </div>
     </div>

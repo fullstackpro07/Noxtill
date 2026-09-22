@@ -13,6 +13,12 @@ export class SocialAnalyticsController {
     return this.analytics.summary(user.businessId);
   }
 
+  // Must be registered before ':platform' or that route would swallow 'history' as a platform name.
+  @Get('history')
+  history(@CurrentUser() user: AuthenticatedUser) {
+    return this.analytics.history(user.businessId);
+  }
+
   @Get(':platform')
   list(
     @CurrentUser() user: AuthenticatedUser,

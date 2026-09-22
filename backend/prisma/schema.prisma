@@ -4086,6 +4086,12 @@ model AdAudience {
 
 /// Lead Inbox (UPD-BE-071) — one row per real lead-gen form submission, ingested via each
 /// provider's real lead webhook (reuses the idempotent-webhook pattern from `webhooks/`).
+enum AdLeadStatus {
+  new
+  contacted
+  converted
+}
+
 model AdLead {
   id         String              @id @default(uuid())
   businessId String              @map("business_id")
@@ -4098,6 +4104,8 @@ model AdLead {
   phone      String?
   formData   Json                @default("{}") @map("form_data")
   externalId String              @map("external_id")
+  /// Set by a person from the Leads screen — never inferred. Defaults to `new` for every real lead.
+  status     AdLeadStatus        @default(new)
 
   createdAt DateTime @default(now()) @map("created_at")
 

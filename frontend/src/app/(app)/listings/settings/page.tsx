@@ -1,5 +1,5 @@
-import { ListingSettingsView } from "@/components/listings/listing-settings-view";
+import { SettingsScreen } from "@/components/listings/screens/settings-screen";
 
 export default function ListingsSettingsPage() {
-  return <ListingSettingsView />;
+  return <SettingsScreen />;
 }

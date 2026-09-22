@@ -1,19 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import {
-  useAdvertising,
-  formatMoney,
-  type AutopilotMode,
-} from "./advertising-context";
+import { useAdvertising, formatMoney } from "./advertising-context";
 
 export function AdvertisingModals() {
   const {
     modal,
     modalData,
     closeModal,
-    autopilot,
-    setAutopilot,
     pauseCampaignAction,
     createCampaignAction,
     addCompetitorAction,
@@ -21,16 +15,9 @@ export function AdvertisingModals() {
     flash,
   } = useAdvertising();
 
-  const [selectedAp, setSelectedAp] = useState<AutopilotMode>(autopilot);
   const [compName, setCompName] = useState("");
   const [compPage, setCompPage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (modal === "autopilot") {
-      setSelectedAp(autopilot);
-    }
-  }, [modal, autopilot]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,8 +33,6 @@ export function AdvertisingModals() {
 
   const getTitle = () => {
     switch (modal) {
-      case "autopilot":
-        return "Optimisation mode";
       case "pause":
         return "Pause campaign";
       case "launch":
@@ -59,12 +44,6 @@ export function AdvertisingModals() {
       default:
         return "";
     }
-  };
-
-  const handleSaveAutopilot = () => {
-    setAutopilot(selectedAp);
-    closeModal();
-    flash(`Optimisation set to ${selectedAp}.`);
   };
 
   const handleDoPause = async () => {
@@ -127,13 +106,6 @@ export function AdvertisingModals() {
       setIsSubmitting(false);
     }
   };
-
-  const apModes: { key: AutopilotMode; note: string }[] = [
-    { key: "Off", note: "Nothing changes automatically. Rules do not run." },
-    { key: "Suggest only", note: "Rules watch and tell you. No change is ever made." },
-    { key: "Approval mode", note: "Rules prepare a change and wait for you to approve it." },
-    { key: "Autopilot", note: "Rules act within your guardrails. Anything above the approval threshold still waits." },
-  ];
 
   return (
     <div
@@ -200,128 +172,19 @@ export function AdvertisingModals() {
           </button>
         </div>
 
-        {/* Modal: Autopilot */}
-        {modal === "autopilot" && (
-          <div>
-            <div style={{ padding: "17px", display: "flex", flexDirection: "column", gap: "9px" }}>
-              {apModes.map((m) => {
-                const isSel = selectedAp === m.key;
-                return (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => setSelectedAp(m.key)}
-                    style={{
-                      textAlign: "left",
-                      border: `1px solid ${isSel ? "#12A150" : "#E6EAF0"}`,
-                      background: isSel ? "#F7FCF9" : "#fff",
-                      borderRadius: "12px",
-                      padding: "13px",
-                      cursor: "pointer",
-                      minHeight: "46px",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: "13px",
-                        fontWeight: 800,
-                        color: isSel ? "#0E8442" : "#101828",
-                      }}
-                    >
-                      {m.key}
-                    </span>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: "12px",
-                        color: "#667085",
-                        marginTop: "4px",
-                        lineHeight: 1.55,
-                      }}
-                    >
-                      {m.note}
-                    </span>
-                  </button>
-                );
-              })}
-              <div
-                style={{
-                  background: "#FFFBF2",
-                  border: "1px solid #FDE3B3",
-                  borderRadius: "11px",
-                  padding: "11px 13px",
-                  fontSize: "11.5px",
-                  color: "#93370D",
-                  lineHeight: 1.55,
-                }}
-              >
-                Even on autopilot, budget changes above your approval threshold still wait for you, and out-of-stock products can never be advertised.
-              </div>
-            </div>
-            <div
-              style={{
-                padding: "14px 17px",
-                borderTop: "1px solid #F0F2F5",
-                display: "flex",
-                gap: "10px",
-                justifyContent: "flex-end",
-              }}
-            >
-              <button
-                type="button"
-                onClick={closeModal}
-                style={{
-                  background: "#fff",
-                  border: "1px solid #E6EAF0",
-                  borderRadius: "11px",
-                  padding: "11px 18px",
-                  fontSize: "12.5px",
-                  fontWeight: 600,
-                  color: "#344054",
-                  cursor: "pointer",
-                  minHeight: "44px",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveAutopilot}
-                style={{
-                  background: "#12A150",
-                  border: 0,
-                  borderRadius: "11px",
-                  padding: "11px 20px",
-                  fontSize: "12.5px",
-                  fontWeight: 800,
-                  color: "#fff",
-                  cursor: "pointer",
-                  minHeight: "44px",
-                }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Modal: Pause */}
         {modal === "pause" && (() => {
           const c = modalData?.c || {};
-          const spend = Number(c.spend || c.spent || 38400);
-          const conv = Number(c.conv || c.conversions || 24);
-          const rev = Number(c.rev || c.attributedRevenue || 168400);
-          const roas = spend > 0 ? (rev / spend).toFixed(1) + "×" : "—";
+          const spend = Number(c.stats?.spend || 0);
+          const conv = Number(c.stats?.results || 0);
 
           return (
             <div>
               <div style={{ padding: "17px", display: "flex", flexDirection: "column", gap: "12px" }}>
                 <div style={{ fontSize: "13.5px", fontWeight: 800, color: "#101828" }}>
-                  {c.name || c.n || "iPhone 15 Pro — September push"}
+                  {modalData?.campName || c.goal || "This campaign"}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   <div style={{ border: "1px solid #E6EAF0", borderRadius: "12px", padding: "12px" }}>
                     <div style={{ fontSize: "11px", fontWeight: 700, color: "#667085" }}>Spent</div>
                     <div style={{ fontSize: "16px", fontWeight: 800, color: "#0F172A", marginTop: "4px" }}>
@@ -332,12 +195,6 @@ export function AdvertisingModals() {
                     <div style={{ fontSize: "11px", fontWeight: 700, color: "#667085" }}>Results</div>
                     <div style={{ fontSize: "16px", fontWeight: 800, color: "#0F172A", marginTop: "4px" }}>
                       {conv}
-                    </div>
-                  </div>
-                  <div style={{ border: "1px solid #E6EAF0", borderRadius: "12px", padding: "12px" }}>
-                    <div style={{ fontSize: "11px", fontWeight: 700, color: "#667085" }}>Return</div>
-                    <div style={{ fontSize: "16px", fontWeight: 800, color: "#0F172A", marginTop: "4px" }}>
-                      {roas}
                     </div>
                   </div>
                 </div>

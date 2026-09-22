@@ -20,13 +20,8 @@ export class AdAnalyticsController {
     return this.analytics.funnel();
   }
 
-  @Get('analytics/product-profitability')
-  productProfitability() {
-    return this.analytics.productProfitability();
-  }
-
-  @Get('analytics/attribution')
-  attribution() {
-    return this.analytics.attribution();
+  @Get('analytics/daily-history')
+  dailyHistory() {
+    return this.analytics.dailyHistory();
   }
 }

@@ -13,6 +13,7 @@ import { ListingSyncService } from './listing-sync.service';
 import { GmbManagementService } from './gmb-management.service';
 import { ListingPhotosService } from './listing-photos.service';
 import { ListingSettingsService } from './listing-settings.service';
+import { ListingsRollupService } from './listings-rollup.service';
 import { UpdateMasterListingDto } from './dto/update-master-listing.dto';
 import {
   AnswerGmbQnaDto,
@@ -39,7 +40,19 @@ export class ListingsController {
     private readonly gmbManagement: GmbManagementService,
     private readonly listingPhotos: ListingPhotosService,
     private readonly listingSettings: ListingSettingsService,
+    private readonly listingsRollup: ListingsRollupService,
   ) {}
+
+  /** Unified Listings grid (Overview/All/Locations) — one real row per branch x connected directory provider. */
+  @Get('listings/rollup')
+  rollup(@CurrentUser() user: AuthenticatedUser) {
+    return this.listingsRollup.overview(user.businessId);
+  }
+
+  @Get('listings/rollup/summary')
+  rollupSummary(@CurrentUser() user: AuthenticatedUser) {
+    return this.listingsRollup.summary(user.businessId);
+  }
 
   @Get('listings/master')
   getMaster(@CurrentUser() user: AuthenticatedUser) {

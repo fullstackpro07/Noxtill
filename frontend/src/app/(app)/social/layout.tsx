@@ -9,7 +9,7 @@ import { SocialModals } from "@/components/social/social-modals";
 import { SocialToast } from "@/components/social/social-toast";
 
 function SocialHeaderBinder() {
-  const { headerTitle, headerSub, account, setAccount, autopilot, apColors, openModal, openDrawer } = useSocial();
+  const { headerTitle, headerSub, account, setAccount, openDrawer } = useSocial();
 
   useModuleHeader({
     title: (
@@ -34,29 +34,6 @@ function SocialHeaderBinder() {
           <option value="X (Twitter)">X (Twitter)</option>
           <option value="YouTube">YouTube</option>
         </select>
-        <button
-          onClick={() => openModal("autopilot")}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            border: `1px solid ${apColors.bd}`,
-            background: apColors.bg,
-            borderRadius: 20,
-            padding: "9px 13px",
-            fontSize: 11.5,
-            fontWeight: 800,
-            color: apColors.fg,
-            cursor: "pointer",
-            minHeight: 44,
-          }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="4" y="8" width="16" height="12" rx="2" />
-            <path d="M12 8V5M9 4h6M8.5 13h.01M15.5 13h.01M9.5 16.5h5" />
-          </svg>
-          Autopilot: {autopilot}
-        </button>
         <button
           onClick={() => openDrawer("composer")}
           style={{

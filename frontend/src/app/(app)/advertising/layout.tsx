@@ -17,9 +17,6 @@ function AdvertisingHeaderBinder() {
   const {
     accountFilter,
     setAccountFilter,
-    autopilot,
-    apColors,
-    openModal,
   } = useAdvertising();
 
   useModuleHeader({
@@ -53,41 +50,11 @@ function AdvertisingHeaderBinder() {
           }}
         >
           <option value="All ad accounts">All ad accounts</option>
-          <option value="Meta">Meta · Noxtill</option>
-          <option value="Google">Google · Noxtill</option>
-          <option value="TikTok">TikTok · Noxtill</option>
+          <option value="Meta Ads">Meta Ads</option>
+          <option value="Google Ads">Google Ads</option>
+          <option value="TikTok Ads">TikTok Ads</option>
+          <option value="LinkedIn Ads">LinkedIn Ads</option>
         </select>
-        <button
-          type="button"
-          onClick={() => openModal("autopilot")}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            border: `1px solid ${apColors.bd}`,
-            background: apColors.bg,
-            borderRadius: 20,
-            padding: "9px 13px",
-            fontSize: 11.5,
-            fontWeight: 800,
-            color: apColors.fg,
-            cursor: "pointer",
-            minHeight: 44,
-          }}
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M4 12h2M18 12h2M12 4v2M12 18v2" />
-          </svg>
-          Optimisation: {autopilot}
-        </button>
         <button
           type="button"
           onClick={() => router.push("/advertising/builder")}

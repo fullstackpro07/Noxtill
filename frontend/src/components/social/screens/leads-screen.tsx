@@ -1,16 +1,26 @@
 "use client";
 
 import React from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSocial, getChip } from "../social-context";
+import type { AdLeadStatus } from "@/lib/ads-api";
+
+const STATUS_LABEL: Record<AdLeadStatus, string> = { new: "New", contacted: "Contacted", converted: "Converted" };
 
 export function LeadsScreen() {
-  const { leads, capturePolicy, openDrawer, openModal, flash } = useSocial();
+  const { leads, capturePolicy, openDrawer, flash, updateLeadStatusAction } = useSocial();
+  const queryClient = useQueryClient();
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string | number; status: AdLeadStatus }) => updateLeadStatusAction(id, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ad-leads"] }),
+  });
 
   const leadKpis = [
-    { l: "Captured this month", v: String(leads.length), color: "#101828" },
-    { l: "Matched to customers", v: String(leads.filter((l) => l.st === "Matched").length), color: "#0E8442" },
-    { l: "High intent", v: String(leads.filter((l) => l.score === "High").length), color: "#0E8442" },
-    { l: "Need review", v: String(leads.filter((l) => l.st !== "Matched").length), color: "#B54708" },
+    { l: "Captured", v: String(leads.length), color: "#101828" },
+    { l: "New", v: String(leads.filter((l) => l.status === "new").length), color: "#3538CD" },
+    { l: "Contacted", v: String(leads.filter((l) => l.status === "contacted").length), color: "#B54708" },
+    { l: "Converted", v: String(leads.filter((l) => l.status === "converted").length), color: "#0E8442" },
   ];
 
   return (
@@ -64,19 +74,14 @@ export function LeadsScreen() {
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: "10px 17px" }}>Name</th>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Email</th>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Phone</th>
-                  <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Location</th>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Source</th>
-                  <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Interest</th>
-                  <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Intent</th>
+                  <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Captured</th>
                   <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>Status</th>
-                  <th style={{ textAlign: "right", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: "10px 17px" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {leads.map((l) => {
                   const sc = getChip(l.st);
-                  const scr = getChip(l.score);
-                  const isDupe = l.st === "Possible duplicate";
 
                   return (
                     <tr
@@ -105,33 +110,23 @@ export function LeadsScreen() {
                           <span style={{ fontSize: 11, color: "#98A2B3", fontStyle: "italic" }}>Not provided</span>
                         )}
                       </td>
-                      <td style={{ padding: 12, fontSize: 12, color: "#475467" }}>{l.loc}</td>
                       <td style={{ padding: 12, fontSize: 12, color: "#667085" }}>
                         {l.pf} · {l.src}
                       </td>
-                      <td style={{ padding: 12, fontSize: 12, color: "#475467" }}>{l.interest}</td>
-                      <td style={{ padding: 12 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: scr.bg, color: scr.fg, whiteSpace: "nowrap" }}>
-                          {l.score}
-                        </span>
-                      </td>
-                      <td style={{ padding: 12 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: sc.bg, color: sc.fg, whiteSpace: "nowrap" }}>
-                          {l.st}
-                        </span>
-                      </td>
-                      <td style={{ padding: "12px 17px", textAlign: "right" }}>
-                        {isDupe && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openModal("dupe", { l });
-                            }}
-                            style={{ border: "1px solid #FDE3B3", background: "#FFFBF2", borderRadius: 9, padding: "8px 12px", fontSize: 11.5, fontWeight: 700, color: "#93370D", cursor: "pointer", minHeight: 40, whiteSpace: "nowrap" }}
-                          >
-                            Review match
-                          </button>
-                        )}
+                      <td style={{ padding: 12, fontSize: 12, color: "#475467" }}>{l.when}</td>
+                      <td style={{ padding: 12 }} onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={l.status}
+                          onChange={(e) => statusMutation.mutate({ id: l.id, status: e.target.value as AdLeadStatus })}
+                          aria-label={`Status for ${l.name !== "—" ? l.name : "lead"}`}
+                          style={{ fontSize: 11, fontWeight: 800, padding: "5px 8px", borderRadius: 8, background: sc.bg, color: sc.fg, border: "none", cursor: "pointer" }}
+                        >
+                          {(Object.keys(STATUS_LABEL) as AdLeadStatus[]).map((s) => (
+                            <option key={s} value={s}>
+                              {STATUS_LABEL[s]}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                     </tr>
                   );

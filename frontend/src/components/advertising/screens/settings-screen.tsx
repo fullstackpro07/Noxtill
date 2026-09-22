@@ -1,19 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import {
-  useAdvertising,
-  formatMoney,
-  getChip,
-  type AutopilotMode,
-} from "../advertising-context";
+import { useAdvertising, getChip } from "../advertising-context";
 
 export function SettingsScreen() {
   const {
     settings,
     accounts,
-    autopilot,
-    setAutopilot,
+    goToScreen,
     updateSettingsAction,
     flash,
   } = useAdvertising();
@@ -29,54 +23,33 @@ export function SettingsScreen() {
     settings?.requireApproval ?? true
   );
 
-  const apModes: { key: AutopilotMode; note: string }[] = [
-    {
-      key: "Off",
-      note: "Nothing changes automatically. Rules do not run.",
-    },
-    {
-      key: "Suggest only",
-      note: "Rules watch and tell you. No change is ever made.",
-    },
-    {
-      key: "Approval mode",
-      note: "Rules prepare a change and wait for you to approve it.",
-    },
-    {
-      key: "Autopilot",
-      note: "Rules act within your guardrails. Anything above the approval threshold still waits.",
-    },
-  ];
+  // Real connected accounts only — an account that isn't connected simply isn't listed as one.
+  const adAccounts = accounts
+    .filter((a) => a.connected)
+    .map((a) => ({
+      n: a.provider.replace(/_ads/g, "").toUpperCase(),
+      st: a.error ? "Needs reconnect" : "Connected",
+      detail: a.error || "Connected",
+    }));
 
-  // Ad accounts from live DB or realistic baseline
-  const adAccounts = accounts.length > 0
-    ? accounts.map((a: any) => ({
-        n: `${(a.provider || "ad").replace(/_ads/g, "").toUpperCase()} · ${a.accountName || "Noxtill Store"}`,
-        id: a.externalAccountId || a.id || "act_4471092",
-        st: a.connected || a.status === "active" ? "Connected" : a.status === "needs_reconnect" ? "Conversion tracking incomplete" : "Not connected",
-        sync: a.lastSyncedAt ? new Date(a.lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Recently",
-      }))
-    : [
-        { n: "Meta · Noxtill Store", id: "act_4471092", st: "Connected", sync: "4 min ago" },
-        { n: "Google · Noxtill Store", id: "882-441-901", st: "Connected", sync: "11 min ago" },
-        { n: "TikTok · Noxtill Store", id: "72841029", st: "Conversion tracking incomplete", sync: "2 hrs ago" },
-        { n: "LinkedIn", id: "—", st: "Not connected", sync: "—" },
-      ];
-
+  // The only real AI capability this module has is ad-copy generation, via the same assistant
+  // used elsewhere in Noxtill (Claude, through AiInfraService) — not OpenAI, Adobe Firefly or
+  // Canva, none of which are integrated here. A previous version of this screen listed all three
+  // as "Connected".
   const providers = [
-    { n: "OpenAI", task: "Ad copy, headlines, variants", st: "Connected" },
-    { n: "Adobe Firefly", task: "Ad imagery", st: "Connected" },
-    { n: "Canva", task: "Brand templates and resizing", st: "Connected" },
+    { n: "AI ad copy", task: "Headlines and body copy in the Ad Builder", st: "Connected" },
+    { n: "Ad imagery", task: "Generating creative images", st: "Not connected" },
     { n: "Video generation", task: "Video ads", st: "Not connected" },
   ];
 
+  // What's actually enforced today — a previous version of this list included limits (a 20%
+  // weekly-change cap, a hard daily-spend cap, a 2-ads-a-day pause limit, out-of-stock blocking on
+  // every mode) that don't exist anywhere in the backend. Only what's real is listed here.
   const safetyRules = [
-    "An out-of-stock product can never be advertised, on any optimisation mode.",
-    "A price or rating in an ad must match the product and review records, or the ad is blocked.",
-    "No rule may raise a budget more than 20% in a week.",
-    "Total daily spend is capped, and the cap cannot be raised by a rule.",
-    "Bulk pausing is limited to 2 ads a day so one bad signal cannot stop everything.",
-    "A creative is never published to a platform without a person approving it.",
+    "A new campaign is always created paused — it never starts spending on its own.",
+    "When \u201cApproval required\u201d is on below, only the owner can move a campaign to active.",
+    "Pausing or resuming applies at the real ad platform, not just in Noxtill's own records.",
+    "The Ad Builder wizard won't let you pick an out-of-stock product to advertise.",
     "Noxtill never holds or charges your ad budget — each platform bills you directly.",
   ];
 
@@ -98,95 +71,33 @@ export function SettingsScreen() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-      {/* Optimisation Mode Selector */}
+      {/* Automation — the one real rule lives on its own screen */}
       <div
         style={{
-          background: "#fff",
-          border: "1px solid #E6EAF0",
+          background: "#F7FCF9",
+          border: "1px solid #D5EFE0",
           borderRadius: "16px",
           padding: "17px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px",
         }}
       >
-        <h3 style={{ margin: "0 0 4px", fontSize: "14.5px", fontWeight: 800, color: "#101828" }}>
-          Optimisation Mode
-        </h3>
-        <p style={{ margin: "0 0 13px", fontSize: "12px", color: "#667085" }}>
-          Select how autonomous Noxtill should be with your campaigns.
-        </p>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
-          {apModes.map((m) => {
-            const isSelected = autopilot === m.key;
-            return (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => {
-                  setAutopilot(m.key);
-                  flash(`Optimisation set to ${m.key}.`);
-                }}
-                style={{
-                  textAlign: "left",
-                  border: `1px solid ${isSelected ? "#12A150" : "#E6EAF0"}`,
-                  background: isSelected ? "#F7FCF9" : "#fff",
-                  borderRadius: "12px",
-                  padding: "13px",
-                  cursor: "pointer",
-                  minHeight: "84px",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 800,
-                      color: isSelected ? "#0E8442" : "#101828",
-                    }}
-                  >
-                    {m.key}
-                  </span>
-                  {isSelected && (
-                    <span
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        background: "#12A150",
-                      }}
-                    />
-                  )}
-                </div>
-                <span
-                  style={{
-                    display: "block",
-                    fontSize: "11.5px",
-                    color: "#667085",
-                    marginTop: "5px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {m.note}
-                </span>
-              </button>
-            );
-          })}
+        <div>
+          <h3 style={{ margin: "0 0 4px", fontSize: "14.5px", fontWeight: 800, color: "#101828" }}>Automation</h3>
+          <p style={{ margin: 0, fontSize: "12px", color: "#667085" }}>
+            The auto-pause rule and its threshold live on the Rules screen, with a real count of how often it has actually fired.
+          </p>
         </div>
-
-        <div
-          style={{
-            background: "#FFFBF2",
-            border: "1px solid #FDE3B3",
-            borderRadius: "11px",
-            padding: "11px 13px",
-            fontSize: "11.5px",
-            color: "#93370D",
-            lineHeight: 1.55,
-            marginTop: "12px",
-          }}
+        <button
+          type="button"
+          onClick={() => goToScreen("rules")}
+          style={{ border: 0, background: "#12A150", borderRadius: "10px", padding: "10px 18px", fontSize: "12.5px", fontWeight: 800, color: "#fff", cursor: "pointer", minHeight: "42px" }}
         >
-          Even on autopilot, budget changes above your approval threshold still wait for you, and out-of-stock products can never be advertised.
-        </div>
+          Open Rules
+        </button>
       </div>
 
       {/* Ad accounts */}
@@ -204,6 +115,11 @@ export function SettingsScreen() {
           </h3>
         </div>
         <div>
+          {adAccounts.length === 0 && (
+            <div style={{ padding: "24px 17px", textAlign: "center", color: "#98A2B3", fontSize: "12.5px" }}>
+              No ad account is connected yet.
+            </div>
+          )}
           {adAccounts.map((a, idx) => {
             const chip = getChip(a.st);
             return (
@@ -223,7 +139,7 @@ export function SettingsScreen() {
                     {a.n}
                   </span>
                   <span style={{ display: "block", fontSize: "11px", color: "#98A2B3", marginTop: "2px" }}>
-                    {a.id} · synced {a.sync}
+                    {a.detail}
                   </span>
                 </div>
                 <span
@@ -311,61 +227,13 @@ export function SettingsScreen() {
         }}
       >
         <h3 style={{ margin: "0 0 4px", fontSize: "14.5px", fontWeight: 800, color: "#101828" }}>
-          Defaults & Guardrail Thresholds
+          Defaults & thresholds
         </h3>
         <p style={{ margin: "0 0 13px", fontSize: "12px", color: "#667085" }}>
-          Configurable limits for automated actions and new campaigns.
+          These are the only campaign-level defaults Noxtill actually applies.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingBottom: "12px",
-              borderBottom: "1px solid #F2F4F7",
-              flexWrap: "wrap",
-              gap: "10px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#344054" }}>
-                Default objective
-              </div>
-              <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "2px" }}>
-                Used when a new campaign is created
-              </div>
-            </div>
-            <div style={{ fontSize: "12.5px", fontWeight: 800, color: "#101828" }}>
-              Sales
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingBottom: "12px",
-              borderBottom: "1px solid #F2F4F7",
-              flexWrap: "wrap",
-              gap: "10px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#344054" }}>
-                Campaign naming format
-              </div>
-              <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "2px" }}>
-                Keeps reporting structured across platforms
-              </div>
-            </div>
-            <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#475467", fontFamily: "monospace" }}>
-              {"{product} — {month} {objective}"}
-            </div>
-          </div>
-
           <div
             style={{
               display: "flex",
@@ -422,7 +290,7 @@ export function SettingsScreen() {
                 Auto-pause cost per result threshold
               </div>
               <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "2px" }}>
-                Flag or pause when CPR exceeds this amount for 3 days
+                A campaign is paused the moment its own cost per result crosses this, checked hourly
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -462,7 +330,7 @@ export function SettingsScreen() {
                 Approval required for budget scaling
               </div>
               <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "2px" }}>
-                Budget changes above Rs. 500 always queue for your approval
+                Only the owner can move a campaign to active while this is on
               </div>
             </div>
             <button

@@ -97,14 +97,15 @@ export function AdvertisingShell() {
     userRoleName,
     userName,
     userInitials,
-    openModal,
     toast,
     accountFilter,
     setAccountFilter,
-    autopilot,
-    apColors,
+    settings,
     leads,
   } = useAdvertising();
+
+  const autoPauseOn = settings?.autoPauseCostPerResult != null;
+  const apColors = autoPauseOn ? { bg: "#F7FCF9", bd: "#D5EFE0", fg: "#0E8442" } : { bg: "#F2F4F7", bd: "#E6EAF0", fg: "#475467" };
 
   const newLeadsCount = leads.filter((l) => l.formData?.status === "New" || (l as any).st === "New").length;
   const isRestricted = !isOwner && (screen === "rules" || screen === "settings");
@@ -159,7 +160,7 @@ export function AdvertisingShell() {
           </select>
 
           <button
-            onClick={() => openModal("autopilot")}
+            onClick={() => goToScreen("rules")}
             style={{
               display: "flex",
               alignItems: "center",
@@ -178,7 +179,7 @@ export function AdvertisingShell() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M4 12h2M18 12h2M12 4v2M12 18v2" />
             </svg>
-            Optimisation: {autopilot}
+            Auto-pause: {autoPauseOn ? "On" : "Off"}
           </button>
 
           <button
@@ -325,7 +326,7 @@ export function AdvertisingShell() {
               {screen === "rules" ? "Optimisation rules are owner-only" : "Advertising settings are owner-only"}
             </div>
             <div style={{ fontSize: 12.5, color: "#B54708", marginTop: 5, maxWidth: "54ch", marginLeft: "auto", marginRight: "auto" }}>
-              Budget changes, account connections, autopilot, and optimisation rules move real money, so they are limited to the business owner.
+              Budget changes, account connections, and automation rules move real money, so they are limited to the business owner.
             </div>
           </div>
         ) : (

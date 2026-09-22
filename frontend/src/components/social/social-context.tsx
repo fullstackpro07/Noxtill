@@ -33,7 +33,9 @@ import {
 } from "@/lib/social-inbox-api";
 import {
   fetchSocialAnalyticsSummary,
+  fetchSocialDailyHistory,
   type SocialAnalyticsSummary,
+  type SocialDailyHistoryPoint,
 } from "@/lib/social-analytics-api";
 import {
   fetchSocialSettings,
@@ -52,7 +54,7 @@ import {
   generateAiHashtags,
   fetchCaptionHistory,
 } from "@/lib/ai-content-api";
-import { fetchAdLeads, type AdLead } from "@/lib/ads-api";
+import { fetchAdLeads, updateAdLeadStatus, type AdLead, type AdLeadStatus } from "@/lib/ads-api";
 import {
   fetchCompetitiveOpportunities,
   fetchCompetitiveRecommendations,
@@ -89,10 +91,7 @@ export interface CommentItem {
   msg: string;
   when: string;
   intent: string;
-  conf: string;
   st: string;
-  match: string;
-  lead: boolean;
   reply: string;
   replySrc: string;
   raw?: SocialInboxItem;
@@ -103,12 +102,9 @@ export interface LeadItem {
   name: string;
   email: string;
   phone: string;
-  loc: string;
   pf: string;
   src: string;
-  interest: string;
-  intent: string;
-  score: string;
+  status: AdLeadStatus;
   st: string;
   when: string;
 }
@@ -166,7 +162,7 @@ export interface MentionItem {
 
 export type RoleType = "Owner" | "Manager" | "Social staff";
 export type DrawerType = "composer" | "post" | "kpi" | "intel" | "comment" | "lead" | "account" | "media" | "comp" | "preflight" | null;
-export type ModalType = "autopilot" | "autoplan" | "repurpose" | "bulkapprove" | "failure" | "capture" | "dupe" | "disconnect" | "addcomp" | null;
+export type ModalType = "autoplan" | "repurpose" | "bulkapprove" | "failure" | "disconnect" | "addcomp" | null;
 
 export const INITIAL_POSTS: PostItem[] = [];
 export const INITIAL_COMMENTS: CommentItem[] = [];
@@ -206,6 +202,8 @@ export function getChip(status: string): { bg: string; fg: string } {
     Escalated: ["#FEF3F2", "#B42318"],
     Matched: ["#E8F7EE", "#0E8442"],
     "Possible duplicate": ["#FEF6E7", "#B54708"],
+    Contacted: ["#FEF6E7", "#B54708"],
+    Converted: ["#E8F7EE", "#0E8442"],
     Connected: ["#E8F7EE", "#0E8442"],
     "Needs reconnect": ["#FEF6E7", "#B54708"],
     "Not connected": ["#F2F4F7", "#475467"],
@@ -251,9 +249,6 @@ interface SocialContextType {
   setRange: (r: string) => void;
   metric: string;
   setMetric: (m: string) => void;
-  autopilot: string;
-  setAutopilot: (a: string) => void;
-  apColors: { bg: string; bd: string; fg: string };
   toast: string | null;
   flash: (msg: string) => void;
 
@@ -299,12 +294,12 @@ interface SocialContextType {
   iTab: string;
   setITab: (t: string) => void;
   replyPolicy: string;
-  captureLeadFromComment: (c: CommentItem) => void;
   sendInboxReply: (id: string | number, text: string) => Promise<void>;
 
   // Leads
   leads: LeadItem[];
   capturePolicy: string;
+  updateLeadStatusAction: (id: string | number, status: AdLeadStatus) => Promise<void>;
 
   // Accounts
   accounts: AccountItem[];
@@ -343,6 +338,7 @@ interface SocialContextType {
 
   // Raw queries for screens wanting deeper state
   analyticsSummary?: SocialAnalyticsSummary;
+  dailyHistory: SocialDailyHistoryPoint[];
   isLoadingPosts: boolean;
 }
 
@@ -363,7 +359,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState("All accounts");
   const [range, setRange] = useState("Last 30 days");
   const [metric, setMetric] = useState("Reach");
-  const [autopilot, setAutopilotState] = useState("Approval mode");
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -405,6 +400,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     queryFn: () => fetchSocialAnalyticsSummary(),
   });
 
+  const { data: dailyHistory = [] } = useQuery({
+    queryKey: ["social-analytics-history"],
+    queryFn: () => fetchSocialDailyHistory(),
+  });
+
   const { data: realLeads = [] } = useQuery({
     queryKey: ["ad-leads"],
     queryFn: () => fetchAdLeads(),
@@ -443,7 +443,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   // Synchronize Posts from API: strictly real database records + session posts
   const posts: PostItem[] = useMemo(() => {
     const fromApi: PostItem[] = realPosts.map((p) => {
-      const pf = p.targets?.map((t) => SOCIAL_PLATFORM_LABELS[t.platform] || t.platform).join(" · ") || "Instagram";
+      const pf = p.targets?.map((t) => SOCIAL_PLATFORM_LABELS[t.platform] || t.platform).join(" · ") || "No platform selected";
       const type = p.mediaKeys?.length > 1 ? "Carousel" : p.mediaKeys?.length === 1 ? "Photo" : "Text";
       const st = mapStatusToUi(p.status);
       const when = p.scheduledFor
@@ -467,6 +467,10 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     });
     return [...sessionPosts, ...fromApi];
   }, [realPosts, sessionPosts]);
+
+  // The "account" filter in the header actually filters, instead of sitting there doing nothing —
+  // every screen that reads `posts` from this context gets it for free.
+  const filteredPosts = account === "All accounts" ? posts : posts.filter((p) => p.pf.includes(account));
 
   // Synchronize Accounts: strictly real database connections per platform
   const accounts: AccountItem[] = useMemo(() => {
@@ -530,10 +534,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       msg: i.text,
       when: new Date(i.receivedAt || i.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       intent: i.kind === "dm" ? "Direct Inquiry" : "Customer question",
-      conf: "High",
       st: i.status === "unread" ? "New" : i.status === "replied" ? "AI replied" : "Read",
-      match: i.authorName || "—",
-      lead: true,
       reply: i.repliedText || "",
       replySrc: "Social Inbox",
       raw: i,
@@ -558,23 +559,27 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     return [...sessionMedia, ...fromApi];
   }, [realMedia, sessionMedia]);
 
-  // Synchronize Leads: strictly real database captured leads
+  // Synchronize Leads: strictly real database captured leads. Only fields actually stored on
+  // AdLead are shown — no interest/intent/score/location is inferred or fabricated.
+  const STATUS_LABEL: Record<AdLeadStatus, string> = { new: "New", contacted: "Contacted", converted: "Converted" };
   const leads: LeadItem[] = useMemo(() => {
     return realLeads.map((l) => ({
       id: l.id,
-      name: l.name || "Customer Lead",
+      name: l.name || "—",
       email: l.email || "—",
       phone: l.phone || "—",
-      loc: "Local",
       pf: l.provider || "Meta",
-      src: "Social Campaign",
-      interest: "Product inquiry",
-      intent: "Purchase interest",
-      score: "High",
-      st: "New",
+      src: "Ad campaign",
+      status: l.status,
+      st: STATUS_LABEL[l.status] || "New",
       when: new Date(l.createdAt).toLocaleDateString(),
     }));
   }, [realLeads]);
+
+  const updateLeadStatusAction = async (id: string | number, status: AdLeadStatus) => {
+    await updateAdLeadStatus(String(id), status);
+    queryClient.invalidateQueries({ queryKey: ["ad-leads"] });
+  };
 
   // Synchronize Competitors: strictly real database records from /competitors
   const comps: CompItem[] = useMemo(() => {
@@ -793,9 +798,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   };
 
   // Inbox & Comment actions
-  const captureLeadFromComment = (c: CommentItem) => {
-    openModal("capture", { c });
-  };
 
   const sendInboxReply = async (id: string | number, text: string) => {
     try {
@@ -944,12 +946,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     return map[activeScreen] || "Autonomous social media management across all your connected channels.";
   }, [activeScreen]);
 
-  const apColors = useMemo(() => {
-    if (autopilot === "Full auto") return { bg: "#E8F7EE", bd: "#A6F4C5", fg: "#0E8442" };
-    if (autopilot === "Approval mode") return { bg: "#FEF6E7", bd: "#FEDF89", fg: "#B54708" };
-    return { bg: "#F2F4F7", bd: "#EAECF0", fg: "#475467" };
-  }, [autopilot]);
-
   const value = {
     role,
     isOwner,
@@ -960,9 +956,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     setRange,
     metric,
     setMetric,
-    autopilot,
-    setAutopilot: setAutopilotState,
-    apColors,
     toast,
     flash,
 
@@ -977,7 +970,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     closeModal,
     closeAll,
 
-    posts,
+    posts: filteredPosts,
     cTab,
     setCTab,
     pFilter,
@@ -1004,11 +997,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     iTab,
     setITab,
     replyPolicy,
-    captureLeadFromComment,
     sendInboxReply,
 
     leads,
     capturePolicy,
+    updateLeadStatusAction,
 
     accounts,
     disconnectAccountAction,
@@ -1039,6 +1032,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     headerSub,
 
     analyticsSummary,
+    dailyHistory,
     isLoadingPosts,
   };
 

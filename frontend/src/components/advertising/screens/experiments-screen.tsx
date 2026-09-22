@@ -2,12 +2,18 @@
 
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAdvertising, getChip, formatMoney } from "../advertising-context";
+import { useAdvertising } from "../advertising-context";
 import {
   fetchAdExperiments,
   createAdExperiment,
   type AdExperimentItem,
 } from "@/lib/ads-api";
+
+function timeAgo(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return "Today";
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
 
 export function ExperimentsScreen() {
   const { openDrawer, goToScreen, flash } = useAdvertising();
@@ -97,28 +103,13 @@ export function ExperimentsScreen() {
                   Experiment
                 </th>
                 <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
-                  Type
-                </th>
-                <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
-                  Target metric
-                </th>
-                <th style={{ textAlign: "right", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
-                  Spend
-                </th>
-                <th style={{ textAlign: "right", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
-                  Days
-                </th>
-                <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
                   Variant A
                 </th>
                 <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
                   Variant B
                 </th>
                 <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
-                  Winner
-                </th>
-                <th style={{ textAlign: "left", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: 10 }}>
-                  Statistical confidence
+                  Started
                 </th>
                 <th style={{ textAlign: "right", fontSize: 11, fontWeight: 700, color: "#98A2B3", padding: "10px 17px" }}>
                   Actions
@@ -128,84 +119,52 @@ export function ExperimentsScreen() {
             <tbody>
               {exps.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: "40px 20px", textAlign: "center", color: "#667085" }}>
+                  <td colSpan={5} style={{ padding: "40px 20px", textAlign: "center", color: "#667085" }}>
                     No A/B experiments running yet. Create one above to test creative hooks and variants.
                   </td>
                 </tr>
               ) : (
-                exps.map((x) => {
-                  const confChip = getChip(x.confidence);
-                  return (
-                    <tr
-                      key={x.id}
-                      onClick={() => openDrawer("exp", { x })}
-                      style={{ borderTop: "1px solid #F2F4F7", cursor: "pointer" }}
-                    >
-                      <td style={{ padding: "12px 17px", fontSize: 12.5, fontWeight: 700, color: "#0E8442" }}>
-                        {x.name}
-                      </td>
-                      <td style={{ padding: 12, fontSize: 12, color: "#667085" }}>{x.type}</td>
-                      <td style={{ padding: 12, fontSize: 12.5, color: "#475467" }}>{x.metric}</td>
-                      <td style={{ padding: 12, fontSize: 12.5, fontWeight: 700, color: "#101828", textAlign: "right" }}>
-                        {formatMoney(x.spend)}
-                      </td>
-                      <td style={{ padding: 12, fontSize: 12.5, color: "#475467", textAlign: "right" }}>
-                        {x.days}d
-                      </td>
-                      <td style={{ padding: 12, fontSize: 12, color: "#101828" }}>
-                        <strong>{x.variantA}</strong> ({x.valA})
-                      </td>
-                      <td style={{ padding: 12, fontSize: 12, color: "#101828" }}>
-                        <strong>{x.variantB}</strong> ({x.valB})
-                      </td>
-                      <td style={{ padding: 12, fontSize: 12.5, fontWeight: 800, color: x.done ? "#0E8442" : "#B54708" }}>
-                        {x.winner}
-                      </td>
-                      <td style={{ padding: 12 }}>
-                        <span
-                          style={{
-                            fontSize: 10.5,
-                            fontWeight: 800,
-                            padding: "3px 9px",
-                            borderRadius: 20,
-                            background: confChip.bg,
-                            color: confChip.fg,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {x.confidence}
-                        </span>
-                      </td>
-                      <td style={{ padding: "12px 17px", textAlign: "right" }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDrawer("exp", { x });
-                          }}
-                          style={{
-                            border: "1px solid #E6EAF0",
-                            background: "#fff",
-                            borderRadius: 9,
-                            padding: "7px 12px",
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            color: "#344054",
-                            cursor: "pointer",
-                            minHeight: 38,
-                          }}
-                        >
-                          Details
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
+                exps.map((x) => (
+                  <tr
+                    key={x.id}
+                    onClick={() => openDrawer("exp", { x })}
+                    style={{ borderTop: "1px solid #F2F4F7", cursor: "pointer" }}
+                  >
+                    <td style={{ padding: "12px 17px", fontSize: 12.5, fontWeight: 700, color: "#0E8442" }}>
+                      {x.name}
+                    </td>
+                    <td style={{ padding: 12, fontSize: 12, color: "#101828" }}>{x.variantA}</td>
+                    <td style={{ padding: 12, fontSize: 12, color: "#101828" }}>{x.variantB}</td>
+                    <td style={{ padding: 12, fontSize: 11.5, color: "#98A2B3" }}>{timeAgo(x.createdAt)}</td>
+                    <td style={{ padding: "12px 17px", textAlign: "right" }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDrawer("exp", { x });
+                        }}
+                        style={{
+                          border: "1px solid #E6EAF0",
+                          background: "#fff",
+                          borderRadius: 9,
+                          padding: "7px 12px",
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          color: "#344054",
+                          cursor: "pointer",
+                          minHeight: 38,
+                        }}
+                      >
+                        Details
+                      </button>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
         <div style={{ padding: "11px 17px", borderTop: "1px solid #F0F2F5", fontSize: 11.5, color: "#98A2B3" }}>
-          Experiments require statistically significant sample sizes before concluding. Tests that have not accrued enough conversions remain in &quot;Too early&quot; status.
+          There is no per-creative performance tracking yet, so this only shows which creatives you set up as variants of each other — not a winner.
         </div>
       </div>
 

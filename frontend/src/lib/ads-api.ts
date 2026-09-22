@@ -59,6 +59,11 @@ export function fetchCampaign(id: string): Promise<AdCampaign> {
   return apiFetch<AdCampaign>(`/ads/campaigns/${id}`);
 }
 
+/** Real AI-generated ad copy — the same `AiInfraService` path used for social captions, not a template. */
+export function generateAdCopy(input: { productName: string; goal?: string }): Promise<{ headline: string; body: string }> {
+  return apiFetch("/ads/generate-copy", { method: "POST", body: JSON.stringify(input) });
+}
+
 export interface CreateCampaignInput {
   name: string;
   goal: string;
@@ -185,6 +190,8 @@ export function fetchAdPerformance(): Promise<AdPerformanceRow[]> {
   return apiFetch<AdPerformanceRow[]>("/ads/performance");
 }
 
+export type AdLeadStatus = "new" | "contacted" | "converted";
+
 export interface AdLead {
   id: string;
   businessId: string;
@@ -195,11 +202,17 @@ export interface AdLead {
   phone: string | null;
   formData: Record<string, unknown>;
   externalId: string;
+  status: AdLeadStatus;
   createdAt: string;
 }
 
 export function fetchAdLeads(): Promise<AdLead[]> {
   return apiFetch<AdLead[]>("/ads/leads");
+}
+
+/** Real status, set by a person from the Leads screen — never inferred. */
+export function updateAdLeadStatus(id: string, status: AdLeadStatus): Promise<AdLead> {
+  return apiFetch<AdLead>(`/ads/leads/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
 }
 
 export interface AdSettings {
@@ -221,21 +234,19 @@ export function updateAdSettings(input: {
   return apiFetch<AdSettings>("/ads/settings", { method: "PATCH", body: JSON.stringify(input) });
 }
 
+/**
+ * A/B experiment: two or more `AdCreative` rows sharing a real `experimentKey`. There is no
+ * per-creative spend/CTR/conversion tracking in this schema (stats only exist at the campaign
+ * level), so this deliberately carries no spend, winner, or confidence figure — none of those
+ * would be real.
+ */
 export interface AdExperimentItem {
   id: string;
   name: string;
-  type: string;
-  metric: string;
-  spend: number;
-  days: number;
   variantA: string;
   variantB: string;
-  valA: string;
-  valB: string;
-  winner: string;
-  confidence: "Sufficient data" | "Not enough data";
-  done: boolean;
-  creatives?: Array<{
+  createdAt: string;
+  creatives: Array<{
     id: string;
     headline: string;
     body: string;
@@ -271,17 +282,16 @@ export interface AdRuleRecord {
   locked?: boolean;
 }
 
+/**
+ * Rules & Automation. There is exactly one real automated rule (auto-pause on cost per result,
+ * enforced hourly by the real `ad-auto-pause` job) — `pendingApproval` is always null: no
+ * suggestion/anomaly-detection engine exists to populate it, and it's never fabricated to look
+ * like one does.
+ */
 export interface AdRulesResponse {
   kpis: Array<{ label: string; value: string; color: string }>;
   rules: AdRuleRecord[];
-  pendingApproval: {
-    id: string;
-    title: string;
-    why: string;
-    impact: string;
-    confidence: "High" | "Medium" | "Low";
-    suggestedBudget?: number;
-  } | null;
+  pendingApproval: null;
 }
 
 export function fetchAdRules(): Promise<AdRulesResponse> {
@@ -292,47 +302,27 @@ export function toggleAdRule(id: string): Promise<{ success: boolean; rule: AdRu
   return apiFetch(`/ads/rules/${id}/toggle`, { method: "POST" });
 }
 
-export function approveAdRule(id: string): Promise<{ success: boolean; message: string }> {
-  return apiFetch(`/ads/rules/${id}/approve`, { method: "POST" });
-}
-
-export function declineAdRule(id: string): Promise<{ success: boolean; message: string }> {
-  return apiFetch(`/ads/rules/${id}/decline`, { method: "POST" });
-}
-
 export interface FunnelStage {
-  l: string;
-  v: string;
-  w: string;
-  color: string;
+  label: string;
+  value: number;
+  widthPercent: number;
 }
 
+/** Real numbers only: impressions/clicks from campaign stats, leads and completed orders from
+ * their own tables. No landing-page-view or click-to-order tracking exists, so this is where the
+ * funnel stops — it never estimates a stage it can't measure. */
 export function fetchAdFunnel(): Promise<FunnelStage[]> {
   return apiFetch<FunnelStage[]>("/ads/analytics/funnel");
 }
 
-export interface ProductProfitabilityRow {
-  id?: string;
-  n: string;
+export interface AdDailyHistoryPoint {
+  date: string;
   spend: number;
-  rev: number;
-  profit: number;
+  results: number;
 }
 
-export function fetchProductProfitability(): Promise<ProductProfitabilityRow[]> {
-  return apiFetch<ProductProfitabilityRow[]>("/ads/analytics/product-profitability");
-}
-
-export interface AdAttributionRow {
-  c: string;
-  ad: string;
-  cust: string;
-  touch: string;
-  order: string;
-  rev: string;
-}
-
-export function fetchAdAttribution(): Promise<AdAttributionRow[]> {
-  return apiFetch<AdAttributionRow[]>("/ads/analytics/attribution");
+/** Real per-day spend/results from `AdCampaignStatsSnapshot`, captured hourly. */
+export function fetchAdDailyHistory(): Promise<AdDailyHistoryPoint[]> {
+  return apiFetch<AdDailyHistoryPoint[]>("/ads/analytics/daily-history");
 }
 

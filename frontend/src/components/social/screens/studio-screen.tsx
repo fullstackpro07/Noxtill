@@ -36,19 +36,10 @@ export function StudioScreen() {
       ]
     : [];
 
+  // Only Claude is a real, connected generation provider — no Adobe Firefly / Canva / OpenAI
+  // integration exists in this codebase, so those are not claimed as "Connected".
   const providers = [
-    { n: "Anthropic Claude", task: "Caption, hook, variants", st: "Connected", bg: "#E8F7EE", fg: "#0E8442" },
-    { n: "Adobe Firefly", task: "Image generation", st: "Connected", bg: "#E8F7EE", fg: "#0E8442" },
-    { n: "Canva", task: "Brand templates", st: "Connected", bg: "#E8F7EE", fg: "#0E8442" },
-    { n: "OpenAI", task: "Fallback text", st: "Not connected", bg: "#F2F4F7", fg: "#475467" },
-  ];
-
-  const genSteps = [
-    "Reading product and review data",
-    "Generating creative",
-    "Writing caption and hashtags",
-    "Building platform variants",
-    "Running content checks",
+    { n: "Anthropic Claude", task: "Caption generation", st: "Connected", bg: "#E8F7EE", fg: "#0E8442" },
   ];
 
   const genVariants = [
@@ -56,15 +47,6 @@ export function StudioScreen() {
     { pf: "Facebook", init: "FB", bg: "#EEF4FF", fg: "#3538CD", note: "Single photo · longer caption · link in post" },
     { pf: "TikTok", init: "TT", bg: "#F2F4F7", fg: "#101828", note: "Vertical video · hook in first 2 seconds" },
     { pf: "LinkedIn", init: "LI", bg: "#EFF8FF", fg: "#175CD3", note: "Single photo · professional tone · no hashtag spam" },
-  ];
-
-  const qaChecks = [
-    { l: "Price matches the Products record", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Product is in stock", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "No unsupported claims in caption", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Brand voice matches your kit", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Platform compliance verified", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Link included and reachable", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
   ];
 
   return (
@@ -218,29 +200,10 @@ export function StudioScreen() {
             )}
 
             {genState === "running" && (
-              <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, padding: 24 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-                  {genSteps.map((l, i) => {
-                    const isDone = genStep > i;
-                    const isActive = genStep === i;
-                    const isPending = genStep < i;
-                    return (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        {isDone && (
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0E8442" strokeWidth="2.4" strokeLinecap="round">
-                            <path d="m5 13 4 4L19 7" />
-                          </svg>
-                        )}
-                        {isActive && (
-                          <span style={{ width: 15, height: 15, borderRadius: "50%", border: "2px solid #12A150", borderTopColor: "transparent", animation: "nxpulse 1s infinite" }} />
-                        )}
-                        {isPending && <span style={{ width: 15, height: 15, borderRadius: "50%", border: "2px solid #E6EAF0" }} />}
-                        <span style={{ fontSize: 13, fontWeight: 600, color: isDone ? "#0E8442" : isActive ? "#101828" : "#98A2B3" }}>
-                          {l}
-                        </span>
-                      </div>
-                    );
-                  })}
+              <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, padding: 40, textAlign: "center" }}>
+                <span style={{ width: 30, height: 30, borderRadius: "50%", border: "3px solid #E6EAF0", borderTopColor: "#12A150", display: "inline-block", animation: "nxpulse 0.8s linear infinite" }} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#344054", marginTop: 14 }}>
+                  Generating a caption for {activeProduct?.name || "this item"}…
                 </div>
               </div>
             )}
@@ -249,10 +212,10 @@ export function StudioScreen() {
               <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
                 {/* Generated Package Detail */}
                 <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, padding: 17 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 13, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4, flexWrap: "wrap" }}>
                     <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Generated package</h3>
                     <span style={{ fontSize: 10, fontWeight: 800, color: "#0E8442", background: "#E8F7EE", borderRadius: 5, padding: "3px 8px" }}>
-                      AI draft — nothing published
+                      Draft — nothing published
                     </span>
                     <button
                       onClick={resetGeneration}
@@ -260,6 +223,9 @@ export function StudioScreen() {
                     >
                       Regenerate
                     </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#98A2B3", marginBottom: 13 }}>
+                    {generatedCaption ? "Caption is written by AI. " : ""}Hook, CTA, hashtags and alt text below are auto-filled from your product data, not separately AI-composed.
                   </div>
                   <div data-r2="1" style={{ display: "grid", gridTemplateColumns: "200px minmax(0,1fr)", gap: 15 }}>
                     <div>
@@ -328,11 +294,19 @@ export function StudioScreen() {
                   </div>
                 </div>
 
-                {/* Content Checks & Action Buttons */}
+                {/* Content Checks & Action Buttons — only checks actually verified against real data */}
                 <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, padding: 17 }}>
                   <h3 style={{ margin: "0 0 12px", fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Content checks</h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {qaChecks.map((c2, idx) => (
+                    {[
+                      { l: "Price shown matches the Products record", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
+                      activeProduct && (activeProduct.stockOnHand ?? 0) > 0
+                        ? { l: "Product is in stock", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" }
+                        : { l: "Product is out of stock", s: "Warning", bg: "#FEF6E7", fg: "#B54708" },
+                      generatedCaption
+                        ? { l: "Caption written by AI", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" }
+                        : { l: "Caption is a fallback template (AI unavailable)", s: "Warning", bg: "#FEF6E7", fg: "#B54708" },
+                    ].map((c2, idx) => (
                       <div key={idx} style={{ display: "flex", alignItems: "center", gap: 11, border: "1px solid #E6EAF0", borderRadius: 11, padding: 11 }}>
                         <span style={{ flex: 1, fontSize: 12.5, color: "#344054" }}>{c2.l}</span>
                         <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: c2.bg, color: c2.fg, whiteSpace: "nowrap" }}>

@@ -22,13 +22,17 @@ import { AdRulesService } from './ad-rules.service';
 import { AdRulesController } from './ad-rules.controller';
 import { AdExperimentsService } from './ad-experiments.service';
 import { AdExperimentsController } from './ad-experiments.controller';
+import { AdCopyGeneratorService } from './ad-copy-generator.service';
+import { AD_AUTO_PAUSE_QUEUE, AD_STATS_SYNC_QUEUE } from './ads.constants';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { CustomersModule } from '../customers/customers.module';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
     IntegrationsModule,
     CustomersModule,
+    AiModule,
     BullModule.registerQueue(
       { name: AD_AUTO_PAUSE_QUEUE },
       { name: AD_STATS_SYNC_QUEUE },
@@ -55,6 +59,7 @@ import { CustomersModule } from '../customers/customers.module';
     AdSettingsService,
     AdRulesService,
     AdExperimentsService,
+    AdCopyGeneratorService,
     AdAutoPauseScheduler,
     AdAutoPauseProcessor,
     AdStatsSyncScheduler,

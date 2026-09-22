@@ -9,19 +9,18 @@ export function AnalyticsScreen() {
   const totalReach = analyticsSummary?.totalReach ?? posts.reduce((acc, p) => acc + (p.reach || 0), 0);
   const totalFollowers = analyticsSummary?.totalFollowers ?? 0;
   const totalEngagement = analyticsSummary?.totalEngagement ?? posts.reduce((acc, p) => acc + (p.eng || 0), 0);
+  const totalImpressions = analyticsSummary?.totalImpressions ?? 0;
   const leadsCount = leads.length;
-  const ordersCount = 0;
-  const revenueEst = 0;
 
   const anKpis = [
     { l: "Reach", v: formatNum(totalReach), d: totalReach > 0 ? "Total audience views" : "No reach yet", up: totalReach > 0 },
-    { l: "Impressions", v: formatNum(Math.round(totalReach * 1.2)), d: totalReach > 0 ? "Content impressions" : "0 impressions", up: totalReach > 0 },
+    { l: "Impressions", v: formatNum(totalImpressions), d: totalImpressions > 0 ? "Content impressions" : "Not reported by this channel", up: totalImpressions > 0 },
     { l: "Engagement", v: formatNum(totalEngagement), d: totalEngagement > 0 ? "Likes, comments, shares" : "0 interactions", up: totalEngagement > 0 },
     { l: "Engagement rate", v: `${totalReach > 0 ? ((totalEngagement / totalReach) * 100).toFixed(1) : "0"}%`, d: "Interactions per view", up: totalEngagement > 0 },
     { l: "Followers total", v: formatNum(totalFollowers), d: totalFollowers > 0 ? "Connected channels" : "Channels not connected", up: totalFollowers > 0 },
     { l: "Leads captured", v: String(leadsCount), d: leadsCount > 0 ? "Customer inquiries" : "No inquiries yet", up: leadsCount > 0 },
-    { l: "Attributed orders", v: String(ordersCount), d: "Conversion tracking", up: ordersCount > 0 },
-    { l: "Attributed revenue", v: `Rs. ${formatNum(revenueEst)}`, d: "Sales from social", up: revenueEst > 0 },
+    { l: "Attributed orders", v: "Not tracked", d: "No order-to-post link exists yet", up: false },
+    { l: "Attributed revenue", v: "Not tracked", d: "No order-to-post link exists yet", up: false },
   ];
 
   const formats = [
@@ -50,7 +49,6 @@ export function AnalyticsScreen() {
     { l: "Reach", v: formatNum(totalReach), w: totalReach > 0 ? "100%" : "0%", color: "#BFE7CF" },
     { l: "Engaged", v: formatNum(totalEngagement), w: totalReach > 0 ? `${Math.min(100, Math.round((totalEngagement / totalReach) * 100))}%` : "0%", color: "#BFE7CF" },
     { l: "Leads captured", v: String(leadsCount), w: totalReach > 0 ? `${Math.min(100, Math.round((leadsCount / totalReach) * 100))}%` : leadsCount > 0 ? "100%" : "0%", color: "#12A150" },
-    { l: "Attributed orders", v: String(ordersCount), w: leadsCount > 0 ? `${Math.min(100, Math.round((ordersCount / leadsCount) * 100))}%` : "0%", color: "#0E8442" },
   ];
 
   const topPosts = posts
@@ -100,9 +98,6 @@ export function AnalyticsScreen() {
         <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, padding: 17, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12, flexWrap: "wrap" }}>
             <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Social funnel</h3>
-            <span style={{ fontSize: 10.5, fontWeight: 800, color: "#0E8442", background: "#E8F7EE", borderRadius: 20, padding: "3px 9px" }}>
-              Direct attribution
-            </span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
             {funnel.map((f, idx) => (
@@ -118,7 +113,7 @@ export function AnalyticsScreen() {
             ))}
           </div>
           <div style={{ fontSize: 11.5, color: "#98A2B3", marginTop: 12, lineHeight: 1.55 }}>
-            Attributed funnel values reflect actual customer inquiries and orders linked to social campaigns.
+            Reach, engagement and leads captured are real. Order/revenue attribution isn&apos;t tracked yet — no link exists between an order and the post or channel it came from.
           </div>
         </div>
       </div>

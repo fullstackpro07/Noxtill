@@ -1,11 +1,9 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { AdExperimentsService } from './ad-experiments.service';
-import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { TenantGuard } from '../common/guards/tenant.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
 @Controller('ads/experiments')
-@UseGuards(JwtAuthGuard, TenantGuard)
 export class AdExperimentsController {
   constructor(private readonly experiments: AdExperimentsService) {}
 
@@ -16,7 +14,7 @@ export class AdExperimentsController {
 
   @Post()
   create(
-    @CurrentTenant() businessId: string,
+    @CurrentUser() user: AuthenticatedUser,
     @Body()
     body: {
       name: string;
@@ -28,6 +26,6 @@ export class AdExperimentsController {
       variantBBody: string;
     },
   ) {
-    return this.experiments.create(businessId, body);
+    return this.experiments.create(user.businessId, body);
   }
 }

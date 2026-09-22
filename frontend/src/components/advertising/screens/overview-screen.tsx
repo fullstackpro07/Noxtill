@@ -13,9 +13,11 @@ export function OverviewScreen() {
     campaigns,
     accounts,
     performance,
+    dailyHistory,
     leads,
     creatives,
     products,
+    settings,
   } = useAdvertising();
 
   // Dynamic 30 days date span ending today
@@ -37,12 +39,14 @@ export function OverviewScreen() {
 
   const avgCtr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(1) + "%" : "0.0%";
   const costPerResult = totalConversions > 0 ? totalSpend / totalConversions : 0;
-  // Attributed revenue (calculated from tracked order/conversion values or estimated from catalog prices)
+  // Real attributed revenue only — no platform here writes a per-campaign revenue figure back yet,
+  // so this is 0 (and shown as "Not tracked" below) rather than estimated from an assumed order value.
   const attributedRev = campaigns.reduce((sum, c) => {
-    const pMeta = (c.providerMeta || {}) as Record<string, any>;
-    return sum + (Number(pMeta.revenue) || Number(c.stats?.results || 0) * 2800);
+    const pMeta = (c.providerMeta || {}) as Record<string, unknown>;
+    return sum + (Number(pMeta.revenue) || 0);
   }, 0);
-  const roas = totalSpend > 0 ? (attributedRev / totalSpend).toFixed(1) + "×" : "0.0×";
+  const hasRevenueTracking = campaigns.some((c) => Number((c.providerMeta as Record<string, unknown> | undefined)?.revenue) > 0);
+  const roas = !hasRevenueTracking ? "Not tracked" : totalSpend > 0 ? (attributedRev / totalSpend).toFixed(1) + "×" : "0.0×";
 
   const ovKpis = [
     { l: "Active campaigns", v: String(activeCampaigns.length), d: "Live", vs: "in delivery", up: true, bd: "#E6EAF0" },
@@ -52,29 +56,22 @@ export function OverviewScreen() {
     { l: "Click rate", v: avgCtr, d: "CTR", vs: "overall average", up: true, bd: "#E6EAF0" },
     { l: "Conversions", v: String(totalConversions), d: "Results", vs: "tracked", up: true, bd: "#BFE7CF" },
     { l: "Cost per result", v: formatMoney(costPerResult), d: "CPA", vs: "per conversion", up: true, bd: "#E6EAF0" },
-    { l: "Attributed revenue", v: formatMoney(attributedRev), d: "Orders", vs: "matched to ads", up: true, bd: "#BFE7CF" },
-    { l: "Return on spend", v: roas, d: "ROAS", vs: "spend efficiency", up: true, bd: "#BFE7CF" },
+    { l: "Attributed revenue", v: hasRevenueTracking ? formatMoney(attributedRev) : "Not tracked", d: hasRevenueTracking ? "Orders" : "No platform sends this back yet", vs: "matched to ads", up: hasRevenueTracking, bd: "#BFE7CF" },
+    { l: "Return on spend", v: roas, d: "ROAS", vs: hasRevenueTracking ? "spend efficiency" : "needs revenue tracking", up: hasRevenueTracking, bd: "#BFE7CF" },
     { l: "Paid leads", v: String(leads.length), d: "Inbound", vs: "form submissions", up: true, bd: "#E6EAF0" },
   ].map((k) => ({ ...k, dColor: k.up ? "#0E8442" : "#B54708" }));
 
-  // Safe SVG Chart Coordinates (Spend vs. Revenue over 8 intervals)
-  const spendVals = totalSpend > 0
-    ? [0.35, 0.45, 0.4, 0.6, 0.7, 0.65, 0.85, 1.0].map((r) => +(totalSpend * r / 1000).toFixed(1))
-    : [0, 0, 0, 0, 0, 0, 0, 0];
-  const revVals = attributedRev > 0
-    ? [0.4, 0.5, 0.45, 0.7, 0.85, 0.8, 1.0, 1.2].map((r) => +(attributedRev * r / 1000).toFixed(1))
-    : [0, 0, 0, 0, 0, 0, 0, 0];
+  // Real daily spend (from AdCampaignStatsSnapshot, captured hourly) — no revenue series here
+  // since revenue isn't tracked per day at all (see hasRevenueTracking above).
+  const spendVals = dailyHistory.map((d) => d.spend);
+  const revVals = dailyHistory.map(() => 0);
 
-  const chartLabels = Array.from({ length: 8 }).map((_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - (7 - i) * 4);
-    return {
-      m: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      x: +(34 + i * ((620 - 48) / 7)).toFixed(1),
-    };
-  });
+  const chartLabels = dailyHistory.map((d, i) => ({
+    m: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    x: +(34 + i * ((620 - 48) / Math.max(1, dailyHistory.length - 1))).toFixed(1),
+  }));
 
-  const allVals = [...spendVals, ...revVals];
+  const allVals = hasRevenueTracking ? [...spendVals, ...revVals] : spendVals;
   const rawMin = Math.min(...allVals);
   const rawMax = Math.max(...allVals);
   const minVal = rawMin === rawMax ? (rawMin === 0 ? 0 : rawMin * 0.8) : rawMin * 0.8;
@@ -84,14 +81,15 @@ export function OverviewScreen() {
   const PH = 118;
   const T = 12;
 
+  const denom = Math.max(1, dailyHistory.length - 1);
   const spendPts = spendVals.map((v, i) => {
-    const x = +(34 + i * ((W - 48) / 7)).toFixed(1);
+    const x = +(34 + i * ((W - 48) / denom)).toFixed(1);
     const ratio = Math.max(0, Math.min(1, (v - minVal) / valRange));
     const rawY = T + PH * (1 - ratio);
     return { x: isNaN(x) ? 34 : x, y: +(isNaN(rawY) ? T + PH : rawY).toFixed(1) };
   });
   const revPts = revVals.map((v, i) => {
-    const x = +(34 + i * ((W - 48) / 7)).toFixed(1);
+    const x = +(34 + i * ((W - 48) / denom)).toFixed(1);
     const ratio = Math.max(0, Math.min(1, (v - minVal) / valRange));
     const rawY = T + PH * (1 - ratio);
     return { x: isNaN(x) ? 34 : x, y: +(isNaN(rawY) ? T + PH : rawY).toFixed(1) };
@@ -169,7 +167,6 @@ export function OverviewScreen() {
     const pfSpend = pfPerf?.spend || 0;
     const pfConv = pfPerf?.results || 0;
     const pfCpa = pfConv > 0 ? pfSpend / pfConv : 0;
-    const pfRoas = pfSpend > 0 ? ((pfConv * 2800) / pfSpend).toFixed(1) + "×" : "0.0×";
 
     return {
       n: p.n,
@@ -182,8 +179,8 @@ export function OverviewScreen() {
       spend: formatMoney(pfSpend),
       conv: String(pfConv),
       cpa: formatMoney(pfCpa),
-      roas: pfRoas,
-      roasColor: pfConv > 0 ? "#0E8442" : "#475467",
+      roas: hasRevenueTracking ? "Not tracked" : "Not tracked",
+      roasColor: "#475467",
     };
   });
 
@@ -220,16 +217,20 @@ export function OverviewScreen() {
           },
         ]
       : []),
-    {
-      t: "Automatic optimisation rules active",
-      sub: "Guardrails limit daily budget shifts and block runaway cost per result",
-      sev: "Info",
-      bg: "#F7FCF9",
-      fg: "#0E8442",
-      icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 7.5V12l3.2 2",
-      scr: "rules" as const,
-      act: "View rules",
-    },
+    ...(settings?.autoPauseCostPerResult != null
+      ? [
+          {
+            t: "Auto-pause is on for runaway cost per result",
+            sub: `Any campaign whose cost per result passes Rs. ${Number(settings.autoPauseCostPerResult).toLocaleString("en-US")} is paused automatically.`,
+            sev: "Info",
+            bg: "#F7FCF9",
+            fg: "#0E8442",
+            icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 7.5V12l3.2 2",
+            scr: "rules" as const,
+            act: "View rules",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -261,7 +262,17 @@ export function OverviewScreen() {
 
         <div style={{ display: "flex", gap: 9, marginLeft: "auto", flexWrap: "wrap" }}>
           <button
-            onClick={() => openDrawer("brief")}
+            onClick={() =>
+              openDrawer("brief", {
+                spend: totalSpend,
+                revenue: hasRevenueTracking ? attributedRev : null,
+                roas,
+                bestCampaign: ((campaigns[0]?.providerMeta as Record<string, unknown> | undefined)?.name as string) || campaigns[0]?.goal || null,
+                bestCreative: creatives[0]?.headline || null,
+                activeCount: activeCampaigns.length,
+                totalConversions,
+              })
+            }
             style={{
               display: "flex",
               alignItems: "center",

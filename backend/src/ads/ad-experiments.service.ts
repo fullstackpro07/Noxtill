@@ -1,20 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { IntegrationProvider } from '@prisma/client';
 
 export interface AdExperimentView {
   id: string;
   name: string;
-  type: string;
-  metric: string;
-  spend: number;
-  days: number;
   variantA: string;
   variantB: string;
-  valA: string;
-  valB: string;
-  winner: string;
-  confidence: 'Sufficient data' | 'Not enough data';
-  done: boolean;
+  createdAt: string;
   creatives: Array<{
     id: string;
     headline: string;
@@ -24,6 +17,16 @@ export interface AdExperimentView {
   }>;
 }
 
+/**
+ * A/B experiments: two or more `AdCreative` rows sharing a real `experimentKey`. This shows only
+ * what's real — which creatives belong together, their real copy, their real status and creation
+ * date. There is no per-creative spend/conversion/CTR tracking anywhere in this schema (stats are
+ * only ever recorded at the campaign level — see `AdCampaignStatsSnapshot`), so this deliberately
+ * does not show a "winner", a cost figure, or a confidence verdict for an experiment — there is no
+ * real signal behind any of those. A previous version of this screen fabricated all of them
+ * (a fixed formula for spend, a hardcoded cost-per-conversion, and always picking variant A as the
+ * "winner") plus three entirely invented example experiments shown when none existed.
+ */
 @Injectable()
 export class AdExperimentsService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
@@ -42,33 +45,15 @@ export class AdExperimentsService {
       groups.set(c.experimentKey, list);
     }
 
-    const experiments: AdExperimentView[] = [];
-    for (const [key, items] of groups.entries()) {
-      const a = items[0];
-      const b = items[1] ?? items[0];
-
-      // Derive human title from key
-      const title = key
-        .replace(/[-_]/g, ' ')
-        .replace(/\b\w/g, (l) => l.toUpperCase());
-
-      // If we have stats or sample sizes, compute honest confidence
-      const hasEnoughData = items.length >= 2 && items.every((i) => i.status === 'active');
-
-      experiments.push({
+    return [...groups.entries()].map(([key, items]) => {
+      const title = key.replace(/[-_]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+      const [a, b] = items;
+      return {
         id: key,
         name: title,
-        type: 'Creative',
-        metric: 'Cost per conversion',
-        spend: 18400 * items.length,
-        days: 12,
-        variantA: a.headline || 'Variant A',
-        variantB: b.headline || 'Variant B',
-        valA: 'Rs. 1,314',
-        valB: 'Rs. 2,000',
-        winner: a.headline || 'Variant A',
-        confidence: hasEnoughData ? 'Sufficient data' : 'Not enough data',
-        done: hasEnoughData,
+        variantA: a?.headline || 'Variant A',
+        variantB: b?.headline || 'Variant B',
+        createdAt: (items.reduce((oldest, i) => (i.createdAt < oldest ? i.createdAt : oldest), items[0].createdAt)).toISOString(),
         creatives: items.map((i) => ({
           id: i.id,
           headline: i.headline,
@@ -76,75 +61,22 @@ export class AdExperimentsService {
           provider: i.provider,
           status: i.status,
         })),
-      });
-    }
-
-    // Baseline experiments if none created yet
-    if (experiments.length === 0) {
-      return [
-        {
-          id: 'exp-creative-static-vs-carousel',
-          name: 'iPhone creative — static vs carousel',
-          type: 'Creative',
-          metric: 'Cost per conversion',
-          spend: 38400,
-          days: 12,
-          variantA: 'Static',
-          variantB: 'Carousel',
-          valA: 'Rs. 1,314',
-          valB: 'Rs. 2,000',
-          winner: 'Static',
-          confidence: 'Sufficient data',
-          done: true,
-          creatives: [],
-        },
-        {
-          id: 'exp-hook-a-vs-b',
-          name: 'Booking reel — hook A vs B',
-          type: 'Creative',
-          metric: 'Conversions',
-          spend: 18600,
-          days: 9,
-          variantA: 'Hook A',
-          variantB: 'Hook B',
-          valA: '21',
-          valB: '10',
-          winner: 'Hook A',
-          confidence: 'Sufficient data',
-          done: true,
-          creatives: [],
-        },
-        {
-          id: 'exp-retargeting-7-vs-30',
-          name: 'Retargeting window — 7 vs 30 days',
-          type: 'Audience',
-          metric: 'Return',
-          spend: 6200,
-          days: 4,
-          variantA: '7 days',
-          variantB: '30 days',
-          valA: '1.4×',
-          valB: '0.9×',
-          winner: 'Too early',
-          confidence: 'Not enough data',
-          done: false,
-          creatives: [],
-        },
-      ];
-    }
-
-    return experiments;
+      };
+    });
   }
 
-  async create(businessId: string, dto: {
-    name: string;
-    provider: any;
-    campaignId?: string;
-    variantAHeadline: string;
-    variantABody: string;
-    variantBHeadline: string;
-    variantBBody: string;
-  }) {
+  async create(
+    businessId: string,
+    dto: {
+      name: string;
+      provider: IntegrationProvider;
+      campaignId?: string;
+      variantAHeadline: string;
+      variantABody: string;
+      variantBHeadline: string;
+      variantBBody: string;
+    },
+  ) {
     const experimentKey = `exp-${Date.now()}`;
 
     const creativeA = await this.tenantPrisma.client.adCreative.create({

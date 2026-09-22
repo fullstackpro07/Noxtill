@@ -499,7 +499,7 @@ function IntelDrawerContent({ intel, intelIndex }: { intel?: any; intelIndex?: n
 }
 
 function CommentDrawerContent({ comment }: { comment?: CommentItem }) {
-  const { closeAll, captureLeadFromComment, sendInboxReply } = useSocial();
+  const { closeAll, sendInboxReply } = useSocial();
   const [replyText, setReplyText] = useState(comment?.reply || "");
   const [isSending, setIsSending] = useState(false);
 
@@ -533,17 +533,9 @@ function CommentDrawerContent({ comment }: { comment?: CommentItem }) {
         <div style={{ fontSize: 13, color: "#344054", marginTop: 7, lineHeight: 1.6 }}>{comment.msg}</div>
       </div>
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #F2F4F7" }}>
-          <span style={{ fontSize: 12.5, color: "#667085" }}>Detected intent</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{comment.intent}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #F2F4F7" }}>
-          <span style={{ fontSize: 12.5, color: "#667085" }}>Confidence</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{comment.conf}</span>
-        </div>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0" }}>
-          <span style={{ fontSize: 12.5, color: "#667085" }}>Customer match</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{comment.match}</span>
+          <span style={{ fontSize: 12.5, color: "#667085" }}>Type</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{comment.intent}</span>
         </div>
       </div>
       {isEscalated && (
@@ -576,11 +568,6 @@ function CommentDrawerContent({ comment }: { comment?: CommentItem }) {
         <button onClick={closeAll} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: 11, padding: "12px 15px", fontSize: 12.5, fontWeight: 700, color: "#344054", cursor: "pointer", minHeight: 46 }}>
           Close
         </button>
-        {comment.lead && (
-          <button onClick={() => captureLeadFromComment(comment)} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: 11, padding: "12px 15px", fontSize: 12.5, fontWeight: 700, color: "#0E8442", cursor: "pointer", minHeight: 46 }}>
-            Capture lead
-          </button>
-        )}
         <button
           disabled={isSending || !replyText.trim()}
           onClick={handleSend}
@@ -621,16 +608,8 @@ function LeadDrawerContent({ lead }: { lead?: LeadItem }) {
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{lead.phone}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: "1px solid #F2F4F7" }}>
-            <span style={{ fontSize: 12.5, color: "#667085" }}>Location</span>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{lead.loc}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: "1px solid #F2F4F7" }}>
             <span style={{ fontSize: 12.5, color: "#667085" }}>Source</span>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{lead.pf} · {lead.src}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: "1px solid #F2F4F7" }}>
-            <span style={{ fontSize: 12.5, color: "#667085" }}>Interested in</span>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: "#344054" }}>{lead.interest}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0" }}>
             <span style={{ fontSize: 12.5, color: "#667085" }}>Captured</span>
@@ -638,12 +617,8 @@ function LeadDrawerContent({ lead }: { lead?: LeadItem }) {
           </div>
         </div>
       </div>
-      <div style={{ background: "#EEF4FF", border: "1px solid #C7D7FE", borderRadius: 12, padding: 13 }}>
-        <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".4px", textTransform: "uppercase", color: "#3538CD" }}>Detected intent — {lead.intent}</div>
-        <div style={{ fontSize: 12, color: "#3538CD", marginTop: 6, lineHeight: 1.6 }}>Read from what they wrote, not from anything about who they are. Score is {lead.score} based on how directly they asked.</div>
-      </div>
       <div style={{ background: "#FFFBF2", border: "1px solid #FDE3B3", borderRadius: 11, padding: "11px 13px", fontSize: 11.5, color: "#93370D", lineHeight: 1.55 }}>
-        Blank fields stay blank. Nothing here was looked up, inferred or scraped.
+        Blank fields stay blank. Nothing here was looked up, inferred or scraped. There is no intent or lead-scoring model — status is only what you set it to.
       </div>
       <div style={{ display: "flex", gap: 9, borderTop: "1px solid #F0F2F5", paddingTop: 14, flexWrap: "wrap" }}>
         <button onClick={closeAll} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: 11, padding: "12px 15px", fontSize: 12.5, fontWeight: 700, color: "#344054", cursor: "pointer", minHeight: 46 }}>
@@ -827,16 +802,22 @@ function CompDrawerContent({ comp }: { comp?: CompItem }) {
 }
 
 function PreflightDrawerContent({ post }: { post?: PostItem }) {
-  const { closeAll } = useSocial();
+  const { closeAll, accounts } = useSocial();
+  const account = accounts.find((a) => a.pf === post?.pf);
+  const accountOk = account?.st === "Connected";
+  const approvalOk = post?.st !== "Needs approval";
+
+  // Only checks actually backed by real, queryable state — no media/link/offer/stock validation
+  // runs today, so those aren't claimed as verified.
   const checks = [
-    { l: "Account connected and authorised", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Media meets platform requirements", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Caption within character limit", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Product in stock", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Offer still valid", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Link reachable", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Approval recorded", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
+    accountOk
+      ? { l: "Account connected and authorised", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" }
+      : { l: "Account connected and authorised", s: "Fail", bg: "#FEF3F2", fg: "#B42318" },
+    approvalOk
+      ? { l: "Approval recorded", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" }
+      : { l: "Approval recorded", s: "Pending", bg: "#FEF6E7", fg: "#B54708" },
   ];
+  const willBlock = !accountOk || !approvalOk;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -854,8 +835,10 @@ function PreflightDrawerContent({ post }: { post?: PostItem }) {
           </div>
         ))}
       </div>
-      <div style={{ background: "#F7FCF9", border: "1px solid #D5EFE0", borderRadius: 11, padding: "11px 13px", fontSize: 11.5, color: "#0E8442", lineHeight: 1.55 }}>
-        All checks pass, so this will publish at the scheduled time. A critical failure blocks the publish rather than warning and going ahead.
+      <div style={{ background: willBlock ? "#FEF3F2" : "#F7FCF9", border: `1px solid ${willBlock ? "#FDD9D6" : "#D5EFE0"}`, borderRadius: 11, padding: "11px 13px", fontSize: 11.5, color: willBlock ? "#B42318" : "#0E8442", lineHeight: 1.55 }}>
+        {willBlock
+          ? "This will not publish until the failing item above is resolved."
+          : "Account is connected and this post is approved, so it will publish at the scheduled time. Media, link and stock are not automatically validated before publishing."}
       </div>
       <button onClick={closeAll} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: 11, padding: 12, fontSize: 12.5, fontWeight: 700, color: "#344054", cursor: "pointer", minHeight: 46 }}>
         Close

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useMemo, useRef, useEffect } from "react";
+import React, { createContext, useContext, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
@@ -13,6 +13,7 @@ import {
   fetchAdBudget,
   fetchAdPerformance,
   fetchAdSettings,
+  fetchAdDailyHistory,
   createCampaign,
   updateCampaign,
   updateAdSettings,
@@ -24,6 +25,7 @@ import {
   type AdPerformanceRow,
   type AdSettings,
   type AdProvider,
+  type AdDailyHistoryPoint,
 } from "@/lib/ads-api";
 import { fetchProducts } from "@/lib/products-api";
 import type { Product } from "@/lib/products";
@@ -59,14 +61,11 @@ export type DrawerType =
   | null;
 
 export type ModalType =
-  | "autopilot"
   | "pause"
   | "launch"
   | "overlap"
   | "addcomp"
   | null;
-
-export type AutopilotMode = "Off" | "Suggest only" | "Approval mode" | "Autopilot";
 
 export interface ChipColors {
   bg: string;
@@ -138,9 +137,6 @@ interface AdvertisingContextType {
   setAccountFilter: (a: string) => void;
   range: string;
   setRange: (r: string) => void;
-  autopilot: AutopilotMode;
-  setAutopilot: (m: AutopilotMode) => void;
-  apColors: { bg: string; bd: string; fg: string };
 
   // Data
   campaigns: AdCampaign[];
@@ -149,6 +145,7 @@ interface AdvertisingContextType {
   creatives: AdCreative[];
   leads: AdLead[];
   performance: AdPerformanceRow[];
+  dailyHistory: AdDailyHistoryPoint[];
   settings: AdSettings | undefined;
   products: Product[];
   competitors: Competitor[];
@@ -181,20 +178,6 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
   // Global top filters
   const [accountFilter, setAccountFilter] = useState("All ad accounts");
   const [range, setRange] = useState("Last 30 days");
-  const [autopilot, setAutopilot] = useState<AutopilotMode>("Approval mode");
-
-  const apColors = useMemo(() => {
-    switch (autopilot) {
-      case "Off":
-        return { bg: "#F2F4F7", bd: "#E6EAF0", fg: "#475467" };
-      case "Suggest only":
-        return { bg: "#EEF4FF", bd: "#C7D7FE", fg: "#3538CD" };
-      case "Approval mode":
-        return { bg: "#F7FCF9", bd: "#D5EFE0", fg: "#0E8442" };
-      case "Autopilot":
-        return { bg: "#E8F7EE", bd: "#BFE7CF", fg: "#0E8442" };
-    }
-  }, [autopilot]);
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -248,10 +231,14 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
   };
 
   // Queries
-  const { data: campaigns = [], isLoading: loadingCamps } = useQuery({
+  const { data: allCampaigns = [], isLoading: loadingCamps } = useQuery({
     queryKey: ["adCampaigns"],
     queryFn: fetchCampaigns,
   });
+  // The "Ad account" filter in the header actually filters, instead of just sitting there —
+  // every screen that reads `campaigns` from this context gets it for free.
+  const providerLabelToKey: Record<string, AdProvider> = { "Meta Ads": "meta_ads", "Google Ads": "google_ads", "TikTok Ads": "tiktok_ads", "LinkedIn Ads": "linkedin_ads" };
+  const campaigns = accountFilter === "All ad accounts" ? allCampaigns : allCampaigns.filter((c) => c.provider === providerLabelToKey[accountFilter]);
 
   const { data: accounts = [], isLoading: loadingAccounts } = useQuery({
     queryKey: ["adAccounts"],
@@ -278,6 +265,11 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
     queryFn: fetchAdPerformance,
   });
 
+  const { data: dailyHistory = [] } = useQuery({
+    queryKey: ["adDailyHistory"],
+    queryFn: fetchAdDailyHistory,
+  });
+
   const { data: settings } = useQuery({
     queryKey: ["adSettings"],
     queryFn: fetchAdSettings,
@@ -302,13 +294,13 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
   const role = (user?.role || "owner").toLowerCase();
   const isOwner = role === "owner" || role === "admin" || role === "superadmin";
   const userRoleName = isOwner ? "Owner" : role === "manager" ? "Manager" : "Staff";
-  const userName = user?.name || (isOwner ? "Olivia Smith" : "Staff Member");
+  const userName = user?.name || "You";
   const userInitials = userName
     .split(" ")
     .map((p: string) => p[0])
     .join("")
     .slice(0, 2)
-    .toUpperCase() || "OS";
+    .toUpperCase() || "Y";
 
   // Actions & Mutations
   const createCampaignMutation = useMutation({
@@ -406,15 +398,13 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
         setAccountFilter,
         range,
         setRange,
-        autopilot,
-        setAutopilot,
-        apColors,
         campaigns,
         accounts,
         audiences,
         creatives,
         leads,
         performance,
+        dailyHistory,
         settings,
         products,
         competitors,

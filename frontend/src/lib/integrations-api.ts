@@ -50,10 +50,11 @@ export interface ConnectResult {
   connected?: true;
 }
 
-export function connectIntegration(key: ConnectorKey): Promise<ConnectResult> {
-  return apiFetch<ConnectResult>(`/integrations/${TO_BACKEND_PROVIDER[key]}/connect`, { method: "POST" });
+/** `branchId` targets a specific branch's own integration (a real cross-branch write via the same X-Branch override the branch switcher uses), instead of always acting on whichever branch is globally active. */
+export function connectIntegration(key: ConnectorKey, branchId?: string): Promise<ConnectResult> {
+  return apiFetch<ConnectResult>(`/integrations/${TO_BACKEND_PROVIDER[key]}/connect`, { method: "POST" }, { branchId });
 }
 
-export async function disconnectIntegration(key: ConnectorKey): Promise<void> {
-  await apiFetch(`/integrations/${TO_BACKEND_PROVIDER[key]}/disconnect`, { method: "POST" });
+export async function disconnectIntegration(key: ConnectorKey, branchId?: string): Promise<void> {
+  await apiFetch(`/integrations/${TO_BACKEND_PROVIDER[key]}/disconnect`, { method: "POST" }, { branchId });
 }

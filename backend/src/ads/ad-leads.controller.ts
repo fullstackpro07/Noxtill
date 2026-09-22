@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   ServiceUnavailableException,
@@ -13,6 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AdLeadsService } from './ad-leads.service';
 import { IngestAdLeadDto } from './dto/ingest-ad-lead.dto';
+import { UpdateAdLeadStatusDto } from './dto/update-ad-lead-status.dto';
 import { AppException } from '../common/filters/app.exception';
 import { safeEqual } from '../common/webhooks/signature.util';
 import { Public } from '../common/decorators/public.decorator';
@@ -46,6 +48,11 @@ export class AdLeadsController {
   @Get('leads')
   list() {
     return this.leads.list();
+  }
+
+  @Patch('leads/:id')
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateAdLeadStatusDto) {
+    return this.leads.updateStatus(id, dto.status);
   }
 
   @Public()

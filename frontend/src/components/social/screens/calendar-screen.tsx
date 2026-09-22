@@ -29,16 +29,25 @@ export function CalendarScreen() {
     return `${dayName} ${dayNum}`;
   });
 
-  // Map real posts into the 7 days of the week
+  // Map posts into the 7 real calendar days of this week, using each post's actual scheduledFor
+  // date — not array position. A post with no scheduled date has no day to place it on and is left
+  // off the grid rather than assigned an arbitrary slot.
+  const weekStart = new Date(monday);
+  weekStart.setHours(0, 0, 0, 0);
   const calItemsByDay: Record<number, { t: string; pf: string; time: string; st: string; rawPost?: any }[]> = {};
-  posts.forEach((p, idx) => {
-    const slotIdx = idx % 7;
-    if (!calItemsByDay[slotIdx]) calItemsByDay[slotIdx] = [];
-    if (calItemsByDay[slotIdx].length < 2) {
-      calItemsByDay[slotIdx].push({
+  posts.forEach((p) => {
+    const scheduledFor = (p.raw as { scheduledFor?: string | null } | undefined)?.scheduledFor;
+    if (!scheduledFor) return;
+    const d = new Date(scheduledFor);
+    if (isNaN(d.getTime())) return;
+    const dayIdx = Math.floor((d.getTime() - weekStart.getTime()) / 86400000);
+    if (dayIdx < 0 || dayIdx > 6) return;
+    if (!calItemsByDay[dayIdx]) calItemsByDay[dayIdx] = [];
+    if (calItemsByDay[dayIdx].length < 4) {
+      calItemsByDay[dayIdx].push({
         t: p.t,
         pf: p.pf.slice(0, 2).toUpperCase(),
-        time: p.when.includes(":") ? p.when.split(",")[1]?.trim() || "7:00 PM" : "6:30 PM",
+        time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         st: p.st,
         rawPost: p,
       });
@@ -136,7 +145,7 @@ export function CalendarScreen() {
           </div>
         </div>
         <div style={{ fontSize: 11.5, color: "#98A2B3", marginTop: 12, lineHeight: 1.55 }}>
-          Click a slot to view or edit. AI-suggested times come from your own posting history, and are recommendations rather than guarantees.
+          Click a slot to view or edit. Days shown reflect each post&apos;s actual scheduled date.
         </div>
       </div>
 

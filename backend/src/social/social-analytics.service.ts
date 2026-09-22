@@ -39,8 +39,49 @@ export class SocialAnalyticsService {
         (sum, row) => sum + row.engagement,
         0,
       ),
+      totalImpressions: latestPerPlatform.reduce(
+        (sum, row) => sum + row.impressions,
+        0,
+      ),
       byPlatform: latestPerPlatform,
     };
+  }
+
+  /**
+   * Real per-day totals across every connected platform, from the same `SocialAnalyticsSnapshot`
+   * rows `summary()` reads — for a trend chart. Before this existed, the Overview screen faked a
+   * trend line by multiplying today's all-time reach/engagement/followers total by a fixed,
+   * made-up shape, which produced the same-looking "trend" no matter what actually happened.
+   */
+  async history(businessId: string, days = 14) {
+    const since = new Date();
+    since.setUTCHours(0, 0, 0, 0);
+    since.setUTCDate(since.getUTCDate() - (days - 1));
+
+    const snapshots = await this.tenantPrisma.client.socialAnalyticsSnapshot.findMany({
+      where: { businessId, date: { gte: since } },
+      orderBy: { date: 'asc' },
+    });
+
+    const byDay = new Map<string, { reach: number; engagement: number; followers: number }>();
+    for (const s of snapshots) {
+      const key = s.date.toISOString().slice(0, 10);
+      const row = byDay.get(key) ?? { reach: 0, engagement: 0, followers: 0 };
+      row.reach += s.reach;
+      row.engagement += s.engagement;
+      row.followers += s.followers;
+      byDay.set(key, row);
+    }
+
+    const points: { date: string; reach: number; engagement: number; followers: number }[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(since);
+      d.setUTCDate(since.getUTCDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      const row = byDay.get(key);
+      points.push({ date: key, reach: row?.reach ?? 0, engagement: row?.engagement ?? 0, followers: row?.followers ?? 0 });
+    }
+    return points;
   }
 
   async pullForAccount(businessId: string, platform: SocialPlatform) {

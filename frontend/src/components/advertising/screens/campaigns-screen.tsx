@@ -152,10 +152,12 @@ export function CampaignsScreen() {
                   const spend = c.stats?.spend || 0;
                   const conv = c.stats?.results || 0;
                   const cpa = conv > 0 ? spend / conv : 0;
-                  const revenue = Number(pMeta.revenue) || conv * 2800;
-                  const roas = spend > 0 ? (revenue / spend).toFixed(1) + "×" : "—";
+                  // No platform writes real revenue back yet — never estimated from an assumed order value.
+                  const revenue = Number(pMeta.revenue) || 0;
+                  const hasRevenue = Number(pMeta.revenue) > 0;
+                  const roas = hasRevenue ? (revenue / spend).toFixed(1) + "×" : "Not tracked";
                   const roasNum = spend > 0 ? revenue / spend : 0;
-                  const roasColor = spend === 0 ? "#98A2B3" : roasNum >= 2 ? "#0E8442" : roasNum >= 1 ? "#B54708" : "#B42318";
+                  const roasColor = !hasRevenue ? "#98A2B3" : roasNum >= 2 ? "#0E8442" : roasNum >= 1 ? "#B54708" : "#B42318";
                   const providerLabel = c.provider.replace(/_ads/g, "").toUpperCase();
 
                   return (

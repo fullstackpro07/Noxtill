@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
-import { ModuleTabs } from "@/components/layout/module-tabs";
+import { ListingsProvider } from "@/components/listings/listings-context";
+import { ListingsShell } from "@/components/listings/listings-shell";
 
 export default function ListingsLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-full flex-col">
-      <ModuleTabs moduleKey="listings" />
-      <div className="flex-1">{children}</div>
-    </div>
+    <ListingsProvider>
+      <ListingsShell>{children}</ListingsShell>
+    </ListingsProvider>
   );
 }

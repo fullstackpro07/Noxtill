@@ -31,7 +31,7 @@ export function QueueScreen() {
       <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 16, overflow: "hidden" }}>
         <div style={{ padding: "13px 17px", borderBottom: "1px solid #F0F2F5", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Publishing queue</h3>
-          <span style={{ fontSize: 11, color: "#98A2B3" }}>Every item runs a pre-flight check before it goes out</span>
+          <span style={{ fontSize: 11, color: "#98A2B3" }}>Open a scheduled item to check its connection and approval status before it goes out</span>
         </div>
 
         {qRows.length === 0 ? (

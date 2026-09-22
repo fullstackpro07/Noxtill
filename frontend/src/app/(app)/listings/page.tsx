@@ -1,5 +1,5 @@
-import { ListingsOverviewView } from "@/components/listings/listings-overview-view";
+import { OverviewScreen } from "@/components/listings/screens/overview-screen";
 
 export default function ListingsPage() {
-  return <ListingsOverviewView />;
+  return <OverviewScreen />;
 }

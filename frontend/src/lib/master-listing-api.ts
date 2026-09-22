@@ -46,9 +46,9 @@ export interface SyncResult {
   message?: string;
 }
 
-/** POST /listings/sync */
-export function syncListings(): Promise<SyncResult[]> {
-  return apiFetch<SyncResult[]>("/listings/sync", { method: "POST" });
+/** POST /listings/sync — optionally targets a specific branch (a real cross-branch write, via the same X-Branch override the branch switcher uses), rather than always acting on whichever branch is globally active. */
+export function syncListings(branchId?: string): Promise<SyncResult[]> {
+  return apiFetch<SyncResult[]>("/listings/sync", { method: "POST" }, { branchId });
 }
 
 export interface ListingSyncLogRow {
@@ -88,4 +88,49 @@ export interface CitationAuditRow {
 /** GET /seo/citations */
 export function fetchCitationAudit(): Promise<CitationAuditRow[]> {
   return apiFetch<CitationAuditRow[]>("/seo/citations");
+}
+
+export interface ListingRollupItem {
+  branchId: string;
+  branchName: string;
+  businessName: string | null;
+  phone: string | null;
+  address: string | null;
+  category: string | null;
+  provider: string;
+  providerLabel: string;
+  hasMasterListing: boolean;
+  status: "Connected" | "Needs attention" | "Disconnected" | "Not connected";
+  verification: "Not tracked";
+  lastSyncedAt: string | null;
+  lastSyncStatus: "success" | "failed" | null;
+  lastSyncMessage: string | null;
+  completenessPercent: number | null;
+  photoCount: number;
+  mismatchedFields: string[];
+  nextAction: string;
+  nextWhy: string;
+}
+
+export interface ListingsRollupSummary {
+  totalListings: number;
+  totalBranches: number;
+  totalProviders: number;
+  connected: number;
+  needsAttention: number;
+  disconnected: number;
+  notConnected: number;
+  mismatchCount: number;
+  averageCompleteness: number | null;
+  branchesWithoutMasterListing: number;
+}
+
+/** GET /listings/rollup — one real row per branch x connected directory provider, across the whole branch group. */
+export function fetchListingsRollup(): Promise<ListingRollupItem[]> {
+  return apiFetch<ListingRollupItem[]>("/listings/rollup");
+}
+
+/** GET /listings/rollup/summary — real aggregate counts derived from the same rollup. */
+export function fetchListingsRollupSummary(): Promise<ListingsRollupSummary> {
+  return apiFetch<ListingsRollupSummary>("/listings/rollup/summary");
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useAdvertising, formatMoney } from "../advertising-context";
+import { generateAdCopy } from "@/lib/ads-api";
 import type { Product } from "@/lib/products";
 
 export function BuilderScreen() {
@@ -21,18 +23,22 @@ export function BuilderScreen() {
 
   // AI Creative generation state
   const [genState, setGenState] = useState<"idle" | "running" | "done">("idle");
-  const [genStep, setGenStep] = useState(0);
   const [headline, setHeadline] = useState("");
   const [bodyText, setBodyText] = useState("");
   const [cta, setCta] = useState("Send message");
 
-  const genSteps = [
-    "Reading product, price and stock",
-    "Checking margin and recent reviews",
-    "Building audience from customer data",
-    "Generating creative and copy",
-    "Running pre-launch checks",
-  ];
+  const genMutation = useMutation({
+    mutationFn: generateAdCopy,
+    onSuccess: (res) => {
+      setHeadline(res.headline);
+      setBodyText(res.body);
+      setGenState("done");
+    },
+    onError: () => {
+      setGenState("idle");
+      flash("AI generation failed — please try again.");
+    },
+  });
 
   const stepDots = [
     { n: "1", label: "Goal" },
@@ -45,36 +51,24 @@ export function BuilderScreen() {
   const objectives = ["Sales", "Leads", "Bookings", "Traffic", "Awareness"];
 
   const handleStartGeneration = () => {
+    const prod = selectedProduct || products[0];
     setGenState("running");
-    setGenStep(0);
-    let stepCount = 0;
-    const interval = setInterval(() => {
-      stepCount += 1;
-      setGenStep(stepCount);
-      if (stepCount >= genSteps.length) {
-        clearInterval(interval);
-        setGenState("done");
-        const prod = selectedProduct || products[0];
-        const prodName = prod ? prod.name : "Featured Product";
-        const priceStr = prod ? `Rs. ${prod.price.toLocaleString()}` : "Rs. 2,500";
-        const stockStr = prod?.stockOnHand !== undefined ? `${prod.stockOnHand} in stock` : "Available now";
-        setHeadline(`${prodName} — ${stockStr} today`);
-        setBodyText(
-          `Premium quality, genuine guarantee, and instant dispatch. ${priceStr} with fast delivery across Pakistan. Highly rated by customers.`
-        );
-      }
-    }, 450);
+    genMutation.mutate({ productName: prod?.name || "this product", goal });
   };
 
-  const estimatedDailyReach = Math.round(budget * 3.4);
+  // No real reach-prediction model exists (no auction data, no historical campaign results tied to
+  // budget) — a previous version of this screen invented one (budget × 3.4). Not shown any more.
 
+  const stockOk = !selectedProduct || (selectedProduct.kind === "product" ? (selectedProduct.stockOnHand ?? 0) > 0 : true);
   const qaChecks = [
-    { l: `Product is in stock (${selectedProduct?.stockOnHand ?? 12} units)`, s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
+    {
+      l: selectedProduct ? `Product is in stock${selectedProduct.stockOnHand !== undefined ? ` (${selectedProduct.stockOnHand} units)` : ""}` : "Product is in stock",
+      s: stockOk ? "Pass" : "Blocked",
+      bg: stockOk ? "#E8F7EE" : "#FEF3F2",
+      fg: stockOk ? "#0E8442" : "#B42318",
+    },
     { l: "Price on the ad matches the product catalog record", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Destination link loads over secure HTTPS", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Conversion tracking pixel is firing on this account", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "UTM campaign and source parameters attached", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
-    { l: "Rating and description claims verified with Reviews", s: "Pass", bg: "#E8F7EE", fg: "#0E8442" },
+    { l: "Conversion tracking pixel, UTM parameters and review claims", s: "Not verified", bg: "#F2F4F7", fg: "#475467" },
     { l: "Platform policy approval", s: "Decided by platform", bg: "#F2F4F7", fg: "#475467" },
   ];
 
@@ -284,20 +278,17 @@ export function BuilderScreen() {
             Built from your own customer records and lookalike pools. Only privacy-safe targeting is passed to the ad platform.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-            {(audiences.length > 0
-              ? audiences.map((a) => ({
+            {audiences.length === 0 ? (
+              <div style={{ padding: 24, textAlign: "center", color: "#98A2B3", fontSize: 13 }}>
+                No customer segment has been synced into an audience yet — sync one from the Audiences screen, or continue and let the platform choose.
+              </div>
+            ) : audiences.map((a) => ({
                   name: a.name,
                   size: `${a.size.toLocaleString()} people`,
-                  why: `Provider: ${a.provider} · Status: ${a.status}`,
-                  roas: "Audience sync ready",
-                  best: a.size > 2000,
+                  why: `${a.provider} · ${a.status}`,
+                  best: false,
                 }))
-              : [
-                  { name: "Past buyers — repeat customers", size: "2,840 people", why: "Purchased from your store in the last 12 months", roas: "Historical return 4.1×", best: true },
-                  { name: "Lookalike — high value spenders", size: "84,000 people", why: "Modelled on your top 200 customers by lifetime value", roas: "Cold acquisition pool", best: false },
-                  { name: "Local city radius · 5 km", size: "146,000 people", why: "Geographic radius around your active branch", roas: "Optimal for walk-ins & same day pickup", best: false },
-                ]
-            ).map((aud, idx) => {
+            .map((aud, idx) => {
               const isSel = selectedAudience === aud.name || (!selectedAudience && idx === 0);
               return (
                 <label
@@ -334,7 +325,6 @@ export function BuilderScreen() {
                     <span style={{ display: "block", fontSize: 11.5, color: "#667085", marginTop: 4 }}>
                       {aud.size} · {aud.why}
                     </span>
-                    <span style={{ display: "block", fontSize: 11, color: "#98A2B3", marginTop: 3 }}>{aud.roas}</span>
                   </span>
                 </label>
               );
@@ -386,37 +376,9 @@ export function BuilderScreen() {
           )}
 
           {genState === "running" && (
-            <div style={{ padding: "20px 14px", border: "1px solid #E6EAF0", borderRadius: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#101828", marginBottom: 12 }}>Building your ad package…</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {genSteps.map((s, i) => {
-                  const isDone = genStep > i;
-                  const isActive = genStep === i;
-                  return (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
-                      <span
-                        style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: "50%",
-                          background: isDone ? "#E8F7EE" : isActive ? "#FEF6E7" : "#F2F4F7",
-                          color: isDone ? "#0E8442" : isActive ? "#B54708" : "#98A2B3",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 10,
-                          fontWeight: 800,
-                        }}
-                      >
-                        {isDone ? "✓" : i + 1}
-                      </span>
-                      <span style={{ color: isDone ? "#0E8442" : isActive ? "#101828" : "#98A2B3", fontWeight: isActive ? 700 : 500 }}>
-                        {s}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+            <div style={{ padding: "36px 14px", border: "1px solid #E6EAF0", borderRadius: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#101828" }}>Asking AI to draft your ad copy…</div>
+              <div style={{ fontSize: 12, color: "#667085", marginTop: 6 }}>This calls the AI assistant for real — it usually takes a few seconds.</div>
             </div>
           )}
 
@@ -502,7 +464,7 @@ export function BuilderScreen() {
               style={{ width: "100%", accentColor: "#12A150", cursor: "pointer" }}
             />
             <div style={{ fontSize: 11.5, color: "#667085", marginTop: 8, lineHeight: 1.55 }}>
-              At {formatMoney(budget)} a day, similar past campaigns reached roughly {estimatedDailyReach.toLocaleString()} people daily. This is a baseline projection, not an auction guarantee.
+              How far {formatMoney(budget)} a day reaches depends entirely on the platform&apos;s live auction — Noxtill doesn&apos;t have a real forecasting model for this yet, so no estimate is shown.
             </div>
           </div>
 

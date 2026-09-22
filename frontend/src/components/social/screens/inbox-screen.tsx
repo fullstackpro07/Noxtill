@@ -10,18 +10,15 @@ export function InboxScreen() {
     setITab,
     replyPolicy,
     openDrawer,
-    captureLeadFromComment,
   } = useSocial();
 
   const iTabs = [
     { k: "All", n: comments.length },
     { k: "Unanswered", n: comments.filter((c) => c.st === "New" || c.st === "AI suggested").length },
-    { k: "Leads", n: comments.filter((c) => c.lead).length },
     { k: "Escalated", n: comments.filter((c) => c.st === "Escalated").length },
   ];
 
   const iFiltered = comments.filter((c) => {
-    if (iTab === "Leads") return c.lead;
     if (iTab === "Escalated") return c.st === "Escalated";
     if (iTab === "Unanswered") return c.st === "New" || c.st === "AI suggested";
     return true;
@@ -32,7 +29,6 @@ export function InboxScreen() {
     { l: "AI suggested", v: String(comments.filter((c) => c.st === "AI suggested").length), color: "#0E8442" },
     { l: "AI replied", v: String(comments.filter((c) => c.st === "AI replied").length), color: "#0E8442" },
     { l: "Escalated", v: String(comments.filter((c) => c.st === "Escalated").length), color: "#B42318" },
-    { l: "Potential leads", v: String(comments.filter((c) => c.lead).length), color: "#0E8442" },
   ];
 
   return (
@@ -94,8 +90,6 @@ export function InboxScreen() {
           <div>
             {iFiltered.map((c) => {
               const sc = getChip(c.st);
-              const cc = getChip(c.conf);
-              const hasMatch = c.match !== "—";
 
               return (
                 <div
@@ -112,43 +106,17 @@ export function InboxScreen() {
                       <span style={{ fontSize: 10.5, color: "#98A2B3" }}>
                         {c.pf} · {c.when}
                       </span>
-                      {c.lead && (
-                        <span style={{ fontSize: 9.5, fontWeight: 800, color: "#0E8442", background: "#E8F7EE", borderRadius: 5, padding: "2px 7px" }}>
-                          Potential lead
-                        </span>
-                      )}
                     </span>
                     <span style={{ display: "block", fontSize: 12.5, color: "#344054", marginTop: 6, lineHeight: 1.55 }}>{c.msg}</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 10.5, color: "#98A2B3" }}>On: {c.post}</span>
-                      {hasMatch ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: "#0E8442" }}>{c.match}</span>
-                      ) : (
-                        <span style={{ fontSize: 10.5, color: "#98A2B3" }}>No customer match</span>
-                      )}
                     </span>
                   </span>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 7 }}>
-                    <span style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: sc.bg, color: sc.fg, whiteSpace: "nowrap" }}>
-                        {c.st}
-                      </span>
-                      <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: cc.bg, color: cc.fg, whiteSpace: "nowrap" }}>
-                        {c.conf}
-                      </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: sc.bg, color: sc.fg, whiteSpace: "nowrap" }}>
+                      {c.st}
                     </span>
                     <span style={{ fontSize: 10.5, color: "#667085" }}>{c.intent}</span>
-                    {c.lead && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          captureLeadFromComment(c);
-                        }}
-                        style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: 9, padding: "8px 12px", fontSize: 11.5, fontWeight: 700, color: "#0E8442", cursor: "pointer", minHeight: 40, whiteSpace: "nowrap" }}
-                      >
-                        Capture lead
-                      </button>
-                    )}
                   </span>
                 </div>
               );

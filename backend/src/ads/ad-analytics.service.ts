@@ -22,6 +22,18 @@ export interface AdPerformanceRow {
   costPerResult: number | null;
 }
 
+export interface AdFunnelStage {
+  label: string;
+  value: number;
+  widthPercent: number;
+}
+
+export interface AdDailyHistoryPoint {
+  date: string;
+  spend: number;
+  results: number;
+}
+
 /** Budget & Spend, Ad Performance (UPD-BE-071) — real cross-platform rollup over every stored `AdCampaign`. */
 @Injectable()
 export class AdAnalyticsService {
@@ -92,125 +104,68 @@ export class AdAnalyticsService {
     }));
   }
 
-  async funnel() {
+  /**
+   * Real funnel from real stored numbers only. There is no landing-page-view, add-to-cart or
+   * click-to-order tracking anywhere in this schema, so this stops at what is actually measured:
+   * impressions and clicks (from each campaign's own provider-reported `stats`), leads (real
+   * `AdLead` rows), and orders (real completed `Order` rows) — it does not claim those orders were
+   * caused by an ad click, only that they exist. Width is a real percentage of impressions, not a
+   * fixed shape.
+   */
+  async funnel(): Promise<AdFunnelStage[]> {
     const campaigns = await this.tenantPrisma.client.adCampaign.findMany();
-    let totalImp = 0;
-    let totalClicks = 0;
+    let impressions = 0;
+    let clicks = 0;
     for (const c of campaigns) {
       const stats = (c.stats as AdCampaignStats | null) ?? {};
-      totalImp += stats.impressions ?? 0;
-      totalClicks += stats.clicks ?? 0;
+      impressions += stats.impressions ?? 0;
+      clicks += stats.clicks ?? 0;
     }
+    const leads = await this.tenantPrisma.client.adLead.count();
+    const orders = await this.tenantPrisma.client.order.count({ where: { status: 'completed' } });
 
-    const leadsCount = await this.tenantPrisma.client.adLead.count();
-    const ordersCount = await this.tenantPrisma.client.order.count();
-    const paidOrdersCount = await this.tenantPrisma.client.order.count({
-      where: { status: 'completed' },
-    });
-
-    const impVal = totalImp > 0 ? totalImp : 412000;
-    const clickVal = totalClicks > 0 ? totalClicks : 9840;
-    const lpvVal = Math.round(clickVal * 0.82);
-    const leadsVal = leadsCount > 0 ? leadsCount : 312;
-    const ordersVal = ordersCount > 0 ? ordersCount : 79;
-    const paidVal = paidOrdersCount > 0 ? paidOrdersCount : 74;
-
+    const widthOf = (n: number) => (impressions > 0 ? Math.min(100, Math.round((n / impressions) * 100)) : 0);
     return [
-      { l: 'Impressions', v: impVal.toLocaleString('en-US'), w: '100%', color: '#C7D7FE' },
-      { l: 'Clicks', v: clickVal.toLocaleString('en-US'), w: '72%', color: '#A4BCFD' },
-      { l: 'Landing page views', v: lpvVal.toLocaleString('en-US'), w: '58%', color: '#8098F9' },
-      { l: 'Leads and add-to-carts', v: leadsVal.toLocaleString('en-US'), w: '34%', color: '#BFE7CF' },
-      { l: 'Orders and bookings', v: ordersVal.toLocaleString('en-US'), w: '20%', color: '#6CD49A' },
-      { l: 'Paid and settled', v: paidVal.toLocaleString('en-US'), w: '17%', color: '#12A150' },
+      { label: 'Impressions', value: impressions, widthPercent: impressions > 0 ? 100 : 0 },
+      { label: 'Clicks', value: clicks, widthPercent: widthOf(clicks) },
+      { label: 'Leads', value: leads, widthPercent: widthOf(leads) },
+      { label: 'Completed orders', value: orders, widthPercent: widthOf(orders) },
     ];
   }
 
-  async productProfitability() {
-    const products = await this.tenantPrisma.client.product.findMany({
-      take: 8,
-      orderBy: { createdAt: 'desc' },
+  /**
+   * Real per-day spend/results, aggregated from `AdCampaignStatsSnapshot` (captured hourly by
+   * `AdStatsSyncProcessor`). This is what a trend chart should read from — before this existed, the
+   * Overview screen faked a trend line by multiplying today's all-time total by a fixed made-up
+   * shape, which produced a line that always looked the same regardless of what actually happened.
+   */
+  async dailyHistory(days = 14): Promise<AdDailyHistoryPoint[]> {
+    const since = new Date();
+    since.setUTCHours(0, 0, 0, 0);
+    since.setUTCDate(since.getUTCDate() - (days - 1));
+
+    const snapshots = await this.tenantPrisma.client.adCampaignStatsSnapshot.findMany({
+      where: { capturedAt: { gte: since } },
+      orderBy: { capturedAt: 'asc' },
     });
 
-    if (products.length === 0) {
-      return [
-        { n: 'iPhone 15 Pro', spend: 38400, rev: 168400, profit: 18500 },
-        { n: 'Hair styling', spend: 18600, rev: 62000, profit: 31000 },
-        { n: 'Smart Watch Series 9', spend: 29800, rev: 94600, profit: 22700 },
-        { n: 'Wireless Headphones', spend: 14200, rev: 12800, profit: -1900 },
-      ];
+    const byDay = new Map<string, { spend: number; results: number }>();
+    for (const s of snapshots) {
+      const key = s.capturedAt.toISOString().slice(0, 10);
+      const row = byDay.get(key) ?? { spend: 0, results: 0 };
+      row.spend += Number(s.spend);
+      row.results += s.results;
+      byDay.set(key, row);
     }
 
-    return products.map((p, idx) => {
-      const spend = 12000 + idx * 6000;
-      const price = Number(p.sellingPrice) || 5000;
-      const cost = Number(p.costPrice) || 2000;
-      const salesCount = Math.max(3, 15 - idx * 2);
-      const rev = price * salesCount;
-      const cogs = cost * salesCount;
-      const profit = rev - cogs - spend;
-
-      return {
-        id: p.id,
-        n: p.name,
-        spend,
-        rev,
-        profit,
-      };
-    });
-  }
-
-  async attribution() {
-    const orders = await this.tenantPrisma.client.order.findMany({
-      take: 6,
-      orderBy: { createdAt: 'desc' },
-      include: { customer: true },
-    });
-
-    if (orders.length === 0) {
-      return [
-        {
-          c: 'iPhone 15 Pro — September push',
-          ad: 'iPhone hero — static',
-          cust: 'Sophia B.',
-          touch: 'Clicked 2 Sep, 11:04',
-          order: '#ORD-1071',
-          rev: 'Rs. 336,000',
-        },
-        {
-          c: 'Weekend booking slots',
-          ad: 'Booking — reel cut A',
-          cust: 'Zainab A.',
-          touch: 'Clicked 1 Sep, 18:22',
-          order: 'BK-2088',
-          rev: 'Rs. 4,200',
-        },
-        {
-          c: 'Search — watch buyers',
-          ad: 'Watch — search text ad',
-          cust: 'Ahmed R.',
-          touch: 'Clicked 1 Sep, 09:41',
-          order: '#ORD-1068',
-          rev: 'Rs. 61,000',
-        },
-      ];
+    const points: AdDailyHistoryPoint[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(since);
+      d.setUTCDate(since.getUTCDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      const row = byDay.get(key);
+      points.push({ date: key, spend: round2(row?.spend ?? 0), results: row?.results ?? 0 });
     }
-
-    const campaigns = await this.tenantPrisma.client.adCampaign.findMany({ take: 3 });
-
-    return orders.map((o, idx) => {
-      const camp = campaigns[idx % campaigns.length];
-      const campName = ((camp?.providerMeta as any)?.name as string) || camp?.goal || 'Sales campaign';
-      const custName = o.customer ? `${o.customer.firstName ?? ''} ${o.customer.lastName ?? ''}`.trim() : 'Customer';
-
-      return {
-        c: campName,
-        ad: 'Variant A (ad)',
-        cust: custName || 'Online Shopper',
-        touch: new Date(o.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        order: `#ORD-${o.orderNo || o.id.slice(0, 6)}`,
-        rev: `Rs. ${Number(o.total || 0).toLocaleString('en-US')}`,
-      };
-    });
+    return points;
   }
 }
-

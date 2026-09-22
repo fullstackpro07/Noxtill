@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { IngestAdLeadDto } from './dto/ingest-ad-lead.dto';
-import { IntegrationProvider, Prisma } from '@prisma/client';
+import { AdLeadStatus, IntegrationProvider, Prisma } from '@prisma/client';
 
 /**
  * Lead Inbox (UPD-BE-071) — `ingest` is called from each provider's real lead-gen-form webhook
@@ -52,5 +52,12 @@ export class AdLeadsService {
       },
       update: {}, // a re-delivered webhook (at-least-once delivery) is a no-op, not an error
     });
+  }
+
+  /** Real lead status, set by a person — never inferred from anything. */
+  async updateStatus(id: string, status: AdLeadStatus) {
+    const existing = await this.tenantPrisma.client.adLead.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Lead not found');
+    return this.tenantPrisma.client.adLead.update({ where: { id }, data: { status } });
   }
 }

@@ -1,5 +1,5 @@
-import { ListingPhotosView } from "@/components/listings/listing-photos-view";
+import { PhotosScreen } from "@/components/listings/screens/photos-screen";
 
 export default function ListingsPhotosPage() {
-  return <ListingPhotosView />;
+  return <PhotosScreen />;
 }
