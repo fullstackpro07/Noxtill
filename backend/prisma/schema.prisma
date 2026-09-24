@@ -671,6 +671,7 @@ model Business {
   attendance                  Attendance[]
   campaigns                   Campaign[]
   competitors                 Competitor[]
+  competitorObservations      CompetitorObservation[]
   trackedKeywords             TrackedKeyword[]
   auditLogs                   AuditLog[]
   importBatches               ImportBatch[]
@@ -768,6 +769,8 @@ model Business {
   voiceSettings               VoiceSettings?
   phoneNumber                 PhoneNumber?
   phoneCalls                  PhoneCall[]
+  voiceRoutingRules           VoiceRoutingRule[]
+  voiceKnowledgeEntries       VoiceKnowledgeEntry[]
   digitizerAliases            DigitizerAlias[]
   riders                      Rider[]
   deliveries                  Delivery[]
@@ -1875,6 +1878,9 @@ model Appointment {
   depositPaid     Decimal           @default(0) @map("deposit_paid") @db.Decimal(12, 2)
   source          AppointmentSource @default(link)
   rescheduleToken String?           @unique @map("reschedule_token")
+  /// A short, human-readable booking number, unique within the business (BK-1042). NULL only for rows
+  /// written by a path that predates numbering; every creation path now allocates one.
+  bookingNo       Int?              @map("booking_no")
 
   deposits   Deposit[]
   phoneCalls PhoneCall[]
@@ -1882,6 +1888,7 @@ model Appointment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@unique([businessId, bookingNo])
   @@index([businessId, startsAt])
   @@index([staffUserId, startsAt])
   @@map("appointments")
@@ -2334,12 +2341,127 @@ model PhoneCall {
   /// convention as `AuditLog.actorUserId`.
   joinedAt            DateTime?        @map("joined_at")
   joinedByUserId      String?          @map("joined_by_user_id")
+  /// AI Phone workspace — the staff member who owns the follow-up for this call (a `BusinessUser.id`,
+  /// loose reference like `joinedByUserId`). NULL means nobody has been asked to call back yet.
+  assignedToUserId    String?          @map("assigned_to_user_id")
+  /// AI Phone workspace — a summary generated ON DEMAND from `transcript` alone (never a live
+  /// guess) and cached here. NULL until someone asks for one.
+  summary             String?          @db.Text
+  summaryGeneratedAt  DateTime?        @map("summary_generated_at")
+  /// AI Phone, full — only what the caller actually said during the call (the AI extracts a name or an
+  /// email address when one is clearly given, never guesses). NULL means the caller never offered it.
+  callerName          String?          @map("caller_name")
+  callerEmail         String?          @map("caller_email")
+  /// The custom routing rule (VoiceRoutingRule) that decided this call, kept by name too so the call
+  /// still explains itself after the rule is edited or deleted. NULL when no custom rule fired.
+  routedRuleId        String?          @map("routed_rule_id")
+  routedRuleName      String?          @map("routed_rule_name")
+  /// What the telephony provider itself reported charging for this call (Twilio call resource
+  /// price, stored as a positive amount). NULL until the provider has priced it.
+  providerCost          Decimal?  @map("provider_cost") @db.Decimal(10, 4)
+  providerCostUnit      String?   @map("provider_cost_unit")
+  providerCostCheckedAt DateTime? @map("provider_cost_checked_at")
+  /// Set when staff deleted the recording and transcript (the call log itself is kept).
+  recordingDeletedAt    DateTime? @map("recording_deleted_at")
+
+  notes PhoneCallNote[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, status, startedAt])
   @@index([businessId, resolvedAt])
   @@map("phone_calls")
+}
+
+/// AI Phone — an internal note a staff member attached to a call (live or finished).
+model PhoneCallNote {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  callId       String    @map("call_id")
+  call         PhoneCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  authorUserId String?   @map("author_user_id")
+  body         String    @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([callId, createdAt])
+  @@index([businessId])
+  @@map("phone_call_notes")
+}
+
+enum VoiceRoutingTrigger {
+  /// The caller said one of the comma-separated words/phrases in matchValue.
+  keyword
+  /// The AI classified the caller's question under the topic key in matchValue (see voice-analysis.ts TOPICS).
+  topic
+  /// The AI read the caller as the sentiment in matchValue (negative | frustrated).
+  sentiment
+  /// The AI's own confidence in what the caller wanted was low.
+  low_confidence
+  /// The call arrived outside the business's working hours.
+  after_hours
+}
+
+enum VoiceRoutingAction {
+  /// Stop evaluating rules and let the AI carry on as normal.
+  ai
+  /// Take a message: the call ends and joins the follow-up queue.
+  take_message
+  /// Dial a person — the rule's transferNumber, else the business transfer number.
+  transfer
+}
+
+/// AI Phone — a business's own routing rules, evaluated in position order on every caller turn, before
+/// the built-in handling (book / message / transfer / end). The first matching active rule wins.
+model VoiceRoutingRule {
+  id             String              @id @default(uuid())
+  businessId     String              @map("business_id")
+  business       Business            @relation(fields: [businessId], references: [id])
+  position       Int
+  name           String
+  triggerKind    VoiceRoutingTrigger @map("trigger_kind")
+  matchValue     String?             @map("match_value")
+  action         VoiceRoutingAction
+  transferNumber String?             @map("transfer_number")
+  active         Boolean             @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, position])
+  @@map("voice_routing_rules")
+}
+
+enum VoiceKnowledgeKind {
+  faq
+  document
+}
+
+/// AI Phone — an FAQ answer or an imported text document the receptionist may draw on. Only the passages
+/// relevant to what the caller just said are put in front of the AI, on that turn.
+model VoiceKnowledgeEntry {
+  id             String             @id @default(uuid())
+  businessId     String             @map("business_id")
+  business       Business           @relation(fields: [businessId], references: [id])
+  kind           VoiceKnowledgeKind
+  title          String
+  /// For an FAQ, the question callers ask; NULL for a document.
+  question       String?
+  content        String             @db.MediumText
+  sourceFilename String?            @map("source_filename")
+  active         Boolean            @default(true)
+  usedCount      Int                @default(0) @map("used_count")
+  lastUsedAt     DateTime?          @map("last_used_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, active])
+  /// Two separate single-column indexes (not one composite), same reasoning as HelpArticle's —
+  /// `voice-call.service.ts#findKnowledge` scores MATCH(title)/MATCH(content) independently.
+  @@fulltext([title])
+  @@fulltext([content])
+  @@map("voice_knowledge_entries")
 }
 
 enum PhoneCallStatus {
@@ -2378,6 +2500,14 @@ model VoiceSettings {
   /// `[{name, priority}]` — real, injected into the intent-classification prompt alongside the 5
   /// built-in intents (book/message/transfer/continue/end).
   customIntents          Json     @default("[]") @map("custom_intents")
+  /// AI Phone, full — what records the AI may read to answer a caller. Catalogue (prices, stock,
+  /// services, hours, address) is on by default; a caller's own orders and credit balance are opt-in,
+  /// because caller ID identifies a phone number, not a person.
+  shareCatalog           Boolean  @default(true) @map("share_catalog")
+  shareOrderStatus       Boolean  @default(false) @map("share_order_status")
+  shareCreditBalance     Boolean  @default(false) @map("share_credit_balance")
+  /// Where a transfer rings. NULL falls back to the server-wide VOICE_TRANSFER_NUMBER, if set.
+  transferNumber         String?  @map("transfer_number")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3395,14 +3525,50 @@ model Competitor {
   /// Ad Library lookup. Left unset, that endpoint returns an empty, honestly-disclosed result
   /// rather than guessing a page from the Google-Place-based `platformRef`.
   metaPageId       String?  @map("meta_page_id")
+  /// How closely the owner wants this competitor watched — `watch_closely` | `keep_an_eye` |
+  /// `background`. An owner-set label the Competitive Insights screens sort and filter by.
+  priority         String   @default("keep_an_eye")
+  /// Public Instagram username (no `@`) — lets Competitive Insights read this competitor's public
+  /// posting via Instagram Business Discovery, using the business's own connected Instagram account.
+  instagramHandle  String?  @map("instagram_handle")
 
-  snapshots CompetitorSnapshot[]
+  snapshots    CompetitorSnapshot[]
+  observations CompetitorObservation[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId])
   @@map("competitors")
+}
+
+/// Something the owner saw on a competitor's public pages and recorded by hand — a listed price, a
+/// service, a public offer. Public Places/Meta data cannot reveal any of these, so this is the only
+/// honest source for them. Rows are append-only: a price change is a NEW row for the same label, so
+/// the history of what a price used to be is never lost.
+model CompetitorObservation {
+  id           String     @id @default(uuid())
+  businessId   String     @map("business_id")
+  business     Business   @relation(fields: [businessId], references: [id])
+  competitorId String     @map("competitor_id")
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  /// `price` | `service` | `offer`
+  kind         String
+  /// The service/product name, or the offer's wording.
+  label        String
+  /// Listed price. Null when the competitor lists the item without publishing a price.
+  amount       Decimal?   @db.Decimal(12, 2)
+  /// Offers only — when the offer ends, if the competitor published an end date.
+  endsAt       DateTime?  @map("ends_at")
+  /// Where it was seen ("Their website", "Instagram"…). Free text the owner types.
+  source       String?
+  /// When the owner saw it (not necessarily when it was entered).
+  observedAt   DateTime   @default(now()) @map("observed_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([businessId, observedAt])
+  @@index([competitorId, kind, label])
+  @@map("competitor_observations")
 }
 
 /// Historical weekly rating snapshots (BE-063 real backend) — Competitor itself only ever holds the latest values.

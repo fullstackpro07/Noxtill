@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { S3Service } from '../common/storage/s3.service';
+import { AuditService } from '../common/audit/audit.service';
 import { PhoneCallOutcome, PhoneCallStatus } from '@prisma/client';
 
 /** Call history, missed-call recovery funnel, and analytics (UPD-BE-059) — all thin reads over the real `PhoneCall` log. */
@@ -9,6 +10,7 @@ export class VoiceQueryService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly s3: S3Service,
+    private readonly audit: AuditService,
   ) {}
 
   listCalls() {
@@ -30,7 +32,15 @@ export class VoiceQueryService {
     if (!call.recordingKey) {
       return { url: null };
     }
-    return { url: await this.s3.getSignedDownloadUrl(call.recordingKey) };
+    const url = await this.s3.getSignedDownloadUrl(call.recordingKey);
+    // Every time staff open a recording for playback the access is written to the append-only audit
+    // trail — who, which call, when. (The link is logged when it is issued, i.e. when playback starts.)
+    await this.audit.log({
+      entity: 'PhoneCall',
+      entityId: call.id,
+      action: 'call.recording_played',
+    });
+    return { url };
   }
 
   listMissedCalls() {

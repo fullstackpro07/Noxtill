@@ -21,12 +21,30 @@ import { VoiceQueryService } from './voice-query.service';
 import { VoiceSettingsService } from './voice-settings.service';
 import { VoiceQueueService } from './voice-queue.service';
 import { VoiceLiveJoinService, type JoinRole } from './voice-live-join.service';
+import { VoiceCallWorkspaceService } from './voice-call-workspace.service';
+import { VoiceRoutingRulesService } from './voice-routing-rules.service';
+import { VoiceKnowledgeService } from './voice-knowledge.service';
 import { PollyVoiceService } from './polly-voice.service';
 import { UpdateVoiceSettingsDto } from './dto/update-voice-settings.dto';
+import { AssignCallDto } from './dto/assign-call.dto';
+import {
+  AddCallNoteDto,
+  TransferLiveCallDto,
+} from './dto/call-workspace-actions.dto';
+import {
+  CreateRoutingRuleDto,
+  ReorderRoutingRulesDto,
+  UpdateRoutingRuleDto,
+} from './dto/routing-rule.dto';
+import {
+  CreateKnowledgeEntryDto,
+  UpdateKnowledgeEntryDto,
+} from './dto/knowledge-entry.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { VoiceInsightsService } from './voice-insights.service';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { verifyTwilioSignature } from '../common/webhooks/signature.util';
 
@@ -36,9 +54,13 @@ export class VoiceController {
     private readonly telephony: TelephonyService,
     private readonly voiceCall: VoiceCallService,
     private readonly voiceQuery: VoiceQueryService,
+    private readonly voiceInsights: VoiceInsightsService,
     private readonly voiceSettings: VoiceSettingsService,
     private readonly voiceQueue: VoiceQueueService,
     private readonly voiceLiveJoin: VoiceLiveJoinService,
+    private readonly voiceWorkspace: VoiceCallWorkspaceService,
+    private readonly voiceRoutingRules: VoiceRoutingRulesService,
+    private readonly voiceKnowledge: VoiceKnowledgeService,
     private readonly pollyVoice: PollyVoiceService,
     private readonly config: ConfigService,
   ) {}
@@ -52,6 +74,54 @@ export class VoiceController {
   @Post('voice/provision-number')
   provisionNumber(@CurrentUser() user: AuthenticatedUser) {
     return this.telephony.provisionNumber(user.businessId);
+  }
+
+  /** The AI Phone workspace's single read: recent calls enriched with customer match, repeat-caller and after-hours facts. */
+  @Get('voice/insights')
+  insights(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('days') days?: string,
+  ) {
+    return this.voiceInsights.insights(
+      user.businessId,
+      days ? Number(days) : undefined,
+    );
+  }
+
+  @Get('voice/calls/:id/context')
+  callContext(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.voiceInsights.context(user.businessId, id);
+  }
+
+  /** Knowledge/Quality screens' real "top question clusters" table. */
+  @Get('voice/clusters')
+  clusters(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('days') days?: string,
+  ) {
+    return this.voiceInsights.questionClusters(
+      user.businessId,
+      days ? Number(days) : undefined,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/assign')
+  assignCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() body: AssignCallDto,
+  ) {
+    return this.voiceInsights.assign(user.businessId, id, body.userId ?? null);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/summary')
+  summariseCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceInsights.generateSummary(user.businessId, id);
   }
 
   @Get('voice/calls')
@@ -114,6 +184,124 @@ export class VoiceController {
     @Param('id') id: string,
   ) {
     return this.voiceLiveJoin.takeOver(user.businessId, user.sub, id);
+  }
+
+  /** AI Phone, full — transfers a call that is genuinely still live to a person. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/transfer')
+  transferCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: TransferLiveCallDto,
+  ) {
+    return this.voiceWorkspace.transfer(user.businessId, id, dto);
+  }
+
+  /** AI Phone, full — ends a call that is genuinely still live. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/end')
+  endCall(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.voiceWorkspace.endCall(user.businessId, id);
+  }
+
+  @Get('voice/calls/:id/notes')
+  listCallNotes(@Param('id') id: string) {
+    return this.voiceWorkspace.listNotes(id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/notes')
+  addCallNote(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: AddCallNoteDto,
+  ) {
+    return this.voiceWorkspace.addNote(user.businessId, user.sub, id, dto);
+  }
+
+  /** AI Phone, full — permanently deletes a call's recording audio and transcript text; keeps the call log itself. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/delete-recording')
+  deleteRecording(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceWorkspace.deleteRecording(user.businessId, id);
+  }
+
+  @Get('voice/routing-rules')
+  listRoutingRules(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceRoutingRules.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/routing-rules')
+  createRoutingRule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateRoutingRuleDto,
+  ) {
+    return this.voiceRoutingRules.create(user.businessId, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/routing-rules/reorder')
+  reorderRoutingRules(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ReorderRoutingRulesDto,
+  ) {
+    return this.voiceRoutingRules.reorder(user.businessId, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/routing-rules/:id')
+  updateRoutingRule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateRoutingRuleDto,
+  ) {
+    return this.voiceRoutingRules.update(user.businessId, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/routing-rules/:id/delete')
+  removeRoutingRule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceRoutingRules.remove(user.businessId, id);
+  }
+
+  @Get('voice/knowledge')
+  listKnowledge() {
+    return this.voiceKnowledge.list();
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/knowledge')
+  createKnowledge(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateKnowledgeEntryDto,
+  ) {
+    return this.voiceKnowledge.create(user.businessId, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/knowledge/:id')
+  updateKnowledge(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateKnowledgeEntryDto,
+  ) {
+    return this.voiceKnowledge.update(user.businessId, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/knowledge/:id/delete')
+  removeKnowledge(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceKnowledge.remove(user.businessId, id);
   }
 
   /** Call Queue (UPD-BE-129) — registered before nothing dynamic collides; every segment here is static. */

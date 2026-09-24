@@ -1,5 +1,5 @@
-import { CallOverviewView } from "@/components/receptionist/call-overview-view";
+import { OverviewScreen } from "@/components/receptionist/screens/overview-screen";
 
 export default function ReceptionistPage() {
-  return <CallOverviewView />;
+  return <OverviewScreen />;
 }

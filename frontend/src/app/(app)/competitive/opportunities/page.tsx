@@ -1,5 +1,5 @@
-import { OpportunitiesView } from "@/components/competitive/opportunities-view";
+import { redirect } from "next/navigation";
 
-export default function CompetitiveOpportunitiesPage() {
-  return <OpportunitiesView />;
+export default function CompetitiveOpportunitiesRedirect() {
+  redirect("/competitive/trends");
 }

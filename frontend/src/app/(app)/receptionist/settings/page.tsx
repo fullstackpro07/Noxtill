@@ -1,5 +1,5 @@
-import { ReceptionistSettingsView } from "@/components/receptionist/receptionist-settings-view";
+import { SettingsScreen } from "@/components/receptionist/screens/settings-screen";
 
-export default function ReceptionistSettingsPage() {
-  return <ReceptionistSettingsView />;
+export default function SettingsScreenPage() {
+  return <SettingsScreen />;
 }

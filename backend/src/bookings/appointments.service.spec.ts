@@ -253,6 +253,38 @@ describe('AppointmentsService (BE-054)', () => {
     expect(appointment.source).toBe('walk_in');
   });
 
+  it('gives every new booking the next human-readable number for its business, walk-ins and requests alike', async () => {
+    const a = await service.createWalkIn(businessId, {
+      serviceId: serviceProductId,
+      startsAt: '2026-08-20T10:00:00Z',
+      customerName: 'Numbered Nora',
+      customerPhone: `+1${Date.now()}n1`,
+    });
+    const b = await service.createRequest(businessId, {
+      serviceId: serviceProductId,
+      startsAt: '2026-08-20T12:00:00Z',
+      customerName: 'Numbered Nick',
+      customerPhone: `+1${Date.now()}n2`,
+    });
+    expect(a.bookingNo).not.toBeNull();
+    expect(b.bookingNo).toBe((a.bookingNo as number) + 1);
+  });
+
+  it('never hands two concurrent bookings the same booking number', async () => {
+    const results = await Promise.all(
+      [0, 1, 2, 3].map((i) =>
+        service.createWalkIn(businessId, {
+          serviceId: serviceProductId,
+          startsAt: `2026-08-21T${String(9 + i).padStart(2, '0')}:00:00Z`,
+          customerName: `Concurrent ${i}`,
+          customerPhone: `+1${Date.now()}c${i}`,
+        }),
+      ),
+    );
+    const numbers = results.map((r) => r.bookingNo);
+    expect(new Set(numbers).size).toBe(4);
+  });
+
   it('rejects a walk-in booking for an unknown service', async () => {
     await expect(
       service.createWalkIn(businessId, {

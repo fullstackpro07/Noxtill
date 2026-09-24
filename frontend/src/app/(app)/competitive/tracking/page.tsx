@@ -1,5 +1,5 @@
-import { CompetitorTrackingView } from "@/components/competitive/competitor-tracking-view";
+import { redirect } from "next/navigation";
 
-export default function CompetitorTrackingPage() {
-  return <CompetitorTrackingView />;
+export default function CompetitorTrackingRedirect() {
+  redirect("/competitive/competitors");
 }

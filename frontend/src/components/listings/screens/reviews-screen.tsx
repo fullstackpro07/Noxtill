@@ -37,14 +37,14 @@ export function ReviewsScreen() {
   return (
     <div className="flex flex-col gap-5">
       {/* Top Banner */}
-      <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-[#E6E8EC] bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2.5 rounded-[12px] border border-[#E6E8EC] bg-white p-4 shadow-sm">
         <Info className="h-4 w-4 flex-shrink-0 text-[#7A8798]" />
         <div className="min-w-[220px] flex-1 text-[11.5px] leading-relaxed text-[#5B6675]">
           Reviews live in Reviews &amp; Reputation. This screen shows a summary for your active location — there is no second review database anywhere in Noxtill.
         </div>
         <Link
           href="/reviews"
-          className="flex h-[30px] items-center gap-1.5 rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
+          className="flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
         >
           <ExternalLink className="h-3.5 w-3.5" />
           <span>Open Reviews</span>
@@ -57,7 +57,7 @@ export function ReviewsScreen() {
           <div
             key={idx}
             onClick={() => notify(`${k.label} · ${k.value}`, k.meta)}
-            className={`cursor-pointer rounded-xl border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
+            className={`cursor-pointer rounded-[12px] border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
               k.tone === "red"
                 ? "border-[#FBD5D2]"
                 : k.tone === "amber"
@@ -139,7 +139,7 @@ export function ReviewsScreen() {
                     <td className="px-3 py-3 text-[11.5px] text-[#45505F] whitespace-nowrap">{br.providers.join(", ")}</td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">
                       {isCurrent && reviewsSummary?.averageRating ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-[#ECFDF3] px-2 py-0.5 font-mono text-[11px] font-extrabold text-[#15803D]">
+                        <span className="inline-flex items-center gap-1 rounded-[6px] bg-[#ECFDF3] px-2 py-0.5 font-mono text-[11px] font-extrabold text-[#15803D]">
                           <Star className="h-3 w-3 fill-[#15803D]" />
                           {reviewsSummary.averageRating.toFixed(1)}
                         </span>
@@ -156,7 +156,7 @@ export function ReviewsScreen() {
                           e.stopPropagation();
                           notify(isCurrent ? "Opening Reviews & Reputation" : "Switch location first", isCurrent ? "Replies are written and approved there." : "This screen only reads reviews for the currently active location.");
                         }}
-                        className="inline-flex h-[30px] items-center rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+                        className="inline-flex h-[30px] items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
                       >
                         {isCurrent ? "View" : "Switch location"}
                       </button>

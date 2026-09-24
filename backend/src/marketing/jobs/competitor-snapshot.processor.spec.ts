@@ -80,4 +80,67 @@ describe('CompetitorSnapshotProcessor (BE-063)', () => {
     expect(history).toHaveLength(1);
     expect(Number(history[0].rating)).toBe(4.6);
   });
+
+  describe('scan frequency (Competitive Settings)', () => {
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
+    const seed = async (ref: string, snapshotDaysAgo: number) => {
+      const c = await prisma.competitor.create({
+        data: { businessId, name: ref, platformRef: ref },
+      });
+      await prisma.competitorSnapshot.create({
+        data: {
+          competitorId: c.id,
+          rating: 4.0,
+          reviewsCount: 10,
+          capturedAt: daysAgo(snapshotDaysAgo),
+        },
+      });
+    };
+    const refsLookedUp = () =>
+      (googlePlaces.fetchPlaceSnapshot.mock.calls as [string][]).map(
+        (c) => c[0],
+      );
+
+    afterAll(async () => {
+      await prisma.competitiveSettings.deleteMany({ where: { businessId } });
+    });
+
+    it('uses the default 7 days when the business has never set a frequency', async () => {
+      googlePlaces.fetchPlaceSnapshot.mockResolvedValue(null);
+      await seed('freq-default-not-due', 5);
+      await seed('freq-default-due', 8);
+
+      await processor.runSnapshot();
+
+      expect(refsLookedUp()).toContain('freq-default-due');
+      expect(refsLookedUp()).not.toContain('freq-default-not-due');
+    });
+
+    it('honours a shorter frequency the owner has chosen', async () => {
+      await prisma.competitiveSettings.upsert({
+        where: { businessId },
+        create: { businessId, scanFrequencyDays: 2 },
+        update: { scanFrequencyDays: 2 },
+      });
+      googlePlaces.fetchPlaceSnapshot.mockResolvedValue(null);
+      await seed('freq-two-not-due', 1);
+      await seed('freq-two-due', 3);
+
+      await processor.runSnapshot();
+
+      expect(refsLookedUp()).toContain('freq-two-due');
+      expect(refsLookedUp()).not.toContain('freq-two-not-due');
+    });
+
+    it('always looks up a competitor that has never been snapshotted', async () => {
+      googlePlaces.fetchPlaceSnapshot.mockResolvedValue(null);
+      await prisma.competitor.create({
+        data: { businessId, name: 'never', platformRef: 'freq-never' },
+      });
+
+      await processor.runSnapshot();
+
+      expect(refsLookedUp()).toContain('freq-never');
+    });
+  });
 });

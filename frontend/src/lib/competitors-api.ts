@@ -8,7 +8,13 @@ export interface RawCompetitor {
   lastRating: string | null;
   lastReviewsCount: number | null;
   metaPageId: string | null;
+  priority: CompetitorPriority;
+  /** Public Instagram username (no `@`), used to read their posting via Instagram Business Discovery. */
+  instagramHandle: string | null;
+  createdAt: string;
 }
+
+export type CompetitorPriority = "watch_closely" | "keep_an_eye" | "background";
 
 /** Raw shape (id/platformRef/metaPageId included) — for screens that need more than the card-friendly `Competitor` shape. */
 export function fetchCompetitorsRaw(): Promise<RawCompetitor[]> {
@@ -47,6 +53,14 @@ export function addCompetitor(name: string): Promise<RawCompetitor> {
   });
 }
 
+/** Same free-text add, with an explicit watch priority (kept separate so `addCompetitor` stays safe to pass straight to `mutationFn`). */
+export function addCompetitorByName(name: string, priority: CompetitorPriority): Promise<RawCompetitor> {
+  return apiFetch<RawCompetitor>("/competitors", {
+    method: "POST",
+    body: JSON.stringify({ name, platformRef: name, priority }),
+  });
+}
+
 export interface PlaceSearchResult {
   placeId: string;
   name: string;
@@ -61,14 +75,17 @@ export function searchCompetitorPlaces(query: string): Promise<PlaceSearchResult
 }
 
 /** Add via a selected search result — platformRef is the real Google Place ID. */
-export function addCompetitorFromPlace(place: PlaceSearchResult): Promise<RawCompetitor> {
+export function addCompetitorFromPlace(place: PlaceSearchResult, priority?: CompetitorPriority): Promise<RawCompetitor> {
   return apiFetch<RawCompetitor>("/competitors", {
     method: "POST",
-    body: JSON.stringify({ name: place.name, platformRef: place.placeId }),
+    body: JSON.stringify({ name: place.name, platformRef: place.placeId, priority }),
   });
 }
 
-export function updateCompetitor(id: string, input: { name?: string; metaPageId?: string }): Promise<RawCompetitor> {
+export function updateCompetitor(
+  id: string,
+  input: { name?: string; metaPageId?: string; priority?: CompetitorPriority; instagramHandle?: string },
+): Promise<RawCompetitor> {
   return apiFetch<RawCompetitor>(`/competitors/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
@@ -123,10 +140,19 @@ export interface CompetitorReview {
   relativeTime: string;
 }
 
+/** How many of the same seven public checks a Google listing fills in — the same checklist your own listing is scored on. */
+export interface PublicListingCompleteness {
+  percent: number;
+  checks: { key: string; label: string; present: boolean }[];
+}
+
 export interface CompetitorDetails {
   hours: string[] | null;
   reviews: CompetitorReview[];
   photos: string[];
+  /** Public listing details from Google — null when there is no Google listing to read. */
+  profile: { website: string | null; phone: string | null; address: string | null; categories: string[] } | null;
+  completeness: PublicListingCompleteness | null;
 }
 
 /**

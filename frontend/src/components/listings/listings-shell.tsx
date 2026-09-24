@@ -52,13 +52,13 @@ export function ListingsShell({ children }: { children: React.ReactNode }) {
     title: currentTitle,
     subtitle: "Business Listings · local presence",
     search: (
-      <div className="relative flex items-center">
+      <div className="relative flex min-w-0 items-center">
         <input
           type="text"
           placeholder="Ask — “which listings need attention?”"
           onClick={() => askAI("attention")}
           readOnly
-          className="h-[34px] w-[260px] rounded-full border border-[#E1E5EB] bg-[#F8FAFC] pl-8 pr-3 text-[12px] text-[#0F172A] placeholder:text-[#94A3B8] cursor-pointer hover:border-[#CBD5E1] transition-colors"
+          className="h-[34px] w-full min-w-0 truncate rounded-full border border-[#E1E5EB] bg-[#F8FAFC] pl-8 pr-3 text-[12px] text-[#0F172A] placeholder:text-[#94A3B8] cursor-pointer hover:border-[#CBD5E1] transition-colors"
         />
         <Sparkles className="absolute left-2.5 h-3.5 w-3.5 text-[#0066FF]" />
       </div>
@@ -153,7 +153,7 @@ export function ListingsShell({ children }: { children: React.ReactNode }) {
               onPrimary: () => router.push("/listings/all"),
             })
           }
-          className="inline-flex h-[34px] items-center gap-1.5 rounded-lg bg-[#16A34A] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D]"
+          className="inline-flex h-[34px] items-center gap-1.5 rounded-[8px] bg-[#16A34A] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D]"
         >
           <Plus className="h-3.5 w-3.5" />
           <span className="whitespace-nowrap">Add listing</span>

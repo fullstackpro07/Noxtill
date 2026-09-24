@@ -43,14 +43,14 @@ export function PostsScreen() {
   return (
     <div className="flex flex-col gap-5">
       {/* Top Banner */}
-      <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-[#E6E8EC] bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2.5 rounded-[12px] border border-[#E6E8EC] bg-white p-4 shadow-sm">
         <Info className="h-4 w-4 flex-shrink-0 text-[#7A8798]" />
         <div className="min-w-[220px] flex-1 text-[11.5px] leading-relaxed text-[#5B6675]">
           These are Google Business Profile updates, not organic social posts. Social Media Management owns those. Only Google supports posts among the connected directories — Bing and Apple have no posts API.
         </div>
         <button
           onClick={() => setIsComposing((v) => !v)}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]"
+          className="flex h-8 items-center gap-1.5 rounded-[8px] bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]"
         >
           {isComposing ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
           <span>{isComposing ? "Cancel" : "New post"}</span>
@@ -66,14 +66,14 @@ export function PostsScreen() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="What's the update?"
-              className="rounded-lg border border-[#D5DAE2] px-3 py-2 text-[12.5px] text-[#0F172A]"
+              className="rounded-[8px] border border-[#D5DAE2] px-3 py-2 text-[12.5px] text-[#0F172A]"
             />
           </label>
           <div className="mt-3 flex justify-end gap-2">
-            <button onClick={() => setIsComposing(false)} className="flex h-9 items-center rounded-lg border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]">
+            <button onClick={() => setIsComposing(false)} className="flex h-9 items-center rounded-[8px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]">
               Cancel
             </button>
-            <button disabled={isSaving} onClick={handleCreate} className="flex h-9 items-center rounded-lg bg-[#16A34A] px-4 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:opacity-60">
+            <button disabled={isSaving} onClick={handleCreate} className="flex h-9 items-center rounded-[8px] bg-[#16A34A] px-4 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:opacity-60">
               {isSaving ? "Saving…" : "Save as draft"}
             </button>
           </div>
@@ -121,14 +121,14 @@ export function PostsScreen() {
                         {p.status === "draft" && (
                           <button
                             onClick={() => publishPostAction(p.id)}
-                            className="inline-flex h-[30px] items-center rounded-lg bg-[#16A34A] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]"
+                            className="inline-flex h-[30px] items-center rounded-[8px] bg-[#16A34A] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]"
                           >
                             Publish
                           </button>
                         )}
                         <button
                           onClick={() => deletePostAction(p.id)}
-                          className="inline-flex h-[30px] items-center rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+                          className="inline-flex h-[30px] items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
                         >
                           Delete
                         </button>

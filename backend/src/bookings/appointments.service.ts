@@ -14,6 +14,7 @@ import { CreateAppointmentRequestDto } from './dto/create-appointment-request.dt
 import { DeclineAppointmentRequestDto } from './dto/decline-appointment-request.dto';
 import { SuggestAlternativeDto } from './dto/suggest-alternative.dto';
 import { assertSlotAvailable } from './booking-lock.util';
+import { nextBookingNo } from './booking-number.util';
 import {
   APPOINTMENT_STATUS_TRANSITIONS,
   BOOKING_ERROR_CODES,
@@ -393,6 +394,7 @@ export class AppointmentsService {
           endsAt,
           status: AppointmentStatus.confirmed,
           source,
+          bookingNo: await nextBookingNo(tx, businessId),
         },
       });
 
@@ -481,6 +483,7 @@ export class AppointmentsService {
           startsAt,
           endsAt,
           status: AppointmentStatus.requested,
+          bookingNo: await nextBookingNo(tx, businessId),
         },
         include: {
           service: true,

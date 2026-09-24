@@ -123,7 +123,7 @@ export function ProfileScreen() {
       {/* Business Profile Top Card */}
       <div className="rounded-[13px] border border-[#E6E8EC] bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start gap-3.5">
-          <div className="flex h-13 w-13 flex-shrink-0 items-center justify-center rounded-xl bg-[#16A34A] text-[20px] font-extrabold text-white">
+          <div className="flex h-13 w-13 flex-shrink-0 items-center justify-center rounded-[12px] bg-[#16A34A] text-[20px] font-extrabold text-white">
             {bizName ? bizName[0].toUpperCase() : "?"}
           </div>
           <div className="min-w-[220px] flex-1">
@@ -147,7 +147,7 @@ export function ProfileScreen() {
           </div>
           <button
             onClick={startEditing}
-            className="flex h-[30px] items-center gap-1.5 rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
+            className="flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
           >
             <Pencil className="h-3.5 w-3.5" />
             <span>Edit profile</span>
@@ -159,34 +159,34 @@ export function ProfileScreen() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-[11.5px] font-bold text-[#5B6675]">
                 Business name
-                <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="h-9 rounded-lg border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
+                <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="h-9 rounded-[8px] border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
               </label>
               <label className="flex flex-col gap-1 text-[11.5px] font-bold text-[#5B6675]">
                 Phone
-                <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="h-9 rounded-lg border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
+                <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="h-9 rounded-[8px] border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
               </label>
               <label className="flex flex-col gap-1 text-[11.5px] font-bold text-[#5B6675]">
                 Website
-                <input value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} className="h-9 rounded-lg border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
+                <input value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} className="h-9 rounded-[8px] border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
               </label>
               <label className="flex flex-col gap-1 text-[11.5px] font-bold text-[#5B6675]">
                 Address
-                <input value={form.addressLine1} onChange={(e) => setForm((f) => ({ ...f, addressLine1: e.target.value }))} className="h-9 rounded-lg border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
+                <input value={form.addressLine1} onChange={(e) => setForm((f) => ({ ...f, addressLine1: e.target.value }))} className="h-9 rounded-[8px] border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
               </label>
               <label className="flex flex-col gap-1 text-[11.5px] font-bold text-[#5B6675]">
                 Category
-                <input value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className="h-9 rounded-lg border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
+                <input value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className="h-9 rounded-[8px] border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
               </label>
               <label className="flex flex-col gap-1 text-[11.5px] font-bold text-[#5B6675] sm:col-span-2">
                 Description
-                <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="rounded-lg border border-[#D5DAE2] px-3 py-2 text-[12.5px] text-[#0F172A]" />
+                <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="rounded-[8px] border border-[#D5DAE2] px-3 py-2 text-[12.5px] text-[#0F172A]" />
               </label>
             </div>
             <div className="mt-3 flex justify-end gap-2">
-              <button onClick={() => setIsEditing(false)} className="flex h-9 items-center gap-1.5 rounded-lg border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]">
+              <button onClick={() => setIsEditing(false)} className="flex h-9 items-center gap-1.5 rounded-[8px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]">
                 <X className="h-3.5 w-3.5" /> Cancel
               </button>
-              <button disabled={isSaving} onClick={save} className="flex h-9 items-center rounded-lg bg-[#16A34A] px-4 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:opacity-60">
+              <button disabled={isSaving} onClick={save} className="flex h-9 items-center rounded-[8px] bg-[#16A34A] px-4 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:opacity-60">
                 {isSaving ? "Saving…" : "Save changes"}
               </button>
             </div>
@@ -275,7 +275,7 @@ export function ProfileScreen() {
                     },
                   })
                 }
-                className="flex h-[30px] items-center rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
+                className="flex h-[30px] items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
               >
                 Add special hours
               </button>

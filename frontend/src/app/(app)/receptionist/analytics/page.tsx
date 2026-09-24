@@ -1,5 +1,5 @@
-import { VoiceAnalyticsView } from "@/components/receptionist/voice-analytics-view";
+import { AnalyticsScreen } from "@/components/receptionist/screens/analytics-screen";
 
-export default function VoiceAnalyticsPage() {
-  return <VoiceAnalyticsView />;
+export default function AnalyticsScreenPage() {
+  return <AnalyticsScreen />;
 }

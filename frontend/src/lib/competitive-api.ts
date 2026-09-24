@@ -61,3 +61,75 @@ export interface UpdateCompetitiveSettingsInput {
 export function updateCompetitiveSettings(input: UpdateCompetitiveSettingsInput): Promise<CompetitiveSettings> {
   return apiFetch<CompetitiveSettings>("/competitive/settings", { method: "PATCH", body: JSON.stringify(input) });
 }
+
+export type CompetitorObservationKind = "price" | "service" | "offer";
+
+/** Something the owner saw on a competitor's public pages and recorded by hand. Append-only — a price change is a new row. */
+export interface CompetitorObservation {
+  id: string;
+  competitorId: string;
+  kind: CompetitorObservationKind;
+  label: string;
+  /** Null when the competitor lists the item without publishing a price. */
+  amount: number | null;
+  endsAt: string | null;
+  source: string | null;
+  observedAt: string;
+  createdAt: string;
+}
+
+export interface CreateCompetitorObservationInput {
+  competitorId: string;
+  kind: CompetitorObservationKind;
+  label: string;
+  amount?: number;
+  endsAt?: string;
+  source?: string;
+  observedAt?: string;
+}
+
+export function fetchCompetitorObservations(competitorId?: string): Promise<CompetitorObservation[]> {
+  const query = competitorId ? `?competitorId=${encodeURIComponent(competitorId)}` : "";
+  return apiFetch<CompetitorObservation[]>(`/competitor-observations${query}`);
+}
+
+export function createCompetitorObservation(input: CreateCompetitorObservationInput): Promise<CompetitorObservation> {
+  return apiFetch<CompetitorObservation>("/competitor-observations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function removeCompetitorObservation(id: string): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/competitor-observations/${id}`, { method: "DELETE" });
+}
+
+/** A competitor's public Instagram posting, read via Instagram Business Discovery. A non-"ok" status is an explicit reason it could not be read — never a zero. */
+export type CompetitorSocial =
+  | {
+      status: "ok";
+      handle: string;
+      followers: number | null;
+      mediaCount: number | null;
+      postsLast30: number;
+      postsPrev30: number;
+      /** The sample was full, so the real count may be higher. */
+      capped: boolean;
+      formats: { image: number; video: number; carousel: number };
+      topics: string[];
+      latestAt: string | null;
+    }
+  | { status: "no_handle" | "not_connected" | "unavailable"; message: string };
+
+export function fetchCompetitorSocial(competitorId: string): Promise<CompetitorSocial> {
+  return apiFetch<CompetitorSocial>(`/competitive/competitors/${competitorId}/social`);
+}
+
+/** Your own listing scored on the same seven public checks as a competitor's Google listing — null until a Master Record exists. */
+export function fetchOwnListingCompleteness(): Promise<{ percent: number; checks: { key: string; label: string; present: boolean }[] } | null> {
+  return apiFetch<{ percent: number; checks: { key: string; label: string; present: boolean }[] } | null>("/competitive/listing-completeness");
+}
+
+export type WeeklyReportResult = { sent: true; recipient: string } | { sent: false; reason: "no_recipient" | "send_failed"; message: string };
+
+/** Sends the weekly report to the saved recipient right now, so the setup can be checked. */
+export function sendCompetitiveWeeklyReportNow(): Promise<WeeklyReportResult> {
+  return apiFetch<WeeklyReportResult>("/competitive/weekly-report/send-now", { method: "POST" });
+}

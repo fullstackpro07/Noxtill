@@ -7,6 +7,10 @@ const DEFAULTS = {
   responseTimeoutSeconds: 5,
   queueHoldMessage: null,
   customIntents: [],
+  transferNumber: null,
+  shareCatalog: true,
+  shareOrderStatus: false,
+  shareCreditBalance: false,
 };
 
 /**

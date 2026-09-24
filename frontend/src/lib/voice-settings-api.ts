@@ -12,6 +12,14 @@ export interface VoiceSettings {
   responseTimeoutSeconds: number;
   queueHoldMessage: string | null;
   customIntents: CustomIntent[];
+  /** Where a transfer rings; null falls back to the server-wide transfer number, if any. */
+  transferNumber: string | null;
+  /** May the AI read a matching product/service's price and stock to answer a caller. On by default. */
+  shareCatalog: boolean;
+  /** May the AI read a caller's OWN recent order status (caller ID must match a saved customer). Off by default. */
+  shareOrderStatus: boolean;
+  /** May the AI read a caller's OWN credit balance (caller ID must match a saved customer). Off by default. */
+  shareCreditBalance: boolean;
 }
 
 export interface UpdateVoiceSettingsInput {
@@ -19,6 +27,10 @@ export interface UpdateVoiceSettingsInput {
   responseTimeoutSeconds?: number;
   queueHoldMessage?: string | null;
   customIntents?: CustomIntent[];
+  transferNumber?: string | null;
+  shareCatalog?: boolean;
+  shareOrderStatus?: boolean;
+  shareCreditBalance?: boolean;
 }
 
 /**

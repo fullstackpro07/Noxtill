@@ -7,6 +7,8 @@ import { KeywordsService } from './keywords.service';
 import { CampaignsController } from './campaigns.controller';
 import { ReferralsController } from './referrals.controller';
 import { CompetitorsController } from './competitors.controller';
+import { CompetitorObservationsController } from './competitor-observations.controller';
+import { CompetitorObservationsService } from './competitor-observations.service';
 import { KeywordsController } from './keywords.controller';
 import { OverviewController } from './overview.controller';
 import { MarketingOverviewService } from './overview.service';
@@ -56,6 +58,7 @@ import { MarketingSettingsController } from './marketing-settings.controller';
     CampaignsController,
     ReferralsController,
     CompetitorsController,
+    CompetitorObservationsController,
     KeywordsController,
     OverviewController,
     CouponsController,
@@ -70,6 +73,7 @@ import { MarketingSettingsController } from './marketing-settings.controller';
     CampaignsService,
     ReferralsService,
     CompetitorsService,
+    CompetitorObservationsService,
     KeywordsService,
     MarketingOverviewService,
     CompetitorSnapshotScheduler,

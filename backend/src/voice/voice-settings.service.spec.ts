@@ -56,6 +56,12 @@ describe('VoiceSettingsService (Receptionist Settings depth fix, UPD-FE-051e)', 
     expect(result.voiceId).toBeNull();
     expect(result.responseTimeoutSeconds).toBe(5);
     expect(result.customIntents).toEqual([]);
+    // AI Phone, full: catalog sharing defaults on; a verified caller's own order/credit stays off
+    // until the owner opts in, since caller ID is not proof of identity.
+    expect(result.shareCatalog).toBe(true);
+    expect(result.shareOrderStatus).toBe(false);
+    expect(result.shareCreditBalance).toBe(false);
+    expect(result.transferNumber).toBeNull();
   });
 
   it('update() upserts a real row and persists every field', async () => {
@@ -64,14 +70,23 @@ describe('VoiceSettingsService (Receptionist Settings depth fix, UPD-FE-051e)', 
       responseTimeoutSeconds: 10,
       queueHoldMessage: 'We will call you back soon.',
       customIntents: [{ name: 'complaint', priority: 1 }],
+      transferNumber: '+15551230000',
+      shareCatalog: false,
+      shareOrderStatus: true,
+      shareCreditBalance: true,
     });
     expect(updated.voiceId).toBe('Polly.Matthew');
     expect(updated.responseTimeoutSeconds).toBe(10);
     expect(updated.queueHoldMessage).toBe('We will call you back soon.');
     expect(updated.customIntents).toEqual([{ name: 'complaint', priority: 1 }]);
+    expect(updated.transferNumber).toBe('+15551230000');
+    expect(updated.shareCatalog).toBe(false);
+    expect(updated.shareOrderStatus).toBe(true);
+    expect(updated.shareCreditBalance).toBe(true);
 
     const fetched = await service.get(businessId);
     expect(fetched.id).not.toBeNull();
     expect(fetched.voiceId).toBe('Polly.Matthew');
+    expect(fetched.transferNumber).toBe('+15551230000');
   });
 });

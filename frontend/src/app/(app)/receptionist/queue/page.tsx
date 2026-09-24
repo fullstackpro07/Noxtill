@@ -1,5 +1,5 @@
-import { CallQueueView } from "@/components/receptionist/call-queue-view";
+import { QueueScreen } from "@/components/receptionist/screens/queue-screen";
 
-export default function CallQueuePage() {
-  return <CallQueueView />;
+export default function QueueScreenPage() {
+  return <QueueScreen />;
 }

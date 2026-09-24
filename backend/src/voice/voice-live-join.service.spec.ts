@@ -3,6 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AuditService } from '../common/audit/audit.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { VoiceLiveJoinService } from './voice-live-join.service';
 import { AppException } from '../common/filters/app.exception';
@@ -41,7 +42,11 @@ describe('VoiceLiveJoinService (Live Calls listen/take-over depth fix)', () => {
       TWILIO_AUTH_TOKEN: 'test-token',
       BACKEND_URL: 'http://localhost:5000/api/v1',
     });
-    service = new VoiceLiveJoinService(tenantPrisma, config);
+    service = new VoiceLiveJoinService(
+      tenantPrisma,
+      config,
+      new AuditService(tenantPrisma, cls as unknown as ClsService),
+    );
 
     const business = await prisma.business.create({
       data: {

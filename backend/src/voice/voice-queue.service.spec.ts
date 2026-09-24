@@ -1,6 +1,7 @@
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AuditService } from '../common/audit/audit.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { VoiceQueueService } from './voice-queue.service';
 import { PhoneCallOutcome, PhoneCallStatus } from '@prisma/client';
@@ -30,7 +31,10 @@ describe('VoiceQueueService (Call Queue, UPD-BE-129)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new VoiceQueueService(tenantPrisma);
+    service = new VoiceQueueService(
+      tenantPrisma,
+      new AuditService(tenantPrisma, cls as unknown as ClsService),
+    );
 
     const business = await prisma.business.create({
       data: { name: 'Voice Queue Test Biz', slug: `voice-queue-${Date.now()}` },

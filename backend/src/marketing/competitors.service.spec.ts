@@ -106,6 +106,27 @@ describe('CompetitorsService (BE-063)', () => {
     expect(created.platformRef).toBe('replacement');
   });
 
+  it('defaults priority to keep_an_eye and lets the owner change it', async () => {
+    const list = await service.list();
+    expect(list[0].priority).toBe('keep_an_eye');
+
+    const updated = await service.update(list[0].id, {
+      priority: 'watch_closely',
+    });
+    expect(updated.priority).toBe('watch_closely');
+  });
+
+  it('stores and clears an Instagram handle', async () => {
+    const list = await service.list();
+    const withHandle = await service.update(list[0].id, {
+      instagramHandle: 'freshfades',
+    });
+    expect(withHandle.instagramHandle).toBe('freshfades');
+
+    const cleared = await service.update(list[0].id, { instagramHandle: '' });
+    expect(cleared.instagramHandle).toBeNull();
+  });
+
   it('search() delegates straight to GooglePlacesService', async () => {
     const results = [
       {
@@ -187,6 +208,10 @@ describe('CompetitorsService (BE-063)', () => {
           },
         ],
         photoReferences: ['ref-1', 'ref-2'],
+        website: 'https://rival.example',
+        phone: '+92 300 1234567',
+        address: '12 Main Blvd, Lahore',
+        categories: ['Hair care'],
       });
       places.fetchPhoto.mockResolvedValue({
         buffer: Buffer.from('fake-image-bytes'),
@@ -206,6 +231,39 @@ describe('CompetitorsService (BE-063)', () => {
       expect(places.fetchPlaceDetails).toHaveBeenCalledWith('place-detail-1');
     });
 
+    it('details() returns the public listing profile and a completeness score on the same seven checks', async () => {
+      const competitor = await prisma.competitor.create({
+        data: {
+          businessId,
+          name: 'Profile Test',
+          platformRef: 'place-profile-1',
+        },
+      });
+      places.fetchPlaceDetails.mockResolvedValue({
+        hours: ['Monday: 9AM–5PM'],
+        reviews: [],
+        photoReferences: ['ref-1'],
+        website: 'https://rival.example',
+        phone: null,
+        address: '12 Main Blvd, Lahore',
+        categories: ['Hair care'],
+      });
+      places.fetchPhoto.mockResolvedValue(null);
+
+      const result = await service.details(competitor.id);
+      expect(result.profile).toEqual({
+        website: 'https://rival.example',
+        phone: null,
+        address: '12 Main Blvd, Lahore',
+        categories: ['Hair care'],
+      });
+      // name, website, address, hours, category, photos present; phone missing → 6 of 7.
+      expect(result.completeness?.percent).toBe(86);
+      expect(
+        result.completeness?.checks.find((c) => c.key === 'phone')?.present,
+      ).toBe(false);
+    });
+
     it('details() degrades gracefully (not an error) when the place lookup fails', async () => {
       const competitor = await prisma.competitor.create({
         data: {
@@ -217,7 +275,13 @@ describe('CompetitorsService (BE-063)', () => {
       places.fetchPlaceDetails.mockResolvedValue(null);
 
       const result = await service.details(competitor.id);
-      expect(result).toEqual({ hours: null, reviews: [], photos: [] });
+      expect(result).toEqual({
+        hours: null,
+        reviews: [],
+        photos: [],
+        profile: null,
+        completeness: null,
+      });
     });
   });
 

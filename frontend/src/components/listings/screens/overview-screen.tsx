@@ -186,7 +186,7 @@ export function OverviewScreen() {
       {/* Local presence summary card */}
       <div className="rounded-[13px] border border-[#DDD3FE] bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#F5F3FF] text-[#6D28D9]">
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[8px] bg-[#F5F3FF] text-[#6D28D9]">
             <Sparkles className="h-4 w-4" />
           </div>
           <div className="text-[11px] font-bold tracking-wider uppercase text-[#6D28D9]">
@@ -216,7 +216,7 @@ export function OverviewScreen() {
               <Link
                 key={idx}
                 href={na.href}
-                className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-bold transition-colors ${
+                className={`flex h-8 items-center gap-1.5 rounded-[8px] border px-3 text-[12.5px] font-bold transition-colors ${
                   na.primary
                     ? "border-[#16A34A] bg-[#16A34A] text-white hover:bg-[#15803D]"
                     : "border-[#D5DAE2] bg-white text-[#45505F] hover:bg-[#F1F3F6]"
@@ -271,7 +271,7 @@ export function OverviewScreen() {
                 onPrimary: () => router.push("/listings/all"),
               })
             }
-            className={`cursor-pointer rounded-xl border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
+            className={`cursor-pointer rounded-[12px] border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
               k.tone === "red"
                 ? "border-[#FBD5D2]"
                 : k.tone === "amber"

@@ -1,5 +1,5 @@
-import { MissedCallsView } from "@/components/receptionist/missed-calls-view";
+import { redirect } from "next/navigation";
 
-export default function MissedCallsPage() {
-  return <MissedCallsView />;
+export default function MissedCallsRedirect() {
+  redirect("/receptionist/queue");
 }

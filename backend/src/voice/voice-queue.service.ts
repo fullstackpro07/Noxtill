@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AuditService } from '../common/audit/audit.service';
 import { PhoneCallOutcome, PhoneCallStatus } from '@prisma/client';
 
 const MIN_SAMPLES_FOR_ESTIMATE = 3;
@@ -22,7 +23,10 @@ interface CallTurn {
  */
 @Injectable()
 export class VoiceQueueService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   private pendingWhere() {
     return {
@@ -67,18 +71,30 @@ export class VoiceQueueService {
 
   async take(businessId: string, id: string) {
     await this.findPending(businessId, id);
-    return this.tenantPrisma.client.phoneCall.update({
+    const updated = await this.tenantPrisma.client.phoneCall.update({
       where: { id },
       data: { resolvedAt: new Date() },
     });
+    await this.audit.log({
+      entity: 'PhoneCall',
+      entityId: id,
+      action: 'call.marked_handled',
+    });
+    return updated;
   }
 
   async offerCallback(businessId: string, id: string) {
     await this.findPending(businessId, id);
-    return this.tenantPrisma.client.phoneCall.update({
+    const updated = await this.tenantPrisma.client.phoneCall.update({
       where: { id },
       data: { callbackRequestedAt: new Date() },
     });
+    await this.audit.log({
+      entity: 'PhoneCall',
+      entityId: id,
+      action: 'call.callback_offered',
+    });
+    return updated;
   }
 
   /** Bulk-resolves every currently pending item in one action. */

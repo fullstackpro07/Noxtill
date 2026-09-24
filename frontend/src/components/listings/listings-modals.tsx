@@ -491,7 +491,7 @@ export function ListingsModals() {
             {/* Drawer Header */}
             <div className="flex items-start gap-3.5 border-b border-[#EEF0F3] p-5">
               <div
-                className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${
+                className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[12px] border ${
                   selectedListing.statusTone === "red"
                     ? "bg-[#FEF3F2] border-[#FBD5D2] text-[#B42318]"
                     : selectedListing.statusTone === "amber"
@@ -525,7 +525,7 @@ export function ListingsModals() {
               </div>
               <button
                 onClick={closeOverlays}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]"
+                className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -534,7 +534,7 @@ export function ListingsModals() {
             {/* "What should I do?" — real, computed from this listing's own state */}
             <div className="border-b border-[#EEF0F3] bg-[#FBFAFF] p-5">
               <div className="flex items-center gap-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#F5F3FF] text-[#6D28D9]">
+                <div className="flex h-6 w-6 items-center justify-center rounded-[8px] bg-[#F5F3FF] text-[#6D28D9]">
                   <Sparkles className="h-3.5 w-3.5" />
                 </div>
                 <span className="text-[11px] font-bold tracking-wider uppercase text-[#6D28D9]">
@@ -550,7 +550,7 @@ export function ListingsModals() {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => openSyncPreview(selectedListing)}
-                  className="flex h-8 items-center rounded-lg bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D]"
+                  className="flex h-8 items-center rounded-[8px] bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D]"
                 >
                   Review changes
                 </button>
@@ -586,7 +586,7 @@ export function ListingsModals() {
                       secondary: "Close",
                     })
                   }
-                  className="flex h-8 items-center rounded-lg border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+                  className="flex h-8 items-center rounded-[8px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
                 >
                   Why?
                 </button>
@@ -616,7 +616,7 @@ export function ListingsModals() {
             {/* Section Content */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* Rows Table */}
-              <div className="overflow-hidden rounded-xl border border-[#E6E8EC]">
+              <div className="overflow-hidden rounded-[12px] border border-[#E6E8EC]">
                 <div className="flex items-center gap-2 border-b border-[#EEF0F3] bg-[#FAFBFC] px-3.5 py-2.5">
                   <span className="text-[11px] font-bold tracking-wider uppercase text-[#7A8798]">
                     {activeLdSection}
@@ -671,7 +671,7 @@ export function ListingsModals() {
 
               {/* Note */}
               {secData.note && (
-                <div className="flex items-start gap-2 rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] p-3 text-[11.5px] leading-relaxed text-[#5B6675]">
+                <div className="flex items-start gap-2 rounded-[12px] border border-[#E6E8EC] bg-[#FCFCFD] p-3 text-[11.5px] leading-relaxed text-[#5B6675]">
                   <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#7A8798]" />
                   <span>{secData.note}</span>
                 </div>
@@ -741,7 +741,7 @@ export function ListingsModals() {
                         return;
                       }
                     }}
-                    className={`flex h-[34px] flex-shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-bold transition-colors ${
+                    className={`flex h-[34px] flex-shrink-0 items-center gap-1.5 rounded-[8px] border px-3 text-[12.5px] font-bold transition-colors ${
                       a.risky
                         ? "border-[#FBD5D2] bg-white text-[#B42318] hover:bg-[#FEF3F2]"
                         : "border-[#D5DAE2] bg-white text-[#45505F] hover:bg-[#F1F3F6]"
@@ -784,7 +784,7 @@ export function ListingsModals() {
               </div>
               <button
                 onClick={closeOverlays}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]"
+                className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -794,7 +794,7 @@ export function ListingsModals() {
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* Optional Answer Box */}
               {panel.answer && (
-                <div className="rounded-xl border border-[#DDD3FE] bg-[#FBFAFF] p-3.5">
+                <div className="rounded-[12px] border border-[#DDD3FE] bg-[#FBFAFF] p-3.5">
                   <div className="text-[10.5px] font-bold tracking-wider uppercase text-[#6D28D9]">
                     {panel.answerLabel || "Answer"}
                   </div>
@@ -806,7 +806,7 @@ export function ListingsModals() {
 
               {/* Rows Table */}
               {panel.rows && panel.rows.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-[#E6E8EC]">
+                <div className="overflow-hidden rounded-[12px] border border-[#E6E8EC]">
                   {panel.rows.map((r, i) => (
                     <div
                       key={i}
@@ -850,7 +850,7 @@ export function ListingsModals() {
 
               {/* Note */}
               {panel.note && (
-                <div className="flex items-start gap-2 rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] p-3 text-[11.5px] leading-relaxed text-[#5B6675]">
+                <div className="flex items-start gap-2 rounded-[12px] border border-[#E6E8EC] bg-[#FCFCFD] p-3 text-[11.5px] leading-relaxed text-[#5B6675]">
                   <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#7A8798]" />
                   <span>{panel.note}</span>
                 </div>
@@ -861,7 +861,7 @@ export function ListingsModals() {
             <div className="flex justify-end gap-2 border-t border-[#EEF0F3] bg-[#FCFCFD] p-4">
               <button
                 onClick={closeOverlays}
-                className="flex h-9 items-center rounded-lg border border-[#D5DAE2] bg-white px-3.5 text-[13px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+                className="flex h-9 items-center rounded-[8px] border border-[#D5DAE2] bg-white px-3.5 text-[13px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
               >
                 {panel.secondary || "Close"}
               </button>
@@ -874,7 +874,7 @@ export function ListingsModals() {
                   }
                   closeOverlays();
                 }}
-                className={`flex h-9 items-center rounded-lg px-3.5 text-[13px] font-bold text-white ${
+                className={`flex h-9 items-center rounded-[8px] px-3.5 text-[13px] font-bold text-white ${
                   panel.primaryTone === "red"
                     ? "bg-[#DC2626] hover:bg-[#B91C1C]"
                     : "bg-[#16A34A] hover:bg-[#15803D]"
@@ -895,11 +895,11 @@ export function ListingsModals() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[560px] overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-150"
+            className="w-full max-w-[560px] overflow-hidden rounded-[18px] bg-white shadow-2xl animate-in zoom-in-95 duration-150"
           >
             <div className="flex items-start gap-3.5 p-6 pb-0">
               <div
-                className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${
+                className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] ${
                   confirm.tone === "red"
                     ? "bg-[#FEF3F2] text-[#B42318]"
                     : confirm.tone === "amber"
@@ -925,7 +925,7 @@ export function ListingsModals() {
               </div>
               <button
                 onClick={closeOverlays}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]"
+                className="flex h-7 w-7 items-center justify-center rounded-[8px] text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -933,7 +933,7 @@ export function ListingsModals() {
 
             {/* Rows diff */}
             {confirm.rows && confirm.rows.length > 0 && (
-              <div className="mx-6 mt-4 overflow-hidden rounded-xl border border-[#E6E8EC]">
+              <div className="mx-6 mt-4 overflow-hidden rounded-[12px] border border-[#E6E8EC]">
                 {confirm.rows.map((r, i) => (
                   <div
                     key={i}
@@ -962,7 +962,7 @@ export function ListingsModals() {
             <div className="mt-5 flex justify-end gap-2 border-t border-[#EEF0F3] bg-[#FCFCFD] p-4 px-6">
               <button
                 onClick={closeOverlays}
-                className="flex h-9 items-center rounded-lg border border-[#D5DAE2] bg-white px-4 text-[13px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+                className="flex h-9 items-center rounded-[8px] border border-[#D5DAE2] bg-white px-4 text-[13px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
               >
                 {confirm.cancel || "Cancel"}
               </button>
@@ -975,7 +975,7 @@ export function ListingsModals() {
                   }
                   closeOverlays();
                 }}
-                className={`flex h-9 items-center rounded-lg px-4 text-[13px] font-bold text-white ${
+                className={`flex h-9 items-center rounded-[8px] px-4 text-[13px] font-bold text-white ${
                   confirm.tone === "red"
                     ? "bg-[#DC2626] hover:bg-[#B91C1C]"
                     : "bg-[#16A34A] hover:bg-[#15803D]"
@@ -990,8 +990,8 @@ export function ListingsModals() {
 
       {/* 4. Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex w-[340px] max-w-[calc(100vw-32px)] items-start gap-3 rounded-xl border border-[#E6E8EC] border-l-4 border-l-[#16A34A] bg-white p-3.5 shadow-2xl animate-in slide-in-from-bottom-2 duration-150">
-          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-[#ECFDF3] text-[#15803D]">
+        <div className="fixed bottom-6 right-6 z-50 flex w-[340px] max-w-[calc(100vw-32px)] items-start gap-3 rounded-[12px] border border-[#E6E8EC] border-l-4 border-l-[#16A34A] bg-white p-3.5 shadow-2xl animate-in slide-in-from-bottom-2 duration-150">
+          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[8px] bg-[#ECFDF3] text-[#15803D]">
             <Check className="h-3.5 w-3.5" />
           </div>
           <div className="min-w-0 flex-1">

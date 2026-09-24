@@ -61,7 +61,7 @@ export function PhotosScreen() {
           <div
             key={idx}
             onClick={() => notify(`${k.label} · ${k.value}`, k.meta)}
-            className={`cursor-pointer rounded-xl border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
+            className={`cursor-pointer rounded-[12px] border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
               k.tone === "amber" ? "border-[#FDE49B]" : "border-[#E6E8EC]"
             }`}
           >
@@ -80,7 +80,7 @@ export function PhotosScreen() {
           <div className="text-[14px] font-extrabold text-[#0F172A]">Media library</div>
           <button
             onClick={() => setIsAdding((v) => !v)}
-            className="ml-auto flex h-8 items-center gap-1.5 rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+            className="ml-auto flex h-8 items-center gap-1.5 rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
           >
             {isAdding ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             <span>{isAdding ? "Cancel" : "Add photo"}</span>
@@ -88,20 +88,20 @@ export function PhotosScreen() {
         </div>
 
         {isAdding && (
-          <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-[#E6E8EC] bg-[#FAFBFC] p-3">
+          <div className="mt-3 flex flex-wrap items-end gap-2 rounded-[12px] border border-[#E6E8EC] bg-[#FAFBFC] p-3">
             <label className="flex flex-1 min-w-[220px] flex-col gap-1 text-[11px] font-bold text-[#5B6675]">
               Image URL
-              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="h-9 rounded-lg border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
+              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="h-9 rounded-[8px] border border-[#D5DAE2] px-3 text-[12.5px] text-[#0F172A]" />
             </label>
             <label className="flex flex-col gap-1 text-[11px] font-bold text-[#5B6675]">
               Category
-              <select value={category} onChange={(e) => setCategory(e.target.value as ListingPhotoCategory)} className="h-9 rounded-lg border border-[#D5DAE2] px-2 text-[12.5px] text-[#0F172A]">
+              <select value={category} onChange={(e) => setCategory(e.target.value as ListingPhotoCategory)} className="h-9 rounded-[8px] border border-[#D5DAE2] px-2 text-[12.5px] text-[#0F172A]">
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </label>
-            <button disabled={isSaving} onClick={handleAdd} className="flex h-9 items-center rounded-lg bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:opacity-60">
+            <button disabled={isSaving} onClick={handleAdd} className="flex h-9 items-center rounded-[8px] bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:opacity-60">
               {isSaving ? "Adding…" : "Add"}
             </button>
           </div>
@@ -109,7 +109,7 @@ export function PhotosScreen() {
 
         {/* Gallery Grid */}
         {listingPhotos.length === 0 && gmbPhotos.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-[#D5DAE2] p-10 text-center text-[12.5px] text-[#94A3B8]">
+          <div className="mt-4 rounded-[12px] border border-dashed border-[#D5DAE2] p-10 text-center text-[12.5px] text-[#94A3B8]">
             No photos on record yet. Add one above, or connect Google Business Profile to pull its photos in.
           </div>
         ) : (
@@ -143,7 +143,7 @@ export function PhotosScreen() {
                     },
                   })
                 }
-                className="cursor-pointer overflow-hidden rounded-xl border border-[#E6E8EC] bg-white shadow-sm transition-all hover:border-[#16A34A]"
+                className="cursor-pointer overflow-hidden rounded-[12px] border border-[#E6E8EC] bg-white shadow-sm transition-all hover:border-[#16A34A]"
               >
                 <div className="relative flex h-24 items-center justify-center overflow-hidden border-b border-[#EEF0F3] bg-[repeating-linear-gradient(135deg,#F5F6F8_0_6px,#EEF0F3_6px_12px)]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -169,7 +169,7 @@ export function PhotosScreen() {
               </div>
             ))}
             {gmbPhotos.map((p) => (
-              <div key={p.id} className="overflow-hidden rounded-xl border border-[#E6E8EC] bg-white shadow-sm opacity-90">
+              <div key={p.id} className="overflow-hidden rounded-[12px] border border-[#E6E8EC] bg-white shadow-sm opacity-90">
                 <div className="relative flex h-24 items-center justify-center overflow-hidden border-b border-[#EEF0F3] bg-[repeating-linear-gradient(135deg,#F5F6F8_0_6px,#EEF0F3_6px_12px)]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={p.url} alt={p.category || "Google photo"} className="h-full w-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />

@@ -310,6 +310,12 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       );
       expect(xml).toContain('<Hangup/>');
       expect(xml).not.toContain('<Dial>');
+      // The caller was told a message was noted, so it must reach the follow-up queue — not be
+      // recorded as a transfer that never happened.
+      const call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-no-transfer' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.message);
     });
 
     it('never fabricates: falls back to a real "please repeat" reply when the AI response is unparseable', async () => {
@@ -430,6 +436,8 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(transcript[transcript.length - 1].text).toBe(
         "We'll ring you back within the hour.",
       );
+      // A promised callback must be recorded, or it never reaches the follow-up queue.
+      expect(call?.outcome).toBe(PhoneCallOutcome.message);
     });
 
     it('records outcome "custom" with the matched intent name when the AI matches a configured custom intent', async () => {
@@ -487,6 +495,426 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
 
       const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
       expect(prompt).toContain('media_inquiry');
+    });
+  });
+
+  describe('AI Phone, full — real records given to the AI, never fabricated', () => {
+    afterEach(async () => {
+      await prisma.voiceSettings.deleteMany({ where: { businessId } });
+      await prisma.voiceRoutingRule.deleteMany({ where: { businessId } });
+      await prisma.voiceKnowledgeEntry.deleteMany({ where: { businessId } });
+    });
+
+    it('gives the AI the real matching product/service price and stock, and records it as a source', async () => {
+      speechToText.transcribe.mockResolvedValue('How much is a haircut?');
+      await service.handleIncoming(
+        'CA-catalog',
+        '+15550000020',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: 'A haircut is 25.',
+          intent: 'continue',
+          topic: 'service_pricing',
+          answered: true,
+        }),
+      );
+
+      await service.handleRecording(
+        'CA-catalog',
+        'https://api.twilio.com/recordings/RE-catalog',
+      );
+
+      const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+      expect(prompt).toContain('Service "Haircut": price 25');
+
+      const call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-catalog' },
+      });
+      const transcript = call?.transcript as unknown as {
+        speaker: string;
+        analysis?: { sources: string[] };
+      }[];
+      const assistantTurn = transcript.find((t) => t.speaker === 'assistant');
+      expect(assistantTurn?.analysis?.sources).toContain('Products: Haircut');
+    });
+
+    it('does not offer catalog context at all when shareCatalog is off', async () => {
+      await prisma.voiceSettings.create({
+        data: { businessId, shareCatalog: false },
+      });
+      speechToText.transcribe.mockResolvedValue('How much is a haircut?');
+      await service.handleIncoming(
+        'CA-catalog-off',
+        '+15550000021',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: "I don't have that.", intent: 'continue' }),
+      );
+
+      await service.handleRecording(
+        'CA-catalog-off',
+        'https://api.twilio.com/recordings/RE-catalog-off',
+      );
+      const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+      expect(prompt).not.toContain('Service "Haircut"');
+    });
+
+    it('gives the AI the real saved hours and address when a caller asks, and records them as sources', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          address: '12 Main Boulevard, Lahore',
+          workingHours: {
+            mon: [['09:00', '17:00']],
+            tue: [['09:00', '17:00']],
+          },
+        },
+      });
+      try {
+        speechToText.transcribe.mockResolvedValue(
+          'What time do you open and where are you?',
+        );
+        await service.handleIncoming(
+          'CA-hours',
+          '+15550000029',
+          '+15559990000',
+        );
+        aiInfra.complete.mockResolvedValue(
+          JSON.stringify({
+            reply: 'We open at nine.',
+            intent: 'continue',
+            topic: 'opening_hours',
+            answered: true,
+          }),
+        );
+        await service.handleRecording(
+          'CA-hours',
+          'https://api.twilio.com/recordings/RE-hours',
+        );
+
+        const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+        expect(prompt).toContain('mon 09:00-17:00');
+        expect(prompt).toContain('12 Main Boulevard, Lahore');
+
+        const call = await prisma.phoneCall.findUnique({
+          where: { callSid: 'CA-hours' },
+        });
+        const transcript = call?.transcript as unknown as {
+          speaker: string;
+          analysis?: { sources: string[] };
+        }[];
+        expect(
+          transcript.find((t) => t.speaker === 'assistant')?.analysis?.sources,
+        ).toEqual(expect.arrayContaining(['Business hours', 'Address']));
+      } finally {
+        await prisma.business.update({
+          where: { id: businessId },
+          data: { address: null, workingHours: {} },
+        });
+      }
+    });
+
+    it('does not give the AI hours or address when catalogue sharing is off', async () => {
+      await prisma.voiceSettings.create({
+        data: { businessId, shareCatalog: false },
+      });
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          address: '12 Main Boulevard, Lahore',
+          workingHours: { mon: [['09:00', '17:00']] },
+        },
+      });
+      try {
+        speechToText.transcribe.mockResolvedValue('What time do you open?');
+        await service.handleIncoming(
+          'CA-hours-off',
+          '+15550000030',
+          '+15559990000',
+        );
+        aiInfra.complete.mockResolvedValue(
+          JSON.stringify({
+            reply: "I don't have that.",
+            intent: 'continue',
+            topic: 'opening_hours',
+            answered: false,
+          }),
+        );
+        await service.handleRecording(
+          'CA-hours-off',
+          'https://api.twilio.com/recordings/RE-hours-off',
+        );
+        const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+        expect(prompt).not.toContain('09:00-17:00');
+        expect(prompt).not.toContain('Main Boulevard');
+      } finally {
+        await prisma.business.update({
+          where: { id: businessId },
+          data: { address: null, workingHours: {} },
+        });
+      }
+    });
+
+    it('only shares a verified caller’s own order status when shareOrderStatus is on and the number matches a saved customer', async () => {
+      await prisma.voiceSettings.create({
+        data: { businessId, shareOrderStatus: true },
+      });
+      const customer = await prisma.customer.create({
+        data: { businessId, name: 'Order Caller', phone: '+15550000022' },
+      });
+      const order = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: 9001,
+          customerId: customer.id,
+          status: 'confirmed',
+          total: 40,
+        },
+      });
+      speechToText.transcribe.mockResolvedValue(
+        'What is the status of my order?',
+      );
+      await service.handleIncoming('CA-order', '+15550000022', '+15559990000');
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: `Order ${order.orderNo} is confirmed.`,
+          intent: 'continue',
+          topic: 'order_status',
+          answered: true,
+        }),
+      );
+
+      await service.handleRecording(
+        'CA-order',
+        'https://api.twilio.com/recordings/RE-order',
+      );
+      const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+      expect(prompt).toContain(`#${order.orderNo}`);
+      expect(prompt).toContain('confirmed');
+
+      await prisma.order.delete({ where: { id: order.id } });
+      await prisma.customer.delete({ where: { id: customer.id } });
+    });
+
+    it('never shares order status for an unverified caller (no matching saved customer), even with sharing on', async () => {
+      await prisma.voiceSettings.create({
+        data: { businessId, shareOrderStatus: true },
+      });
+      speechToText.transcribe.mockResolvedValue(
+        'What is the status of my order?',
+      );
+      await service.handleIncoming(
+        'CA-order-unverified',
+        '+15550000023',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: "I don't have that.", intent: 'continue' }),
+      );
+
+      await service.handleRecording(
+        'CA-order-unverified',
+        'https://api.twilio.com/recordings/RE-order-unverified',
+      );
+      const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+      expect(prompt).not.toContain('most recent order');
+    });
+
+    it('gives the AI a real matching FAQ entry and bumps its real usage stats', async () => {
+      const entry = await prisma.voiceKnowledgeEntry.create({
+        data: {
+          businessId,
+          kind: 'faq',
+          title: 'Eid hours',
+          question: 'Are you open on Eid?',
+          content: 'We are closed on both days of Eid al-Fitr.',
+        },
+      });
+      speechToText.transcribe.mockResolvedValue('Are you open on Eid?');
+      await service.handleIncoming(
+        'CA-knowledge',
+        '+15550000024',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: 'We are closed for Eid.',
+          intent: 'continue',
+          topic: 'opening_hours',
+          answered: true,
+        }),
+      );
+
+      await service.handleRecording(
+        'CA-knowledge',
+        'https://api.twilio.com/recordings/RE-knowledge',
+      );
+      const [, prompt] = aiInfra.complete.mock.calls[0] as [string, string];
+      expect(prompt).toContain('closed on both days of Eid');
+
+      const updated = await prisma.voiceKnowledgeEntry.findUniqueOrThrow({
+        where: { id: entry.id },
+      });
+      expect(updated.usedCount).toBe(1);
+      expect(updated.lastUsedAt).not.toBeNull();
+    });
+
+    it('extracts and keeps a caller name and email the AI clearly reports, without overwriting a real value already saved', async () => {
+      speechToText.transcribe.mockResolvedValue(
+        'My name is Ayesha Khan, email ayesha@example.com',
+      );
+      await service.handleIncoming(
+        'CA-identity',
+        '+15550000025',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: 'Thanks, Ayesha.',
+          intent: 'continue',
+          customerName: 'Ayesha Khan',
+          callerEmail: 'ayesha@example.com',
+        }),
+      );
+      await service.handleRecording(
+        'CA-identity',
+        'https://api.twilio.com/recordings/RE-identity-1',
+      );
+
+      let call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-identity' },
+      });
+      expect(call?.callerName).toBe('Ayesha Khan');
+      expect(call?.callerEmail).toBe('ayesha@example.com');
+
+      // A later turn "correcting" the name must not clobber the one already on file.
+      speechToText.transcribe.mockResolvedValue('Actually never mind');
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: 'Sure.',
+          intent: 'continue',
+          customerName: 'Someone Else',
+        }),
+      );
+      await service.handleRecording(
+        'CA-identity',
+        'https://api.twilio.com/recordings/RE-identity-2',
+      );
+      call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-identity' },
+      });
+      expect(call?.callerName).toBe('Ayesha Khan');
+    });
+
+    it('overrides the AI’s own intent with a matching keyword routing rule, transferring to the rule’s own number', async () => {
+      await prisma.voiceRoutingRule.create({
+        data: {
+          businessId,
+          position: 1,
+          name: 'Legal escalation',
+          triggerKind: 'keyword',
+          matchValue: 'lawyer',
+          action: 'transfer',
+          transferNumber: '+15557778888',
+        },
+      });
+      speechToText.transcribe.mockResolvedValue(
+        'I want to talk to a lawyer about this.',
+      );
+      await service.handleIncoming(
+        'CA-rule-transfer',
+        '+15550000026',
+        '+15559990000',
+      );
+      // The AI itself thinks this is just "continue" — the rule must still win.
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: 'Let me note that.', intent: 'continue' }),
+      );
+
+      const xml = await service.handleRecording(
+        'CA-rule-transfer',
+        'https://api.twilio.com/recordings/RE-rule-transfer',
+      );
+      expect(xml).toContain('<Dial>+15557778888</Dial>');
+
+      const call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-rule-transfer' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.transfer);
+      expect(call?.routedRuleName).toBe('Legal escalation');
+    });
+
+    it('overrides the AI’s own intent with a matching low_confidence routing rule, taking a message', async () => {
+      await prisma.voiceRoutingRule.create({
+        data: {
+          businessId,
+          position: 1,
+          name: 'Low confidence safety net',
+          triggerKind: 'low_confidence',
+          action: 'take_message',
+        },
+      });
+      speechToText.transcribe.mockResolvedValue('Something unclear.');
+      await service.handleIncoming(
+        'CA-rule-lowconf',
+        '+15550000027',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: 'I think I follow.',
+          intent: 'continue',
+          confidence: 'low',
+        }),
+      );
+
+      const xml = await service.handleRecording(
+        'CA-rule-lowconf',
+        'https://api.twilio.com/recordings/RE-rule-lowconf',
+      );
+      expect(xml).toContain('<Hangup/>');
+      const call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-rule-lowconf' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.message);
+      expect(call?.routedRuleName).toBe('Low confidence safety net');
+    });
+
+    it('does not apply an inactive routing rule', async () => {
+      await prisma.voiceRoutingRule.create({
+        data: {
+          businessId,
+          position: 1,
+          name: 'Disabled rule',
+          triggerKind: 'keyword',
+          matchValue: 'lawyer',
+          action: 'transfer',
+          transferNumber: '+15557778888',
+          active: false,
+        },
+      });
+      speechToText.transcribe.mockResolvedValue('I want a lawyer.');
+      await service.handleIncoming(
+        'CA-rule-inactive',
+        '+15550000028',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: 'Continuing.', intent: 'continue' }),
+      );
+
+      const xml = await service.handleRecording(
+        'CA-rule-inactive',
+        'https://api.twilio.com/recordings/RE-rule-inactive',
+      );
+      expect(xml).not.toContain('<Dial>');
+      const call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-rule-inactive' },
+      });
+      expect(call?.routedRuleName).toBeNull();
     });
   });
 });

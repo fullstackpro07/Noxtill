@@ -13,6 +13,20 @@ export const CAMPAIGN_TEMPLATE_KEY = 'campaign';
 
 export const MAX_COMPETITORS = 5;
 
+/** How closely the owner watches a competitor (Competitive Insights). */
+export const COMPETITOR_PRIORITIES = [
+  'watch_closely',
+  'keep_an_eye',
+  'background',
+] as const;
+
+/** What an owner can record about a competitor by hand (`CompetitorObservation.kind`). */
+export const COMPETITOR_OBSERVATION_KINDS = [
+  'price',
+  'service',
+  'offer',
+] as const;
+
 export const COMPETITOR_SNAPSHOT_QUEUE = 'competitor-snapshot';
 
 export const MAX_TRACKED_KEYWORDS = 10;

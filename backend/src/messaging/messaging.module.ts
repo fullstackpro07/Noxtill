@@ -35,6 +35,6 @@ import { dlqName } from '../common/queue/queue.constants';
     MessagesService,
     MessagingChannelsService,
   ],
-  exports: [SendGateService, TemplateRegistryService],
+  exports: [SendGateService, TemplateRegistryService, EmailService],
 })
 export class MessagingModule {}

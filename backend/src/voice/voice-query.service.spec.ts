@@ -1,7 +1,11 @@
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
+import { AuditService } from '../common/audit/audit.service';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_USER_ID,
+} from '../common/tenancy/tenant.constants';
 import { VoiceQueryService } from './voice-query.service';
 import type { S3Service } from '../common/storage/s3.service';
 
@@ -34,7 +38,11 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
         .fn()
         .mockResolvedValue('https://signed.example.com/recording.mp3'),
     };
-    service = new VoiceQueryService(tenantPrisma, s3 as unknown as S3Service);
+    service = new VoiceQueryService(
+      tenantPrisma,
+      s3 as unknown as S3Service,
+      new AuditService(tenantPrisma, cls as unknown as ClsService),
+    );
 
     const business = await prisma.business.create({
       data: {
@@ -44,6 +52,8 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
     });
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    // No FK on AuditLog.actorUserId — a plain id is enough to prove who is recorded.
+    cls.set(CLS_KEY_USER_ID, 'staff-user-1');
 
     const startedAt = new Date('2026-08-01T10:00:00.000Z');
     await prisma.phoneCall.createMany({
@@ -80,6 +90,7 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
 
   afterAll(async () => {
     await prisma.phoneCall.deleteMany({ where: { businessId } });
+    await prisma.auditLog.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
@@ -122,6 +133,18 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
       });
       const result = await service.getRecordingUrl(call.id);
       expect(result.url).toBe('https://signed.example.com/recording.mp3');
+
+      // Playback is written to the append-only audit trail: who, which call, when.
+      const logs = await prisma.auditLog.findMany({
+        where: {
+          businessId,
+          entity: 'PhoneCall',
+          entityId: call.id,
+          action: 'call.recording_played',
+        },
+      });
+      expect(logs).toHaveLength(1);
+      expect(logs[0].actorUserId).toBe('staff-user-1');
     });
 
     it('returns a real null (not fabricated) when the call has no recording', async () => {
@@ -134,6 +157,11 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
       });
       const result = await service.getRecordingUrl(call.id);
       expect(result.url).toBeNull();
+      // Nothing was played, so nothing is logged as played.
+      const logs = await prisma.auditLog.count({
+        where: { entityId: call.id, action: 'call.recording_played' },
+      });
+      expect(logs).toBe(0);
     });
   });
 });

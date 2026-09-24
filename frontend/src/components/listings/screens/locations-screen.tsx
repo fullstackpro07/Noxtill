@@ -68,14 +68,14 @@ export function LocationsScreen() {
   return (
     <div className="flex flex-col gap-5">
       {/* Top Banner */}
-      <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-[#E6E8EC] bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2.5 rounded-[12px] border border-[#E6E8EC] bg-white p-4 shadow-sm">
         <Info className="h-4 w-4 flex-shrink-0 text-[#7A8798]" />
         <div className="min-w-[220px] flex-1 text-[11.5px] leading-relaxed text-[#5B6675]">
           Branch records live in the Branches module. This screen references them and adds the listing layer on top — nothing is duplicated.
         </div>
         <Link
           href="/branches"
-          className="flex h-[30px] items-center gap-1.5 rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
+          className="flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
         >
           <ExternalLink className="h-3.5 w-3.5" />
           <span>Open Branches</span>
@@ -145,7 +145,7 @@ export function LocationsScreen() {
             {/* Card Header */}
             <div className="flex items-start gap-2.5">
               <div
-                className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${
+                className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[8px] ${
                   lc.tone === "red"
                     ? "bg-[#FEE4E2] text-[#B42318]"
                     : lc.tone === "amber"

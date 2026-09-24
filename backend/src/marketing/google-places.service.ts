@@ -42,6 +42,12 @@ export interface PlaceDetailsFull {
   hours: string[] | null;
   reviews: PlaceReview[];
   photoReferences: string[];
+  /** Public listing details Google shows alongside hours and photos. */
+  website: string | null;
+  phone: string | null;
+  address: string | null;
+  /** Human-readable categories from Google's place types (generic ones like "establishment" dropped). */
+  categories: string[];
 }
 
 interface PlaceDetailsFullResponse {
@@ -55,7 +61,19 @@ interface PlaceDetailsFullResponse {
       relative_time_description: string;
     }[];
     photos?: { photo_reference: string }[];
+    website?: string;
+    formatted_phone_number?: string;
+    formatted_address?: string;
+    types?: string[];
   };
+}
+
+/** Google lists every place as "establishment" / "point_of_interest" — they say nothing about what the business is. */
+const GENERIC_PLACE_TYPES = new Set(['establishment', 'point_of_interest']);
+
+function humanizePlaceType(type: string): string {
+  const spaced = type.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 const MAX_DETAIL_PHOTOS = 6;
@@ -162,7 +180,8 @@ export class GooglePlacesService {
       {
         params: {
           place_id: placeId,
-          fields: 'opening_hours,reviews,photos',
+          fields:
+            'opening_hours,reviews,photos,website,formatted_phone_number,formatted_address,types',
           key: apiKey,
         },
       },
@@ -187,6 +206,12 @@ export class GooglePlacesService {
       photoReferences: (result.photos ?? [])
         .slice(0, MAX_DETAIL_PHOTOS)
         .map((p) => p.photo_reference),
+      website: result.website ?? null,
+      phone: result.formatted_phone_number ?? null,
+      address: result.formatted_address ?? null,
+      categories: (result.types ?? [])
+        .filter((t) => !GENERIC_PLACE_TYPES.has(t))
+        .map(humanizePlaceType),
     };
   }
 

@@ -106,7 +106,7 @@ export function AllScreen() {
               setStatusFilter(KPI_TO_STATUS[k.label] ?? "All statuses");
               notify(`Filtered to ${k.label}`, `${k.value} listing${k.value === "1" ? "" : "s"}.`);
             }}
-            className={`cursor-pointer rounded-xl border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
+            className={`cursor-pointer rounded-[12px] border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
               k.tone === "red"
                 ? "border-[#FBD5D2]"
                 : k.tone === "amber"
@@ -135,7 +135,7 @@ export function AllScreen() {
       <div className="overflow-hidden rounded-[13px] border border-[#E6E8EC] bg-white shadow-sm">
         {/* Search and Filters Header */}
         <div className="flex flex-wrap items-center gap-2 p-4">
-          <div className="flex h-9 flex-1 min-w-[220px] items-center gap-2 rounded-lg border border-[#D5DAE2] bg-white px-3 focus-within:border-[#16A34A]">
+          <div className="flex h-9 flex-1 min-w-[220px] items-center gap-2 rounded-[8px] border border-[#D5DAE2] bg-white px-3 focus-within:border-[#16A34A]">
             <Search className="h-3.5 w-3.5 text-[#7A8798]" />
             <input
               type="text"
@@ -149,7 +149,7 @@ export function AllScreen() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             aria-label="Filter by status"
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+            className="flex h-9 items-center gap-1.5 rounded-[8px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
           >
             {["All statuses", "Connected", "Needs attention", "Disconnected", "Not connected"].map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -180,13 +180,13 @@ export function AllScreen() {
                   onConfirm: syncSelected,
                 })
               }
-              className="flex h-7 items-center rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[11.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6] disabled:opacity-40"
+              className="flex h-7 items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[11.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6] disabled:opacity-40"
             >
               Sync
             </button>
             <button
               onClick={exportCsv}
-              className="flex h-7 items-center rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[11.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
+              className="flex h-7 items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[11.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]"
             >
               Export {selectedIds.length > 0 ? "selected" : "all"}
             </button>
@@ -351,7 +351,7 @@ export function AllScreen() {
                             openSyncPreview(l);
                           }
                         }}
-                        className={`inline-flex h-[30px] items-center rounded-lg px-2.5 text-[12px] font-bold transition-colors ${
+                        className={`inline-flex h-[30px] items-center rounded-[8px] px-2.5 text-[12px] font-bold transition-colors ${
                           l.status === "Disconnected" || isConflict
                             ? "bg-[#16A34A] text-white hover:bg-[#15803D]"
                             : "border border-[#D5DAE2] bg-white text-[#45505F] hover:bg-[#F1F3F6]"

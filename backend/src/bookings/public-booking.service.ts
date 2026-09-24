@@ -13,6 +13,7 @@ import {
   DEFAULT_BOOKING_LINK_SETTINGS,
 } from './bookings.constants';
 import { assertSlotAvailable } from './booking-lock.util';
+import { nextBookingNo } from './booking-number.util';
 import { resolvePolicies } from '../common/policies/policies.service';
 import {
   assertBookingWindow,
@@ -225,6 +226,7 @@ export class PublicBookingService {
           endsAt,
           source: 'link',
           rescheduleToken: randomBytes(RESCHEDULE_TOKEN_BYTES).toString('hex'),
+          bookingNo: await nextBookingNo(tx, business.id),
         },
       });
     });

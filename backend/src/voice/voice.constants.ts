@@ -1,4 +1,9 @@
 export const VOICE_RETENTION_QUEUE = 'voice-recording-retention';
+export const VOICE_PROVIDER_COST_QUEUE = 'voice-provider-cost';
+
+/** A business may keep at most this many routing rules / knowledge entries — small, deliberately-curated lists, not a bulk store. */
+export const MAX_ROUTING_RULES = 20;
+export const MAX_KNOWLEDGE_ENTRIES = 200;
 
 /**
  * Spoken at the start of every call, before anything else — UPD-BE-057 requires this disclosure

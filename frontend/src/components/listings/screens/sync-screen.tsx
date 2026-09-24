@@ -80,7 +80,7 @@ export function SyncScreen() {
           <div
             key={idx}
             onClick={() => notify(`${k.label} · ${k.value}`, k.meta)}
-            className={`cursor-pointer rounded-xl border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
+            className={`cursor-pointer rounded-[12px] border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
               k.tone === "red"
                 ? "border-[#FBD5D2]"
                 : k.tone === "amber"
@@ -120,7 +120,7 @@ export function SyncScreen() {
 
           <div className="mt-3.5 flex flex-col gap-2.5">
             {listingsWithMismatch.map((l) => (
-              <div key={l.id} className="rounded-xl border border-[#E6E8EC] bg-white p-3.5">
+              <div key={l.id} className="rounded-[12px] border border-[#E6E8EC] bg-white p-3.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[12.5px] font-extrabold text-[#0F172A]">{l.location} · {l.platform}</span>
                   <span className="text-[11px] text-[#B45309]">disagrees on: {l.mismatchedFields.join(", ")}</span>
@@ -144,7 +144,7 @@ export function SyncScreen() {
                         },
                       })
                     }
-                    className="ml-auto flex h-8 items-center rounded-lg bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]"
+                    className="ml-auto flex h-8 items-center rounded-[8px] bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]"
                   >
                     Use Noxtill's value
                   </button>
@@ -262,7 +262,7 @@ export function SyncScreen() {
                 } ${sh.tone === "red" ? "bg-[#FEFBFB]" : "bg-white"}`}
               >
                 <div
-                  className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${
+                  className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[8px] ${
                     sh.tone === "red" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#ECFDF3] text-[#15803D]"
                   }`}
                 >

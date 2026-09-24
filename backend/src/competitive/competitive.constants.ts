@@ -1,5 +1,6 @@
 export const VISIBILITY_SCORE_SNAPSHOT_QUEUE = 'visibility-score-snapshot';
 export const COMPETITIVE_OPPORTUNITIES_QUEUE = 'competitive-opportunities';
+export const COMPETITIVE_WEEKLY_REPORT_QUEUE = 'competitive-weekly-report';
 
 /** UPD-BE-052: how many weekly snapshots the trend history returns by default. */
 export const VISIBILITY_SCORE_WINDOW_WEEKS = 12;

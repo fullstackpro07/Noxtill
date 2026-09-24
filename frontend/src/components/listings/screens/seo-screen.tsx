@@ -145,7 +145,7 @@ export function SeoScreen() {
           <div
             key={idx}
             onClick={() => notify(`${k.label} · ${k.value}`, k.meta)}
-            className={`cursor-pointer rounded-xl border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
+            className={`cursor-pointer rounded-[12px] border bg-white p-3.5 shadow-sm transition-all hover:border-[#CBD5E1] ${
               k.tone === "amber" ? "border-[#FDE49B]" : "border-[#E6E8EC]"
             }`}
           >
@@ -163,7 +163,7 @@ export function SeoScreen() {
       </div>
 
       {/* Info Banner */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-[#E6E8EC] bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-2.5 rounded-[12px] border border-[#E6E8EC] bg-white p-4 shadow-sm">
         <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#7A8798]" />
         <div className="text-[11.5px] leading-relaxed text-[#5B6675]">
           Search ranking is deliberately absent. No listing platform exposes a verified position through its API, so Noxtill reports the metrics platforms actually provide — views, calls, directions, clicks — and nothing it would have to invent.
@@ -293,7 +293,7 @@ export function SeoScreen() {
                     notify(si.action, "Opens the exact field on the exact platform.");
                   }
                 }}
-                className="flex h-[30px] items-center rounded-lg border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
+                className="flex h-[30px] items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold text-[#0F172A] hover:bg-[#F1F3F6]"
               >
                 {si.action}
               </button>

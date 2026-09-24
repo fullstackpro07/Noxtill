@@ -12,6 +12,7 @@ import {
 } from './google-places.service';
 import { S3Service } from '../common/storage/s3.service';
 import { randomUUID } from 'crypto';
+import { publicListingCompleteness } from './public-listing-completeness';
 
 const HISTORY_WEEKS = 12;
 
@@ -55,7 +56,13 @@ export class CompetitorsService {
 
     const details = await this.places.fetchPlaceDetails(competitor.platformRef);
     if (!details) {
-      return { hours: null, reviews: [], photos: [] };
+      return {
+        hours: null,
+        reviews: [],
+        photos: [],
+        profile: null,
+        completeness: null,
+      };
     }
 
     const photos = (
@@ -69,7 +76,27 @@ export class CompetitorsService {
       )
     ).filter((url): url is string => !!url);
 
-    return { hours: details.hours, reviews: details.reviews, photos };
+    return {
+      hours: details.hours,
+      reviews: details.reviews,
+      photos,
+      profile: {
+        website: details.website,
+        phone: details.phone,
+        address: details.address,
+        categories: details.categories,
+      },
+      // Same seven public checks the business's own Master Record is scored on, so the two compare directly.
+      completeness: publicListingCompleteness({
+        name: true,
+        phone: !!details.phone,
+        website: !!details.website,
+        address: !!details.address,
+        hours: !!details.hours && details.hours.length > 0,
+        category: details.categories.length > 0,
+        photos: details.photoReferences.length > 0,
+      }),
+    };
   }
 
   list() {
@@ -116,6 +143,7 @@ export class CompetitorsService {
         businessId,
         name: dto.name,
         platformRef: dto.platformRef,
+        ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
       },
     });
   }
@@ -132,6 +160,11 @@ export class CompetitorsService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.metaPageId !== undefined ? { metaPageId: dto.metaPageId } : {}),
+        ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+        // An empty string clears the handle.
+        ...(dto.instagramHandle !== undefined
+          ? { instagramHandle: dto.instagramHandle || null }
+          : {}),
       },
     });
   }

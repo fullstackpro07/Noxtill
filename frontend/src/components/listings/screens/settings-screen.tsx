@@ -77,7 +77,7 @@ export function SettingsScreen() {
         </div>
         <div className="mt-3 flex flex-col gap-1">
           {connectionItems.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-2.5 rounded-lg p-2.5">
+            <div key={idx} className="flex items-center gap-2.5 rounded-[8px] p-2.5">
               <div className="min-w-0 flex-1 text-[12.5px] font-bold text-[#0F172A]">{item.label}</div>
               <span className={`inline-flex h-5 items-center rounded-full border px-2 text-[10px] font-bold ${chipClass(item.value)}`}>{item.value}</span>
             </div>
@@ -114,7 +114,7 @@ export function SettingsScreen() {
               value={settings?.autoSyncFrequencyHours ?? 24}
               onChange={(e) => setFrequency(Number(e.target.value))}
               disabled={!settings?.autoSyncEnabled || isSavingSync}
-              className="h-8 rounded-lg border border-[#D5DAE2] px-2 text-[12px] font-bold text-[#0F172A] disabled:opacity-50"
+              className="h-8 rounded-[8px] border border-[#D5DAE2] px-2 text-[12px] font-bold text-[#0F172A] disabled:opacity-50"
             >
               {[1, 4, 12, 24, 168].map((h) => (
                 <option key={h} value={h}>{h === 168 ? "Weekly" : `Every ${h}h`}</option>
@@ -127,7 +127,7 @@ export function SettingsScreen() {
               value={settings?.conflictResolution ?? "master_wins"}
               onChange={(e) => setConflictResolution(e.target.value as "master_wins" | "directory_wins")}
               disabled={isSavingSync}
-              className="h-8 rounded-lg border border-[#D5DAE2] px-2 text-[12px] font-bold text-[#0F172A] disabled:opacity-50"
+              className="h-8 rounded-[8px] border border-[#D5DAE2] px-2 text-[12px] font-bold text-[#0F172A] disabled:opacity-50"
             >
               <option value="master_wins">Master Record wins</option>
               <option value="directory_wins">Directory wins</option>
@@ -153,7 +153,7 @@ export function SettingsScreen() {
             { label: "Website", value: masterListing?.website || "Not set" },
             { label: "Default category", value: masterListing?.categories?.[0] || "Not set" },
           ].map((item, idx) => (
-            <div key={idx} className="flex items-center gap-2.5 rounded-lg p-2.5">
+            <div key={idx} className="flex items-center gap-2.5 rounded-[8px] p-2.5">
               <div className="min-w-0 flex-1 text-[12.5px] font-bold text-[#0F172A]">{item.label}</div>
               <span className="text-[11.5px] text-[#45505F]">{item.value}</span>
             </div>
@@ -176,7 +176,7 @@ export function SettingsScreen() {
             { label: "Auto publish", meta: "Off — nothing publishes externally without you clicking Publish" },
             { label: "Photo quality scoring", meta: "Not implemented — Noxtill does not fabricate an image quality score" },
           ].map((item, idx) => (
-            <div key={idx} className="flex items-center gap-2.5 rounded-lg p-2.5">
+            <div key={idx} className="flex items-center gap-2.5 rounded-[8px] p-2.5">
               <div className="min-w-0 flex-1">
                 <div className="text-[12.5px] font-bold text-[#0F172A]">{item.label}</div>
                 <div className="mt-0.5 text-[10.5px] leading-relaxed text-[#94A3B8]">{item.meta}</div>
@@ -196,7 +196,7 @@ export function SettingsScreen() {
           <h3 className="text-[13.5px] font-extrabold text-[#0F172A]">Monitoring and alerts</h3>
         </div>
         <div className="mt-3 flex flex-col gap-1">
-          <div className="rounded-lg p-2.5 text-[12.5px] leading-relaxed text-[#45505F]">
+          <div className="rounded-[8px] p-2.5 text-[12.5px] leading-relaxed text-[#45505F]">
             There is no in-app or notification-based alert system for listing issues yet — field mismatches, disconnections and missing hours are surfaced when you open Overview, All Listings or Sync &amp; Health, not pushed to you proactively.
           </div>
         </div>
@@ -216,7 +216,7 @@ export function SettingsScreen() {
             { label: "AI may prepare", meta: "A sync, with a change preview you approve", value: "Allowed" },
             { label: "AI may write externally", meta: "Never without your approval", value: "Restricted" },
           ].map((item, idx) => (
-            <div key={idx} className="flex items-center gap-2.5 rounded-lg p-2.5">
+            <div key={idx} className="flex items-center gap-2.5 rounded-[8px] p-2.5">
               <div className="min-w-0 flex-1">
                 <div className="text-[12.5px] font-bold text-[#0F172A]">{item.label}</div>
                 <div className="mt-0.5 text-[10.5px] leading-relaxed text-[#94A3B8]">{item.meta}</div>

@@ -8,6 +8,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { SendGateService } from '../messaging/send-gate.service';
 import { assertSlotAvailable } from './booking-lock.util';
+import { nextBookingNo } from './booking-number.util';
 import { CreateWaitlistEntryDto } from './dto/create-waitlist-entry.dto';
 import { OfferWaitlistEntryDto } from './dto/offer-waitlist-entry.dto';
 import { WAITLIST_ERROR_CODES } from './bookings.constants';
@@ -135,6 +136,7 @@ export class WaitlistService {
             endsAt,
             status: AppointmentStatus.confirmed,
             source: AppointmentSource.waitlist,
+            bookingNo: await nextBookingNo(tx, businessId),
           },
           include: { service: true, customer: true },
         });

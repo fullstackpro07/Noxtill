@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
+import { AuditService } from '../common/audit/audit.service';
 import { VOICE_ERROR_CODES } from './voice.constants';
 import { escapeXml, twiml } from './twiml.util';
 import { PhoneCallStatus } from '@prisma/client';
@@ -40,6 +41,7 @@ export class VoiceLiveJoinService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   listen(businessId: string, userId: string, callId: string) {
@@ -135,10 +137,16 @@ export class VoiceLiveJoinService {
       `${muted ? 'Listen' : 'Take-over'} join for call ${call.callSid} by user ${userId}`,
     );
 
-    return this.tenantPrisma.client.phoneCall.update({
+    const updated = await this.tenantPrisma.client.phoneCall.update({
       where: { id: callId },
       data: { joinedAt: call.joinedAt ?? new Date(), joinedByUserId: userId },
     });
+    await this.audit.log({
+      entity: 'PhoneCall',
+      entityId: callId,
+      action: muted ? 'call.listened_in' : 'call.taken_over',
+    });
+    return updated;
   }
 
   private conferenceUrl(

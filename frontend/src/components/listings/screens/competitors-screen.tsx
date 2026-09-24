@@ -119,14 +119,14 @@ export function CompetitorsScreen() {
   return (
     <div className="flex flex-col gap-5">
       {/* Top Banner */}
-      <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-[#FDE49B] bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2.5 rounded-[12px] border border-[#FDE49B] bg-white p-4 shadow-sm">
         <ShieldCheck className="h-4 w-4 flex-shrink-0 text-[#B45309]" />
         <div className="min-w-[220px] flex-1 text-[11.5px] leading-relaxed text-[#B45309]">
           Only publicly visible listing information is monitored. Noxtill does not and cannot show a competitor&apos;s revenue, customers, strategy or search ranking — anything presented as such would be invented.
         </div>
         <button
           onClick={() => router.push("/marketing")}
-          className="flex h-[30px] items-center gap-1.5 rounded-lg border border-[#FDE49B] bg-[#FFFDF5] px-2.5 text-[12px] font-bold text-[#B45309] hover:bg-[#FEF3C7]"
+          className="flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#FDE49B] bg-[#FFFDF5] px-2.5 text-[12px] font-bold text-[#B45309] hover:bg-[#FEF3C7]"
         >
           <ExternalLink className="h-3.5 w-3.5" />
           <span>Marketing module</span>
@@ -174,7 +174,7 @@ export function CompetitorsScreen() {
             >
               {/* Card Header */}
               <div className="flex items-start gap-2.5">
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#F5F3FF] text-[13px] font-black text-[#6D28D9]">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[8px] bg-[#F5F3FF] text-[13px] font-black text-[#6D28D9]">
                   {cc.initials}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -203,7 +203,7 @@ export function CompetitorsScreen() {
               </div>
 
               {/* Observation */}
-              <div className="mt-3 rounded-lg border border-[#F1F3F6] bg-[#FAFBFC] p-2.5 text-[11px] leading-relaxed text-[#5B6675]">
+              <div className="mt-3 rounded-[8px] border border-[#F1F3F6] bg-[#FAFBFC] p-2.5 text-[11px] leading-relaxed text-[#5B6675]">
                 {cc.observation}
               </div>
             </div>
@@ -222,7 +222,7 @@ export function CompetitorsScreen() {
           </p>
           <button
             onClick={() => router.push("/marketing")}
-            className="mt-4 flex h-[34px] items-center gap-1.5 rounded-lg bg-[#0F172A] px-3.5 text-[12px] font-bold text-white hover:bg-[#1E293B]"
+            className="mt-4 flex h-[34px] items-center gap-1.5 rounded-[8px] bg-[#0F172A] px-3.5 text-[12px] font-bold text-white hover:bg-[#1E293B]"
           >
             <Plus className="h-4 w-4" />
             <span>Track competitor in Marketing</span>
@@ -271,7 +271,7 @@ export function CompetitorsScreen() {
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap">
                     <span
-                      className={`inline-flex rounded-md px-2 py-0.5 font-mono text-[11.5px] font-extrabold tabular-nums ${
+                      className={`inline-flex rounded-[6px] px-2 py-0.5 font-mono text-[11.5px] font-extrabold tabular-nums ${
                         cmp.tone === "pos"
                           ? "bg-[#ECFDF3] text-[#15803D]"
                           : "bg-[#F1F3F6] text-[#45505F]"
