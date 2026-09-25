@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ActivityPubSubService } from '../activity/activity-pubsub.service';
+import { ActivityService } from '../activity/activity.service';
+import { DeliverySettingsService } from './delivery-settings.service';
 import { RidersService } from './riders.service';
 
 class FakeClsService {
@@ -20,6 +22,7 @@ describe('RidersService (UPD-BE-064/065)', () => {
   let service: RidersService;
   let businessId: string;
   const pubsub = { publish: jest.fn() };
+  const activity = { record: jest.fn() };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -33,6 +36,8 @@ describe('RidersService (UPD-BE-064/065)', () => {
     service = new RidersService(
       tenantPrisma,
       pubsub as unknown as ActivityPubSubService,
+      activity as unknown as ActivityService,
+      new DeliverySettingsService(tenantPrisma),
     );
 
     const business = await prisma.business.create({
@@ -231,5 +236,32 @@ describe('RidersService (UPD-BE-064/065)', () => {
       `delivery:${businessId}`,
       expect.objectContaining({ kind: 'rider_location', riderId: rider.id }),
     );
+  });
+
+  it('going off shift clears the last GPS fix and the break marker — location is not kept after a shift ends', async () => {
+    const rider = await service.create(businessId, {
+      name: 'Shift Rider',
+      phone: '0300',
+    });
+    await service.reportLocation(businessId, rider.id, {
+      lat: 31.5,
+      lng: 74.3,
+    });
+    await service.setBreak(businessId, rider.id, true);
+    const off = await service.update(rider.id, { status: 'inactive' });
+    expect(off.lastLat).toBeNull();
+    expect(off.lastLng).toBeNull();
+    expect(off.lastLocationAt).toBeNull();
+    expect(off.onBreakSince).toBeNull();
+  });
+
+  it('location-sharing consent is off by default and only changes when set explicitly', async () => {
+    const rider = await service.create(businessId, {
+      name: 'Consent Rider',
+      phone: '0301',
+    });
+    expect(rider.shareLocationConsent).toBe(false);
+    const on = await service.setLocationConsent(rider.id, true);
+    expect(on.shareLocationConsent).toBe(true);
   });
 });

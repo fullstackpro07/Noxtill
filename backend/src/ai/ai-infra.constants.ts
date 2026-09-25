@@ -41,6 +41,7 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
 export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   voice_entry: 'voiceEntry',
   digitizer_scan: 'photoDigitizer',
+  digitizer_assistant: 'photoDigitizer',
   review_reply: 'reviewReplies',
   campaign_copy: 'campaignCopy',
   generate_image: 'campaignCopy',

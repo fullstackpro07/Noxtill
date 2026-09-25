@@ -38,13 +38,25 @@ describe('CapabilitiesService (UPD-BE-035)', () => {
 
   it('resolves each system role to its real default capability set when no custom role is assigned', async () => {
     expect(
-      await service.resolve({ businessId, role: Role.owner, customRoleId: null }),
+      await service.resolve({
+        businessId,
+        role: Role.owner,
+        customRoleId: null,
+      }),
     ).toEqual(SYSTEM_ROLE_CAPABILITIES[Role.owner]);
     expect(
-      await service.resolve({ businessId, role: Role.manager, customRoleId: null }),
+      await service.resolve({
+        businessId,
+        role: Role.manager,
+        customRoleId: null,
+      }),
     ).toEqual(SYSTEM_ROLE_CAPABILITIES[Role.manager]);
     expect(
-      await service.resolve({ businessId, role: Role.staff, customRoleId: null }),
+      await service.resolve({
+        businessId,
+        role: Role.staff,
+        customRoleId: null,
+      }),
     ).toEqual(SYSTEM_ROLE_CAPABILITIES[Role.staff]);
   });
 
@@ -75,7 +87,7 @@ describe('CapabilitiesService (UPD-BE-035)', () => {
     expect(resolved).toEqual(SYSTEM_ROLE_CAPABILITIES[Role.manager]);
   });
 
-  it("a RoleCapabilityOverride replaces the manager/staff system default entirely", async () => {
+  it('a RoleCapabilityOverride replaces the manager/staff system default entirely', async () => {
     await prisma.roleCapabilityOverride.create({
       data: {
         businessId,

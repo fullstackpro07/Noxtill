@@ -1,8 +1,9 @@
-import { IsIn, IsObject, IsOptional } from 'class-validator';
+import { IsBoolean, IsIn, IsObject, IsOptional } from 'class-validator';
 import { DESTINATIONS } from '../digitizer.constants';
 import type {
   DigitizerDestination,
   DigitizerRowData,
+  DuplicateDecision,
 } from '../digitizer.types';
 
 export class UpdateDigitizerRowDto {
@@ -17,4 +18,14 @@ export class UpdateDigitizerRowDto {
   @IsOptional()
   @IsIn(['commit', 'skip'])
   action?: 'commit' | 'skip';
+
+  /** The owner looked at this row and accepts it as it stands. */
+  @IsOptional()
+  @IsBoolean()
+  reviewed?: boolean;
+
+  /** `null` clears an earlier decision. */
+  @IsOptional()
+  @IsIn(['use_existing', 'create_new', null])
+  duplicateDecision?: DuplicateDecision | null;
 }

@@ -2,285 +2,134 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Route as RouteIcon, Wand2, GripVertical } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { SkeletonRow } from "@/components/shared/skeleton";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { EmptyState } from "@/components/shared/empty-state";
-import { fetchDeliveries, assignDelivery, assignDeliveryZone, DELIVERY_STATUS_LABELS } from "@/lib/deliveries-api";
+import { KpiGrid, NoteBanner, PanelCard, LoadingBlock } from "./delivery-ui";
+import { invalidateDeliveryData } from "./delivery-actions";
+import { fetchRoutesSummary } from "@/lib/delivery-insights-api";
+import { createRoute, optimiseRoute } from "@/lib/delivery-routes-api";
+import { assignDelivery, fetchDeliveries } from "@/lib/deliveries-api";
 import { fetchRiders } from "@/lib/riders-api";
-import { fetchDeliveryZones } from "@/lib/delivery-zones-api";
-import { fetchRoutes, createRoute, optimiseRoute } from "@/lib/delivery-routes-api";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
-/** Real HTML5 drag-and-drop payload — a delivery row's `dataTransfer` carries its own id under this MIME type. */
-const DELIVERY_DRAG_MIME = "application/x-noxtill-delivery-id";
-
 export function AssignmentRoutesView() {
   const queryClient = useQueryClient();
-  const [selectedForRoute, setSelectedForRoute] = useState<Set<string>>(new Set());
-  const [routeRiderId, setRouteRiderId] = useState("");
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOverRiderId, setDragOverRiderId] = useState<string | null>(null);
+  const { data, isLoading } = useQuery({ queryKey: ["delivery-routes-summary"], queryFn: fetchRoutesSummary, refetchInterval: 30000 });
+  const { data: deliveries } = useQuery({ queryKey: ["deliveries", "all"], queryFn: () => fetchDeliveries() });
+  const { data: riders } = useQuery({ queryKey: ["delivery-riders"], queryFn: fetchRiders });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [riderId, setRiderId] = useState("");
 
-  const { data: unassigned, isPending, isError, refetch } = useQuery({
-    queryKey: ["deliveries", "unassigned"],
-    queryFn: () => fetchDeliveries("unassigned"),
-  });
-  const { data: riders } = useQuery({ queryKey: ["riders"], queryFn: fetchRiders });
-  const { data: zones } = useQuery({ queryKey: ["delivery-zones"], queryFn: fetchDeliveryZones });
-  const { data: routes } = useQuery({ queryKey: ["delivery-routes"], queryFn: fetchRoutes });
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["delivery-routes-summary"] });
+    invalidateDeliveryData(queryClient);
+  };
 
-  const activeRiders = (riders ?? []).filter((r) => r.status === "active");
-  const activeZones = (zones ?? []).filter((z) => z.active);
-
-  const assignMutation = useMutation({
-    mutationFn: ({ deliveryId, riderId }: { deliveryId: string; riderId: string }) => assignDelivery(deliveryId, riderId),
-    onSuccess: () => {
-      toast.success("Assigned.");
-      void queryClient.invalidateQueries({ queryKey: ["deliveries"] });
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't assign this delivery."),
-  });
-
-  const assignZoneMutation = useMutation({
-    mutationFn: ({ deliveryId, zoneId }: { deliveryId: string; zoneId: string | null }) => assignDeliveryZone(deliveryId, zoneId),
-    onSuccess: () => {
-      toast.success("Zone set — its SLA now applies to this delivery's on-time promise.");
-      void queryClient.invalidateQueries({ queryKey: ["deliveries"] });
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't set this delivery's zone."),
-  });
-
-  const createRouteMutation = useMutation({
-    mutationFn: () => createRoute([...selectedForRoute], routeRiderId || undefined),
-    onSuccess: () => {
-      toast.success("Route created.");
-      setSelectedForRoute(new Set());
-      void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
-      void queryClient.invalidateQueries({ queryKey: ["deliveries"] });
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't create this route."),
-  });
-
-  function toggleForRoute(id: string) {
-    setSelectedForRoute((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function handleDropOnRider(riderId: string) {
-    if (draggingId) assignMutation.mutate({ deliveryId: draggingId, riderId });
-    setDraggingId(null);
-    setDragOverRiderId(null);
-  }
-
-  return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-5">
-        <h1 className="font-display text-2xl font-bold text-fg">Assignment & Routes</h1>
-        <p className="mt-0.5 text-sm text-fg-muted">
-          Drag a delivery onto a rider to assign it, or use the dropdown in each row — both do the same real assignment. Set a zone per
-          delivery to apply that zone&apos;s own SLA to its on-time promise.
-        </p>
-      </div>
-
-      {activeRiders.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {activeRiders.map((r) => (
-            <div
-              key={r.id}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOverRiderId(r.id);
-              }}
-              onDragLeave={() => setDragOverRiderId((prev) => (prev === r.id ? null : prev))}
-              onDrop={(e) => {
-                e.preventDefault();
-                handleDropOnRider(r.id);
-              }}
-              className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                dragOverRiderId === r.id ? "border-primary bg-primary/10 text-primary" : "border-border-strong text-fg"
-              }`}
-            >
-              <UserPlus className="h-3.5 w-3.5" aria-hidden />
-              {r.name}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {isError ? (
-        <ErrorBanner title="Couldn't load unassigned deliveries" onRetry={() => refetch()} />
-      ) : isPending ? (
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <SkeletonRow />
-        </div>
-      ) : !unassigned || unassigned.length === 0 ? (
-        <EmptyState icon={UserPlus} title="Nothing to assign" description="Every delivery already has a rider." />
-      ) : (
-        <>
-          {selectedForRoute.size > 0 && (
-            <div className="mb-3 flex items-center gap-2 rounded-[var(--radius-noxtill)] border border-primary/30 bg-primary/8 p-3">
-              <span className="text-sm text-fg">{selectedForRoute.size} selected for a route</span>
-              <Select value={routeRiderId} onChange={(e) => setRouteRiderId(e.target.value)} className="ml-auto w-40">
-                <option value="">No rider yet</option>
-                {activeRiders.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </Select>
-              <Button size="sm" onClick={() => createRouteMutation.mutate()} disabled={createRouteMutation.isPending}>
-                <RouteIcon className="h-3.5 w-3.5" aria-hidden />
-                Build route
-              </Button>
-            </div>
-          )}
-
-          <div className="overflow-x-auto rounded-[var(--radius-noxtill)] border border-border bg-surface">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-fg-faint">
-                  <th className="w-8 px-4 py-2" />
-                  <th className="w-8 px-2 py-2" />
-                  <th className="px-4 py-2 font-medium">Order</th>
-                  <th className="px-4 py-2 font-medium">Address</th>
-                  <th className="px-4 py-2 font-medium">Zone (SLA)</th>
-                  <th className="px-4 py-2 font-medium">Assign to</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unassigned.map((d) => (
-                  <tr
-                    key={d.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData(DELIVERY_DRAG_MIME, d.id);
-                      e.dataTransfer.effectAllowed = "move";
-                      setDraggingId(d.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingId(null);
-                      setDragOverRiderId(null);
-                    }}
-                    className={`border-b border-border last:border-0 ${draggingId === d.id ? "opacity-40" : ""}`}
-                  >
-                    <td className="px-4 py-2">
-                      <input type="checkbox" checked={selectedForRoute.has(d.id)} onChange={() => toggleForRoute(d.id)} className="h-4 w-4 rounded border-border-strong accent-primary" />
-                    </td>
-                    <td className="cursor-grab px-2 py-2 text-fg-faint" aria-hidden>
-                      <GripVertical className="h-4 w-4" />
-                    </td>
-                    <td className="px-4 py-2 font-medium text-fg">#{d.order?.orderNo ?? "—"}</td>
-                    <td className="max-w-[240px] truncate px-4 py-2 text-fg-muted">{d.addressLine}</td>
-                    <td className="px-4 py-2">
-                      <Select
-                        value={d.zoneId ?? ""}
-                        onChange={(e) => assignZoneMutation.mutate({ deliveryId: d.id, zoneId: e.target.value || null })}
-                        className="w-36"
-                      >
-                        <option value="">Business default</option>
-                        {activeZones.map((z) => (
-                          <option key={z.id} value={z.id}>
-                            {z.name}
-                            {z.slaMinutes != null ? ` (${z.slaMinutes}m)` : ""}
-                          </option>
-                        ))}
-                      </Select>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Select
-                        defaultValue=""
-                        onChange={(e) => e.target.value && assignMutation.mutate({ deliveryId: d.id, riderId: e.target.value })}
-                        className="w-40"
-                      >
-                        <option value="" disabled>
-                          Choose a rider…
-                        </option>
-                        {activeRiders.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      <div className="mt-6">
-        <p className="mb-3 text-sm font-medium text-fg">Routes</p>
-        {!routes || routes.length === 0 ? (
-          <p className="text-sm text-fg-faint">No routes built yet.</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {routes.map((route) => (
-              <RouteCard key={route.id} routeId={route.id} riderName={route.rider?.name ?? "Unassigned"} status={route.status} stops={route.deliveries} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function RouteCard({
-  routeId,
-  riderName,
-  status,
-  stops,
-}: {
-  routeId: string;
-  riderName: string;
-  status: string;
-  stops: { id: string; addressLine: string; routeSequence: number | null; status: string }[];
-}) {
-  const queryClient = useQueryClient();
   const optimiseMutation = useMutation({
-    mutationFn: () => optimiseRoute(routeId),
+    mutationFn: optimiseRoute,
     onSuccess: () => {
-      toast.success("Route optimised.");
-      void queryClient.invalidateQueries({ queryKey: ["delivery-routes"] });
+      toast.success("Route re-optimised.");
+      refresh();
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't optimise this route."),
   });
 
-  const ordered = [...stops].sort((a, b) => (a.routeSequence ?? 0) - (b.routeSequence ?? 0));
+  const buildMutation = useMutation({
+    mutationFn: async () => {
+      const ids = [...selected];
+      const rows = (deliveries ?? []).filter((d) => selected.has(d.id));
+      // A route belongs to one rider, so any stop that has no rider yet is given to that rider first.
+      for (const d of rows.filter((x) => x.riderId !== riderId)) {
+        await assignDelivery(d.id, riderId);
+      }
+      const route = await createRoute(ids, riderId);
+      return optimiseRoute(route.id).catch(() => route);
+    },
+    onSuccess: () => {
+      toast.success("Route built and optimised.");
+      setSelected(new Set());
+      refresh();
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't build this route."),
+  });
+
+  const candidates = (deliveries ?? []).filter((d) => !d.routeId && (d.status === "unassigned" || d.status === "assigned"));
+  const activeRiders = (riders ?? []).filter((r) => r.status === "active");
+
+  if (isLoading || !data) return <LoadingBlock label="Loading routes…" />;
 
   return (
-    <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-fg">{riderName}</span>
-          <Badge tone="neutral">{status}</Badge>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => optimiseMutation.mutate()} disabled={optimiseMutation.isPending}>
-          <Wand2 className="h-3.5 w-3.5" aria-hidden />
-          {optimiseMutation.isPending ? "Optimising…" : "Optimise"}
-        </Button>
+    <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+      <NoteBanner text="A suggested route is only ever a suggestion. Riders know their roads, and any rider can reorder their own stops without asking." />
+      <KpiGrid kpis={data.kpis} minWidth={180} />
+
+      <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: "16px", padding: "17px" }}>
+        <h3 style={{ margin: "0 0 4px", fontSize: "14.5px", fontWeight: 800, color: "#101828" }}>Build a route</h3>
+        <p style={{ margin: "0 0 13px", fontSize: "11.5px", color: "#98A2B3" }}>Pick the stops and a rider. Stops without that rider are given to them, then ordered nearest-first from where they are.</p>
+        {candidates.length === 0 ? (
+          <div style={{ fontSize: "12.5px", color: "#98A2B3" }}>Every open delivery is already on a route.</div>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
+              {candidates.map((d) => (
+                <label key={d.id} style={{ border: "1px solid #E6EAF0", borderRadius: "11px", padding: "10px 12px", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(d.id)}
+                    onChange={() => {
+                      const next = new Set(selected);
+                      if (next.has(d.id)) next.delete(d.id);
+                      else next.add(d.id);
+                      setSelected(next);
+                    }}
+                  />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: "12.5px", fontWeight: 800, color: "#0E8442" }}>DEL-{d.order?.orderNo}</span>
+                    <span style={{ fontSize: "12px", color: "#344054", marginLeft: "8px" }}>{d.order?.customer?.name ?? "Walk-in customer"}</span>
+                    <span style={{ display: "block", fontSize: "11px", color: "#98A2B3" }}>
+                      {d.addressLine}
+                      {d.lat === null ? " · no coordinates, will stay where it is in the order" : ""}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: d.rider ? "#475467" : "#B42318" }}>{d.rider?.name ?? "Not assigned"}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
+              <Select label="Rider for this route" value={riderId} onChange={(e) => setRiderId(e.target.value)}>
+                <option value="">Choose a rider…</option>
+                {activeRiders.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} · {r.displayStatus} · {r.activeDeliveries} active
+                  </option>
+                ))}
+              </Select>
+              <Button onClick={() => buildMutation.mutate()} disabled={selected.size === 0 || !riderId || buildMutation.isPending}>
+                {buildMutation.isPending ? "Building…" : `Build route (${selected.size} stop${selected.size === 1 ? "" : "s"})`}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
-      <ol className="flex flex-col gap-1">
-        {ordered.map((stop, i) => (
-          <li key={stop.id} className="flex items-center gap-2 text-xs text-fg-muted">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-semibold text-fg">{i + 1}</span>
-            <span className="truncate">{stop.addressLine}</span>
-            <Badge tone="neutral" className="ml-auto shrink-0">
-              {DELIVERY_STATUS_LABELS[stop.status as keyof typeof DELIVERY_STATUS_LABELS] ?? stop.status}
-            </Badge>
-          </li>
-        ))}
-      </ol>
+
+      {data.panels.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: "16px", padding: "44px 18px", textAlign: "center" }}>
+          <div style={{ fontSize: "13.5px", fontWeight: 800, color: "#344054" }}>No routes built today</div>
+          <div style={{ fontSize: "12px", color: "#98A2B3", marginTop: "5px" }}>Build one above from open deliveries.</div>
+        </div>
+      ) : (
+        data.panels.map((p) => (
+          <div key={p.routeId} style={{ position: "relative" }}>
+            <PanelCard panel={p} />
+            <div style={{ position: "absolute", top: "17px", right: "17px" }}>
+              <Button size="sm" variant="outline" disabled={optimiseMutation.isPending} onClick={() => optimiseMutation.mutate(p.routeId)}>
+                {optimiseMutation.isPending ? "Optimising…" : "Re-optimise"}
+              </Button>
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }

@@ -29,7 +29,7 @@ export class DeliveryZonesController {
     return this.zones.findOne(id);
   }
 
-  @RequireCapability(CAPABILITIES.DELIVERY_MANAGE)
+  @RequireCapability(CAPABILITIES.DELIVERY_CONFIGURE)
   @Post()
   create(
     @CurrentUser() user: AuthenticatedUser,
@@ -38,13 +38,13 @@ export class DeliveryZonesController {
     return this.zones.create(user.businessId, dto);
   }
 
-  @RequireCapability(CAPABILITIES.DELIVERY_MANAGE)
+  @RequireCapability(CAPABILITIES.DELIVERY_CONFIGURE)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateDeliveryZoneDto) {
     return this.zones.update(id, dto);
   }
 
-  @RequireCapability(CAPABILITIES.DELIVERY_MANAGE)
+  @RequireCapability(CAPABILITIES.DELIVERY_CONFIGURE)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.zones.remove(id);

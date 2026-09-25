@@ -41,6 +41,9 @@ export const DELIVERY_ERROR_CODES = {
   DELIVERY_ALREADY_HAS_PROOF: 'DELIVERY_ALREADY_HAS_PROOF',
   INVALID_STATUS_TRANSITION: 'INVALID_DELIVERY_STATUS_TRANSITION',
   FAILURE_REASON_REQUIRED: 'DELIVERY_FAILURE_REASON_REQUIRED',
+  OUT_OF_ZONE: 'DELIVERY_OUT_OF_ZONE',
+  ZONE_PAUSED: 'DELIVERY_ZONE_PAUSED',
+  ADDRESS_REQUIRED: 'DELIVERY_ADDRESS_REQUIRED',
 } as const;
 
 /** All Deliveries depth fix (UPD-FE-055e) — common reasons for the dropdown; the field itself is free text so "Add custom" always works. */
@@ -52,9 +55,31 @@ export const DELIVERY_FAILURE_REASONS = [
   'Unable to contact customer',
 ] as const;
 
-/** On-time-rate depth fix — mirrored by `DeliverySettings.defaultSlaMinutes`'s own column default. */
+/** On-time-rate depth fix — mirrored by `DeliverySettings`'s own column defaults. */
 export const DEFAULT_DELIVERY_SETTINGS = {
   defaultSlaMinutes: 45,
+  etaPaddingMinutes: 0,
+  cashLimitAmount: null,
+  warnAtStopCount: 8,
+  staleLocationMinutes: 10,
+  hubLat: null,
+  hubLng: null,
+  costPerKm: null,
+  riderPayPerDelivery: null,
+  autoEtaOnAssign: false,
+  autoEtaOnSlip: false,
+  slipThresholdMinutes: 10,
+  autoFlagStalePhone: false,
+  autoWarnCashLimit: false,
+  autoTaskOnFailure: false,
+  sendProofToCustomer: false,
+  shareLiveLocation: false,
+  enforceZoneCoverage: false,
+  showFeeBeforeCheckout: false,
+  pausedZonesBlockOrders: false,
+  autoAssignNew: true,
+  urgentAfterMinutes: 15,
+  highValueAmount: 15000,
 } as const;
 
 /** How many trailing days the on-time-rate trend covers. */

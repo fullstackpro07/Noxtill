@@ -4,10 +4,15 @@ import type { MessageEvent } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { S3Service } from '../common/storage/s3.service';
 import { ActivityPubSubService } from '../activity/activity-pubsub.service';
+import { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
 import { validateUploadedFile } from '../common/utils/file-validation.util';
 import { DeliveryAssignmentService } from './delivery-assignment.service';
 import { DeliverySettingsService } from './delivery-settings.service';
+import { DeliveryPricingService } from './delivery-pricing.service';
+import { DeliveryNotifierService } from './delivery-notifier.service';
+import { DeliveryAutomationsService } from './delivery-automations.service';
+import { GeocodingService } from './geocoding.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
@@ -35,15 +40,24 @@ export class DeliveriesService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly s3: S3Service,
     private readonly pubsub: ActivityPubSubService,
+    private readonly activity: ActivityService,
     private readonly assignment: DeliveryAssignmentService,
     private readonly deliverySettings: DeliverySettingsService,
+    private readonly pricing: DeliveryPricingService,
+    private readonly notifier: DeliveryNotifierService,
+    private readonly automations: DeliveryAutomationsService,
+    private readonly geocoding: GeocodingService,
   ) {}
 
   list(status?: DeliveryStatus) {
     return this.tenantPrisma.client.delivery.findMany({
       where: status ? { status } : {},
       orderBy: { createdAt: 'desc' },
-      include: { order: true, rider: true },
+      include: {
+        order: { include: { customer: true, payments: true } },
+        rider: true,
+        zone: true,
+      },
     });
   }
 
@@ -119,9 +133,14 @@ export class DeliveriesService {
     return delivery;
   }
 
-  async create(businessId: string, dto: CreateDeliveryDto) {
+  async create(
+    businessId: string,
+    dto: CreateDeliveryDto,
+    actorUserId?: string,
+  ) {
     const order = await this.tenantPrisma.client.order.findUnique({
       where: { id: dto.orderId },
+      include: { customer: true },
     });
     if (!order) throw new NotFoundException('Order not found');
 
@@ -138,18 +157,44 @@ export class DeliveriesService {
 
     if (dto.zoneId) await this.requireZone(dto.zoneId);
 
+    // No coordinates typed in: try the configured maps provider, otherwise leave them unset —
+    // distance, fee-by-distance and the map then honestly say they don't know.
+    let lat = dto.lat ?? null;
+    let lng = dto.lng ?? null;
+    if (lat === null || lng === null) {
+      const found = await this.geocoding.geocode(dto.addressLine);
+      if (found) {
+        lat = found.lat;
+        lng = found.lng;
+      }
+    }
+    const priced = await this.pricing.quote(businessId, {
+      zoneId: dto.zoneId,
+      orderTotal: Number(order.total),
+      lat,
+      lng,
+    });
+
     const delivery = await this.tenantPrisma.client.delivery.create({
       data: {
         businessId,
         orderId: dto.orderId,
         addressLine: dto.addressLine,
-        lat: dto.lat,
-        lng: dto.lng,
+        lat,
+        lng,
         zoneId: dto.zoneId,
+        deliveryNote: dto.deliveryNote?.trim() || null,
+        deliveryFee: priced.fee,
+        deliveryCost: priced.cost,
+        distanceKm: priced.distanceKm,
+        trackingToken: this.notifier.newTrackingToken(),
       },
     });
 
-    const riderId = await this.assignment.pickRider();
+    const dispatchSettings = await this.deliverySettings.get(businessId);
+    const riderId = dispatchSettings.autoAssignNew
+      ? await this.assignment.pickRider()
+      : null;
     const assigned = riderId
       ? await this.tenantPrisma.client.delivery.update({
           where: { id: delivery.id },
@@ -165,16 +210,63 @@ export class DeliveriesService {
         })
       : delivery;
 
+    await this.activity.record(businessId, {
+      type: 'delivery',
+      description: `New delivery for order #${order.orderNo}${assigned.riderId ? ' — auto-assigned' : ' — waiting for a rider'}`,
+      entityType: 'Delivery',
+      entityId: delivery.id,
+      actorUserId,
+    });
     await this.broadcast(businessId, assigned);
+    if (assigned.riderId)
+      await this.automations.onAssigned(businessId, assigned.id);
     return assigned;
   }
 
-  async assign(businessId: string, id: string, dto: AssignDeliveryDto) {
+  /** Orders that could still be dispatched: no delivery yet, not a quotation, newest first. */
+  async eligibleOrders() {
+    const orders = await this.tenantPrisma.client.order.findMany({
+      where: {
+        delivery: { is: null },
+        isQuotation: false,
+        status: { not: 'cancelled' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: { customer: true },
+    });
+    return orders.map((o) => ({
+      id: o.id,
+      orderNo: o.orderNo,
+      orderType: o.orderType,
+      total: Number(o.total),
+      customerName: o.customer?.name ?? null,
+      customerAddress: o.customer?.address ?? null,
+      createdAt: o.createdAt,
+    }));
+  }
+
+  async assign(
+    businessId: string,
+    id: string,
+    dto: AssignDeliveryDto,
+    actorUserId?: string,
+  ) {
     const delivery = await this.findOne(id);
     const rider = await this.tenantPrisma.client.rider.findUnique({
       where: { id: dto.riderId },
     });
     if (!rider) throw new NotFoundException('Rider not found');
+    if (
+      delivery.status !== DeliveryStatus.unassigned &&
+      delivery.status !== DeliveryStatus.assigned
+    ) {
+      throw new AppException(
+        DELIVERY_ERROR_CODES.INVALID_STATUS_TRANSITION,
+        'Only a delivery that has not been picked up yet can be given to a different rider',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const updated = await this.tenantPrisma.client.delivery.update({
       where: { id },
@@ -183,29 +275,43 @@ export class DeliveriesService {
         status: DeliveryStatus.assigned,
         assignedAt: new Date(),
         promisedAt: await this.computePromisedAt(businessId, delivery.zoneId),
+        slipNotifiedAt: null,
       },
     });
+    await this.activity.record(businessId, {
+      type: 'delivery',
+      description:
+        `${rider.name} assigned to order #${delivery.order?.orderNo ?? ''}`.trim(),
+      entityType: 'Delivery',
+      entityId: id,
+      actorUserId,
+    });
     await this.broadcast(businessId, updated);
+    await this.automations.onAssigned(businessId, id);
     return updated;
   }
 
   /**
-   * On-time-rate depth fix, extended by the per-zone SLA depth fix — the real promise, made the
-   * moment a rider is actually assigned. Uses the delivery's own zone's `slaMinutes` when the zone
-   * has a real override set; otherwise falls back to the business's configured default.
+   * On-time-rate depth fix, extended by the per-zone SLA depth fix and by real ETA padding — the
+   * real promise, made the moment a rider is actually assigned. Uses the delivery's own zone's
+   * `slaMinutes` when the zone has a real override set, otherwise the business's configured
+   * default, then adds the business's own configured padding on top (0 unless set) — the same
+   * number `DeliverySettingsService` returns and the Settings screen shows, never a second figure.
    */
   private async computePromisedAt(
     businessId: string,
     zoneId?: string | null,
   ): Promise<Date> {
-    let slaMinutes = await this.deliverySettings.getSlaMinutes(businessId);
+    const settings = await this.deliverySettings.get(businessId);
+    let slaMinutes = settings.defaultSlaMinutes;
     if (zoneId) {
       const zone = await this.tenantPrisma.client.deliveryZone.findUnique({
         where: { id: zoneId },
       });
       if (zone?.slaMinutes != null) slaMinutes = zone.slaMinutes;
     }
-    return new Date(Date.now() + slaMinutes * 60 * 1000);
+    const totalMinutes = slaMinutes + (settings.etaPaddingMinutes ?? 0);
+    return new Date(Date.now() + totalMinutes * 60 * 1000);
   }
 
   private async requireZone(zoneId: string) {
@@ -229,10 +335,19 @@ export class DeliveriesService {
     const delivery = await this.findOne(id);
     if (zoneId) await this.requireZone(zoneId);
 
+    const priced = await this.pricing.quote(businessId, {
+      zoneId,
+      orderTotal: Number(delivery.order?.total ?? 0),
+      lat: delivery.lat !== null ? Number(delivery.lat) : null,
+      lng: delivery.lng !== null ? Number(delivery.lng) : null,
+    });
     const updated = await this.tenantPrisma.client.delivery.update({
       where: { id },
       data: {
         zoneId: zoneId ?? null,
+        deliveryFee: priced.fee,
+        deliveryCost: priced.cost,
+        distanceKm: priced.distanceKm,
         ...(delivery.riderId
           ? { promisedAt: await this.computePromisedAt(businessId, zoneId) }
           : {}),
@@ -246,6 +361,7 @@ export class DeliveriesService {
     businessId: string,
     id: string,
     dto: UpdateDeliveryStatusDto,
+    actorUserId?: string,
   ) {
     const delivery = await this.findOne(id);
     const allowed = DELIVERY_STATUS_TRANSITIONS[delivery.status];
@@ -266,15 +382,88 @@ export class DeliveriesService {
       );
     }
 
+    const now = new Date();
     const updated = await this.tenantPrisma.client.delivery.update({
       where: { id },
       data: {
         status: dto.status as DeliveryStatus,
-        ...(dto.status === 'delivered' ? { deliveredAt: new Date() } : {}),
+        // Delivery module redesign — real per-stage timestamps, set only the first time a
+        // delivery actually reaches that stage (the transition table already forbids moving
+        // backwards, so this never overwrites a real earlier timestamp).
+        ...(dto.status === 'picked_up' ? { pickedUpAt: now } : {}),
+        ...(dto.status === 'en_route' ? { enRouteAt: now } : {}),
+        ...(dto.status === 'delivered' ? { deliveredAt: now } : {}),
         ...(dto.status === 'failed'
           ? { failureReason: dto.failureReason }
           : {}),
       },
+      include: { order: true },
+    });
+    const orderNo = updated.order?.orderNo;
+    const label = orderNo !== undefined ? `#${orderNo}` : id.slice(0, 8);
+    const descriptions: Partial<Record<DeliveryStatus, string>> = {
+      picked_up: `Order ${label} picked up`,
+      en_route: `Order ${label} on the way`,
+      delivered: `Order ${label} delivered`,
+      failed: `Order ${label} failed — ${dto.failureReason}`,
+    };
+    await this.activity.record(businessId, {
+      type: 'delivery',
+      description:
+        descriptions[dto.status as DeliveryStatus] ?? `Order ${label} updated`,
+      entityType: 'Delivery',
+      entityId: id,
+      actorUserId,
+    });
+    await this.broadcast(businessId, updated);
+    if (dto.status === 'delivered') {
+      await this.automations.onDelivered(businessId, id);
+    } else if (dto.status === 'failed') {
+      await this.automations.onFailed(businessId, id);
+    }
+    return updated;
+  }
+
+  /**
+   * A person deciding to send a failed delivery out again: it goes back to the dispatch queue with
+   * no rider and no promise. The failure is not erased — its reason is written to the activity
+   * log before the field is cleared, so the history stays.
+   */
+  async retry(businessId: string, id: string, actorUserId?: string) {
+    const delivery = await this.findOne(id);
+    if (delivery.status !== DeliveryStatus.failed) {
+      throw new AppException(
+        DELIVERY_ERROR_CODES.INVALID_STATUS_TRANSITION,
+        'Only a failed delivery can be retried',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const updated = await this.tenantPrisma.client.delivery.update({
+      where: { id },
+      data: {
+        status: DeliveryStatus.unassigned,
+        riderId: null,
+        routeId: null,
+        routeSequence: null,
+        assignedAt: null,
+        promisedAt: null,
+        pickedUpAt: null,
+        enRouteAt: null,
+        deliveredAt: null,
+        failureReason: null,
+        slipNotifiedAt: null,
+      },
+    });
+    await this.activity.record(businessId, {
+      type: 'delivery',
+      description:
+        `Order #${delivery.order?.orderNo ?? ''} retry booked (failed before: ${delivery.failureReason ?? 'no reason recorded'})`.replace(
+          '# ',
+          '#',
+        ),
+      entityType: 'Delivery',
+      entityId: id,
+      actorUserId,
     });
     await this.broadcast(businessId, updated);
     return updated;
@@ -341,8 +530,17 @@ export class DeliveriesService {
         status: DeliveryStatus.delivered,
         deliveredAt: new Date(),
       },
+      include: { order: true },
+    });
+    const orderNo = updated.order?.orderNo;
+    await this.activity.record(businessId, {
+      type: 'delivery',
+      description: `Order ${orderNo !== undefined ? `#${orderNo}` : id.slice(0, 8)} delivered — proof captured`,
+      entityType: 'Delivery',
+      entityId: id,
     });
     await this.broadcast(businessId, updated);
+    await this.automations.onDelivered(businessId, id);
     return updated;
   }
 

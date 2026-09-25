@@ -16,10 +16,15 @@ export interface AnthropicContentBlock {
   input?: Record<string, unknown>;
   tool_use_id?: string;
   content?: string;
-  /** Present when `type` is `'image'` (UPD-BE-060, AI Photo Digitizer) — real Claude Vision input. */
+  /** Present when `type` is `'image'` (UPD-BE-060, AI Photo Digitizer) — real Claude Vision input — or `'document'` (a PDF). */
   source?: {
     type: 'base64';
-    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    media_type:
+      | 'image/jpeg'
+      | 'image/png'
+      | 'image/gif'
+      | 'image/webp'
+      | 'application/pdf';
     data: string;
   };
 }

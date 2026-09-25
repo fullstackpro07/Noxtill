@@ -1,273 +1,130 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, MapPin, Star, UserX, UserCheck, BarChart3 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Dialog } from "@/components/ui/dialog";
-import { SkeletonRow } from "@/components/shared/skeleton";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { EmptyState } from "@/components/shared/empty-state";
-import {
-  fetchRiders,
-  createRider,
-  updateRider,
-  fetchRiderPerformance,
-  VEHICLE_TYPE_LABELS,
-  type RiderRosterRow,
-  type RiderVehicleType,
-  type RiderPerformance,
-} from "@/lib/riders-api";
-import { fetchDeliveryZones } from "@/lib/delivery-zones-api";
+import { KpiGrid, DeliveryTableCard, StatusChip, LoadingBlock, type TableColumn } from "./delivery-ui";
+import { fetchRiders, updateRider, type RiderRosterRow, VEHICLE_TYPE_LABELS } from "@/lib/riders-api";
+import { fetchDeliverySettings } from "@/lib/delivery-settings-api";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
-export function RidersView() {
-  const [addOpen, setAddOpen] = useState(false);
-  const [detailRider, setDetailRider] = useState<RiderRosterRow | null>(null);
-  const { data, isPending, isError, refetch } = useQuery({ queryKey: ["riders"], queryFn: fetchRiders });
+const STATUS_CHIP: Record<string, { bg: string; fg: string }> = {
+  "On delivery": { bg: "#EEF4FF", fg: "#3538CD" },
+  Available: { bg: "#E8F7EE", fg: "#0E8442" },
+  "On break": { bg: "#FEF6E7", fg: "#B54708" },
+  "No signal": { bg: "#FEF3F2", fg: "#B42318" },
+  Offline: { bg: "#F2F4F7", fg: "#475467" },
+};
 
-  return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-fg">Riders</h1>
-          <p className="mt-0.5 text-sm text-fg-muted">Your delivery roster — vehicle, status, load, and real performance.</p>
-        </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" aria-hidden />
-          Add rider
-        </Button>
-      </div>
-
-      {isError ? (
-        <ErrorBanner title="Couldn't load riders" onRetry={() => refetch()} />
-      ) : isPending ? (
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : !data || data.length === 0 ? (
-        <EmptyState icon={UserCheck} title="No riders yet" description="Add your first delivery rider." action={{ label: "Add rider", onClick: () => setAddOpen(true) }} />
-      ) : (
-        <div className="overflow-x-auto rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-fg-faint">
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Vehicle</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Today</th>
-                <th className="px-4 py-2 font-medium">Location</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((rider) => (
-                <tr key={rider.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-2">
-                    <button onClick={() => setDetailRider(rider)} className="font-medium text-fg hover:underline">
-                      {rider.name}
-                    </button>
-                    <p className="text-xs text-fg-faint">{rider.phone}</p>
-                  </td>
-                  <td className="px-4 py-2 text-fg-muted">{rider.vehicleType ? VEHICLE_TYPE_LABELS[rider.vehicleType] : "—"}</td>
-                  <td className="px-4 py-2">
-                    <Badge tone={rider.status === "active" ? "success" : "neutral"}>{rider.status}</Badge>
-                  </td>
-                  <td className="px-4 py-2 tabular-nums text-fg-muted">
-                    {rider.deliveriesToday} {rider.activeDeliveries > 0 && <span className="text-primary">({rider.activeDeliveries} active)</span>}
-                  </td>
-                  <td className="px-4 py-2 text-xs text-fg-faint">
-                    {rider.lastLat != null ? (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="h-3 w-3" aria-hidden />
-                        {Number(rider.lastLat).toFixed(3)}, {Number(rider.lastLng).toFixed(3)}
-                      </span>
-                    ) : (
-                      "No check-in yet"
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-end">
-                    <DeactivateButton rider={rider} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <AddRiderDialog open={addOpen} onClose={() => setAddOpen(false)} />
-      <RiderDetailDialog rider={detailRider} onClose={() => setDetailRider(null)} />
-    </div>
-  );
+function money(n: number): string {
+  return `Rs. ${Math.round(n).toLocaleString("en-US")}`;
 }
 
-function DeactivateButton({ rider }: { rider: RiderRosterRow }) {
+export function RidersView() {
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: () => updateRider(rider.id, { status: rider.status === "active" ? "inactive" : "active" }),
+  const { data, isLoading } = useQuery({ queryKey: ["delivery-riders"], queryFn: fetchRiders, refetchInterval: 30000 });
+  const { data: settings } = useQuery({ queryKey: ["delivery-settings"], queryFn: fetchDeliverySettings });
+
+  const deactivateMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "active" | "inactive" }) => updateRider(id, { status }),
     onSuccess: () => {
-      toast.success(rider.status === "active" ? "Deactivated." : "Reactivated.");
-      void queryClient.invalidateQueries({ queryKey: ["riders"] });
+      toast.success("Updated.");
+      void queryClient.invalidateQueries({ queryKey: ["delivery-riders"] });
+      void queryClient.invalidateQueries({ queryKey: ["delivery-riders-live"] });
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't update this rider."),
   });
 
-  return (
-    <Button variant="ghost" size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-      {rider.status === "active" ? <UserX className="h-3.5 w-3.5" aria-hidden /> : <UserCheck className="h-3.5 w-3.5" aria-hidden />}
-      {rider.status === "active" ? "Deactivate" : "Reactivate"}
-    </Button>
-  );
-}
+  const kpis = useMemo(() => {
+    const rows = data ?? [];
+    const onShift = rows.filter((r) => r.status === "active");
+    const free = onShift.filter((r) => r.displayStatus === "Available");
+    const warnAt = settings?.warnAtStopCount ?? null;
+    const atCapacity = warnAt === null ? [] : onShift.filter((r) => r.activeDeliveries >= warnAt);
+    const cashTotal = rows.reduce((s, r) => s + r.cashHeld, 0);
+    const cashRiders = rows.filter((r) => r.cashHeld > 0).length;
+    return [
+      { l: "On shift", v: String(onShift.length), sub: `of ${rows.length} riders`, color: "#0F172A", bd: "#E6EAF0" },
+      { l: "Free now", v: String(free.length), sub: free[0] ? `${free[0].name}, ${free[0].zoneName ?? "no zone"}` : "nobody free right now", color: free.length > 0 ? "#12A150" : "#0F172A", bd: free.length > 0 ? "#BFE7CF" : "#E6EAF0" },
+      { l: "At capacity", v: String(atCapacity.length), sub: atCapacity[0] ? `${atCapacity[0].name}, ${atCapacity[0].activeDeliveries} of ${warnAt} stops` : "nobody at capacity", color: atCapacity.length > 0 ? "#B54708" : "#0F172A", bd: "#E6EAF0" },
+      { l: "Cash held", v: money(cashTotal), sub: `across ${cashRiders} riders`, color: cashTotal > 0 ? "#B42318" : "#0F172A", bd: cashTotal > 0 ? "#FDD9D6" : "#E6EAF0" },
+    ];
+  }, [data, settings]);
 
-function AddRiderDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const { data: zones } = useQuery({ queryKey: ["delivery-zones"], queryFn: fetchDeliveryZones, enabled: open });
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [vehicleType, setVehicleType] = useState<RiderVehicleType>("bike");
-  const [commissionRate, setCommissionRate] = useState("");
-  const [zoneIds, setZoneIds] = useState<string[]>([]);
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      createRider({
-        name,
-        phone,
-        vehicleType,
-        commissionRate: commissionRate ? Number(commissionRate) : undefined,
-        zoneIds,
-      }),
-    onSuccess: () => {
-      toast.success(`${name} added.`);
-      void queryClient.invalidateQueries({ queryKey: ["riders"] });
-      handleClose();
+  const columns: TableColumn<RiderRosterRow>[] = [
+    {
+      label: "Rider",
+      render: (r) => (
+        <span>
+          <span style={{ fontWeight: 700, color: "#101828" }}>{r.name}</span>
+          <span style={{ display: "block", fontSize: "11px", color: "#98A2B3" }}>{r.phone}</span>
+        </span>
+      ),
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't add this rider."),
-  });
-
-  function handleClose() {
-    setName("");
-    setPhone("");
-    setVehicleType("bike");
-    setCommissionRate("");
-    setZoneIds([]);
-    onClose();
-  }
-
-  function toggleZone(id: string) {
-    setZoneIds((prev) => (prev.includes(id) ? prev.filter((z) => z !== id) : [...prev, id]));
-  }
-
-  if (!open) return null;
-
-  return (
-    <Dialog
-      open
-      onClose={handleClose}
-      title="Add rider"
-      footer={
-        <>
-          <Button variant="ghost" onClick={handleClose} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={!name.trim() || !phone.trim() || mutation.isPending}>
-            {mutation.isPending ? "Adding…" : "Add rider"}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3">
-        <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-        <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" />
-        <div className="grid grid-cols-2 gap-3">
-          <Select label="Vehicle" value={vehicleType} onChange={(e) => setVehicleType(e.target.value as RiderVehicleType)}>
-            {Object.entries(VEHICLE_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-          <Input label="Commission rate (%)" type="number" min={0} max={100} value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} />
-        </div>
-        {zones && zones.length > 0 && (
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-fg-muted">Zones covered</p>
-            <div className="flex flex-wrap gap-2">
-              {zones.map((zone) => (
-                <button
-                  key={zone.id}
-                  onClick={() => toggleZone(zone.id)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                    zoneIds.includes(zone.id) ? "border-primary bg-primary/10 text-primary" : "border-border-strong text-fg hover:bg-surface-2"
-                  }`}
-                >
-                  {zone.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </Dialog>
-  );
-}
-
-function RiderDetailDialog({ rider, onClose }: { rider: RiderRosterRow | null; onClose: () => void }) {
-  return rider ? <RiderDetailDialogBody rider={rider} onClose={onClose} /> : null;
-}
-
-function RiderDetailDialogBody({ rider, onClose }: { rider: RiderRosterRow; onClose: () => void }) {
-  const { data: perf, isPending } = useQuery<RiderPerformance>({
-    queryKey: ["rider-performance", rider.id],
-    queryFn: () => fetchRiderPerformance(rider.id),
-  });
+    { label: "Zone", render: (r) => <span style={{ color: "#475467" }}>{[r.zoneName, r.vehicleType ? VEHICLE_TYPE_LABELS[r.vehicleType] : null].filter(Boolean).join(" · ") || "Not set"}</span> },
+    {
+      label: "Status",
+      render: (r) => {
+        const c = STATUS_CHIP[r.displayStatus] ?? STATUS_CHIP.Offline;
+        return (
+          <StatusChip bg={c.bg} fg={c.fg}>
+            {r.displayStatus}
+          </StatusChip>
+        );
+      },
+    },
+    { label: "Stops", align: "right", render: (r) => <span style={{ fontWeight: 700, color: r.activeDeliveries >= (settings?.warnAtStopCount ?? Infinity) ? "#B42318" : "#101828" }}>{r.activeDeliveries}</span> },
+    { label: "Done", align: "right", render: (r) => <span style={{ color: "#475467" }}>{r.deliveredToday}</span> },
+    { label: "On time", align: "right", render: (r) => <span style={{ fontWeight: 700, color: "#101828" }}>{r.onTimeRateToday !== null ? `${r.onTimeRateToday}%` : "—"}</span> },
+    { label: "Cash held", align: "right", render: (r) => <span style={{ color: "#475467" }}>{money(r.cashHeld)}</span> },
+    {
+      label: "Last seen",
+      align: "right",
+      render: (r) => (
+        <span style={{ fontWeight: r.stale ? 700 : 400, color: r.stale ? "#B42318" : "#98A2B3" }}>
+          {r.lastLocationAt ? new Date(r.lastLocationAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "never"}
+        </span>
+      ),
+    },
+    {
+      label: "",
+      align: "right",
+      render: (r) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={(e) => {
+            e.stopPropagation();
+            deactivateMutation.mutate({ id: r.id, status: r.status === "active" ? "inactive" : "active" });
+          }}
+          disabled={deactivateMutation.isPending}
+        >
+          {r.status === "active" ? "Deactivate" : "Reactivate"}
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <Dialog open onClose={onClose} title={rider.name} description={rider.phone} className="max-w-md">
-      {isPending || !perf ? (
-        <SkeletonRow />
+    <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+      <KpiGrid kpis={kpis} minWidth={180} />
+      {isLoading || !data ? (
+        <LoadingBlock label="Loading riders…" />
       ) : (
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Total deliveries" value={String(perf.totalDeliveries)} />
-            <Stat label="Success rate" value={perf.successRate != null ? `${perf.successRate}%` : "—"} />
-            <Stat label="Avg. delivery time" value={perf.averageDeliveryMinutes != null ? `${Math.round(perf.averageDeliveryMinutes)}m` : "—"} />
-            <Stat
-              label="Rating"
-              value={
-                perf.averageRating != null ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-accent text-accent" aria-hidden />
-                    {perf.averageRating.toFixed(1)}
-                  </span>
-                ) : (
-                  "Not yet rated"
-                )
-              }
-            />
-          </div>
-          <p className="flex items-center gap-1.5 text-xs text-fg-faint">
-            <BarChart3 className="h-3 w-3" aria-hidden />
-            Based on {perf.ratedDeliveries} rated deliver{perf.ratedDeliveries === 1 ? "y" : "ies"} of {perf.delivered} completed.
-          </p>
-        </div>
+        <DeliveryTableCard
+          title="Riders"
+          sub="Today"
+          columns={columns}
+          rows={data.map((r) => ({ ...r, i: r.id }))}
+          footer="Cash held is what a rider has collected but not yet handed in. It is not counted as revenue until it reaches the till."
+          onRowClick={(r) => router.push(`/deliveries/rider/${r.id}`)}
+          emptyTitle="No riders yet"
+          emptySub="Add your first delivery rider from the button above."
+        />
       )}
-    </Dialog>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="rounded-[var(--radius-sm)] bg-surface-2 p-3">
-      <p className="text-xs text-fg-faint">{label}</p>
-      <p className="mt-0.5 font-display text-lg font-bold text-fg">{value}</p>
     </div>
   );
 }

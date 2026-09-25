@@ -1,17 +1,17 @@
 import { AiInfraService } from '../ai/ai-infra.service';
-import {
-  CreateMessageParams,
-  CreateMessageResult,
-  VISION_MODEL,
-} from '../ai/claude.client';
+import { CreateMessageParams, CreateMessageResult } from '../ai/claude.client';
 import { DigitizerAliasService } from './digitizer-alias.service';
 import { DigitizerVisionService } from './digitizer-vision.service';
+import { DIGITIZER_MODEL } from './digitizer.constants';
 import { AppException } from '../common/filters/app.exception';
 
-function textResult(text: string): CreateMessageResult {
+function textResult(
+  text: string,
+  stopReason = 'end_turn',
+): CreateMessageResult {
   return {
     content: [{ type: 'text', text }],
-    stopReason: 'end_turn',
+    stopReason,
     inputTokens: 100,
     outputTokens: 50,
   };
@@ -37,7 +37,7 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
     );
   });
 
-  it('sends a real image content block using the vision-capable model', async () => {
+  it('sends a real image content block using the digitizer model', async () => {
     aiInfra.createMessage.mockResolvedValue(textResult('[]'));
 
     await service.extract(
@@ -49,7 +49,7 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
 
     expect(aiInfra.createMessage).toHaveBeenCalledTimes(1);
     const params: CreateMessageParams = aiInfra.createMessage.mock.calls[0][2];
-    expect(params.model).toBe(VISION_MODEL);
+    expect(params.model).toBe(DIGITIZER_MODEL);
     const content = params.messages[0].content;
     if (typeof content === 'string') throw new Error('expected content blocks');
     expect(content[0].type).toBe('image');
@@ -57,6 +57,26 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
     expect(content[0].source?.data).toBe(
       Buffer.from('fake-image-bytes').toString('base64'),
     );
+  });
+
+  it('sends a PDF as a document block, not an image', async () => {
+    aiInfra.createMessage.mockResolvedValue(textResult('{"rows": []}'));
+
+    await service.extractDocument(
+      'biz-1',
+      'invoice',
+      Buffer.from('%PDF-1.4'),
+      'application/pdf',
+      3,
+    );
+
+    const params = aiInfra.createMessage.mock.calls[0][2];
+    const content = params.messages[0].content;
+    if (typeof content === 'string') throw new Error('expected content blocks');
+    expect(content[0].type).toBe('document');
+    expect(content[0].source?.media_type).toBe('application/pdf');
+    const prompt = content[1].text ?? '';
+    expect(prompt).toContain('3 pages');
   });
 
   it('parses real rows, defaults destination per scanner type, and clamps confidence', async () => {
@@ -110,16 +130,137 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
     expect(rows.map((r) => r.destination)).toEqual(['supplier', 'product']);
   });
 
-  it('never fabricates a row: unparseable AI output yields an empty result, not an error', async () => {
-    aiInfra.createMessage.mockResolvedValue(textResult('this is not json'));
+  it('reads the full document report: type, quality, line items, printed totals, page/row/region', async () => {
+    aiInfra.createMessage.mockResolvedValue(
+      textResult(
+        JSON.stringify({
+          document: {
+            type: 'purchase_invoice',
+            typeConfidence: 0.93,
+            title: 'Supplier invoice · Zenith Beauty',
+            handwriting: 'printed',
+            language: 'English',
+            quality: {
+              legible: true,
+              blur: 'none',
+              glare: 'mild',
+              shadow: 'none',
+              skew: 'none',
+              cutOff: false,
+              notes: null,
+            },
+            invoiceNumber: 'ZB-0844',
+            supplier: 'Zenith Beauty',
+            documentDate: '2026-08-28',
+            currency: 'PKR',
+            lineItems: [
+              {
+                description: 'Serum',
+                quantity: 2,
+                unitPrice: 500,
+                lineTotal: 1000,
+              },
+              {
+                description: 'Cream',
+                quantity: null,
+                unitPrice: 300,
+                lineTotal: 300,
+              },
+            ],
+            totals: {
+              subtotal: null,
+              tax: 0,
+              discount: null,
+              printedTotal: 1400,
+            },
+          },
+          rows: [
+            {
+              destination: 'expense',
+              data: {
+                description: 'Zenith Beauty · ZB-0844',
+                amount: 1400,
+                incurredOn: '2026-08-28',
+              },
+              fieldConfidence: { amount: 0.95, incurredOn: null },
+              confidence: 0.9,
+              page: 1,
+              row: 1,
+              region: { x: 0.1, y: 0.2, w: 0.5, h: 0.05 },
+            },
+          ],
+        }),
+      ),
+    );
 
-    const rows = await service.extract(
+    const out = await service.extractDocument(
+      'biz-1',
+      'invoice',
+      Buffer.from('x'),
+      'image/jpeg',
+    );
+
+    expect(out.analysis.documentKind).toBe('purchase_invoice');
+    expect(out.analysis.typeConfidence).toBe(0.93);
+    expect(out.analysis.quality?.glare).toBe('mild');
+    expect(out.analysis.lineItems).toHaveLength(2);
+    expect(out.analysis.lineItems[1].quantity).toBeNull(); // an unread value stays null — never filled in
+    expect(out.analysis.totals?.printedTotal).toBe(1400);
+    expect(out.analysis.extractionModel).toBe(DIGITIZER_MODEL);
+    expect(out.rows[0].page).toBe(1);
+    expect(out.rows[0].sourceRow).toBe(1);
+    expect(out.rows[0].fieldConfidence).toEqual({
+      amount: 0.95,
+      incurredOn: null,
+    });
+    expect(out.rows[0].region).toEqual({ x: 0.1, y: 0.2, w: 0.5, h: 0.05 });
+  });
+
+  it('drops a region that falls outside the page instead of trusting it', async () => {
+    aiInfra.createMessage.mockResolvedValue(
+      textResult(
+        JSON.stringify({
+          rows: [
+            {
+              destination: 'expense',
+              data: { description: 'x', amount: 1 },
+              confidence: 0.9,
+              region: { x: 5, y: 5, w: 1, h: 1 },
+            },
+          ],
+        }),
+      ),
+    );
+    const out = await service.extractDocument(
       'biz-1',
       'receipt',
       Buffer.from('x'),
       'image/jpeg',
     );
-    expect(rows).toEqual([]);
+    expect(out.rows[0].region).toBeUndefined();
+  });
+
+  it('never fabricates a row: unparseable AI output is an error, not an empty success', async () => {
+    aiInfra.createMessage.mockResolvedValue(textResult('this is not json'));
+
+    await expect(
+      service.extract('biz-1', 'receipt', Buffer.from('x'), 'image/jpeg'),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('refuses a truncated reply rather than parsing half a document', async () => {
+    aiInfra.createMessage.mockResolvedValue(
+      textResult('{"rows": [', 'max_tokens'),
+    );
+
+    await expect(
+      service.extractDocument(
+        'biz-1',
+        'receipt',
+        Buffer.from('x'),
+        'image/jpeg',
+      ),
+    ).rejects.toBeInstanceOf(AppException);
   });
 
   it('fails cleanly (disclosed gap) when the AI call itself throws', async () => {
@@ -132,7 +273,7 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
     ).rejects.toBeInstanceOf(AppException);
   });
 
-  it('applies learned aliases to the extracted name field before returning', async () => {
+  it('applies learned aliases but keeps the model’s own read in `original`', async () => {
     aliases.getMap.mockResolvedValue(new Map([['Sprte', 'Sprite']]));
     aliases.applyAliases.mockImplementation((value: string) =>
       value === 'Sprte' ? 'Sprite' : value,
@@ -156,5 +297,6 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
       'image/jpeg',
     );
     expect(rows[0].data.name).toBe('Sprite');
+    expect(rows[0].original?.name).toBe('Sprte');
   });
 });

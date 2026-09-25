@@ -9,6 +9,9 @@ import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { OrderStatus } from '@prisma/client';
 import { resolvePolicies } from '../common/policies/policies.service';
+import { randomBytes } from 'crypto';
+import { computeDeliveryPricing } from '../delivery/delivery-pricing.util';
+import { DELIVERY_ERROR_CODES } from '../delivery/delivery.constants';
 
 /**
  * Public online-ordering / dine-in endpoints (BE-029). No auth — the
@@ -34,7 +37,36 @@ export class PublicOrderingService {
       orderBy: { name: 'asc' },
     });
 
+    // Zone rules the owner switched on: the storefront lists the zones a customer can pick, and
+    // shows each fee only when "fee shown before checkout" is on.
+    const settings = await this.prisma.deliverySettings.findUnique({
+      where: { businessId: business.id },
+    });
+    const zones =
+      settings?.enforceZoneCoverage ||
+      settings?.showFeeBeforeCheckout ||
+      settings?.pausedZonesBlockOrders
+        ? await this.prisma.deliveryZone.findMany({
+            where: { businessId: business.id, active: true },
+            orderBy: { name: 'asc' },
+          })
+        : [];
+
     return {
+      deliveryZones: zones.map((z) => ({
+        id: z.id,
+        name: z.name,
+        fee: settings?.showFeeBeforeCheckout
+          ? {
+              chargeType: z.chargeType,
+              flatAmount: z.flatAmount ? Number(z.flatAmount) : null,
+              perKmAmount: z.perKmAmount ? Number(z.perKmAmount) : null,
+              freeAboveOrderValue: z.freeAboveOrderValue
+                ? Number(z.freeAboveOrderValue)
+                : null,
+            }
+          : null,
+      })),
       business: {
         name: business.name,
         currency: business.currency,
@@ -48,6 +80,50 @@ export class PublicOrderingService {
 
   async createOrder(slug: string, dto: CreatePublicOrderDto) {
     const business = await this.resolveBusiness(slug);
+
+    // Delivery orders: enforce the owner's zone rules before anything is created.
+    const isDelivery = dto.orderType === 'delivery';
+    const settings = isDelivery
+      ? await this.prisma.deliverySettings.findUnique({
+          where: { businessId: business.id },
+        })
+      : null;
+    const zone =
+      isDelivery && dto.deliveryZoneId
+        ? await this.prisma.deliveryZone.findFirst({
+            where: { id: dto.deliveryZoneId, businessId: business.id },
+          })
+        : null;
+    if (isDelivery) {
+      if (!dto.deliveryAddress?.trim()) {
+        throw new AppException(
+          DELIVERY_ERROR_CODES.ADDRESS_REQUIRED,
+          'A delivery address is required for a delivery order',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (dto.deliveryZoneId && !zone) {
+        throw new AppException(
+          DELIVERY_ERROR_CODES.OUT_OF_ZONE,
+          'That delivery zone does not exist',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (zone && !zone.active && settings?.pausedZonesBlockOrders) {
+        throw new AppException(
+          DELIVERY_ERROR_CODES.ZONE_PAUSED,
+          `We are not taking delivery orders for ${zone.name} right now`,
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (settings?.enforceZoneCoverage && (!zone || !zone.active)) {
+        throw new AppException(
+          DELIVERY_ERROR_CODES.OUT_OF_ZONE,
+          'Delivery is only available inside our delivery zones — please choose one',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let customerId: string | undefined;
@@ -101,7 +177,9 @@ export class PublicOrderingService {
         };
       });
 
-      const taxInclusive = resolvePolicies(business).bool('sales.pricesIncludeTax');
+      const taxInclusive = resolvePolicies(business).bool(
+        'sales.pricesIncludeTax',
+      );
       const { subtotal, tax, total, cogs } = computeOrderTotals(
         itemsData,
         0,
@@ -143,6 +221,46 @@ export class PublicOrderingService {
           qty: item.qty,
         })),
       });
+
+      if (isDelivery) {
+        const lat = dto.deliveryLat ?? null;
+        const lng = dto.deliveryLng ?? null;
+        const priced = computeDeliveryPricing({
+          zone,
+          settings: settings ?? {
+            hubLat: null,
+            hubLng: null,
+            costPerKm: null,
+            riderPayPerDelivery: null,
+          },
+          orderTotal: total,
+          lat,
+          lng,
+        });
+        await tx.delivery.create({
+          data: {
+            businessId: business.id,
+            orderId: order.id,
+            addressLine: dto.deliveryAddress!.trim(),
+            lat,
+            lng,
+            zoneId: zone?.id,
+            deliveryNote: dto.deliveryNote?.trim() || null,
+            deliveryFee: priced.fee,
+            deliveryCost: priced.cost,
+            distanceKm: priced.distanceKm,
+            trackingToken: randomBytes(16).toString('hex'),
+          },
+        });
+        await tx.activityEvent.create({
+          data: {
+            businessId: business.id,
+            type: 'delivery',
+            description: `New online delivery order #${orderNo} — waiting for a rider`,
+            entityType: 'Delivery',
+          },
+        });
+      }
 
       return order;
     });

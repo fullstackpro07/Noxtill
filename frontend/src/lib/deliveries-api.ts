@@ -22,9 +22,17 @@ export const DELIVERY_FAILURE_REASONS = [
   "Unable to contact customer",
 ];
 
+export interface DeliveryOrderPayment {
+  method: string;
+  amount: string;
+}
+
 export interface DeliveryOrder {
   id: string;
   orderNo: number;
+  total: string;
+  customer?: { name: string } | null;
+  payments?: DeliveryOrderPayment[];
 }
 
 export interface Delivery {
@@ -47,7 +55,14 @@ export interface Delivery {
   proofPhotoKey: string | null;
   proofAt: string | null;
   assignedAt: string | null;
+  promisedAt: string | null;
   deliveredAt: string | null;
+  deliveryFee: string | null;
+  deliveryCost: string | null;
+  distanceKm: string | null;
+  deliveryNote: string | null;
+  trackingToken: string | null;
+  customerNotifiedAt: string | null;
   failureReason: string | null;
   qualityRating: number | null;
   createdAt: string;
@@ -124,4 +139,37 @@ export interface OnTimeStats {
  */
 export function fetchOnTimeStats(): Promise<OnTimeStats> {
   return apiFetch<OnTimeStats>(`/deliveries/on-time-stats`);
+}
+
+export interface EligibleOrder {
+  id: string;
+  orderNo: number;
+  orderType: string;
+  total: number;
+  customerName: string | null;
+  customerAddress: string | null;
+  createdAt: string;
+}
+
+/** Orders that have no delivery yet — what "Create delivery" can dispatch. */
+export function fetchEligibleOrders(): Promise<EligibleOrder[]> {
+  return apiFetch<EligibleOrder[]>("/deliveries/eligible-orders");
+}
+
+export interface CreateDeliveryInput {
+  orderId: string;
+  addressLine: string;
+  zoneId?: string;
+  lat?: number;
+  lng?: number;
+  deliveryNote?: string;
+}
+
+export function createDelivery(input: CreateDeliveryInput): Promise<Delivery> {
+  return apiFetch<Delivery>("/deliveries", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** A person sending a failed delivery back to the dispatch queue (logged, never automatic). */
+export function retryDelivery(id: string): Promise<Delivery> {
+  return apiFetch<Delivery>(`/deliveries/${id}/retry`, { method: "PATCH" });
 }

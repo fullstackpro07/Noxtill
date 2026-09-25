@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Package, Star, CheckCircle2 } from "lucide-react";
+import { Star, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
-import { SkeletonRow } from "@/components/shared/skeleton";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { EmptyState } from "@/components/shared/empty-state";
+import { KpiGrid, DeliveryTableCard, StatusChip, LoadingBlock, type TableColumn } from "./delivery-ui";
 import {
   fetchDeliveries,
   fetchDeliveryProof,
@@ -25,7 +24,10 @@ import {
 import { OnTimeTrendChart } from "@/components/delivery/on-time-trend-chart";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatTime } from "@/lib/format";
+import { fetchRiders, VEHICLE_TYPE_LABELS } from "@/lib/riders-api";
+import { assignDelivery } from "@/lib/deliveries-api";
+import { invalidateDeliveryData } from "./delivery-actions";
 
 const STATUS_TONE: Record<DeliveryStatus, "neutral" | "primary" | "success" | "danger"> = {
   unassigned: "neutral",
@@ -35,112 +37,123 @@ const STATUS_TONE: Record<DeliveryStatus, "neutral" | "primary" | "success" | "d
   delivered: "success",
   failed: "danger",
 };
+const STATUS_CHIP: Record<DeliveryStatus, { bg: string; fg: string }> = {
+  unassigned: { bg: "#FEF6E7", fg: "#B54708" },
+  assigned: { bg: "#EEF4FF", fg: "#3538CD" },
+  picked_up: { bg: "#EEF4FF", fg: "#3538CD" },
+  en_route: { bg: "#EEF4FF", fg: "#3538CD" },
+  delivered: { bg: "#E8F7EE", fg: "#0E8442" },
+  failed: { bg: "#FEF3F2", fg: "#B42318" },
+};
 
-const STATUS_FILTERS: (DeliveryStatus | "all")[] = ["all", "unassigned", "assigned", "picked_up", "en_route", "delivered", "failed"];
+function paymentText(d: Delivery): { text: string; paid: boolean } {
+  const total = Number(d.order?.total ?? 0);
+  const paid = (d.order?.payments ?? []).reduce((s, p) => s + Number(p.amount), 0);
+  const isPaid = paid >= total && total > 0;
+  return { text: `Rs. ${Math.round(total).toLocaleString("en-US")} · ${isPaid ? "paid" : "cash on delivery"}`, paid: isPaid };
+}
 
 export function AllDeliveriesView() {
-  const [statusFilter, setStatusFilter] = useState<DeliveryStatus | "all">("all");
+  const params = useSearchParams();
+  const initial = params.get("status");
+  const openId = params.get("open");
+  const [statusFilter, setStatusFilter] = useState<DeliveryStatus | "all">(
+    initial && initial in DELIVERY_STATUS_LABELS ? (initial as DeliveryStatus) : "all",
+  );
   const [selected, setSelected] = useState<Delivery | null>(null);
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["deliveries", statusFilter],
-    queryFn: () => fetchDeliveries(statusFilter === "all" ? undefined : statusFilter),
-  });
+  const [dismissedOpen, setDismissedOpen] = useState(false);
+  // Cards are counted over every delivery, never over the filtered rows, so a filter can't change them.
+  const { data: all, isLoading } = useQuery({ queryKey: ["deliveries", "all"], queryFn: () => fetchDeliveries() });
+  const data = useMemo(() => (all ? (statusFilter === "all" ? all : all.filter((d) => d.status === statusFilter)) : undefined), [all, statusFilter]);
   const { data: onTimeStats } = useQuery({ queryKey: ["deliveries-on-time-stats"], queryFn: fetchOnTimeStats });
 
-  const total = data?.length ?? 0;
-  const delivered = data?.filter((d) => d.status === "delivered").length ?? 0;
-  const failed = data?.filter((d) => d.status === "failed").length ?? 0;
-  const successRate = delivered + failed > 0 ? Math.round((delivered / (delivered + failed)) * 100) : null;
+  const kpis = useMemo(() => {
+    const rows = all ?? [];
+    const delivered = rows.filter((d) => d.status === "delivered").length;
+    const failed = rows.filter((d) => d.status === "failed").length;
+    const inProgress = rows.filter((d) => ["assigned", "picked_up", "en_route"].includes(d.status)).length;
+    return [
+      { l: "All deliveries", v: String(rows.length), sub: `${delivered} delivered`, color: "#0F172A", bd: "#E6EAF0" },
+      { l: "In progress", v: String(inProgress), sub: "assigned, picked up or en route", color: "#0F172A", bd: "#E6EAF0" },
+      { l: "On-time rate", v: onTimeStats?.onTimeRate != null ? `${onTimeStats.onTimeRate}%` : "Not enough data", sub: onTimeStats ? `${onTimeStats.sampleSize} with a real promise` : "", color: "#0F172A", bd: "#E6EAF0" },
+      { l: "Failed", v: String(failed), sub: failed > 0 ? "see Exceptions" : "none recorded", color: failed > 0 ? "#B54708" : "#0F172A", bd: "#E6EAF0" },
+    ];
+  }, [all, onTimeStats]);
+
+  const columns: TableColumn<Delivery>[] = [
+    { label: "Delivery", render: (d) => <span style={{ fontWeight: 700, color: "#0E8442" }}>{d.order ? `DEL-${d.order.orderNo}` : "—"}</span> },
+    { label: "Customer", render: (d) => <span style={{ fontWeight: 700, color: "#101828" }}>{d.order?.customer?.name ?? "Walk-in customer"}</span> },
+    { label: "Zone", render: (d) => <span style={{ color: "#475467" }}>{d.zone?.name ?? "No zone"}</span> },
+    { label: "Rider", render: (d) => <span style={{ color: d.rider ? "#475467" : "#B42318", fontWeight: d.rider ? 400 : 700 }}>{d.rider?.name ?? "Not assigned"}</span> },
+    {
+      label: "Status",
+      render: (d) => {
+        const c = STATUS_CHIP[d.status];
+        return (
+          <StatusChip bg={c.bg} fg={c.fg}>
+            {DELIVERY_STATUS_LABELS[d.status]}
+          </StatusChip>
+        );
+      },
+    },
+    { label: "Payment", render: (d) => <span style={{ color: "#475467" }}>{paymentText(d).text}</span> },
+    { label: "Promised", align: "right", render: (d) => <span style={{ fontWeight: 700, color: "#101828" }}>{d.promisedAt ? formatTime(d.promisedAt) : "—"}</span> },
+  ];
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-5">
-        <h1 className="font-display text-2xl font-bold text-fg">All Deliveries</h1>
-        <p className="mt-0.5 text-sm text-fg-muted">Every delivery, with real outcomes and a real on-time rate measured against each business&apos;s configured delivery SLA.</p>
-      </div>
-
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-          <p className="text-xs text-fg-faint">Total</p>
-          <p className="font-display text-xl font-bold text-fg">{total}</p>
-        </div>
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-          <p className="text-xs text-fg-faint">Delivered</p>
-          <p className="font-display text-xl font-bold text-fg">{delivered}</p>
-        </div>
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-          <p className="text-xs text-fg-faint">Success rate</p>
-          <p className="font-display text-xl font-bold text-fg">{successRate != null ? `${successRate}%` : "—"}</p>
-        </div>
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-          <p className="text-xs text-fg-faint">On-time rate</p>
-          <p className="font-display text-xl font-bold text-fg">{onTimeStats?.onTimeRate != null ? `${onTimeStats.onTimeRate}%` : "—"}</p>
-          {onTimeStats && onTimeStats.sampleSize === 0 && <p className="mt-0.5 text-[11px] text-fg-faint">No promised deliveries yet</p>}
-        </div>
-      </div>
-
-      {onTimeStats && onTimeStats.trend.length > 0 && (
-        <div className="mb-4 rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-          <p className="mb-2 text-xs font-medium text-fg-muted">On-time rate, last 14 days</p>
-          <OnTimeTrendChart trend={onTimeStats.trend} />
-        </div>
-      )}
-
-      <div className="mb-4 flex gap-2">
-        {STATUS_FILTERS.map((s) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        {(["all", "unassigned", "assigned", "picked_up", "en_route", "delivered", "failed"] as const).map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-              statusFilter === s ? "border-primary bg-primary/10 text-primary" : "border-border-strong text-fg hover:bg-surface-2"
-            }`}
+            style={{
+              border: `1px solid ${statusFilter === s ? "#12A150" : "#E6EAF0"}`,
+              background: statusFilter === s ? "#F7FCF9" : "#fff",
+              color: statusFilter === s ? "#0E8442" : "#475467",
+              borderRadius: "20px",
+              padding: "7px 13px",
+              fontSize: "12px",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
           >
             {s === "all" ? "All" : DELIVERY_STATUS_LABELS[s]}
           </button>
         ))}
       </div>
 
-      {isError ? (
-        <ErrorBanner title="Couldn't load deliveries" onRetry={() => refetch()} />
-      ) : isPending ? (
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : !data || data.length === 0 ? (
-        <EmptyState icon={Package} title="No deliveries" description="Nothing matches this filter." />
-      ) : (
-        <div className="overflow-x-auto rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-fg-faint">
-                <th className="px-4 py-2 font-medium">Order</th>
-                <th className="px-4 py-2 font-medium">Address</th>
-                <th className="px-4 py-2 font-medium">Rider</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((d) => (
-                <tr key={d.id} onClick={() => setSelected(d)} className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-2">
-                  <td className="px-4 py-2 font-medium text-fg">#{d.order?.orderNo ?? "—"}</td>
-                  <td className="max-w-[220px] truncate px-4 py-2 text-fg-muted">{d.addressLine}</td>
-                  <td className="px-4 py-2 text-fg-muted">{d.rider?.name ?? "—"}</td>
-                  <td className="px-4 py-2">
-                    <Badge tone={STATUS_TONE[d.status]}>{DELIVERY_STATUS_LABELS[d.status]}</Badge>
-                  </td>
-                  <td className="px-4 py-2 text-xs text-fg-faint">
-                    {formatDate(d.createdAt)} · {formatTime(d.createdAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {onTimeStats && onTimeStats.trend.length > 0 && (
+        <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: "16px", padding: "16px" }}>
+          <p style={{ margin: "0 0 8px", fontSize: "12px", fontWeight: 700, color: "#475467" }}>On-time rate, last 14 days</p>
+          <OnTimeTrendChart trend={onTimeStats.trend} />
         </div>
       )}
 
-      <DeliveryDetailDialog delivery={selected} onClose={() => setSelected(null)} />
+      <KpiGrid kpis={kpis} minWidth={180} />
+
+      {isLoading || !data ? (
+        <LoadingBlock label="Loading deliveries…" />
+      ) : (
+        <DeliveryTableCard
+          title="Every delivery"
+          sub="Newest first"
+          columns={columns}
+          rows={data.map((d) => ({ ...d, i: d.id }))}
+          footer="Promised time is the promise recorded when the rider was assigned (the zone or default SLA plus your ETA padding)."
+          onRowClick={(d) => setSelected(d)}
+          emptyTitle="No deliveries"
+          emptySub="Nothing matches this filter."
+        />
+      )}
+
+      <DeliveryDetailDialog
+        delivery={selected ?? (!dismissedOpen && openId ? (all?.find((d) => d.id === openId) ?? null) : null)}
+        onClose={() => {
+          setSelected(null);
+          setDismissedOpen(true);
+        }}
+      />
     </div>
   );
 }
@@ -184,13 +197,88 @@ function DeliveryDetailDialogBody({ delivery, onClose }: { delivery: Delivery; o
 
   const canFail = !["delivered", "failed"].includes(delivery.status);
 
+  const { data: riders } = useQuery({ queryKey: ["delivery-riders"], queryFn: fetchRiders });
+  const [newRiderId, setNewRiderId] = useState("");
+  const NEXT: Partial<Record<DeliveryStatus, { to: "picked_up" | "en_route" | "delivered"; label: string }>> = {
+    assigned: { to: "picked_up", label: "Mark picked up" },
+    picked_up: { to: "en_route", label: "Mark on the way" },
+    en_route: { to: "delivered", label: "Mark delivered" },
+  };
+  const next = NEXT[delivery.status];
+  const advanceMutation = useMutation({
+    mutationFn: (to: "picked_up" | "en_route" | "delivered") => updateDeliveryStatus(delivery.id, to),
+    onSuccess: () => {
+      toast.success("Status updated.");
+      invalidateDeliveryData(queryClient);
+      onClose();
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't update this delivery."),
+  });
+  const reassignMutation = useMutation({
+    mutationFn: () => assignDelivery(delivery.id, newRiderId),
+    onSuccess: () => {
+      toast.success("Rider assigned.");
+      invalidateDeliveryData(queryClient);
+      onClose();
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't assign this rider."),
+  });
+  const canReassign = delivery.status === "unassigned" || delivery.status === "assigned";
+  const trackingUrl = delivery.trackingToken && typeof window !== "undefined" ? `${window.location.origin}/track/${delivery.trackingToken}` : null;
+
   return (
-    <Dialog open onClose={onClose} title={`Order #${delivery.order?.orderNo ?? ""}`} description={delivery.addressLine} className="max-w-lg">
+    <Dialog open onClose={onClose} title={delivery.order ? `DEL-${delivery.order.orderNo}` : "Delivery"} description={delivery.addressLine} className="max-w-lg">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <Badge tone={STATUS_TONE[delivery.status]}>{DELIVERY_STATUS_LABELS[delivery.status]}</Badge>
           {delivery.rider && <span className="text-xs text-fg-muted">{delivery.rider.name}</span>}
         </div>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-fg-muted">
+          <span>Delivery fee</span>
+          <span className="text-right font-medium text-fg">{delivery.deliveryFee !== null ? `Rs. ${Math.round(Number(delivery.deliveryFee)).toLocaleString("en-US")}` : "Not quoted (no zone fee)"}</span>
+          <span>Delivery cost</span>
+          <span className="text-right font-medium text-fg">{delivery.deliveryCost !== null ? `Rs. ${Math.round(Number(delivery.deliveryCost)).toLocaleString("en-US")}` : "Not configured"}</span>
+          <span>Distance from hub</span>
+          <span className="text-right font-medium text-fg">{delivery.distanceKm !== null ? `${Number(delivery.distanceKm)} km` : "Unknown"}</span>
+          <span>Customer message queued</span>
+          <span className="text-right font-medium text-fg">{delivery.customerNotifiedAt ? formatTime(delivery.customerNotifiedAt) : "Not yet"}</span>
+        </div>
+        {delivery.deliveryNote && <div className="rounded-[var(--radius-sm)] bg-surface-2 px-3 py-2 text-sm text-fg">Note for the rider: {delivery.deliveryNote}</div>}
+        {trackingUrl && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void navigator.clipboard.writeText(trackingUrl);
+              toast.success("Tracking link copied.");
+            }}
+          >
+            Copy customer tracking link
+          </Button>
+        )}
+        {next && (
+          <Button size="sm" onClick={() => advanceMutation.mutate(next.to)} disabled={advanceMutation.isPending}>
+            {advanceMutation.isPending ? "Saving…" : next.label}
+          </Button>
+        )}
+        {canReassign && (
+          <div className="flex items-end gap-2">
+            <Select label={delivery.riderId ? "Give to a different rider" : "Assign a rider"} value={newRiderId} onChange={(e) => setNewRiderId(e.target.value)}>
+              <option value="">Choose a rider…</option>
+              {(riders ?? [])
+                .filter((r) => r.status === "active" && r.id !== delivery.riderId)
+                .map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} · {r.displayStatus} · {r.activeDeliveries} active{r.vehicleType ? ` · ${VEHICLE_TYPE_LABELS[r.vehicleType]}` : ""}
+                  </option>
+                ))}
+            </Select>
+            <Button size="sm" onClick={() => reassignMutation.mutate()} disabled={!newRiderId || reassignMutation.isPending}>
+              Assign
+            </Button>
+          </div>
+        )}
 
         {delivery.status === "failed" && delivery.failureReason && (
           <div className="rounded-[var(--radius-sm)] bg-destructive/6 px-3 py-2 text-sm text-destructive">{delivery.failureReason}</div>
@@ -217,7 +305,14 @@ function DeliveryDetailDialogBody({ delivery, onClose }: { delivery: Delivery; o
               <p className="mb-1.5 text-xs font-medium text-fg-muted">Delivery quality rating (staff-recorded)</p>
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <button key={n} onClick={() => { setRating(n); rateMutation.mutate(n); }} aria-label={`Rate ${n} stars`}>
+                  <button
+                    key={n}
+                    onClick={() => {
+                      setRating(n);
+                      rateMutation.mutate(n);
+                    }}
+                    aria-label={`Rate ${n} stars`}
+                  >
                     <Star className={`h-6 w-6 ${n <= rating ? "fill-accent text-accent" : "text-fg-faint"}`} aria-hidden />
                   </button>
                 ))}
@@ -248,7 +343,7 @@ function DeliveryDetailDialogBody({ delivery, onClose }: { delivery: Delivery; o
         {delivery.status === "delivered" && (
           <div className="flex items-center gap-1.5 text-xs text-whatsapp">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-            Delivered {delivery.deliveredAt ? `${formatDate(delivery.deliveredAt)} · ${formatTime(delivery.deliveredAt)}` : ""}
+            Delivered {delivery.deliveredAt ? formatTime(delivery.deliveredAt) : ""}
           </div>
         )}
       </div>

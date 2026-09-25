@@ -5,8 +5,13 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { S3Service } from '../common/storage/s3.service';
 import { ActivityPubSubService } from '../activity/activity-pubsub.service';
+import { ActivityService } from '../activity/activity.service';
 import { DeliveryAssignmentService } from './delivery-assignment.service';
 import { DeliverySettingsService } from './delivery-settings.service';
+import { DeliveryPricingService } from './delivery-pricing.service';
+import { DeliveryNotifierService } from './delivery-notifier.service';
+import { DeliveryAutomationsService } from './delivery-automations.service';
+import { GeocodingService } from './geocoding.service';
 import { DeliveriesService } from './deliveries.service';
 import { deliveryChannel } from './delivery.constants';
 import { AppException } from '../common/filters/app.exception';
@@ -34,6 +39,14 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
   let orderNo = 1;
   const s3 = { upload: jest.fn(), getSignedDownloadUrl: jest.fn() };
   const pubsub = { publish: jest.fn(), subscribe: jest.fn() };
+  const activity = { record: jest.fn() };
+  const notifier = { newTrackingToken: () => 'test-token-' + Math.random() };
+  const automations = {
+    onAssigned: jest.fn(),
+    onDelivered: jest.fn(),
+    onFailed: jest.fn(),
+  };
+  const geocoding = { geocode: jest.fn().mockResolvedValue(null) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -50,8 +63,13 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
       tenantPrisma,
       s3 as unknown as S3Service,
       pubsub as unknown as ActivityPubSubService,
+      activity as unknown as ActivityService,
       assignment,
       deliverySettings,
+      new DeliveryPricingService(tenantPrisma, deliverySettings),
+      notifier as unknown as DeliveryNotifierService,
+      automations as unknown as DeliveryAutomationsService,
+      geocoding as unknown as GeocodingService,
     );
 
     const business = await prisma.business.create({
@@ -532,8 +550,16 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
         tenantPrisma,
         s3 as unknown as S3Service,
         pubsub as unknown as ActivityPubSubService,
+        activity as unknown as ActivityService,
         new DeliveryAssignmentService(tenantPrisma),
         new DeliverySettingsService(tenantPrisma),
+        new DeliveryPricingService(
+          tenantPrisma,
+          new DeliverySettingsService(tenantPrisma),
+        ),
+        notifier as unknown as DeliveryNotifierService,
+        automations as unknown as DeliveryAutomationsService,
+        geocoding as unknown as GeocodingService,
       );
       return { business, isolatedService };
     }
@@ -662,6 +688,153 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
         expect(typeof event.type).toBe('string');
         expect(event.type).toBe((event.data as { kind: string }).kind);
       }
+    });
+  });
+
+  describe('create() with fee/cost snapshot and eligible orders', () => {
+    it('stores the zone fee on the delivery, lists only orders without a delivery, and refuses reassigning a picked-up delivery', async () => {
+      const zone = await prisma.deliveryZone.create({
+        data: {
+          businessId,
+          name: 'Fee Zone',
+          chargeType: 'flat',
+          flatAmount: 175,
+        },
+      });
+      const order = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: orderNo++,
+          orderType: 'delivery',
+          status: 'pending',
+          total: 900,
+        },
+      });
+      const eligibleBefore = await service.eligibleOrders();
+      expect(eligibleBefore.some((o) => o.id === order.id)).toBe(true);
+
+      const delivery = await service.create(businessId, {
+        orderId: order.id,
+        addressLine: '9 Fee Street',
+        zoneId: zone.id,
+        deliveryNote: 'Ring twice',
+      });
+      const stored = await prisma.delivery.findUniqueOrThrow({
+        where: { id: delivery.id },
+      });
+      expect(Number(stored.deliveryFee)).toBe(175);
+      expect(stored.deliveryNote).toBe('Ring twice');
+      expect(stored.trackingToken).toBeTruthy();
+
+      const eligibleAfter = await service.eligibleOrders();
+      expect(eligibleAfter.some((o) => o.id === order.id)).toBe(false);
+
+      const rider = await prisma.rider.create({
+        data: {
+          businessId,
+          name: 'Reassign Rider',
+          phone: '0302',
+          status: 'active',
+        },
+      });
+      await prisma.delivery.update({
+        where: { id: delivery.id },
+        data: { status: 'picked_up', riderId: rider.id },
+      });
+      await expect(
+        service.assign(businessId, delivery.id, { riderId: rider.id }),
+      ).rejects.toMatchObject({
+        response: { code: 'INVALID_DELIVERY_STATUS_TRANSITION' },
+      });
+    });
+  });
+
+  describe('auto-assign switch', () => {
+    it('leaves a new delivery unassigned when auto-assign is off, and assigns it when on', async () => {
+      await prisma.rider.create({
+        data: {
+          businessId,
+          name: 'Auto Rider',
+          phone: '0303',
+          status: 'active',
+        },
+      });
+      await prisma.deliverySettings.upsert({
+        where: { businessId },
+        create: { businessId, autoAssignNew: false },
+        update: { autoAssignNew: false },
+      });
+      const o1 = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: orderNo++,
+          orderType: 'delivery',
+          status: 'pending',
+          total: 100,
+        },
+      });
+      const off = await service.create(businessId, {
+        orderId: o1.id,
+        addressLine: 'A',
+      });
+      expect(off.status).toBe('unassigned');
+      expect(off.riderId).toBeNull();
+
+      await prisma.deliverySettings.update({
+        where: { businessId },
+        data: { autoAssignNew: true },
+      });
+      const o2 = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: orderNo++,
+          orderType: 'delivery',
+          status: 'pending',
+          total: 100,
+        },
+      });
+      const on = await service.create(businessId, {
+        orderId: o2.id,
+        addressLine: 'B',
+      });
+      expect(on.status).toBe('assigned');
+    });
+  });
+
+  describe('retry()', () => {
+    it('sends only a failed delivery back to the queue, logs why it failed, and clears the promise', async () => {
+      const order = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: orderNo++,
+          orderType: 'delivery',
+          status: 'pending',
+          total: 50,
+        },
+      });
+      const failed = await prisma.delivery.create({
+        data: {
+          businessId,
+          orderId: order.id,
+          addressLine: 'R',
+          status: 'failed',
+          failureReason: 'Nobody home',
+          promisedAt: new Date(),
+        },
+      });
+      const retried = await service.retry(businessId, failed.id);
+      expect(retried.status).toBe('unassigned');
+      expect(retried.failureReason).toBeNull();
+      expect(retried.promisedAt).toBeNull();
+      const calls = activity.record.mock.calls as unknown as [
+        string,
+        { description: string },
+      ][];
+      const logged = calls.map((c) => c[1].description);
+      expect(logged.some((d) => d.includes('Nobody home'))).toBe(true);
+      await expect(service.retry(businessId, failed.id)).rejects.toMatchObject({
+        response: { code: 'INVALID_DELIVERY_STATUS_TRANSITION' },
+      });
     });
   });
 });

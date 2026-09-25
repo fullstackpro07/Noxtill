@@ -1,11 +1,6 @@
 import type { ReactNode } from "react";
-import { ModuleTabs } from "@/components/layout/module-tabs";
+import { DeliveryShell } from "@/components/delivery/delivery-shell";
 
 export default function DeliveriesLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-h-full flex-col">
-      <ModuleTabs moduleKey="deliveries" />
-      <div className="flex-1">{children}</div>
-    </div>
-  );
+  return <DeliveryShell>{children}</DeliveryShell>;
 }

@@ -42,6 +42,10 @@ export const CAPABILITIES = {
   COMPETITIVE_MANAGE: 'competitive.manage',
   VOICE_MANAGE: 'voice.manage',
   DELIVERY_MANAGE: 'delivery.manage',
+  /// Delivery zones, automations and settings change how every delivery is priced, routed and
+  /// messaged — owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below), while
+  /// day-to-day dispatch stays DELIVERY_MANAGE.
+  DELIVERY_CONFIGURE: 'delivery.configure',
   ADS_MANAGE: 'ads.manage',
   HEALTH_SCORE_MANAGE: 'health_score.manage',
   BOOKINGS_MANAGE: 'bookings.manage',

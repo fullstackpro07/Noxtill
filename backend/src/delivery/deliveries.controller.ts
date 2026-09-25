@@ -47,6 +47,11 @@ export class DeliveriesController {
     return this.deliveries.onTimeStats(user.businessId);
   }
 
+  @Get('eligible-orders')
+  eligibleOrders() {
+    return this.deliveries.eligibleOrders();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.deliveries.findOne(id);
@@ -62,7 +67,7 @@ export class DeliveriesController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateDeliveryDto,
   ) {
-    return this.deliveries.create(user.businessId, dto);
+    return this.deliveries.create(user.businessId, dto, user.sub);
   }
 
   @RequireCapability(CAPABILITIES.DELIVERY_MANAGE)
@@ -72,7 +77,7 @@ export class DeliveriesController {
     @Param('id') id: string,
     @Body() dto: AssignDeliveryDto,
   ) {
-    return this.deliveries.assign(user.businessId, id, dto);
+    return this.deliveries.assign(user.businessId, id, dto, user.sub);
   }
 
   /** Per-zone SLA depth fix. */
@@ -86,13 +91,20 @@ export class DeliveriesController {
     return this.deliveries.setZone(user.businessId, id, dto.zoneId);
   }
 
+  /** A person sending a failed delivery back to the dispatch queue. */
+  @RequireCapability(CAPABILITIES.DELIVERY_MANAGE)
+  @Patch(':id/retry')
+  retry(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.deliveries.retry(user.businessId, id, user.sub);
+  }
+
   @Patch(':id/status')
   updateStatus(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateDeliveryStatusDto,
   ) {
-    return this.deliveries.updateStatus(user.businessId, id, dto);
+    return this.deliveries.updateStatus(user.businessId, id, dto, user.sub);
   }
 
   @Post(':id/proof')

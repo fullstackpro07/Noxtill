@@ -133,10 +133,14 @@ export class S3Service {
     let listed = 0;
 
     if (this.useLocalStorage) {
-      const walk = async (dir: string): Promise<{ bytes: number; objects: number }> => {
+      const walk = async (
+        dir: string,
+      ): Promise<{ bytes: number; objects: number }> => {
         let bytes = 0;
         let objects = 0;
-        for (const entry of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+        for (const entry of await fs
+          .readdir(dir, { withFileTypes: true })
+          .catch(() => [])) {
           const full = path.join(dir, entry.name);
           if (entry.isDirectory()) {
             const sub = await walk(full);
@@ -149,14 +153,18 @@ export class S3Service {
         }
         return { bytes, objects };
       };
-      for (const top of await fs.readdir(this.localRoot, { withFileTypes: true }).catch(() => [])) {
+      for (const top of await fs
+        .readdir(this.localRoot, { withFileTypes: true })
+        .catch(() => [])) {
         if (!top.isDirectory()) continue;
         const dir = path.join(this.localRoot, top.name, businessId);
         const used = await walk(dir);
         if (used.objects > 0) areas.push({ area: top.name, ...used });
       }
     } else {
-      const roots = await this.client!.send(new ListObjectsV2Command({ Bucket: this.bucket, Delimiter: '/' }));
+      const roots = await this.client!.send(
+        new ListObjectsV2Command({ Bucket: this.bucket, Delimiter: '/' }),
+      );
       for (const prefix of roots.CommonPrefixes ?? []) {
         if (!prefix.Prefix) continue;
         let bytes = 0;
@@ -164,22 +172,39 @@ export class S3Service {
         let token: string | undefined;
         do {
           const page = await this.client!.send(
-            new ListObjectsV2Command({ Bucket: this.bucket, Prefix: `${prefix.Prefix}${businessId}/`, ContinuationToken: token }),
+            new ListObjectsV2Command({
+              Bucket: this.bucket,
+              Prefix: `${prefix.Prefix}${businessId}/`,
+              ContinuationToken: token,
+            }),
           );
           for (const o of page.Contents ?? []) {
             bytes += o.Size ?? 0;
             objects += 1;
           }
           listed += page.Contents?.length ?? 0;
-          token = page.IsTruncated && listed < MAX_LISTED ? page.NextContinuationToken : undefined;
+          token =
+            page.IsTruncated && listed < MAX_LISTED
+              ? page.NextContinuationToken
+              : undefined;
           if (page.IsTruncated && listed >= MAX_LISTED) truncated = true;
         } while (token);
-        if (objects > 0) areas.push({ area: prefix.Prefix.replace(/\/$/, ''), bytes, objects });
+        if (objects > 0)
+          areas.push({
+            area: prefix.Prefix.replace(/\/$/, ''),
+            bytes,
+            objects,
+          });
       }
     }
 
     areas.sort((a, b) => b.bytes - a.bytes);
-    return { bytes: areas.reduce((n, a) => n + a.bytes, 0), objects: areas.reduce((n, a) => n + a.objects, 0), truncated, areas };
+    return {
+      bytes: areas.reduce((n, a) => n + a.bytes, 0),
+      objects: areas.reduce((n, a) => n + a.objects, 0),
+      truncated,
+      areas,
+    };
   }
 
   /** Used by retention/purge jobs (e.g. UPD-BE-059's voice recording retention) — permanent, not a soft-delete. */
@@ -191,6 +216,22 @@ export class S3Service {
     await this.client!.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
+  }
+
+  /** Reads a stored object's bytes back in either storage mode. Returns null (never throws) when the key is missing. */
+  async readObject(key: string): Promise<Buffer | null> {
+    if (this.useLocalStorage) {
+      return (await this.readLocalFile(key))?.buffer ?? null;
+    }
+    try {
+      const out = await this.client!.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      const bytes = await out.Body?.transformToByteArray();
+      return bytes ? Buffer.from(bytes) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Read-back for `LocalFilesController`. Returns null (never throws) for a missing key or when

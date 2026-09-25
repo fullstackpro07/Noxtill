@@ -23,14 +23,25 @@ export interface Rider {
   lastLat: string | null;
   lastLng: string | null;
   lastLocationAt: string | null;
+  cashHandedInAt: string | null;
+  onBreakSince: string | null;
+  shareLocationConsent: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-/** Roster row — same as Rider plus real today/active delivery counts (`RidersService.list()`). */
+export type RiderDisplayStatus = "Offline" | "On break" | "On delivery" | "No signal" | "Available";
+
+/** Roster row — same as Rider plus real today/active delivery counts and computed display status (`RidersService.enrich()`). */
 export interface RiderRosterRow extends Rider {
   deliveriesToday: number;
   activeDeliveries: number;
+  deliveredToday: number;
+  onTimeRateToday: number | null;
+  cashHeld: number;
+  zoneName: string | null;
+  displayStatus: RiderDisplayStatus;
+  stale: boolean;
 }
 
 export function fetchRiders(): Promise<RiderRosterRow[]> {
@@ -85,4 +96,21 @@ export function updateRider(id: string, input: UpdateRiderInput): Promise<Rider>
 
 export function removeRider(id: string): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>(`/riders/${id}`, { method: "DELETE" });
+}
+
+/** Real cash-on-delivery this rider is currently holding — sum of real `cash` payments on their delivered deliveries since their last hand-in. */
+export function fetchRiderCashHeld(id: string): Promise<{ held: number }> {
+  return apiFetch<{ held: number }>(`/riders/${id}/cash`);
+}
+
+export function handInRiderCash(id: string): Promise<Rider> {
+  return apiFetch<Rider>(`/riders/${id}/cash-handin`, { method: "POST" });
+}
+
+export function setRiderBreak(id: string, onBreak: boolean): Promise<Rider> {
+  return apiFetch<Rider>(`/riders/${id}/break`, { method: "POST", body: JSON.stringify({ onBreak }) });
+}
+
+export function setRiderLocationConsent(id: string, consent: boolean): Promise<Rider> {
+  return apiFetch<Rider>(`/riders/${id}/location-consent`, { method: "POST", body: JSON.stringify({ consent }) });
 }

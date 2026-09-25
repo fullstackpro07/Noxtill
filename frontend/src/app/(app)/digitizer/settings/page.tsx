@@ -1,5 +1,5 @@
-import { DigitizerSettingsView } from "@/components/digitizer/settings-view";
+import { SettingsScreen } from "@/components/digitizer/screens/settings-screen";
 
 export default function DigitizerSettingsPage() {
-  return <DigitizerSettingsView />;
+  return <SettingsScreen />;
 }

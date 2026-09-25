@@ -1,287 +1,214 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Settings2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { SkeletonRow } from "@/components/shared/skeleton";
-import { ErrorBanner } from "@/components/shared/error-states";
-import { EmptyState } from "@/components/shared/empty-state";
-import {
-  fetchDeliveryZones,
-  createDeliveryZone,
-  updateDeliveryZone,
-  removeDeliveryZone,
-  CHARGE_TYPE_LABELS,
-  type DeliveryChargeType,
-  type DeliveryZone,
-} from "@/lib/delivery-zones-api";
-import { fetchDeliverySettings, updateDeliverySettings } from "@/lib/delivery-settings-api";
-import { ApiError } from "@/lib/api-client";
+import { KpiGrid, PanelCard, LoadingBlock } from "./delivery-ui";
+import { OwnerGate } from "./owner-gate";
+import { useDeliverySettingMutation } from "./use-delivery-setting";
+import { fetchDeliverySettings } from "@/lib/delivery-settings-api";
+import { fetchDeliveryZones } from "@/lib/delivery-zones-api";
+import { fetchRiders } from "@/lib/riders-api";
+import { fetchDeliveries } from "@/lib/deliveries-api";
 import { toast } from "@/lib/toast";
 
+function money(n: number): string {
+  return `Rs. ${Math.round(n).toLocaleString("en-US")}`;
+}
+
 export function DeliverySettingsView() {
-  const queryClient = useQueryClient();
-  const [addOpen, setAddOpen] = useState(false);
-  const { data, isPending, isError, refetch } = useQuery({ queryKey: ["delivery-zones"], queryFn: fetchDeliveryZones });
-
-  const removeMutation = useMutation({
-    mutationFn: removeDeliveryZone,
-    onSuccess: () => {
-      toast.success("Zone removed.");
-      void queryClient.invalidateQueries({ queryKey: ["delivery-zones"] });
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't remove this zone."),
-  });
-
-  const toggleActiveMutation = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) => updateDeliveryZone(id, { active }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["delivery-zones"] }),
-  });
-
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-fg">Delivery Settings</h1>
-          <p className="mt-0.5 text-sm text-fg-muted">Charge rules by zone — a settings CRUD, not yet wired into POS pricing.</p>
-        </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" aria-hidden />
-          Add zone
-        </Button>
-      </div>
-
-      <SlaSettingsCard />
-
-      {isError ? (
-        <ErrorBanner title="Couldn't load delivery zones" onRetry={() => refetch()} />
-      ) : isPending ? (
-        <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface">
-          <SkeletonRow />
-        </div>
-      ) : !data || data.length === 0 ? (
-        <EmptyState icon={Settings2} title="No zones yet" description="Add a delivery zone with its own charge rule." action={{ label: "Add zone", onClick: () => setAddOpen(true) }} />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {data.map((zone) => (
-            <div key={zone.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-fg">{zone.name}</p>
-                  <Badge tone={zone.active ? "success" : "neutral"}>{zone.active ? "Active" : "Inactive"}</Badge>
-                </div>
-                <p className="mt-0.5 text-xs text-fg-muted">
-                  {CHARGE_TYPE_LABELS[zone.chargeType]}
-                  {zone.chargeType === "flat" && zone.flatAmount ? ` · $${zone.flatAmount}` : ""}
-                  {zone.chargeType === "by_distance" && zone.perKmAmount ? ` · $${zone.perKmAmount}/km` : ""}
-                  {zone.freeAboveOrderValue ? ` · Free above $${zone.freeAboveOrderValue}` : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <ZoneSlaEditor zone={zone} />
-                <Button variant="ghost" size="sm" onClick={() => toggleActiveMutation.mutate({ id: zone.id, active: !zone.active })}>
-                  {zone.active ? "Deactivate" : "Activate"}
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => removeMutation.mutate(zone.id)} disabled={removeMutation.isPending} aria-label={`Remove ${zone.name}`}>
-                  <Trash2 className="h-4 w-4 text-fg-faint" aria-hidden />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <AddZoneDialog open={addOpen} onClose={() => setAddOpen(false)} />
-    </div>
+    <OwnerGate title="Delivery settings are owner-only">
+      <SettingsBody />
+    </OwnerGate>
   );
 }
 
-/**
- * On-time-rate depth fix — this is the real promise window: whatever minutes a business sets here
- * is what the backend actually stamps onto `Delivery.promisedAt` the moment a rider is assigned, and
- * is what "on-time rate" on the All Deliveries screen is measured against. The business-wide
- * default — a zone below can override it with its own SLA.
- */
-function SlaSettingsCard() {
-  const queryClient = useQueryClient();
-  const { data, isPending } = useQuery({ queryKey: ["delivery-settings"], queryFn: fetchDeliverySettings });
-  const [minutes, setMinutes] = useState("");
-  const [dirty, setDirty] = useState(false);
+function SettingsBody() {
+  const { data: settings, isLoading } = useQuery({ queryKey: ["delivery-settings"], queryFn: fetchDeliverySettings });
+  const { data: zones } = useQuery({ queryKey: ["delivery-zones"], queryFn: fetchDeliveryZones });
+  const { data: riders } = useQuery({ queryKey: ["delivery-riders"], queryFn: fetchRiders });
+  const { data: delivered } = useQuery({ queryKey: ["deliveries", "delivered"], queryFn: () => fetchDeliveries("delivered") });
+  const save = useDeliverySettingMutation("Setting updated.");
+  const [dirty, setDirty] = useState<Record<string, string | undefined>>({});
 
-  const currentMinutes = dirty ? minutes : data ? String(data.defaultSlaMinutes) : "";
+  if (isLoading || !settings) return <LoadingBlock label="Loading settings…" />;
 
-  const mutation = useMutation({
-    mutationFn: (defaultSlaMinutes: number) => updateDeliverySettings({ defaultSlaMinutes }),
-    onSuccess: () => {
-      toast.success("Delivery SLA updated.");
-      setDirty(false);
-      void queryClient.invalidateQueries({ queryKey: ["delivery-settings"] });
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't update the SLA."),
-  });
+  const onShift = (riders ?? []).filter((r) => r.status === "active").length;
+  const value = (key: string, current: number | string | null) => (dirty[key] !== undefined ? (dirty[key] as string) : current === null ? "" : String(current));
 
-  const parsed = Number(currentMinutes);
-  const valid = currentMinutes !== "" && Number.isInteger(parsed) && parsed >= 5 && parsed <= 1440;
-
-  return (
-    <div className="mb-5 rounded-[var(--radius-noxtill)] border border-border bg-surface p-4">
-      <p className="text-sm font-medium text-fg">Delivery time promise (SLA)</p>
-      <p className="mt-0.5 text-xs text-fg-muted">
-        How many minutes after a rider is assigned a delivery is expected to arrive by. Drives the real on-time rate on the All Deliveries screen.
-      </p>
-      <div className="mt-3 flex flex-wrap items-end gap-3">
-        <Input
-          label="Minutes"
-          type="number"
-          min={5}
-          max={1440}
-          value={currentMinutes}
-          onChange={(e) => {
-            setMinutes(e.target.value);
-            setDirty(true);
-          }}
-          disabled={isPending}
-          className="w-32"
-        />
-        <Button
-          onClick={() => mutation.mutate(parsed)}
-          disabled={!valid || !dirty || mutation.isPending}
-        >
-          {mutation.isPending ? "Saving…" : "Save"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Per-zone SLA depth fix — an empty field means "use the business default"; a real number overrides
- * it for deliveries in this zone. Clearing the field back to empty reverts to the default.
- */
-function ZoneSlaEditor({ zone }: { zone: DeliveryZone }) {
-  const queryClient = useQueryClient();
-  const [minutes, setMinutes] = useState("");
-  const [dirty, setDirty] = useState(false);
-
-  const currentMinutes = dirty ? minutes : zone.slaMinutes != null ? String(zone.slaMinutes) : "";
-
-  const mutation = useMutation({
-    mutationFn: (slaMinutes: number | null) => updateDeliveryZone(zone.id, { slaMinutes }),
-    onSuccess: () => {
-      toast.success(`${zone.name}'s SLA updated.`);
-      setDirty(false);
-      void queryClient.invalidateQueries({ queryKey: ["delivery-zones"] });
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't update this zone's SLA."),
-  });
-
-  const valid = currentMinutes === "" || (Number.isInteger(Number(currentMinutes)) && Number(currentMinutes) >= 5 && Number(currentMinutes) <= 1440);
-
-  return (
-    <div className="flex items-end gap-1.5">
-      <Input
-        label="SLA (min)"
-        type="number"
-        min={5}
-        max={1440}
-        placeholder="Default"
-        value={currentMinutes}
-        onChange={(e) => {
-          setMinutes(e.target.value);
-          setDirty(true);
-        }}
-        className="w-24"
-      />
-      {dirty && (
-        <Button size="sm" variant="outline" disabled={!valid || mutation.isPending} onClick={() => mutation.mutate(currentMinutes === "" ? null : Number(currentMinutes))}>
-          {mutation.isPending ? "…" : "Save"}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function AddZoneDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [chargeType, setChargeType] = useState<DeliveryChargeType>("flat");
-  const [flatAmount, setFlatAmount] = useState("");
-  const [perKmAmount, setPerKmAmount] = useState("");
-  const [freeAboveOrderValue, setFreeAboveOrderValue] = useState("");
-  const [slaMinutes, setSlaMinutes] = useState("");
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      createDeliveryZone({
-        name,
-        chargeType,
-        flatAmount: flatAmount ? Number(flatAmount) : undefined,
-        perKmAmount: perKmAmount ? Number(perKmAmount) : undefined,
-        freeAboveOrderValue: freeAboveOrderValue ? Number(freeAboveOrderValue) : undefined,
-        slaMinutes: slaMinutes ? Number(slaMinutes) : undefined,
-      }),
-    onSuccess: () => {
-      toast.success(`${name} added.`);
-      void queryClient.invalidateQueries({ queryKey: ["delivery-zones"] });
-      handleClose();
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't add this zone."),
-  });
-
-  function handleClose() {
-    setName("");
-    setChargeType("flat");
-    setFlatAmount("");
-    setPerKmAmount("");
-    setFreeAboveOrderValue("");
-    setSlaMinutes("");
-    onClose();
+  function saveField(key: string, patchKey: string, kind: "int" | "float" | "nullableFloat") {
+    const raw = (dirty[key] ?? "").trim();
+    let parsed: number | null;
+    if (raw === "") {
+      if (kind !== "nullableFloat") return;
+      parsed = null;
+    } else {
+      parsed = Number(raw);
+      if (!Number.isFinite(parsed) || (kind === "int" && !Number.isInteger(parsed))) {
+        toast.error("Enter a valid number.");
+        return;
+      }
+    }
+    save.mutate({ [patchKey]: parsed });
+    setDirty((d) => ({ ...d, [key]: undefined }));
   }
 
-  if (!open) return null;
+  function setHubFromBrowser() {
+    if (!navigator.geolocation) {
+      toast.error("This browser can't share a location.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        save.mutate({ hubLat: Number(pos.coords.latitude.toFixed(6)), hubLng: Number(pos.coords.longitude.toFixed(6)) });
+        setDirty((d) => ({ ...d, hubLat: undefined, hubLng: undefined }));
+      },
+      () => toast.error("Couldn't read your location — type it in instead."),
+    );
+  }
+
+  const row = (label: string, desc: string, key: string, current: number | string | null, suffix: string, patchKey: string, kind: "int" | "float" | "nullableFloat") => (
+    <SettingRow key={key} label={label} desc={desc} value={value(key, current)} suffix={suffix} pending={save.isPending} onChange={(v) => setDirty((d) => ({ ...d, [key]: v }))} onSave={() => saveField(key, patchKey, kind)} allowEmpty={kind === "nullableFloat"} />
+  );
 
   return (
-    <Dialog
-      open
-      onClose={handleClose}
-      title="Add delivery zone"
-      footer={
-        <>
-          <Button variant="ghost" onClick={handleClose} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={!name.trim() || mutation.isPending}>
-            {mutation.isPending ? "Adding…" : "Add zone"}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3">
-        <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-        <Select label="Charge type" value={chargeType} onChange={(e) => setChargeType(e.target.value as DeliveryChargeType)}>
-          {Object.entries(CHARGE_TYPE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </Select>
-        {chargeType === "flat" && <Input label="Flat amount" type="number" min={0} value={flatAmount} onChange={(e) => setFlatAmount(e.target.value)} />}
-        {chargeType === "by_distance" && <Input label="Amount per km" type="number" min={0} value={perKmAmount} onChange={(e) => setPerKmAmount(e.target.value)} />}
-        <Input label="Free delivery above order value (optional)" type="number" min={0} value={freeAboveOrderValue} onChange={(e) => setFreeAboveOrderValue(e.target.value)} />
-        <Input
-          label="Delivery SLA for this zone, in minutes (optional — uses the business default when left blank)"
-          type="number"
-          min={5}
-          max={1440}
-          value={slaMinutes}
-          onChange={(e) => setSlaMinutes(e.target.value)}
-        />
+    <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+      <KpiGrid
+        minWidth={180}
+        kpis={[
+          { l: "Riders set up", v: String(riders?.length ?? 0), sub: `${onShift} on shift today`, color: "#0F172A", bd: "#E6EAF0" },
+          { l: "Zones", v: String(zones?.length ?? 0), sub: `${(zones ?? []).filter((z) => z.active).length} delivering`, color: "#0F172A", bd: "#E6EAF0" },
+          { l: "Cash limit", v: settings.cashLimitAmount ? money(Number(settings.cashLimitAmount)) : "No limit set", sub: "per rider", color: "#0F172A", bd: "#E6EAF0" },
+          {
+            l: "Delivered with proof",
+            v: delivered ? `${delivered.filter((d) => d.proofAt).length} of ${delivered.length}` : "…",
+            sub: "proof is captured by the rider flow; marking delivered by hand skips it and shows on Proof of Delivery",
+            color: "#0F172A",
+            bd: "#E6EAF0",
+          },
+        ]}
+      />
+
+      <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: "16px", padding: "17px" }}>
+        <h3 style={{ margin: "0 0 13px", fontSize: "14.5px", fontWeight: 800, color: "#101828" }}>How dispatch behaves</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
+          {row("Delivery time promise (SLA)", "Minutes after a rider is assigned that a delivery is expected to arrive by.", "sla", settings.defaultSlaMinutes, "min", "defaultSlaMinutes", "int")}
+          {row("ETA padding added for the customer", "A small buffer so most deliveries beat the promise rather than miss it.", "padding", settings.etaPaddingMinutes, "min", "etaPaddingMinutes", "int")}
+          {row("Stops per rider before a warning", "Dispatch flags a rider once they reach this many active stops.", "warn", settings.warnAtStopCount, "stops", "warnAtStopCount", "int")}
+          {row("Cash a rider may carry", "A warning, not a block. Riders are not stopped mid-round. Leave blank for no limit.", "cash", settings.cashLimitAmount, "Rs.", "cashLimitAmount", "nullableFloat")}
+          {row("How long before a quiet phone is flagged", "Minutes since a rider's last GPS fix before their position is labelled stale.", "stale", settings.staleLocationMinutes, "min", "staleLocationMinutes", "int")}
+          {row("Urgent after", "A waiting order gets the Urgent chip once it has waited this long.", "urgent", settings.urgentAfterMinutes, "min", "urgentAfterMinutes", "int")}
+          {row("High-value order from", "A waiting order at or above this total gets the High value chip. Leave blank to turn it off.", "highValue", settings.highValueAmount, "Rs.", "highValueAmount", "nullableFloat")}
+          {row("ETA-slip threshold", "How many minutes past the promise before a delay message can go out (when that rule is on).", "slip", settings.slipThresholdMinutes, "min", "slipThresholdMinutes", "int")}
+        </div>
       </div>
-    </Dialog>
+
+      <PanelCard
+        panel={{
+          h: "Assignment",
+          bd: "#E6EAF0",
+          items: [
+            {
+              t: "Hand new deliveries to the least-busy rider automatically",
+              d: "When on, a delivery created from the dashboard goes straight to the active rider with the fewest open stops. When off, it waits in the Dispatch queue for you. Deliveries from the public storefront always wait for dispatch.",
+              toggle: true,
+              toggleOn: settings.autoAssignNew,
+              onToggle: () => save.mutate({ autoAssignNew: !settings.autoAssignNew }),
+            },
+          ],
+        }}
+      />
+
+      <div style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: "16px", padding: "17px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px", flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0, fontSize: "14.5px", fontWeight: 800, color: "#101828" }}>Dispatch hub and delivery costs</h3>
+          <Button size="sm" variant="outline" style={{ marginLeft: "auto" }} onClick={setHubFromBrowser} disabled={save.isPending}>
+            Use my current location as the hub
+          </Button>
+        </div>
+        <p style={{ margin: "0 0 13px", fontSize: "11.5px", color: "#98A2B3" }}>
+          The hub is where deliveries leave from. With it, every delivery gets a real distance, a by-distance fee and a cost. Without it those figures stay blank.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
+          {row("Hub latitude", "Where your branch is, north-south.", "hubLat", settings.hubLat, "°", "hubLat", "nullableFloat")}
+          {row("Hub longitude", "Where your branch is, east-west.", "hubLng", settings.hubLng, "°", "hubLng", "nullableFloat")}
+          {row("Fuel and vehicle cost per km", "Applied to the round trip (out and back). Leave blank if you don't cost it.", "costPerKm", settings.costPerKm, "Rs./km", "costPerKm", "nullableFloat")}
+          {row("Rider pay per delivery", "A fixed amount per delivery. Leave blank if riders are not paid per delivery.", "riderPay", settings.riderPayPerDelivery, "Rs.", "riderPayPerDelivery", "nullableFloat")}
+        </div>
+      </div>
+
+      <PanelCard
+        panel={{
+          h: "What the customer is told",
+          sub: "Each switch is real and off until you turn it on. Messages go through your connected messaging channels.",
+          bd: "#E6EAF0",
+          items: [
+            { t: "Send an ETA when a rider is assigned", d: "Includes the promised time and a private tracking link.", toggle: true, toggleOn: settings.autoEtaOnAssign, onToggle: () => save.mutate({ autoEtaOnAssign: !settings.autoEtaOnAssign }) },
+            { t: "Send an update if the ETA slips", d: `Once, when an active delivery is ${settings.slipThresholdMinutes}+ minutes past its promise.`, toggle: true, toggleOn: settings.autoEtaOnSlip, onToggle: () => save.mutate({ autoEtaOnSlip: !settings.autoEtaOnSlip }) },
+            { t: "Share the rider's live position on the tracking link", d: "Only for riders who have given consent (recorded on each rider), and only while their position is fresh.", toggle: true, toggleOn: settings.shareLiveLocation, onToggle: () => save.mutate({ shareLiveLocation: !settings.shareLiveLocation }) },
+            { t: "Send proof of delivery to the customer", d: "A delivered notice with a link showing the captured signature or photo.", toggle: true, toggleOn: settings.sendProofToCustomer, onToggle: () => save.mutate({ sendProofToCustomer: !settings.sendProofToCustomer }) },
+          ],
+        }}
+      />
+
+      <PanelCard
+        panel={{
+          h: "Fixed rules",
+          sub: "These are built into the code and cannot be switched off",
+          bd: "#BFE7CF",
+          items: [
+            { t: "Money never moves on its own", d: "No refund, fee change or price adjustment happens without a person approving it." },
+            { t: "A rider is never moved off a delivery automatically", d: "Once a delivery has a rider, only a person can change it. The only automatic assignment is the switch above, which applies to a brand-new delivery." },
+            { t: "Rider location is only used for dispatch", d: "It reaches a customer only if you switch sharing on and that rider has consented, and it is erased when a rider goes off shift." },
+            { t: "“Cash held” tracks custody, not revenue timing", d: "A cash payment is recorded on the order as soon as it is taken; “held” only tracks whether it has physically reached the till." },
+            { t: "A stale position is always labelled", d: "Anything past the stale-position window above is marked rather than shown as current." },
+          ],
+        }}
+      />
+    </div>
+  );
+}
+
+function SettingRow({
+  label,
+  desc,
+  value,
+  suffix,
+  onChange,
+  onSave,
+  pending,
+  allowEmpty,
+}: {
+  label: string;
+  desc: string;
+  value: string;
+  suffix: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  pending: boolean;
+  allowEmpty?: boolean;
+}) {
+  return (
+    <div style={{ border: "1px solid #E6EAF0", borderRadius: "12px", padding: "13px", display: "flex", alignItems: "flex-end", gap: "12px", flexWrap: "wrap" }}>
+      <span style={{ flex: 1, minWidth: "200px" }}>
+        <span style={{ display: "block", fontSize: "12.5px", fontWeight: 800, color: "#101828" }}>{label}</span>
+        <span style={{ display: "block", fontSize: "12px", color: "#475467", marginTop: "6px", lineHeight: 1.6 }}>{desc}</span>
+      </span>
+      <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <input
+          type="number"
+          step="any"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={allowEmpty ? "Not set" : undefined}
+          style={{ width: "110px", border: "1px solid #E6EAF0", borderRadius: "9px", padding: "8px 10px", fontSize: "12.5px", fontWeight: 700, color: "#101828" }}
+        />
+        <span style={{ fontSize: "11px", color: "#98A2B3", minWidth: "34px" }}>{suffix}</span>
+        <Button size="sm" variant="outline" disabled={pending} onClick={onSave}>
+          {pending ? "…" : "Save"}
+        </Button>
+      </span>
+    </div>
   );
 }

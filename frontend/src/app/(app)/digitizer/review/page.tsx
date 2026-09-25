@@ -1,5 +1,10 @@
-import { ReviewView } from "@/components/digitizer/review-view";
+import { Suspense } from "react";
+import { ReviewScreen } from "@/components/digitizer/screens/review-screen";
 
 export default function DigitizerReviewPage() {
-  return <ReviewView />;
+  return (
+    <Suspense fallback={null}>
+      <ReviewScreen />
+    </Suspense>
+  );
 }

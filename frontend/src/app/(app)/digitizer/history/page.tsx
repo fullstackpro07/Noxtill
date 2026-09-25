@@ -1,5 +1,10 @@
-import { DigitizerHistoryView } from "@/components/digitizer/history-view";
+import { Suspense } from "react";
+import { HistoryScreen } from "@/components/digitizer/screens/history-screen";
 
 export default function DigitizerHistoryPage() {
-  return <DigitizerHistoryView />;
+  return (
+    <Suspense fallback={null}>
+      <HistoryScreen />
+    </Suspense>
+  );
 }

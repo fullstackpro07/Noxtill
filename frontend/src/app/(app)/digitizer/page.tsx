@@ -1,5 +1,5 @@
-import { ScannerHomeView } from "@/components/digitizer/scanner-home-view";
+import { OverviewScreen } from "@/components/digitizer/screens/overview-screen";
 
-export default function DigitizerPage() {
-  return <ScannerHomeView />;
+export default function DigitizerOverviewPage() {
+  return <OverviewScreen />;
 }

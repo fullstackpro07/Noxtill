@@ -1,5 +1,5 @@
-import { LiveTrackingView } from "@/components/delivery/live-tracking-view";
+import { OverviewView } from "@/components/delivery/overview-view";
 
 export default function DeliveriesPage() {
-  return <LiveTrackingView />;
+  return <OverviewView />;
 }

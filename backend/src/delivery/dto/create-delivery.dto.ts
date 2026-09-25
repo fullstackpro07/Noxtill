@@ -1,4 +1,11 @@
-import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateDeliveryDto {
   @IsString()
@@ -23,4 +30,10 @@ export class CreateDeliveryDto {
   @IsOptional()
   @IsString()
   zoneId?: string;
+
+  /** Free-text instruction for the rider (gate code, "ring twice"). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  deliveryNote?: string;
 }

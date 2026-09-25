@@ -95,6 +95,10 @@ enum ActivityEventType {
   customer_lapsed
   credit_overdue
   birthday
+  /// Delivery module redesign — real events for a delivery's lifecycle (created, assigned,
+  /// delivered, failed) and a rider handing in collected cash, feeding the module's real "what
+  /// just happened" activity feed the same way every other module's feed is fed.
+  delivery
 }
 
 enum CouponType {
@@ -777,6 +781,7 @@ model Business {
   routes                      Route[]
   deliveryZones               DeliveryZone[]
   deliverySettings            DeliverySettings?
+  deliveryAutomationRuns      DeliveryAutomationRun[]
   adCreatives                 AdCreative[]
   adAudiences                 AdAudience[]
   adLeads                     AdLead[]
@@ -3861,10 +3866,39 @@ model ImportBatch {
   /// UPD-BE-060: S3 key of the original uploaded photo — null for every non-photo source.
   imageKey      String?      @map("image_key")
 
+  /// Digitizer document workspace — everything below is null for every non-photo source.
+  originalName   String?   @map("original_name") @db.VarChar(255)
+  mimeType       String?   @map("mime_type") @db.VarChar(100)
+  fileSize       Int?      @map("file_size")
+  /// Real page count: 1 for an image, the PDF's own page count otherwise.
+  pageCount      Int?      @map("page_count")
+  /// `User.id` of whoever uploaded the file (resolved to a name on read, never copied).
+  uploadedById   String?   @map("uploaded_by_id")
+  /// Ties together files uploaded in the same session (the Batch screen's unit).
+  groupId        String?   @map("group_id")
+  /// Pipeline stage while `status = processing`: queued | quality | extraction | validation.
+  stage          String?   @db.VarChar(32)
+  stageStartedAt DateTime? @map("stage_started_at")
+  failureReason  String?   @map("failure_reason") @db.VarChar(500)
+  /// 1 for the first extraction; +1 every time the document is reprocessed.
+  version        Int       @default(1)
+  approvedAt     DateTime? @map("approved_at")
+  approvedById   String?   @map("approved_by_id")
+  /// Model-reported document facts (type, handwriting, language, quality, line items, totals, ledger) + stage timings.
+  analysis       Json?
+  /// Per-commit import jobs: [{id, at, byId, created, updated, skipped, failed, blocked, destinations, failures}].
+  importResult   Json?     @map("import_result")
+  /// Append-only audit trail: [{at, actorId, action, detail}].
+  events         Json?
+  /// Earlier extractions kept when a document is reprocessed: [{version, rows, analysis, createdAt}].
+  versions       Json?
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([businessId, contentHash])
+  @@index([businessId, source, createdAt])
+  @@index([businessId, groupId])
   @@map("import_batches")
 }
 
@@ -3906,6 +3940,19 @@ model Rider {
   lastLat        Decimal?          @map("last_lat") @db.Decimal(9, 6)
   lastLng        Decimal?          @map("last_lng") @db.Decimal(9, 6)
   lastLocationAt DateTime?         @map("last_location_at")
+  /// Delivery module redesign — cash-on-delivery this rider has collected is "held" (real, from
+  /// `Payment.method = cash` on their delivered deliveries) until they hand it in at the branch;
+  /// this is the last time that happened. Null means never reconciled — every cash-method payment
+  /// on a delivered delivery still counts as held.
+  cashHandedInAt DateTime?         @map("cash_handed_in_at")
+  /// Delivery module redesign — real, rider-or-staff-toggled break state (the design's "On break"
+  /// status has no other real signal to derive from: `status` only distinguishes active/inactive
+  /// shift, not a mid-shift pause). Null means not on break; set the moment `setBreak(true)` is
+  /// called, cleared by `setBreak(false)` or when the rider goes off shift.
+  onBreakSince   DateTime?         @map("on_break_since")
+  /// Delivery module — the rider's own explicit consent to have their live position shown to a
+  /// customer on that customer's tracking link. Off by default; never inferred.
+  shareLocationConsent Boolean     @default(false) @map("share_location_consent")
 
   deliveries Delivery[]
   routes     Route[]
@@ -3959,7 +4006,31 @@ model Delivery {
   proofLng          Decimal?       @map("proof_lng") @db.Decimal(9, 6)
   proofAt           DateTime?      @map("proof_at")
   assignedAt        DateTime?      @map("assigned_at")
+  /// Delivery module redesign — real per-stage timestamps, set the moment `updateStatus()` moves a
+  /// delivery into that stage. Nullable and left unset for every delivery that never reached that
+  /// stage (or was created before this column existed), so a real average is computed only from
+  /// deliveries that actually recorded it — never backfilled or estimated.
+  pickedUpAt        DateTime?      @map("picked_up_at")
+  enRouteAt         DateTime?      @map("en_route_at")
   deliveredAt       DateTime?      @map("delivered_at")
+  /// Delivery module — real money/cost snapshot taken when the delivery is created or its zone
+  /// changes: `deliveryFee` is what the zone's own charge rule quotes for this order,
+  /// `deliveryCost` is the owner's configured cost model (fuel per km, rider pay per delivery)
+  /// applied to the real distance from the dispatch hub. Null whenever an input is genuinely
+  /// missing (no zone, no coordinates, no hub, no cost model) — never estimated.
+  deliveryFee       Decimal?       @map("delivery_fee") @db.Decimal(12, 2)
+  deliveryCost      Decimal?       @map("delivery_cost") @db.Decimal(12, 2)
+  distanceKm        Decimal?       @map("distance_km") @db.Decimal(8, 2)
+  /// Free-text instruction for the rider (gate code, "ring twice") entered when dispatching.
+  deliveryNote      String?        @map("delivery_note") @db.Text
+  /// Unguessable token for the public customer tracking link.
+  trackingToken     String?        @unique @map("tracking_token")
+  /// The promise time last actually messaged to the customer, and when — the real "customer told".
+  notifiedPromisedAt DateTime?     @map("notified_promised_at")
+  customerNotifiedAt DateTime?     @map("customer_notified_at")
+  slipNotifiedAt    DateTime?      @map("slip_notified_at")
+  /// The Message row for the last notice sent — the Tracking screen reads its real delivery status.
+  notificationMessageId String?    @map("notification_message_id")
   /// All Deliveries depth fix (real on-time-rate) — set the moment a rider is assigned, from the
   /// business's own `DeliverySettings.defaultSlaMinutes` at that moment. NULL for every delivery
   /// assigned before this fix existed — those are honestly excluded from on-time-rate rather than
@@ -4057,11 +4128,69 @@ model DeliverySettings {
   businessId        String   @unique @map("business_id")
   business          Business @relation(fields: [businessId], references: [id])
   defaultSlaMinutes Int      @default(45) @map("default_sla_minutes")
+  /// Delivery module redesign — real, owner-configured buffer added on top of `defaultSlaMinutes`
+  /// (or a zone's own override) when computing `Delivery.promisedAt`: the time told to the
+  /// customer is deliberately a little later than the real target, so most deliveries beat it.
+  etaPaddingMinutes Int      @default(0) @map("eta_padding_minutes")
+  /// Real per-rider cash-on-delivery warning threshold. Null means no limit is set — every rider's
+  /// held cash is shown as a plain figure with nothing flagged, never a fabricated default limit.
+  cashLimitAmount   Decimal? @map("cash_limit_amount") @db.Decimal(12, 2)
+  /// Real, owner-configured active-stop count a rider can reach before the dispatch screens flag
+  /// them as at capacity. A business-wide number (the design's own "Stops per rider before a
+  /// warning" setting), not a per-rider field — every rider is compared against the same number.
+  warnAtStopCount   Int      @default(8) @map("warn_at_stop_count")
+  /// Real minutes since a rider's last GPS fix before their position is labelled stale rather than
+  /// current, everywhere a rider's location is shown.
+  staleLocationMinutes Int   @default(10) @map("stale_location_minutes")
+  /// Dispatch hub (the branch deliveries leave from) — the anchor for real distance, fee and cost.
+  hubLat            Decimal? @map("hub_lat") @db.Decimal(9, 6)
+  hubLng            Decimal? @map("hub_lng") @db.Decimal(9, 6)
+  /// Owner's cost model: fuel/vehicle cost per km (applied to the round trip) and a fixed rider
+  /// pay per delivery. Both null means cost is not configured, and cost figures stay "Not tracked".
+  costPerKm         Decimal? @map("cost_per_km") @db.Decimal(10, 2)
+  riderPayPerDelivery Decimal? @map("rider_pay_per_delivery") @db.Decimal(10, 2)
+  /// Real automation switches — every one is off until the owner turns it on, and each drives
+  /// real behaviour in `DeliveryAutomationsService`.
+  autoEtaOnAssign   Boolean  @default(false) @map("auto_eta_on_assign")
+  autoEtaOnSlip     Boolean  @default(false) @map("auto_eta_on_slip")
+  slipThresholdMinutes Int   @default(10) @map("slip_threshold_minutes")
+  autoFlagStalePhone Boolean @default(false) @map("auto_flag_stale_phone")
+  autoWarnCashLimit Boolean  @default(false) @map("auto_warn_cash_limit")
+  autoTaskOnFailure Boolean  @default(false) @map("auto_task_on_failure")
+  sendProofToCustomer Boolean @default(false) @map("send_proof_to_customer")
+  shareLiveLocation Boolean  @default(false) @map("share_live_location")
+  /// Zone rules enforced by the public ordering flow.
+  enforceZoneCoverage Boolean @default(false) @map("enforce_zone_coverage")
+  showFeeBeforeCheckout Boolean @default(false) @map("show_fee_before_checkout")
+  pausedZonesBlockOrders Boolean @default(false) @map("paused_zones_block_orders")
+  /// Whether a delivery created from the dashboard is handed to the least-busy active rider
+  /// straight away (the behaviour that always existed, so it defaults on) or left for dispatch.
+  autoAssignNew     Boolean  @default(true) @map("auto_assign_new")
+  /// The two rules behind the dispatch queue's priority chips — the owner's own numbers, not
+  /// built-in guesses. `highValueAmount` null turns the high-value chip off.
+  urgentAfterMinutes Int     @default(15) @map("urgent_after_minutes")
+  highValueAmount   Decimal? @default(15000) @map("high_value_amount") @db.Decimal(12, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("delivery_settings")
+}
+
+/// Delivery module — one row per time a delivery automation rule actually acted, so the
+/// Automations screen's "ran N times" is a real count, not a claim.
+model DeliveryAutomationRun {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  rule       String
+  deliveryId String?  @map("delivery_id")
+  riderId    String?  @map("rider_id")
+  detail     String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, rule, createdAt])
+  @@map("delivery_automation_runs")
 }
 
 model Integration {
