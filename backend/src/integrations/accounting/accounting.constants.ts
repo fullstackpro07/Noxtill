@@ -10,6 +10,7 @@ export const ACCOUNTING_ERROR_CODES = {
   UNKNOWN_PROVIDER: 'ACCOUNTING_UNKNOWN_PROVIDER',
   NO_PROVIDER_CONNECTED: 'ACCOUNTING_NO_PROVIDER_CONNECTED',
   NO_MAPPING: 'ACCOUNTING_NO_MAPPING',
+  SYNC_PAUSED: 'ACCOUNTING_SYNC_PAUSED',
 } as const;
 
 /** Orders pushed per `sync()` call — bounded so one business's backlog can't monopolize the run. */

@@ -11,7 +11,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { SkeletonRow } from "@/components/shared/skeleton";
 import { ErrorBanner } from "@/components/shared/error-states";
 import { EmptyState } from "@/components/shared/empty-state";
-import { fetchCapabilities } from "@/lib/roles-api";
+import { HUB_KEYS, fetchApiScopes } from "@/lib/integrations-hub-api";
 import { fetchAutomationTriggers } from "@/lib/automation-api";
 import { SettingsSectionHeader } from "./settings-section-header";
 import { useTranslation } from "@/hooks/use-translation";
@@ -141,7 +141,9 @@ function ApiKeysSection() {
 
 function NewApiKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const { data: capabilities } = useQuery({ queryKey: ["capabilities"], queryFn: fetchCapabilities, enabled: open });
+  // Only the scopes a key may actually be granted — destructive and admin capabilities are never offered.
+  const { data: grantable } = useQuery({ queryKey: HUB_KEYS.scopes, queryFn: fetchApiScopes, enabled: open });
+  const capabilities = grantable?.map((s) => s.key);
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
   const [createdKey, setCreatedKey] = useState<string | null>(null);

@@ -3,12 +3,19 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { ApiKeyAuthService } from '../../developer/api-key-auth.service';
+import {
+  ApiKeyAuthService,
+  ApiKeyRateLimitedException,
+} from '../../developer/api-key-auth.service';
 import { API_KEY_PREFIX } from '../../developer/api-key.constants';
-import type { RequestWithUser } from '../tenancy/auth-context';
+import type {
+  AuthenticatedUser,
+  RequestWithUser,
+} from '../tenancy/auth-context';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -34,7 +41,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const authHeader = request.headers.authorization;
     if (authHeader?.startsWith(`Bearer ${API_KEY_PREFIX}`)) {
       const rawKey = authHeader.slice('Bearer '.length);
-      const user = await this.apiKeyAuth.authenticate(rawKey);
+      let user: AuthenticatedUser | null;
+      try {
+        user = await this.apiKeyAuth.authenticate(rawKey);
+      } catch (error) {
+        if (error instanceof ApiKeyRateLimitedException) {
+          context
+            .switchToHttp()
+            .getResponse<Response>()
+            .setHeader('Retry-After', String(error.retryAfterSeconds));
+        }
+        throw error;
+      }
       if (!user) {
         throw new UnauthorizedException('Invalid or revoked API key');
       }

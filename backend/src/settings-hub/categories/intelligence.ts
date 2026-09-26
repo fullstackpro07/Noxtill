@@ -1,6 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import { AppException } from '../../common/filters/app.exception';
-import { IntegrationProvider } from '@prisma/client';
+import { HUB_CATALOG } from '../../integrations/hub/hub.catalog';
 import { CAPABILITIES } from '../../common/capabilities/capabilities.constants';
 import { CategoryDef, HubValue, row, RowDef, plural, relativeTime } from '../hub.core';
 import { HubDeps, asJson, business, monthStart, updateBusiness } from './hub.deps';
@@ -18,8 +18,10 @@ const AI_FEATURES: { key: string; label: string; description: string }[] = [
   { key: 'photoDigitizer', label: 'Photo digitizer', description: 'Reads a photo of a list into rows you review before importing.' },
 ];
 
+/** Provider display names — one source, the Integrations catalog, so this screen never lags the directory. */
 const PROVIDER_LABELS: Record<string, string> = {
-  email: 'Email', gmb: 'Google Business Profile', google_ads: 'Google Ads', merchant: 'Google Merchant Center', meta_ads: 'Meta Ads', tiktok_ads: 'TikTok Ads', bing_places: 'Bing Places', apple_business_connect: 'Apple Business Connect', yelp: 'Yelp', linkedin_ads: 'LinkedIn Ads', pinterest_ads: 'Pinterest Ads', snapchat_ads: 'Snapchat Ads', microsoft_ads: 'Microsoft Ads', amazon_ads: 'Amazon Ads', reddit_ads: 'Reddit Ads', quickbooks: 'QuickBooks', xero: 'Xero', shopify: 'Shopify', woocommerce: 'WooCommerce', zapier: 'Zapier', make: 'Make', n8n: 'n8n', developer: 'Developer API',
+  ...Object.fromEntries(HUB_CATALOG.filter((p) => p.source.type === 'integration').map((p) => [p.key, p.name])),
+  developer: 'Developer API',
 };
 
 export function intelligenceCategories(d: HubDeps): CategoryDef[] {
@@ -240,7 +242,7 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       help: [
         'States are connected, needs attention or not connected — never a fabricated live badge.',
         'Only services Noxtill can genuinely connect to are listed.',
-        'Disconnecting stops syncing; data already synced is kept.',
+        'A paused connection stays authorised but does not sync; disconnecting stops syncing too. Data already synced is kept either way.',
       ],
       actions: [{ label: 'Open Integrations', icon: 'external-link', primary: true, href: '/integrations', kind: 'link' }],
       groups: [
@@ -257,7 +259,10 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                 description: `Connected ${i.connectedAt ? relativeTime(i.connectedAt, ctx.now) : ''}. Last synced ${i.lastSyncAt ? relativeTime(i.lastSyncAt, ctx.now) : 'never'}.`.replace('Connected . ', ''),
                 risk: i.status === 'needs_attention' ? 'High' : 'Medium',
                 link: { label: 'Open integration', href: '/integrations' },
-                state: () => ({ value: i.status === 'connected' ? 'Connected' : 'Needs attention', tone: i.status === 'connected' ? 'green' : 'amber' }),
+                state: () => ({
+                  value: i.pausedAt ? 'Paused' : i.status === 'connected' ? 'Connected' : 'Needs attention',
+                  tone: i.pausedAt ? 'neutral' : i.status === 'connected' ? 'green' : 'amber',
+                }),
               }),
             );
           },
@@ -272,8 +277,12 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               description: 'Services Noxtill can connect to that you have not connected.',
               link: { label: 'Browse integrations', href: '/integrations' },
               state: async (ctx) => {
-                const connected = await d.prisma.integration.count({ where: { businessId: ctx.businessId, status: { in: ['connected', 'needs_attention'] } } });
-                return { value: `${Math.max(0, Object.values(IntegrationProvider).length - connected)} available` };
+                const [integrations, social] = await Promise.all([
+                  d.prisma.integration.findMany({ where: { businessId: ctx.businessId, status: { in: ['connected', 'needs_attention'] } }, select: { provider: true } }),
+                  d.prisma.socialAccount.findMany({ where: { businessId: ctx.businessId, status: { in: ['connected', 'needs_attention'] } }, select: { platform: true } }),
+                ]);
+                const taken = new Set<string>([...integrations.map((i) => i.provider), ...social.map((s) => s.platform)]);
+                return { value: `${HUB_CATALOG.filter((p) => !taken.has(p.key)).length} available` };
               },
             }),
           ],
@@ -288,7 +297,7 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       group: 'Intelligence',
       description: 'Keys, scopes and event endpoints for connecting your own systems.',
       affects: ['Integrations', 'Every module'],
-      affectsNote: 'An API key can read whatever its scopes allow, so scope is the real security boundary.',
+      affectsNote: 'An API key acts with the access any signed-in staff member has, plus the capabilities you grant it. Capabilities that erase data, change billing or roles, or write off money can never be granted to a key.',
       help: [
         'A key’s secret is shown once at creation and never again. Revoke and recreate rather than recover.',
         'Webhook deliveries record their response and status so failures are diagnosable.',

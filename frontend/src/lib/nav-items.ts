@@ -591,8 +591,12 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["owner", "manager"],
     children: [
       { key: "integrations-directory", labelKey: "nav.integrationsDirectory", href: "/integrations", icon: Plug },
-      { key: "integrations-accounting-ecommerce", labelKey: "nav.integrationsAccountingEcommerce", href: "/integrations/accounting-ecommerce", icon: Calculator },
+      { key: "integrations-connections", labelKey: "nav.integrationsConnections", href: "/integrations/connections", icon: Plug },
+      { key: "integrations-accounting", labelKey: "nav.integrationsAccounting", href: "/integrations/accounting", icon: Calculator },
+      { key: "integrations-ecommerce", labelKey: "nav.integrationsEcommerce", href: "/integrations/ecommerce", icon: Boxes },
       { key: "integrations-automation", labelKey: "nav.integrationsAutomation", href: "/integrations/automation", icon: Zap },
+      { key: "integrations-developer", labelKey: "nav.integrationsDeveloper", href: "/integrations/developer", icon: Settings2 },
+      { key: "integrations-map", labelKey: "nav.integrationsMap", href: "/integrations/map", icon: Route },
     ],
   },
   {

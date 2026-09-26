@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
@@ -6,11 +6,14 @@ import { ConnectorRegistry } from './connector-registry';
 import { TokenCipherService } from './token-cipher.service';
 import { signPayload, verifyPayload } from './signed-token.util';
 import { OAuthTokens } from './connector.interface';
+import { IntegrationAuditService } from './integration-audit.service';
 import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 
 interface StatePayload {
   businessId: string;
   provider: string;
+  /** Who started the connect flow — the public OAuth callback has no session to read it from. */
+  actorUserId?: string;
 }
 
 export interface ConnectResult {
@@ -33,6 +36,7 @@ export class IntegrationsService {
     private readonly connectors: ConnectorRegistry,
     private readonly tokenCipher: TokenCipherService,
     private readonly config: ConfigService,
+    @Optional() private readonly audit?: IntegrationAuditService,
   ) {}
 
   async list(businessId: string) {
@@ -55,10 +59,11 @@ export class IntegrationsService {
     businessId: string,
     provider: IntegrationProvider,
     params: Record<string, string> = {},
+    actorUserId?: string,
   ): Promise<ConnectResult> {
     const connector = this.connectors.get(provider);
     const state = signPayload<StatePayload>(
-      { businessId, provider },
+      { businessId, provider, actorUserId },
       this.stateSecret(),
     );
     const url = connector.authUrl(state, params);
@@ -73,7 +78,26 @@ export class IntegrationsService {
       // connect without ever storing tokens, so `getTokens()` always came back `null` for a
       // non-OAuth provider and any real `pushListing()` call silently no-op'd even once a real
       // credential was configured.
-      const tokens = await connector.handleCallback('', params);
+      let tokens: OAuthTokens;
+      try {
+        tokens = await connector.handleCallback('', params);
+      } catch (error) {
+        // A credential the provider rejects (or one that is missing) is the merchant's to fix —
+        // say so plainly instead of surfacing a generic 500.
+        const reason = (error as Error).message;
+        await this.audit?.record({
+          businessId,
+          key: provider,
+          action: 'integration.connect_failed',
+          actorUserId,
+          after: { reason: reason.slice(0, 300) },
+        });
+        throw new AppException(
+          'INTEGRATION_CONNECT_FAILED',
+          `Could not connect ${provider}: ${reason}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const meta = tokens.providerMeta;
       await this.tenantPrisma.client.integration.upsert({
         where: { businessId_provider: { businessId, provider } },
@@ -91,6 +115,12 @@ export class IntegrationsService {
           tokens: this.tokenCipher.encrypt(JSON.stringify(tokens)),
           ...(meta ? { meta } : {}),
         },
+      });
+      await this.audit?.record({
+        businessId,
+        key: provider,
+        action: 'integration.connected',
+        actorUserId,
       });
       return { connected: true };
     }
@@ -137,6 +167,12 @@ export class IntegrationsService {
           ...(meta ? { meta } : {}),
         },
       });
+      await this.audit?.record({
+        businessId,
+        key: provider,
+        action: 'integration.connected',
+        actorUserId: payload.actorUserId,
+      });
       return { businessId, ok: true };
     } catch (error) {
       this.logger.warn(
@@ -151,6 +187,13 @@ export class IntegrationsService {
         },
         update: { status: IntegrationStatus.needs_attention },
       });
+      await this.audit?.record({
+        businessId,
+        key: provider,
+        action: 'integration.connect_failed',
+        actorUserId: payload.actorUserId,
+        after: { reason: (error as Error).message.slice(0, 300) },
+      });
       return { businessId, ok: false };
     }
   }
@@ -158,6 +201,7 @@ export class IntegrationsService {
   async disconnect(
     businessId: string,
     provider: IntegrationProvider,
+    actorUserId?: string,
   ): Promise<void> {
     const connector = this.connectors.get(provider);
     // Fetched before revoking so a real revoke call (QuickBooks, Xero) has a token to send —
@@ -176,7 +220,14 @@ export class IntegrationsService {
         status: IntegrationStatus.not_connected,
         tokens: null,
         connectedAt: null,
+        pausedAt: null,
       },
+    });
+    await this.audit?.record({
+      businessId,
+      key: provider,
+      action: 'integration.disconnected',
+      actorUserId,
     });
   }
 
@@ -189,7 +240,45 @@ export class IntegrationsService {
       where: { businessId_provider: { businessId, provider } },
     });
     if (!row?.tokens) return null;
-    return JSON.parse(this.tokenCipher.decrypt(row.tokens)) as OAuthTokens;
+    const tokens = JSON.parse(
+      this.tokenCipher.decrypt(row.tokens),
+    ) as OAuthTokens;
+    return this.refreshIfExpiring(businessId, provider, tokens);
+  }
+
+  /**
+   * An access token that is about to expire (or already has) is renewed with its refresh token and
+   * the renewed pair is stored, so a sync an hour after connecting doesn't die on a stale token.
+   * When the provider refuses the refresh, the authorisation is genuinely gone — the connection is
+   * moved to `needs_attention` so the owner is told to reconnect.
+   */
+  private async refreshIfExpiring(
+    businessId: string,
+    provider: IntegrationProvider,
+    tokens: OAuthTokens,
+  ): Promise<OAuthTokens> {
+    if (!tokens.expiresAt || !tokens.refreshToken) return tokens;
+    if (new Date(tokens.expiresAt).getTime() - Date.now() > 120_000)
+      return tokens;
+    try {
+      const refreshed = await this.connectors
+        .get(provider)
+        .refreshToken(tokens);
+      await this.tenantPrisma.client.integration.updateMany({
+        where: { businessId, provider },
+        data: { tokens: this.tokenCipher.encrypt(JSON.stringify(refreshed)) },
+      });
+      return refreshed;
+    } catch (error) {
+      this.logger.warn(
+        `Token refresh failed for provider=${provider}: ${(error as Error).message}`,
+      );
+      await this.tenantPrisma.client.integration.updateMany({
+        where: { businessId, provider, status: IntegrationStatus.connected },
+        data: { status: IntegrationStatus.needs_attention },
+      });
+      return tokens;
+    }
   }
 
   private stateSecret(): string {

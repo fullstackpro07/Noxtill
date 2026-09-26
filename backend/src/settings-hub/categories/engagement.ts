@@ -232,15 +232,15 @@ export function engagementCategories(d: HubDeps): CategoryDef[] {
       title: 'Unified Inbox',
       icon: 'message-circle',
       group: 'Engagement',
-      description: 'Which social channels are connected. A channel that is not connected cannot send or receive.',
+      description: 'Which social channels are connected, and how the Unified Inbox routes, auto-replies and drafts.',
       affects: ['Unified Inbox', 'Marketing', 'Notifications'],
       affectsNote: 'Channel authorisation state decides whether anything can send at all.',
       help: [
         'A channel needing attention cannot send, and Noxtill says so rather than queueing silently.',
-        'Routing, auto-reply and inbox business hours are not part of this version.',
-        'AI never sends a customer message on its own.',
+        'Routing, the away message and inbox working hours are set in Unified Inbox → Settings and Automations.',
+        'AI never sends a customer message on its own — it drafts, and a person sends.',
       ],
-      actions: [{ label: 'Open Inbox', icon: 'external-link', href: '/social/inbox', kind: 'link' }],
+      actions: [{ label: 'Open Inbox', icon: 'external-link', href: '/unified-inbox', kind: 'link' }],
       groups: [
         {
           title: 'Channel connections',
@@ -263,10 +263,41 @@ export function engagementCategories(d: HubDeps): CategoryDef[] {
         {
           title: 'Replies',
           hint: 'What is and is not available',
-          rows: [
-            row({ key: 'inbox-auto', label: 'Auto-reply', description: 'Automatic replies outside business hours.', state: () => ({ value: 'Not available', tone: 'neutral' }) }),
-            row({ key: 'inbox-ai', label: 'AI replies', description: 'AI drafting a reply to a social message. Every reply here is typed and sent by a person; this is different from the AI review-reply drafts in Reviews.', state: () => ({ value: 'Not available', tone: 'neutral' }) }),
-          ],
+          dynamicRows: async (ctx) => {
+            const [away, inboxSettings, routed] = await Promise.all([
+              d.prisma.inboxRule.findFirst({ where: { businessId: ctx.businessId, trigger: 'out_of_hours' }, orderBy: { createdAt: 'asc' } }),
+              d.prisma.inboxSettings.findUnique({ where: { businessId: ctx.businessId } }),
+              d.prisma.inboxRule.count({ where: { businessId: ctx.businessId, trigger: 'keyword', active: true, assigneeUserId: { not: null } } }),
+            ]);
+            const autoDraft = inboxSettings?.aiAutoDraft ?? true;
+            const assignMode = inboxSettings?.assignMode ?? 'none';
+            return [
+              row({
+                key: 'inbox-auto',
+                label: 'Auto-reply',
+                description: 'A fixed away message sent once per conversation when a message arrives outside working hours.',
+                link: { label: 'Change in Inbox settings', href: '/unified-inbox/settings' },
+                state: () => ({ value: away?.active ? 'On' : 'Off', tone: away?.active ? 'green' : 'neutral' }),
+              }),
+              row({
+                key: 'inbox-ai',
+                label: 'AI replies',
+                description: 'AI drafts a reply from real order, delivery, credit and booking records. A person always presses send; nothing goes out on its own.',
+                link: { label: 'Change in AI Assist', href: '/unified-inbox/ai' },
+                state: () => ({ value: autoDraft ? 'Drafts only — a person sends' : 'Off', tone: autoDraft ? 'green' : 'neutral' }),
+              }),
+              row({
+                key: 'inbox-routing',
+                label: 'Routing',
+                description: 'How new conversations are handed out, plus any keyword rules that assign to a person.',
+                link: { label: 'Change in Inbox settings', href: '/unified-inbox/settings' },
+                state: () => ({
+                  value: `${assignMode === 'free' ? 'Whoever is free' : assignMode === 'topic' ? 'By topic' : 'Unassigned until taken'}${routed ? ` · ${routed} routing rule${routed === 1 ? '' : 's'}` : ''}`,
+                  tone: 'neutral',
+                }),
+              }),
+            ];
+          },
         },
       ],
     },

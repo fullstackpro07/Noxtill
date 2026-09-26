@@ -35,6 +35,7 @@ interface TelnyxWebhookBody {
       type?: string;
       from?: { phone_number?: string };
       to?: { phone_number?: string; status?: string }[];
+      text?: string;
       errors?: unknown[];
     };
   };
@@ -44,8 +45,10 @@ interface MetaWebhookBody {
   entry?: Array<{
     changes?: Array<{
       value?: {
+        metadata?: { phone_number_id?: string };
+        contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
         statuses?: Array<{ id: string }>;
-        messages?: Array<{ id: string }>;
+        messages?: Array<{ id: string; from?: string }>;
       };
     }>;
   }>;
@@ -112,8 +115,18 @@ export class WebhooksController {
           });
         }
         for (const message of change.value?.messages ?? []) {
+          // The business's own number (phone_number_id) and the sender's profile name ride along so
+          // the Unified Inbox can file the message under the right business and contact.
+          const contact = change.value?.contacts?.find(
+            (c) => c.wa_id === message.from,
+          );
+          const inbound = {
+            ...message,
+            phoneNumberId: change.value?.metadata?.phone_number_id,
+            contactName: contact?.profile?.name,
+          };
           await this.idempotency.handle('meta', message.id, async () => {
-            await this.webhookQueue.add('meta-inbound', message, {
+            await this.webhookQueue.add('meta-inbound', inbound, {
               jobId: `meta-inbound-${message.id}`,
             });
           });
@@ -202,7 +215,12 @@ export class WebhooksController {
       await this.idempotency.handle('telnyx', eventId, async () => {
         await this.webhookQueue.add(
           'telnyx-inbound',
-          { type: payload?.type, from: payload?.from?.phone_number },
+          {
+            type: payload?.type,
+            from: payload?.from?.phone_number,
+            id: payload?.id,
+            text: payload?.text,
+          },
           { jobId: `telnyx-inbound-${eventId}` },
         );
       });

@@ -1,8 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { AuditService } from '../common/audit/audit.service';
+import { AppException } from '../common/filters/app.exception';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import {
+  API_KEY_FORBIDDEN_SCOPES,
   API_KEY_PREFIX,
   API_KEY_SECRET_BYTES,
   API_KEY_VISIBLE_PREFIX_LENGTH,
@@ -22,7 +30,10 @@ function hashKey(rawKey: string): string {
  */
 @Injectable()
 export class ApiKeyService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    @Optional() private readonly audit?: AuditService,
+  ) {}
 
   list() {
     return this.tenantPrisma.client.apiKey.findMany({
@@ -40,6 +51,16 @@ export class ApiKeyService {
   }
 
   async create(businessId: string, dto: CreateApiKeyDto) {
+    const forbidden = dto.scopes.filter((s) =>
+      (API_KEY_FORBIDDEN_SCOPES as readonly string[]).includes(s),
+    );
+    if (forbidden.length > 0) {
+      throw new AppException(
+        'API_KEY_SCOPE_FORBIDDEN',
+        `These scopes cannot be granted to an API key: ${forbidden.join(', ')}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const rawKey = `${API_KEY_PREFIX}${randomBytes(API_KEY_SECRET_BYTES).toString('hex')}`;
     const row = await this.tenantPrisma.client.apiKey.create({
       data: {
@@ -50,8 +71,16 @@ export class ApiKeyService {
         scopes: dto.scopes as unknown as Prisma.InputJsonValue,
       },
     });
-    // The only time the raw key is ever available — the caller must save it now.
-    return { ...row, key: rawKey };
+    await this.audit?.log({
+      entity: 'Integration',
+      entityId: 'rest_api',
+      action: 'integration.api_key_created',
+      after: { name: dto.name, scopes: dto.scopes, keyPrefix: row.keyPrefix },
+    });
+    // The only time the raw key is ever available — the caller must save it now. The stored hash
+    // is never returned.
+    const { keyHash: _hash, ...safe } = row;
+    return { ...safe, key: rawKey };
   }
 
   async revoke(id: string) {
@@ -59,9 +88,16 @@ export class ApiKeyService {
       where: { id },
     });
     if (!existing) throw new NotFoundException('API key not found');
-    return this.tenantPrisma.client.apiKey.update({
+    const revoked = await this.tenantPrisma.client.apiKey.update({
       where: { id },
       data: { revokedAt: new Date() },
     });
+    await this.audit?.log({
+      entity: 'Integration',
+      entityId: 'rest_api',
+      action: 'integration.api_key_revoked',
+      after: { name: existing.name, keyPrefix: existing.keyPrefix },
+    });
+    return revoked;
   }
 }

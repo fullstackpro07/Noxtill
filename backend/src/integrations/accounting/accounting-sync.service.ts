@@ -39,7 +39,17 @@ export class AccountingSyncService {
     private readonly connectors: ConnectorRegistry,
   ) {}
 
-  async sync(businessId: string): Promise<AccountingSyncResult> {
+  /**
+   * `orderIds` (Integrations redesign) retries just those orders — the per-record "Retry" on a
+   * failed row — instead of the next batch. Without it, the batch is ordered so orders never tried
+   * come first, then the least recently tried, so a permanently failing order can never starve
+   * newer ones out of the batch.
+   */
+  async sync(
+    businessId: string,
+    opts: { orderIds?: string[] } = {},
+  ): Promise<AccountingSyncResult> {
+    const startedAt = Date.now();
     const integration = await this.tenantPrisma.client.integration.findFirst({
       where: {
         provider: { in: ACCOUNTING_PROVIDERS },
@@ -50,6 +60,13 @@ export class AccountingSyncService {
       throw new AppException(
         ACCOUNTING_ERROR_CODES.NO_PROVIDER_CONNECTED,
         'Connect QuickBooks or Xero before syncing',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (integration.pausedAt) {
+      throw new AppException(
+        ACCOUNTING_ERROR_CODES.SYNC_PAUSED,
+        `${integration.provider} sync is paused — resume it before posting`,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -81,10 +98,11 @@ export class AccountingSyncService {
         businessId,
         status: OrderStatus.completed,
         accountingSyncedAt: null,
+        ...(opts.orderIds ? { id: { in: opts.orderIds } } : {}),
       },
       include: { items: { include: { product: true } }, customer: true },
-      orderBy: { createdAt: 'asc' },
-      take: ACCOUNTING_SYNC_BATCH_SIZE,
+      orderBy: [{ accountingSyncAttemptedAt: 'asc' }, { createdAt: 'asc' }],
+      take: opts.orderIds ? opts.orderIds.length : ACCOUNTING_SYNC_BATCH_SIZE,
     });
 
     const result: AccountingSyncResult = {
@@ -125,6 +143,8 @@ export class AccountingSyncService {
           data: {
             accountingSyncedAt: new Date(),
             accountingExternalId: invoiceResult.externalId,
+            accountingSyncError: null,
+            accountingSyncAttemptedAt: new Date(),
           },
         });
         result.pushed += 1;
@@ -145,6 +165,15 @@ export class AccountingSyncService {
           status: 'failed',
           message,
         });
+        // Integrations redesign — the reason is kept on the order itself, so a failed post is
+        // visible per record (and its cause is fixable) instead of only in a server log.
+        await this.tenantPrisma.client.order.update({
+          where: { id: order.id },
+          data: {
+            accountingSyncError: message.slice(0, 500),
+            accountingSyncAttemptedAt: new Date(),
+          },
+        });
       }
     }
 
@@ -160,6 +189,8 @@ export class AccountingSyncService {
         provider,
         success: result.failed === 0,
         recordsProcessed: result.pushed,
+        recordsFailed: result.failed,
+        durationMs: Date.now() - startedAt,
         message:
           result.failed === 0
             ? `Pushed ${result.pushed} invoice(s)`

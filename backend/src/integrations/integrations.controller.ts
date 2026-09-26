@@ -60,6 +60,7 @@ export class IntegrationsController {
       user.businessId,
       parseProvider(provider),
       body,
+      user.sub,
     );
   }
 
@@ -72,6 +73,7 @@ export class IntegrationsController {
     return this.integrations.disconnect(
       user.businessId,
       parseProvider(provider),
+      user.sub,
     );
   }
 

@@ -35,7 +35,7 @@ export const SENSITIVE_CAPS: SensitiveCap[] = [
   { key: CAPABILITIES.GDPR_MANAGE, label: 'Privacy requests', description: 'Customer data export and erasure requests.', impact: 'Can lead to permanent erasure of customer data.' },
   { key: CAPABILITIES.CUSTOMERS_ERASE, label: 'Customer erasure', description: 'Permanently erasing a customer.', impact: 'Erasure is irreversible and breaks links on historical records.' },
   { key: CAPABILITIES.AI_SETTINGS_MANAGE, label: 'AI settings', description: 'AI spend cap, rate limit and feature switches.', impact: 'Controls what AI features can run and how much they may cost.' },
-  { key: CAPABILITIES.INTEGRATIONS_MANAGE, label: 'Integrations and API keys', description: 'Connecting services and creating API keys.', impact: 'An API key can read whatever its scopes allow.' },
+  { key: CAPABILITIES.INTEGRATIONS_MANAGE, label: 'Integrations and API keys', description: 'Connecting services and creating API keys.', impact: 'An API key acts with staff-level access plus the capabilities granted to it.' },
 ];
 
 const WHO = [

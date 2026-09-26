@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QueueService } from '../../common/queue/queue.service';
 import { mapActivityEventToTriggerKey } from '../../marketing/automations/workflow-trigger-map.util';
 import { OUTBOUND_WEBHOOK_QUEUE } from './automation.constants';
+import { SlackNotifierService } from './slack-notifier.service';
 import { ActivityEventType } from '@prisma/client';
 
 export interface OutboundWebhookTriggerEvent {
@@ -30,6 +31,7 @@ export class OutboundWebhookDispatchService {
     private readonly prisma: PrismaService,
     private readonly queueService: QueueService,
     @InjectQueue(OUTBOUND_WEBHOOK_QUEUE) private readonly queue: Queue,
+    @Optional() private readonly slack?: SlackNotifierService,
   ) {}
 
   async dispatch(
@@ -39,6 +41,13 @@ export class OutboundWebhookDispatchService {
   ): Promise<void> {
     const triggerKey = mapActivityEventToTriggerKey(type, event.description);
     if (!triggerKey) return;
+
+    // Slack (Integrations redesign) — same events, same fire-and-forget rule.
+    void this.slack
+      ?.notify(businessId, triggerKey, event)
+      .catch((error: Error) =>
+        this.logger.warn(`Slack notify failed: ${error.message}`),
+      );
 
     const subscriptions = await this.prisma.outboundWebhook.findMany({
       where: { businessId, triggerKey, active: true },

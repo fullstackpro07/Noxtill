@@ -9,6 +9,15 @@ import { EcommerceSyncService } from '../ecommerce/ecommerce-sync.service';
 import { ListingSyncService } from '../../listings/listing-sync.service';
 import { AdStatsSyncProcessor } from '../../ads/jobs/ad-stats-sync.processor';
 import { OutboundWebhookService } from '../automation/outbound-webhook.service';
+import {
+  AUDIENCE_PROVIDERS,
+  CapabilitySyncService,
+  PAYMENT_PROVIDERS,
+} from '../sync/capability-sync.service';
+import {
+  BOOKING_SYNC_PROVIDERS,
+  BookingSyncService,
+} from '../sync/booking-sync.service';
 import { AD_PROVIDERS } from '../../ads/ads.constants';
 import { ACCOUNTING_PROVIDERS } from '../accounting/accounting.constants';
 import { ECOMMERCE_PROVIDERS } from '../ecommerce/ecommerce.constants';
@@ -49,6 +58,8 @@ export class ConnectionDetailService {
     private readonly listingSync: ListingSyncService,
     private readonly adStatsSync: AdStatsSyncProcessor,
     private readonly outboundWebhooks: OutboundWebhookService,
+    private readonly capabilitySync: CapabilitySyncService,
+    private readonly bookingSync: BookingSyncService,
   ) {}
 
   private categorize(provider: IntegrationProvider): ConnectionCategory {
@@ -169,6 +180,23 @@ export class ConnectionDetailService {
   async triggerSync(businessId: string, providerRaw: string) {
     const provider = parseProvider(providerRaw);
     const category = this.categorize(provider);
+
+    // Providers added in the Integrations redesign each have their own real sync.
+    if (PAYMENT_PROVIDERS.includes(provider)) {
+      return this.capabilitySync.syncPayments(businessId, provider);
+    }
+    if (AUDIENCE_PROVIDERS.includes(provider)) {
+      return this.capabilitySync.syncAudience(businessId, provider);
+    }
+    if (provider === IntegrationProvider.google_analytics) {
+      return this.capabilitySync.syncAnalytics(businessId);
+    }
+    if (provider === IntegrationProvider.merchant) {
+      return this.capabilitySync.syncMerchant(businessId);
+    }
+    if (BOOKING_SYNC_PROVIDERS.includes(provider)) {
+      return this.bookingSync.sync(businessId, provider, { manual: true });
+    }
 
     switch (category) {
       case 'accounting':

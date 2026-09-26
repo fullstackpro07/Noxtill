@@ -156,6 +156,14 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       en: 'Hi {{customerName}}, thanks for visiting {{businessName}}! Could you rate your experience? {{reviewUrl}}',
     },
   },
+  /** Unified Inbox reply typed (or approved) by a person — the text is exactly what they sent. */
+  inbox_reply: {
+    key: 'inbox_reply',
+    category: MessageCategory.utility,
+    locales: {
+      en: '{{message}}',
+    },
+  },
   feedback_reply: {
     key: 'feedback_reply',
     // Utility, not marketing: a direct customer-service reply to feedback the customer themselves

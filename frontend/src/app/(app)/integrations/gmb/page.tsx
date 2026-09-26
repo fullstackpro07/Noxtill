@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { GmbManagerView } from "@/components/integrations/gmb/gmb-manager-view";
-
-export default function GmbIntegrationPage() {
-  return <GmbManagerView />;
+/** The demo-data screen that lived here is gone — this provider is managed from its real module. */
+export default function Page() {
+  redirect("/listings");
 }

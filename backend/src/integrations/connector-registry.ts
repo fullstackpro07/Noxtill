@@ -19,6 +19,17 @@ import { QuickBooksConnector } from './connectors/quickbooks.connector';
 import { XeroConnector } from './connectors/xero.connector';
 import { ShopifyConnector } from './connectors/shopify.connector';
 import { WooCommerceConnector } from './connectors/woocommerce.connector';
+import { StripeConnector } from './connectors/stripe.connector';
+import { SquareConnector } from './connectors/square.connector';
+import { PayPalConnector } from './connectors/paypal.connector';
+import { GoogleAnalyticsConnector } from './connectors/google-analytics.connector';
+import { GoogleCalendarConnector } from './connectors/google-calendar.connector';
+import { OutlookConnector } from './connectors/outlook.connector';
+import { MailchimpConnector } from './connectors/mailchimp.connector';
+import { KlaviyoConnector } from './connectors/klaviyo.connector';
+import { SlackConnector } from './connectors/slack.connector';
+import { ZoomConnector } from './connectors/zoom.connector';
+import { WhatsAppConnector } from './connectors/whatsapp.connector';
 import { IntegrationProvider } from '@prisma/client';
 
 @Injectable()
@@ -50,6 +61,17 @@ export class ConnectorRegistry {
     xero: XeroConnector,
     shopify: ShopifyConnector,
     wooCommerce: WooCommerceConnector,
+    stripe: StripeConnector,
+    square: SquareConnector,
+    payPal: PayPalConnector,
+    googleAnalytics: GoogleAnalyticsConnector,
+    googleCalendar: GoogleCalendarConnector,
+    outlook: OutlookConnector,
+    mailchimp: MailchimpConnector,
+    klaviyo: KlaviyoConnector,
+    slack: SlackConnector,
+    zoom: ZoomConnector,
+    whatsApp: WhatsAppConnector,
   ) {
     this.byProvider = {
       [IntegrationProvider.gmb]: gmb,
@@ -71,6 +93,17 @@ export class ConnectorRegistry {
       [IntegrationProvider.xero]: xero,
       [IntegrationProvider.shopify]: shopify,
       [IntegrationProvider.woocommerce]: wooCommerce,
+      [IntegrationProvider.stripe]: stripe,
+      [IntegrationProvider.square]: square,
+      [IntegrationProvider.paypal]: payPal,
+      [IntegrationProvider.google_analytics]: googleAnalytics,
+      [IntegrationProvider.google_calendar]: googleCalendar,
+      [IntegrationProvider.outlook]: outlook,
+      [IntegrationProvider.mailchimp]: mailchimp,
+      [IntegrationProvider.klaviyo]: klaviyo,
+      [IntegrationProvider.slack]: slack,
+      [IntegrationProvider.zoom]: zoom,
+      [IntegrationProvider.whatsapp]: whatsApp,
     };
   }
 

@@ -118,6 +118,14 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'RecurringObligation',
   'SeoHeatmapPoint',
   'ApiKey',
+  'InboxConversation',
+  'InboxMessage',
+  'InboxEvent',
+  'InboxAiDraft',
+  'InboxReplyFolder',
+  'InboxSavedReply',
+  'InboxRule',
+  'InboxSettings',
 ]);
 
 export const CLS_KEY_BUSINESS_ID = 'businessId';

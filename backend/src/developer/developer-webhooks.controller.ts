@@ -28,7 +28,7 @@ export class DeveloperWebhooksController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateDeveloperWebhookDto,
   ) {
-    return this.webhooks.subscribe(user.businessId, {
+    return this.webhooks.subscribeValidated(user.businessId, {
       provider: IntegrationProvider.developer,
       triggerKey: dto.triggerKey,
       targetUrl: dto.targetUrl,
@@ -45,6 +45,12 @@ export class DeveloperWebhooksController {
   @Get(':id/deliveries')
   deliveries(@Param('id') id: string) {
     return this.webhooks.deliveries(id);
+  }
+
+  @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)
+  @Post('deliveries/:deliveryId/retry')
+  retryDelivery(@Param('deliveryId') deliveryId: string) {
+    return this.webhooks.retryDelivery(deliveryId);
   }
 
   @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)

@@ -7,6 +7,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequireCapability } from '../../common/decorators/require-capability.decorator';
 import { CAPABILITIES } from '../../common/capabilities/capabilities.constants';
@@ -15,6 +16,14 @@ import { AccountingMappingService } from './accounting-mapping.service';
 import { AccountingSyncService } from './accounting-sync.service';
 import { UpsertAccountingMappingDto } from './dto/upsert-accounting-mapping.dto';
 import { IntegrationProvider } from '@prisma/client';
+
+class AccountingSyncDto {
+  /** Retry just these orders (the per-record "Retry"); omit for the next batch. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  orderIds?: string[];
+}
 
 @Controller('integrations/accounting')
 export class AccountingController {
@@ -46,7 +55,10 @@ export class AccountingController {
 
   @RequireCapability(CAPABILITIES.INTEGRATIONS_MANAGE)
   @Post('sync')
-  runSync(@CurrentUser() user: AuthenticatedUser) {
-    return this.sync.sync(user.businessId);
+  runSync(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AccountingSyncDto = {},
+  ) {
+    return this.sync.sync(user.businessId, { orderIds: dto?.orderIds });
   }
 }

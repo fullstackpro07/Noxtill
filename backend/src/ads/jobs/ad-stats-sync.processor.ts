@@ -72,6 +72,34 @@ export class AdStatsSyncProcessor extends WorkerHost {
 
   private async syncCampaigns(campaigns: AdCampaign[]): Promise<number> {
     let syncedCount = 0;
+    // One real sync-log row per business+provider per run (Integrations hub — last attempted vs
+    // last successful, errors today) rather than one per campaign.
+    const runs = new Map<
+      string,
+      {
+        businessId: string;
+        provider: IntegrationProvider;
+        ok: number;
+        failed: number;
+        started: number;
+        lastError?: string;
+      }
+    >();
+    const runFor = (c: AdCampaign) => {
+      const key = `${c.businessId}:${c.provider}`;
+      let run = runs.get(key);
+      if (!run) {
+        run = {
+          businessId: c.businessId,
+          provider: c.provider,
+          ok: 0,
+          failed: 0,
+          started: Date.now(),
+        };
+        runs.set(key, run);
+      }
+      return run;
+    };
     for (const campaign of campaigns) {
       const connector = this.connectors.get(campaign.provider);
       if (!connector.fetchCampaignStats) continue;
@@ -85,6 +113,8 @@ export class AdStatsSyncProcessor extends WorkerHost {
         },
       });
       if (integration?.status !== IntegrationStatus.connected) continue;
+      // Owner paused this connection — keep it authorised but do not pull stats.
+      if (integration.pausedAt) continue;
 
       try {
         const tokens = await this.integrations.getTokens(
@@ -114,10 +144,37 @@ export class AdStatsSyncProcessor extends WorkerHost {
           },
         });
         syncedCount += 1;
+        runFor(campaign).ok += 1;
       } catch (error) {
         this.logger.warn(
           `Real stats sync failed for campaign ${campaign.id} (provider=${campaign.provider}), skipping this cycle: ${(error as Error).message}`,
         );
+        const run = runFor(campaign);
+        run.failed += 1;
+        run.lastError = (error as Error).message;
+      }
+    }
+    for (const run of runs.values()) {
+      const lastError = run.lastError;
+      await this.prisma.integrationSyncLog.create({
+        data: {
+          businessId: run.businessId,
+          provider: run.provider,
+          success: run.failed === 0,
+          recordsProcessed: run.ok,
+          recordsFailed: run.failed,
+          durationMs: Date.now() - run.started,
+          message:
+            run.failed === 0
+              ? `Refreshed stats for ${run.ok} campaign(s)`
+              : `Refreshed ${run.ok}, failed ${run.failed}${lastError ? `: ${lastError.slice(0, 300)}` : ''}`,
+        },
+      });
+      if (run.ok > 0) {
+        await this.prisma.integration.updateMany({
+          where: { businessId: run.businessId, provider: run.provider },
+          data: { lastSyncAt: new Date() },
+        });
       }
     }
     return syncedCount;

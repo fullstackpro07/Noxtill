@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { HUB_KEYS, fetchHubOverview } from "@/lib/integrations-hub-api";
 import { cn } from "@/lib/utils";
 import { navItemsForRole, type Role } from "@/lib/nav-items";
 import { useTranslation } from "@/hooks/use-translation";
@@ -18,11 +20,20 @@ function isRouteActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** How many integrations need attention — the same query the Integrations module reads, so it costs nothing extra there. */
+function useIntegrationsAttention(role: Role): number {
+  const allowed = role === "owner" || role === "manager";
+  const { data } = useQuery({ queryKey: HUB_KEYS.overview, queryFn: fetchHubOverview, enabled: allowed, staleTime: 60_000, retry: false });
+  return data?.health.needsAttention ?? 0;
+}
+
 function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string; onNavigate?: () => void }) {
   const { t } = useTranslation();
+  const integrationsAttention = useIntegrationsAttention(role);
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3.5" style={{ paddingTop: 0 }}>
-      {navItemsForRole(role).map((item) => {
+      {navItemsForRole(role).map((rawItem) => {
+        const item = rawItem.key === "integrations" && integrationsAttention > 0 ? { ...rawItem, badge: { count: integrationsAttention, color: "#DC2626" } } : rawItem;
         const active = !item.disabled && isRouteActive(pathname, item.href);
         const Icon = item.icon;
 

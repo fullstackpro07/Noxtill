@@ -37,9 +37,9 @@ export interface Connector {
  */
 export const CONNECTORS: Connector[] = [
   { key: "email", name: "Email Marketing", description: "Segment campaigns, templates, and list health.", status: "not_connected", href: "/integrations/email" },
-  { key: "gmb", name: "Google My Business", description: "Profile health, posts, photos, and Q&A.", status: "not_connected", href: "/integrations/gmb" },
+  { key: "gmb", name: "Google My Business", description: "Profile health, posts, photos, and Q&A.", status: "not_connected", href: "/listings" },
   { key: "google_ads", name: "Google Ads", description: "Smart campaigns with a live spend forecast.", status: "not_connected", href: "/advertising" },
-  { key: "merchant_center", name: "Google Merchant Center", description: "Product feed built from your catalog.", status: "not_connected", href: "/integrations/merchant-center" },
+  { key: "merchant_center", name: "Google Merchant Center", description: "Product feed built from your catalog.", status: "not_connected", href: "/integrations?provider=merchant" },
   { key: "meta_ads", name: "Meta Ads", description: "Facebook & Instagram, including review-to-ad.", status: "not_connected", href: "/advertising" },
   { key: "tiktok_ads", name: "TikTok Ads", description: "Slideshow creatives from your product photos.", status: "not_connected", href: "/advertising" },
   { key: "linkedin_ads", name: "LinkedIn Ads", description: "B2B campaigns on LinkedIn's sponsored network.", status: "not_connected", href: "/advertising" },

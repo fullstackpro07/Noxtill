@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { MerchantCenterView } from "@/components/integrations/merchant-center/merchant-center-view";
-
-export default function MerchantCenterIntegrationPage() {
-  return <MerchantCenterView />;
+/** The demo-data screen that lived here is gone — this provider is managed from its real module. */
+export default function Page() {
+  redirect("/integrations?provider=merchant");
 }

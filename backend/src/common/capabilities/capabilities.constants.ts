@@ -91,6 +91,9 @@ export const CAPABILITIES = {
   PRICE_OVERRIDE: 'prices.override',
   CREDIT_LIMIT_OVERRIDE: 'credit.limit_override',
   COST_VIEW: 'products.view_cost',
+  /// Unified Inbox: see every conversation (without it, only yours and unassigned ones), hand
+  /// conversations between people, and change inbox rules, channels and settings.
+  INBOX_MANAGE: 'inbox.manage',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -135,6 +138,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.PRICE_OVERRIDE,
   CAPABILITIES.CREDIT_LIMIT_OVERRIDE,
   CAPABILITIES.COST_VIEW,
+  CAPABILITIES.INBOX_MANAGE,
 ];
 
 /**

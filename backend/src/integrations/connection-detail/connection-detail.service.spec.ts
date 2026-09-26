@@ -10,6 +10,8 @@ import type { EcommerceSyncService } from '../ecommerce/ecommerce-sync.service';
 import type { ListingSyncService } from '../../listings/listing-sync.service';
 import type { AdStatsSyncProcessor } from '../../ads/jobs/ad-stats-sync.processor';
 import type { OutboundWebhookService } from '../automation/outbound-webhook.service';
+import type { CapabilitySyncService } from '../sync/capability-sync.service';
+import type { BookingSyncService } from '../sync/booking-sync.service';
 import { ConnectionDetailService } from './connection-detail.service';
 import {
   IntegrationProvider,
@@ -37,6 +39,11 @@ describe('ConnectionDetailService (UPD-BE-132)', () => {
   const listingSyncSpy = jest.fn();
   const syncBusinessProviderSpy = jest.fn();
   const retryFailedDeliveriesSpy = jest.fn();
+  const syncPaymentsSpy = jest.fn();
+  const syncAnalyticsSpy = jest.fn();
+  const syncAudienceSpy = jest.fn();
+  const syncMerchantSpy = jest.fn();
+  const bookingSyncSpy = jest.fn();
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -65,6 +72,13 @@ describe('ConnectionDetailService (UPD-BE-132)', () => {
       {
         retryFailedDeliveries: retryFailedDeliveriesSpy,
       } as unknown as OutboundWebhookService,
+      {
+        syncPayments: syncPaymentsSpy,
+        syncAnalytics: syncAnalyticsSpy,
+        syncAudience: syncAudienceSpy,
+        syncMerchant: syncMerchantSpy,
+      } as unknown as CapabilitySyncService,
+      { sync: bookingSyncSpy } as unknown as BookingSyncService,
     );
 
     const business = await prisma.business.create({

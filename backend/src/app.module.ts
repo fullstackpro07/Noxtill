@@ -52,6 +52,7 @@ import { ActivityModule } from './activity/activity.module';
 import { RolesModule } from './roles/roles.module';
 import { ListingsModule } from './listings/listings.module';
 import { SocialModule } from './social/social.module';
+import { UnifiedInboxModule } from './unified-inbox/unified-inbox.module';
 import { CompetitiveModule } from './competitive/competitive.module';
 import { VoiceModule } from './voice/voice.module';
 import { DigitizerModule } from './digitizer/digitizer.module';
@@ -63,6 +64,8 @@ import { EcommerceModule } from './integrations/ecommerce/ecommerce.module';
 import { AutomationModule as OutboundWebhookAutomationModule } from './integrations/automation/automation.module';
 import { IntegrationDirectoryModule } from './integrations/directory/integration-directory.module';
 import { ConnectionDetailModule } from './integrations/connection-detail/connection-detail.module';
+import { IntegrationHubModule } from './integrations/hub/hub.module';
+import { IntegrationSyncModule } from './integrations/sync/integration-sync.module';
 import { DeveloperModule } from './developer/developer.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 
@@ -122,6 +125,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     RolesModule,
     ListingsModule,
     SocialModule,
+    UnifiedInboxModule,
     CompetitiveModule,
     VoiceModule,
     DigitizerModule,
@@ -133,6 +137,8 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     OutboundWebhookAutomationModule,
     IntegrationDirectoryModule,
     ConnectionDetailModule,
+    IntegrationSyncModule,
+    IntegrationHubModule,
     DeveloperModule,
     AuditLogModule,
   ],

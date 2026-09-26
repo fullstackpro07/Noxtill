@@ -1,9 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { MetaAdsView } from "@/components/integrations/meta-ads/meta-ads-view";
-import { useSession } from "@/lib/session";
-
-export default function MetaAdsIntegrationPage() {
-  const session = useSession();
-  return <MetaAdsView currency={session.business.currency} />;
+/** The demo-data screen that lived here is gone — this provider is managed from its real module. */
+export default function Page() {
+  redirect("/advertising");
 }

@@ -1,5 +1,7 @@
-import { AutomationView } from "@/components/integrations/automation-view";
+"use client";
 
-export default function AutomationPage() {
-  return <AutomationView />;
+import { AutomationScreen } from "@/components/integrations/hub/automation-screen";
+
+export default function IntegrationsAutomationPage() {
+  return <AutomationScreen />;
 }

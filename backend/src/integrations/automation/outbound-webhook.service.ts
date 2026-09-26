@@ -1,12 +1,21 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { randomBytes } from 'crypto';
+import axios from 'axios';
+import { createHmac, randomBytes } from 'crypto';
+import { AppException } from '../../common/filters/app.exception';
+import { AuditService } from '../../common/audit/audit.service';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
 import { QueueService } from '../../common/queue/queue.service';
 import {
   AUTOMATION_PROVIDERS,
   OUTBOUND_WEBHOOK_QUEUE,
+  OUTBOUND_WEBHOOK_SIGNATURE_HEADER,
 } from './automation.constants';
 import { IntegrationProvider, WorkflowTriggerKey } from '@prisma/client';
 
@@ -22,6 +31,7 @@ export class OutboundWebhookService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly queueService: QueueService,
     @InjectQueue(OUTBOUND_WEBHOOK_QUEUE) private readonly queue: Queue,
+    @Optional() private readonly audit?: AuditService,
   ) {}
 
   /** `providers` defaults to the automation-platform set (UPD-BE-074); the Developer & API's own webhooks (UPD-BE-081) pass `[IntegrationProvider.developer]` instead — same table, same delivery pipeline, different provider filter. */
@@ -51,12 +61,132 @@ export class OutboundWebhookService {
     });
   }
 
+  /**
+   * Developer webhooks (Integrations redesign) — the endpoint is validated before it goes live: a
+   * signed `validation` event is POSTed and the endpoint must answer 2xx within 10 seconds, or the
+   * subscription is refused and nothing is saved. The signing secret is returned once.
+   */
+  async subscribeValidated(
+    businessId: string,
+    dto: {
+      provider: IntegrationProvider;
+      triggerKey: WorkflowTriggerKey;
+      targetUrl: string;
+    },
+  ) {
+    const secret = randomBytes(32).toString('hex');
+    const payload = {
+      trigger: dto.triggerKey,
+      test: true,
+      validation: true,
+      description: 'Endpoint validation from Noxtill',
+      occurredAt: new Date().toISOString(),
+    };
+    const body = JSON.stringify(payload);
+    let responseStatus: number;
+    try {
+      const response = await axios.post(dto.targetUrl, body, {
+        headers: {
+          'Content-Type': 'application/json',
+          [OUTBOUND_WEBHOOK_SIGNATURE_HEADER]: createHmac('sha256', secret)
+            .update(body)
+            .digest('hex'),
+        },
+        timeout: 10_000,
+        validateStatus: () => true,
+      });
+      responseStatus = response.status;
+    } catch (error) {
+      throw new AppException(
+        'WEBHOOK_ENDPOINT_UNREACHABLE',
+        `Noxtill could not reach that endpoint: ${(error as Error).message}. Nothing was saved.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (responseStatus < 200 || responseStatus >= 300) {
+      throw new AppException(
+        'WEBHOOK_ENDPOINT_REJECTED',
+        `The endpoint answered ${responseStatus}; it must answer 2xx to a validation event. Nothing was saved.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const webhook = await this.tenantPrisma.client.outboundWebhook.create({
+      data: {
+        businessId,
+        provider: dto.provider,
+        triggerKey: dto.triggerKey,
+        targetUrl: dto.targetUrl,
+        secret,
+      },
+    });
+    await this.tenantPrisma.client.outboundWebhookDelivery.create({
+      data: {
+        webhookId: webhook.id,
+        payload,
+        status: 'success',
+        attempts: 1,
+        lastAttemptAt: new Date(),
+        responseStatus,
+      },
+    });
+    await this.audit?.log({
+      entity: 'Integration',
+      entityId: 'webhooks',
+      action: 'integration.webhook_created',
+      after: { triggerKey: dto.triggerKey, targetUrl: dto.targetUrl },
+    });
+    return webhook;
+  }
+
+  /** Re-attempts one delivery (the per-row "Retry" on the Developer tab) with the same payload. */
+  async retryDelivery(deliveryId: string) {
+    const delivery =
+      await this.tenantPrisma.client.outboundWebhookDelivery.findUnique({
+        where: { id: deliveryId },
+      });
+    if (!delivery) throw new NotFoundException('Delivery not found');
+    // The webhook lookup is tenant-scoped, so a delivery of another business is a 404 too.
+    const webhook = await this.tenantPrisma.client.outboundWebhook.findUnique({
+      where: { id: delivery.webhookId },
+    });
+    if (!webhook) throw new NotFoundException('Delivery not found');
+
+    await this.tenantPrisma.client.outboundWebhookDelivery.update({
+      where: { id: deliveryId },
+      data: { status: 'pending', attempts: 0, error: null },
+    });
+    await this.queueService.addJob(
+      this.queue,
+      'deliver',
+      { deliveryId },
+      `retry-${deliveryId}-${Date.now()}`,
+    );
+    return { retried: true };
+  }
+
   async unsubscribe(id: string) {
     const existing = await this.tenantPrisma.client.outboundWebhook.findUnique({
       where: { id },
     });
     if (!existing) throw new NotFoundException('Outbound webhook not found');
-    await this.tenantPrisma.client.outboundWebhook.delete({ where: { id } });
+    // Deliveries reference the webhook with ON DELETE RESTRICT, so its history goes first — the
+    // subscription and its delivery log are removed together, never half-way.
+    await this.tenantPrisma.client.$transaction([
+      this.tenantPrisma.client.outboundWebhookDelivery.deleteMany({
+        where: { webhookId: id },
+      }),
+      this.tenantPrisma.client.outboundWebhook.delete({ where: { id } }),
+    ]);
+    await this.audit?.log({
+      entity: 'Integration',
+      entityId:
+        existing.provider === IntegrationProvider.developer
+          ? 'webhooks'
+          : existing.provider,
+      action: 'integration.webhook_deleted',
+      after: { triggerKey: existing.triggerKey, targetUrl: existing.targetUrl },
+    });
     return { success: true };
   }
 

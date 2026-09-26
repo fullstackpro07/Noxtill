@@ -1,9 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { use } from "react";
-import { ConnectionDetailView } from "@/components/integrations/connection-detail-view";
-
-export default function ConnectionDetailPage({ params }: { params: Promise<{ provider: string }> }) {
-  const { provider } = use(params);
-  return <ConnectionDetailView provider={provider} />;
+/** A provider's own URL (e.g. /integrations/shopify) opens that connection in the Integrations drawer. */
+export default async function ProviderRedirect({ params }: { params: Promise<{ provider: string }> }) {
+  const { provider } = await params;
+  redirect(`/integrations?provider=${encodeURIComponent(provider)}`);
 }

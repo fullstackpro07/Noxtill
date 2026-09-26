@@ -10,6 +10,7 @@ import { CAPABILITY_KEY } from '../decorators/require-capability.decorator';
 import type { Capability } from '../capabilities/capabilities.constants';
 import type { RequestWithUser } from '../tenancy/auth-context';
 import { CapabilitiesService } from '../capabilities/capabilities.service';
+import { API_KEY_SUBJECT_PREFIX } from '../../developer/api-key.constants';
 
 /**
  * Enforces per-route capability gates (UPD-BE-035) — replaces the old flat-role `RolesGuard`.
@@ -48,6 +49,16 @@ export class CapabilitiesGuard implements CanActivate {
 
     if (!user) {
       throw new ForbiddenException('Ask the owner for access');
+    }
+
+    // An API key's capabilities are exactly the scopes it was created with (`ApiKeyAuthService`).
+    // They must be checked as-is: re-resolving them from the key's nominal `staff` role would
+    // silently ignore every scope the key was granted and 403 the calls it was made for.
+    if (user.sub.startsWith(API_KEY_SUBJECT_PREFIX)) {
+      if (!user.capabilities.includes(requiredCapability)) {
+        throw new ForbiddenException('Ask the owner for access');
+      }
+      return true;
     }
 
     if (user.customRoleId || user.role !== Role.owner) {

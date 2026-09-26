@@ -1,5 +1,6 @@
-import { AccountingEcommerceView } from "@/components/integrations/accounting-ecommerce-view";
+import { redirect } from "next/navigation";
 
-export default function AccountingEcommercePage() {
-  return <AccountingEcommerceView />;
+/** The old combined screen is now two tabs; keep the URL working. */
+export default function AccountingEcommerceRedirect() {
+  redirect("/integrations/accounting");
 }

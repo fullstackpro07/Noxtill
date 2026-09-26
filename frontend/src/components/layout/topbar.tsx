@@ -45,7 +45,7 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
         <Menu className="h-4 w-4" aria-hidden />
       </button>
 
-      <div className="hidden min-w-0 shrink-0 flex-col sm:flex">
+      <div className="hidden min-w-[150px] shrink flex-col sm:flex">
         <h1 className="truncate text-[23px] font-extrabold leading-tight tracking-[-.6px]" style={{ color: "var(--app-text)" }}>
           {isCustom ? moduleHeader.title : pageTitle}
         </h1>
@@ -65,7 +65,7 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
           <SearchTrigger />
         </div>
       ) : moduleHeader.search ? (
-        <div className="hidden min-w-0 max-w-[360px] flex-1 sm:block">{moduleHeader.search}</div>
+        <div className="hidden min-w-[40px] max-w-[360px] flex-1 sm:block">{moduleHeader.search}</div>
       ) : null}
 
       {isCustom && moduleHeader.stats ? <div className="hidden shrink-0 items-center gap-2.5 lg:flex">{moduleHeader.stats}</div> : null}

@@ -92,6 +92,56 @@ export interface EcommerceOrder {
 }
 
 /** The Master Business Record's push-able fields (UPD-BE-041) — see `MasterListing` in schema.prisma. */
+/** A charge, refund or payout read from a payment processor (Stripe, Square, PayPal). */
+export interface ExternalPaymentInput {
+  externalId: string;
+  kind: 'charge' | 'refund' | 'payout';
+  status: string;
+  /** Major units (e.g. 12.50), never minor units. */
+  amount: number;
+  currency: string;
+  occurredAt: string;
+}
+
+/** One day of web traffic from an analytics provider. */
+export interface TrafficDayInput {
+  /** `YYYY-MM-DD`. */
+  day: string;
+  sessions: number;
+  conversions: number;
+}
+
+export interface AudienceContact {
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface CalendarEventInput {
+  title: string;
+  description?: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface MeetingInput {
+  topic: string;
+  startsAt: string;
+  durationMinutes: number;
+}
+
+export interface CatalogProductInput {
+  sku: string;
+  title: string;
+  description?: string;
+  price: number;
+  currency: string;
+  link: string;
+  imageLink?: string;
+  inStock: boolean;
+}
+
 export interface MasterListingData {
   name: string;
   phone?: string | null;
@@ -246,4 +296,67 @@ export interface Connector {
     meta: Record<string, unknown>,
     sinceIso?: string,
   ): Promise<EcommerceOrder[]>;
+
+  /**
+   * Payment processors (Stripe/Square/PayPal): every charge, refund and payout since `sinceIso`
+   * (or the provider's default window). Read-only — nothing in the processor is modified.
+   */
+  fetchPayments?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    sinceIso?: string,
+  ): Promise<ExternalPaymentInput[]>;
+
+  /** Analytics (GA4): daily sessions and conversions for the last `days` days. */
+  fetchTraffic?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    days: number,
+  ): Promise<TrafficDayInput[]>;
+
+  /** Email marketing (Mailchimp/Klaviyo): upsert these contacts into the connected audience. */
+  pushContacts?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    contacts: AudienceContact[],
+  ): Promise<{ pushed: number; failed: number }>;
+
+  /** Calendars (Google Calendar/Outlook): create, update and remove the event mirroring a booking. */
+  createCalendarEvent?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    event: CalendarEventInput,
+  ): Promise<{ externalId: string }>;
+  updateCalendarEvent?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    externalId: string,
+    event: CalendarEventInput,
+  ): Promise<void>;
+  deleteCalendarEvent?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    externalId: string,
+  ): Promise<void>;
+
+  /** Video meetings (Zoom): create a meeting and return its join link. */
+  createMeeting?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    meeting: MeetingInput,
+  ): Promise<{ externalId: string; joinUrl: string }>;
+
+  /** Team chat (Slack): post a message to the channel the business granted. */
+  postMessage?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    text: string,
+  ): Promise<void>;
+
+  /** Google Merchant Center: insert/update these catalog products. */
+  pushProducts?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    products: CatalogProductInput[],
+  ): Promise<{ pushed: number; failed: number; errors: string[] }>;
 }

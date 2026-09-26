@@ -154,6 +154,33 @@ export class CustomersService {
       },
     });
 
+    // Unified Inbox keeps conversations (they are closed, never deleted), so erasure blanks what
+    // the customer wrote and who they were rather than removing the rows.
+    const conversations =
+      await this.tenantPrisma.client.inboxConversation.findMany({
+        where: { customerId: id },
+        select: { id: true },
+      });
+    for (const conversation of conversations) {
+      await this.tenantPrisma.client.inboxConversation.update({
+        where: { id: conversation.id },
+        data: {
+          contactName: 'Erased Customer',
+          contactHandle: `erased-${conversation.id}`,
+          lastMessagePreview: '[erased]',
+        },
+      });
+    }
+    if (conversations.length > 0) {
+      await this.tenantPrisma.client.inboxMessage.updateMany({
+        where: {
+          conversationId: { in: conversations.map((c) => c.id) },
+          kind: { in: ['in', 'out'] },
+        },
+        data: { body: '[erased]', authorName: null },
+      });
+    }
+
     await this.auditService.log({
       entity: 'Customer',
       entityId: id,

@@ -196,4 +196,41 @@ describe('CapabilitiesGuard (UPD-BE-035)', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
+
+  describe('API-key callers (Integrations redesign)', () => {
+    const guardWith = (required: string) =>
+      new CapabilitiesGuard(
+        { getAllAndOverride: () => required } as unknown as Reflector,
+        // A live re-resolve of the nominal staff role would grant nothing — it must not be consulted.
+        {
+          resolve: () => Promise.resolve([]),
+        } as unknown as CapabilitiesService,
+      );
+    const keyUser = (
+      capabilities: AuthenticatedUser['capabilities'],
+    ): AuthenticatedUser => ({
+      sub: 'api-key:key-1',
+      businessId: 'b1',
+      role: Role.staff,
+      capabilities,
+    });
+
+    it('honours the scopes the key was created with', () => {
+      const guard = guardWith(CAPABILITIES.INTEGRATIONS_MANAGE);
+      expect(
+        guard.canActivate(
+          makeContext(keyUser([CAPABILITIES.INTEGRATIONS_MANAGE])),
+        ),
+      ).toBe(true);
+    });
+
+    it('rejects a route whose capability is not among the key’s scopes', () => {
+      const guard = guardWith(CAPABILITIES.ADS_MANAGE);
+      expect(() =>
+        guard.canActivate(
+          makeContext(keyUser([CAPABILITIES.INTEGRATIONS_MANAGE])),
+        ),
+      ).toThrow(ForbiddenException);
+    });
+  });
 });

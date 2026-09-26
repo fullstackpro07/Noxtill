@@ -21,11 +21,14 @@ export const OUTBOUND_WEBHOOK_SIGNATURE_HEADER = 'X-Noxtill-Signature';
 export const AUTOMATION_TRIGGERS: Array<{
   key: WorkflowTriggerKey;
   label: string;
+  /** When this trigger fires, in plain words (shown in the Integrations Automation tab). */
+  description: string;
   samplePayload: Record<string, unknown>;
 }> = [
   {
     key: WorkflowTriggerKey.sale,
     label: 'New sale',
+    description: 'Fires when a sale is completed',
     samplePayload: {
       description: 'Sale #1042 — 45.00',
       entityType: 'Order',
@@ -36,6 +39,7 @@ export const AUTOMATION_TRIGGERS: Array<{
   {
     key: WorkflowTriggerKey.booking_completed,
     label: 'Booking completed',
+    description: 'Fires when an appointment is marked completed',
     samplePayload: {
       description: 'Appointment completed',
       entityType: 'Appointment',
@@ -45,6 +49,7 @@ export const AUTOMATION_TRIGGERS: Array<{
   {
     key: WorkflowTriggerKey.review,
     label: 'New review',
+    description: 'Fires when a new review arrives',
     samplePayload: {
       description: '5-star review from Jamie',
       entityType: 'ExternalReview',
@@ -54,6 +59,7 @@ export const AUTOMATION_TRIGGERS: Array<{
   {
     key: WorkflowTriggerKey.low_stock,
     label: 'Product low on stock',
+    description: 'Fires when a product falls to its low-stock level',
     samplePayload: {
       description: 'Blue T-Shirt is low on stock (3 left)',
       entityType: 'Product',
@@ -63,6 +69,7 @@ export const AUTOMATION_TRIGGERS: Array<{
   {
     key: WorkflowTriggerKey.lapsed_customer,
     label: 'Customer lapsed',
+    description: 'Fires when a customer has not visited for a while',
     samplePayload: {
       description: 'Jamie Prospect has not visited in 60 days',
       entityType: 'Customer',
@@ -72,6 +79,7 @@ export const AUTOMATION_TRIGGERS: Array<{
   {
     key: WorkflowTriggerKey.credit_overdue,
     label: 'Credit overdue',
+    description: 'Fires when a credit installment becomes overdue',
     samplePayload: {
       description: 'Installment #3 overdue (120.00)',
       entityType: 'Installment',
@@ -82,6 +90,7 @@ export const AUTOMATION_TRIGGERS: Array<{
   {
     key: WorkflowTriggerKey.birthday,
     label: 'Customer birthday',
+    description: "Fires on a customer's birthday",
     samplePayload: {
       description: "Jamie Prospect's birthday is today",
       entityType: 'Customer',

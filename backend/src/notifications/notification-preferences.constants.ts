@@ -10,6 +10,11 @@ export const NOTIFICATION_EVENTS = [
   'scheduled_delivery_ready',
   'schedule_updated',
   'tax_filing_reminder',
+  // unified-inbox/inbox-automation.service.ts and inbox.service.ts (reassign)
+  'inbox_unassigned',
+  'inbox_money_question',
+  'inbox_flagged',
+  'inbox_reassigned',
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
@@ -19,6 +24,10 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   scheduled_delivery_ready: 'Scheduled report/export ready',
   schedule_updated: 'Your shift schedule changed',
   tax_filing_reminder: 'Tax filing reminder',
+  inbox_unassigned: 'Inbox: nobody has picked a conversation up',
+  inbox_money_question: 'Inbox: a money question came in',
+  inbox_flagged: 'Inbox: a conversation is past its reply target',
+  inbox_reassigned: 'Inbox: a conversation was handed to or from you',
 };
 
 export type NotificationPriority = 'low' | 'normal' | 'high';
@@ -29,6 +38,10 @@ export const NOTIFICATION_EVENT_PRIORITY: Record<NotificationEvent, Notification
   scheduled_delivery_ready: 'normal',
   schedule_updated: 'high',
   tax_filing_reminder: 'high',
+  inbox_unassigned: 'high',
+  inbox_money_question: 'high',
+  inbox_flagged: 'high',
+  inbox_reassigned: 'normal',
 };
 
 export function isNotificationEvent(value: string): value is NotificationEvent {

@@ -7,6 +7,7 @@ import { EcommerceModule } from '../ecommerce/ecommerce.module';
 import { ListingsModule } from '../../listings/listings.module';
 import { AdsModule } from '../../ads/ads.module';
 import { AutomationModule } from '../automation/automation.module';
+import { IntegrationSyncModule } from '../sync/integration-sync.module';
 
 /**
  * Connection Detail (UPD-BE-132). Registered AFTER `IntegrationDirectoryModule` in
@@ -22,8 +23,10 @@ import { AutomationModule } from '../automation/automation.module';
     ListingsModule,
     AdsModule,
     AutomationModule,
+    IntegrationSyncModule,
   ],
   controllers: [ConnectionDetailController],
   providers: [ConnectionDetailService],
+  exports: [ConnectionDetailService],
 })
 export class ConnectionDetailModule {}

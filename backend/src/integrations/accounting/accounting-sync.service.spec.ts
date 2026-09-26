@@ -247,5 +247,93 @@ describe('AccountingSyncService (UPD-BE-072)', () => {
       take: 1,
     });
     expect(latestLog.success).toBe(false);
+    expect(latestLog.recordsFailed).toBe(1);
+    expect(latestLog.durationMs).not.toBeNull();
+    // Integrations redesign — the reason and attempt time are kept on the order itself.
+    expect(refreshed.accountingSyncError).toContain('No accounting mapping');
+    expect(refreshed.accountingSyncAttemptedAt).not.toBeNull();
+  });
+
+  describe('Integrations redesign — per-record retry and pause', () => {
+    it('retries only the requested order and clears its stored error once it posts', async () => {
+      const failed = await prisma.order.findFirstOrThrow({
+        where: { businessId, orderNo: 1003 },
+      });
+      // A second failing order that must NOT be touched by a targeted retry.
+      const other = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: 1004,
+          status: OrderStatus.completed,
+          total: 5,
+          items: {
+            create: [{ name: 'Loose item', price: 5, cost: 2, qty: 1 }],
+          },
+        },
+      });
+      await service.sync(businessId);
+
+      await mapping.upsert(businessId, {
+        provider: IntegrationProvider.quickbooks,
+        externalAccountCode: 'ACC-FIXED',
+      });
+      pushInvoice.mockResolvedValue({ externalId: 'qbo-inv-fixed' });
+
+      const result = await service.sync(businessId, { orderIds: [failed.id] });
+      expect(result.pushed).toBe(1);
+      expect(pushInvoice).toHaveBeenCalledTimes(1);
+
+      const fixed = await prisma.order.findUniqueOrThrow({
+        where: { id: failed.id },
+      });
+      expect(fixed.accountingExternalId).toBe('qbo-inv-fixed');
+      expect(fixed.accountingSyncError).toBeNull();
+      const untouched = await prisma.order.findUniqueOrThrow({
+        where: { id: other.id },
+      });
+      expect(untouched.accountingSyncedAt).toBeNull();
+    });
+
+    it('refuses to post while the connection is paused, and never touches an order', async () => {
+      const waiting = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: 1005,
+          status: OrderStatus.completed,
+          total: 4,
+          items: {
+            create: [{ name: 'Paused item', price: 4, cost: 1, qty: 1 }],
+          },
+        },
+      });
+      await prisma.integration.update({
+        where: {
+          businessId_provider: {
+            businessId,
+            provider: IntegrationProvider.quickbooks,
+          },
+        },
+        data: { pausedAt: new Date() },
+      });
+
+      await expect(service.sync(businessId)).rejects.toMatchObject({
+        response: { code: 'ACCOUNTING_SYNC_PAUSED' },
+      });
+      expect(pushInvoice).not.toHaveBeenCalled();
+      const still = await prisma.order.findUniqueOrThrow({
+        where: { id: waiting.id },
+      });
+      expect(still.accountingSyncAttemptedAt).toBeNull();
+
+      await prisma.integration.update({
+        where: {
+          businessId_provider: {
+            businessId,
+            provider: IntegrationProvider.quickbooks,
+          },
+        },
+        data: { pausedAt: null },
+      });
+    });
   });
 });

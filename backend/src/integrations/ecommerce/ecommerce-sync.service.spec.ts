@@ -5,6 +5,8 @@ import { CLS_KEY_BUSINESS_ID } from '../../common/tenancy/tenant.constants';
 import { EcommerceSyncService } from './ecommerce-sync.service';
 import type { IntegrationsService } from '../integrations.service';
 import type { ConnectorRegistry } from '../connector-registry';
+import type { IntegrationAuditService } from '../integration-audit.service';
+import type { SourceOfTruth } from './ecommerce.constants';
 import {
   IntegrationProvider,
   IntegrationStatus,
@@ -29,6 +31,20 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
   const fetchProducts = jest.fn();
   const pushInventory = jest.fn();
   const fetchOrders = jest.fn();
+  const auditRecord = jest.fn();
+
+  /** Sets the connection's source-of-truth (the redesign's per-connection conflict policy). */
+  async function setSourceOfTruth(value: SourceOfTruth) {
+    await prisma.integration.update({
+      where: {
+        businessId_provider: {
+          businessId,
+          provider: IntegrationProvider.shopify,
+        },
+      },
+      data: { meta: { shop: 'test-shop.myshopify.com', sourceOfTruth: value } },
+    });
+  }
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -47,6 +63,7 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
       tenantPrisma,
       integrations as unknown as IntegrationsService,
       connectors as unknown as ConnectorRegistry,
+      { record: auditRecord } as unknown as IntegrationAuditService,
     );
 
     const business = await prisma.business.create({
@@ -92,7 +109,8 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
     await prisma.$disconnect();
   });
 
-  it('remote stock level wins when it was more recently updated — writes a real StockMovement adjustment', async () => {
+  it('store as source of truth: the remote stock level is applied — writes a real StockMovement adjustment', async () => {
+    await setSourceOfTruth('store');
     const product = await prisma.product.create({
       data: {
         businessId,
@@ -139,7 +157,8 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
     });
   });
 
-  it('local stock level wins when more recently updated — pushes to the platform instead of overwriting local', async () => {
+  it('Noxtill as source of truth (the default): pushes local stock to the platform instead of overwriting local', async () => {
+    await setSourceOfTruth('noxtill');
     const product = await prisma.product.create({
       data: {
         businessId,
@@ -160,7 +179,7 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
     );
     expect(pushInventory).toHaveBeenCalledWith(
       { accessToken: 'tok' },
-      { shop: 'test-shop.myshopify.com' },
+      { shop: 'test-shop.myshopify.com', sourceOfTruth: 'noxtill' },
       'SKU-RED',
       9,
     );
@@ -258,6 +277,215 @@ describe('EcommerceSyncService (UPD-BE-073)', () => {
         take: 1,
       });
       expect(latestLog.success).toBe(false);
+    });
+  });
+
+  describe('source of truth "manual" — conflicts are queued, never overwritten', () => {
+    async function seed(sku: string, local: number, remote: number) {
+      const product = await prisma.product.create({
+        data: {
+          businessId,
+          name: `Queue ${sku}`,
+          sku,
+          sellingPrice: 10,
+          stockQty: local,
+        },
+      });
+      fetchProducts.mockResolvedValue([
+        { sku, quantity: remote, updatedAt: '2099-01-01T00:00:00Z' },
+      ]);
+      fetchOrders.mockResolvedValue([]);
+      return product;
+    }
+
+    it('creates a pending conflict and changes neither side', async () => {
+      await setSourceOfTruth('manual');
+      const product = await seed('SKU-Q1', 10, 4);
+
+      const [result] = await service.sync(businessId);
+      expect(result.conflicts).toContainEqual(
+        expect.objectContaining({ sku: 'SKU-Q1', winner: 'none' }),
+      );
+      expect(pushInventory).not.toHaveBeenCalled();
+      const untouched = await prisma.product.findUniqueOrThrow({
+        where: { id: product.id },
+      });
+      expect(untouched.stockQty).toBe(10);
+      const pending = await service.listConflicts(
+        businessId,
+        IntegrationProvider.shopify,
+        'pending',
+      );
+      const row = pending.find((c) => c.sku === 'SKU-Q1');
+      expect(row).toMatchObject({
+        status: 'pending',
+        localQty: 10,
+        remoteQty: 4,
+        productId: product.id,
+        productName: 'Queue SKU-Q1',
+      });
+    });
+
+    it('does not duplicate a pending conflict on the next sync — it refreshes the numbers', async () => {
+      await seed('SKU-Q2', 8, 3);
+      await service.sync(businessId);
+      fetchProducts.mockResolvedValue([
+        { sku: 'SKU-Q2', quantity: 2, updatedAt: '2099-01-02T00:00:00Z' },
+      ]);
+      await service.sync(businessId);
+
+      const rows = await prisma.ecommerceSyncConflict.findMany({
+        where: { businessId, sku: 'SKU-Q2' },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ status: 'pending', remoteQty: 2 });
+    });
+
+    it('resolves a pending conflict with the store quantity — applied locally as a stock movement, audited', async () => {
+      const product = await seed('SKU-Q3', 10, 6);
+      await service.sync(businessId);
+      const row = await prisma.ecommerceSyncConflict.findFirstOrThrow({
+        where: { businessId, sku: 'SKU-Q3' },
+      });
+
+      const resolved = await service.resolveConflict(
+        businessId,
+        undefined,
+        row.id,
+        'store',
+      );
+      expect(resolved).toMatchObject({
+        status: 'resolved',
+        resolution: 'store',
+        resolvedQty: 6,
+      });
+      const after = await prisma.product.findUniqueOrThrow({
+        where: { id: product.id },
+      });
+      expect(after.stockQty).toBe(6);
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'integration.conflict_resolved' }),
+      );
+      await expect(
+        service.resolveConflict(businessId, undefined, row.id, 'store'),
+      ).rejects.toMatchObject({
+        response: { code: 'ECOMMERCE_CONFLICT_NOT_PENDING' },
+      });
+    });
+
+    it('resolves with Noxtill quantity — pushed to the store, local unchanged', async () => {
+      const product = await seed('SKU-Q4', 10, 6);
+      await service.sync(businessId);
+      const row = await prisma.ecommerceSyncConflict.findFirstOrThrow({
+        where: { businessId, sku: 'SKU-Q4' },
+      });
+      pushInventory.mockClear();
+
+      await service.resolveConflict(businessId, undefined, row.id, 'noxtill');
+      expect(pushInventory).toHaveBeenCalledWith(
+        { accessToken: 'tok' },
+        expect.anything(),
+        'SKU-Q4',
+        10,
+      );
+      const after = await prisma.product.findUniqueOrThrow({
+        where: { id: product.id },
+      });
+      expect(after.stockQty).toBe(10);
+    });
+
+    it('resolves with a custom quantity — both sides set, and rejects a negative number', async () => {
+      const product = await seed('SKU-Q5', 10, 6);
+      await service.sync(businessId);
+      const row = await prisma.ecommerceSyncConflict.findFirstOrThrow({
+        where: { businessId, sku: 'SKU-Q5' },
+      });
+
+      await expect(
+        service.resolveConflict(businessId, undefined, row.id, 'custom', -1),
+      ).rejects.toMatchObject({ response: { code: 'ECOMMERCE_INVALID_QTY' } });
+
+      pushInventory.mockClear();
+      await service.resolveConflict(businessId, undefined, row.id, 'custom', 7);
+      expect(pushInventory).toHaveBeenCalledWith(
+        { accessToken: 'tok' },
+        expect.anything(),
+        'SKU-Q5',
+        7,
+      );
+      const after = await prisma.product.findUniqueOrThrow({
+        where: { id: product.id },
+      });
+      expect(after.stockQty).toBe(7);
+    });
+
+    it('leaves the conflict pending when the store rejects the push', async () => {
+      await seed('SKU-Q6', 10, 6);
+      await service.sync(businessId);
+      const row = await prisma.ecommerceSyncConflict.findFirstOrThrow({
+        where: { businessId, sku: 'SKU-Q6' },
+      });
+      pushInventory.mockRejectedValueOnce(new Error('403 forbidden'));
+
+      await expect(
+        service.resolveConflict(businessId, undefined, row.id, 'noxtill'),
+      ).rejects.toMatchObject({ response: { code: 'ECOMMERCE_PUSH_FAILED' } });
+      const still = await prisma.ecommerceSyncConflict.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      expect(still.status).toBe('pending');
+    });
+
+    it('closes a pending conflict on its own once both sides agree again', async () => {
+      await seed('SKU-Q7', 10, 6);
+      await service.sync(businessId);
+      fetchProducts.mockResolvedValue([
+        { sku: 'SKU-Q7', quantity: 10, updatedAt: '2099-01-03T00:00:00Z' },
+      ]);
+      await service.sync(businessId);
+      const row = await prisma.ecommerceSyncConflict.findFirstOrThrow({
+        where: { businessId, sku: 'SKU-Q7' },
+      });
+      expect(row).toMatchObject({ status: 'resolved', resolution: 'matched' });
+    });
+
+    it('setSourceOfTruth() persists the choice and audits it; sync skips a paused connection', async () => {
+      await service.setSourceOfTruth(
+        businessId,
+        undefined,
+        IntegrationProvider.shopify,
+        'store',
+      );
+      expect(
+        await service.sourceOfTruth(businessId, IntegrationProvider.shopify),
+      ).toBe('store');
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'integration.source_of_truth_changed',
+          after: { sourceOfTruth: 'store' },
+        }),
+      );
+
+      await prisma.integration.update({
+        where: {
+          businessId_provider: {
+            businessId,
+            provider: IntegrationProvider.shopify,
+          },
+        },
+        data: { pausedAt: new Date() },
+      });
+      expect(await service.sync(businessId)).toEqual([]);
+      await prisma.integration.update({
+        where: {
+          businessId_provider: {
+            businessId,
+            provider: IntegrationProvider.shopify,
+          },
+        },
+        data: { pausedAt: null },
+      });
+      await setSourceOfTruth('noxtill');
     });
   });
 

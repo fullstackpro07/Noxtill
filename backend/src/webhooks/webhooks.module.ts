@@ -3,12 +3,14 @@ import { BullModule } from '@nestjs/bullmq';
 import { WebhooksController } from './webhooks.controller';
 import { WebhookEventsProcessor } from './webhook-events.processor';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { UnifiedInboxModule } from '../unified-inbox/unified-inbox.module';
 import { WEBHOOK_EVENTS_QUEUE } from './webhooks.constants';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: WEBHOOK_EVENTS_QUEUE }),
     WhatsappModule,
+    UnifiedInboxModule,
   ],
   controllers: [WebhooksController],
   providers: [WebhookEventsProcessor],

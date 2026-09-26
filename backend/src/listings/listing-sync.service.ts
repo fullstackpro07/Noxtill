@@ -72,6 +72,8 @@ export class ListingSyncService {
       if (!integration || integration.status !== IntegrationStatus.connected) {
         continue;
       }
+      // Owner paused this directory — the connection stays authorised, nothing is pushed.
+      if (integration.pausedAt) continue;
 
       const tokens = await this.integrations.getTokens(businessId, provider);
       const connector = this.connectors.get(provider);
