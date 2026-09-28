@@ -94,6 +94,9 @@ export const CAPABILITIES = {
   /// Unified Inbox: see every conversation (without it, only yours and unassigned ones), hand
   /// conversations between people, and change inbox rules, channels and settings.
   INBOX_MANAGE: 'inbox.manage',
+  /// Business Brain: approve and run an action it prepared that messages customers (an offer or a
+  /// follow-up). Credit reminders and reorder drafts need the credit / purchases capability instead.
+  BRAIN_APPROVE: 'brain.approve',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -139,6 +142,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.CREDIT_LIMIT_OVERRIDE,
   CAPABILITIES.COST_VIEW,
   CAPABILITIES.INBOX_MANAGE,
+  CAPABILITIES.BRAIN_APPROVE,
 ];
 
 /**

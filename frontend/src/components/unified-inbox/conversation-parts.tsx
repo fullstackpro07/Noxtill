@@ -171,7 +171,12 @@ export function useConversationActions(id: string | null) {
 export const COMPOSER_TOOLS = ["Attach", "Saved reply", "AI assist", "Translate"] as const;
 
 /** Runs one composer tool; returns replacement text when the tool produces some. */
-export function useComposerTool(detail: ConversationDetail | undefined, text: string, setText: (t: string) => void) {
+export function useComposerTool(
+  detail: ConversationDetail | undefined,
+  text: string,
+  setText: (t: string) => void,
+  stageDraft?: (text: string, draftId: string) => void,
+) {
   const openModal = useInboxStore((s) => s.openModal);
   const flash = useInboxStore((s) => s.flash);
   const actions = useConversationActions(detail?.id ?? null);
@@ -185,7 +190,8 @@ export function useComposerTool(detail: ConversationDetail | undefined, text: st
         openModal({ type: "saved-reply-picker", conversationId: detail.id });
       } else if (tool === "AI assist") {
         if (detail.draft) {
-          setText(detail.draft.text);
+          if (stageDraft) stageDraft(detail.draft.text, detail.draft.id);
+          else setText(detail.draft.text);
           flash("Draft copied into the reply box — edit it, then send.");
         } else actions.draft.mutate();
       } else if (tool === "Translate") {

@@ -17,6 +17,7 @@ import { InboxFactsService } from './inbox-facts.service';
 import { InboxSendService } from './inbox-send.service';
 import { InboxAiService } from './inbox-ai.service';
 import { InboxAutomationService } from './inbox-automation.service';
+import { InboxChannelsService } from './inbox-channels.service';
 import {
   INBOX_AUTOMATION_QUEUE,
   InboxAutomationProcessor,
@@ -45,6 +46,7 @@ import {
     InboxSendService,
     InboxAiService,
     InboxAutomationService,
+    InboxChannelsService,
     InboxAutomationScheduler,
     InboxAutomationProcessor,
   ],

@@ -10,12 +10,13 @@ const bad = (message: string) => new AppException('SETTING_INVALID', message, Ht
 
 const AI_FEATURES: { key: string; label: string; description: string }[] = [
   { key: 'assistant', label: 'Business assistant', description: 'The chat assistant that answers questions from your data.' },
-  { key: 'insights', label: 'AI insights', description: 'Suggestions shown on the dashboard and Business Brain.' },
+  { key: 'insights', label: 'AI insights', description: 'Suggestions shown on the dashboard and the Marketing overview. Business Brain findings do not use AI.' },
   { key: 'whatIf', label: 'What-if simulations', description: 'Scenario estimates built from your recorded data.' },
   { key: 'reviewReplies', label: 'Review reply drafts', description: 'Drafts a reply to a review for a person to send.' },
   { key: 'campaignCopy', label: 'Campaign copy', description: 'Drafts marketing message copy for a person to approve.' },
   { key: 'voiceEntry', label: 'Voice entry', description: 'Turns a spoken command into a draft you confirm before anything is saved.' },
   { key: 'photoDigitizer', label: 'Photo digitizer', description: 'Reads a photo of a list into rows you review before importing.' },
+  { key: 'inboxReplies', label: 'Inbox reply drafts', description: 'Drafts, translates and summarises Unified Inbox replies for a person to send.' },
 ];
 
 /** Provider display names — one source, the Integrations catalog, so this screen never lags the directory. */
@@ -218,6 +219,19 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               on: { text: 'Masked', tone: 'green' },
               off: { text: 'Visible to the assistant', tone: 'amber' },
             }),
+          ],
+        },
+        {
+          title: 'Business Brain',
+          hint: 'What counts as worth raising',
+          footer: 'Business Brain raises a finding only when a recorded figure crosses one of these. The same values are editable on Business Brain → Memory & Rules.',
+          rows: [
+            policyRow(d, { key: 'brain-overdue', policy: 'brain.overdueDays', kind: 'number', label: 'Credit counts as overdue after', description: 'How long a balance can stand before it is raised as overdue.', requires: CAPABILITIES.BRAIN_APPROVE, unit: 'days', format: (n) => `${n} days` }),
+            policyRow(d, { key: 'brain-cover', policy: 'brain.stockCoverDays', kind: 'number', label: 'Warn when stock covers fewer than', description: 'Days of stock left at the 14-day sales rate.', requires: CAPABILITIES.BRAIN_APPROVE, unit: 'days', format: (n) => `${n} days` }),
+            policyRow(d, { key: 'brain-repeat', policy: 'brain.repeatDropPercent', kind: 'number', label: 'Raise a drop in returning-buyer spend of', description: 'Compared with the previous period.', requires: CAPABILITIES.BRAIN_APPROVE, unit: '%', format: (n) => `${n}%` }),
+            policyRow(d, { key: 'brain-gap', policy: 'brain.marginGapPoints', kind: 'number', label: 'Raise a branch margin gap of', description: 'Between your best and worst branch over 30 days.', requires: CAPABILITIES.BRAIN_APPROVE, unit: 'points', format: (n) => `${n} points` }),
+            policyRow(d, { key: 'brain-change', policy: 'brain.notableChangePercent', kind: 'number', label: 'Report a figure as changed when it moves', description: 'Anything smaller is treated as normal variation.', requires: CAPABILITIES.BRAIN_APPROVE, unit: '%', format: (n) => `${n}%` }),
+            policyRow(d, { key: 'brain-lapsed', policy: 'brain.lapsedDays', kind: 'number', label: 'A regular customer has gone quiet after', description: 'For customers with two or more past orders.', requires: CAPABILITIES.BRAIN_APPROVE, unit: 'days', format: (n) => `${n} days` }),
           ],
         },
         {

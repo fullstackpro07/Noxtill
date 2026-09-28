@@ -19,6 +19,8 @@ import { InboxAiService } from './inbox-ai.service';
 import { InboxAutomationService } from './inbox-automation.service';
 import { InboxService } from './inbox.service';
 import { InboxRulesService } from './inbox-rules.service';
+import { InboxChannelsService } from './inbox-channels.service';
+import type { ConfigService } from '@nestjs/config';
 import { AppException } from '../common/filters/app.exception';
 
 class FakeClsService {
@@ -42,6 +44,7 @@ describe('Unified Inbox (real DB)', () => {
   let automation: InboxAutomationService;
   let rules: InboxRulesService;
   let facts: InboxFactsService;
+  let channels: InboxChannelsService;
   let owner: AuthenticatedUser;
   let staff: AuthenticatedUser;
 
@@ -64,6 +67,17 @@ describe('Unified Inbox (real DB)', () => {
       outputTokens: 10,
     }),
   };
+  // Channel capability config: SMS/WhatsApp send + receive are set up for these tests.
+  const configValues: Record<string, string> = {
+    META_WA_TOKEN: 't',
+    META_WA_PHONE_ID: 'p',
+    META_APP_SECRET: 's',
+    TELNYX_PUBLIC_KEY: 'k',
+    TWILIO_ACCOUNT_SID: 'a',
+    TWILIO_AUTH_TOKEN: 'b',
+    TWILIO_FROM_NUMBER: '+10000000000',
+  };
+  const config = { get: (k: string) => configValues[k] };
   const canManage = { value: true };
   const policies = {
     actorCan: jest.fn(() => Promise.resolve(canManage.value)),
@@ -104,12 +118,17 @@ describe('Unified Inbox (real DB)', () => {
       settings,
     );
     facts = new InboxFactsService(prisma, new LocaleService());
+    channels = new InboxChannelsService(
+      prisma,
+      config as unknown as ConfigService,
+    );
     const sender = new InboxSendService(
       prisma,
       sendGate as unknown as SendGateService,
       socialInbox as unknown as SocialInboxService,
       window as unknown as WhatsappWindowService,
       core,
+      channels,
     );
     const ai = new InboxAiService(
       prisma,
@@ -205,6 +224,7 @@ describe('Unified Inbox (real DB)', () => {
   });
 
   afterAll(async () => {
+    await prisma.socialAccount.deleteMany({ where: { businessId } });
     await prisma.inboxAiDraft.deleteMany({ where: { businessId } });
     await prisma.inboxMessage.deleteMany({ where: { businessId } });
     await prisma.inboxEvent.deleteMany({ where: { businessId } });
@@ -495,5 +515,75 @@ describe('Unified Inbox (real DB)', () => {
     expect(out.text).toContain('#1048');
     expect(out.text).not.toContain('[promised time]');
     expect(out.unfilled).toEqual(['voucher code']);
+  });
+  it('judges receiving and sending separately, from real config and connections', async () => {
+    const saved = { ...configValues };
+    delete configValues.META_APP_SECRET;
+    delete configValues.TELNYX_PUBLIC_KEY;
+    await prisma.socialAccount.createMany({
+      data: [
+        {
+          businessId,
+          platform: 'facebook',
+          status: 'connected',
+          externalAccountName: 'Test Page',
+        },
+        { businessId, platform: 'snapchat', status: 'connected' },
+      ],
+    });
+    try {
+      const states = await channels.states(businessId);
+      const wa = states.get('whatsapp')!;
+      expect(wa.send.ok).toBe(true);
+      expect(wa.receive.ok).toBe(false);
+      expect(wa.st).toBe('Sending only');
+      // Connected in Social, but no webhook secret: honest "Sending only", not "Connected".
+      expect(states.get('facebook')!.st).toBe('Sending only');
+      expect(states.get('snapchat')!.send.ok).toBe(false);
+      expect(states.get('email')!.receive.ok).toBe(false);
+      expect(states.get('webchat')!.st).toBe('Not available');
+    } finally {
+      Object.assign(configValues, saved);
+    }
+  });
+
+  it('refuses to send up front when the channel has no provider, saying why', async () => {
+    const conv = await automation.ingest({
+      businessId,
+      channel: 'sms',
+      contactHandle: '+15550008888',
+      text: 'Hello there',
+    });
+    const saved = { ...configValues };
+    delete configValues.TWILIO_ACCOUNT_SID;
+    try {
+      await expect(inbox.reply(owner, conv!.id, 'Hi')).rejects.toBeInstanceOf(
+        AppException,
+      );
+      const detail = await inbox.detail(owner, conv!.id);
+      expect(detail.cannotSend).toContain('No SMS provider');
+      expect(sendGate.send).not.toHaveBeenCalled();
+    } finally {
+      Object.assign(configValues, saved);
+    }
+  });
+
+  it('records "switched off in AI Settings" as its own reason, not as missing facts', async () => {
+    aiInfra.createMessage.mockRejectedValueOnce(
+      new AppException('AI_FEATURE_DISABLED', 'off'),
+    );
+    const conv = await automation.ingest({
+      businessId,
+      channel: 'whatsapp',
+      contactHandle: '923001112233',
+      text: 'Is my order coming today?',
+      externalKey: 'whatsapp:wamid.off',
+    });
+    const skip = await prisma.inboxEvent.findFirstOrThrow({
+      where: { conversationId: conv!.id, kind: 'ai.skipped' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect((skip.data as { cause?: string }).cause).toBe('ai_off');
+    expect(skip.detail).toContain('switched off in AI Settings');
   });
 });

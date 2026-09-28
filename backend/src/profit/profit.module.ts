@@ -18,6 +18,6 @@ import { MessagingModule } from '../messaging/messaging.module';
     CashForecastService,
     RecurringObligationsService,
   ],
-  exports: [ProfitService],
+  exports: [ProfitService, DeadHoursOfferService, CashForecastService],
 })
 export class ProfitModule {}

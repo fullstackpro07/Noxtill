@@ -35,6 +35,6 @@ import { LocalizationModule } from '../common/localization/localization.module';
     LowStockScanScheduler,
     LowStockScanProcessor,
   ],
-  exports: [InventoryService],
+  exports: [InventoryService, PurchaseOrdersService],
 })
 export class InventoryModule {}

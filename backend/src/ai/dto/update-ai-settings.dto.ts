@@ -36,6 +36,10 @@ export class AiFeatureTogglesDto {
   @IsOptional()
   @IsBoolean()
   assistant?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  inboxReplies?: boolean;
 }
 
 export class UpdateAiSettingsDto {

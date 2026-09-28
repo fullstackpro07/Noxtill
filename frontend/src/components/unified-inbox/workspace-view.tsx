@@ -70,7 +70,10 @@ function Workspace() {
   const editingDraftId = composer.draftId;
   const [showSummary, setShowSummary] = useState(false);
   const actions = useConversationActions(d.id);
-  const tool = useComposerTool(d, text, setText);
+  const tool = useComposerTool(d, text, setText, (t, draftId) => {
+    setMode("Reply");
+    composer.set({ text: t, draftId });
+  });
   const summary = useQuery({ queryKey: ["inbox-summary", d.id], queryFn: () => fetchSummary(d.id), enabled: showSummary && d.summaryAvailable });
   const close = useMutation({
     mutationFn: () => (d.conversationStatus === "closed" ? reopenConversation(d.id) : closeConversation(d.id)),

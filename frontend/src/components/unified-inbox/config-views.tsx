@@ -30,7 +30,7 @@ export function SavedRepliesView() {
   const canManage = overview?.canManage ?? false;
   const dup = useMutation({ mutationFn: duplicateSavedReply, onSuccess: () => { flash("Duplicated"); void invalidate(); }, onError: (e) => flash(errorText(e)) });
   const del = useMutation({ mutationFn: deleteSavedReply, onSuccess: () => { flash("Saved reply deleted"); void invalidate(); }, onError: (e) => flash(errorText(e)) });
-  const manageTitle = canManage ? undefined : "Only an Owner or Manager can change saved replies";
+  const manageTitle = canManage ? undefined : "Only people with inbox management rights (Owner and Manager by default) can change saved replies";
 
   return (
     <div data-3pane="1" style={{ display: "grid", gridTemplateColumns: "200px minmax(0,1fr)", gap: "15px", alignItems: "start" }}>
@@ -156,7 +156,7 @@ export function AutomationsView() {
         <button
           type="button"
           disabled={!canManage}
-          title={canManage ? undefined : "Only an Owner or Manager can add rules"}
+          title={canManage ? undefined : "Only people with inbox management rights (Owner and Manager by default) can add rules"}
           onClick={() => openModal({ type: "rule-editor" })}
           className="nx-primary"
           style={{ border: 0, background: "#12A150", borderRadius: "11px", padding: "11px 18px", fontSize: "12.5px", fontWeight: 800, color: "#fff", cursor: "pointer", minHeight: "44px", opacity: canManage ? 1 : 0.55 }}

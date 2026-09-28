@@ -5,7 +5,7 @@ export const AI_ERROR_CODES = {
 } as const;
 
 /**
- * AI Settings (UPD-BE-115) — the 7 named toggles from the spec. A key not present in
+ * AI Settings (UPD-BE-115) — the named toggles (the spec's 7, plus Unified Inbox replies). A key not present in
  * `Business.aiFeatureToggles` defaults to enabled, so adding a new feature here never silently
  * disables it for existing businesses.
  */
@@ -16,7 +16,9 @@ export type AiFeatureKey =
   | 'campaignCopy'
   | 'insights'
   | 'whatIf'
-  | 'assistant';
+  | 'assistant'
+  /** Unified Inbox drafts, translations and long-thread summaries. */
+  | 'inboxReplies';
 
 export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'voiceEntry',
@@ -26,10 +28,11 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'insights',
   'whatIf',
   'assistant',
+  'inboxReplies',
 ];
 
 /**
- * Maps every `AiCallLog.kind` this codebase actually writes into one of the 7 toggleable
+ * Maps every `AiCallLog.kind` this codebase actually writes into one of the toggleable
  * features, for both enforcement (`AiInfraService.checkGuardrails`) and the AI Settings screen's
  * per-feature usage figures. Deliberately incomplete: several real AI call sites (branch advisor,
  * pricing-rationale phrasing, segment personas, competitive opportunities, the AI phone
@@ -50,6 +53,10 @@ export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   what_if: 'whatIf',
   assistant_chat: 'assistant',
   help_ask: 'assistant',
+  projects_plan: 'assistant',
+  inbox_draft: 'inboxReplies',
+  inbox_translate: 'inboxReplies',
+  inbox_summary: 'inboxReplies',
 };
 
 /** EU AI Act transparency requirement (UPD-BE-115) — shown verbatim on the AI Settings screen. */

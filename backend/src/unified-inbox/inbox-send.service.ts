@@ -9,11 +9,8 @@ import { SendGateService } from '../messaging/send-gate.service';
 import { SocialInboxService } from '../social/social-inbox.service';
 import { WhatsappWindowService } from '../whatsapp/whatsapp-window.service';
 import { AppException } from '../common/filters/app.exception';
-import {
-  channelDef,
-  INBOX_ERROR_CODES,
-  isMessagingChannel,
-} from './inbox.constants';
+import { INBOX_ERROR_CODES, isMessagingChannel } from './inbox.constants';
+import { InboxChannelsService } from './inbox-channels.service';
 import { Actor, InboxCoreService } from './inbox-core.service';
 
 /**
@@ -29,28 +26,22 @@ export class InboxSendService {
     private readonly socialInbox: SocialInboxService,
     private readonly window: WhatsappWindowService,
     private readonly core: InboxCoreService,
+    private readonly channels: InboxChannelsService,
   ) {}
 
   /** Why this conversation cannot receive a reply right now, or null when it can. */
   async cannotSendReason(
     conversation: InboxConversation,
   ): Promise<string | null> {
-    const def = channelDef(conversation.channel);
-    if (def.transport === 'none')
-      return `${def.label} has no connection in Noxtill, so replies cannot be sent from here.`;
-    if (def.transport === 'social') {
+    const state = await this.channels.state(
+      conversation.businessId,
+      conversation.channel,
+    );
+    if (!state.send.ok) return state.send.how;
+    if (state.def.transport === 'social') {
       const latest = await this.latestSocialItem(conversation.id);
       if (!latest)
         return 'There is no incoming message on this conversation to reply to.';
-      const account = await this.prisma.socialAccount.findFirst({
-        where: {
-          businessId: conversation.businessId,
-          platform: def.platform,
-          status: 'connected',
-        },
-      });
-      if (!account)
-        return `${def.short} is not connected, so a reply cannot be posted.`;
     }
     return null;
   }

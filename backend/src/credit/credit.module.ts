@@ -46,6 +46,6 @@ import { ActivityModule } from '../activity/activity.module';
     CreditBalanceSnapshotScheduler,
     CreditBalanceSnapshotProcessor,
   ],
-  exports: [CreditService],
+  exports: [CreditService, CreditReminderService],
 })
 export class CreditModule {}

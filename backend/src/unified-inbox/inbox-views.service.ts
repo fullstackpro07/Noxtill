@@ -23,6 +23,7 @@ import {
   ResolvedInboxSettings,
 } from './inbox-settings.service';
 import { InboxService, initials, tagList } from './inbox.service';
+import { InboxChannelsService } from './inbox-channels.service';
 import {
   describeWeeklyHours,
   hasHours,
@@ -61,6 +62,7 @@ export class InboxViewsService {
     private readonly facts: InboxFactsService,
     private readonly settings: InboxSettingsService,
     private readonly inbox: InboxService,
+    private readonly channelCaps: InboxChannelsService,
   ) {}
 
   private targetFor(
@@ -92,105 +94,9 @@ export class InboxViewsService {
 
   // ─── Channels ─────────────────────────────────────────────────────────
 
-  /** Real connection state per channel — never "healthy" for something that is not connected. */
-  async channelStates(businessId: string) {
-    const [integration, accounts] = await Promise.all([
-      this.prisma.integration.findUnique({
-        where: { businessId_provider: { businessId, provider: 'whatsapp' } },
-      }),
-      this.prisma.socialAccount.findMany({ where: { businessId } }),
-    ]);
-    const env = (k: string) => !!this.config.get<string>(k);
-    const map = new Map<
-      string,
-      { st: string; handle: string; cta: string | null; href: string | null }
-    >();
-    for (const def of INBOX_CHANNELS) {
-      if (def.key === 'whatsapp') {
-        const meta = (integration?.meta ?? {}) as Record<string, unknown>;
-        const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
-        const number = str(meta.displayPhoneNumber) ?? str(meta.verifiedName);
-        if (integration?.status === 'connected' && !integration.pausedAt) {
-          map.set(def.key, {
-            st: 'Connected',
-            handle: number ?? 'Your WhatsApp Business number',
-            cta: 'Manage',
-            href: '/integrations/whatsapp',
-          });
-        } else if (integration?.status === 'needs_attention') {
-          map.set(def.key, {
-            st: 'Reconnect needed',
-            handle: number ?? 'Your WhatsApp Business number',
-            cta: 'Reconnect',
-            href: '/integrations/whatsapp',
-          });
-        } else if (env('META_WA_TOKEN') && env('META_WA_PHONE_ID')) {
-          map.set(def.key, {
-            st: 'Connected',
-            handle: 'Noxtill shared number',
-            cta: 'Use your own number',
-            href: '/integrations/whatsapp',
-          });
-        } else {
-          map.set(def.key, {
-            st: 'Not configured',
-            handle: 'No WhatsApp number',
-            cta: 'Connect',
-            href: '/integrations/whatsapp',
-          });
-        }
-      } else if (def.key === 'sms') {
-        const ok =
-          env('TWILIO_ACCOUNT_SID') &&
-          env('TWILIO_AUTH_TOKEN') &&
-          env('TWILIO_FROM_NUMBER');
-        map.set(def.key, {
-          st: ok ? 'Connected' : 'Not configured',
-          handle: ok
-            ? String(this.config.get('TWILIO_FROM_NUMBER'))
-            : 'No sending number set up',
-          cta: null,
-          href: null,
-        });
-      } else if (def.key === 'email') {
-        const ok = env('EMAIL_PROVIDER_KEY') && env('EMAIL_FROM_ADDRESS');
-        map.set(def.key, {
-          st: ok ? 'Sending only' : 'Not configured',
-          handle: ok
-            ? String(this.config.get('EMAIL_FROM_ADDRESS'))
-            : 'No sending address set up',
-          cta: null,
-          href: null,
-        });
-      } else if (def.transport === 'social') {
-        const acc = accounts.find((a) => a.platform === def.platform);
-        const st =
-          acc?.status === 'connected'
-            ? 'Connected'
-            : acc?.status === 'needs_attention'
-              ? 'Reconnect needed'
-              : 'Not connected';
-        map.set(def.key, {
-          st,
-          handle: acc?.externalAccountName ?? 'Not connected',
-          cta:
-            st === 'Connected'
-              ? 'Manage'
-              : st === 'Reconnect needed'
-                ? 'Reconnect'
-                : 'Connect',
-          href: '/social/accounts',
-        });
-      } else {
-        map.set(def.key, {
-          st: 'Not available',
-          handle: 'Not available',
-          cta: null,
-          href: null,
-        });
-      }
-    }
-    return map;
+  /** Real connection state per channel — receive and send judged separately. */
+  channelStates(businessId: string) {
+    return this.channelCaps.states(businessId);
   }
 
   async overview(user: AuthenticatedUser) {
@@ -212,8 +118,8 @@ export class InboxViewsService {
       .filter((r) => !known.has(r.channel))
       .map((r) => channelDef(r.channel));
     const channels = [...INBOX_CHANNELS, ...extra].map((def) => {
-      const st = states.get(def.key)?.st ?? 'Connected';
-      const warn = st === 'Connected' || st === 'Sending only' ? '' : st;
+      const st = states.get(def.key)?.st ?? 'Not connected';
+      const warn = st === 'Connected' ? '' : st;
       return {
         key: def.key,
         n: def.short,
@@ -285,7 +191,9 @@ export class InboxViewsService {
           init: def.initials,
           handle: state.handle,
           st: state.st,
-          note: def.note,
+          note: def.transport === 'none' ? def.note : null,
+          receive: def.transport === 'none' ? null : state.receive,
+          send: def.transport === 'none' ? null : state.send,
           vol: def.transport === 'none' ? '—' : n.toLocaleString('en-US'),
           resp: fmtMinutes(med),
           respLate: med !== null && med > target,
@@ -1310,6 +1218,13 @@ export class InboxViewsService {
     const unavailableCount = waiting.filter(
       (w) => skipCause(w) === 'ai_unavailable',
     ).length;
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { aiFeatureToggles: true },
+    });
+    const aiFeatureOn =
+      (business.aiFeatureToggles as Record<string, boolean> | null)
+        ?.inboxReplies !== false;
     const count = (st: string) =>
       stats.find((x) => x.status === st)?._count._all ?? 0;
     const decided = count('sent') + count('edited') + count('discarded');
@@ -1332,6 +1247,7 @@ export class InboxViewsService {
       })),
       skippedCount,
       unavailableCount,
+      aiFeatureOn,
       settings: {
         tone: s.tone,
         language: s.language,
@@ -1421,9 +1337,11 @@ export class InboxViewsService {
             who:
               cause === 'ai_unavailable'
                 ? 'No draft made — the AI service could not be reached'
-                : cause === 'read_off'
-                  ? 'No draft made — reading records is turned off'
-                  : 'No draft made — nothing certain to build it from',
+                : cause === 'ai_off'
+                  ? 'No draft made — inbox AI is switched off in AI Settings'
+                  : cause === 'read_off'
+                    ? 'No draft made — reading records is turned off'
+                    : 'No draft made — nothing certain to build it from',
           };
         }
         default:
@@ -1635,7 +1553,7 @@ export class InboxViewsService {
           v: String(
             pendingToday.filter((d) => localDay(d.createdAt) === today).length,
           ),
-          l: 'Drafts held for approval',
+          l: 'AI drafts waiting for a person',
           tone: 'amber',
         },
         {

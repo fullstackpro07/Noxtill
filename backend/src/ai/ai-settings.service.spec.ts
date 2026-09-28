@@ -40,6 +40,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       insights: true,
       whatIf: true,
       assistant: true,
+      inboxReplies: true,
     });
     expect(settings.disclosureText).toContain('AI');
   });

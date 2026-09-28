@@ -293,7 +293,7 @@ function AssignModal({ conversationId, suggested, onClose }: { conversationId: s
             </option>
           ))}
         </select>
-        {!canManage && <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "6px" }}>You can take unassigned conversations yourself. Handing one to someone else needs an Owner or Manager.</div>}
+        {!canManage && <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "6px" }}>You can take unassigned conversations yourself. Handing one to someone else needs inbox management rights (Owner and Manager by default).</div>}
       </div>
       <div>
         <label style={lbl}>Why</label>
