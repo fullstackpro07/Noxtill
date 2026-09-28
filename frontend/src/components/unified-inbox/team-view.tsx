@@ -132,14 +132,14 @@ export function TeamView() {
           </table>
         </div>
         <div style={{ padding: "11px 17px", borderTop: "1px solid #F0F2F5", fontSize: "11.5px", color: "#98A2B3" }}>
-          Workload is open conversations against what that person usually handles in a day (conversations they replied in, per working day, over 30 days). It is a rough guide for who to hand the next one to, not a performance score.
+          Workload is open conversations against what that person usually handles in a day (conversations they replied in, per day they replied, over the last 30 days). It is a rough guide for who to hand the next one to, not a performance score.
         </div>
       </div>
 
       <div style={{ ...card, padding: "17px" }}>
         <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 800, color: "#101828" }}>Hand a conversation over</h3>
         <p style={{ margin: "0 0 13px", fontSize: "11.5px", color: "#98A2B3" }}>Reassigning changes who is responsible, so the previous owner is told and it is recorded.</p>
-        {!canManage && <p style={{ margin: "0 0 13px", fontSize: "11.5px", color: "#B54708", fontWeight: 700 }}>Only an Owner or Manager can hand conversations between people. You can take unassigned ones yourself.</p>}
+        {!canManage && <p style={{ margin: "0 0 13px", fontSize: "11.5px", color: "#B54708", fontWeight: 700 }}>Only people with inbox management rights (Owner and Manager by default) can hand conversations between people. You can take unassigned ones yourself.</p>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: "11px" }}>
           <div>
             <label style={label}>Conversation</label>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { discardDraft, fetchAiActions, fetchAiAssist, fetchInboxOverview, sendDraft, updateInboxSettings, type Tone } from "@/lib/inbox-api";
@@ -30,12 +31,17 @@ export function AiAssistView() {
     { key: "aiAutoDraft", l: "Draft replies automatically", d: "A draft appears as soon as a message lands. It is never sent on its own.", on: s.aiAutoDraft },
     { key: "aiFactsOnly", l: "Only draft when the facts are certain", d: "If no order, delivery, credit, booking or named product backs the answer, no draft is offered.", on: s.aiFactsOnly },
     { key: "aiNextAction", l: "Suggest the next best action", d: "Shows what a person would usually do next, like opening the order.", on: s.aiNextAction },
-    { key: "aiSummarise", l: "Summarise long conversations", d: "A three-line summary above threads over 20 messages.", on: s.aiSummarise },
+    { key: "aiSummarise", l: "Summarise long conversations", d: "A three-line summary above threads of 20 messages or more.", on: s.aiSummarise },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
       <InfoBanner icon="warn">AI drafts. A person sends. Nothing on this screen goes to a customer, changes an order, or moves money until someone here presses the button.</InfoBanner>
+      {!data.aiFeatureOn && (
+        <InfoBanner tone="amber" icon="warn">
+          Inbox reply drafts are switched off in AI Settings, so no drafts, translations or summaries are made. <Link href="/assistant/settings" style={{ fontWeight: 800, color: "#93370D" }}>Open AI Settings</Link>
+        </InfoBanner>
+      )}
       <div data-3pane="1" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr)", gap: "15px", alignItems: "start" }}>
         <div style={{ ...card, overflow: "hidden" }}>
           <div style={{ padding: "15px 17px", borderBottom: "1px solid #F2F4F7", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
@@ -127,7 +133,7 @@ export function AiAssistView() {
                 <ToggleRow key={t.key} l={t.l} d={t.d} on={t.on} locked={!canManage} onToggle={() => save.mutate({ [t.key]: !t.on })} />
               ))}
             </div>
-            {!canManage && <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "10px" }}>Only an Owner or Manager can change these.</div>}
+            {!canManage && <div style={{ fontSize: "11px", color: "#98A2B3", marginTop: "10px" }}>Only people with inbox management rights (Owner and Manager by default) can change these.</div>}
           </div>
           <div style={{ ...card, padding: "17px" }}>
             <div style={{ fontSize: "13.5px", fontWeight: 800, color: "#101828" }}>Last 30 days</div>
@@ -216,7 +222,7 @@ export function AiActionsView() {
                 <button
                   type="button"
                   disabled={!!a.setting && !canManage}
-                  title={a.setting && !canManage ? "Only an Owner or Manager can change this" : undefined}
+                  title={a.setting && !canManage ? "Only people with inbox management rights (Owner and Manager by default) can change this" : undefined}
                   onClick={() => (a.setting ? save.mutate({ [a.setting]: !a.on }) : router.push("/unified-inbox/automations"))}
                   className="nx-hover-soft"
                   style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: "9px", padding: "8px 12px", fontSize: "11.5px", fontWeight: 700, color: "#344054", cursor: "pointer", minHeight: "40px" }}

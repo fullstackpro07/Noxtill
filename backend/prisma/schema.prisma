@@ -5558,3 +5558,628 @@ model InboxSettings {
 
   @@map("inbox_settings")
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Business Brain — every reading, finding and signal is computed on demand from the existing
+// records (orders, credit, stock, bookings, deliveries, reviews, inbox). These tables hold only
+// what is genuinely new: what a person decided about a finding, actions prepared for approval,
+// watch rules, the daily reading kept for History, and questions asked.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// A person's decision about one finding (`key` is the detector's stable key, e.g.
+/// `credit_overdue` or `stock_runout:<productId>`). status: watching | dismissed.
+model BrainFindingState {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  key         String   @db.VarChar(191)
+  status      String   @db.VarChar(12)
+  reason      String?  @db.Text
+  title       String   @db.VarChar(255)
+  actorUserId String?  @map("actor_user_id")
+  actorName   String?  @map("actor_name") @db.VarChar(191)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, key])
+  @@map("brain_finding_states")
+}
+
+/// Append-only decision log (approved, dismissed, watched, restored, ran, cancelled).
+model BrainDecision {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  findingKey  String?  @map("finding_key") @db.VarChar(191)
+  actionId    String?  @map("action_id")
+  title       String   @db.VarChar(255)
+  decision    String   @db.VarChar(20)
+  reason      String?  @db.Text
+  actorUserId String?  @map("actor_user_id")
+  actorName   String?  @map("actor_name") @db.VarChar(191)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("brain_decisions")
+}
+
+/// An action prepared from a finding. Nothing executes until someone with `requiredCapability`
+/// approves it AND runs it. status: prepared | approved | done | failed | blocked | cancelled.
+model BrainAction {
+  id                 String    @id @default(uuid())
+  businessId         String    @map("business_id")
+  findingKey         String?   @map("finding_key") @db.VarChar(191)
+  type               String    @db.VarChar(30)
+  title              String    @db.VarChar(255)
+  detail             String    @db.Text
+  payload            Json      @default("{}")
+  requiredCapability String?   @map("required_capability") @db.VarChar(60)
+  status             String    @default("prepared") @db.VarChar(12)
+  blockedReason      String?   @map("blocked_reason") @db.Text
+  result             String?   @db.Text
+  preparedByUserId   String?   @map("prepared_by_user_id")
+  preparedByName     String?   @map("prepared_by_name") @db.VarChar(191)
+  approvedByUserId   String?   @map("approved_by_user_id")
+  approvedByName     String?   @map("approved_by_name") @db.VarChar(191)
+  approvedAt         DateTime? @map("approved_at")
+  executedAt         DateTime? @map("executed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("brain_actions")
+}
+
+/// "Tell me when …" — subject + metric + condition, evaluated against live records.
+/// metric: product_stock | branch_margin_gap | customer_quiet_days | overdue_credit | revenue_week
+/// op: lt | gt | outside (threshold..threshold2). status: watching | triggered.
+model BrainWatch {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  label        String    @db.VarChar(191)
+  metric       String    @db.VarChar(40)
+  subjectId    String?   @map("subject_id")
+  op           String    @db.VarChar(10)
+  threshold    Decimal   @db.Decimal(14, 2)
+  threshold2   Decimal?  @db.Decimal(14, 2)
+  status       String    @default("watching") @db.VarChar(12)
+  lastValue    Decimal?  @map("last_value") @db.Decimal(14, 2)
+  triggeredAt  DateTime? @map("triggered_at")
+  notifiedAt   DateTime? @map("notified_at")
+  createdById  String?   @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("brain_watches")
+}
+
+/// One reading per business per day, kept so History can show what the Brain said and when a
+/// finding stopped being true (that is what "Resolved" means — never a guess).
+model BrainSnapshot {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  day        DateTime @db.Date
+  stateLabel String   @map("state_label") @db.VarChar(40)
+  summary    String   @db.Text
+  counts     Json     @default("{}")
+  signals    Json     @default("[]")
+  findings   Json     @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, day])
+  @@map("brain_snapshots")
+}
+
+/// Questions asked of the Brain (Ask and Ask why) with the answer given and where it came from.
+model BrainQuestion {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  userId     String   @map("user_id")
+  kind       String   @db.VarChar(10)
+  question   String   @db.Text
+  answer     String   @db.Text
+  source     String   @db.VarChar(40)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("brain_questions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Projects & Tasks — project delivery work: projects, tasks, milestones, project files, project
+// time (separate from Staff attendance), approvals, a client portal and templates. Every figure
+// the module shows is computed from these rows (plus Customers/Orders/Staff/Bookings reads).
+// People are BusinessUser ids — no duplicate users are created.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// One project. `status` is a name from ProjectSettings.config.statuses (custom statuses allowed).
+model Project {
+  id                    String    @id @default(uuid())
+  businessId            String    @map("business_id")
+  number                String    @db.VarChar(40)
+  name                  String    @db.VarChar(191)
+  customerId            String?   @map("customer_id")
+  managerId             String?   @map("manager_id")
+  type                  String    @default("Client") @db.VarChar(40)
+  status                String    @default("Planned") @db.VarChar(40)
+  priority              String    @default("Medium") @db.VarChar(10)
+  visibility            String    @default("Team") @db.VarChar(20)
+  description           String?   @db.Text
+  objective             String?   @db.Text
+  deliverables          String?   @db.Text
+  exclusions            String?   @db.Text
+  startDate             DateTime? @map("start_date") @db.Date
+  dueDate               DateTime? @map("due_date") @db.Date
+  dueLocked             Boolean   @default(false) @map("due_locked")
+  baselineDueDate       DateTime? @map("baseline_due_date") @db.Date
+  budget                Decimal?  @db.Decimal(14, 2)
+  billingType           String    @default("Fixed") @map("billing_type") @db.VarChar(30)
+  requireClientApproval Boolean   @default(false) @map("require_client_approval")
+  templateId            String?   @map("template_id")
+  automationRefs        Json      @default("[]") @map("automation_refs")
+  customFields          Json      @default("{}") @map("custom_fields")
+  createdById           String?   @map("created_by_id")
+  completedAt           DateTime? @map("completed_at")
+  archivedAt            DateTime? @map("archived_at")
+  lastActivityAt        DateTime  @default(now()) @map("last_activity_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members    ProjectMember[]
+  favorites  ProjectFavorite[]
+  tasks      ProjectTask[]
+  milestones ProjectMilestone[]
+  files      ProjectFile[]
+  time       ProjectTimeEntry[]
+  approvals  ProjectApproval[]
+  portal     ProjectPortalAccess[]
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id             String  @id @default(uuid())
+  businessId     String  @map("business_id")
+  projectId      String  @map("project_id")
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  businessUserId String  @map("business_user_id")
+  roleLabel      String  @default("Team member") @map("role_label") @db.VarChar(60)
+  allocationPct  Int     @default(0) @map("allocation_pct")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, businessUserId])
+  @@index([businessId])
+  @@map("project_members")
+}
+
+model ProjectFavorite {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  projectId  String  @map("project_id")
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId     String  @map("user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, userId])
+  @@index([businessId, userId])
+  @@map("project_favorites")
+}
+
+/// status: Backlog | To Do | In Progress | In Review | Blocked | Done | Cancelled.
+/// checklist: [{ t, done, req }]. Subtasks are tasks with parentTaskId.
+model ProjectTask {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  number        String    @db.VarChar(40)
+  projectId     String    @map("project_id")
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentTaskId  String?   @map("parent_task_id")
+  title         String    @db.VarChar(255)
+  description   String?   @db.Text
+  assigneeId    String?   @map("assignee_id")
+  priority      String    @default("Medium") @db.VarChar(10)
+  status        String    @default("To Do") @db.VarChar(20)
+  sortOrder     Int       @default(0) @map("sort_order")
+  startDate     DateTime? @map("start_date") @db.Date
+  dueDate       DateTime? @map("due_date") @db.Date
+  baselineStart DateTime? @map("baseline_start") @db.Date
+  baselineDue   DateTime? @map("baseline_due") @db.Date
+  estimateMins  Int       @default(0) @map("estimate_mins")
+  checklist     Json      @default("[]")
+  blocked       Boolean   @default(false)
+  blockType     String?   @map("block_type") @db.VarChar(30)
+  blockerNote   String?   @map("blocker_note") @db.Text
+  clientVisible Boolean   @default(false) @map("client_visible")
+  createdById   String?   @map("created_by_id")
+  completedAt   DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  dependsOn  ProjectTaskDependency[] @relation("TaskDeps")
+  dependents ProjectTaskDependency[] @relation("TaskDependents")
+  milestones ProjectMilestoneTask[]
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([projectId])
+  @@index([businessId, assigneeId])
+  @@map("project_tasks")
+}
+
+/// Finish-to-Start: `task` cannot finish before `dependsOnTask` is Done.
+model ProjectTaskDependency {
+  id              String      @id @default(uuid())
+  businessId      String      @map("business_id")
+  taskId          String      @map("task_id")
+  task            ProjectTask @relation("TaskDeps", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTaskId String      @map("depends_on_task_id")
+  dependsOnTask   ProjectTask @relation("TaskDependents", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([businessId])
+  @@map("project_task_dependencies")
+}
+
+/// status stored: Planned | In Progress | Ready for Approval | Completed | Cancelled.
+/// "Overdue" and "At Risk" are computed at read time. approvalMode: not_required | internal | client.
+model ProjectMilestone {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(40)
+  projectId    String    @map("project_id")
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String    @db.VarChar(191)
+  ownerId      String?   @map("owner_id")
+  plannedDate  DateTime  @map("planned_date") @db.Date
+  actualDate   DateTime? @map("actual_date") @db.Date
+  status       String    @default("Planned") @db.VarChar(24)
+  description  String?   @db.Text
+  approvalMode String    @default("not_required") @map("approval_mode") @db.VarChar(16)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tasks ProjectMilestoneTask[]
+
+  @@unique([businessId, number])
+  @@index([projectId])
+  @@map("project_milestones")
+}
+
+model ProjectMilestoneTask {
+  id          String           @id @default(uuid())
+  businessId  String           @map("business_id")
+  milestoneId String           @map("milestone_id")
+  milestone   ProjectMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  taskId      String           @map("task_id")
+  task        ProjectTask      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([milestoneId, taskId])
+  @@index([businessId])
+  @@map("project_milestone_tasks")
+}
+
+/// A comment on a project (Activity feed) or on a task (task drawer). Portal comments set
+/// `portalAuthor` and carry no user id.
+model ProjectComment {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  projectId    String    @map("project_id")
+  taskId       String?   @map("task_id")
+  authorUserId String?   @map("author_user_id")
+  authorName   String    @map("author_name") @db.VarChar(191)
+  portalAuthor Boolean   @default(false) @map("portal_author")
+  body         String    @db.Text
+  mentions     Json      @default("[]")
+  editedAt     DateTime? @map("edited_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, projectId, createdAt])
+  @@index([taskId])
+  @@map("project_comments")
+}
+
+/// System event feed (task.status_changed, file.uploaded, time.submitted, approval.approved, ...).
+model ProjectActivity {
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  projectId   String? @map("project_id")
+  taskId      String? @map("task_id")
+  actorUserId String? @map("actor_user_id")
+  actorName   String  @map("actor_name") @db.VarChar(191)
+  event       String  @db.VarChar(40)
+  text        String  @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("project_activities")
+}
+
+/// access: client_shared | internal | private. linkType: project | task | milestone.
+model ProjectFile {
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  projectId  String    @map("project_id")
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name       String    @db.VarChar(255)
+  ext        String    @db.VarChar(10)
+  folder     String    @default("Uploads") @db.VarChar(60)
+  access     String    @default("internal") @db.VarChar(16)
+  pinned     Boolean   @default(false)
+  linkType   String    @default("project") @map("link_type") @db.VarChar(12)
+  linkId     String?   @map("link_id")
+  archivedAt DateTime? @map("archived_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions ProjectFileVersion[]
+
+  @@index([businessId, projectId])
+  @@map("project_files")
+}
+
+model ProjectFileVersion {
+  id           String      @id @default(uuid())
+  businessId   String      @map("business_id")
+  fileId       String      @map("file_id")
+  file         ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  n            Int
+  note         String      @db.VarChar(255)
+  storageKey   String      @map("storage_key") @db.VarChar(255)
+  mimeType     String      @map("mime_type") @db.VarChar(120)
+  sizeBytes    Int         @map("size_bytes")
+  uploadedById String?     @map("uploaded_by_id")
+  uploadedBy   String      @map("uploaded_by") @db.VarChar(191)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([fileId, n])
+  @@index([businessId])
+  @@map("project_file_versions")
+}
+
+/// Project delivery time only, never attendance. status: draft | submitted | approved | rejected.
+/// rateSnapshot is the Staff hourly rate of the person at the moment the entry was created.
+model ProjectTimeEntry {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  number         String    @db.VarChar(40)
+  businessUserId String    @map("business_user_id")
+  projectId      String    @map("project_id")
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId         String?   @map("task_id")
+  date           DateTime  @db.Date
+  minutes        Int
+  billable       Boolean   @default(true)
+  rateSnapshot   Decimal?  @map("rate_snapshot") @db.Decimal(10, 2)
+  status         String    @default("draft") @db.VarChar(12)
+  note           String?   @db.VarChar(500)
+  rejectReason   String?   @map("reject_reason") @db.Text
+  decidedById    String?   @map("decided_by_id")
+  decidedAt      DateTime? @map("decided_at")
+  source         String    @default("manual") @db.VarChar(10)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, date])
+  @@index([projectId])
+  @@map("project_time_entries")
+}
+
+/// At most one running timer per person, kept server-side so it survives reloads.
+model ProjectTimer {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  businessUserId String   @map("business_user_id")
+  projectId      String   @map("project_id")
+  taskId         String?  @map("task_id")
+  startedAt      DateTime @map("started_at")
+
+  @@unique([businessId, businessUserId])
+  @@map("project_timers")
+}
+
+/// status: Draft | Sent | Viewed | Approved | Changes Requested | Rejected | Cancelled.
+/// approverKind client: only decidable from the client portal.
+model ProjectApproval {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  number         String    @db.VarChar(40)
+  projectId      String    @map("project_id")
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type           String    @db.VarChar(30)
+  item           String    @db.VarChar(255)
+  message        String?   @db.Text
+  evidenceFileId String?   @map("evidence_file_id")
+  milestoneId    String?   @map("milestone_id")
+  approverKind   String    @map("approver_kind") @db.VarChar(10)
+  approverUserId String?   @map("approver_user_id")
+  approverName   String    @map("approver_name") @db.VarChar(191)
+  requestedById  String?   @map("requested_by_id")
+  requestedAt    DateTime? @map("requested_at")
+  dueDate        DateTime? @map("due_date") @db.Date
+  status         String    @default("Draft") @db.VarChar(20)
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  events ProjectApprovalEvent[]
+
+  @@unique([businessId, number])
+  @@index([projectId])
+  @@map("project_approvals")
+}
+
+model ProjectApprovalEvent {
+  id         String          @id @default(uuid())
+  businessId String          @map("business_id")
+  approvalId String          @map("approval_id")
+  approval   ProjectApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  actorName  String          @map("actor_name") @db.VarChar(191)
+  what       String          @db.VarChar(191)
+  note       String?         @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([approvalId, createdAt])
+  @@map("project_approval_events")
+}
+
+/// A client access to one project portal. The raw token is only emailed/shown once; only its
+/// sha256 is stored. requireCode: a 6-digit code is emailed on each sign-in.
+model ProjectPortalAccess {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  projectId     String    @map("project_id")
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clientName    String    @map("client_name") @db.VarChar(191)
+  email         String?   @db.VarChar(191)
+  tokenHash     String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt     DateTime  @map("expires_at")
+  requireCode   Boolean   @default(true) @map("require_code")
+  codeHash      String?   @map("code_hash") @db.VarChar(64)
+  codeExpiresAt DateTime? @map("code_expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  lastVisitAt   DateTime? @map("last_visit_at")
+  visits        Int       @default(0)
+  invitedById   String?   @map("invited_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  sessions ProjectPortalSession[]
+
+  @@index([businessId, projectId])
+  @@map("project_portal_access")
+}
+
+model ProjectPortalSession {
+  id          String              @id @default(uuid())
+  businessId  String              @map("business_id")
+  accessId    String              @map("access_id")
+  access      ProjectPortalAccess @relation(fields: [accessId], references: [id], onDelete: Cascade)
+  sessionHash String              @unique @map("session_hash") @db.VarChar(64)
+  expiresAt   DateTime            @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("project_portal_sessions")
+}
+
+/// status: Draft | Published | Archived. phases: [{ name, days, tasks: string[] }].
+model ProjectTemplate {
+  id           String  @id @default(uuid())
+  businessId   String  @map("business_id")
+  name         String  @db.VarChar(191)
+  category     String  @db.VarChar(40)
+  businessType String  @default("Any") @map("business_type") @db.VarChar(120)
+  status       String  @default("Draft") @db.VarChar(12)
+  defaults     Json    @default("{}")
+  phases       Json    @default("[]")
+  milestones   Json    @default("[]")
+  roles        Json    @default("[]")
+  docs         String? @db.Text
+  hooks        Json    @default("[]")
+  chain        Boolean @default(true)
+  taskChain    Boolean @default(false) @map("task_chain")
+  createdById  String? @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("project_templates")
+}
+
+/// visibility: Private | Team | Organization. filters: { view, fStatus, fHealth, q }.
+model ProjectSavedView {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  userId     String @map("user_id")
+  name       String @db.VarChar(80)
+  visibility String @default("Private") @db.VarChar(16)
+  filters    Json   @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, userId])
+  @@map("project_saved_views")
+}
+
+model ProjectSavedReport {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  userId     String @map("user_id")
+  reportKey  String @map("report_key") @db.VarChar(60)
+  chartType  String @map("chart_type") @db.VarChar(10)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, userId, reportKey])
+  @@map("project_saved_reports")
+}
+
+/// Module configuration (defaults, numbering, statuses, custom fields, permission matrix, archive
+/// and portal policy) plus the running number sequences, which are locked FOR UPDATE on use.
+model ProjectSettings {
+  id         String @id @default(uuid())
+  businessId String @unique @map("business_id")
+  config     Json   @default("{}")
+  taskSeq    Int    @default(0) @map("task_seq")
+  msSeq      Int    @default(0) @map("ms_seq")
+  apprSeq    Int    @default(0) @map("appr_seq")
+  timeSeq    Int    @default(0) @map("time_seq")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("project_settings")
+}
+
+/// Which of the 8 project roles a staff member holds (absent: default from their system role).
+model ProjectRoleAssignment {
+  id             String @id @default(uuid())
+  businessId     String @map("business_id")
+  businessUserId String @map("business_user_id")
+  role           String @db.VarChar(30)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, businessUserId])
+  @@map("project_role_assignments")
+}
+
+/// Per-person "Notify me about" toggles for project events (delivery channel = global settings).
+model ProjectNotifyPref {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  userId     String @map("user_id")
+  prefs      Json   @default("{}")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, userId])
+  @@map("project_notify_prefs")
+}

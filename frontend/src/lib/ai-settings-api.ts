@@ -8,6 +8,7 @@ export interface AiFeatureToggles {
   insights: boolean;
   whatIf: boolean;
   assistant: boolean;
+  inboxReplies: boolean;
 }
 
 export interface AiFeatureUsage {

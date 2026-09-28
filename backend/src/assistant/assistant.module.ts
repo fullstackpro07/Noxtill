@@ -18,5 +18,6 @@ import { StorageModule } from '../common/storage/storage.module';
     AssistantReportService,
     AssistantHistoryService,
   ],
+  exports: [AssistantService],
 })
 export class AssistantModule {}

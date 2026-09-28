@@ -272,7 +272,7 @@ function ConversationPane() {
   const composer = useComposer(d?.id ?? null);
   const { text, setText, savedReplyId } = composer;
   const actions = useConversationActions(d?.id ?? null);
-  const tool = useComposerTool(d, text, setText);
+  const tool = useComposerTool(d, text, setText, (t, draftId) => composer.set({ text: t, draftId }));
   const invalidate = useInboxInvalidate();
   const star = useMutation({ mutationFn: (v: boolean) => starConversation(d!.id, v), onSuccess: (r) => { flash(r.starred ? "Conversation starred" : "Star removed"); void invalidate(); }, onError: (e) => flash(errorText(e)) });
 
@@ -286,8 +286,10 @@ function ConversationPane() {
 
   const submit = () => {
     const body = text.trim();
-    if (!body || actions.reply.isPending) return;
-    actions.reply.mutate({ text: body, savedReplyId }, { onSuccess: () => composer.clear() });
+    if (!body || actions.reply.isPending || actions.send.isPending) return;
+    // Sending a staged draft goes through the draft endpoint, so it is recorded as sent or edited.
+    if (composer.draftId && d?.draft?.id === composer.draftId) actions.send.mutate({ draftId: composer.draftId, text: body }, { onSuccess: () => composer.clear() });
+    else actions.reply.mutate({ text: body, savedReplyId }, { onSuccess: () => composer.clear() });
   };
 
   return (
@@ -338,7 +340,7 @@ function ConversationPane() {
         <div style={{ borderTop: "1px solid #F0F2F5", padding: "10px 16px", background: "#F7FCF9", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <Icon d="m11 3 1.7 5L17.7 9.7 12.7 11.4 11 16.4 9.3 11.4 4.3 9.7 9.3 8Z" size={14} stroke="#0E8442" />
           <span style={{ flex: 1, minWidth: "160px", fontSize: "11.5px", color: "#0E8442", fontWeight: 700 }}>A drafted reply is waiting — built from {d.draft.sources.join(", ") || "this conversation"}.</span>
-          <button type="button" onClick={() => setText(d.draft!.text)} style={{ border: 0, background: "none", fontSize: "11.5px", fontWeight: 800, color: "#0E8442", cursor: "pointer" }}>
+          <button type="button" onClick={() => composer.set({ text: d.draft!.text, draftId: d.draft!.id })} style={{ border: 0, background: "none", fontSize: "11.5px", fontWeight: 800, color: "#0E8442", cursor: "pointer" }}>
             Put it in the reply box
           </button>
         </div>

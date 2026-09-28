@@ -120,6 +120,46 @@ export const POLICY_DEFS = {
   'digitizer.flagNameOnlyMatch': { kind: 'boolean', default: true },
   // digitizer/digitizer-pipeline.service.ts (a photo the model calls unreadable)
   'digitizer.rejectUnreadable': { kind: 'boolean', default: true },
+  // business-brain/brain-detectors.service.ts (what counts as worth raising)
+  'brain.overdueDays': {
+    kind: 'number',
+    default: 30,
+    min: 1,
+    max: 365,
+    integer: true,
+  },
+  'brain.stockCoverDays': {
+    kind: 'number',
+    default: 7,
+    min: 1,
+    max: 90,
+    integer: true,
+  },
+  'brain.repeatDropPercent': {
+    kind: 'number',
+    default: 10,
+    min: 1,
+    max: 100,
+  },
+  'brain.marginGapPoints': {
+    kind: 'number',
+    default: 3,
+    min: 0.5,
+    max: 50,
+  },
+  'brain.notableChangePercent': {
+    kind: 'number',
+    default: 10,
+    min: 1,
+    max: 100,
+  },
+  'brain.lapsedDays': {
+    kind: 'number',
+    default: 90,
+    min: 14,
+    max: 730,
+    integer: true,
+  },
   // backups (exports/backup.service.ts)
   'backup.enabled': { kind: 'boolean', default: false },
   'backup.retentionDays': {

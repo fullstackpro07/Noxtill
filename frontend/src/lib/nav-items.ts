@@ -607,6 +607,14 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["owner", "manager", "staff"],
     isNew: true,
   },
+  {
+    key: "projects",
+    labelKey: "nav.projects",
+    href: "/projects",
+    icon: ListChecks,
+    roles: ["owner", "manager", "staff"],
+    isNew: true,
+  },
 
   // ---- Group 3 (all new AI modules) ----
   {

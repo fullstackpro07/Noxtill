@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InboxAiDraft, InboxConversation } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { AI_ERROR_CODES } from '../ai/ai-infra.constants';
 import { AppException } from '../common/filters/app.exception';
 import {
   INBOX_AI_KIND,
@@ -156,9 +157,21 @@ export class InboxAiService {
       );
       text = (result.content.find((b) => b.type === 'text')?.text ?? '').trim();
     } catch (error) {
+      if (manual) throw error;
+      if (
+        error instanceof AppException &&
+        (error.getResponse() as { code?: string }).code ===
+          AI_ERROR_CODES.FEATURE_DISABLED
+      ) {
+        return this.skip(
+          conversation,
+          actor,
+          'Inbox reply drafts are switched off in AI Settings.',
+          'ai_off',
+        );
+      }
       const reason =
         `AI could not be reached: ${(error as Error).message}`.slice(0, 300);
-      if (manual) throw error;
       return this.skip(conversation, actor, reason, 'ai_unavailable');
     }
     if (!text) {
@@ -218,7 +231,7 @@ export class InboxAiService {
     actor: Actor,
     reason: string,
     /** Why: facts missing (the honest "system does not know"), AI unreachable, or reading turned off. */
-    cause: 'no_facts' | 'ai_unavailable' | 'read_off',
+    cause: 'no_facts' | 'ai_unavailable' | 'read_off' | 'ai_off',
   ): Promise<DraftOutcome> {
     await this.core.event(conversation.businessId, INBOX_EVENT.AI_SKIPPED, {
       conversationId: conversation.id,

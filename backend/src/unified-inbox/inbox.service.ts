@@ -603,7 +603,7 @@ export class InboxService {
     if (!manage && !selfTake && !selfRelease) {
       throw new AppException(
         INBOX_ERROR_CODES.NOT_YOURS,
-        'Only an Owner or Manager can hand a conversation to someone else.',
+        'Handing a conversation to someone else needs inbox management rights (Owner and Manager by default).',
         HttpStatus.FORBIDDEN,
       );
     }

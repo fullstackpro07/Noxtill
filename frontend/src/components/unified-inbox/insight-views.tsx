@@ -9,7 +9,8 @@ import { KPI_TONE } from "./team-view";
 
 function statusColors(st: string) {
   if (st === "Connected") return { bg: "#E8F7EE", fg: "#0E8442", bd: "#E6EAF0" };
-  if (st === "Sending only") return { bg: "#EEF4FF", fg: "#3538CD", bd: "#E6EAF0" };
+  if (st === "Sending only" || st === "Receiving only") return { bg: "#EEF4FF", fg: "#3538CD", bd: "#E6EAF0" };
+  if (st === "Not receiving") return { bg: "#FEF6E7", fg: "#B54708", bd: "#FDE3B3" };
   if (st === "Reconnect needed") return { bg: "#FEF3F2", fg: "#B42318", bd: "#FDD9D6" };
   if (st === "Not configured") return { bg: "#FEF6E7", fg: "#B54708", bd: "#E6EAF0" };
   return { bg: "#F2F4F7", fg: "#475467", bd: "#E6EAF0" };
@@ -19,7 +20,7 @@ export function ChannelsView() {
   const router = useRouter();
   const { data, isLoading } = useQuery({ queryKey: ["inbox-channels"], queryFn: fetchInboxChannels });
   if (isLoading || !data) return <Loading />;
-  const broken = data.cards.filter((c) => c.st === "Reconnect needed" || c.st === "Not configured");
+  const broken = data.cards.filter((c) => c.st !== "Connected" && c.st !== "Not connected" && c.st !== "Not available");
   const unavailable = data.cards.filter((c) => c.st === "Not available");
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
@@ -42,7 +43,11 @@ export function ChannelsView() {
                 </span>
                 <span style={{ fontSize: "10px", fontWeight: 800, color: sc.fg, background: sc.bg, borderRadius: "20px", padding: "4px 10px", flex: "0 0 auto" }}>{c.st}</span>
               </div>
-              <div style={{ fontSize: "11.5px", color: "#475467", lineHeight: 1.5, flex: 1 }}>{c.note}</div>
+              <div style={{ fontSize: "11.5px", color: "#475467", lineHeight: 1.5, flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                {c.note && <span>{c.note}</span>}
+                {c.receive && <CapLine label="Receiving" cap={c.receive} />}
+                {c.send && <CapLine label="Sending" cap={c.send} />}
+              </div>
               <div style={{ display: "flex", gap: "14px", borderTop: "1px solid #F2F4F7", paddingTop: "10px" }}>
                 <span>
                   <span style={{ display: "block", fontSize: "15px", fontWeight: 800, color: "#0F172A" }}>{c.vol}</span>
@@ -72,11 +77,22 @@ export function ChannelsView() {
       </div>
       <div style={{ ...card, padding: "17px", fontSize: "11.5px", color: "#667085", lineHeight: 1.6 }}>
         {broken.length
-          ? `${broken.map((b) => b.n).join(" and ")} ${broken.length === 1 ? "is" : "are"} not delivering right now and say${broken.length === 1 ? "s" : ""} so plainly rather than showing zero and looking healthy. `
+          ? `${broken.map((b) => b.n).join(", ")} ${broken.length === 1 ? "is" : "are"} only partly working right now — each card says exactly what is missing, rather than showing zero and looking healthy. `
           : "Every channel that can be connected is either working or honestly marked as not connected. "}
         {unavailable.length ? `${unavailable.map((u) => u.n).join(", ")} have no connection in Noxtill at all, so nothing from them can ever appear in this inbox.` : ""}
       </div>
     </div>
+  );
+}
+
+function CapLine({ label, cap }: { label: string; cap: { ok: boolean; how: string } }) {
+  return (
+    <span style={{ display: "flex", gap: "7px", alignItems: "flex-start" }}>
+      <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cap.ok ? "#12A150" : "#F79009", flex: "0 0 7px", marginTop: "6px" }} />
+      <span>
+        <strong style={{ color: "#344054" }}>{label}:</strong> {cap.how}
+      </span>
+    </span>
   );
 }
 

@@ -186,7 +186,9 @@ export interface ChannelCard {
   init: string;
   handle: string;
   st: string;
-  note: string;
+  note: string | null;
+  receive: { ok: boolean; how: string } | null;
+  send: { ok: boolean; how: string } | null;
   vol: string;
   resp: string;
   respLate: boolean;
@@ -198,6 +200,8 @@ export interface AiAssistView {
   drafts: { id: string; conversationId: string; init: string; name: string; channel: string; when: string; text: string; src: string; needsDecision: boolean; warn: string | null }[];
   skippedCount: number;
   unavailableCount: number;
+  /** The Inbox Replies switch in AI Settings — when off, no AI call is made at all. */
+  aiFeatureOn: boolean;
   settings: { tone: string; language: string; aiAutoDraft: boolean; aiFactsOnly: boolean; aiNextAction: boolean; aiSummarise: boolean };
   stats: { l: string; v: string; tone: Tone }[];
 }

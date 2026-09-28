@@ -29,7 +29,8 @@ export interface InboxChannelDef {
   /** Frontend `/inbox-icons/<icon>.png`; empty = initials badge. */
   icon: string;
   initials: string;
-  /** What this channel really does in Noxtill today — shown on the Channels screen. */
+  /** Shown only for channels with no transport; for the rest the Channels screen shows computed
+   * receive/send capability from `InboxChannelsService`. */
   note: string;
 }
 
@@ -56,7 +57,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.instagram,
     icon: 'instagram',
     initials: 'IG',
-    note: 'Direct messages and comments pulled by the Social connector land here.',
+    note: 'Direct messages and comments arrive through the Instagram webhook once the account is connected in Social.',
   },
   {
     key: 'facebook',
@@ -66,7 +67,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.facebook,
     icon: 'facebook',
     initials: 'FB',
-    note: 'Page messages and comments pulled by the Social connector land here.',
+    note: 'Page messages and comments arrive through the Facebook webhook once the page is connected in Social.',
   },
   {
     key: 'email',
@@ -103,7 +104,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.telegram,
     icon: 'telegram',
     initials: 'TG',
-    note: 'Connected through a bot token in Social. Only direct messages to the bot arrive here.',
+    note: 'Connected through a bot token in Social; messages arrive through the Telegram webhook.',
   },
   {
     key: 'twitter',
@@ -113,7 +114,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.twitter,
     icon: 'x',
     initials: 'X',
-    note: 'Mentions and replies pulled by the Social connector land here.',
+    note: 'Messages arrive through the X webhook once the account is connected in Social.',
   },
   {
     key: 'linkedin',
@@ -123,7 +124,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.linkedin,
     icon: 'linkedin',
     initials: 'LI',
-    note: 'Comments on your company page posts land here once connected in Social.',
+    note: 'Messages arrive through the LinkedIn webhook once the page is connected in Social.',
   },
   {
     key: 'tiktok',
@@ -133,7 +134,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.tiktok,
     icon: 'tiktok',
     initials: 'TT',
-    note: 'Comments pulled by the Social connector land here once connected.',
+    note: 'Messages arrive through the platform webhook once the account is connected in Social.',
   },
   {
     key: 'slack',
@@ -179,7 +180,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.discord,
     icon: 'discord',
     initials: 'DC',
-    note: 'Connected through a bot token in Social.',
+    note: 'Connected through a bot token in Social; messages arrive through the Discord webhook.',
   },
   {
     key: 'pinterest',
@@ -189,7 +190,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.pinterest,
     icon: 'pinterest',
     initials: 'PT',
-    note: 'Comments pulled by the Social connector land here once connected.',
+    note: 'Messages arrive through the platform webhook once the account is connected in Social.',
   },
   {
     key: 'snapchat',
@@ -199,7 +200,7 @@ export const INBOX_CHANNELS: InboxChannelDef[] = [
     platform: SocialPlatform.snapchat,
     icon: 'snapchat',
     initials: 'SC',
-    note: 'Pulled by the Social connector once connected.',
+    note: 'Messages arrive through the Snapchat webhook once connected. Snapchat has no public reply API.',
   },
   {
     key: 'gbm',
