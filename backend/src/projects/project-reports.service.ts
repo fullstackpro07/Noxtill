@@ -318,35 +318,69 @@ export class ProjectReportsService {
           p.budget ? cur(p.consumed ?? 0) : '—',
           p.progress + '%',
         ]),
-        note: 'Consumed = approved time at each person’s snapshot rate. Red when spend runs 15+ points ahead of progress.',
+        note: 'Consumed = labour cost of approved time (hours × each person’s Staff hourly wage, snapshotted). Red when spend runs 15+ points ahead of progress.',
       };
     } else if (rk === 'Project Profitability') {
+      const approved = (pid: string) =>
+        entries.filter((e) => e.projectId === pid && e.status === 'approved');
       const val = (pid: string) =>
-        entries
-          .filter(
-            (e) =>
-              e.projectId === pid &&
-              e.billable &&
-              e.status === 'approved' &&
-              e.rateSnapshot != null,
-          )
+        approved(pid)
+          .filter((e) => e.billable && e.billRateSnapshot != null)
+          .reduce(
+            (a, e) => a + (e.minutes / 60) * Number(e.billRateSnapshot),
+            0,
+          );
+      const cost = (pid: string) =>
+        approved(pid)
+          .filter((e) => e.rateSnapshot != null)
           .reduce((a, e) => a + (e.minutes / 60) * Number(e.rateSnapshot), 0);
-      const mx = Math.max(1, ...P.map((p) => val(p.id)));
+      const unpriced = (pid: string) =>
+        approved(pid).filter(
+          (e) =>
+            e.rateSnapshot == null ||
+            (e.billable && e.billRateSnapshot == null),
+        ).length;
+      const margin = (pid: string) => val(pid) - cost(pid);
+      const mx = Math.max(1, ...P.map((p) => Math.max(val(p.id), cost(p.id))));
       out = {
-        rows: byP((p) => ({
-          label: p.name,
-          w1: (val(p.id) / mx) * 100,
-          c1: '#12A150',
-          v: val(p.id) ? cur(val(p.id)) + ' billable' : 'Insufficient data',
-        })),
-        cols: ['Project', 'Budget', 'Approved billable value', 'Gross margin'],
-        table: byP((p) => [
-          p.name,
-          p.budget ? cur(p.budget) : 'Not set',
-          cur(val(p.id)),
-          'Needs cost data from Finance',
-        ]),
-        note: 'Margin is not calculated here — cost and expense data come from Finance & Accounting.',
+        rows: byP((p) => {
+          const v = val(p.id);
+          const c = cost(p.id);
+          return {
+            label: p.name,
+            w1: (v / mx) * 100,
+            c1: '#12A150',
+            hasB: c > 0,
+            wb: (c / mx) * 100,
+            v: !approved(p.id).length
+              ? 'No approved time'
+              : `${cur(margin(p.id))} margin`,
+          };
+        }),
+        legend: [
+          { c: '#12A150', t: 'Billable value (bill rates)' },
+          { c: '#98A2B3', t: 'Labour cost (Staff wage rates)' },
+        ],
+        cols: [
+          'Project',
+          'Billable value',
+          'Labour cost',
+          'Gross margin',
+          'Margin %',
+          'Unpriced entries',
+        ],
+        table: byP((p) => {
+          const v = val(p.id);
+          return [
+            p.name,
+            cur(v),
+            cur(cost(p.id)),
+            cur(margin(p.id)),
+            v ? Math.round((margin(p.id) / v) * 100) + '%' : '—',
+            String(unpriced(p.id)),
+          ];
+        }),
+        note: 'Approved project time only: billable hours × each person’s project bill rate, minus all hours × their Staff hourly wage. Entries without a rate are counted as unpriced, not guessed. Other expenses are not included.',
       };
     } else if (rk === 'Team Workload') {
       const w = L.workload;

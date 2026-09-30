@@ -294,6 +294,56 @@ export class ProjectFilesService {
     return { ok: true };
   }
 
+  /** Folder and what the file is linked to (the project, one of its tasks, or a milestone). */
+  async setMeta(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { folder?: string; linkType?: string; linkId?: string | null },
+  ) {
+    await this.perms.assert(actor, 'Manage files');
+    const f = await this.file(id);
+    const data: { folder?: string; linkType?: string; linkId?: string | null } =
+      {};
+    if (input.folder !== undefined) {
+      const folder = input.folder.trim().slice(0, 60);
+      if (!folder)
+        throw new AppException(
+          PROJECT_ERRORS.INVALID,
+          'Folder name can’t be empty.',
+          HttpStatus.BAD_REQUEST,
+        );
+      data.folder = folder;
+    }
+    if (input.linkType !== undefined) {
+      if (input.linkType === 'project') {
+        data.linkType = 'project';
+        data.linkId = null;
+      } else if (input.linkType === 'task' || input.linkType === 'milestone') {
+        const ok =
+          input.linkType === 'task'
+            ? await this.prisma.projectTask.count({
+                where: { id: input.linkId ?? '', projectId: f.projectId },
+              })
+            : await this.prisma.projectMilestone.count({
+                where: { id: input.linkId ?? '', projectId: f.projectId },
+              });
+        if (!ok)
+          throw new AppException(
+            PROJECT_ERRORS.INVALID,
+            'Link the file to a task or milestone on the same project.',
+            HttpStatus.BAD_REQUEST,
+          );
+        data.linkType = input.linkType;
+        data.linkId = input.linkId!;
+      }
+    }
+    await this.ctx.db.projectFile.update({ where: { id }, data });
+    await this.ctx.activity(actor, 'file.updated', `updated ${f.name}`, {
+      projectId: f.projectId,
+    });
+    return { ok: true };
+  }
+
   async togglePin(actor: AuthenticatedUser, id: string) {
     await this.perms.assert(actor, 'Manage files');
     const f = await this.file(id);

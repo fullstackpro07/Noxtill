@@ -206,6 +206,7 @@ export interface ProjectConfig {
   branchCode: boolean;
   archiveDays: string;
   noHardDelete: boolean;
+  wipLimit: number;
   portalOn: boolean;
   portalMfa: boolean;
   inviteExp: string;
@@ -230,6 +231,7 @@ export function defaultConfig(): ProjectConfig {
     branchCode: false,
     archiveDays: '90 days',
     noHardDelete: true,
+    wipLimit: WIP_LIMIT,
     portalOn: true,
     portalMfa: true,
     inviteExp: '14 days',
@@ -251,14 +253,16 @@ export const INVITE_DAYS: Record<string, number> = {
   '30 days': 30,
 };
 
-/** Automation hooks a project/template can reference. The Automations engine has no project
- * triggers today (`WorkflowTriggerKey` has none), so these are stored as references only. */
+/** Automation hooks a project/template can opt into — each runs a real action (ProjectHooksService). */
 export const PROJECT_AUTOMATION_HOOKS: Array<[string, string]> = [
-  ['project.created', 'Notify team when a project is created'],
-  ['project.deadline_approaching', 'Remind manager before the deadline'],
-  ['task.overdue', 'Daily overdue digest'],
-  ['milestone.completed', 'Client update draft on milestone completion'],
-  ['project.completed', 'Request a review when a project completes'],
+  ['project.created', 'Notify the project team in-app'],
+  [
+    'project.deadline_approaching',
+    'Remind the manager 3 days before the deadline',
+  ],
+  ['task.overdue', 'Daily overdue-task digest to the manager'],
+  ['milestone.completed', 'Tell the manager a client update draft is ready'],
+  ['project.completed', 'Send the customer a review request (Reviews)'],
 ];
 
 export const FILE_MAX_BYTES = 25 * 1024 * 1024;

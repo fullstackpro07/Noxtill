@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { hdApi } from "@/lib/helpdesk-api";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { closeConversation, fetchSummary, reopenConversation } from "@/lib/inbox-api";
 import { useInboxStore } from "./inbox-store";
@@ -75,6 +77,15 @@ function Workspace() {
     composer.set({ text: t, draftId });
   });
   const summary = useQuery({ queryKey: ["inbox-summary", d.id], queryFn: () => fetchSummary(d.id), enabled: showSummary && d.summaryAvailable });
+  const router = useRouter();
+  const ticket = useMutation({
+    mutationFn: () => hdApi.fromConversation(d.id),
+    onSuccess: (t) => {
+      flash(`Helpdesk ticket ${t.number} created`);
+      router.push(`/helpdesk/tickets/${encodeURIComponent(t.number)}`);
+    },
+    onError: (e) => flash(errorText(e)),
+  });
   const close = useMutation({
     mutationFn: () => (d.conversationStatus === "closed" ? reopenConversation(d.id) : closeConversation(d.id)),
     onSuccess: () => {
@@ -113,6 +124,7 @@ function Workspace() {
         <span style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           <HeadButton onClick={() => openModal({ type: "assign", conversationId: d.id })}>Assign</HeadButton>
           <HeadButton onClick={() => openModal({ type: "snooze", conversationId: d.id })}>Snooze</HeadButton>
+          <HeadButton onClick={() => !ticket.isPending && ticket.mutate()}>{ticket.isPending ? "Creating…" : "Create ticket"}</HeadButton>
           <button
             type="button"
             onClick={() => close.mutate()}

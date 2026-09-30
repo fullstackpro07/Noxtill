@@ -10,6 +10,7 @@ import {
   todayIn,
 } from './projects-context.service';
 import { ARCHIVE_DAYS, PROJECTS_QUEUE } from './projects.constants';
+import { ProjectHooksService } from './project-hooks.service';
 
 @Injectable()
 export class ProjectsDailyScheduler implements OnModuleInit {
@@ -46,6 +47,7 @@ export class ProjectsDailyProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ctx: ProjectsContextService,
+    private readonly hooks: ProjectHooksService,
   ) {
     super();
   }
@@ -161,5 +163,6 @@ export class ProjectsDailyProcessor extends WorkerHost {
         businessId,
       );
     }
+    await this.hooks.daily(businessId, today);
   }
 }

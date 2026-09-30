@@ -18,6 +18,7 @@ import { InboxSendService } from './inbox-send.service';
 import { InboxAiService } from './inbox-ai.service';
 import { InboxAutomationService } from './inbox-automation.service';
 import { InboxChannelsService } from './inbox-channels.service';
+import { InboxHooksService } from './inbox-hooks.service';
 import {
   INBOX_AUTOMATION_QUEUE,
   InboxAutomationProcessor,
@@ -47,9 +48,15 @@ import {
     InboxAiService,
     InboxAutomationService,
     InboxChannelsService,
+    InboxHooksService,
     InboxAutomationScheduler,
     InboxAutomationProcessor,
   ],
-  exports: [InboxAutomationService],
+  exports: [
+    InboxAutomationService,
+    InboxSendService,
+    InboxChannelsService,
+    InboxHooksService,
+  ],
 })
 export class UnifiedInboxModule {}

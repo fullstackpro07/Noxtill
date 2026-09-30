@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPortalPreview, fileDownload, invitePortal, revokePortal, type ClientView } from "@/lib/projects-api";
+import { fetchPortalPreview, fetchProjectLinks, fileDownload, invitePortal, revokePortal, type ClientView } from "@/lib/projects-api";
+import { useRouter } from "next/navigation";
+import { useInboxStore } from "@/components/unified-inbox/inbox-store";
 import { useProjectsInvalidate, useProjectsStore, useWorkspace } from "./projects-store";
 import { ErrorBox, Loading, aps, card, errorText, fileSize, fmt, ini, money, st } from "./projects-ui";
 
@@ -52,7 +54,7 @@ export function PortalBody({ v, h }: { v: ClientView; h: PortalHandlers }) {
             Project portal for {v.project.client} · {v.business}
           </div>
         </div>
-        <div style={{ marginLeft: "auto", fontSize: "11.5px", color: "#667085" }}>Signed in as {v.project.client} · secure link</div>
+        <div style={{ marginLeft: "auto", fontSize: "11.5px", color: "#667085" }}>{live ? `Signed in as ${v.project.client} · secure link` : `Preview of what ${v.project.client} sees`}</div>
       </div>
       <div style={{ background: "#fff", borderBottom: "1px solid #E6EAF0", padding: "0 16px", display: "flex", gap: "2px", overflowX: "auto" }}>
         {PT.map(([k, label]) => (
@@ -73,6 +75,16 @@ export function PortalBody({ v, h }: { v: ClientView; h: PortalHandlers }) {
                 </div>
               ))}
             </div>
+            {v.fields.length > 0 && (
+              <div style={{ ...card, borderRadius: "13px", padding: "14px 16px", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: "10px" }}>
+                {v.fields.map((f) => (
+                  <div key={f.name}>
+                    <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#667085" }}>{f.name}</div>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#101828", wordBreak: "break-word" }}>{/^https?:\/\//.test(f.value) ? <a href={f.value} target="_blank" rel="noopener noreferrer" style={{ color: "#0E8442" }}>{f.value}</a> : f.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ ...card, borderRadius: "13px", padding: "14px 16px" }}>
               <div style={{ fontSize: "13px", fontWeight: 800, color: "#101828", marginBottom: "6px" }}>Recent updates</div>
               {v.updates.map((u, i) => (
@@ -239,6 +251,7 @@ export function PortalBody({ v, h }: { v: ClientView; h: PortalHandlers }) {
 }
 
 export function PortalPreviewView() {
+  const router = useRouter();
   const { data: ws, error, isLoading } = useWorkspace();
   const flash = useProjectsStore((s) => s.flash);
   const ask = useProjectsStore((s) => s.ask);
@@ -342,7 +355,17 @@ export function PortalPreviewView() {
       )}
       {pv.isLoading && <Loading />}
       {pv.error && <ErrorBox error={pv.error} />}
-      {d && <PortalBody v={d} h={{ mode: "preview", onDownload: async (fid) => { try { const r = await fileDownload(fid); window.open(r.url, "_blank", "noopener"); } catch (e) { flash(errorText(e)); } }, onOpenInbox: () => window.location.assign("/unified-inbox") }} />}
+      {d && <PortalBody v={d} h={{ mode: "preview", onDownload: async (fid) => { try { const r = await fileDownload(fid); window.open(r.url, "_blank", "noopener"); } catch (e) { flash(errorText(e)); } }, onOpenInbox: async () => {
+            try {
+              const l = await fetchProjectLinks(id);
+              if (l.conversationId) {
+                useInboxStore.getState().select(l.conversationId);
+                router.push("/unified-inbox/conversation");
+              } else flash("No conversation with this client yet — it starts when they message you or write in the portal.");
+            } catch (e) {
+              flash(errorText(e));
+            }
+          } }} />}
     </div>
   );
 }

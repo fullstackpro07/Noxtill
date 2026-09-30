@@ -11,6 +11,7 @@ import {
 import { InboxCoreService } from './inbox-core.service';
 import { InboxSettingsService } from './inbox-settings.service';
 import { InboxSendService } from './inbox-send.service';
+import { InboxHooksService } from './inbox-hooks.service';
 import { InboxAiService } from './inbox-ai.service';
 import {
   hasHours,
@@ -49,6 +50,7 @@ export class InboxAutomationService {
     private readonly settings: InboxSettingsService,
     private readonly sender: InboxSendService,
     private readonly ai: InboxAiService,
+    private readonly hooks: InboxHooksService,
   ) {}
 
   async ingest(input: InboundInput): Promise<InboxConversation | null> {
@@ -173,7 +175,7 @@ export class InboxAutomationService {
       }
     }
 
-    await this.prisma.inboxMessage.create({
+    const inbound = await this.prisma.inboxMessage.create({
       data: {
         businessId,
         conversationId: conversation.id,
@@ -195,6 +197,12 @@ export class InboxAutomationService {
         conversation.customerId,
       );
     }
+
+    await this.hooks.emitInbound({
+      conversation,
+      message: inbound,
+      backfill: input.backfill === true,
+    });
 
     conversation = await this.applyKeywordRules(
       conversation,

@@ -126,7 +126,7 @@ export function OverviewView() {
             <span style={{ fontSize: "11px", fontWeight: 800, color: "#B42318", background: "#FEF3F2", borderRadius: "20px", padding: "2px 8px" }}>{data.risks.length}</span>
           </div>
           <div style={{ background: "#F3FBF6", border: "1px solid #D1F2DE", borderRadius: "12px", padding: "12px 13px", display: "flex", flexDirection: "column", gap: "7px" }}>
-            <div style={{ fontSize: "10.5px", fontWeight: 800, letterSpacing: ".4px", textTransform: "uppercase", color: "#0E8442" }}>AI project insight</div>
+            <div style={{ fontSize: "10.5px", fontWeight: 800, letterSpacing: ".4px", textTransform: "uppercase", color: "#0E8442" }}>{data.insightSource === "ai" ? "AI project insight" : "Project insight · from records"}</div>
             <div style={{ fontSize: "12.5px", color: "#101828", lineHeight: 1.5, fontWeight: 600 }}>{data.aiInsight}</div>
             <div style={{ fontSize: "11px", color: "#475467", lineHeight: 1.5 }}>{data.aiEvidence}</div>
             <button

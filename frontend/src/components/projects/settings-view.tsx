@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
-import { fetchSettings, saveSettings, setProjectRole, type ProjectConfig } from "@/lib/projects-api";
+import { fetchSettings, saveSettings, setBillRate, setProjectRole, type ProjectConfig } from "@/lib/projects-api";
 import { useProjectsInvalidate, useProjectsStore } from "./projects-store";
 import { NotifyPrefs } from "./activity-view";
 import { ErrorBox, Loading, card, errorText, fieldLabel, fieldInput, fieldSelect } from "./projects-ui";
@@ -110,6 +110,11 @@ export function SettingsView() {
             </label>
             {sel("defVis", "Default visibility", o(["Private", "Team", "Organization"]), ro, "Private projects are visible only to their manager, members and assignees.")}
             {sel("defView", "Default project view", o(["Overview", "Tasks"]), ro, "The tab Project 360 opens on.")}
+            <label style={fieldLabel}>
+              Kanban WIP limit (In Progress)
+              <input disabled={ro} type="number" min={1} max={50} value={cfg.wipLimit} onChange={(e) => set("wipLimit", +e.target.value)} style={fieldInput} />
+              <span style={{ fontSize: "11px", fontWeight: 500, color: "#98A2B3" }}>Moving past it is allowed but warned on the board.</span>
+            </label>
           </div>
         )}
 
@@ -279,11 +284,36 @@ export function SettingsView() {
             </div>
             <div style={{ fontSize: "11.5px", color: "#667085" }}>Owner permissions are locked. Changes are enforced server-side and written to the audit log. For portal clients only “View financials” applies — it shows their invoices in the portal.</div>
             <div style={{ borderTop: "1px solid #F0F2F5", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div style={{ fontSize: "13px", fontWeight: 800, color: "#101828" }}>Project roles by person</div>
+              <div style={{ fontSize: "13px", fontWeight: 800, color: "#101828" }}>Project roles &amp; bill rates</div>
+              <div style={{ fontSize: "11.5px", color: "#667085" }}>Bill rate is what a person’s billable project hour is charged at; it is snapshotted on each time entry. Wage comes from Staff and is used for labour cost.</div>
               {S.people.map((p) => (
                 <div key={p.id} style={{ display: "flex", gap: "10px", alignItems: "center", fontSize: "12.5px" }}>
                   <span style={{ flex: 1, fontWeight: 700, color: "#101828" }}>{p.name}</span>
                   <span style={{ color: "#98A2B3", fontSize: "11.5px", textTransform: "capitalize" }}>{p.systemRole}</span>
+                  <span style={{ color: "#98A2B3", fontSize: "11.5px", width: "120px", textAlign: "right" }}>{p.costRate != null ? `Wage ${business?.currency ?? ""} ${p.costRate}/h` : "No wage in Staff"}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    defaultValue={p.billRate ?? ""}
+                    key={`${p.id}-${p.billRate}`}
+                    placeholder="Bill rate/h"
+                    disabled={!S.canManageBudgets}
+                    aria-label={`Bill rate for ${p.name}`}
+                    onBlur={async (e) => {
+                      const raw = e.target.value.trim();
+                      const next = raw === "" ? null : Number(raw);
+                      if (next === (p.billRate ?? null)) return;
+                      try {
+                        await setBillRate(p.id, next);
+                        flash(next == null ? `${p.name}’s bill rate cleared` : `${p.name} now bills ${business?.currency ?? ""} ${next}/h`);
+                        await invalidate();
+                      } catch (er) {
+                        flash(errorText(er));
+                      }
+                    }}
+                    style={{ width: "110px", height: "34px", border: "1px solid #E6EAF0", borderRadius: "8px", padding: "0 8px", fontSize: "12px" }}
+                  />
                   <select
                     disabled={p.locked || ro}
                     value={p.projectRole}

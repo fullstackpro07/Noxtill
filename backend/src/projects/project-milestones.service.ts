@@ -6,6 +6,7 @@ import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { ProjectsContextService, parseDay } from './projects-context.service';
 import { ProjectsLoaderService } from './projects-loader.service';
 import { ProjectsPermissionsService } from './projects-permissions.service';
+import { ProjectHooksService } from './project-hooks.service';
 import { PROJECT_ERRORS } from './projects.constants';
 import { toCsv } from './projects.service';
 
@@ -26,6 +27,7 @@ export class ProjectMilestonesService {
     private readonly ctx: ProjectsContextService,
     private readonly loader: ProjectsLoaderService,
     private readonly perms: ProjectsPermissionsService,
+    private readonly hooks: ProjectHooksService,
   ) {}
 
   async milestone(id: string) {
@@ -203,6 +205,7 @@ export class ProjectMilestonesService {
       { status: m.status },
       { status: 'Completed', actualDate: today },
     );
+    await this.hooks.milestoneCompleted(m.projectId, m.name);
     return { ok: true };
   }
 

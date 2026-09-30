@@ -11,6 +11,7 @@ import { WhatsappWindowService } from '../whatsapp/whatsapp-window.service';
 import { AppException } from '../common/filters/app.exception';
 import { INBOX_ERROR_CODES, isMessagingChannel } from './inbox.constants';
 import { InboxChannelsService } from './inbox-channels.service';
+import { InboxHooksService } from './inbox-hooks.service';
 import { Actor, InboxCoreService } from './inbox-core.service';
 
 /**
@@ -27,6 +28,7 @@ export class InboxSendService {
     private readonly window: WhatsappWindowService,
     private readonly core: InboxCoreService,
     private readonly channels: InboxChannelsService,
+    private readonly hooks: InboxHooksService,
   ) {}
 
   /** Why this conversation cannot receive a reply right now, or null when it can. */
@@ -146,6 +148,7 @@ export class InboxSendService {
     });
     if (note) await this.core.threadEvent(businessId, conversation.id, note);
     await this.core.afterOutbound(conversation, text, out.createdAt);
+    await this.hooks.emitOutbound({ conversation, message: out });
     return out;
   }
 

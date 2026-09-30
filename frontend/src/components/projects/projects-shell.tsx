@@ -89,6 +89,10 @@ export function ProjectsShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (taskParam) open({ kind: "task", id: taskParam });
   }, [taskParam, open]);
+  const aiParam = search.get("ai");
+  useEffect(() => {
+    if (aiParam === "status" || aiParam === "plan" || aiParam === "risk") open({ kind: "ai", tab: aiParam, projectId: detailId ?? undefined });
+  }, [aiParam, detailId, open]);
 
   const detail = detailId ? ws?.projects.find((p) => p.id === detailId) : undefined;
   const title = key === "detail" ? detail?.name ?? "Project" : TITLES[key];

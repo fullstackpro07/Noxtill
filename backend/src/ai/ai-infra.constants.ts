@@ -54,6 +54,7 @@ export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   assistant_chat: 'assistant',
   help_ask: 'assistant',
   projects_plan: 'assistant',
+  projects_insight: 'insights',
   inbox_draft: 'inboxReplies',
   inbox_translate: 'inboxReplies',
   inbox_summary: 'inboxReplies',

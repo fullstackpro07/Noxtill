@@ -35,6 +35,7 @@ export interface TaskInput {
   estimateMins?: number;
   parentTaskId?: string | null;
   clientVisible?: boolean;
+  customFields?: Record<string, unknown>;
   checklist?: Array<{ t: string; done: boolean; req: boolean }>;
   blocked?: boolean;
   blockType?: string | null;
@@ -158,6 +159,9 @@ export class ProjectTasksService {
         baselineDue: due,
         estimateMins: Math.max(0, Math.round(input.estimateMins ?? 0)),
         clientVisible: !!input.clientVisible,
+        customFields: (await this.taskFields(
+          input.customFields ?? {},
+        )) as Prisma.InputJsonValue,
         checklist: sanitizeChecklist(
           input.checklist ?? [],
         ) as Prisma.InputJsonValue,
@@ -214,6 +218,11 @@ export class ProjectTasksService {
       data.estimateMins = Math.max(0, Math.round(input.estimateMins));
     if (input.clientVisible !== undefined)
       data.clientVisible = !!input.clientVisible;
+    if (input.customFields !== undefined)
+      data.customFields = {
+        ...((t.customFields ?? {}) as Record<string, unknown>),
+        ...(await this.taskFields(input.customFields)),
+      } as Prisma.InputJsonValue;
     if (input.checklist !== undefined)
       data.checklist = sanitizeChecklist(input.checklist);
     const start =
@@ -339,8 +348,9 @@ export class ProjectTasksService {
       const n = await this.prisma.projectTask.count({
         where: { businessId: this.ctx.businessId(), status: 'In Progress' },
       });
-      if (n >= WIP_LIMIT)
-        warning = `In Progress is over its WIP limit (${WIP_LIMIT}). Moved anyway — consider finishing work first.`;
+      const limit = (await this.ctx.config()).wipLimit || WIP_LIMIT;
+      if (n >= limit)
+        warning = `In Progress is over its WIP limit (${limit}). Moved anyway — consider finishing work first.`;
     }
     await this.ctx.db.projectTask.update({
       where: { id },
@@ -467,6 +477,19 @@ export class ProjectTasksService {
       where: { taskId: id, dependsOnTaskId: dependsOnId },
     });
     return { ok: true };
+  }
+
+  /** Keeps only the Task custom fields defined in Project Settings. */
+  private async taskFields(input: Record<string, unknown>) {
+    const cfg = await this.ctx.config();
+    const allowed = new Set(
+      cfg.fields.filter((f) => f.applies === 'Task').map((f) => f.name),
+    );
+    return Object.fromEntries(
+      Object.entries(input ?? {})
+        .filter(([k]) => allowed.has(k))
+        .map(([k, v]) => [k, typeof v === 'string' ? v.slice(0, 500) : v]),
+    );
   }
 
   // ── comments ─────────────────────────────────────────────────────────────

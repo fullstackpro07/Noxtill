@@ -4,6 +4,8 @@ import { AiModule } from '../ai/ai.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UnifiedInboxModule } from '../unified-inbox/unified-inbox.module';
+import { ReviewsModule } from '../reviews/reviews.module';
+import { ProjectHooksService } from './project-hooks.service';
 import { PROJECTS_QUEUE } from './projects.constants';
 import { ProjectsController } from './projects.controller';
 import { ProjectPortalPublicController } from './project-portal-public.controller';
@@ -34,10 +36,12 @@ import {
     MessagingModule,
     NotificationsModule,
     UnifiedInboxModule,
+    ReviewsModule,
   ],
   controllers: [ProjectsController, ProjectPortalPublicController],
   providers: [
     ProjectsContextService,
+    ProjectHooksService,
     ProjectsPermissionsService,
     ProjectsLoaderService,
     ProjectsService,

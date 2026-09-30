@@ -15,6 +15,7 @@ import { InboxSettingsService } from './inbox-settings.service';
 import { InboxCoreService } from './inbox-core.service';
 import { InboxFactsService } from './inbox-facts.service';
 import { InboxSendService } from './inbox-send.service';
+import { InboxHooksService } from './inbox-hooks.service';
 import { InboxAiService } from './inbox-ai.service';
 import { InboxAutomationService } from './inbox-automation.service';
 import { InboxService } from './inbox.service';
@@ -122,6 +123,7 @@ describe('Unified Inbox (real DB)', () => {
       prisma,
       config as unknown as ConfigService,
     );
+    const hooks = new InboxHooksService();
     const sender = new InboxSendService(
       prisma,
       sendGate as unknown as SendGateService,
@@ -129,6 +131,7 @@ describe('Unified Inbox (real DB)', () => {
       window as unknown as WhatsappWindowService,
       core,
       channels,
+      hooks,
     );
     const ai = new InboxAiService(
       prisma,
@@ -138,7 +141,14 @@ describe('Unified Inbox (real DB)', () => {
       core,
       sender,
     );
-    automation = new InboxAutomationService(prisma, core, settings, sender, ai);
+    automation = new InboxAutomationService(
+      prisma,
+      core,
+      settings,
+      sender,
+      ai,
+      hooks,
+    );
     inbox = new InboxService(
       tenant,
       prisma,

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { completeProject, fetchApprovals, fetchFeed, fetchFiles, fetchTime, projectReadiness, setMembers, type ProjectRow, type Workspace } from "@/lib/projects-api";
+import { completeProject, fetchApprovals, fetchFeed, fetchFiles, fetchProjectLinks, fetchTime, projectReadiness, setMembers, type ProjectRow, type Workspace } from "@/lib/projects-api";
+import { useInboxStore } from "@/components/unified-inbox/inbox-store";
 import { useProjectsInvalidate, useProjectsStore, useWorkspace } from "./projects-store";
 import { useProjectActions } from "./projects-actions";
 import { ACCESS, Avatar, Badge, Empty, ErrorBox, HealthBadge, Loading, TIME_ST, ago, card, days, errorText, fmt, fmtShort, hm, money, pr, st } from "./projects-ui";
@@ -30,7 +31,6 @@ export function ProjectDetailView({ id }: { id: string }) {
 }
 
 function Detail({ ws, p }: { ws: Workspace; p: ProjectRow }) {
-  const router = useRouter();
   const act = useProjectActions(ws);
   const invalidate = useProjectsInvalidate();
   const dtab = useProjectsStore((s) => s.dtab);
@@ -44,7 +44,6 @@ function Detail({ ws, p }: { ws: Workspace; p: ProjectRow }) {
   const tasks = ws.tasks.filter((t) => t.projectId === p.id);
   const top = tasks.filter((t) => !t.parentTaskId);
   const blockers = tasks.filter((t) => (t.blocked || t.status === "Blocked") && t.status !== "Done" && t.status !== "Cancelled").length;
-  const canFin = ws.me.can["View financials"];
 
   const completeFlow = async () => {
     try {
@@ -178,28 +177,7 @@ function Detail({ ws, p }: { ws: Workspace; p: ProjectRow }) {
               ))}
               <div style={{ fontSize: "11.5px", color: "#475467", lineHeight: 1.5, background: "#FAFBFC", borderRadius: "10px", padding: "9px 11px" }}>{p.healthWhy}</div>
               <div style={{ fontSize: "12px", fontWeight: 800, color: "#344054", marginTop: "4px" }}>Linked business records</div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {[
-                  p.customerId ? { label: "Customer", href: `/customers/${p.customerId}` } : { label: "Customer · not linked", href: "" },
-                  { label: "Quotations", href: "/orders/quotations" },
-                  { label: "Invoices", href: "/orders/invoices" },
-                  { label: "Signed SOW · Contracts not available", href: "" },
-                  { label: "Conversation", href: "/unified-inbox" },
-                ].map((l) => (
-                  <button
-                    key={l.label}
-                    type="button"
-                    disabled={!l.href}
-                    className={l.href ? "pt-ghost" : undefined}
-                    onClick={() => l.href && router.push(l.href)}
-                    title={l.href ? undefined : l.label.includes("Contracts") ? "There is no Documents, Contracts & eSign module yet, so no signed document can be linked." : "Link a customer by editing the project."}
-                    style={{ border: "1px solid #E6EAF0", background: l.href ? "#fff" : "#F9FAFB", borderRadius: "8px", padding: "6px 9px", fontSize: "11.5px", fontWeight: 600, color: l.href ? "#344054" : "#98A2B3", cursor: l.href ? "pointer" : "default" }}
-                  >
-                    {l.label}
-                    {l.href ? " ↗" : ""}
-                  </button>
-                ))}
-              </div>
+              <LinkedRecords p={p} currency={ws.currency} />
             </section>
           </div>
         </div>
@@ -235,44 +213,7 @@ function Detail({ ws, p }: { ws: Workspace; p: ProjectRow }) {
       {["ms", "files", "time", "appr"].includes(dtab) && <DetailList ws={ws} p={p} tab={dtab} />}
       {dtab === "team" && <TeamTab ws={ws} p={p} />}
 
-      {dtab === "fin" && (
-        <section style={{ ...card, padding: "16px 18px", display: "flex", flexDirection: "column", gap: "12px" }}>
-          <div style={{ fontSize: "12px", color: "#475467" }}>Context only. Budget is a reference and “consumed” is approved project time at each person’s snapshot rate. Invoices and postings stay in Orders and Profit &amp; Analytics — nothing is posted from Projects.</div>
-          {canFin ? (
-            <div data-kpi="1" style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "10px" }}>
-              {(p.budget != null
-                ? [
-                    { l: "Budget", v: money(p.budget, ws.currency) },
-                    { l: "Consumed", v: money(p.consumed ?? 0, ws.currency), fg: (p.consumed ?? 0) / p.budget > 0.9 ? "#B42318" : undefined },
-                    { l: "Remaining", v: money(p.budget - (p.consumed ?? 0), ws.currency) },
-                    { l: "Invoiced / paid", v: "In Orders & Payments" },
-                  ]
-                : [
-                    { l: "Budget", v: "Not set" },
-                    { l: "Consumed", v: p.consumed ? money(p.consumed, ws.currency) : "Insufficient data" },
-                    { l: "Remaining", v: "—" },
-                    { l: "Invoiced / paid", v: "In Orders & Payments" },
-                  ]
-              ).map((c) => (
-                <div key={c.l} style={{ border: "1px solid #F0F2F5", borderRadius: "11px", padding: "11px 12px" }}>
-                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#667085" }}>{c.l}</div>
-                  <div style={{ fontSize: "17px", fontWeight: 800, color: c.fg ?? "#0F172A", marginTop: "3px" }}>{c.v}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: "12.5px", color: "#667085" }}>Your project role doesn’t include “View financials”.</div>
-          )}
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button type="button" onClick={() => router.push("/profit")} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: "9px", padding: "8px 12px", fontSize: "12px", fontWeight: 700, color: "#344054", cursor: "pointer" }}>
-              Open Profit &amp; Analytics ↗
-            </button>
-            <button type="button" onClick={() => router.push("/orders/invoices")} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: "9px", padding: "8px 12px", fontSize: "12px", fontWeight: 700, color: "#344054", cursor: "pointer" }}>
-              Open Invoices ↗
-            </button>
-          </div>
-        </section>
-      )}
+      {dtab === "fin" && <FinTab ws={ws} p={p} />}
 
       {dtab === "act" && <ActTab p={p} />}
     </div>
@@ -438,3 +379,102 @@ function ActTab({ p }: { p: ProjectRow }) {
   );
 }
 
+/** This project’s real linked records: the customer, their quotations/invoices/payments since the
+ * project started, their Unified Inbox conversation, and the latest file in the Contracts folder. */
+function LinkedRecords({ p, currency }: { p: ProjectRow; currency: string }) {
+  const router = useRouter();
+  const open = useProjectsStore((s) => s.open);
+  const { data: l, isLoading } = useQuery({ queryKey: ["projects-links", p.id], queryFn: () => fetchProjectLinks(p.id) });
+  if (isLoading || !l) return <div style={{ fontSize: "11.5px", color: "#98A2B3" }}>Loading linked records…</div>;
+  const chips: Array<{ label: string; onClick?: () => void; title?: string }> = [];
+  if (l.customer) chips.push({ label: `Customer · ${l.customer.name}`, onClick: () => router.push(`/customers/${l.customer!.id}`) });
+  else chips.push({ label: "No customer linked", title: "Link a customer with Edit." });
+  if (l.quotations) chips.push(l.quotations.latest ? { label: `Quote #${l.quotations.latest.no} · ${l.quotations.latest.status}${l.quotations.count > 1 ? ` (+${l.quotations.count - 1})` : ""}`, onClick: () => router.push("/orders/quotations") } : { label: "No quotations since start" });
+  if (l.invoices)
+    chips.push(
+      l.invoices.count
+        ? { label: `Invoice #${l.invoices.latestNo}${l.invoices.count > 1 ? ` (+${l.invoices.count - 1})` : ""}${l.invoices.invoiced != null ? ` · ${money(l.invoices.invoiced, currency)}` : ""}`, onClick: () => router.push("/orders/invoices") }
+        : { label: "No invoices since start" },
+    );
+  if (l.invoices?.paid != null && l.invoices.count) chips.push({ label: `Payments · ${money(l.invoices.paid, currency)}`, onClick: () => router.push("/orders/invoices") });
+  chips.push(l.contract ? { label: `Signed SOW · ${l.contract.name}`, onClick: () => open({ kind: "file", id: l.contract!.id }) } : { label: "No contract file", title: "Upload the signed agreement to this project’s Contracts folder." });
+  if (l.customer)
+    chips.push(
+      l.conversationId
+        ? {
+            label: "Conversation",
+            onClick: () => {
+              useInboxStore.getState().select(l.conversationId!);
+              router.push("/unified-inbox/conversation");
+            },
+          }
+        : { label: "No conversation yet" },
+    );
+  return (
+    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+      {chips.map((c) => (
+        <button
+          key={c.label}
+          type="button"
+          disabled={!c.onClick}
+          className={c.onClick ? "pt-ghost" : undefined}
+          onClick={c.onClick}
+          title={c.title}
+          style={{ border: "1px solid #E6EAF0", background: c.onClick ? "#fff" : "#F9FAFB", borderRadius: "8px", padding: "6px 9px", fontSize: "11.5px", fontWeight: 600, color: c.onClick ? "#344054" : "#98A2B3", cursor: c.onClick ? "pointer" : "default" }}
+        >
+          {c.label}
+          {c.onClick ? " ↗" : ""}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FinTab({ ws, p }: { ws: Workspace; p: ProjectRow }) {
+  const router = useRouter();
+  const canFin = ws.me.can["View financials"];
+  const { data: l } = useQuery({ queryKey: ["projects-links", p.id], queryFn: () => fetchProjectLinks(p.id), enabled: canFin });
+  const inv = l?.invoices;
+  const invoiced = !p.customerId ? "No customer linked" : !inv ? "…" : inv.count ? `${money(inv.invoiced ?? 0, ws.currency)} / ${money(inv.paid ?? 0, ws.currency)}` : "No invoices yet";
+  const cards: Array<{ l: string; v: string; fg?: string }> =
+    p.budget != null
+      ? [
+          { l: "Budget", v: money(p.budget, ws.currency) },
+          { l: "Consumed", v: money(p.consumed ?? 0, ws.currency), fg: (p.consumed ?? 0) / p.budget > 0.9 ? "#B42318" : undefined },
+          { l: "Remaining", v: money(p.budget - (p.consumed ?? 0), ws.currency) },
+          { l: "Invoiced / paid", v: invoiced },
+        ]
+      : [
+          { l: "Budget", v: "Not set" },
+          { l: "Consumed", v: money(p.consumed ?? 0, ws.currency) },
+          { l: "Remaining", v: "—" },
+          { l: "Invoiced / paid", v: invoiced },
+        ];
+  return (
+    <section style={{ ...card, padding: "16px 18px", display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ fontSize: "12px", color: "#475467" }}>
+        Consumed is the labour cost of approved project time (hours × each person’s Staff hourly wage, snapshotted). Invoiced / paid are {p.customerName ?? "the customer"}’s orders and payments since {fmt(l?.since ?? p.startDate)} — read from Orders; nothing is posted from Projects.
+      </div>
+      {canFin ? (
+        <div data-kpi="1" style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "10px" }}>
+          {cards.map((c) => (
+            <div key={c.l} style={{ border: "1px solid #F0F2F5", borderRadius: "11px", padding: "11px 12px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#667085" }}>{c.l}</div>
+              <div style={{ fontSize: "17px", fontWeight: 800, color: c.fg ?? "#0F172A", marginTop: "3px" }}>{c.v}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: "12.5px", color: "#667085" }}>Your project role doesn’t include “View financials”.</div>
+      )}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <button type="button" onClick={() => router.push("/profit")} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: "9px", padding: "8px 12px", fontSize: "12px", fontWeight: 700, color: "#344054", cursor: "pointer" }}>
+          Open Profit &amp; Analytics ↗
+        </button>
+        <button type="button" onClick={() => router.push("/orders/invoices")} style={{ border: "1px solid #E6EAF0", background: "#fff", borderRadius: "9px", padding: "8px 12px", fontSize: "12px", fontWeight: 700, color: "#344054", cursor: "pointer" }}>
+          Open Invoices ↗
+        </button>
+      </div>
+    </section>
+  );
+}

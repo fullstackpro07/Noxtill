@@ -17,6 +17,7 @@ import {
   readyMilestone,
   remindApproval,
   restoreFileVersion,
+  setFileMeta,
   resubmitApproval,
   setFileAccess,
   uploadProjectFile,
@@ -316,6 +317,7 @@ export function FileDrawer({ ws, id }: { ws: Workspace; id: string }) {
           </div>
         ))}
       </div>
+      {can && <FileMetaEditor ws={ws} f={f} />}
       {can && (
         <label style={{ ...footBtnGhost, alignSelf: "flex-start", fontSize: "12px", padding: "7px 12px" }}>
           Upload new version
@@ -640,6 +642,57 @@ export function RejectModal({ ids }: { ids: string[] }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FileMetaEditor({ ws, f }: { ws: Workspace; f: { id: string; projectId: string; folder: string; linkType: string; linkId: string | null } }) {
+  const run = useRun();
+  const [folder, setFolder] = useState(f.folder);
+  const value = f.linkType === "project" ? "project" : `${f.linkType}:${f.linkId}`;
+  const tasks = ws.tasks.filter((t) => t.projectId === f.projectId && t.status !== "Cancelled");
+  const ms = ws.milestones.filter((m) => m.projectId === f.projectId);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "9px" }}>
+      <label style={fieldLabel}>
+        Folder
+        <input
+          list="pt-folders"
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          onBlur={() => folder.trim() && folder !== f.folder && void run(() => setFileMeta(f.id, { folder: folder.trim() }), "Folder updated")}
+          style={{ ...fieldInput, height: "36px" }}
+        />
+        <datalist id="pt-folders">
+          {["Contracts", "Design", "Deliverables", "Invoices", "Uploads"].map((x) => (
+            <option key={x} value={x} />
+          ))}
+        </datalist>
+      </label>
+      <label style={fieldLabel}>
+        Linked to
+        <select
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            const [type, id] = v === "project" ? ["project", null] : v.split(":");
+            void run(() => setFileMeta(f.id, { linkType: type as string, linkId: id }), "Link updated");
+          }}
+          style={{ ...fieldSelect, height: "36px" }}
+        >
+          <option value="project">The project</option>
+          {tasks.map((t) => (
+            <option key={t.id} value={`task:${t.id}`}>
+              Task {t.number} · {t.title}
+            </option>
+          ))}
+          {ms.map((m) => (
+            <option key={m.id} value={`milestone:${m.id}`}>
+              Milestone · {m.name}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

@@ -106,6 +106,19 @@ export class TaskDto {
   @IsOptional() @IsBoolean() blocked?: boolean;
   @IsOptional() @IsString() blockType?: string | null;
   @IsOptional() @IsString() blockerNote?: string | null;
+  @IsOptional()
+  @IsObject()
+  customFields?: Record<string, unknown>;
+}
+
+export class RateDto {
+  @IsOptional() @Type(() => Number) @IsNumber() rate?: number | null;
+}
+
+export class FileMetaDto {
+  @IsOptional() @IsString() @MaxLength(60) folder?: string;
+  @IsOptional() @IsIn(['project', 'task', 'milestone']) linkType?: string;
+  @IsOptional() @IsString() linkId?: string | null;
 }
 
 export class StatusDto {

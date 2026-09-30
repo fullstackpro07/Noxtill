@@ -66,10 +66,18 @@ export class ProjectTimeService {
       date: isoDay(e.date)!,
       minutes: e.minutes,
       billable: e.billable,
-      rate: canFin && e.rateSnapshot != null ? Number(e.rateSnapshot) : null,
+      /** Bill rate snapshot (what the hour is charged at). */
+      rate:
+        canFin && e.billRateSnapshot != null
+          ? Number(e.billRateSnapshot)
+          : null,
+      /** Staff hourly wage snapshot (what the hour costs). */
+      costRate:
+        canFin && e.rateSnapshot != null ? Number(e.rateSnapshot) : null,
       value:
-        canFin && e.billable && e.rateSnapshot != null
-          ? Math.round((e.minutes / 60) * Number(e.rateSnapshot) * 100) / 100
+        canFin && e.billable && e.billRateSnapshot != null
+          ? Math.round((e.minutes / 60) * Number(e.billRateSnapshot) * 100) /
+            100
           : null,
       status: e.status,
       note: e.note,
@@ -274,6 +282,15 @@ export class ProjectTimeService {
       where: { id: personId },
       select: { hourlyRate: true },
     });
+    const rate = await tx.projectRoleAssignment.findUnique({
+      where: {
+        businessId_businessUserId: {
+          businessId: this.ctx.businessId(),
+          businessUserId: personId,
+        },
+      },
+      select: { billRate: true },
+    });
     const number = await this.ctx.nextNumber('timeSeq', tx);
     return tx.projectTimeEntry.create({
       data: {
@@ -286,6 +303,7 @@ export class ProjectTimeService {
         minutes: e.minutes,
         billable: e.billable,
         rateSnapshot: bu?.hourlyRate ?? null,
+        billRateSnapshot: e.billable ? (rate?.billRate ?? null) : null,
         status: 'draft',
         note: e.note.slice(0, 500),
         source: e.source,

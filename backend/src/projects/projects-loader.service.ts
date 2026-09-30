@@ -101,6 +101,7 @@ export interface TaskRow {
   blockType: string | null;
   blockerNote: string | null;
   clientVisible: boolean;
+  customFields: Record<string, unknown>;
   deps: string[];
   subDone: number;
   subTotal: number;
@@ -606,6 +607,7 @@ export class ProjectsLoaderService {
         blockType: t.blockType,
         blockerNote: t.blockerNote,
         clientVisible: t.clientVisible,
+        customFields: (t.customFields ?? {}) as Record<string, unknown>,
         deps: depMap.get(t.id) ?? [],
         subDone: subCounts.get(t.id)?.d ?? 0,
         subTotal: subCounts.get(t.id)?.t ?? 0,

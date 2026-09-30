@@ -265,6 +265,7 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.settings": "Settings",
     "nav.unifiedInbox": "Unified Inbox",
     "nav.projects": "Projects & Tasks",
+    "nav.helpdesk": "Helpdesk",
     "nav.businessBrain": "Business Brain",
     "nav.opportunityRadar": "Opportunity Radar",
     "nav.businessSimulator": "Business Simulator",

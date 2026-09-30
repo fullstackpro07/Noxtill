@@ -55,6 +55,7 @@ import { SocialModule } from './social/social.module';
 import { UnifiedInboxModule } from './unified-inbox/unified-inbox.module';
 import { BusinessBrainModule } from './business-brain/business-brain.module';
 import { ProjectsModule } from './projects/projects.module';
+import { HelpdeskModule } from './helpdesk/helpdesk.module';
 import { CompetitiveModule } from './competitive/competitive.module';
 import { VoiceModule } from './voice/voice.module';
 import { DigitizerModule } from './digitizer/digitizer.module';
@@ -130,6 +131,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     UnifiedInboxModule,
     BusinessBrainModule,
     ProjectsModule,
+    HelpdeskModule,
     CompetitiveModule,
     VoiceModule,
     DigitizerModule,

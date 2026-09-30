@@ -31,6 +31,8 @@ import { ProjectSettingsService } from './project-settings.service';
 import { ProjectAiService } from './project-ai.service';
 import { ProjectReportsService } from './project-reports.service';
 import { ProjectsDailyProcessor } from './projects-daily.processor';
+import { ProjectHooksService } from './project-hooks.service';
+import type { ReviewRequestsService } from '../reviews/review-requests.service';
 import {
   criticalPath,
   healthOf,
@@ -84,6 +86,8 @@ describe('Projects & Tasks (real DB)', () => {
   let reports: ProjectReportsService;
   let loader: ProjectsLoaderService;
   let daily: ProjectsDailyProcessor;
+  let hooks: ProjectHooksService;
+  const reviewsMock = { create: jest.fn(() => Promise.resolve({ id: 'r1' })) };
   const email = { send: jest.fn(() => Promise.resolve({ providerRef: 'x' })) };
   const inbox = { ingest: jest.fn(() => Promise.resolve(null)) };
   const aiInfra = {
@@ -188,9 +192,27 @@ describe('Projects & Tasks (real DB)', () => {
     );
     const perms = new ProjectsPermissionsService(prisma, ctx);
     loader = new ProjectsLoaderService(prisma, ctx, perms);
-    projects = new ProjectsService(prisma, ctx, loader, perms);
+    hooks = new ProjectHooksService(
+      prisma,
+      ctx,
+      reviewsMock as unknown as ReviewRequestsService,
+    );
+    projects = new ProjectsService(
+      prisma,
+      ctx,
+      loader,
+      perms,
+      hooks,
+      aiInfra as unknown as AiInfraService,
+    );
     tasks = new ProjectTasksService(prisma, ctx, loader, perms);
-    milestones = new ProjectMilestonesService(prisma, ctx, loader, perms);
+    milestones = new ProjectMilestonesService(
+      prisma,
+      ctx,
+      loader,
+      perms,
+      hooks,
+    );
     time = new ProjectTimeService(prisma, ctx, loader, perms);
     const config = {
       get: (k: string) => ({ FRONTEND_URL: 'http://localhost:3000' })[k],
@@ -214,7 +236,7 @@ describe('Projects & Tasks (real DB)', () => {
       perms,
     );
     reports = new ProjectReportsService(prisma, ctx, loader, perms);
-    daily = new ProjectsDailyProcessor(prisma, ctx);
+    daily = new ProjectsDailyProcessor(prisma, ctx, hooks);
   });
 
   afterAll(async () => {
@@ -661,6 +683,296 @@ describe('Projects & Tasks (real DB)', () => {
       },
     });
     expect(after - before).toBe(1);
+  });
+});
+
+describe('Projects & Tasks — rates, hooks, links, fields (real DB)', () => {
+  // Own business, so ordering with the suite above cannot interfere.
+  let prisma: PrismaService;
+  let cls: FakeClsService;
+  let businessId: string;
+  let ownerUserId: string;
+  let ownerBu: string;
+  let customerId: string;
+  let owner: AuthenticatedUser;
+  let ctx: ProjectsContextService;
+  let projects: ProjectsService;
+  let tasks: ProjectTasksService;
+  let time: ProjectTimeService;
+  let settings: ProjectSettingsService;
+  let reports: ProjectReportsService;
+  const reviews = { create: jest.fn(() => Promise.resolve({ id: 'r' })) };
+  const ai = {
+    createMessage: jest.fn(() => Promise.reject(new Error('AI off'))),
+  };
+  let today: string;
+  const as = () => {
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    cls.set(CLS_KEY_USER_ID, ownerUserId);
+  };
+
+  beforeAll(async () => {
+    prisma = new PrismaService();
+    await prisma.$connect();
+    cls = new FakeClsService();
+    const tenant = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    const stamp = Date.now();
+    businessId = (
+      await prisma.business.create({
+        data: {
+          name: 'Projects Rates Biz',
+          slug: `projects-rates-${stamp}`,
+          currency: 'USD',
+          timezone: 'UTC',
+        },
+      })
+    ).id;
+    ownerUserId = (
+      await prisma.user.create({
+        data: {
+          name: 'Rae Owner',
+          email: `proj-rates-${stamp}@example.com`,
+          passwordHash: 'x',
+        },
+      })
+    ).id;
+    ownerBu = (
+      await prisma.businessUser.create({
+        data: {
+          businessId,
+          userId: ownerUserId,
+          role: Role.owner,
+          hourlyRate: 40,
+        },
+      })
+    ).id;
+    customerId = (
+      await prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Rate Client',
+          phone: `+1666${String(stamp).slice(-7)}`,
+        },
+      })
+    ).id;
+    owner = {
+      sub: ownerUserId,
+      businessId,
+      role: Role.owner,
+      capabilities: [],
+    };
+    today = todayIn('UTC');
+    as();
+    ctx = new ProjectsContextService(
+      prisma,
+      tenant,
+      cls as unknown as ClsService,
+      new AuditService(tenant, cls as unknown as ClsService),
+      new NotificationsService(tenant),
+    );
+    const perms = new ProjectsPermissionsService(prisma, ctx);
+    const loader = new ProjectsLoaderService(prisma, ctx, perms);
+    const hooks = new ProjectHooksService(
+      prisma,
+      ctx,
+      reviews as unknown as ReviewRequestsService,
+    );
+    projects = new ProjectsService(
+      prisma,
+      ctx,
+      loader,
+      perms,
+      hooks,
+      ai as unknown as AiInfraService,
+    );
+    tasks = new ProjectTasksService(prisma, ctx, loader, perms);
+    time = new ProjectTimeService(prisma, ctx, loader, perms);
+    settings = new ProjectSettingsService(prisma, ctx, perms);
+    reports = new ProjectReportsService(prisma, ctx, loader, perms);
+  });
+
+  afterAll(async () => {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      for (const t of [
+        'project_activities',
+        'project_comments',
+        'project_timers',
+        'project_settings',
+        'project_role_assignments',
+        'project_notify_prefs',
+        'project_templates',
+      ])
+        await tx.$executeRawUnsafe(
+          `DELETE FROM ${t} WHERE business_id = ?`,
+          businessId,
+        );
+      await tx.project.deleteMany({ where: { businessId } });
+      await tx.notification.deleteMany({ where: { businessId } });
+      await tx.order.deleteMany({ where: { businessId } });
+      await tx.customer.deleteMany({ where: { businessId } });
+      await tx.businessUser.deleteMany({ where: { businessId } });
+      await tx.user.deleteMany({ where: { id: ownerUserId } });
+      await tx.business.delete({ where: { id: businessId } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
+    await prisma.$disconnect();
+  });
+
+  it('snapshots the bill rate and computes a real margin (bill value minus labour cost)', async () => {
+    as();
+    await settings.setBillRate(owner, ownerBu, 100);
+    const p = await projects.create(owner, {
+      name: 'Margin',
+      status: 'Active',
+    });
+    const e1 = await time.add(owner, {
+      projectId: p.id,
+      date: today,
+      hours: 2,
+      billable: true,
+    });
+    const e2 = await time.add(owner, {
+      projectId: p.id,
+      date: today,
+      hours: 1,
+      billable: false,
+    });
+    for (const e of [e1, e2]) {
+      await time.submit(owner, e.id);
+      await time.decide(owner, [e.id], 'approved');
+    }
+    const row = await prisma.projectTimeEntry.findUniqueOrThrow({
+      where: { id: e1.id },
+    });
+    expect(Number(row.billRateSnapshot)).toBe(100);
+    expect(Number(row.rateSnapshot)).toBe(40);
+    const r = await reports.run(owner, 'Project Profitability');
+    const line = r.table.find((x) => x[0] === 'Margin')!;
+    // value 2h x 100 = 200; cost 3h x 40 = 120; margin 80 (40%)
+    expect(line.slice(1, 5)).toEqual(['USD 200', 'USD 120', 'USD 80', '40%']);
+    const list = await time.list(owner);
+    expect(list.entries.find((x) => x.id === e1.id)!.value).toBe(200);
+  });
+
+  it('project hooks run real actions: team notice on create, review request on completion', async () => {
+    as();
+    const su = await prisma.user.create({
+      data: {
+        name: 'Sid Staff',
+        email: `proj-hook-${Date.now()}@example.com`,
+        passwordHash: 'x',
+      },
+    });
+    const sbu = await prisma.businessUser.create({
+      data: { businessId, userId: su.id, role: Role.staff },
+    });
+    const p = await projects.create(owner, {
+      name: 'Hooked',
+      customerId,
+      team: [sbu.id],
+      automationRefs: ['project.created', 'project.completed'],
+    });
+    const n = await prisma.notification.count({
+      where: { businessId, title: { startsWith: 'You’re on a new project' } },
+    });
+    expect(n).toBe(1);
+    await projects.complete(owner, p.id);
+    expect(reviews.create).toHaveBeenCalledWith(businessId, {
+      customerId,
+      source: 'project',
+      sourceId: p.id,
+    });
+    const act = await prisma.projectActivity.findFirst({
+      where: {
+        projectId: p.id,
+        event: 'automation.ran',
+        text: { contains: 'review request' },
+      },
+    });
+    expect(act).not.toBeNull();
+  });
+
+  it('links returns this customer quotations, invoices and payments since the project started', async () => {
+    as();
+    const p = await projects.create(owner, {
+      name: 'Linked',
+      customerId,
+      startDate: addDays(today, -5),
+    });
+    const o = await prisma.order.create({
+      data: {
+        businessId,
+        orderNo: 90001,
+        customerId,
+        status: 'completed',
+        total: 300,
+      },
+    });
+    await prisma.payment.create({
+      data: { orderId: o.id, method: 'cash', amount: 120 },
+    });
+    await prisma.order.create({
+      data: {
+        businessId,
+        orderNo: 90002,
+        customerId,
+        isQuotation: true,
+        quotationStatus: 'sent',
+        total: 900,
+      },
+    });
+    const l = await projects.links(owner, p.id);
+    expect(l.invoices).toEqual({
+      count: 1,
+      latestNo: 90001,
+      invoiced: 300,
+      paid: 120,
+    });
+    expect(l.quotations!.count).toBe(1);
+    expect(l.quotations!.latest!.status).toBe('sent');
+    await prisma.payment.deleteMany({ where: { orderId: o.id } });
+  });
+
+  it('task custom fields keep only fields defined for tasks; WIP limit is configurable', async () => {
+    as();
+    const cfg = (await settings.get(owner)).config;
+    await settings.save(owner, {
+      ...cfg,
+      wipLimit: 1,
+      fields: [
+        {
+          name: 'QA reviewer',
+          type: 'Text',
+          applies: 'Task',
+          client: 'Internal only',
+        },
+      ],
+    });
+    const p = await projects.create(owner, { name: 'Fields' });
+    const t = await tasks.create(owner, {
+      projectId: p.id,
+      title: 'X',
+      customFields: { 'QA reviewer': 'Pat', Bogus: 'no' },
+    });
+    const row = await prisma.projectTask.findUniqueOrThrow({
+      where: { id: t.id },
+    });
+    expect(row.customFields).toEqual({ 'QA reviewer': 'Pat' });
+    const t2 = await tasks.create(owner, { projectId: p.id, title: 'Y' });
+    await tasks.setStatus(owner, t.id, 'In Progress');
+    const r = await tasks.setStatus(owner, t2.id, 'In Progress');
+    expect(r.warning).toMatch(/WIP limit \(1\)/);
+  });
+
+  it('the overview insight is labelled as rule-based when AI is unavailable', async () => {
+    as();
+    const o = await projects.overview(owner, 'This Month');
+    expect(o.insightSource).toBe('rules');
+    expect(o.kpis[6].value).toMatch(/^\$/);
   });
 });
 

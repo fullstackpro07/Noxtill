@@ -16,6 +16,7 @@ export function FilesView() {
   const [fq, setFq] = useState("");
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
+  const [upFolder, setUpFolder] = useState("Uploads");
   if (isLoading || files.isLoading) return <Loading />;
   if (error || !ws) return <ErrorBox error={error} />;
   if (files.error) return <ErrorBox error={files.error} />;
@@ -62,6 +63,16 @@ export function FilesView() {
             </select>
           )}
           {canManage && (
+            <>
+              <input list="pt-upload-folders" value={upFolder} onChange={(e) => setUpFolder(e.target.value)} aria-label="Upload into folder" placeholder="Folder" style={{ ...inputSt, width: "140px" }} />
+              <datalist id="pt-upload-folders">
+                {[...new Set(["Contracts", "Design", "Deliverables", "Invoices", "Uploads", ...list.map((x) => x.folder)])].map((x) => (
+                  <option key={x} value={x} />
+                ))}
+              </datalist>
+            </>
+          )}
+          {canManage && (
             <label style={{ display: "flex", alignItems: "center", gap: "7px", height: "40px", border: 0, background: "#12A150", borderRadius: "10px", padding: "0 14px", fontSize: "12.5px", fontWeight: 800, color: "#fff", cursor: uploadTo && !busy ? "pointer" : "not-allowed", opacity: uploadTo && !busy ? 1 : 0.6 }}>
               {busy ? "Uploading…" : "+ Upload"}
               <input
@@ -76,7 +87,7 @@ export function FilesView() {
                   let ok = 0;
                   for (const f of fl) {
                     try {
-                      await uploadProjectFile(f, { projectId: uploadTo });
+                      await uploadProjectFile(f, { projectId: uploadTo, folder: upFolder.trim() || "Uploads" });
                       ok++;
                     } catch (er) {
                       flash(`${f.name}: ${errorText(er)}`);

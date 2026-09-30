@@ -40,6 +40,8 @@ import {
   DependencyDto,
   IdsDto,
   InviteDto,
+  RateDto,
+  FileMetaDto,
   MembersDto,
   MilestoneDto,
   NotifyDto,
@@ -294,6 +296,15 @@ export class ProjectsController {
     return this.files.archive(user, id);
   }
 
+  @Post('files/:id/meta')
+  fileMeta(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: FileMetaDto,
+  ) {
+    return this.files.setMeta(user, id, dto);
+  }
+
   @Get('files/:id/download')
   download(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.files.downloadUrl(user, id);
@@ -527,6 +538,15 @@ export class ProjectsController {
     return this.settings.setRole(user, id, dto.role);
   }
 
+  @Put('settings/rates/:businessUserId')
+  setRate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('businessUserId') id: string,
+    @Body() dto: RateDto,
+  ) {
+    return this.settings.setBillRate(user, id, dto.rate ?? null);
+  }
+
   @Put('settings/notify')
   setNotify(@CurrentUser() user: AuthenticatedUser, @Body() dto: NotifyDto) {
     return this.settings.setNotify(user, dto.prefs);
@@ -570,6 +590,11 @@ export class ProjectsController {
   @Post(':id/favorite')
   favorite(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.projects.toggleFavorite(user, id);
+  }
+
+  @Get(':id/links')
+  links(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.projects.links(user, id);
   }
 
   @Get(':id/readiness')

@@ -237,6 +237,24 @@ export function TaskDrawer({ ws, id }: { ws: Workspace; id: string }) {
           </label>
         </div>
         <textarea value={desc} onChange={(e) => setDesc(e.target.value)} onBlur={() => desc !== (t.description ?? "") && void save({ description: desc })} rows={3} placeholder="Add a description." aria-label="Description" style={{ fontSize: "12.5px", color: "#344054", lineHeight: 1.6, border: "1px solid #F0F2F5", borderRadius: "9px", padding: "8px 10px", resize: "vertical" }} />
+        {ws.config.fields.filter((f) => f.applies === "Task").length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "10px" }}>
+            {ws.config.fields
+              .filter((f) => f.applies === "Task")
+              .map((f) => (
+                <label key={f.name} style={lbl}>
+                  {f.name}
+                  <input
+                    type={f.type === "Number" || f.type === "Currency" || f.type === "Percentage" ? "number" : f.type === "Date" ? "date" : f.type === "URL" ? "url" : "text"}
+                    defaultValue={String(t.customFields?.[f.name] ?? "")}
+                    key={`${t.id}-${f.name}-${String(t.customFields?.[f.name] ?? "")}`}
+                    onBlur={(e) => e.target.value !== String(t.customFields?.[f.name] ?? "") && void save({ customFields: { [f.name]: e.target.value } }, `${f.name} saved`)}
+                    style={sel}
+                  />
+                </label>
+              ))}
+          </div>
+        )}
         {!t.blocked && !blk && t.status !== "Done" && (
           <button type="button" onClick={() => setBlk({ type: "Internal", note: "" })} style={{ alignSelf: "flex-start", border: 0, background: "none", padding: 0, color: "#B42318", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
             ⚠ Flag a blocker
@@ -735,14 +753,14 @@ export function NewProjectWizard({ ws, templateId, type, editId }: { ws: Workspa
             )}
             {step === 6 && (
               <>
-                <div style={{ fontSize: "12px", color: "#475467" }}>Choose which events this project should hand to automations. The Automations engine has no project triggers yet, so these are saved as references and nothing fires today.</div>
+                <div style={{ fontSize: "12px", color: "#475467" }}>Choose what should happen automatically on this project. Each one runs inside Noxtill and is recorded in the project activity feed.</div>
                 {ws.config.hooks.map((a) => (
                   <label key={a.k} style={{ display: "flex", gap: "9px", alignItems: "center", fontSize: "12.5px", color: "#344054", border: "1px solid #F0F2F5", borderRadius: "10px", padding: "10px 12px" }}>
                     <input type="checkbox" checked={np.automationRefs.includes(a.k)} onChange={() => upd({ automationRefs: np.automationRefs.includes(a.k) ? np.automationRefs.filter((x) => x !== a.k) : [...np.automationRefs, a.k] })} />
                     <span style={{ flex: 1 }}>
                       <b>{a.k}</b> → {a.wf}
                     </span>
-                    <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#667085", background: "#F2F4F7", borderRadius: "5px", padding: "2px 6px" }}>Not connected</span>
+                    <span style={{ fontSize: "10.5px", fontWeight: 800, color: np.automationRefs.includes(a.k) ? "#067647" : "#667085", background: np.automationRefs.includes(a.k) ? "#ECFDF3" : "#F2F4F7", borderRadius: "5px", padding: "2px 6px" }}>{np.automationRefs.includes(a.k) ? "On" : "Off"}</span>
                   </label>
                 ))}
               </>

@@ -97,6 +97,9 @@ export const CAPABILITIES = {
   /// Business Brain: approve and run an action it prepared that messages customers (an offer or a
   /// follow-up). Credit reminders and reorder drafts need the credit / purchases capability instead.
   BRAIN_APPROVE: 'brain.approve',
+  /// Helpdesk: open the Helpdesk module at all. Every system role has it; a custom role without it
+  /// gets the "no access to Helpdesk" screen. What a person can do inside is the Helpdesk matrix.
+  HELPDESK_ACCESS: 'helpdesk.access',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -143,6 +146,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.COST_VIEW,
   CAPABILITIES.INBOX_MANAGE,
   CAPABILITIES.BRAIN_APPROVE,
+  CAPABILITIES.HELPDESK_ACCESS,
 ];
 
 /**
@@ -150,11 +154,11 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
  * per the real risk this ticket's own research flagged: a future route gated with a new
  * capability that forgets to add it to owner's set would silently lock the owner out, unlike
  * today's `RolesGuard` where every gate already spells out `Role.owner` explicitly. Manager's
- * set is exactly the historical "owner+manager" gates; staff's is empty, matching the fact that
- * `Role.staff` was never named in any `@Roles()` call before this ticket.
+ * set is exactly the historical "owner+manager" gates; staff's holds only module access
+ * (Helpdesk), matching the fact that `Role.staff` was never named in any `@Roles()` call.
  */
 export const SYSTEM_ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   [Role.owner]: ALL_CAPABILITIES,
   [Role.manager]: OWNER_AND_MANAGER_CAPABILITIES,
-  [Role.staff]: [],
+  [Role.staff]: [CAPABILITIES.HELPDESK_ACCESS],
 };

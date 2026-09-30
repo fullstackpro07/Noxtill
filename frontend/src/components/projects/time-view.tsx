@@ -186,7 +186,7 @@ export function TimeView() {
                   <td style={{ padding: "10px 8px", color: "#475467", whiteSpace: "nowrap" }}>{fmt(e.date)}</td>
                   <td style={{ padding: "10px 8px", fontWeight: 700, color: "#101828" }}>{hm(e.minutes)}</td>
                   <td style={{ padding: "10px 8px", color: "#475467" }}>{e.billable ? "Billable" : "Non-billable"}</td>
-                  <td style={{ padding: "10px 8px", color: "#475467" }}>{!e.billable ? "—" : !T.canSeeRates ? "Hidden" : e.rate == null ? "No rate in Staff" : `${money(e.rate, ws.currency)}/h`}</td>
+                  <td style={{ padding: "10px 8px", color: "#475467" }}>{!e.billable ? "—" : !T.canSeeRates ? "Hidden" : e.rate == null ? "No bill rate set" : `${money(e.rate, ws.currency)}/h`}</td>
                   <td style={{ padding: "10px 8px", color: "#101828", fontWeight: 600 }}>{e.value == null ? "—" : money(e.value, ws.currency)}</td>
                   <td style={{ padding: "10px 8px" }}>
                     <span style={{ fontSize: "11px", fontWeight: 700, color: s.fg, background: s.bg, borderRadius: "6px", padding: "3px 7px" }}>{TIME_ST[e.status].label}</span>
@@ -241,8 +241,8 @@ export function TimeView() {
         {!rows.length && <div style={{ padding: "36px", textAlign: "center", fontSize: "12.5px", color: "#667085" }}>No project time has been logged for this view.</div>}
       </div>
       <div style={{ fontSize: "11.5px", color: "#667085" }}>
-        Project delivery time only. Attendance, shifts and payroll timesheets stay in Staff and are never changed from here. Rates are each person’s Staff hourly rate, snapshotted when an entry is created.
-        {T.kpis.ratesMissing > 0 ? ` ${T.kpis.ratesMissing} billable entr${T.kpis.ratesMissing > 1 ? "ies have" : "y has"} no rate because no hourly rate is set in Staff.` : ""}
+        Project delivery time only. Attendance, shifts and payroll timesheets stay in Staff and are never changed from here. Billable value uses each person’s project bill rate (Settings → Permissions), snapshotted when the entry is created; labour cost uses their Staff hourly wage.
+        {T.kpis.ratesMissing > 0 ? ` ${T.kpis.ratesMissing} billable entr${T.kpis.ratesMissing > 1 ? "ies have" : "y has"} no value because no bill rate is set for that person.` : ""}
       </div>
     </div>
   );

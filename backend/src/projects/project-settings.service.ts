@@ -57,10 +57,16 @@ export class ProjectSettingsService {
       where: { businessId: this.ctx.businessId() },
     });
     const roleMap = new Map(roles.map((r) => [r.businessUserId, r.role]));
+    const billMap = new Map(
+      roles
+        .filter((r) => r.billRate != null)
+        .map((r) => [r.businessUserId, Number(r.billRate)]),
+    );
     const prefs = await this.ctx.notifyPrefs(actor.sub);
     return {
       config: cfg,
       canManage: acc.can['Manage settings'],
+      canManageBudgets: acc.can['Manage budgets'],
       numberPreview: formatProjectNumber(
         cfg,
         cfg.nextNo,
@@ -81,6 +87,8 @@ export class ProjectSettingsService {
             : (roleMap.get(p.id) ??
               (p.role === Role.manager ? 'Project Manager' : 'Staff')),
         locked: p.role === Role.owner,
+        costRate: p.hourlyRate,
+        billRate: billMap.get(p.id) ?? null,
       })),
       notify: prefs,
     };
@@ -106,6 +114,9 @@ export class ProjectSettingsService {
       throw bad('Unknown default priority.');
     if (!['Private', 'Team', 'Organization'].includes(cfg.defVis))
       throw bad('Unknown visibility.');
+    cfg.wipLimit = Math.round(Number(cfg.wipLimit));
+    if (!(cfg.wipLimit >= 1 && cfg.wipLimit <= 50))
+      throw bad('WIP limit must be between 1 and 50.');
     if (!(cfg.archiveDays in ARCHIVE_DAYS))
       throw bad('Unknown archive period.');
     if (!(cfg.inviteExp in INVITE_DAYS)) throw bad('Unknown invite expiry.');
@@ -222,6 +233,51 @@ export class ProjectSettingsService {
       businessUserId,
       undefined,
       { role },
+    );
+    return { ok: true };
+  }
+
+  /** Project bill rate per person — what their billable project hours are charged at. */
+  async setBillRate(
+    actor: AuthenticatedUser,
+    businessUserId: string,
+    rate: number | null,
+  ) {
+    await this.perms.assert(actor, 'Manage budgets');
+    if (rate != null && (!Number.isFinite(rate) || rate < 0 || rate > 100000))
+      throw bad('Enter a bill rate between 0 and 100,000 per hour.');
+    const bu = await this.prisma.businessUser.findFirst({
+      where: { id: businessUserId, businessId: this.ctx.businessId() },
+    });
+    if (!bu) throw bad('That person is not on this business’s staff.');
+    const role =
+      bu.role === Role.owner
+        ? 'Owner'
+        : bu.role === Role.manager
+          ? 'Project Manager'
+          : 'Staff';
+    const billRate = rate == null ? null : new Prisma.Decimal(rate);
+    await this.ctx.db.projectRoleAssignment.upsert({
+      where: {
+        businessId_businessUserId: {
+          businessId: this.ctx.businessId(),
+          businessUserId,
+        },
+      },
+      update: { billRate },
+      create: {
+        businessId: this.ctx.businessId(),
+        businessUserId,
+        role,
+        billRate,
+      },
+    });
+    await this.ctx.auditLog(
+      'project_rate.set',
+      'BusinessUser',
+      businessUserId,
+      undefined,
+      { billRate: rate },
     );
     return { ok: true };
   }

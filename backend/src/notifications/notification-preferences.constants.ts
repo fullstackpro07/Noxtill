@@ -19,6 +19,8 @@ export const NOTIFICATION_EVENTS = [
   'brain_watch_triggered',
   // projects/projects-context.service.ts notifyPerson() (assignments, mentions, approvals, overdue, ...)
   'project_update',
+  // helpdesk/helpdesk-context.service.ts notify() (assignment, customer reply, SLA risk/breach, escalation, CSAT)
+  'helpdesk_update',
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
@@ -34,6 +36,7 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   inbox_reassigned: 'Inbox: a conversation was handed to or from you',
   brain_watch_triggered: 'Business Brain: something you are watching moved',
   project_update: 'Projects & Tasks: assignments, mentions, approvals and deadlines',
+  helpdesk_update: 'Helpdesk: new tickets, assignments, customer replies, SLA and escalations',
 };
 
 export type NotificationPriority = 'low' | 'normal' | 'high';
@@ -50,6 +53,7 @@ export const NOTIFICATION_EVENT_PRIORITY: Record<NotificationEvent, Notification
   inbox_reassigned: 'normal',
   brain_watch_triggered: 'high',
   project_update: 'normal',
+  helpdesk_update: 'high',
 };
 
 export function isNotificationEvent(value: string): value is NotificationEvent {

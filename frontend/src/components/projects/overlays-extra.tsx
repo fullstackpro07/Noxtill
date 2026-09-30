@@ -302,10 +302,12 @@ export function TemplateBuilderDrawer({ ws }: { ws: Workspace }) {
           {ws.config.hooks.map((h) => (
             <label key={h.k} style={{ display: "flex", gap: "9px", alignItems: "center", fontSize: "12.5px", color: "#344054", border: "1px solid #F0F2F5", borderRadius: "10px", padding: "10px 12px" }}>
               <input type="checkbox" checked={tf.hooks.includes(h.k)} onChange={() => set({ hooks: tf.hooks.includes(h.k) ? tf.hooks.filter((x) => x !== h.k) : [...tf.hooks, h.k] })} />
-              <b>{h.k}</b>
+              <span>
+                <b>{h.k}</b> → {h.wf}
+              </span>
             </label>
           ))}
-          <div style={{ fontSize: "11.5px", color: "#667085" }}>References only — the Automations engine has no project triggers yet, so nothing fires from these.</div>
+          <div style={{ fontSize: "11.5px", color: "#667085" }}>Projects created from this template switch these automations on. Each runs inside Noxtill and is logged in the project’s activity.</div>
         </>
       )}
       {step === 9 && (

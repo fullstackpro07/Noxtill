@@ -567,11 +567,11 @@ model Business {
   /// order, no custom lines" — `composeAndSend` falls back to that exact default.
   nightlyCloseConfig Json   @default("{}") @map("nightly_close_config")
 
-  taxLabel String  @default("Tax") @map("tax_label")
-  taxRate  Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxLabel     String  @default("Tax") @map("tax_label")
+  taxRate      Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   /// Day of the month after a tax period ends that the owner files by (1-28). Noxtill only
   /// reminds — it does not know or verify any tax authority's real deadline.
-  taxFilingDay Int @default(15) @map("tax_filing_day")
+  taxFilingDay Int     @default(15) @map("tax_filing_day")
 
   /// Messages & Channels, configurable (UPD-BE-118): ordered `MessageChannel[]` overriding the
   /// hardcoded whatsapp→sms→email fallback in `channel-resolution.util.ts`. `[]` (every
@@ -1464,24 +1464,24 @@ model Product {
 }
 
 model Order {
-  id          String      @id @default(uuid())
-  businessId  String      @map("business_id")
-  business    Business    @relation(fields: [businessId], references: [id])
-  orderNo     Int         @map("order_no")
-  customerId  String?     @map("customer_id")
-  customer    Customer?   @relation(fields: [customerId], references: [id])
-  orderType   OrderType   @default(counter) @map("order_type")
-  tableNo     String?     @map("table_no")
-  status      OrderStatus @default(pending)
-  subtotal    Decimal     @default(0) @db.Decimal(12, 2)
-  tax         Decimal     @default(0) @db.Decimal(12, 2)
-  discount    Decimal     @default(0) @db.Decimal(12, 2)
-  total       Decimal     @default(0) @db.Decimal(12, 2)
-  cogs        Decimal     @default(0) @db.Decimal(12, 2)
-  isQuotation Boolean     @default(false) @map("is_quotation")
+  id           String      @id @default(uuid())
+  businessId   String      @map("business_id")
+  business     Business    @relation(fields: [businessId], references: [id])
+  orderNo      Int         @map("order_no")
+  customerId   String?     @map("customer_id")
+  customer     Customer?   @relation(fields: [customerId], references: [id])
+  orderType    OrderType   @default(counter) @map("order_type")
+  tableNo      String?     @map("table_no")
+  status       OrderStatus @default(pending)
+  subtotal     Decimal     @default(0) @db.Decimal(12, 2)
+  tax          Decimal     @default(0) @db.Decimal(12, 2)
+  discount     Decimal     @default(0) @db.Decimal(12, 2)
+  total        Decimal     @default(0) @db.Decimal(12, 2)
+  cogs         Decimal     @default(0) @db.Decimal(12, 2)
+  isQuotation  Boolean     @default(false) @map("is_quotation")
   /// True when prices on this order include tax: `tax` is the portion inside `total`, so
   /// `total = subtotal − discount` rather than `subtotal − discount + tax`.
-  taxInclusive Boolean    @default(false) @map("tax_inclusive")
+  taxInclusive Boolean     @default(false) @map("tax_inclusive")
 
   /// Staff member who rang up the sale, if any — drives commission attribution (BE-058).
   staffUserId String?       @map("staff_user_id")
@@ -1525,11 +1525,11 @@ model Order {
 
   /// Accounting Sync (UPD-BE-072): set once this order has been pushed as a real invoice to the
   /// business's connected accounting provider — the guard against re-pushing the same order.
-  accountingSyncedAt   DateTime? @map("accounting_synced_at")
-  accountingExternalId String?   @map("accounting_external_id")
+  accountingSyncedAt        DateTime? @map("accounting_synced_at")
+  accountingExternalId      String?   @map("accounting_external_id")
   /// Integrations redesign - why the last accounting push for this order failed (NULL once it
   /// posts) and when it was last attempted, so a failed post is visible per record.
-  accountingSyncError  String?   @map("accounting_sync_error") @db.VarChar(500)
+  accountingSyncError       String?   @map("accounting_sync_error") @db.VarChar(500)
   accountingSyncAttemptedAt DateTime? @map("accounting_sync_attempted_at")
 
   items         OrderItem[]
@@ -1885,28 +1885,28 @@ model CreditReminderLog {
 // ─────────────────────────────────────────────────────────────────────────
 
 model Appointment {
-  id              String            @id @default(uuid())
-  businessId      String            @map("business_id")
-  business        Business          @relation(fields: [businessId], references: [id])
-  serviceId       String            @map("service_id")
-  service         Product           @relation(fields: [serviceId], references: [id])
-  staffUserId     String?           @map("staff_user_id")
-  staffUser       BusinessUser?     @relation("StaffAppointments", fields: [staffUserId], references: [id])
-  customerId      String            @map("customer_id")
-  customer        Customer          @relation(fields: [customerId], references: [id])
-  startsAt        DateTime          @map("starts_at")
-  endsAt          DateTime          @map("ends_at")
-  status          AppointmentStatus @default(booked)
-  depositPaid     Decimal           @default(0) @map("deposit_paid") @db.Decimal(12, 2)
-  source          AppointmentSource @default(link)
-  rescheduleToken String?           @unique @map("reschedule_token")
+  id               String            @id @default(uuid())
+  businessId       String            @map("business_id")
+  business         Business          @relation(fields: [businessId], references: [id])
+  serviceId        String            @map("service_id")
+  service          Product           @relation(fields: [serviceId], references: [id])
+  staffUserId      String?           @map("staff_user_id")
+  staffUser        BusinessUser?     @relation("StaffAppointments", fields: [staffUserId], references: [id])
+  customerId       String            @map("customer_id")
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  startsAt         DateTime          @map("starts_at")
+  endsAt           DateTime          @map("ends_at")
+  status           AppointmentStatus @default(booked)
+  depositPaid      Decimal           @default(0) @map("deposit_paid") @db.Decimal(12, 2)
+  source           AppointmentSource @default(link)
+  rescheduleToken  String?           @unique @map("reschedule_token")
   /// A short, human-readable booking number, unique within the business (BK-1042). NULL only for rows
   /// written by a path that predates numbering; every creation path now allocates one.
-  bookingNo       Int?              @map("booking_no")
+  bookingNo        Int?              @map("booking_no")
   /// Integrations redesign - the Zoom meeting link created for this booking (NULL when Zoom isn't
   /// connected) and the calendar event ids created in each connected calendar, keyed by provider.
-  meetingUrl      String?           @map("meeting_url") @db.VarChar(500)
-  calendarEventIds Json?            @map("calendar_event_ids")
+  meetingUrl       String?           @map("meeting_url") @db.VarChar(500)
+  calendarEventIds Json?             @map("calendar_event_ids")
 
   deposits   Deposit[]
   phoneCalls PhoneCall[]
@@ -2338,57 +2338,57 @@ model PhoneNumber {
 /// recording, not Twilio's own URL — kept for as long as `RECORDING_RETENTION_DAYS`, then purged
 /// by the daily retention job alongside the row itself.
 model PhoneCall {
-  id                  String           @id @default(uuid())
-  businessId          String           @map("business_id")
-  business            Business         @relation(fields: [businessId], references: [id])
-  callSid             String           @unique @map("call_sid")
-  fromNumber          String           @map("from_number")
-  status              PhoneCallStatus  @default(in_progress)
-  outcome             PhoneCallOutcome @default(none)
+  id                    String           @id @default(uuid())
+  businessId            String           @map("business_id")
+  business              Business         @relation(fields: [businessId], references: [id])
+  callSid               String           @unique @map("call_sid")
+  fromNumber            String           @map("from_number")
+  status                PhoneCallStatus  @default(in_progress)
+  outcome               PhoneCallOutcome @default(none)
   /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the
   /// AI matched this call to (Call Queue depth fix, UPD-BE-129).
-  customIntentName    String?          @map("custom_intent_name")
-  transcript          Json             @default("[]")
-  recordingKey        String?          @map("recording_key")
-  appointmentId       String?          @map("appointment_id")
-  appointment         Appointment?     @relation(fields: [appointmentId], references: [id])
-  startedAt           DateTime         @default(now()) @map("started_at")
-  endedAt             DateTime?        @map("ended_at")
+  customIntentName      String?          @map("custom_intent_name")
+  transcript            Json             @default("[]")
+  recordingKey          String?          @map("recording_key")
+  appointmentId         String?          @map("appointment_id")
+  appointment           Appointment?     @relation(fields: [appointmentId], references: [id])
+  startedAt             DateTime         @default(now()) @map("started_at")
+  endedAt               DateTime?        @map("ended_at")
   /// Call Queue fix (UPD-BE-129) — set when staff mark this "message"/"custom"/missed call as
   /// handled (manually called back, or otherwise resolved). NULL means it's still sitting in the
   /// real operational queue of calls needing human follow-up.
-  resolvedAt          DateTime?        @map("resolved_at")
+  resolvedAt            DateTime?        @map("resolved_at")
   /// Set when staff explicitly log that a callback was promised, without yet marking it resolved —
   /// a distinct state from `resolvedAt` (a queue item can be "callback offered" but not yet done).
-  callbackRequestedAt DateTime?        @map("callback_requested_at")
+  callbackRequestedAt   DateTime?        @map("callback_requested_at")
   /// Live Calls listen/take-over fix — set the moment a staff member's own phone is bridged live
   /// into this call via a real Twilio conference redirect (Twilio's "modify a live call" REST
   /// action), replacing the earlier disclosed 15s-poll-only gap. Loose reference (no relation), same
   /// convention as `AuditLog.actorUserId`.
-  joinedAt            DateTime?        @map("joined_at")
-  joinedByUserId      String?          @map("joined_by_user_id")
+  joinedAt              DateTime?        @map("joined_at")
+  joinedByUserId        String?          @map("joined_by_user_id")
   /// AI Phone workspace — the staff member who owns the follow-up for this call (a `BusinessUser.id`,
   /// loose reference like `joinedByUserId`). NULL means nobody has been asked to call back yet.
-  assignedToUserId    String?          @map("assigned_to_user_id")
+  assignedToUserId      String?          @map("assigned_to_user_id")
   /// AI Phone workspace — a summary generated ON DEMAND from `transcript` alone (never a live
   /// guess) and cached here. NULL until someone asks for one.
-  summary             String?          @db.Text
-  summaryGeneratedAt  DateTime?        @map("summary_generated_at")
+  summary               String?          @db.Text
+  summaryGeneratedAt    DateTime?        @map("summary_generated_at")
   /// AI Phone, full — only what the caller actually said during the call (the AI extracts a name or an
   /// email address when one is clearly given, never guesses). NULL means the caller never offered it.
-  callerName          String?          @map("caller_name")
-  callerEmail         String?          @map("caller_email")
+  callerName            String?          @map("caller_name")
+  callerEmail           String?          @map("caller_email")
   /// The custom routing rule (VoiceRoutingRule) that decided this call, kept by name too so the call
   /// still explains itself after the rule is edited or deleted. NULL when no custom rule fired.
-  routedRuleId        String?          @map("routed_rule_id")
-  routedRuleName      String?          @map("routed_rule_name")
+  routedRuleId          String?          @map("routed_rule_id")
+  routedRuleName        String?          @map("routed_rule_name")
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
-  providerCost          Decimal?  @map("provider_cost") @db.Decimal(10, 4)
-  providerCostUnit      String?   @map("provider_cost_unit")
-  providerCostCheckedAt DateTime? @map("provider_cost_checked_at")
+  providerCost          Decimal?         @map("provider_cost") @db.Decimal(10, 4)
+  providerCostUnit      String?          @map("provider_cost_unit")
+  providerCostCheckedAt DateTime?        @map("provider_cost_checked_at")
   /// Set when staff deleted the recording and transcript (the call log itself is kept).
-  recordingDeletedAt    DateTime? @map("recording_deleted_at")
+  recordingDeletedAt    DateTime?        @map("recording_deleted_at")
 
   notes PhoneCallNote[]
 
@@ -2670,18 +2670,18 @@ enum ContentItemStatus {
 /// flat (no per-platform publish integration): saving/scheduling here is the plan of record a
 /// person works from, not an auto-publish pipeline this schema doesn't otherwise have.
 model ContentItem {
-  id         String             @id @default(uuid())
-  businessId String             @map("business_id")
-  business   Business           @relation(fields: [businessId], references: [id])
-  title      String
-  type       ContentItemType
-  channel    ContentItemChannel
-  body       String             @db.Text
-  scheduledFor DateTime?        @map("scheduled_for")
-  status     ContentItemStatus  @default(draft)
-  ownerUserId String?           @map("owner_user_id")
-  ownerUser   BusinessUser?     @relation(fields: [ownerUserId], references: [id])
-  aiGenerated Boolean           @default(false) @map("ai_generated")
+  id           String             @id @default(uuid())
+  businessId   String             @map("business_id")
+  business     Business           @relation(fields: [businessId], references: [id])
+  title        String
+  type         ContentItemType
+  channel      ContentItemChannel
+  body         String             @db.Text
+  scheduledFor DateTime?          @map("scheduled_for")
+  status       ContentItemStatus  @default(draft)
+  ownerUserId  String?            @map("owner_user_id")
+  ownerUser    BusinessUser?      @relation(fields: [ownerUserId], references: [id])
+  aiGenerated  Boolean            @default(false) @map("ai_generated")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3338,23 +3338,23 @@ enum StaffAdvanceStatus {
 /// materialized, so that's where outstanding advances actually get netted and flipped to
 /// `deducted`, stamped with the month they were applied against.
 model StaffAdvance {
-  id              String             @id @default(uuid())
-  businessId      String             @map("business_id")
-  business        Business           @relation(fields: [businessId], references: [id])
-  staffUserId     String             @map("staff_user_id")
-  staffUser       BusinessUser       @relation(fields: [staffUserId], references: [id])
-  amount          Decimal            @db.Decimal(12, 2)
-  reason          String?
+  id               String             @id @default(uuid())
+  businessId       String             @map("business_id")
+  business         Business           @relation(fields: [businessId], references: [id])
+  staffUserId      String             @map("staff_user_id")
+  staffUser        BusinessUser       @relation(fields: [staffUserId], references: [id])
+  amount           Decimal            @db.Decimal(12, 2)
+  reason           String?
   /// Staff module v2 (UPD-BE-STAFF-05): a small closed-ish set from the UI (e.g. "Salary Advance",
   /// "Emergency", "Festival") — free text, not an enum, since the real business need is a label,
   /// not a fixed vocabulary tied to code elsewhere the way `Role`/`Capability` are.
-  category        String?
+  category         String?
   /// UPD-BE-STAFF-05: who recorded this advance — `User.id`, no Prisma relation (same reason
   /// `AuditLog.actorUserId` has none: `User` isn't tenant-scoped). Resolved to a name the same way
   /// `AuditService.list` already does, via one batched follow-up query.
-  recordedByUserId String?           @map("recorded_by_user_id")
-  status          StaffAdvanceStatus @default(outstanding)
-  deductedInMonth String?            @map("deducted_in_month")
+  recordedByUserId String?            @map("recorded_by_user_id")
+  status           StaffAdvanceStatus @default(outstanding)
+  deductedInMonth  String?            @map("deducted_in_month")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3945,35 +3945,35 @@ model DigitizerAlias {
 // ─────────────────────────────────────────────────────────────────────────
 
 model Rider {
-  id             String            @id @default(uuid())
-  businessId     String            @map("business_id")
-  business       Business          @relation(fields: [businessId], references: [id])
-  name           String
-  phone          String
-  status         RiderStatus       @default(active)
+  id                   String            @id @default(uuid())
+  businessId           String            @map("business_id")
+  business             Business          @relation(fields: [businessId], references: [id])
+  name                 String
+  phone                String
+  status               RiderStatus       @default(active)
   /// Riders screen depth fix (UPD-FE-127) — real fields the plan doc's spec named but the original
   /// model never had. `zoneIds` is a lightweight tag-style reference (like `VoiceSettings.customIntents`),
   /// not a join table — zone assignment here is informational grouping, not a query-heavy relation.
-  vehicleType    RiderVehicleType? @map("vehicle_type")
-  commissionRate Decimal?          @map("commission_rate") @db.Decimal(5, 2)
-  zoneIds        Json              @default("[]") @map("zone_ids")
+  vehicleType          RiderVehicleType? @map("vehicle_type")
+  commissionRate       Decimal?          @map("commission_rate") @db.Decimal(5, 2)
+  zoneIds              Json              @default("[]") @map("zone_ids")
   /// Last GPS fix pushed by the rider's own device (UPD-BE-065 live tracking) — null until their first check-in.
-  lastLat        Decimal?          @map("last_lat") @db.Decimal(9, 6)
-  lastLng        Decimal?          @map("last_lng") @db.Decimal(9, 6)
-  lastLocationAt DateTime?         @map("last_location_at")
+  lastLat              Decimal?          @map("last_lat") @db.Decimal(9, 6)
+  lastLng              Decimal?          @map("last_lng") @db.Decimal(9, 6)
+  lastLocationAt       DateTime?         @map("last_location_at")
   /// Delivery module redesign — cash-on-delivery this rider has collected is "held" (real, from
   /// `Payment.method = cash` on their delivered deliveries) until they hand it in at the branch;
   /// this is the last time that happened. Null means never reconciled — every cash-method payment
   /// on a delivered delivery still counts as held.
-  cashHandedInAt DateTime?         @map("cash_handed_in_at")
+  cashHandedInAt       DateTime?         @map("cash_handed_in_at")
   /// Delivery module redesign — real, rider-or-staff-toggled break state (the design's "On break"
   /// status has no other real signal to derive from: `status` only distinguishes active/inactive
   /// shift, not a mid-shift pause). Null means not on break; set the moment `setBreak(true)` is
   /// called, cleared by `setBreak(false)` or when the rider goes off shift.
-  onBreakSince   DateTime?         @map("on_break_since")
+  onBreakSince         DateTime?         @map("on_break_since")
   /// Delivery module — the rider's own explicit consent to have their live position shown to a
   /// customer on that customer's tracking link. Off by default; never inferred.
-  shareLocationConsent Boolean     @default(false) @map("share_location_consent")
+  shareLocationConsent Boolean           @default(false) @map("share_location_consent")
 
   deliveries Delivery[]
   routes     Route[]
@@ -4002,69 +4002,69 @@ enum RiderVehicleType {
 /// delivery's stop position within its `Route`, when it has one — a real ordering column (not
 /// implicit array order), same MySQL-row-ordering-safety reasoning as `VariantOption.sortOrder`.
 model Delivery {
-  id                String         @id @default(uuid())
-  businessId        String         @map("business_id")
-  business          Business       @relation(fields: [businessId], references: [id])
-  orderId           String         @unique @map("order_id")
-  order             Order          @relation(fields: [orderId], references: [id])
-  riderId           String?        @map("rider_id")
-  rider             Rider?         @relation(fields: [riderId], references: [id])
-  status            DeliveryStatus @default(unassigned)
-  addressLine       String         @map("address_line") @db.Text
-  lat               Decimal?       @db.Decimal(9, 6)
-  lng               Decimal?       @db.Decimal(9, 6)
-  routeId           String?        @map("route_id")
-  route             Route?         @relation(fields: [routeId], references: [id])
-  routeSequence     Int?           @map("route_sequence")
+  id                    String         @id @default(uuid())
+  businessId            String         @map("business_id")
+  business              Business       @relation(fields: [businessId], references: [id])
+  orderId               String         @unique @map("order_id")
+  order                 Order          @relation(fields: [orderId], references: [id])
+  riderId               String?        @map("rider_id")
+  rider                 Rider?         @relation(fields: [riderId], references: [id])
+  status                DeliveryStatus @default(unassigned)
+  addressLine           String         @map("address_line") @db.Text
+  lat                   Decimal?       @db.Decimal(9, 6)
+  lng                   Decimal?       @db.Decimal(9, 6)
+  routeId               String?        @map("route_id")
+  route                 Route?         @relation(fields: [routeId], references: [id])
+  routeSequence         Int?           @map("route_sequence")
   /// Per-zone SLA depth fix — real link, set manually (staff picks a zone; this app's zones carry
   /// no geofence to auto-match an address to). Drives which SLA `computePromisedAt()` uses: this
   /// zone's own `slaMinutes` when set, else the business's `DeliverySettings.defaultSlaMinutes`.
-  zoneId            String?        @map("zone_id")
-  zone              DeliveryZone?  @relation(fields: [zoneId], references: [id])
-  proofSignatureKey String?        @map("proof_signature_key")
-  proofPhotoKey     String?        @map("proof_photo_key")
-  proofLat          Decimal?       @map("proof_lat") @db.Decimal(9, 6)
-  proofLng          Decimal?       @map("proof_lng") @db.Decimal(9, 6)
-  proofAt           DateTime?      @map("proof_at")
-  assignedAt        DateTime?      @map("assigned_at")
+  zoneId                String?        @map("zone_id")
+  zone                  DeliveryZone?  @relation(fields: [zoneId], references: [id])
+  proofSignatureKey     String?        @map("proof_signature_key")
+  proofPhotoKey         String?        @map("proof_photo_key")
+  proofLat              Decimal?       @map("proof_lat") @db.Decimal(9, 6)
+  proofLng              Decimal?       @map("proof_lng") @db.Decimal(9, 6)
+  proofAt               DateTime?      @map("proof_at")
+  assignedAt            DateTime?      @map("assigned_at")
   /// Delivery module redesign — real per-stage timestamps, set the moment `updateStatus()` moves a
   /// delivery into that stage. Nullable and left unset for every delivery that never reached that
   /// stage (or was created before this column existed), so a real average is computed only from
   /// deliveries that actually recorded it — never backfilled or estimated.
-  pickedUpAt        DateTime?      @map("picked_up_at")
-  enRouteAt         DateTime?      @map("en_route_at")
-  deliveredAt       DateTime?      @map("delivered_at")
+  pickedUpAt            DateTime?      @map("picked_up_at")
+  enRouteAt             DateTime?      @map("en_route_at")
+  deliveredAt           DateTime?      @map("delivered_at")
   /// Delivery module — real money/cost snapshot taken when the delivery is created or its zone
   /// changes: `deliveryFee` is what the zone's own charge rule quotes for this order,
   /// `deliveryCost` is the owner's configured cost model (fuel per km, rider pay per delivery)
   /// applied to the real distance from the dispatch hub. Null whenever an input is genuinely
   /// missing (no zone, no coordinates, no hub, no cost model) — never estimated.
-  deliveryFee       Decimal?       @map("delivery_fee") @db.Decimal(12, 2)
-  deliveryCost      Decimal?       @map("delivery_cost") @db.Decimal(12, 2)
-  distanceKm        Decimal?       @map("distance_km") @db.Decimal(8, 2)
+  deliveryFee           Decimal?       @map("delivery_fee") @db.Decimal(12, 2)
+  deliveryCost          Decimal?       @map("delivery_cost") @db.Decimal(12, 2)
+  distanceKm            Decimal?       @map("distance_km") @db.Decimal(8, 2)
   /// Free-text instruction for the rider (gate code, "ring twice") entered when dispatching.
-  deliveryNote      String?        @map("delivery_note") @db.Text
+  deliveryNote          String?        @map("delivery_note") @db.Text
   /// Unguessable token for the public customer tracking link.
-  trackingToken     String?        @unique @map("tracking_token")
+  trackingToken         String?        @unique @map("tracking_token")
   /// The promise time last actually messaged to the customer, and when — the real "customer told".
-  notifiedPromisedAt DateTime?     @map("notified_promised_at")
-  customerNotifiedAt DateTime?     @map("customer_notified_at")
-  slipNotifiedAt    DateTime?      @map("slip_notified_at")
+  notifiedPromisedAt    DateTime?      @map("notified_promised_at")
+  customerNotifiedAt    DateTime?      @map("customer_notified_at")
+  slipNotifiedAt        DateTime?      @map("slip_notified_at")
   /// The Message row for the last notice sent — the Tracking screen reads its real delivery status.
-  notificationMessageId String?    @map("notification_message_id")
+  notificationMessageId String?        @map("notification_message_id")
   /// All Deliveries depth fix (real on-time-rate) — set the moment a rider is assigned, from the
   /// business's own `DeliverySettings.defaultSlaMinutes` at that moment. NULL for every delivery
   /// assigned before this fix existed — those are honestly excluded from on-time-rate rather than
   /// retroactively assigned a promise that was never actually made.
-  promisedAt        DateTime?      @map("promised_at")
+  promisedAt            DateTime?      @map("promised_at")
   /// All Deliveries depth fix (UPD-FE-055e) — only ever set when `status = failed`. Free text (the
   /// frontend offers a dropdown of common reasons + "Add custom"), not a closed enum, since a
   /// delivery-failure reason is inherently open-ended and store-specific.
-  failureReason     String?        @map("failure_reason") @db.Text
+  failureReason         String?        @map("failure_reason") @db.Text
   /// Riders screen depth fix (UPD-FE-127) — a real, staff-recorded 1-5 delivery-quality rating
   /// (never claimed to be customer-submitted — this app has no customer-facing rating surface for
   /// deliveries). Aggregated into `RidersService.performance()`'s `averageRating`.
-  qualityRating     Int?           @map("quality_rating")
+  qualityRating         Int?           @map("quality_rating")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4145,52 +4145,52 @@ enum DeliveryChargeType {
 /// charge-rule CRUD, not linked to individual deliveries) — widening that relationship is a
 /// separate, larger integration this fix doesn't take on.
 model DeliverySettings {
-  id                String   @id @default(uuid())
-  businessId        String   @unique @map("business_id")
-  business          Business @relation(fields: [businessId], references: [id])
-  defaultSlaMinutes Int      @default(45) @map("default_sla_minutes")
+  id                     String   @id @default(uuid())
+  businessId             String   @unique @map("business_id")
+  business               Business @relation(fields: [businessId], references: [id])
+  defaultSlaMinutes      Int      @default(45) @map("default_sla_minutes")
   /// Delivery module redesign — real, owner-configured buffer added on top of `defaultSlaMinutes`
   /// (or a zone's own override) when computing `Delivery.promisedAt`: the time told to the
   /// customer is deliberately a little later than the real target, so most deliveries beat it.
-  etaPaddingMinutes Int      @default(0) @map("eta_padding_minutes")
+  etaPaddingMinutes      Int      @default(0) @map("eta_padding_minutes")
   /// Real per-rider cash-on-delivery warning threshold. Null means no limit is set — every rider's
   /// held cash is shown as a plain figure with nothing flagged, never a fabricated default limit.
-  cashLimitAmount   Decimal? @map("cash_limit_amount") @db.Decimal(12, 2)
+  cashLimitAmount        Decimal? @map("cash_limit_amount") @db.Decimal(12, 2)
   /// Real, owner-configured active-stop count a rider can reach before the dispatch screens flag
   /// them as at capacity. A business-wide number (the design's own "Stops per rider before a
   /// warning" setting), not a per-rider field — every rider is compared against the same number.
-  warnAtStopCount   Int      @default(8) @map("warn_at_stop_count")
+  warnAtStopCount        Int      @default(8) @map("warn_at_stop_count")
   /// Real minutes since a rider's last GPS fix before their position is labelled stale rather than
   /// current, everywhere a rider's location is shown.
-  staleLocationMinutes Int   @default(10) @map("stale_location_minutes")
+  staleLocationMinutes   Int      @default(10) @map("stale_location_minutes")
   /// Dispatch hub (the branch deliveries leave from) — the anchor for real distance, fee and cost.
-  hubLat            Decimal? @map("hub_lat") @db.Decimal(9, 6)
-  hubLng            Decimal? @map("hub_lng") @db.Decimal(9, 6)
+  hubLat                 Decimal? @map("hub_lat") @db.Decimal(9, 6)
+  hubLng                 Decimal? @map("hub_lng") @db.Decimal(9, 6)
   /// Owner's cost model: fuel/vehicle cost per km (applied to the round trip) and a fixed rider
   /// pay per delivery. Both null means cost is not configured, and cost figures stay "Not tracked".
-  costPerKm         Decimal? @map("cost_per_km") @db.Decimal(10, 2)
-  riderPayPerDelivery Decimal? @map("rider_pay_per_delivery") @db.Decimal(10, 2)
+  costPerKm              Decimal? @map("cost_per_km") @db.Decimal(10, 2)
+  riderPayPerDelivery    Decimal? @map("rider_pay_per_delivery") @db.Decimal(10, 2)
   /// Real automation switches — every one is off until the owner turns it on, and each drives
   /// real behaviour in `DeliveryAutomationsService`.
-  autoEtaOnAssign   Boolean  @default(false) @map("auto_eta_on_assign")
-  autoEtaOnSlip     Boolean  @default(false) @map("auto_eta_on_slip")
-  slipThresholdMinutes Int   @default(10) @map("slip_threshold_minutes")
-  autoFlagStalePhone Boolean @default(false) @map("auto_flag_stale_phone")
-  autoWarnCashLimit Boolean  @default(false) @map("auto_warn_cash_limit")
-  autoTaskOnFailure Boolean  @default(false) @map("auto_task_on_failure")
-  sendProofToCustomer Boolean @default(false) @map("send_proof_to_customer")
-  shareLiveLocation Boolean  @default(false) @map("share_live_location")
+  autoEtaOnAssign        Boolean  @default(false) @map("auto_eta_on_assign")
+  autoEtaOnSlip          Boolean  @default(false) @map("auto_eta_on_slip")
+  slipThresholdMinutes   Int      @default(10) @map("slip_threshold_minutes")
+  autoFlagStalePhone     Boolean  @default(false) @map("auto_flag_stale_phone")
+  autoWarnCashLimit      Boolean  @default(false) @map("auto_warn_cash_limit")
+  autoTaskOnFailure      Boolean  @default(false) @map("auto_task_on_failure")
+  sendProofToCustomer    Boolean  @default(false) @map("send_proof_to_customer")
+  shareLiveLocation      Boolean  @default(false) @map("share_live_location")
   /// Zone rules enforced by the public ordering flow.
-  enforceZoneCoverage Boolean @default(false) @map("enforce_zone_coverage")
-  showFeeBeforeCheckout Boolean @default(false) @map("show_fee_before_checkout")
-  pausedZonesBlockOrders Boolean @default(false) @map("paused_zones_block_orders")
+  enforceZoneCoverage    Boolean  @default(false) @map("enforce_zone_coverage")
+  showFeeBeforeCheckout  Boolean  @default(false) @map("show_fee_before_checkout")
+  pausedZonesBlockOrders Boolean  @default(false) @map("paused_zones_block_orders")
   /// Whether a delivery created from the dashboard is handed to the least-busy active rider
   /// straight away (the behaviour that always existed, so it defaults on) or left for dispatch.
-  autoAssignNew     Boolean  @default(true) @map("auto_assign_new")
+  autoAssignNew          Boolean  @default(true) @map("auto_assign_new")
   /// The two rules behind the dispatch queue's priority chips — the owner's own numbers, not
   /// built-in guesses. `highValueAmount` null turns the high-value chip off.
-  urgentAfterMinutes Int     @default(15) @map("urgent_after_minutes")
-  highValueAmount   Decimal? @default(15000) @map("high_value_amount") @db.Decimal(12, 2)
+  urgentAfterMinutes     Int      @default(15) @map("urgent_after_minutes")
+  highValueAmount        Decimal? @default(15000) @map("high_value_amount") @db.Decimal(12, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4278,26 +4278,26 @@ model IntegrationSyncLog {
 /// resolution itself is unchanged (still automatic, most-recently-updated wins) — this only makes
 /// that real decision durable and visible after the fact.
 model EcommerceSyncConflict {
-  id         String              @id @default(uuid())
-  businessId String              @map("business_id")
-  business   Business            @relation(fields: [businessId], references: [id])
-  provider   IntegrationProvider
-  sku        String
-  winner     String
-  localQty   Int                 @map("local_qty")
-  remoteQty  Int                 @map("remote_qty")
+  id               String              @id @default(uuid())
+  businessId       String              @map("business_id")
+  business         Business            @relation(fields: [businessId], references: [id])
+  provider         IntegrationProvider
+  sku              String
+  winner           String
+  localQty         Int                 @map("local_qty")
+  remoteQty        Int                 @map("remote_qty")
   /// Integrations redesign - `pending` = both sides differ and nothing was applied (waiting for the
   /// owner), `resolved` = the owner chose, `auto` = resolved by the connection's source-of-truth
   /// setting (and every row written before this field existed).
-  status           String    @default("auto")
-  productId        String?   @map("product_id")
-  productName      String?   @map("product_name")
-  localUpdatedAt   DateTime? @map("local_updated_at")
-  remoteUpdatedAt  DateTime? @map("remote_updated_at")
+  status           String              @default("auto")
+  productId        String?             @map("product_id")
+  productName      String?             @map("product_name")
+  localUpdatedAt   DateTime?           @map("local_updated_at")
+  remoteUpdatedAt  DateTime?           @map("remote_updated_at")
   resolution       String?
-  resolvedQty      Int?      @map("resolved_qty")
-  resolvedAt       DateTime? @map("resolved_at")
-  resolvedByUserId String?   @map("resolved_by_user_id")
+  resolvedQty      Int?                @map("resolved_qty")
+  resolvedAt       DateTime?           @map("resolved_at")
+  resolvedByUserId String?             @map("resolved_by_user_id")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -5254,7 +5254,6 @@ model SettingPin {
   @@map("setting_pins")
 }
 
-
 // ---------------------------------------------------------------------------
 // Integrations redesign - usage counters, advisor dismissals, provider requests,
 // and the real records the new inbound connectors write.
@@ -5569,14 +5568,14 @@ model InboxSettings {
 /// A person's decision about one finding (`key` is the detector's stable key, e.g.
 /// `credit_overdue` or `stock_runout:<productId>`). status: watching | dismissed.
 model BrainFindingState {
-  id          String   @id @default(uuid())
-  businessId  String   @map("business_id")
-  key         String   @db.VarChar(191)
-  status      String   @db.VarChar(12)
-  reason      String?  @db.Text
-  title       String   @db.VarChar(255)
-  actorUserId String?  @map("actor_user_id")
-  actorName   String?  @map("actor_name") @db.VarChar(191)
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  key         String  @db.VarChar(191)
+  status      String  @db.VarChar(12)
+  reason      String? @db.Text
+  title       String  @db.VarChar(255)
+  actorUserId String? @map("actor_user_id")
+  actorName   String? @map("actor_name") @db.VarChar(191)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -5587,15 +5586,15 @@ model BrainFindingState {
 
 /// Append-only decision log (approved, dismissed, watched, restored, ran, cancelled).
 model BrainDecision {
-  id          String   @id @default(uuid())
-  businessId  String   @map("business_id")
-  findingKey  String?  @map("finding_key") @db.VarChar(191)
-  actionId    String?  @map("action_id")
-  title       String   @db.VarChar(255)
-  decision    String   @db.VarChar(20)
-  reason      String?  @db.Text
-  actorUserId String?  @map("actor_user_id")
-  actorName   String?  @map("actor_name") @db.VarChar(191)
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  findingKey  String? @map("finding_key") @db.VarChar(191)
+  actionId    String? @map("action_id")
+  title       String  @db.VarChar(255)
+  decision    String  @db.VarChar(20)
+  reason      String? @db.Text
+  actorUserId String? @map("actor_user_id")
+  actorName   String? @map("actor_name") @db.VarChar(191)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -5635,19 +5634,19 @@ model BrainAction {
 /// metric: product_stock | branch_margin_gap | customer_quiet_days | overdue_credit | revenue_week
 /// op: lt | gt | outside (threshold..threshold2). status: watching | triggered.
 model BrainWatch {
-  id           String    @id @default(uuid())
-  businessId   String    @map("business_id")
-  label        String    @db.VarChar(191)
-  metric       String    @db.VarChar(40)
-  subjectId    String?   @map("subject_id")
-  op           String    @db.VarChar(10)
-  threshold    Decimal   @db.Decimal(14, 2)
-  threshold2   Decimal?  @db.Decimal(14, 2)
-  status       String    @default("watching") @db.VarChar(12)
-  lastValue    Decimal?  @map("last_value") @db.Decimal(14, 2)
-  triggeredAt  DateTime? @map("triggered_at")
-  notifiedAt   DateTime? @map("notified_at")
-  createdById  String?   @map("created_by_id")
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  label       String    @db.VarChar(191)
+  metric      String    @db.VarChar(40)
+  subjectId   String?   @map("subject_id")
+  op          String    @db.VarChar(10)
+  threshold   Decimal   @db.Decimal(14, 2)
+  threshold2  Decimal?  @db.Decimal(14, 2)
+  status      String    @default("watching") @db.VarChar(12)
+  lastValue   Decimal?  @map("last_value") @db.Decimal(14, 2)
+  triggeredAt DateTime? @map("triggered_at")
+  notifiedAt  DateTime? @map("notified_at")
+  createdById String?   @map("created_by_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -5677,13 +5676,13 @@ model BrainSnapshot {
 
 /// Questions asked of the Brain (Ask and Ask why) with the answer given and where it came from.
 model BrainQuestion {
-  id         String   @id @default(uuid())
-  businessId String   @map("business_id")
-  userId     String   @map("user_id")
-  kind       String   @db.VarChar(10)
-  question   String   @db.Text
-  answer     String   @db.Text
-  source     String   @db.VarChar(40)
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  userId     String @map("user_id")
+  kind       String @db.VarChar(10)
+  question   String @db.Text
+  answer     String @db.Text
+  source     String @db.VarChar(40)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -5801,6 +5800,7 @@ model ProjectTask {
   blockType     String?   @map("block_type") @db.VarChar(30)
   blockerNote   String?   @map("blocker_note") @db.Text
   clientVisible Boolean   @default(false) @map("client_visible")
+  customFields  Json?     @map("custom_fields")
   createdById   String?   @map("created_by_id")
   completedAt   DateTime? @map("completed_at")
 
@@ -5959,23 +5959,25 @@ model ProjectFileVersion {
 /// Project delivery time only, never attendance. status: draft | submitted | approved | rejected.
 /// rateSnapshot is the Staff hourly rate of the person at the moment the entry was created.
 model ProjectTimeEntry {
-  id             String    @id @default(uuid())
-  businessId     String    @map("business_id")
-  number         String    @db.VarChar(40)
-  businessUserId String    @map("business_user_id")
-  projectId      String    @map("project_id")
-  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  taskId         String?   @map("task_id")
-  date           DateTime  @db.Date
-  minutes        Int
-  billable       Boolean   @default(true)
-  rateSnapshot   Decimal?  @map("rate_snapshot") @db.Decimal(10, 2)
-  status         String    @default("draft") @db.VarChar(12)
-  note           String?   @db.VarChar(500)
-  rejectReason   String?   @map("reject_reason") @db.Text
-  decidedById    String?   @map("decided_by_id")
-  decidedAt      DateTime? @map("decided_at")
-  source         String    @default("manual") @db.VarChar(10)
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  number           String    @db.VarChar(40)
+  businessUserId   String    @map("business_user_id")
+  projectId        String    @map("project_id")
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId           String?   @map("task_id")
+  date             DateTime  @db.Date
+  minutes          Int
+  billable         Boolean   @default(true)
+  rateSnapshot     Decimal?  @map("rate_snapshot") @db.Decimal(10, 2)
+  /// Project bill rate of the person when the entry was created (billable value = hours × this).
+  billRateSnapshot Decimal?  @map("bill_rate_snapshot") @db.Decimal(10, 2)
+  status           String    @default("draft") @db.VarChar(12)
+  note             String?   @db.VarChar(500)
+  rejectReason     String?   @map("reject_reason") @db.Text
+  decidedById      String?   @map("decided_by_id")
+  decidedAt        DateTime? @map("decided_at")
+  source           String    @default("manual") @db.VarChar(10)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -6159,10 +6161,12 @@ model ProjectSettings {
 
 /// Which of the 8 project roles a staff member holds (absent: default from their system role).
 model ProjectRoleAssignment {
-  id             String @id @default(uuid())
-  businessId     String @map("business_id")
-  businessUserId String @map("business_user_id")
-  role           String @db.VarChar(30)
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  businessUserId String   @map("business_user_id")
+  role           String   @db.VarChar(30)
+  /// What this person's project time is billed at (per hour). Null = not billed.
+  billRate       Decimal? @map("bill_rate") @db.Decimal(10, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -6182,4 +6186,393 @@ model ProjectNotifyPref {
 
   @@unique([businessId, userId])
   @@map("project_notify_prefs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Helpdesk — support tickets, queues, SLA, knowledge base, macros, CSAT.
+// One helpdesk per business group: `businessId` is always the group root (the business itself when
+// it has no branches); the branch a ticket belongs to is `HelpdeskTicket.branchId`. Customers,
+// staff (agents) and branches are references to their canonical records, never copies.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Versioned Helpdesk settings (one row per helpdesk) plus the ticket number sequence.
+model HelpdeskSettings {
+  id         String @id @default(uuid())
+  businessId String @unique @map("business_id")
+  version    Int    @default(1)
+  config     Json
+  /// Last issued ticket sequence number (allocated under a row lock, never reused).
+  ticketSeq  Int    @default(0) @map("ticket_seq")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("helpdesk_settings")
+}
+
+/// Support-specific profile of a staff member (keyed by User id, group-wide): skills + capacity.
+model HelpdeskAgent {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  userId     String @map("user_id")
+  skills     Json   @default("[]")
+  /// Max open tickets before the agent counts as over capacity.
+  capacity   Int    @default(10)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, userId])
+  @@map("helpdesk_agents")
+}
+
+model HelpdeskQueue {
+  id           String  @id @default(uuid())
+  businessId   String  @map("business_id")
+  name         String  @db.VarChar(120)
+  description  String? @db.Text
+  active       Boolean @default(true)
+  /// unassigned | escalations: built-in queues that cannot be disabled or deleted.
+  systemKey    String? @map("system_key") @db.VarChar(20)
+  /// User ids of the member agents.
+  members      Json    @default("[]")
+  categories   Json    @default("[]")
+  /// Null = all branches.
+  branchId     String? @map("branch_id")
+  priorityRule String  @default("None") @map("priority_rule") @db.VarChar(20)
+  /// Manual | Round Robin | Least Loaded | Skill Based | Branch Based
+  method       String  @default("Manual") @db.VarChar(20)
+  /// Round-robin pointer: index of the member who got the last ticket.
+  rrCursor     Int     @default(-1) @map("rr_cursor")
+  sortOrder    Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, name])
+  @@map("helpdesk_queues")
+}
+
+model HelpdeskTicket {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  number          String    @db.VarChar(40)
+  seq             Int
+  subject         String    @db.VarChar(300)
+  description     String?   @db.Text
+  customerId      String    @map("customer_id")
+  /// The branch (a Business in the group) this ticket belongs to.
+  branchId        String    @map("branch_id")
+  /// Email | WhatsApp | Web | Portal | Phone | Social | Manual
+  channel         String    @db.VarChar(12)
+  /// Unified Inbox conversation replies go through (Email / WhatsApp / SMS / social tickets).
+  conversationId  String?   @map("conversation_id")
+  category        String    @db.VarChar(80)
+  subcategory     String?   @db.VarChar(120)
+  priority        String    @db.VarChar(10)
+  status          String    @db.VarChar(60)
+  agentUserId     String?   @map("agent_user_id")
+  queueId         String?   @map("queue_id")
+  tags            Json      @default("[]")
+  /// User ids of followers (internal notifications only).
+  followers       Json      @default("[]")
+  escalated       Boolean   @default(false)
+  reopenCount     Int       @default(0) @map("reopen_count")
+  firstResponseAt DateTime? @map("first_response_at")
+  resolvedAt      DateTime? @map("resolved_at")
+  closedAt        DateTime? @map("closed_at")
+  /// Set when the ticket was resolved/closed after its SLA target had already passed.
+  slaMissed       Boolean   @default(false) @map("sla_missed")
+  /// Closed SLA-pause intervals [[fromIso, toIso], ...]; pausedSince is the open one.
+  pauses          Json      @default("[]")
+  pausedSince     DateTime? @map("paused_since")
+  /// Idempotency flags for the background jobs: {risk, breach, unas, urg, age}.
+  fired           Json      @default("{}")
+  mergedIntoId    String?   @map("merged_into_id")
+  /// [{number, channel, conversationId}] of tickets merged into this one.
+  mergedFrom      Json      @default("[]") @map("merged_from")
+  /// cust | reply | note | sys: kind of the latest timeline item (list "Last activity").
+  lastKind        String?   @map("last_kind") @db.VarChar(8)
+  lastActivityAt  DateTime  @default(now()) @map("last_activity_at")
+  /// Unguessable token for the customer portal link to this ticket.
+  portalToken     String    @unique @map("portal_token") @db.VarChar(64)
+  ackSentAt       DateTime? @map("ack_sent_at")
+  createdByUserId String?   @map("created_by_user_id")
+
+  messages HelpdeskMessage[]
+  links    HelpdeskLink[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, agentUserId])
+  @@index([businessId, customerId])
+  @@index([businessId, createdAt])
+  @@index([conversationId])
+  @@map("helpdesk_tickets")
+}
+
+/// Ticket timeline. kind: cust (customer) | reply (public) | note (internal) | sys (event).
+model HelpdeskMessage {
+  id             String         @id @default(uuid())
+  businessId     String         @map("business_id")
+  ticketId       String         @map("ticket_id")
+  ticket         HelpdeskTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  kind           String         @db.VarChar(8)
+  authorUserId   String?        @map("author_user_id")
+  authorName     String         @map("author_name") @db.VarChar(191)
+  body           String         @db.Text
+  /// [{key, name, type, size}]: files stored through S3Service.
+  attachments    Json           @default("[]")
+  /// "From HD-00012" for items carried over by a merge or split.
+  fromLabel      String?        @map("from_label") @db.VarChar(60)
+  /// The Unified Inbox message a public reply / customer message was sent as or mirrored from.
+  inboxMessageId String?        @unique @map("inbox_message_id")
+  /// Public replies: how it went out (WhatsApp, Email, SMS, Instagram, Customer Portal).
+  via            String?        @db.VarChar(40)
+  /// sending | sent | failed | portal
+  delivery       String?        @db.VarChar(12)
+  deliveryNote   String?        @map("delivery_note") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ticketId, createdAt])
+  @@index([businessId, createdAt])
+  @@map("helpdesk_messages")
+}
+
+/// A reference to a canonical record in another module (Order, Booking, Project).
+model HelpdeskLink {
+  id         String         @id @default(uuid())
+  businessId String         @map("business_id")
+  ticketId   String         @map("ticket_id")
+  ticket     HelpdeskTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  type       String         @db.VarChar(40)
+  refId      String         @map("ref_id")
+  label      String         @db.VarChar(60)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([ticketId, type, refId])
+  @@map("helpdesk_links")
+}
+
+/// Helpdesk audit trail: who did what, when (tickets, settings, SLA, queues, articles, exports).
+model HelpdeskAudit {
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  ticketId    String? @map("ticket_id")
+  actorUserId String? @map("actor_user_id")
+  actorName   String  @map("actor_name") @db.VarChar(191)
+  action      String  @db.VarChar(80)
+  detail      String  @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([ticketId, createdAt])
+  @@map("helpdesk_audit")
+}
+
+model HelpdeskSlaPolicy {
+  id                String  @id @default(uuid())
+  businessId        String  @map("business_id")
+  name              String  @db.VarChar(120)
+  /// All Tickets | Specific Priority | Category | Queue | Customer Segment | Branch
+  applies           String  @db.VarChar(30)
+  scope             String  @default("") @db.VarChar(120)
+  /// Any | Urgent | High | Normal | Low
+  priority          String  @default("Any") @db.VarChar(10)
+  firstResponseMins Int     @map("first_response_mins")
+  resolutionMins    Int     @map("resolution_mins")
+  /// 24/7 | Standard hours
+  hours             String  @default("Standard hours") @db.VarChar(20)
+  pauseStatuses     Json    @default("[]") @map("pause_statuses")
+  warnPct           Int     @default(75) @map("warn_pct")
+  active            Boolean @default(true)
+  sortOrder         Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, sortOrder])
+  @@map("helpdesk_sla_policies")
+}
+
+model HelpdeskEscalationRule {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  name       String  @db.VarChar(120)
+  /// SLA At Risk | SLA Breached | Priority = Urgent | No Agent Assigned | Ticket Age
+  trigger    String  @db.VarChar(30)
+  ageHours   Int?    @map("age_hours")
+  /// Notify | Reassign | Move queue | Raise priority | Create internal alert
+  action     String  @db.VarChar(30)
+  /// Manager | Queue | Specific Agent
+  targetType String  @map("target_type") @db.VarChar(20)
+  /// User id (Manager / Specific Agent) or queue id (Queue).
+  targetId   String  @map("target_id")
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("helpdesk_escalation_rules")
+}
+
+/// Every escalation that fired (rule or manual), with its real outcome.
+model HelpdeskEscalation {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  ticketId   String  @map("ticket_id")
+  ruleId     String? @map("rule_id")
+  ruleName   String? @map("rule_name") @db.VarChar(120)
+  trigger    String  @db.VarChar(120)
+  target     String  @db.VarChar(191)
+  result     String  @db.VarChar(500)
+  /// Succeeded | Failed
+  status     String  @db.VarChar(12)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, createdAt])
+  @@map("helpdesk_escalations")
+}
+
+model HelpdeskArticle {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  title        String    @db.VarChar(200)
+  slug         String    @db.VarChar(160)
+  category     String    @db.VarChar(80)
+  summary      String?   @db.Text
+  body         String    @db.Text
+  tags         Json      @default("[]")
+  /// Internal Only | Customer Portal | Public
+  visibility   String    @db.VarChar(20)
+  /// Ids of related articles.
+  related      Json      @default("[]")
+  /// Draft | Published | Archived
+  status       String    @db.VarChar(12)
+  authorUserId String?   @map("author_user_id")
+  authorName   String    @map("author_name") @db.VarChar(191)
+  version      Int       @default(1)
+  reviewedAt   DateTime? @map("reviewed_at")
+  /// How many ticket replies/notes this article was inserted into.
+  linkedCount  Int       @default(0) @map("linked_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, slug])
+  @@map("helpdesk_articles")
+}
+
+model HelpdeskArticleVersion {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  articleId  String  @map("article_id")
+  version    Int
+  title      String  @db.VarChar(200)
+  summary    String? @db.Text
+  body       String  @db.Text
+  note       String  @db.VarChar(191)
+  authorName String  @map("author_name") @db.VarChar(191)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([articleId, version])
+  @@map("helpdesk_article_versions")
+}
+
+/// Article views and helpful / not-helpful votes (from the help center, portal and agent panel).
+model HelpdeskArticleEvent {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  articleId  String  @map("article_id")
+  /// view | helpful | unhelpful
+  kind       String  @db.VarChar(12)
+  /// public | portal | agent
+  source     String  @db.VarChar(12)
+  comment    String? @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([articleId, createdAt])
+  @@index([businessId, createdAt])
+  @@map("helpdesk_article_events")
+}
+
+model HelpdeskSavedReply {
+  id          String @id @default(uuid())
+  businessId  String @map("business_id")
+  name        String @db.VarChar(120)
+  shortcut    String @db.VarChar(60)
+  body        String @db.Text
+  /// All agents | Managers only | Only me
+  visibility  String @db.VarChar(20)
+  /// "All queues" or a queue name.
+  team        String @default("All queues") @db.VarChar(120)
+  usage       Int    @default(0)
+  ownerUserId String @map("owner_user_id")
+  ownerName   String @map("owner_name") @db.VarChar(191)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, shortcut])
+  @@map("helpdesk_saved_replies")
+}
+
+model HelpdeskMacro {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  name       String @db.VarChar(120)
+  conditions String @default("") @db.VarChar(300)
+  /// [[action, value], ...] e.g. [["Set status","Resolved"],["Add tag","refund"]].
+  actions    Json   @default("[]")
+  /// Active | Disabled
+  status     String @default("Active") @db.VarChar(10)
+  usage      Int    @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("helpdesk_macros")
+}
+
+/// Private support CSAT: one survey per resolved ticket. Never published as a review.
+model HelpdeskCsat {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  ticketId        String    @unique @map("ticket_id")
+  /// Email | WhatsApp | Portal | SMS | Social
+  channel         String    @db.VarChar(12)
+  /// scheduled | sent | responded | failed
+  status          String    @db.VarChar(12)
+  sendAt          DateTime  @map("send_at")
+  sentAt          DateTime? @map("sent_at")
+  /// Normalised 1-5 (from the configured scale).
+  rating          Int?
+  rawRating       Int?      @map("raw_rating")
+  scale           String    @db.VarChar(20)
+  comment         String?   @db.Text
+  respondedAt     DateTime? @map("responded_at")
+  /// Open | Done: internal follow-up on a poor rating.
+  followUp        String?   @map("follow_up") @db.VarChar(8)
+  followUpOwnerId String?   @map("follow_up_owner_id")
+  /// Snapshots at resolution time (reporting stays stable if the ticket changes later).
+  agentUserId     String?   @map("agent_user_id")
+  category        String    @db.VarChar(80)
+  failReason      String?   @map("fail_reason") @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status, sendAt])
+  @@index([businessId, respondedAt])
+  @@map("helpdesk_csat")
 }

@@ -503,6 +503,15 @@ export class ProjectPortalService {
         last: a.lastActivityAt.toISOString(),
       })),
       invoices,
+      fields: cfg.fields
+        .filter((f) => f.applies === 'Project' && f.client === 'Client visible')
+        .map((f) => ({
+          name: f.name,
+          value: fieldText(
+            ((p.customFields ?? {}) as Record<string, unknown>)[f.name],
+          ),
+        }))
+        .filter((f) => f.value),
       messages: updates.map((c) => ({
         id: c.id,
         who: c.authorName,
@@ -835,4 +844,11 @@ export class ProjectPortalService {
 function maskEmail(e: string) {
   const [u, d] = e.split('@');
   return `${u.slice(0, 2)}${'•'.repeat(Math.max(1, u.length - 2))}@${d}`;
+}
+
+function fieldText(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+    return String(v);
+  return JSON.stringify(v);
 }

@@ -107,6 +107,7 @@ export interface TaskRow {
   blockType: string | null;
   blockerNote: string | null;
   clientVisible: boolean;
+  customFields: Record<string, unknown>;
   deps: string[];
   subDone: number;
   subTotal: number;
@@ -214,6 +215,7 @@ export interface Overview {
   risks: RiskItem[];
   aiInsight: string;
   aiEvidence: string;
+  insightSource: "ai" | "rules";
   milestones: Array<{ id: string; name: string; projectName: string; projectHealth: Health; owner: string; date: string; status: string }>;
   workload: Workspace["workload"];
   capacityKnown: boolean;
@@ -263,7 +265,10 @@ export interface TimeEntry {
   date: string;
   minutes: number;
   billable: boolean;
+  /** Bill rate snapshot. */
   rate: number | null;
+  /** Staff wage snapshot. */
+  costRate: number | null;
   value: number | null;
   status: "draft" | "submitted" | "approved" | "rejected";
   note: string | null;
@@ -318,6 +323,7 @@ export interface ClientView {
   files: Array<{ id: string; name: string; ext: string; version: number; size: number }>;
   approvals: Array<{ id: string; item: string; type: string; status: string; message: string; due: string | null; open: boolean; last: string }>;
   invoices: Array<{ no: string; amount: number; status: string; paid: boolean }> | null;
+  fields: Array<{ name: string; value: string }>;
   messages: Array<{ id: string; who: string; body: string; when: string }>;
 }
 export interface PortalPreview extends ClientView {
@@ -374,6 +380,7 @@ export interface ProjectConfig {
   portalOn: boolean;
   portalMfa: boolean;
   inviteExp: string;
+  wipLimit: number;
   statuses: StatusDef[];
   fields: CustomFieldDef[];
   perms: Record<string, Record<string, boolean>>;
@@ -381,12 +388,13 @@ export interface ProjectConfig {
 export interface SettingsData {
   config: ProjectConfig;
   canManage: boolean;
+  canManageBudgets: boolean;
   numberPreview: string;
   roles: string[];
   areas: PermissionArea[];
   clientAreas: PermissionArea[];
   fieldTypes: string[];
-  people: Array<{ id: string; name: string; systemRole: string; projectRole: string; locked: boolean }>;
+  people: Array<{ id: string; name: string; systemRole: string; projectRole: string; locked: boolean; costRate: number | null; billRate: number | null }>;
   notify: Record<string, boolean>;
 }
 
@@ -430,7 +438,7 @@ export const readyMilestone = (id: string) => apiFetch<{ ok: true; needsRequest:
 export const exportMilestones = (ids: string[]) => apiFetch<{ filename: string; csv: string; count: number }>("/projects/milestones/export", { method: "POST", ...j({ ids }) });
 
 export const fetchFiles = () => apiFetch<FileRow[]>("/projects/files");
-export function uploadProjectFile(file: File, fields: { projectId: string; folder?: string; access?: string; fileId?: string; note?: string }) {
+export function uploadProjectFile(file: File, fields: { projectId: string; folder?: string; access?: string; fileId?: string; note?: string; linkType?: string; linkId?: string }) {
   const form = new FormData();
   form.append("file", file);
   Object.entries(fields).forEach(([k, v]) => v && form.append(k, v));
@@ -483,3 +491,15 @@ export const saveNotify = (prefs: Record<string, boolean>) => apiFetch("/project
 export const aiPlan = (body: { projectId: string; goal: string; due?: string; constraints?: string }) => apiFetch<{ plan: Plan; source: string }>("/projects/ai/plan", { method: "POST", ...j(body) });
 export const aiAccept = (body: { projectId: string; plan: Plan; due?: string }) => apiFetch<{ tasks: number; milestones: number }>("/projects/ai/accept", { method: "POST", ...j(body) });
 export const aiStatus = (projectId: string, audience: "Internal" | "Client") => apiFetch<{ text: string }>("/projects/ai/status", { method: "POST", ...j({ projectId, audience }) });
+
+export interface ProjectLinks {
+  customer: { id: string; name: string } | null;
+  since?: string | null;
+  quotations: { count: number; latest: { no: number; status: string; total: number | null } | null } | null;
+  invoices: { count: number; latestNo: number | null; invoiced: number | null; paid: number | null } | null;
+  conversationId: string | null;
+  contract: { id: string; name: string } | null;
+}
+export const fetchProjectLinks = (id: string) => apiFetch<ProjectLinks>(`/projects/${id}/links`);
+export const setBillRate = (businessUserId: string, rate: number | null) => apiFetch(`/projects/settings/rates/${businessUserId}`, { method: "PUT", body: JSON.stringify({ rate }) });
+export const setFileMeta = (id: string, body: { folder?: string; linkType?: string; linkId?: string | null }) => apiFetch(`/projects/files/${id}/meta`, { method: "POST", body: JSON.stringify(body) });

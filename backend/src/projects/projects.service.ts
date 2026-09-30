@@ -16,6 +16,10 @@ import {
   mondayOf,
 } from './projects-loader.service';
 import { ProjectsPermissionsService } from './projects-permissions.service';
+import { ProjectHooksService } from './project-hooks.service';
+import { AiInfraService } from '../ai/ai-infra.service';
+
+const insightCache = new Map<string, { text: string; at: number }>();
 import {
   BILLING_TYPES,
   PRIORITIES,
@@ -66,6 +70,8 @@ export class ProjectsService {
     private readonly ctx: ProjectsContextService,
     private readonly loader: ProjectsLoaderService,
     private readonly perms: ProjectsPermissionsService,
+    private readonly hooks: ProjectHooksService,
+    private readonly ai: AiInfraService,
   ) {}
 
   // ── workspace (the shared read model most screens filter client-side) ────
@@ -131,7 +137,7 @@ export class ProjectsService {
         billing: BILLING_TYPES,
         priorities: PRIORITIES,
         hooks: PROJECT_AUTOMATION_HOOKS.map(([k, wf]) => ({ k, wf })),
-        wipLimit: 5,
+        wipLimit: L.cfg.wipLimit,
       },
       people: L.people
         .filter((p) => p.active)
@@ -374,7 +380,10 @@ export class ProjectsService {
       canFin
         ? {
             label: 'Budget At Risk',
-            value: money(budgetRisk.reduce((a, p) => a + (p.budget ?? 0), 0)),
+            value: moneyIn(
+              budgetRisk.reduce((a, p) => a + (p.budget ?? 0), 0),
+              (await this.ctx.business()).currency,
+            ),
             cmp: noBudget
               ? `Partial data — ${noBudget} project${noBudget > 1 ? 's have' : ' has'} no budget`
               : `${budgetRisk.length} project${budgetRisk.length === 1 ? '' : 's'} spending ahead of progress`,
@@ -493,8 +502,14 @@ export class ProjectsService {
         health: p.health,
       })),
       risks,
-      aiInsight,
-      aiEvidence,
+      ...(await this.phraseInsight(
+        aiInsight,
+        aiEvidence,
+        soon.map((p) => p.name),
+        risks.slice(0, 5).map((r) => `${r.sev}: ${r.t} — ${r.d}`),
+        atRisk.length,
+        overdueNow,
+      )),
       milestones: upcoming,
       workload: L.workload.map((w) => ({
         ...w,
@@ -503,6 +518,68 @@ export class ProjectsService {
       capacityKnown: L.capacityKnown,
       activity,
     };
+  }
+
+  /**
+   * The Overview insight. The facts are always computed from records; when the AI service is
+   * reachable and enabled, Claude phrases them as one sentence (cached per business for an hour).
+   * Otherwise the rule-built sentence is returned and labelled as such — never passed off as AI.
+   */
+  private async phraseInsight(
+    ruleText: string,
+    evidence: string,
+    soonNames: string[],
+    risks: string[],
+    atRisk: number,
+    overdue: number,
+  ) {
+    const businessId = this.ctx.businessId();
+    const facts = JSON.stringify({ soonNames, risks, atRisk, overdue });
+    const key = businessId + '|' + facts;
+    const hit = insightCache.get(key);
+    if (hit && hit.at > Date.now() - 3.6e6)
+      return {
+        aiInsight: hit.text,
+        aiEvidence: evidence,
+        insightSource: 'ai' as const,
+      };
+    if (!risks.length && !soonNames.length)
+      return {
+        aiInsight: ruleText,
+        aiEvidence: evidence,
+        insightSource: 'rules' as const,
+      };
+    try {
+      const res = await this.ai.createMessage(businessId, 'projects_insight', {
+        system:
+          'You summarise project risk for a small-business owner. Use only the facts given. Never invent numbers, names or dates.',
+        messages: [
+          {
+            role: 'user',
+            content: `Facts (JSON): ${facts}
+Write ONE plain sentence (max 30 words) naming the single most important thing to act on.`,
+          },
+        ],
+        temperature: 0,
+        maxTokens: 120,
+      });
+      const text = (res.content.find((b) => b.type === 'text')?.text ?? '')
+        .trim()
+        .replace(/^"|"$/g, '');
+      if (!text) throw new Error('empty');
+      insightCache.set(key, { text, at: Date.now() });
+      return {
+        aiInsight: text,
+        aiEvidence: evidence,
+        insightSource: 'ai' as const,
+      };
+    } catch {
+      return {
+        aiInsight: ruleText,
+        aiEvidence: evidence,
+        insightSource: 'rules' as const,
+      };
+    }
   }
 
   async recentActivity(ids: string[], visible: Set<string>, take: number) {
@@ -617,9 +694,14 @@ export class ProjectsService {
               : 'Fixed',
             requireClientApproval: !!input.requireClientApproval,
             templateId: template?.id ?? null,
-            automationRefs: (input.automationRefs ?? []).filter((k) =>
-              PROJECT_AUTOMATION_HOOKS.some(([h]) => h === k),
-            ),
+            automationRefs: [
+              ...new Set([
+                ...(input.automationRefs ?? []),
+                ...(template && Array.isArray(template.hooks)
+                  ? (template.hooks as string[])
+                  : []),
+              ]),
+            ].filter((k) => PROJECT_AUTOMATION_HOOKS.some(([h]) => h === k)),
             createdById: actor.sub,
           },
         });
@@ -659,6 +741,7 @@ export class ProjectsService {
       undefined,
       { number: project.number, name: project.name, status },
     );
+    await this.hooks.projectCreated(project.id, actor.sub);
     return { id: project.id, number: project.number, status };
   }
 
@@ -923,6 +1006,11 @@ export class ProjectsService {
         },
         actor.sub,
       );
+      if (
+        !p.completedAt &&
+        statusCategory(cfg.statuses, input.status) === 'Done'
+      )
+        await this.hooks.projectCompleted(p.id);
     } else {
       await this.ctx.activity(actor, 'project.updated', `updated ${p.name}`, {
         projectId: id,
@@ -1076,6 +1164,8 @@ export class ProjectsService {
         { status: p.status },
         { status: target },
       );
+      if (!p.completedAt && statusCategory(cfg.statuses, target) === 'Done')
+        await this.hooks.projectCompleted(id);
       n++;
     }
     return { updated: n };
@@ -1166,6 +1256,7 @@ export class ProjectsService {
     await this.ctx.auditLog('project.completed', 'Project', id, undefined, {
       status: doneStatus,
     });
+    await this.hooks.projectCompleted(id);
     return { ok: true };
   }
 
@@ -1195,6 +1286,95 @@ export class ProjectsService {
       name: p.name,
     });
     return { ok: true };
+  }
+
+  /**
+   * Linked business records for Project 360: the customer, their quotations and invoices since
+   * the project started (orders are the invoices in this app), what has been paid against them,
+   * their Unified Inbox conversation, and the latest file in this project's Contracts folder.
+   */
+  async links(actor: AuthenticatedUser, id: string) {
+    const p = await this.loader.project(id);
+    const acc = await this.perms.access(actor);
+    const since = p.startDate ?? p.createdAt;
+    const contract = await this.prisma.projectFile.findFirst({
+      where: { projectId: id, archivedAt: null, folder: 'Contracts' },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, name: true },
+    });
+    if (!p.customerId) {
+      return {
+        customer: null,
+        quotations: null,
+        invoices: null,
+        conversationId: null,
+        contract,
+      };
+    }
+    const [customer, quotes, orders, conv] = await Promise.all([
+      this.prisma.customer.findUnique({
+        where: { id: p.customerId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.order.findMany({
+        where: {
+          businessId: p.businessId,
+          customerId: p.customerId,
+          isQuotation: true,
+          createdAt: { gte: since },
+        },
+        select: { orderNo: true, total: true, quotationStatus: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.order.findMany({
+        where: {
+          businessId: p.businessId,
+          customerId: p.customerId,
+          isQuotation: false,
+          status: { not: 'cancelled' },
+          createdAt: { gte: since },
+        },
+        select: {
+          orderNo: true,
+          total: true,
+          payments: { select: { amount: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.inboxConversation.findFirst({
+        where: { businessId: p.businessId, customerId: p.customerId },
+        orderBy: { lastMessageAt: 'desc' },
+        select: { id: true },
+      }),
+    ]);
+    const fin = acc.can['View financials'];
+    const invoiced = orders.reduce((a, o) => a + Number(o.total), 0);
+    const paid = orders.reduce(
+      (a, o) => a + o.payments.reduce((x, y) => x + Number(y.amount), 0),
+      0,
+    );
+    return {
+      customer,
+      since: isoDay(since),
+      quotations: {
+        count: quotes.length,
+        latest: quotes[0]
+          ? {
+              no: quotes[0].orderNo,
+              status: quotes[0].quotationStatus ?? 'draft',
+              total: fin ? Number(quotes[0].total) : null,
+            }
+          : null,
+      },
+      invoices: {
+        count: orders.length,
+        latestNo: orders[0]?.orderNo ?? null,
+        invoiced: fin ? Math.round(invoiced * 100) / 100 : null,
+        paid: fin ? Math.round(paid * 100) / 100 : null,
+      },
+      conversationId: conv?.id ?? null,
+      contract,
+    };
   }
 
   // ── saved views ──────────────────────────────────────────────────────────
@@ -1319,6 +1499,18 @@ export function toCsv(
   return [head.map(q).join(','), ...rows.map((r) => r.map(q).join(','))].join(
     '\n',
   );
+}
+
+export function moneyIn(n: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    return `${currency} ${Math.round(n).toLocaleString('en-US')}`;
+  }
 }
 
 export function money(n: number): string {
