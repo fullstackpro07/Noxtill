@@ -21,6 +21,8 @@ import { ActionCenterService } from './action-center.service';
 import { ActionCenterController } from './action-center.controller';
 import { TodayBusinessService } from './today-business.service';
 import { BusinessGoalService } from './business-goal.service';
+import { AutonomousCommerceDashboardService } from './autonomous-commerce-dashboard.service';
+import { AutonomousCommerceDashboardController } from './autonomous-commerce-dashboard.controller';
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { BusinessGoalService } from './business-goal.service';
   ],
   controllers: [
     DashboardController,
+    AutonomousCommerceDashboardController,
     HealthScoreController,
     AiInsightsController,
     ActionCenterController,
@@ -49,6 +52,7 @@ import { BusinessGoalService } from './business-goal.service';
     ActionCenterService,
     TodayBusinessService,
     BusinessGoalService,
+    AutonomousCommerceDashboardService,
   ],
 })
 export class DashboardModule {}

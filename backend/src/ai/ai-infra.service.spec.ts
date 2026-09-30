@@ -215,6 +215,30 @@ describe('AiInfraService (BE-075)', () => {
       });
     });
 
+    it('blocks workflow AI drafts when the owner disables workflow agents', async () => {
+      const toggledOffBusiness = await prisma.business.create({
+        data: {
+          name: 'Workflow AI Toggle Off Test Biz',
+          slug: `workflow-ai-toggle-off-${Date.now()}`,
+          aiFeatureToggles: { workflowAgents: false },
+        },
+      });
+      claude.createMessage.mockResolvedValue(fakeResult());
+
+      await expect(
+        service.createMessage(toggledOffBusiness.id, 'workflow_agent', {
+          messages: [{ role: 'user', content: 'Draft a short note.' }],
+        }),
+      ).rejects.toBeInstanceOf(AppException);
+      expect(claude.createMessage).not.toHaveBeenCalled();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: toggledOffBusiness.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
+    });
+
     it('allows a call whose kind is not one of the 7 toggleable features, regardless of toggles', async () => {
       const business = await prisma.business.create({
         data: {

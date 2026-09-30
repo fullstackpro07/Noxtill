@@ -2,11 +2,14 @@ import { Injectable } from '@nestjs/common';
 import axios from 'axios';
 import {
   Connector,
+  EcommerceListingDraftInput,
+  EcommerceListingDraftResult,
   EcommerceOrder,
   EcommerceProduct,
   OAuthTokens,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
+import { plainTextAsProductHtml } from '../ecommerce/listing-content.util';
 
 interface WooCommerceVariation {
   sku: string;
@@ -35,6 +38,13 @@ interface WooCommerceOrder {
   total_tax: string;
   date_created_gmt: string;
   line_items: WooCommerceOrderLine[];
+}
+
+interface WooCommerceListingProduct {
+  id: number;
+  sku: string;
+  type?: string;
+  meta_data?: Array<{ key: string; value: unknown }>;
 }
 
 /**
@@ -202,5 +212,89 @@ export class WooCommerceConnector implements Connector {
         price: line.price,
       })),
     }));
+  }
+
+  async upsertListingDraft(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    input: EcommerceListingDraftInput,
+    externalProductId?: string,
+  ): Promise<EcommerceListingDraftResult> {
+    const storeUrl = meta.storeUrl as string | undefined;
+    if (!storeUrl)
+      throw new Error('No WooCommerce store connected for this business');
+    const auth = {
+      username: tokens.accessToken,
+      password: tokens.refreshToken ?? '',
+    };
+    const createPayload = {
+      type: 'simple',
+      name: input.title,
+      description: plainTextAsProductHtml(input.description),
+      sku: input.sku,
+      regular_price: input.sellingPrice.toFixed(2),
+      status: 'draft',
+      meta_data: [
+        { key: '_noxtill_business_id', value: input.businessId },
+        { key: '_noxtill_product_id', value: input.productId },
+      ],
+    };
+    const ownsProduct = (product: WooCommerceListingProduct) => {
+      const metadata = new Map(
+        (product.meta_data ?? []).map(({ key, value }) => [key, String(value)]),
+      );
+      return (
+        metadata.get('_noxtill_business_id') === input.businessId &&
+        metadata.get('_noxtill_product_id') === input.productId
+      );
+    };
+
+    let existing: WooCommerceListingProduct | undefined;
+    if (externalProductId) {
+      const response = await axios.get<WooCommerceListingProduct>(
+        `${storeUrl}/wp-json/wc/v3/products/${encodeURIComponent(externalProductId)}`,
+        { auth },
+      );
+      existing = response.data;
+    } else {
+      const response = await axios.get<WooCommerceListingProduct[]>(
+        `${storeUrl}/wp-json/wc/v3/products`,
+        { auth, params: { sku: input.sku } },
+      );
+      if (response.data.length > 1) {
+        throw new Error('WooCommerce returned multiple products for this SKU');
+      }
+      existing = response.data[0];
+    }
+
+    if (existing) {
+      if (!ownsProduct(existing)) {
+        throw new Error(
+          'This SKU is already used by a WooCommerce product not linked to this Noxtill product.',
+        );
+      }
+      if (existing.type && existing.type !== 'simple') {
+        throw new Error(
+          'The linked WooCommerce product is not a simple product. Variant-preserving updates are not supported for this product.',
+        );
+      }
+      const updated = await axios.put<WooCommerceListingProduct>(
+        `${storeUrl}/wp-json/wc/v3/products/${existing.id}`,
+        {
+          name: createPayload.name,
+          description: createPayload.description,
+          regular_price: createPayload.regular_price,
+        },
+        { auth },
+      );
+      return { externalProductId: String(updated.data.id) };
+    }
+
+    const created = await axios.post<WooCommerceListingProduct>(
+      `${storeUrl}/wp-json/wc/v3/products`,
+      createPayload,
+      { auth },
+    );
+    return { externalProductId: String(created.data.id) };
   }
 }

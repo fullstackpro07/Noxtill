@@ -36,6 +36,10 @@ export class AiFeatureTogglesDto {
   @IsOptional()
   @IsBoolean()
   assistant?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  workflowAgents?: boolean;
 }
 
 export class UpdateAiSettingsDto {

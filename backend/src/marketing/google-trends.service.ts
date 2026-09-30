@@ -26,7 +26,8 @@ export class GoogleTrendsService {
   constructor(private readonly config: ConfigService) {}
 
   async fetchInterest(keyword: string): Promise<number | null> {
-    const apiKey = this.config.get<string>('SERPAPI_KEY');
+    const apiKey = this.config.get<string>('SERPAPI_KEY')?.trim();
+    if (!apiKey) return null;
 
     let response: { data: GoogleTrendsResponse };
     try {

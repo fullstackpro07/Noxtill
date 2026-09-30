@@ -25,6 +25,13 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
       data: { name: 'Rank Test Biz', slug: `rank-test-${Date.now()}` },
     });
     businessId = business.id;
+    await prisma.masterListing.create({
+      data: {
+        businessId,
+        name: 'Rank Test Biz',
+        website: 'https://rank-test.example',
+      },
+    });
   });
 
   afterEach(() => {
@@ -40,6 +47,7 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
       where: { keywordId: { in: keywords.map((k) => k.id) } },
     });
     await prisma.trackedKeyword.deleteMany({ where: { businessId } });
+    await prisma.masterListing.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
@@ -55,6 +63,7 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     serpRank.fetchRank.mockResolvedValue({
       rank: null,
       topResultTitle: 'Someone Else',
+      businessResultUrls: [],
     });
     trends.fetchInterest.mockResolvedValue(null);
 
@@ -71,6 +80,7 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0].rank).toBeNull();
     expect(snapshots[0].topResultTitle).toBe('Someone Else');
+    expect(snapshots[0].businessResultUrls).toEqual([]);
     expect(snapshots[0].searchInterest).toBeNull();
   });
 
@@ -81,6 +91,10 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     serpRank.fetchRank.mockResolvedValue({
       rank: 4,
       topResultTitle: 'Rank Test Biz',
+      businessResultUrls: [
+        'https://rank-test.example/page-a',
+        'https://rank-test.example/page-b',
+      ],
     });
     trends.fetchInterest.mockResolvedValue(62);
 
@@ -96,6 +110,10 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     });
     expect(snapshots[0].rank).toBe(4);
     expect(snapshots[0].topResultTitle).toBe('Rank Test Biz');
+    expect(snapshots[0].businessResultUrls).toEqual([
+      'https://rank-test.example/page-a',
+      'https://rank-test.example/page-b',
+    ]);
     expect(snapshots[0].searchInterest).toBe(62);
   });
 
@@ -106,6 +124,7 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     serpRank.fetchRank.mockResolvedValue({
       rank: 9,
       topResultTitle: 'Someone Else',
+      businessResultUrls: [],
     });
     trends.fetchInterest.mockResolvedValue(30);
 

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Gauge, Lightbulb, LineChart, Trophy, LayoutGrid, Sparkles, Rocket } from "lucide-react";
+import { Gauge, Lightbulb, LineChart, Trophy, LayoutGrid, Sparkles, Rocket, ShoppingBasket } from "lucide-react";
 
 export type DashboardRowKey =
   | "kpi"
@@ -8,6 +8,7 @@ export type DashboardRowKey =
   | "products"
   | "quick"
   | "intelligence"
+  | "commerce"
   | "getting-started";
 
 export interface DashboardRowDef {
@@ -32,6 +33,7 @@ export const DASHBOARD_ROWS: DashboardRowDef[] = [
   { key: "products", title: "Top Products, Recent Orders & Top Channels", module: "Products", icon: Trophy, scope: "inner" },
   { key: "quick", title: "Quick Actions", module: "Dashboard", icon: LayoutGrid, scope: "inner" },
   { key: "intelligence", title: "Business Intelligence", module: "Dashboard", icon: Sparkles, scope: "inner" },
+  { key: "commerce", title: "Autonomous Commerce", module: "Autonomous Commerce", icon: ShoppingBasket, scope: "inner" },
   { key: "getting-started", title: "Getting Started", module: "Dashboard", icon: Rocket, scope: "inner" },
 ];
 

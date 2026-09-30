@@ -9,6 +9,13 @@ import { useModuleHeader } from "@/components/layout/module-header-context";
 import { fetchMarketingTasks } from "@/lib/marketing-tasks-api";
 
 const SUBTITLE_BY_PATH: { prefix: string; subtitle: string }[] = [
+  { prefix: "/marketing/automations/executions", subtitle: "Inspect workflow runs, attempts, failures and recovery actions." },
+  { prefix: "/marketing/automations/triggers", subtitle: "Inspect the event context fields already exposed to workflow triggers." },
+  { prefix: "/marketing/automations/templates", subtitle: "Install a fixture-checked starter as a paused draft and review it before activation." },
+  { prefix: "/marketing/automations/actions", subtitle: "Inspect supported action inputs, outputs, setup requirements and execution limits." },
+  { prefix: "/marketing/automations/data-mapper", subtitle: "Safely preview JSON field mappings before adding them to a workflow." },
+  { prefix: "/marketing/automations/variables", subtitle: "Manage tenant-scoped workflow values and references to server-held secrets." },
+  { prefix: "/marketing/seo-autopilot", subtitle: "Track verified search positions and spot keywords that need a fresh check." },
   { prefix: "/marketing/campaigns", subtitle: "Broadcast messages to customer segments." },
   { prefix: "/marketing/builder", subtitle: "Build a campaign step by step, with checks before it sends." },
   { prefix: "/marketing/audiences", subtitle: "Who you are talking to, and why they belong together." },

@@ -42,6 +42,7 @@ export class OutboundWebhookDispatchService {
 
     const subscriptions = await this.prisma.outboundWebhook.findMany({
       where: { businessId, triggerKey, active: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
     if (subscriptions.length === 0) return;
 

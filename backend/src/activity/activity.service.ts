@@ -70,6 +70,7 @@ export class ActivityService {
       // message queue, and that must never block the real mutation that already succeeded.
       void this.workflowTrigger
         ?.dispatch(businessId, input.type, {
+          eventId: event.id,
           description: input.description,
           entityType: input.entityType,
           entityId: input.entityId,
@@ -115,7 +116,7 @@ export class ActivityService {
   ) {
     const events = await this.tenantPrisma.client.activityEvent.findMany({
       where: { businessId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
     });
     return events.reverse().map((event) => this.toPayload(event));

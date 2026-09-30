@@ -1,5 +1,6 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicOrderingService } from './public-ordering.service';
+import { ActivityService } from '../activity/activity.service';
 
 describe('PublicOrderingService — delivery zone rules', () => {
   let prisma: PrismaService;
@@ -13,7 +14,17 @@ describe('PublicOrderingService — delivery zone rules', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    service = new PublicOrderingService(prisma);
+    const activity = {
+      record: async (
+        activityBusinessId: string,
+        input: Record<string, unknown>,
+      ) => {
+        await prisma.activityEvent.create({
+          data: { businessId: activityBusinessId, ...input } as never,
+        });
+      },
+    } as unknown as ActivityService;
+    service = new PublicOrderingService(prisma, activity);
     slug = `public-order-${Date.now()}`;
     const business = await prisma.business.create({
       data: { name: 'Public Order Biz', slug },
@@ -87,6 +98,13 @@ describe('PublicOrderingService — delivery zone rules', () => {
     expect(delivery?.status).toBe('unassigned');
     expect(Number(delivery?.deliveryFee)).toBe(200);
     expect(delivery?.trackingToken).toBeTruthy();
+    const events = await prisma.activityEvent.findMany({
+      where: { businessId, entityId: { in: [o.id, delivery!.id] } },
+    });
+    expect(events.map((event) => event.type).sort()).toEqual([
+      'delivery',
+      'sale',
+    ]);
   });
 
   it('"nothing outside a zone" refuses an order with no zone, and one for a paused zone', async () => {

@@ -20,6 +20,8 @@ export interface SendGateParams {
   to?: { phone?: string; email?: string };
   /** Set for campaign fan-out sends (BE-061) so the funnel report can attribute delivery/read status back. */
   campaignId?: string;
+  /** Stable, tenant-scoped key for safe workflow action retries; ordinary sends leave this unset. */
+  idempotencyKey?: string;
   /** Overrides `business.channelPref` for this send only (booking reminder rules, UPD-BE-092) — still subject to the same contact-availability fallback in `resolveChannel`. */
   channel?: Message['channel'];
   /** Real custom wording (UPD-BE-092 fix-it) — `{{var}}` placeholders, used instead of the fixed
@@ -47,6 +49,14 @@ export class SendGateService {
     const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
       where: { id: params.businessId },
     });
+
+    if (params.idempotencyKey) {
+      const existing = await this.findIdempotentMessage(
+        params.businessId,
+        params.idempotencyKey,
+      );
+      if (existing) return this.reuseIdempotentMessage(existing);
+    }
 
     const customer = params.customerId
       ? await this.tenantPrisma.client.customer.findUnique({
@@ -164,32 +174,75 @@ export class SendGateService {
       if (allowed.getTime() !== intended.getTime()) scheduledFor = allowed;
     }
 
-    const [message] = await this.tenantPrisma.client.$transaction([
-      this.tenantPrisma.client.message.create({
-        data: {
-          businessId: params.businessId,
-          customerId: params.customerId,
-          campaignId: params.campaignId,
-          channel,
-          category: definition.category,
-          templateKey: params.templateKey,
-          locale: business.locale,
-          payload,
-          status: 'queued',
-          scheduledFor,
-          customBody: params.customBody,
-        },
-      }),
-      this.tenantPrisma.client.business.update({
-        where: { id: params.businessId },
-        data: { msgUsed: { increment: 1 } },
-      }),
-    ]);
+    let message: Message;
+    try {
+      [message] = await this.tenantPrisma.client.$transaction([
+        this.tenantPrisma.client.message.create({
+          data: {
+            businessId: params.businessId,
+            customerId: params.customerId,
+            campaignId: params.campaignId,
+            channel,
+            category: definition.category,
+            templateKey: params.templateKey,
+            locale: business.locale,
+            payload,
+            status: 'queued',
+            scheduledFor,
+            customBody: params.customBody,
+            idempotencyKey: params.idempotencyKey,
+          },
+        }),
+        this.tenantPrisma.client.business.update({
+          where: { id: params.businessId },
+          data: { msgUsed: { increment: 1 } },
+        }),
+      ]);
+    } catch (error) {
+      if (!params.idempotencyKey || !this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+      const existing = await this.findIdempotentMessage(
+        params.businessId,
+        params.idempotencyKey,
+      );
+      if (!existing) throw error;
+      return this.reuseIdempotentMessage(existing);
+    }
 
-    const delay = scheduledFor
-      ? Math.max(0, scheduledFor.getTime() - Date.now())
+    await this.enqueueMessage(message);
+
+    return message;
+  }
+
+  private async findIdempotentMessage(
+    businessId: string,
+    idempotencyKey: string,
+  ): Promise<Message | null> {
+    return this.tenantPrisma.client.message.findFirst({
+      where: { businessId, idempotencyKey },
+    });
+  }
+
+  private async reuseIdempotentMessage(message: Message): Promise<Message> {
+    if (message.status === 'failed') {
+      throw new AppException(
+        MESSAGE_ERROR_CODES.IDEMPOTENCY_TARGET_FAILED,
+        'The message for this workflow action already failed and was not sent again.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    // A queue add may have failed after the message row committed. Re-add the same job ID;
+    // BullMQ deduplicates it while present, and the persisted Message remains the source of truth.
+    if (message.status === 'queued') await this.enqueueMessage(message);
+    return message;
+  }
+
+  private enqueueMessage(message: Message): Promise<unknown> {
+    const delay = message.scheduledFor
+      ? Math.max(0, message.scheduledFor.getTime() - Date.now())
       : 0;
-    await this.messagesQueue.add(
+    return this.messagesQueue.add(
       'send',
       { messageId: message.id },
       {
@@ -199,7 +252,14 @@ export class SendGateService {
         backoff: { type: 'exponential', delay: 2000 },
       },
     );
+  }
 
-    return message;
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    );
   }
 }

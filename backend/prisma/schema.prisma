@@ -99,6 +99,14 @@ enum ActivityEventType {
   /// delivered, failed) and a rider handing in collected cash, feeding the module's real "what
   /// just happened" activity feed the same way every other module's feed is fed.
   delivery
+  commerce_validation
+  commerce_listing_draft
+  seo_issue_detected
+  commerce_rfq_created
+  commerce_rfq_response_received
+  commerce_rfq_awarded
+  commerce_supplier_claim_created
+  commerce_supplier_claim_settled
 }
 
 enum CouponType {
@@ -122,12 +130,120 @@ enum WorkflowTriggerKey {
   review
   credit_overdue
   birthday
+  payment_received
+  complaint_received
+  stock_changed
+  delivery_created
+  delivery_assigned
+  delivery_picked_up
+  delivery_en_route
+  delivery_delivered
+  delivery_failed
+  delivery_retried
+  commerce_validation
+  commerce_listing_draft
+  seo_issue_detected
+  commerce_rfq_created
+  commerce_rfq_response_received
+  commerce_rfq_awarded
+  commerce_supplier_claim_created
+  commerce_supplier_claim_settled
+  scheduled
 }
 
 enum WorkflowRunStatus {
+  running
+  waiting
   success
   failed
   skipped
+  cancelled
+}
+
+enum WorkflowApprovalStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+enum WorkflowDeadLetterStatus {
+  open
+  resolved
+  dismissed
+}
+
+enum WorkflowDeadLetterNextAction {
+  retry
+  manual_review
+}
+
+enum WorkflowDeadLetterDecisionAction {
+  created
+  refreshed
+  retry_started
+  retry_succeeded
+  retry_failed
+  resolved
+  dismissed
+}
+
+enum SeoAuditIssueStatus {
+  open
+  resolved
+  ignored
+}
+
+enum WorkflowConditionMode {
+  all
+  any
+}
+
+enum WorkflowVariableScope {
+  business
+  workflow
+  branch
+}
+
+enum WorkflowVariableEnvironment {
+  draft
+  staging
+  production
+}
+
+enum WorkflowVariableType {
+  string
+  number
+  boolean
+  json
+  secret_reference
+}
+
+/// Autonomous Commerce Product Radar lifecycle. These are opportunity records, never canonical
+/// products: they stay separate until a later validation flow explicitly approves a launch.
+enum ProductOpportunityStatus {
+  discovered
+  saved
+  watching
+  dismissed
+  validation_requested
+  test_approved
+  launch_approved
+  rejected
+}
+
+enum ProductOpportunityRisk {
+  low
+  medium
+  high
+  blocked
+}
+
+enum ProductValidationDecision {
+  approve_test
+  approve_launch
+  watch
+  reject
 }
 
 enum CashShiftStatus {
@@ -554,11 +670,11 @@ model Business {
   /// order, no custom lines" — `composeAndSend` falls back to that exact default.
   nightlyCloseConfig Json   @default("{}") @map("nightly_close_config")
 
-  taxLabel String  @default("Tax") @map("tax_label")
-  taxRate  Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxLabel     String  @default("Tax") @map("tax_label")
+  taxRate      Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   /// Day of the month after a tax period ends that the owner files by (1-28). Noxtill only
   /// reminds — it does not know or verify any tax authority's real deadline.
-  taxFilingDay Int @default(15) @map("tax_filing_day")
+  taxFilingDay Int     @default(15) @map("tax_filing_day")
 
   /// Messages & Channels, configurable (UPD-BE-118): ordered `MessageChannel[]` overriding the
   /// hardcoded whatsapp→sms→email fallback in `channel-resolution.util.ts`. `[]` (every
@@ -657,151 +773,178 @@ model Business {
   /// Last time msgUsed was reset to 0 for a new billing month (INT-014) — null until the first reset.
   msgQuotaResetAt      DateTime? @map("msg_quota_reset_at")
 
-  businessUsers               BusinessUser[]
-  customers                   Customer[]
-  products                    Product[]
-  orders                      Order[]
-  creditEntries               CreditEntry[]
-  appointments                Appointment[]
-  messages                    Message[]
-  whatsappWindows             WhatsappWindow[]
-  reviewRequests              ReviewRequest[]
-  privateFeedback             PrivateFeedback[]
-  externalReviews             ExternalReview[]
-  reviewPlatformDestinations  ReviewPlatformDestination[]
-  reviewMetricsSnapshots      ReviewMetricsSnapshot[]
-  stockMovements              StockMovement[]
-  expenses                    Expense[]
-  attendance                  Attendance[]
-  campaigns                   Campaign[]
-  competitors                 Competitor[]
-  competitorObservations      CompetitorObservation[]
-  trackedKeywords             TrackedKeyword[]
-  auditLogs                   AuditLog[]
-  importBatches               ImportBatch[]
-  integrations                Integration[]
-  adCampaigns                 AdCampaign[]
-  emailCampaigns              EmailCampaign[]
-  productFeedItems            ProductFeedItem[]
-  gmbPosts                    GmbPost[]
-  notifications               Notification[]
-  healthScoreSnapshots        HealthScoreSnapshot[]
-  creditBalanceSnapshots      CreditBalanceSnapshot[]
-  goal                        BusinessGoal?
-  activityEvents              ActivityEvent[]
-  aiInsights                  AiInsight[]
-  actionItemStates            ActionItemState[]
-  heldSales                   HeldSale[]
-  cashShifts                  CashShift[]
-  cashMovements               CashMovement[]
-  voiceSaleDrafts             VoiceSaleDraft[]
-  tables                      Table[]
-  returns                     Return[]
-  receiptLogs                 ReceiptLog[]
-  variantSets                 VariantSet[]
-  bundles                     Bundle[]
-  suppliers                   Supplier[]
-  priceHistory                PriceHistory[]
-  categories                  Category[]
-  scheduledExports            ScheduledExport[]
-  waitlistEntries             WaitlistEntry[]
-  purchaseOrders              PurchaseOrder[]
-  productWaitlistEntries      ProductWaitlistEntry[]
-  queueTokens                 QueueToken[]
-  deposits                    Deposit[]
-  depositSettings             DepositSettings?
-  bookingLinkSettings         BookingLinkSettings?
-  bookingLinkVisits           BookingLinkVisit[]
-  reminderRules               ReminderRule[]
-  installmentPlans            InstallmentPlan[]
-  installments                Installment[]
-  creditShareLinks            CreditShareLink[]
-  creditReminderRules         CreditReminderRule[]
-  creditReminderLogs          CreditReminderLog[]
-  segments                    Segment[]
-  loyaltyPrograms             LoyaltyProgram[]
-  loyaltyMembers              LoyaltyMember[]
-  membershipPlans             MembershipPlan[]
-  memberships                 Membership[]
-  memoryNotes                 MemoryNote[]
-  customerCustomFields        CustomerCustomField[]
-  customerTags                CustomerTag[]
-  customerMergeSettings       CustomerMergeSettings?
-  customerPrivacySettings     CustomerPrivacySettings?
-  customerExportLogs          CustomerExportLog[]
-  customerDuplicateDismissals CustomerDuplicateDismissal[]
-  videoTestimonials           VideoTestimonial[]
-  coupons                     Coupon[]
-  vouchers                    Voucher[]
-  workflows                   Workflow[]
-  workflowRuns                WorkflowRun[]
-  contentItems                ContentItem[]
-  staffShifts                 StaffShift[]
-  timeOff                     TimeOff[]
-  timesheetApprovals          TimesheetApproval[]
-  commissionPayments          CommissionPayment[]
-  staffAdvances               StaffAdvance[]
-  payrollLineItems            PayrollLineItem[]
-  schedulePublishes           SchedulePublish[]
-  stockTransfersOut           StockTransfer[]              @relation("StockTransferSource")
-  stockTransfersIn            StockTransfer[]              @relation("StockTransferDest")
-  stockCounts                 StockCount[]
-  customRoles                 CustomRole[]
-  roleCapabilityOverrides     RoleCapabilityOverride[]
-  labelOverrides              LabelOverride[]
-  optionSets                  OptionSet[]
-  sessions                    Session[]
-  masterListing               MasterListing?
-  listingSyncLogs             ListingSyncLog[]
-  citations                   Citation[]
-  listingPhotos               ListingPhoto[]
-  listingSettings             ListingSettings?
-  gmbPhotos                   GmbPhoto[]
-  gmbQnas                     GmbQna[]
-  gmbInsightsSnapshots        GmbInsightsSnapshot[]
-  socialAccounts              SocialAccount[]
-  mediaAssets                 MediaAsset[]
-  socialPosts                 SocialPost[]
-  socialInboxItems            SocialInboxItem[]
-  socialAnalyticsSnapshots    SocialAnalyticsSnapshot[]
-  socialSettings              SocialSettings?
-  socialPostAnalytics         SocialPostAnalytics[]
-  socialCaptionGenerations    SocialCaptionGeneration[]
-  visibilityScoreSnapshots    VisibilityScoreSnapshot[]
-  competitiveOpportunities    CompetitiveOpportunity[]
-  competitiveSettings         CompetitiveSettings?
-  voiceSettings               VoiceSettings?
-  phoneNumber                 PhoneNumber?
-  phoneCalls                  PhoneCall[]
-  voiceRoutingRules           VoiceRoutingRule[]
-  voiceKnowledgeEntries       VoiceKnowledgeEntry[]
-  digitizerAliases            DigitizerAlias[]
-  riders                      Rider[]
-  deliveries                  Delivery[]
-  routes                      Route[]
-  deliveryZones               DeliveryZone[]
-  deliverySettings            DeliverySettings?
-  deliveryAutomationRuns      DeliveryAutomationRun[]
-  adCreatives                 AdCreative[]
-  adAudiences                 AdAudience[]
-  adLeads                     AdLead[]
-  adSettings                  AdSettings?
-  integrationSyncLogs         IntegrationSyncLog[]
-  ecommerceSyncConflicts      EcommerceSyncConflict[]
-  adCampaignStatsSnapshots    AdCampaignStatsSnapshot[]
-  accountingMappings          AccountingMapping[]
-  outboundWebhooks            OutboundWebhook[]
-  reviewSentimentThemes       ReviewSentimentTheme[]
-  recurringObligations        RecurringObligation[]
-  seoHeatmapPoints            SeoHeatmapPoint[]
-  apiKeys                     ApiKey[]
-  nightlyCloseLogs            NightlyCloseLog[]
-  healthScoreWeightChanges    HealthScoreWeightChange[]
-  voiceCommandDrafts          VoiceCommandDraft[]
-  assistantConversations      AssistantConversation[]
-  notificationPreferences     NotificationPreference[]
-  dataSubjectRequests         DataSubjectRequest[]
-  taxRules                    TaxRule[]
+  businessUsers                BusinessUser[]
+  customers                    Customer[]
+  products                     Product[]
+  orders                       Order[]
+  creditEntries                CreditEntry[]
+  appointments                 Appointment[]
+  messages                     Message[]
+  whatsappWindows              WhatsappWindow[]
+  reviewRequests               ReviewRequest[]
+  privateFeedback              PrivateFeedback[]
+  externalReviews              ExternalReview[]
+  reviewPlatformDestinations   ReviewPlatformDestination[]
+  reviewMetricsSnapshots       ReviewMetricsSnapshot[]
+  stockMovements               StockMovement[]
+  expenses                     Expense[]
+  attendance                   Attendance[]
+  campaigns                    Campaign[]
+  competitors                  Competitor[]
+  competitorObservations       CompetitorObservation[]
+  trackedKeywords              TrackedKeyword[]
+  auditLogs                    AuditLog[]
+  importBatches                ImportBatch[]
+  integrations                 Integration[]
+  adCampaigns                  AdCampaign[]
+  emailCampaigns               EmailCampaign[]
+  productFeedItems             ProductFeedItem[]
+  gmbPosts                     GmbPost[]
+  notifications                Notification[]
+  healthScoreSnapshots         HealthScoreSnapshot[]
+  creditBalanceSnapshots       CreditBalanceSnapshot[]
+  goal                         BusinessGoal?
+  activityEvents               ActivityEvent[]
+  aiInsights                   AiInsight[]
+  actionItemStates             ActionItemState[]
+  heldSales                    HeldSale[]
+  cashShifts                   CashShift[]
+  cashMovements                CashMovement[]
+  voiceSaleDrafts              VoiceSaleDraft[]
+  tables                       Table[]
+  returns                      Return[]
+  receiptLogs                  ReceiptLog[]
+  variantSets                  VariantSet[]
+  bundles                      Bundle[]
+  suppliers                    Supplier[]
+  priceHistory                 PriceHistory[]
+  categories                   Category[]
+  scheduledExports             ScheduledExport[]
+  waitlistEntries              WaitlistEntry[]
+  purchaseOrders               PurchaseOrder[]
+  productWaitlistEntries       ProductWaitlistEntry[]
+  queueTokens                  QueueToken[]
+  deposits                     Deposit[]
+  depositSettings              DepositSettings?
+  bookingLinkSettings          BookingLinkSettings?
+  bookingLinkVisits            BookingLinkVisit[]
+  reminderRules                ReminderRule[]
+  installmentPlans             InstallmentPlan[]
+  installments                 Installment[]
+  creditShareLinks             CreditShareLink[]
+  creditReminderRules          CreditReminderRule[]
+  creditReminderLogs           CreditReminderLog[]
+  segments                     Segment[]
+  loyaltyPrograms              LoyaltyProgram[]
+  loyaltyMembers               LoyaltyMember[]
+  membershipPlans              MembershipPlan[]
+  memberships                  Membership[]
+  memoryNotes                  MemoryNote[]
+  customerCustomFields         CustomerCustomField[]
+  customerTags                 CustomerTag[]
+  customerMergeSettings        CustomerMergeSettings?
+  customerPrivacySettings      CustomerPrivacySettings?
+  customerExportLogs           CustomerExportLog[]
+  customerDuplicateDismissals  CustomerDuplicateDismissal[]
+  videoTestimonials            VideoTestimonial[]
+  coupons                      Coupon[]
+  vouchers                     Voucher[]
+  workflows                    Workflow[]
+  workflowVersions             WorkflowVersion[]
+  workflowRuns                 WorkflowRun[]
+  workflowRunAttempts          WorkflowRunAttempt[]
+  workflowApprovals            WorkflowApproval[]
+  workflowVariables            WorkflowVariable[]
+  workflowDeadLetters          WorkflowDeadLetter[]
+  workflowDeadLetterDecisions  WorkflowDeadLetterDecision[]
+  productOpportunities         ProductOpportunity[]
+  productOpportunityAudits     ProductOpportunityAudit[]
+  productValidationRuns        ProductValidationRun[]
+  commerceRfqs                 CommerceRfq[]
+  commerceRfqAudits            CommerceRfqAudit[]
+  commerceSupplierClaims       CommerceSupplierClaim[]
+  commerceSupplierClaimAudits  CommerceSupplierClaimAudit[]
+  commerceQuotes               CommerceSupplierQuote[]
+  commerceListingDrafts        CommerceListingDraft[]
+  commerceChannelListings      CommerceChannelListing[]
+  commerceListingDraftVersions CommerceListingDraftVersion[]
+  commerceListingDraftAudits   CommerceListingDraftAudit[]
+  commerceFulfillmentNodes     CommerceFulfillmentNode[]
+  commerceFulfillmentMappings  CommerceFulfillmentMapping[]
+  commerceFulfillmentAudits    CommerceFulfillmentAudit[]
+  commerceRoutingDecisions     CommerceRoutingDecision[]
+  commerceRoutingAllocations   CommerceRoutingAllocation[]
+  seoAuditRuns                 SeoAuditRun[]
+  seoAuditSchedule             SeoAuditSchedule?
+  seoAuditIssues               SeoAuditIssue[]
+  seoAuditIssueAudits          SeoAuditIssueAudit[]
+  contentItems                 ContentItem[]
+  staffShifts                  StaffShift[]
+  timeOff                      TimeOff[]
+  timesheetApprovals           TimesheetApproval[]
+  commissionPayments           CommissionPayment[]
+  staffAdvances                StaffAdvance[]
+  payrollLineItems             PayrollLineItem[]
+  schedulePublishes            SchedulePublish[]
+  stockTransfersOut            StockTransfer[]               @relation("StockTransferSource")
+  stockTransfersIn             StockTransfer[]               @relation("StockTransferDest")
+  stockCounts                  StockCount[]
+  customRoles                  CustomRole[]
+  roleCapabilityOverrides      RoleCapabilityOverride[]
+  labelOverrides               LabelOverride[]
+  optionSets                   OptionSet[]
+  sessions                     Session[]
+  masterListing                MasterListing?
+  listingSyncLogs              ListingSyncLog[]
+  citations                    Citation[]
+  listingPhotos                ListingPhoto[]
+  listingSettings              ListingSettings?
+  gmbPhotos                    GmbPhoto[]
+  gmbQnas                      GmbQna[]
+  gmbInsightsSnapshots         GmbInsightsSnapshot[]
+  socialAccounts               SocialAccount[]
+  mediaAssets                  MediaAsset[]
+  socialPosts                  SocialPost[]
+  socialInboxItems             SocialInboxItem[]
+  socialAnalyticsSnapshots     SocialAnalyticsSnapshot[]
+  socialSettings               SocialSettings?
+  socialPostAnalytics          SocialPostAnalytics[]
+  socialCaptionGenerations     SocialCaptionGeneration[]
+  visibilityScoreSnapshots     VisibilityScoreSnapshot[]
+  competitiveOpportunities     CompetitiveOpportunity[]
+  competitiveSettings          CompetitiveSettings?
+  voiceSettings                VoiceSettings?
+  phoneNumber                  PhoneNumber?
+  phoneCalls                   PhoneCall[]
+  voiceRoutingRules            VoiceRoutingRule[]
+  voiceKnowledgeEntries        VoiceKnowledgeEntry[]
+  digitizerAliases             DigitizerAlias[]
+  riders                       Rider[]
+  deliveries                   Delivery[]
+  routes                       Route[]
+  deliveryZones                DeliveryZone[]
+  deliverySettings             DeliverySettings?
+  deliveryAutomationRuns       DeliveryAutomationRun[]
+  adCreatives                  AdCreative[]
+  adAudiences                  AdAudience[]
+  adLeads                      AdLead[]
+  adSettings                   AdSettings?
+  integrationSyncLogs          IntegrationSyncLog[]
+  ecommerceSyncConflicts       EcommerceSyncConflict[]
+  adCampaignStatsSnapshots     AdCampaignStatsSnapshot[]
+  accountingMappings           AccountingMapping[]
+  outboundWebhooks             OutboundWebhook[]
+  reviewSentimentThemes        ReviewSentimentTheme[]
+  recurringObligations         RecurringObligation[]
+  seoHeatmapPoints             SeoHeatmapPoint[]
+  apiKeys                      ApiKey[]
+  nightlyCloseLogs             NightlyCloseLog[]
+  healthScoreWeightChanges     HealthScoreWeightChange[]
+  voiceCommandDrafts           VoiceCommandDraft[]
+  assistantConversations       AssistantConversation[]
+  notificationPreferences      NotificationPreference[]
+  dataSubjectRequests          DataSubjectRequest[]
+  taxRules                     TaxRule[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -824,11 +967,14 @@ model User {
   /// Per-user interface preferences (motion, text size, notification sounds) the app applies.
   uiPreferences       Json      @default("{}") @map("ui_preferences")
 
-  businessUsers          BusinessUser[]
-  notifications          Notification[]
-  sessions               Session[]
-  twoFactorCodes         TwoFactorCode[]
-  assistantConversations AssistantConversation[]
+  businessUsers             BusinessUser[]
+  notifications             Notification[]
+  sessions                  Session[]
+  twoFactorCodes            TwoFactorCode[]
+  assistantConversations    AssistantConversation[]
+  workflowApprovalDecisions WorkflowApproval[]      @relation("WorkflowApprovalDecider")
+  workflowDeadLetterAssignments WorkflowDeadLetter[] @relation("WorkflowDeadLetterOwner")
+  workflowDeadLetterDecisions WorkflowDeadLetterDecision[] @relation("WorkflowDeadLetterDecisionActor")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1426,20 +1572,26 @@ model Product {
   depositRequired  Boolean  @default(false) @map("deposit_required")
   depositAmount    Decimal? @map("deposit_amount") @db.Decimal(12, 2)
 
-  orderItems             OrderItem[]
-  stockMovements         StockMovement[]
-  appointments           Appointment[]
-  productFeedItems       ProductFeedItem[]
+  orderItems              OrderItem[]
+  stockMovements          StockMovement[]
+  appointments            Appointment[]
+  productFeedItems        ProductFeedItem[]
   /// Set only when this product is the sellable, catalog-facing "face" of a bundle (UPD-BE-013).
-  bundle                 Bundle?
-  bundleItems            BundleItem[]
-  priceHistory           PriceHistory[]
-  waitlistEntries        WaitlistEntry[]
-  purchaseOrderItems     PurchaseOrderItem[]
-  productWaitlistEntries ProductWaitlistEntry[]
-  queueTokens            QueueToken[]
-  stockTransferItems     StockTransferItem[]
-  stockCountLines        StockCountLine[]
+  bundle                  Bundle?
+  bundleItems             BundleItem[]
+  priceHistory            PriceHistory[]
+  waitlistEntries         WaitlistEntry[]
+  purchaseOrderItems      PurchaseOrderItem[]
+  productWaitlistEntries  ProductWaitlistEntry[]
+  queueTokens             QueueToken[]
+  stockTransferItems      StockTransferItem[]
+  stockCountLines         StockCountLine[]
+  commerceRfqItems        CommerceRfqItem[]
+  commerceClaimItems      CommerceSupplierClaimItem[]
+  radarOpportunity        ProductOpportunity?
+  commerceListingDrafts   CommerceListingDraft[]
+  commerceChannelListings CommerceChannelListing[]
+  fulfillmentMappings     CommerceFulfillmentMapping[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1451,24 +1603,24 @@ model Product {
 }
 
 model Order {
-  id          String      @id @default(uuid())
-  businessId  String      @map("business_id")
-  business    Business    @relation(fields: [businessId], references: [id])
-  orderNo     Int         @map("order_no")
-  customerId  String?     @map("customer_id")
-  customer    Customer?   @relation(fields: [customerId], references: [id])
-  orderType   OrderType   @default(counter) @map("order_type")
-  tableNo     String?     @map("table_no")
-  status      OrderStatus @default(pending)
-  subtotal    Decimal     @default(0) @db.Decimal(12, 2)
-  tax         Decimal     @default(0) @db.Decimal(12, 2)
-  discount    Decimal     @default(0) @db.Decimal(12, 2)
-  total       Decimal     @default(0) @db.Decimal(12, 2)
-  cogs        Decimal     @default(0) @db.Decimal(12, 2)
-  isQuotation Boolean     @default(false) @map("is_quotation")
+  id           String      @id @default(uuid())
+  businessId   String      @map("business_id")
+  business     Business    @relation(fields: [businessId], references: [id])
+  orderNo      Int         @map("order_no")
+  customerId   String?     @map("customer_id")
+  customer     Customer?   @relation(fields: [customerId], references: [id])
+  orderType    OrderType   @default(counter) @map("order_type")
+  tableNo      String?     @map("table_no")
+  status       OrderStatus @default(pending)
+  subtotal     Decimal     @default(0) @db.Decimal(12, 2)
+  tax          Decimal     @default(0) @db.Decimal(12, 2)
+  discount     Decimal     @default(0) @db.Decimal(12, 2)
+  total        Decimal     @default(0) @db.Decimal(12, 2)
+  cogs         Decimal     @default(0) @db.Decimal(12, 2)
+  isQuotation  Boolean     @default(false) @map("is_quotation")
   /// True when prices on this order include tax: `tax` is the portion inside `total`, so
   /// `total = subtotal − discount` rather than `subtotal − discount + tax`.
-  taxInclusive Boolean    @default(false) @map("tax_inclusive")
+  taxInclusive Boolean     @default(false) @map("tax_inclusive")
 
   /// Staff member who rang up the sale, if any — drives commission attribution (BE-058).
   staffUserId String?       @map("staff_user_id")
@@ -1515,13 +1667,14 @@ model Order {
   accountingSyncedAt   DateTime? @map("accounting_synced_at")
   accountingExternalId String?   @map("accounting_external_id")
 
-  items         OrderItem[]
-  payments      Payment[]
-  creditEntries CreditEntry[]
-  returns       Return[]
-  receiptLogs   ReceiptLog[]
-  stamps        Stamp[]
-  delivery      Delivery?
+  items            OrderItem[]
+  payments         Payment[]
+  creditEntries    CreditEntry[]
+  returns          Return[]
+  receiptLogs      ReceiptLog[]
+  stamps           Stamp[]
+  delivery         Delivery?
+  routingDecisions CommerceRoutingDecision[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1533,21 +1686,22 @@ model Order {
 }
 
 model OrderItem {
-  id             String   @id @default(uuid())
-  orderId        String   @map("order_id")
-  order          Order    @relation(fields: [orderId], references: [id])
-  productId      String?  @map("product_id")
-  product        Product? @relation(fields: [productId], references: [id])
-  name           String
-  price          Decimal  @db.Decimal(12, 2)
-  cost           Decimal  @db.Decimal(12, 2)
-  qty            Int
+  id                 String                      @id @default(uuid())
+  orderId            String                      @map("order_id")
+  order              Order                       @relation(fields: [orderId], references: [id])
+  productId          String?                     @map("product_id")
+  product            Product?                    @relation(fields: [productId], references: [id])
+  name               String
+  price              Decimal                     @db.Decimal(12, 2)
+  cost               Decimal                     @db.Decimal(12, 2)
+  qty                Int
   /// Reports depth fix (UPD-INT-015): the real per-line rate `computeOrderTotals` actually taxed
   /// this line at (via `resolveTaxRatePercent`'s per-category `TaxRule` match, or the business's
   /// flat rate) — previously computed at sale time but never persisted, so a tax report could only
   /// ever show one blended business-level rate even when real multi-rate `TaxRule`s exist. Null on
   /// rows written before this field existed.
-  taxRatePercent Decimal? @map("tax_rate_percent") @db.Decimal(5, 2)
+  taxRatePercent     Decimal?                    @map("tax_rate_percent") @db.Decimal(5, 2)
+  routingAllocations CommerceRoutingAllocation[]
 
   @@index([orderId])
   @@map("order_items")
@@ -2074,9 +2228,13 @@ model Message {
   campaignId String?   @map("campaign_id")
   campaign   Campaign? @relation(fields: [campaignId], references: [id])
 
+  /// Internal deduplication key for retryable workflow actions. Null for ordinary sends.
+  idempotencyKey String? @map("idempotency_key")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@unique([businessId, idempotencyKey], map: "messages_business_idempotency_key_key")
   @@index([businessId, customerId])
   @@index([status, scheduledFor])
   @@map("messages")
@@ -2317,57 +2475,57 @@ model PhoneNumber {
 /// recording, not Twilio's own URL — kept for as long as `RECORDING_RETENTION_DAYS`, then purged
 /// by the daily retention job alongside the row itself.
 model PhoneCall {
-  id                  String           @id @default(uuid())
-  businessId          String           @map("business_id")
-  business            Business         @relation(fields: [businessId], references: [id])
-  callSid             String           @unique @map("call_sid")
-  fromNumber          String           @map("from_number")
-  status              PhoneCallStatus  @default(in_progress)
-  outcome             PhoneCallOutcome @default(none)
+  id                    String           @id @default(uuid())
+  businessId            String           @map("business_id")
+  business              Business         @relation(fields: [businessId], references: [id])
+  callSid               String           @unique @map("call_sid")
+  fromNumber            String           @map("from_number")
+  status                PhoneCallStatus  @default(in_progress)
+  outcome               PhoneCallOutcome @default(none)
   /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the
   /// AI matched this call to (Call Queue depth fix, UPD-BE-129).
-  customIntentName    String?          @map("custom_intent_name")
-  transcript          Json             @default("[]")
-  recordingKey        String?          @map("recording_key")
-  appointmentId       String?          @map("appointment_id")
-  appointment         Appointment?     @relation(fields: [appointmentId], references: [id])
-  startedAt           DateTime         @default(now()) @map("started_at")
-  endedAt             DateTime?        @map("ended_at")
+  customIntentName      String?          @map("custom_intent_name")
+  transcript            Json             @default("[]")
+  recordingKey          String?          @map("recording_key")
+  appointmentId         String?          @map("appointment_id")
+  appointment           Appointment?     @relation(fields: [appointmentId], references: [id])
+  startedAt             DateTime         @default(now()) @map("started_at")
+  endedAt               DateTime?        @map("ended_at")
   /// Call Queue fix (UPD-BE-129) — set when staff mark this "message"/"custom"/missed call as
   /// handled (manually called back, or otherwise resolved). NULL means it's still sitting in the
   /// real operational queue of calls needing human follow-up.
-  resolvedAt          DateTime?        @map("resolved_at")
+  resolvedAt            DateTime?        @map("resolved_at")
   /// Set when staff explicitly log that a callback was promised, without yet marking it resolved —
   /// a distinct state from `resolvedAt` (a queue item can be "callback offered" but not yet done).
-  callbackRequestedAt DateTime?        @map("callback_requested_at")
+  callbackRequestedAt   DateTime?        @map("callback_requested_at")
   /// Live Calls listen/take-over fix — set the moment a staff member's own phone is bridged live
   /// into this call via a real Twilio conference redirect (Twilio's "modify a live call" REST
   /// action), replacing the earlier disclosed 15s-poll-only gap. Loose reference (no relation), same
   /// convention as `AuditLog.actorUserId`.
-  joinedAt            DateTime?        @map("joined_at")
-  joinedByUserId      String?          @map("joined_by_user_id")
+  joinedAt              DateTime?        @map("joined_at")
+  joinedByUserId        String?          @map("joined_by_user_id")
   /// AI Phone workspace — the staff member who owns the follow-up for this call (a `BusinessUser.id`,
   /// loose reference like `joinedByUserId`). NULL means nobody has been asked to call back yet.
-  assignedToUserId    String?          @map("assigned_to_user_id")
+  assignedToUserId      String?          @map("assigned_to_user_id")
   /// AI Phone workspace — a summary generated ON DEMAND from `transcript` alone (never a live
   /// guess) and cached here. NULL until someone asks for one.
-  summary             String?          @db.Text
-  summaryGeneratedAt  DateTime?        @map("summary_generated_at")
+  summary               String?          @db.Text
+  summaryGeneratedAt    DateTime?        @map("summary_generated_at")
   /// AI Phone, full — only what the caller actually said during the call (the AI extracts a name or an
   /// email address when one is clearly given, never guesses). NULL means the caller never offered it.
-  callerName          String?          @map("caller_name")
-  callerEmail         String?          @map("caller_email")
+  callerName            String?          @map("caller_name")
+  callerEmail           String?          @map("caller_email")
   /// The custom routing rule (VoiceRoutingRule) that decided this call, kept by name too so the call
   /// still explains itself after the rule is edited or deleted. NULL when no custom rule fired.
-  routedRuleId        String?          @map("routed_rule_id")
-  routedRuleName      String?          @map("routed_rule_name")
+  routedRuleId          String?          @map("routed_rule_id")
+  routedRuleName        String?          @map("routed_rule_name")
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
-  providerCost          Decimal?  @map("provider_cost") @db.Decimal(10, 4)
-  providerCostUnit      String?   @map("provider_cost_unit")
-  providerCostCheckedAt DateTime? @map("provider_cost_checked_at")
+  providerCost          Decimal?         @map("provider_cost") @db.Decimal(10, 4)
+  providerCostUnit      String?          @map("provider_cost_unit")
+  providerCostCheckedAt DateTime?        @map("provider_cost_checked_at")
   /// Set when staff deleted the recording and transcript (the call log itself is kept).
-  recordingDeletedAt    DateTime? @map("recording_deleted_at")
+  recordingDeletedAt    DateTime?        @map("recording_deleted_at")
 
   notes PhoneCallNote[]
 
@@ -2582,41 +2740,995 @@ model Voucher {
 /// their own relational tables, mirroring `Business.referralSettings`'s precedent for this kind
 /// of business-configurable-rule data.
 model Workflow {
-  id         String             @id @default(uuid())
-  businessId String             @map("business_id")
-  business   Business           @relation(fields: [businessId], references: [id])
-  name       String
-  triggerKey WorkflowTriggerKey @map("trigger_key")
+  id                     String                @id @default(uuid())
+  businessId             String                @map("business_id")
+  business               Business              @relation(fields: [businessId], references: [id])
+  name                   String
+  triggerKey             WorkflowTriggerKey    @map("trigger_key")
+  /// Interval-based schedule for scheduled workflows; null for event-triggered workflows.
+  scheduleEveryMinutes   Int?                  @map("schedule_every_minutes")
+  /// Five-field cron schedule; mutually exclusive with scheduleEveryMinutes.
+  scheduleCronExpression String?               @map("schedule_cron_expression") @db.VarChar(100)
+  /// IANA zone used to interpret cron occurrences, including daylight-saving transitions.
+  scheduleTimezone       String                @default("UTC") @map("schedule_timezone") @db.VarChar(64)
+  nextScheduleAt         DateTime?             @map("next_schedule_at")
+  lastScheduledAt        DateTime?             @map("last_scheduled_at")
   /// `{ field: string; operator: 'eq'|'neq'|'gt'|'gte'|'lt'|'lte'|'contains'; value: string|number }[]`
-  conditions Json               @default("[]")
-  /// `{ type: 'send_customer_message'|'notify_owner'; messageBody: string }[]`
-  actions    Json               @default("[]")
-  active     Boolean            @default(true)
+  conditions             Json                  @default("[]")
+  /// Whether every condition must match (`all`) or at least one (`any`).
+  conditionMode          WorkflowConditionMode @default(all) @map("condition_mode")
+  /// Supported action JSON is validated by `workflow-definition.util.ts` before saving.
+  actions                Json                  @default("[]")
+  /// Optional connected trigger/condition/action graph. Null preserves legacy linear workflows.
+  graph                  Json?
+  /// New workflows stay paused until an operator tests and explicitly activates them.
+  active                 Boolean               @default(false)
+  /// Archived workflows remain auditable but cannot receive new trigger events.
+  archivedAt             DateTime?             @map("archived_at")
+  version                Int                   @default(1)
 
-  runs WorkflowRun[]
+  runs      WorkflowRun[]
+  versions  WorkflowVersion[]
+  approvals WorkflowApproval[]
+  deadLetters WorkflowDeadLetter[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId, triggerKey, active])
+  @@index([businessId, archivedAt, createdAt])
+  @@index([triggerKey, active, nextScheduleAt], map: "workflows_schedule_due_idx")
   @@map("workflows")
 }
 
-model WorkflowRun {
-  id         String            @id @default(uuid())
-  workflowId String            @map("workflow_id")
-  workflow   Workflow          @relation(fields: [workflowId], references: [id])
-  businessId String            @map("business_id")
-  business   Business          @relation(fields: [businessId], references: [id])
-  status     WorkflowRunStatus
-  context    Json
-  result     Json?
-  error      String?
+/// Immutable snapshot of the authored definition for each workflow revision.
+model WorkflowVersion {
+  id                     String                @id @default(uuid())
+  workflowId             String                @map("workflow_id")
+  workflow               Workflow              @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  businessId             String                @map("business_id")
+  business               Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  version                Int
+  name                   String
+  triggerKey             WorkflowTriggerKey    @map("trigger_key")
+  scheduleEveryMinutes   Int?                  @map("schedule_every_minutes")
+  scheduleCronExpression String?               @map("schedule_cron_expression") @db.VarChar(100)
+  scheduleTimezone       String                @default("UTC") @map("schedule_timezone") @db.VarChar(64)
+  conditions             Json
+  conditionMode          WorkflowConditionMode @default(all) @map("condition_mode")
+  actions                Json
+  /// Immutable graph snapshot for runs pinned to this version.
+  graph                  Json?
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@unique([workflowId, version])
   @@index([businessId, workflowId, createdAt])
+  @@map("workflow_versions")
+}
+
+model WorkflowRun {
+  id               String               @id @default(uuid())
+  workflowId       String               @map("workflow_id")
+  workflow         Workflow             @relation(fields: [workflowId], references: [id])
+  businessId       String               @map("business_id")
+  business         Business             @relation(fields: [businessId], references: [id])
+  workflowVersion  Int                  @default(1) @map("workflow_version")
+  triggerEventId   String?              @map("trigger_event_id")
+  status           WorkflowRunStatus
+  /// Durable wait state: the scheduler resumes after this timestamp at the saved action index.
+  waitingUntil     DateTime?            @map("waiting_until")
+  nextActionIndex  Int?                 @map("next_action_index")
+  /// Selected graph branch and visited nodes, fixed when this run starts.
+  executionPlan    Json?                @map("execution_plan")
+  /// Position within executionPlan.actionIndexes when suspended at a durable wait.
+  nextPlanPosition Int?                 @map("next_plan_position")
+  context          Json
+  result           Json?
+  error            String?
+  /// Number of manual retries already claimed; the original execution is not included.
+  retryCount       Int                  @default(0) @map("retry_count")
+  attempts         WorkflowRunAttempt[]
+  approvals        WorkflowApproval[]
+  deadLetter       WorkflowDeadLetter?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, workflowId, triggerEventId], map: "workflow_runs_business_workflow_event_key")
+  @@index([businessId, workflowId, createdAt])
+  @@index([businessId, status, waitingUntil], map: "workflow_runs_waiting_due_idx")
   @@map("workflow_runs")
+}
+
+/// Immutable execution-attempt record for a workflow run (initial attempt plus manual retries).
+model WorkflowRunAttempt {
+  id            String            @id @default(uuid())
+  workflowRunId String            @map("workflow_run_id")
+  workflowRun   WorkflowRun       @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  businessId    String            @map("business_id")
+  business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  attemptNumber Int               @map("attempt_number")
+  status        WorkflowRunStatus
+  result        Json?
+  error         String?           @db.Text
+  startedAt     DateTime          @default(now()) @map("started_at")
+  finishedAt    DateTime?         @map("finished_at")
+
+  @@unique([workflowRunId, attemptNumber], map: "workflow_run_attempts_run_attempt_key")
+  @@index([businessId, workflowRunId, startedAt], map: "workflow_run_attempts_business_run_started_idx")
+  @@map("workflow_run_attempts")
+}
+
+/// Human decision for a paused workflow. `payload` is the reviewable snapshot while
+/// `payloadHash` also binds the decision to the triggering context and pinned downstream actions.
+model WorkflowApproval {
+  id              String                 @id @default(uuid())
+  businessId      String                 @map("business_id")
+  business        Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  workflowId      String                 @map("workflow_id")
+  workflow        Workflow               @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowRunId   String                 @map("workflow_run_id")
+  workflowRun     WorkflowRun            @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  actionIndex     Int                    @map("action_index")
+  status          WorkflowApprovalStatus @default(pending)
+  title           String                 @db.VarChar(191)
+  description     String                 @db.Text
+  payload         Json
+  payloadHash     String                 @map("payload_hash") @db.Char(64)
+  decidedByUserId String?                @map("decided_by_user_id")
+  decidedBy       User?                  @relation("WorkflowApprovalDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decisionComment String?                @map("decision_comment") @db.Text
+  requestedAt     DateTime               @default(now()) @map("requested_at")
+  decidedAt       DateTime?              @map("decided_at")
+
+  @@unique([workflowRunId, actionIndex], map: "workflow_approvals_run_action_key")
+  @@index([businessId, status, requestedAt], map: "workflow_approvals_business_status_requested_idx")
+  @@index([workflowId, requestedAt])
+  @@map("workflow_approvals")
+}
+
+/// Terminal workflow failures retained for operator action; evidence excludes trigger payloads
+/// and stores only failure metadata so the canonical run remains the source for detailed context.
+model WorkflowDeadLetter {
+  id                 String                       @id @default(uuid())
+  businessId         String                       @map("business_id")
+  business           Business                     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  workflowId         String                       @map("workflow_id")
+  workflow           Workflow                     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowRunId      String                       @unique @map("workflow_run_id")
+  workflowRun        WorkflowRun                 @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  ownerUserId        String?                      @map("owner_user_id")
+  ownerUser          User?                        @relation("WorkflowDeadLetterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownerRole          Role                         @default(owner) @map("owner_role")
+  status             WorkflowDeadLetterStatus     @default(open)
+  nextAction         WorkflowDeadLetterNextAction  @default(manual_review) @map("next_action")
+  failureCode        String                       @map("failure_code") @db.VarChar(64)
+  evidence           Json
+  operatorRetryCount Int                          @default(0) @map("operator_retry_count")
+  resolutionReason   String?                      @map("resolution_reason") @db.Text
+  resolvedAt         DateTime?                    @map("resolved_at")
+  dismissedAt        DateTime?                    @map("dismissed_at")
+  decisions          WorkflowDeadLetterDecision[]
+  createdAt          DateTime                     @default(now()) @map("created_at")
+  updatedAt          DateTime                     @updatedAt @map("updated_at")
+
+  @@index([businessId, status, createdAt])
+  @@index([businessId, ownerUserId, status])
+  @@index([workflowId, createdAt])
+  @@map("workflow_dead_letters")
+}
+
+/// Append-only, human- and system-attributed decisions for each dead-letter record.
+model WorkflowDeadLetterDecision {
+  id             String                           @id @default(uuid())
+  businessId     String                           @map("business_id")
+  business       Business                         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  deadLetterId   String                           @map("dead_letter_id")
+  deadLetter     WorkflowDeadLetter              @relation(fields: [deadLetterId], references: [id], onDelete: Cascade)
+  actorUserId    String?                          @map("actor_user_id")
+  actorUser      User?                            @relation("WorkflowDeadLetterDecisionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  action         WorkflowDeadLetterDecisionAction
+  reason         String?                          @db.Text
+  before         Json?
+  after          Json?
+  createdAt      DateTime                         @default(now()) @map("created_at")
+
+  @@index([businessId, deadLetterId, createdAt])
+  @@index([businessId, action, createdAt])
+  @@map("workflow_dead_letter_decisions")
+}
+
+/// Persistent, tenant-scoped workflow state. Secret variables store only a reference such as
+/// `env:TWILIO_AUTH_TOKEN`; the referenced secret is never copied into this table or returned by
+/// the API. Execution-scoped values remain in an individual WorkflowRun.context JSON document.
+model WorkflowVariable {
+  id              String                      @id @default(uuid())
+  businessId      String                      @map("business_id")
+  business        Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  scope           WorkflowVariableScope
+  /// `*` for business scope, otherwise the owning workflow ID or branch Business ID. The service
+  /// validates scoped IDs against this tenant/group before writing them.
+  scopeKey        String                      @map("scope_key") @db.VarChar(191)
+  environment     WorkflowVariableEnvironment @default(production)
+  name            String                      @db.VarChar(100)
+  valueType       WorkflowVariableType        @map("value_type")
+  value           Json?
+  secretReference String?                     @map("secret_reference") @db.VarChar(191)
+  description     String?                     @db.VarChar(500)
+  createdByUserId String?                     @map("created_by_user_id") @db.VarChar(191)
+  updatedByUserId String?                     @map("updated_by_user_id") @db.VarChar(191)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, environment, scope, scopeKey, name], map: "workflow_variables_namespace_name_key")
+  @@index([businessId, environment, scope], map: "workflow_variables_business_environment_scope_idx")
+  @@index([businessId, createdAt], map: "workflow_variables_business_created_idx")
+  @@map("workflow_variables")
+}
+
+/// Product Radar (Autonomous Commerce screen 1). This is deliberately an opportunity/research
+/// record rather than a copy of `Product`: no stock, price, customer, order or supplier master
+/// data may be stored here. Values are nullable whenever no verified source has supplied them.
+model ProductOpportunity {
+  id                  String                   @id @default(uuid())
+  businessId          String                   @map("business_id")
+  business            Business                 @relation(fields: [businessId], references: [id])
+  title               String
+  source              String
+  sourceReference     String?                  @map("source_reference")
+  externalEntityId    String?                  @map("external_entity_id")
+  category            String?
+  market              String?
+  observedPrice       Decimal?                 @map("observed_price") @db.Decimal(12, 2)
+  estimatedLandedCost Decimal?                 @map("estimated_landed_cost") @db.Decimal(12, 2)
+  demandSignal        Int?                     @map("demand_signal")
+  competitionScore    Int?                     @map("competition_score")
+  trendVelocity       Int?                     @map("trend_velocity")
+  storeFitScore       Int?                     @map("store_fit_score")
+  marginEstimate      Decimal?                 @map("margin_estimate") @db.Decimal(5, 2)
+  supplierCount       Int?                     @map("supplier_count")
+  shippingEstimate    Decimal?                 @map("shipping_estimate") @db.Decimal(12, 2)
+  risk                ProductOpportunityRisk   @default(medium)
+  status              ProductOpportunityStatus @default(discovered)
+  /// Optional handoff to the canonical product catalog. Radar candidates remain separate until an
+  /// operator explicitly creates a disabled catalog draft from an approved validation result.
+  productId           String?                  @unique @map("product_id")
+  product             Product?                 @relation(fields: [productId], references: [id], onDelete: SetNull)
+  evidence            String?                  @db.Text
+  confidence          Int?
+  sourceFreshAt       DateTime?                @map("source_fresh_at")
+  version             Int                      @default(1)
+
+  audits         ProductOpportunityAudit[]
+  validationRuns ProductValidationRun[]
+  commerceRfqs   CommerceRfq[]
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+
+  @@index([businessId, status, updatedAt])
+  @@index([businessId, source, sourceFreshAt])
+  @@map("product_opportunities")
+}
+
+enum CommerceRfqStatus {
+  draft
+  open
+  awarded
+  closed
+  cancelled
+}
+
+enum CommerceRfqSupplierStatus {
+  pending_send
+  sent
+  responded
+  declined
+  withdrawn
+}
+
+enum CommerceSupplierQuoteStatus {
+  submitted
+  shortlisted
+  superseded
+  awarded
+  rejected
+  withdrawn
+}
+
+/// RFQs and Negotiations (Autonomous Commerce screen 3). This is a sourcing request, not a
+/// purchase commitment: the only inventory/financial handoff is a canonical draft PurchaseOrder.
+model CommerceRfq {
+  id                  String                  @id @default(uuid())
+  businessId          String                  @map("business_id")
+  business            Business                @relation(fields: [businessId], references: [id])
+  requirement         String                  @db.Text
+  status              CommerceRfqStatus       @default(draft)
+  market              String?
+  currency            String                  @default("USD") @db.Char(3)
+  destination         String?                 @db.Text
+  terms               String?                 @db.Text
+  dueAt               DateTime?               @map("due_at")
+  ownerUserId         String?                 @map("owner_user_id")
+  sourceOpportunityId String?                 @map("source_opportunity_id")
+  sourceOpportunity   ProductOpportunity?     @relation(fields: [sourceOpportunityId], references: [id])
+  awardedQuoteId      String?                 @unique @map("awarded_quote_id")
+  awardedQuote        CommerceSupplierQuote?  @relation("CommerceRfqAwardedQuote", fields: [awardedQuoteId], references: [id])
+  purchaseOrderId     String?                 @unique @map("purchase_order_id")
+  purchaseOrder       PurchaseOrder?          @relation(fields: [purchaseOrderId], references: [id])
+  version             Int                     @default(1)
+  items               CommerceRfqItem[]
+  suppliers           CommerceRfqSupplier[]
+  quotes              CommerceSupplierQuote[]
+  audits              CommerceRfqAudit[]
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+
+  @@index([businessId, status, updatedAt])
+  @@index([businessId, dueAt])
+  @@map("commerce_rfqs")
+}
+
+model CommerceRfqItem {
+  id             String                      @id @default(uuid())
+  rfqId          String                      @map("rfq_id")
+  rfq            CommerceRfq                 @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  productId      String?                     @map("product_id")
+  product        Product?                    @relation(fields: [productId], references: [id])
+  description    String                      @db.Text
+  qty            Int
+  minimumQty     Int?                        @map("minimum_qty")
+  specifications String?                     @db.Text
+  quotes         CommerceSupplierQuoteItem[]
+  createdAt      DateTime                    @default(now()) @map("created_at")
+
+  @@index([rfqId])
+  @@index([productId])
+  @@map("commerce_rfq_items")
+}
+
+model CommerceRfqSupplier {
+  id          String                    @id @default(uuid())
+  rfqId       String                    @map("rfq_id")
+  rfq         CommerceRfq               @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  supplierId  String                    @map("supplier_id")
+  supplier    Supplier                  @relation(fields: [supplierId], references: [id])
+  status      CommerceRfqSupplierStatus @default(pending_send)
+  invitedAt   DateTime?                 @map("invited_at")
+  respondedAt DateTime?                 @map("responded_at")
+  quotes      CommerceSupplierQuote[]
+  createdAt   DateTime                  @default(now()) @map("created_at")
+
+  @@unique([rfqId, supplierId])
+  @@index([supplierId, status])
+  @@map("commerce_rfq_suppliers")
+}
+
+model CommerceSupplierQuote {
+  id              String                      @id @default(uuid())
+  businessId      String                      @map("business_id")
+  business        Business                    @relation(fields: [businessId], references: [id])
+  rfqId           String                      @map("rfq_id")
+  rfq             CommerceRfq                 @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  supplierId      String                      @map("supplier_id")
+  supplier        Supplier                    @relation(fields: [supplierId], references: [id])
+  invitationId    String                      @map("invitation_id")
+  invitation      CommerceRfqSupplier         @relation(fields: [invitationId], references: [id])
+  status          CommerceSupplierQuoteStatus @default(submitted)
+  revisionNo      Int                         @default(1) @map("revision_no")
+  currency        String                      @db.Char(3)
+  validUntil      DateTime?                   @map("valid_until")
+  paymentTerms    String?                     @map("payment_terms") @db.Text
+  freight         Decimal                     @default(0) @db.Decimal(12, 2)
+  duties          Decimal                     @default(0) @db.Decimal(12, 2)
+  leadTimeDays    Int?                        @map("lead_time_days")
+  notes           String?                     @db.Text
+  version         Int                         @default(1)
+  items           CommerceSupplierQuoteItem[]
+  awardedInRfq    CommerceRfq?                @relation("CommerceRfqAwardedQuote")
+  createdByUserId String?                     @map("created_by_user_id")
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
+
+  @@unique([invitationId, revisionNo])
+  @@index([businessId, rfqId, status])
+  @@map("commerce_supplier_quotes")
+}
+
+model CommerceSupplierQuoteItem {
+  id         String                @id @default(uuid())
+  quoteId    String                @map("quote_id")
+  quote      CommerceSupplierQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  rfqItemId  String                @map("rfq_item_id")
+  rfqItem    CommerceRfqItem       @relation(fields: [rfqItemId], references: [id])
+  quotedQty  Int                   @map("quoted_qty")
+  minimumQty Int?                  @map("minimum_qty")
+  unitPrice  Decimal               @map("unit_price") @db.Decimal(12, 2)
+
+  @@unique([quoteId, rfqItemId])
+  @@index([rfqItemId])
+  @@map("commerce_supplier_quote_items")
+}
+
+model CommerceRfqAudit {
+  id          String      @id @default(uuid())
+  businessId  String      @map("business_id")
+  business    Business    @relation(fields: [businessId], references: [id])
+  rfqId       String      @map("rfq_id")
+  rfq         CommerceRfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  action      String
+  reason      String?     @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?     @map("actor_user_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([businessId, rfqId, createdAt])
+  @@map("commerce_rfq_audits")
+}
+
+enum CommerceSupplierClaimStatus {
+  draft
+  submitted
+  acknowledged
+  partially_settled
+  settled
+  rejected
+  closed
+}
+
+enum CommerceSupplierClaimEvidenceType {
+  photo
+  invoice
+  delivery_record
+  inspection_report
+  correspondence
+  other
+}
+
+enum CommerceSupplierClaimCommunicationChannel {
+  email
+  phone
+  portal
+  messaging
+  other
+}
+
+enum CommerceSupplierClaimCommunicationDirection {
+  inbound
+  outbound
+  internal
+}
+
+enum CommerceSupplierClaimSettlementType {
+  credit
+  refund
+  replacement
+  other
+}
+
+/// Merchant loss recovery against canonical Supplier/PurchaseOrder records. This is deliberately
+/// separate from customer Return/refund records; it never changes customer balances or stock.
+model CommerceSupplierClaim {
+  id              String                               @id @default(uuid())
+  businessId      String                               @map("business_id")
+  business        Business                             @relation(fields: [businessId], references: [id])
+  supplierId      String                               @map("supplier_id")
+  supplier        Supplier                             @relation(fields: [supplierId], references: [id])
+  purchaseOrderId String?                              @map("purchase_order_id")
+  purchaseOrder   PurchaseOrder?                       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  reference       String?
+  reasonCode      String                               @map("reason_code")
+  reason          String                               @db.Text
+  currency        String                               @db.Char(3)
+  status          CommerceSupplierClaimStatus          @default(draft)
+  version         Int                                  @default(1)
+  createdByUserId String?                              @map("created_by_user_id")
+  submittedAt     DateTime?                            @map("submitted_at")
+  acknowledgedAt  DateTime?                            @map("acknowledged_at")
+  resolvedAt      DateTime?                            @map("resolved_at")
+  items           CommerceSupplierClaimItem[]
+  evidence        CommerceSupplierClaimEvidence[]
+  communications  CommerceSupplierClaimCommunication[]
+  settlements     CommerceSupplierClaimSettlement[]
+  audits          CommerceSupplierClaimAudit[]
+  createdAt       DateTime                             @default(now()) @map("created_at")
+  updatedAt       DateTime                             @updatedAt @map("updated_at")
+
+  @@index([businessId, status, updatedAt], map: "commerce_supplier_claims_biz_status_updated_idx")
+  @@index([businessId, supplierId, createdAt], map: "commerce_supplier_claims_biz_supplier_created_idx")
+  @@index([purchaseOrderId], map: "commerce_supplier_claims_po_idx")
+  @@map("commerce_supplier_claims")
+}
+
+/// Loss components are entered by an operator; these are not guessed from order or catalog data.
+model CommerceSupplierClaimItem {
+  id                  String                @id @default(uuid())
+  claimId             String                @map("claim_id")
+  claim               CommerceSupplierClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  purchaseOrderItemId String?               @map("purchase_order_item_id")
+  purchaseOrderItem   PurchaseOrderItem?    @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
+  productId           String?               @map("product_id")
+  product             Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  description         String                @db.Text
+  quantityAffected    Int                   @default(1) @map("quantity_affected")
+  productLossAmount   Decimal               @default(0) @map("product_loss_amount") @db.Decimal(12, 2)
+  freightLossAmount   Decimal               @default(0) @map("freight_loss_amount") @db.Decimal(12, 2)
+  otherLossAmount     Decimal               @default(0) @map("other_loss_amount") @db.Decimal(12, 2)
+  createdAt           DateTime              @default(now()) @map("created_at")
+
+  @@index([claimId], map: "commerce_supplier_claim_items_claim_idx")
+  @@index([productId], map: "commerce_supplier_claim_items_product_idx")
+  @@index([purchaseOrderItemId], map: "commerce_supplier_claim_items_po_item_idx")
+  @@map("commerce_supplier_claim_items")
+}
+
+/// Evidence is append-only through the API. `fileKey` is signed only on read and must use this
+/// business's commerce-claims storage prefix; raw public URLs are never stored.
+model CommerceSupplierClaimEvidence {
+  id            String                            @id @default(uuid())
+  claimId       String                            @map("claim_id")
+  claim         CommerceSupplierClaim             @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  evidenceType  CommerceSupplierClaimEvidenceType @map("evidence_type")
+  fileKey       String                            @map("file_key")
+  note          String?                           @db.Text
+  sha256        String?                           @db.Char(64)
+  addedByUserId String?                           @map("added_by_user_id")
+  createdAt     DateTime                          @default(now()) @map("created_at")
+
+  @@index([claimId, createdAt], map: "commerce_supplier_claim_evidence_claim_created_idx")
+  @@map("commerce_supplier_claim_evidence")
+}
+
+/// Records communications an operator actually had; it never dispatches a supplier message.
+model CommerceSupplierClaimCommunication {
+  id                String                                      @id @default(uuid())
+  claimId           String                                      @map("claim_id")
+  claim             CommerceSupplierClaim                       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  channel           CommerceSupplierClaimCommunicationChannel
+  direction         CommerceSupplierClaimCommunicationDirection
+  summary           String                                      @db.Text
+  providerMessageId String?                                     @map("provider_message_id")
+  providerState     String?                                     @map("provider_state")
+  recordedByUserId  String?                                     @map("recorded_by_user_id")
+  occurredAt        DateTime                                    @map("occurred_at")
+  createdAt         DateTime                                    @default(now()) @map("created_at")
+
+  @@index([claimId, occurredAt], map: "commerce_supplier_claim_comms_claim_occurred_idx")
+  @@map("commerce_supplier_claim_communications")
+}
+
+/// Supplier recovery records are independent of customer returns and payments.
+model CommerceSupplierClaimSettlement {
+  id                 String                              @id @default(uuid())
+  claimId            String                              @map("claim_id")
+  claim              CommerceSupplierClaim               @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  settlementType     CommerceSupplierClaimSettlementType @map("settlement_type")
+  amount             Decimal                             @db.Decimal(12, 2)
+  currency           String                              @db.Char(3)
+  financialReference String?                             @map("financial_reference")
+  note               String?                             @db.Text
+  recordedByUserId   String?                             @map("recorded_by_user_id")
+  settledAt          DateTime                            @map("settled_at")
+  createdAt          DateTime                            @default(now()) @map("created_at")
+
+  @@index([claimId, settledAt], map: "commerce_supplier_claim_settlements_claim_settled_idx")
+  @@map("commerce_supplier_claim_settlements")
+}
+
+/// Append-only timeline for claim transitions and real recovery events.
+model CommerceSupplierClaimAudit {
+  id          String                @id @default(uuid())
+  businessId  String                @map("business_id")
+  business    Business              @relation(fields: [businessId], references: [id])
+  claimId     String                @map("claim_id")
+  claim       CommerceSupplierClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  action      String
+  reason      String?               @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?               @map("actor_user_id")
+  createdAt   DateTime              @default(now()) @map("created_at")
+
+  @@index([businessId, claimId, createdAt], map: "commerce_supplier_claim_audits_biz_claim_created_idx")
+  @@map("commerce_supplier_claim_audits")
+}
+
+enum CommerceFulfillmentNodeType {
+  own_location
+  third_party_warehouse
+  dropship_supplier
+  print_on_demand
+  manufacturer
+  marketplace_fulfillment
+  other
+}
+
+enum CommerceFulfillmentNodeStatus {
+  active
+  disabled
+}
+
+enum CommerceFulfillmentMappingRole {
+  primary
+  backup
+}
+
+/// A place or partner that can fulfil products. Stock stays canonical in Inventory: an
+/// `own_location` node points at a branch (a Business in the same group) whose real product stock
+/// is read by SKU; external nodes carry no stock ledger here. Routing individual orders belongs to
+/// the Fulfillment Router, and last-mile delivery to Delivery & Riders.
+model CommerceFulfillmentNode {
+  id               String                        @id @default(uuid())
+  businessId       String                        @map("business_id")
+  business         Business                      @relation(fields: [businessId], references: [id])
+  name             String                        @db.VarChar(120)
+  type             CommerceFulfillmentNodeType
+  status           CommerceFulfillmentNodeStatus @default(active)
+  /// Branch (Business id in the same branch group) for `own_location` nodes. Validated in the service.
+  branchBusinessId String?                       @map("branch_business_id")
+  supplierId       String?                       @map("supplier_id")
+  supplier         Supplier?                     @relation(fields: [supplierId], references: [id])
+  /// ISO 3166-1 alpha-2 country the node ships from.
+  country          String?                       @db.VarChar(2)
+  /// ISO 3166-1 alpha-2 country codes this node can serve. Empty means "not configured", not "everywhere".
+  serviceMarkets   Json                          @default("[]") @map("service_markets")
+  processingDays   Int?                          @map("processing_days")
+  /// Same-day order cutoff as "HH:MM" in the business timezone.
+  cutoffTime       String?                       @map("cutoff_time") @db.VarChar(5)
+  costPerOrder     Decimal?                      @map("cost_per_order") @db.Decimal(12, 2)
+  dailyCapacity    Int?                          @map("daily_capacity")
+  notes            String?                       @db.Text
+  disabledReason   String?                       @map("disabled_reason") @db.Text
+  createdByUserId  String?                       @map("created_by_user_id")
+  mappings         CommerceFulfillmentMapping[]
+  allocations      CommerceRoutingAllocation[]
+  createdAt        DateTime                      @default(now()) @map("created_at")
+  updatedAt        DateTime                      @updatedAt @map("updated_at")
+
+  @@unique([businessId, name], map: "commerce_fulfillment_nodes_business_name_key")
+  @@index([businessId, status], map: "commerce_fulfillment_nodes_business_status_idx")
+  @@map("commerce_fulfillment_nodes")
+}
+
+/// Links a canonical product to a fulfilment node. At most one primary node per product; any
+/// number of ordered backups. Disabled nodes stay mapped but are excluded from coverage.
+model CommerceFulfillmentMapping {
+  id         String                         @id @default(uuid())
+  businessId String                         @map("business_id")
+  business   Business                       @relation(fields: [businessId], references: [id])
+  nodeId     String                         @map("node_id")
+  node       CommerceFulfillmentNode        @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  productId  String                         @map("product_id")
+  product    Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  role       CommerceFulfillmentMappingRole
+  priority   Int                            @default(1)
+  createdAt  DateTime                       @default(now()) @map("created_at")
+  updatedAt  DateTime                       @updatedAt @map("updated_at")
+
+  @@unique([businessId, nodeId, productId], map: "commerce_fulfillment_mappings_biz_node_product_key")
+  @@index([businessId, productId], map: "commerce_fulfillment_mappings_business_product_idx")
+  @@map("commerce_fulfillment_mappings")
+}
+
+/// Append-only audit of fulfilment network changes (nodes, status and product mappings).
+model CommerceFulfillmentAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  nodeId      String?  @map("node_id")
+  action      String   @db.VarChar(64)
+  reason      String?  @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, nodeId, createdAt], map: "commerce_fulfillment_audits_biz_node_created_idx")
+  @@map("commerce_fulfillment_audits")
+}
+
+enum CommerceRoutingDecisionStatus {
+  active
+  superseded
+  cancelled
+}
+
+enum CommerceRoutingMode {
+  single
+  split
+}
+
+/// Operator-approved fulfilment route for one canonical order (Fulfillment Router, screen 8).
+/// Deterministic: the evidence snapshot records every candidate and why it was ranked or excluded
+/// under `policyVersion`. It never marks the order fulfilled and never reserves stock (Inventory
+/// has no reservation model; stock is deducted when the order is created). At most one active
+/// decision per order; rerouting supersedes the previous one.
+model CommerceRoutingDecision {
+  id                     String                        @id @default(uuid())
+  businessId             String                        @map("business_id")
+  business               Business                      @relation(fields: [businessId], references: [id])
+  orderId                String                        @map("order_id")
+  order                  Order                         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status                 CommerceRoutingDecisionStatus @default(active)
+  mode                   CommerceRoutingMode
+  /// ISO alpha-2 destination entered by the operator; orders carry no structured destination.
+  destinationCountry     String?                       @map("destination_country") @db.VarChar(2)
+  policyVersion          String                        @map("policy_version") @db.VarChar(32)
+  recommendedNodeIds     Json                          @map("recommended_node_ids")
+  overrodeRecommendation Boolean                       @default(false) @map("overrode_recommendation")
+  reason                 String?                       @db.Text
+  evidence               Json
+  decidedByUserId        String?                       @map("decided_by_user_id")
+  endedAt                DateTime?                     @map("ended_at")
+  endedReason            String?                       @map("ended_reason") @db.Text
+  allocations            CommerceRoutingAllocation[]
+  createdAt              DateTime                      @default(now()) @map("created_at")
+
+  @@index([businessId, status, createdAt], map: "commerce_routing_decisions_biz_status_created_idx")
+  @@index([businessId, orderId], map: "commerce_routing_decisions_business_order_idx")
+  @@map("commerce_routing_decisions")
+}
+
+/// Which node fulfils which order line under a routing decision.
+model CommerceRoutingAllocation {
+  id          String                  @id @default(uuid())
+  businessId  String                  @map("business_id")
+  business    Business                @relation(fields: [businessId], references: [id])
+  decisionId  String                  @map("decision_id")
+  decision    CommerceRoutingDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  orderItemId String                  @map("order_item_id")
+  orderItem   OrderItem               @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  nodeId      String                  @map("node_id")
+  node        CommerceFulfillmentNode @relation(fields: [nodeId], references: [id])
+  qty         Int
+
+  @@unique([decisionId, orderItemId], map: "commerce_routing_allocations_decision_item_key")
+  @@index([businessId, nodeId], map: "commerce_routing_allocations_business_node_idx")
+  @@map("commerce_routing_allocations")
+}
+
+enum CommerceListingDraftStatus {
+  draft
+  review_required
+  approved
+}
+
+enum CommerceChannelListingStatus {
+  pending
+  synced
+  failed
+}
+
+/// Channel-specific content belongs to Commerce, while the referenced product and its factual
+/// attributes remain owned by the canonical Products module. This record never publishes by itself.
+model CommerceListingDraft {
+  id              String                        @id @default(uuid())
+  businessId      String                        @map("business_id")
+  business        Business                      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  productId       String                        @map("product_id")
+  product         Product                       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  channel         String                        @db.VarChar(64)
+  market          String?                       @db.VarChar(100)
+  language        String                        @default("en") @db.VarChar(16)
+  brandVoice      String?                       @map("brand_voice") @db.Text
+  status          CommerceListingDraftStatus    @default(review_required)
+  currentVersion  Int                           @default(1) @map("current_version")
+  versions        CommerceListingDraftVersion[]
+  audits          CommerceListingDraftAudit[]
+  channelListings CommerceChannelListing[]
+  createdByUserId String?                       @map("created_by_user_id")
+  createdAt       DateTime                      @default(now()) @map("created_at")
+  updatedAt       DateTime                      @updatedAt @map("updated_at")
+
+  @@index([businessId, status, updatedAt], map: "commerce_listing_drafts_business_status_updated_idx")
+  @@index([businessId, productId, channel], map: "commerce_listing_drafts_business_product_channel_idx")
+  @@map("commerce_listing_drafts")
+}
+
+/// Immutable content/source snapshot for one listing draft version. Approval freezes only that
+/// exact snapshot; editing later creates a new version and returns the draft to review.
+model CommerceListingDraftVersion {
+  id               String               @id @default(uuid())
+  businessId       String               @map("business_id")
+  business         Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  draftId          String               @map("draft_id")
+  draft            CommerceListingDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  version          Int
+  content          Json
+  sources          Json
+  generationMethod String               @map("generation_method") @db.VarChar(24)
+  changeReason     String?              @map("change_reason") @db.Text
+  createdByUserId  String?              @map("created_by_user_id")
+  approvedByUserId String?              @map("approved_by_user_id")
+  approvedAt       DateTime?            @map("approved_at")
+  approvalReason   String?              @map("approval_reason") @db.Text
+  createdAt        DateTime             @default(now()) @map("created_at")
+
+  @@unique([draftId, version], map: "commerce_listing_draft_versions_draft_version_key")
+  @@index([businessId, draftId, createdAt], map: "commerce_listing_draft_versions_business_draft_created_idx")
+  @@map("commerce_listing_draft_versions")
+}
+
+/// Append-only audit history for listing draft creation, version changes and human approval.
+model CommerceListingDraftAudit {
+  id          String               @id @default(uuid())
+  businessId  String               @map("business_id")
+  business    Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  draftId     String               @map("draft_id")
+  draft       CommerceListingDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  action      String               @db.VarChar(64)
+  reason      String?              @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?              @map("actor_user_id")
+  createdAt   DateTime             @default(now()) @map("created_at")
+
+  @@index([businessId, draftId, createdAt], map: "commerce_listing_draft_audits_business_draft_created_idx")
+  @@map("commerce_listing_draft_audits")
+}
+
+/// Provider-side unpublished product drafts, linked to a reviewed listing version and canonical product.
+model CommerceChannelListing {
+  id                 String                       @id @default(uuid())
+  businessId         String                       @map("business_id")
+  business           Business                     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  draftId            String                       @map("draft_id")
+  draft              CommerceListingDraft         @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  productId          String                       @map("product_id")
+  product            Product                      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  provider           IntegrationProvider
+  externalProductId  String?                      @map("external_product_id") @db.VarChar(191)
+  syncedVersion      Int?                         @map("synced_version")
+  sellingPriceAtSync Decimal?                     @map("selling_price_at_sync") @db.Decimal(12, 2)
+  status             CommerceChannelListingStatus @default(pending)
+  lastSyncedAt       DateTime?                    @map("last_synced_at")
+  lastError          String?                      @map("last_error") @db.Text
+  createdAt          DateTime                     @default(now()) @map("created_at")
+  updatedAt          DateTime                     @updatedAt @map("updated_at")
+
+  @@unique([businessId, draftId, provider], map: "commerce_channel_listings_biz_draft_provider_key")
+  @@index([businessId, status, updatedAt], map: "commerce_channel_listings_business_status_updated_idx")
+  @@index([businessId, productId, provider], map: "commerce_channel_listings_business_product_provider_idx")
+  @@map("commerce_channel_listings")
+}
+
+/// Append-only audit entries for Product Radar state changes. The `before`/`after` values retain
+/// only the opportunity state; provider secrets and canonical master records never belong here.
+model ProductOpportunityAudit {
+  id            String             @id @default(uuid())
+  businessId    String             @map("business_id")
+  business      Business           @relation(fields: [businessId], references: [id])
+  opportunityId String             @map("opportunity_id")
+  opportunity   ProductOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  action        String
+  reason        String?
+  before        Json?
+  after         Json?
+  actorUserId   String?            @map("actor_user_id")
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  @@index([businessId, opportunityId, createdAt], map: "product_opp_audits_business_opportunity_created_idx")
+  @@map("product_opportunity_audits")
+}
+
+/// Immutable validation decision and the exact Radar evidence visible when it was made.
+/// This records an operator decision only; it does not create a canonical Product or publish it.
+model ProductValidationRun {
+  id               String                    @id @default(uuid())
+  businessId       String                    @map("business_id")
+  business         Business                  @relation(fields: [businessId], references: [id])
+  opportunityId    String                    @map("opportunity_id")
+  opportunity      ProductOpportunity        @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  decision         ProductValidationDecision
+  reason           String                    @db.Text
+  evidenceSnapshot Json                      @map("evidence_snapshot")
+  actorUserId      String?                   @map("actor_user_id")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+
+  @@index([businessId, opportunityId, createdAt], map: "validation_runs_business_opportunity_created_idx")
+  @@index([businessId, decision, createdAt], map: "validation_runs_business_decision_created_idx")
+  @@map("validation_runs")
+}
+
+/// SEO Autopilot crawl evidence. Each row is one explicit, bounded audit run; page observations
+/// and normalized findings are snapshots, not a duplicate canonical website/page database.
+model SeoAuditRun {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  business        Business  @relation(fields: [businessId], references: [id])
+  status          String    @db.VarChar(32)
+  triggeredBy     String    @default("manual") @map("triggered_by") @db.VarChar(24)
+  siteUrl         String    @map("site_url") @db.VarChar(2048)
+  finalUrl        String?   @map("final_url") @db.VarChar(2048)
+  pagesDiscovered Int       @default(0) @map("pages_discovered")
+  pagesCrawled    Int       @default(0) @map("pages_crawled")
+  issuesFound     Int       @default(0) @map("issues_found")
+  pages           Json?
+  issues          Json?
+  warnings        Json?
+  error           String?   @db.Text
+  startedAt       DateTime  @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+
+  normalizedIssues SeoAuditIssue[]      @relation("SeoAuditIssueLastSeenRun")
+  issueAudits      SeoAuditIssueAudit[]
+
+  @@index([businessId, status, startedAt])
+  @@map("seo_audit_runs")
+}
+
+/// Explicit, per-business cadence for the bounded website audit. Disabled until an owner enables it.
+model SeoAuditSchedule {
+  id            String    @id @default(uuid())
+  businessId    String    @unique @map("business_id")
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  enabled       Boolean   @default(false)
+  intervalHours Int       @default(168) @map("interval_hours")
+  nextRunAt     DateTime? @map("next_run_at")
+  processingAt  DateTime? @map("processing_at")
+  lastRunAt     DateTime? @map("last_run_at")
+  lastRunId     String?   @map("last_run_id") @db.VarChar(191)
+  lastStatus    String?   @map("last_status") @db.VarChar(32)
+  lastError     String?   @map("last_error") @db.Text
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([enabled, nextRunAt], map: "seo_audit_schedules_enabled_next_idx")
+  @@map("seo_audit_schedules")
+}
+
+/// Deduplicated, tenant-owned SEO findings. A fingerprint identifies a normalized page + finding
+/// type; it is not a second page master. Only successful recrawls of that page may resolve it.
+model SeoAuditIssue {
+  id                 String               @id @default(uuid())
+  businessId         String               @map("business_id")
+  business           Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  siteHost           String               @map("site_host") @db.VarChar(255)
+  fingerprint        String               @db.Char(64)
+  type               String               @db.VarChar(191)
+  severity           String               @db.VarChar(32)
+  pageUrl            String               @map("page_url") @db.VarChar(2048)
+  evidence           String               @db.Text
+  recommendation     String               @db.Text
+  status             SeoAuditIssueStatus  @default(open)
+  firstSeenAt        DateTime             @default(now()) @map("first_seen_at")
+  lastSeenAt         DateTime             @default(now()) @map("last_seen_at")
+  lastSeenAuditRunId String?              @map("last_seen_audit_run_id")
+  lastSeenAuditRun   SeoAuditRun?         @relation("SeoAuditIssueLastSeenRun", fields: [lastSeenAuditRunId], references: [id], onDelete: SetNull)
+  resolvedAt         DateTime?            @map("resolved_at")
+  ignoredAt          DateTime?            @map("ignored_at")
+  ignoreReason       String?              @map("ignore_reason") @db.Text
+  decidedByUserId    String?              @map("decided_by_user_id")
+  auditEvents        SeoAuditIssueAudit[]
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  @@unique([businessId, fingerprint], map: "seo_audit_issues_business_fingerprint_key")
+  @@index([businessId, status, severity, lastSeenAt], map: "seo_audit_issues_business_status_severity_seen_idx")
+  @@index([businessId, siteHost, status], map: "seo_audit_issues_business_site_status_idx")
+  @@map("seo_audit_issues")
+}
+
+/// Append-only audit history for human decisions and crawler-verified issue lifecycle changes.
+model SeoAuditIssueAudit {
+  id          String        @id @default(uuid())
+  businessId  String        @map("business_id")
+  business    Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  issueId     String        @map("issue_id")
+  issue       SeoAuditIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  auditRunId  String?       @map("audit_run_id")
+  auditRun    SeoAuditRun?  @relation(fields: [auditRunId], references: [id], onDelete: SetNull)
+  action      String        @db.VarChar(64)
+  reason      String?       @db.Text
+  actorUserId String?       @map("actor_user_id")
+  before      Json?
+  after       Json?
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@index([businessId, issueId, createdAt], map: "seo_audit_issue_audits_business_issue_created_idx")
+  @@index([businessId, auditRunId], map: "seo_audit_issue_audits_business_run_idx")
+  @@map("seo_audit_issue_audits")
 }
 
 enum ContentItemType {
@@ -2649,18 +3761,18 @@ enum ContentItemStatus {
 /// flat (no per-platform publish integration): saving/scheduling here is the plan of record a
 /// person works from, not an auto-publish pipeline this schema doesn't otherwise have.
 model ContentItem {
-  id         String             @id @default(uuid())
-  businessId String             @map("business_id")
-  business   Business           @relation(fields: [businessId], references: [id])
-  title      String
-  type       ContentItemType
-  channel    ContentItemChannel
-  body       String             @db.Text
-  scheduledFor DateTime?        @map("scheduled_for")
-  status     ContentItemStatus  @default(draft)
-  ownerUserId String?           @map("owner_user_id")
-  ownerUser   BusinessUser?     @relation(fields: [ownerUserId], references: [id])
-  aiGenerated Boolean           @default(false) @map("ai_generated")
+  id           String             @id @default(uuid())
+  businessId   String             @map("business_id")
+  business     Business           @relation(fields: [businessId], references: [id])
+  title        String
+  type         ContentItemType
+  channel      ContentItemChannel
+  body         String             @db.Text
+  scheduledFor DateTime?          @map("scheduled_for")
+  status       ContentItemStatus  @default(draft)
+  ownerUserId  String?            @map("owner_user_id")
+  ownerUser    BusinessUser?      @relation(fields: [ownerUserId], references: [id])
+  aiGenerated  Boolean            @default(false) @map("ai_generated")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2891,8 +4003,12 @@ model Supplier {
   address    String?
   notes      String?  @db.Text
 
-  stockMovements StockMovement[]
-  purchaseOrders PurchaseOrder[]
+  stockMovements         StockMovement[]
+  purchaseOrders         PurchaseOrder[]
+  commerceRfqInvitations CommerceRfqSupplier[]
+  commerceQuotes         CommerceSupplierQuote[]
+  commerceClaims         CommerceSupplierClaim[]
+  fulfillmentNodes       CommerceFulfillmentNode[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2928,7 +4044,9 @@ model PurchaseOrder {
   confirmedAt DateTime? @map("confirmed_at")
   receivedAt  DateTime? @map("received_at")
 
-  items PurchaseOrderItem[]
+  items          PurchaseOrderItem[]
+  commerceRfq    CommerceRfq?
+  commerceClaims CommerceSupplierClaim[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2947,7 +4065,8 @@ model PurchaseOrderItem {
   qtyReceived     Int           @default(0) @map("qty_received")
   unitCost        Decimal       @map("unit_cost") @db.Decimal(12, 2)
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  commerceClaimItems CommerceSupplierClaimItem[]
 
   @@map("purchase_order_items")
 }
@@ -3317,23 +4436,23 @@ enum StaffAdvanceStatus {
 /// materialized, so that's where outstanding advances actually get netted and flipped to
 /// `deducted`, stamped with the month they were applied against.
 model StaffAdvance {
-  id              String             @id @default(uuid())
-  businessId      String             @map("business_id")
-  business        Business           @relation(fields: [businessId], references: [id])
-  staffUserId     String             @map("staff_user_id")
-  staffUser       BusinessUser       @relation(fields: [staffUserId], references: [id])
-  amount          Decimal            @db.Decimal(12, 2)
-  reason          String?
+  id               String             @id @default(uuid())
+  businessId       String             @map("business_id")
+  business         Business           @relation(fields: [businessId], references: [id])
+  staffUserId      String             @map("staff_user_id")
+  staffUser        BusinessUser       @relation(fields: [staffUserId], references: [id])
+  amount           Decimal            @db.Decimal(12, 2)
+  reason           String?
   /// Staff module v2 (UPD-BE-STAFF-05): a small closed-ish set from the UI (e.g. "Salary Advance",
   /// "Emergency", "Festival") — free text, not an enum, since the real business need is a label,
   /// not a fixed vocabulary tied to code elsewhere the way `Role`/`Capability` are.
-  category        String?
+  category         String?
   /// UPD-BE-STAFF-05: who recorded this advance — `User.id`, no Prisma relation (same reason
   /// `AuditLog.actorUserId` has none: `User` isn't tenant-scoped). Resolved to a name the same way
   /// `AuditService.list` already does, via one batched follow-up query.
-  recordedByUserId String?           @map("recorded_by_user_id")
-  status          StaffAdvanceStatus @default(outstanding)
-  deductedInMonth String?            @map("deducted_in_month")
+  recordedByUserId String?            @map("recorded_by_user_id")
+  status           StaffAdvanceStatus @default(outstanding)
+  deductedInMonth  String?            @map("deducted_in_month")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3724,10 +4843,12 @@ model ActionItemState {
 
 /// Keyword rank tracking (new, BE-063 extension) — a business's own tracked search terms.
 model TrackedKeyword {
-  id         String   @id @default(uuid())
-  businessId String   @map("business_id")
-  business   Business @relation(fields: [businessId], references: [id])
-  keyword    String
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  keyword       String
+  intent        String?  @db.VarChar(24)
+  targetPageUrl String? @map("target_page_url") @db.VarChar(2048)
 
   snapshots KeywordRankSnapshot[]
 
@@ -3738,9 +4859,9 @@ model TrackedKeyword {
 }
 
 model KeywordRankSnapshot {
-  id             String         @id @default(uuid())
-  keywordId      String         @map("keyword_id")
-  keyword        TrackedKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  id                 String         @id @default(uuid())
+  keywordId          String         @map("keyword_id")
+  keyword            TrackedKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
   /// Null means not found in the checked results window.
   rank           Int?
   /// Keyword Rankings depth fix — the #1 organic result's title at check time, captured from the
@@ -3748,12 +4869,14 @@ model KeywordRankSnapshot {
   /// this keyword" figure, not a fabricated "difficulty" score — this app has no real
   /// keyword-difficulty data source (that needs proprietary backlink/authority data no free API
   /// exposes), so that column is deliberately not represented anywhere in this schema.
-  topResultTitle String?        @map("top_result_title")
+  topResultTitle     String?        @map("top_result_title")
+  /// URLs from this business's domain present in this SERP response; multiple distinct pages are a real overlap signal.
+  businessResultUrls Json?          @map("business_result_urls")
   /// Google Trends "interest over time" (0-100 relative index, via SerpApi's `google_trends`
   /// engine) — a real, freely-available search-interest proxy. Deliberately NOT presented as an
   /// exact monthly search-volume count, which no accessible-without-payment API provides.
-  searchInterest Int?           @map("search_interest")
-  capturedAt     DateTime       @default(now()) @map("captured_at")
+  searchInterest     Int?           @map("search_interest")
+  capturedAt         DateTime       @default(now()) @map("captured_at")
 
   @@index([keywordId, capturedAt])
   @@map("keyword_rank_snapshots")
@@ -3924,35 +5047,35 @@ model DigitizerAlias {
 // ─────────────────────────────────────────────────────────────────────────
 
 model Rider {
-  id             String            @id @default(uuid())
-  businessId     String            @map("business_id")
-  business       Business          @relation(fields: [businessId], references: [id])
-  name           String
-  phone          String
-  status         RiderStatus       @default(active)
+  id                   String            @id @default(uuid())
+  businessId           String            @map("business_id")
+  business             Business          @relation(fields: [businessId], references: [id])
+  name                 String
+  phone                String
+  status               RiderStatus       @default(active)
   /// Riders screen depth fix (UPD-FE-127) — real fields the plan doc's spec named but the original
   /// model never had. `zoneIds` is a lightweight tag-style reference (like `VoiceSettings.customIntents`),
   /// not a join table — zone assignment here is informational grouping, not a query-heavy relation.
-  vehicleType    RiderVehicleType? @map("vehicle_type")
-  commissionRate Decimal?          @map("commission_rate") @db.Decimal(5, 2)
-  zoneIds        Json              @default("[]") @map("zone_ids")
+  vehicleType          RiderVehicleType? @map("vehicle_type")
+  commissionRate       Decimal?          @map("commission_rate") @db.Decimal(5, 2)
+  zoneIds              Json              @default("[]") @map("zone_ids")
   /// Last GPS fix pushed by the rider's own device (UPD-BE-065 live tracking) — null until their first check-in.
-  lastLat        Decimal?          @map("last_lat") @db.Decimal(9, 6)
-  lastLng        Decimal?          @map("last_lng") @db.Decimal(9, 6)
-  lastLocationAt DateTime?         @map("last_location_at")
+  lastLat              Decimal?          @map("last_lat") @db.Decimal(9, 6)
+  lastLng              Decimal?          @map("last_lng") @db.Decimal(9, 6)
+  lastLocationAt       DateTime?         @map("last_location_at")
   /// Delivery module redesign — cash-on-delivery this rider has collected is "held" (real, from
   /// `Payment.method = cash` on their delivered deliveries) until they hand it in at the branch;
   /// this is the last time that happened. Null means never reconciled — every cash-method payment
   /// on a delivered delivery still counts as held.
-  cashHandedInAt DateTime?         @map("cash_handed_in_at")
+  cashHandedInAt       DateTime?         @map("cash_handed_in_at")
   /// Delivery module redesign — real, rider-or-staff-toggled break state (the design's "On break"
   /// status has no other real signal to derive from: `status` only distinguishes active/inactive
   /// shift, not a mid-shift pause). Null means not on break; set the moment `setBreak(true)` is
   /// called, cleared by `setBreak(false)` or when the rider goes off shift.
-  onBreakSince   DateTime?         @map("on_break_since")
+  onBreakSince         DateTime?         @map("on_break_since")
   /// Delivery module — the rider's own explicit consent to have their live position shown to a
   /// customer on that customer's tracking link. Off by default; never inferred.
-  shareLocationConsent Boolean     @default(false) @map("share_location_consent")
+  shareLocationConsent Boolean           @default(false) @map("share_location_consent")
 
   deliveries Delivery[]
   routes     Route[]
@@ -3981,69 +5104,69 @@ enum RiderVehicleType {
 /// delivery's stop position within its `Route`, when it has one — a real ordering column (not
 /// implicit array order), same MySQL-row-ordering-safety reasoning as `VariantOption.sortOrder`.
 model Delivery {
-  id                String         @id @default(uuid())
-  businessId        String         @map("business_id")
-  business          Business       @relation(fields: [businessId], references: [id])
-  orderId           String         @unique @map("order_id")
-  order             Order          @relation(fields: [orderId], references: [id])
-  riderId           String?        @map("rider_id")
-  rider             Rider?         @relation(fields: [riderId], references: [id])
-  status            DeliveryStatus @default(unassigned)
-  addressLine       String         @map("address_line") @db.Text
-  lat               Decimal?       @db.Decimal(9, 6)
-  lng               Decimal?       @db.Decimal(9, 6)
-  routeId           String?        @map("route_id")
-  route             Route?         @relation(fields: [routeId], references: [id])
-  routeSequence     Int?           @map("route_sequence")
+  id                    String         @id @default(uuid())
+  businessId            String         @map("business_id")
+  business              Business       @relation(fields: [businessId], references: [id])
+  orderId               String         @unique @map("order_id")
+  order                 Order          @relation(fields: [orderId], references: [id])
+  riderId               String?        @map("rider_id")
+  rider                 Rider?         @relation(fields: [riderId], references: [id])
+  status                DeliveryStatus @default(unassigned)
+  addressLine           String         @map("address_line") @db.Text
+  lat                   Decimal?       @db.Decimal(9, 6)
+  lng                   Decimal?       @db.Decimal(9, 6)
+  routeId               String?        @map("route_id")
+  route                 Route?         @relation(fields: [routeId], references: [id])
+  routeSequence         Int?           @map("route_sequence")
   /// Per-zone SLA depth fix — real link, set manually (staff picks a zone; this app's zones carry
   /// no geofence to auto-match an address to). Drives which SLA `computePromisedAt()` uses: this
   /// zone's own `slaMinutes` when set, else the business's `DeliverySettings.defaultSlaMinutes`.
-  zoneId            String?        @map("zone_id")
-  zone              DeliveryZone?  @relation(fields: [zoneId], references: [id])
-  proofSignatureKey String?        @map("proof_signature_key")
-  proofPhotoKey     String?        @map("proof_photo_key")
-  proofLat          Decimal?       @map("proof_lat") @db.Decimal(9, 6)
-  proofLng          Decimal?       @map("proof_lng") @db.Decimal(9, 6)
-  proofAt           DateTime?      @map("proof_at")
-  assignedAt        DateTime?      @map("assigned_at")
+  zoneId                String?        @map("zone_id")
+  zone                  DeliveryZone?  @relation(fields: [zoneId], references: [id])
+  proofSignatureKey     String?        @map("proof_signature_key")
+  proofPhotoKey         String?        @map("proof_photo_key")
+  proofLat              Decimal?       @map("proof_lat") @db.Decimal(9, 6)
+  proofLng              Decimal?       @map("proof_lng") @db.Decimal(9, 6)
+  proofAt               DateTime?      @map("proof_at")
+  assignedAt            DateTime?      @map("assigned_at")
   /// Delivery module redesign — real per-stage timestamps, set the moment `updateStatus()` moves a
   /// delivery into that stage. Nullable and left unset for every delivery that never reached that
   /// stage (or was created before this column existed), so a real average is computed only from
   /// deliveries that actually recorded it — never backfilled or estimated.
-  pickedUpAt        DateTime?      @map("picked_up_at")
-  enRouteAt         DateTime?      @map("en_route_at")
-  deliveredAt       DateTime?      @map("delivered_at")
+  pickedUpAt            DateTime?      @map("picked_up_at")
+  enRouteAt             DateTime?      @map("en_route_at")
+  deliveredAt           DateTime?      @map("delivered_at")
   /// Delivery module — real money/cost snapshot taken when the delivery is created or its zone
   /// changes: `deliveryFee` is what the zone's own charge rule quotes for this order,
   /// `deliveryCost` is the owner's configured cost model (fuel per km, rider pay per delivery)
   /// applied to the real distance from the dispatch hub. Null whenever an input is genuinely
   /// missing (no zone, no coordinates, no hub, no cost model) — never estimated.
-  deliveryFee       Decimal?       @map("delivery_fee") @db.Decimal(12, 2)
-  deliveryCost      Decimal?       @map("delivery_cost") @db.Decimal(12, 2)
-  distanceKm        Decimal?       @map("distance_km") @db.Decimal(8, 2)
+  deliveryFee           Decimal?       @map("delivery_fee") @db.Decimal(12, 2)
+  deliveryCost          Decimal?       @map("delivery_cost") @db.Decimal(12, 2)
+  distanceKm            Decimal?       @map("distance_km") @db.Decimal(8, 2)
   /// Free-text instruction for the rider (gate code, "ring twice") entered when dispatching.
-  deliveryNote      String?        @map("delivery_note") @db.Text
+  deliveryNote          String?        @map("delivery_note") @db.Text
   /// Unguessable token for the public customer tracking link.
-  trackingToken     String?        @unique @map("tracking_token")
+  trackingToken         String?        @unique @map("tracking_token")
   /// The promise time last actually messaged to the customer, and when — the real "customer told".
-  notifiedPromisedAt DateTime?     @map("notified_promised_at")
-  customerNotifiedAt DateTime?     @map("customer_notified_at")
-  slipNotifiedAt    DateTime?      @map("slip_notified_at")
+  notifiedPromisedAt    DateTime?      @map("notified_promised_at")
+  customerNotifiedAt    DateTime?      @map("customer_notified_at")
+  slipNotifiedAt        DateTime?      @map("slip_notified_at")
   /// The Message row for the last notice sent — the Tracking screen reads its real delivery status.
-  notificationMessageId String?    @map("notification_message_id")
+  notificationMessageId String?        @map("notification_message_id")
   /// All Deliveries depth fix (real on-time-rate) — set the moment a rider is assigned, from the
   /// business's own `DeliverySettings.defaultSlaMinutes` at that moment. NULL for every delivery
   /// assigned before this fix existed — those are honestly excluded from on-time-rate rather than
   /// retroactively assigned a promise that was never actually made.
-  promisedAt        DateTime?      @map("promised_at")
+  promisedAt            DateTime?      @map("promised_at")
   /// All Deliveries depth fix (UPD-FE-055e) — only ever set when `status = failed`. Free text (the
   /// frontend offers a dropdown of common reasons + "Add custom"), not a closed enum, since a
   /// delivery-failure reason is inherently open-ended and store-specific.
-  failureReason     String?        @map("failure_reason") @db.Text
+  failureReason         String?        @map("failure_reason") @db.Text
   /// Riders screen depth fix (UPD-FE-127) — a real, staff-recorded 1-5 delivery-quality rating
   /// (never claimed to be customer-submitted — this app has no customer-facing rating surface for
   /// deliveries). Aggregated into `RidersService.performance()`'s `averageRating`.
-  qualityRating     Int?           @map("quality_rating")
+  qualityRating         Int?           @map("quality_rating")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4124,52 +5247,52 @@ enum DeliveryChargeType {
 /// charge-rule CRUD, not linked to individual deliveries) — widening that relationship is a
 /// separate, larger integration this fix doesn't take on.
 model DeliverySettings {
-  id                String   @id @default(uuid())
-  businessId        String   @unique @map("business_id")
-  business          Business @relation(fields: [businessId], references: [id])
-  defaultSlaMinutes Int      @default(45) @map("default_sla_minutes")
+  id                     String   @id @default(uuid())
+  businessId             String   @unique @map("business_id")
+  business               Business @relation(fields: [businessId], references: [id])
+  defaultSlaMinutes      Int      @default(45) @map("default_sla_minutes")
   /// Delivery module redesign — real, owner-configured buffer added on top of `defaultSlaMinutes`
   /// (or a zone's own override) when computing `Delivery.promisedAt`: the time told to the
   /// customer is deliberately a little later than the real target, so most deliveries beat it.
-  etaPaddingMinutes Int      @default(0) @map("eta_padding_minutes")
+  etaPaddingMinutes      Int      @default(0) @map("eta_padding_minutes")
   /// Real per-rider cash-on-delivery warning threshold. Null means no limit is set — every rider's
   /// held cash is shown as a plain figure with nothing flagged, never a fabricated default limit.
-  cashLimitAmount   Decimal? @map("cash_limit_amount") @db.Decimal(12, 2)
+  cashLimitAmount        Decimal? @map("cash_limit_amount") @db.Decimal(12, 2)
   /// Real, owner-configured active-stop count a rider can reach before the dispatch screens flag
   /// them as at capacity. A business-wide number (the design's own "Stops per rider before a
   /// warning" setting), not a per-rider field — every rider is compared against the same number.
-  warnAtStopCount   Int      @default(8) @map("warn_at_stop_count")
+  warnAtStopCount        Int      @default(8) @map("warn_at_stop_count")
   /// Real minutes since a rider's last GPS fix before their position is labelled stale rather than
   /// current, everywhere a rider's location is shown.
-  staleLocationMinutes Int   @default(10) @map("stale_location_minutes")
+  staleLocationMinutes   Int      @default(10) @map("stale_location_minutes")
   /// Dispatch hub (the branch deliveries leave from) — the anchor for real distance, fee and cost.
-  hubLat            Decimal? @map("hub_lat") @db.Decimal(9, 6)
-  hubLng            Decimal? @map("hub_lng") @db.Decimal(9, 6)
+  hubLat                 Decimal? @map("hub_lat") @db.Decimal(9, 6)
+  hubLng                 Decimal? @map("hub_lng") @db.Decimal(9, 6)
   /// Owner's cost model: fuel/vehicle cost per km (applied to the round trip) and a fixed rider
   /// pay per delivery. Both null means cost is not configured, and cost figures stay "Not tracked".
-  costPerKm         Decimal? @map("cost_per_km") @db.Decimal(10, 2)
-  riderPayPerDelivery Decimal? @map("rider_pay_per_delivery") @db.Decimal(10, 2)
+  costPerKm              Decimal? @map("cost_per_km") @db.Decimal(10, 2)
+  riderPayPerDelivery    Decimal? @map("rider_pay_per_delivery") @db.Decimal(10, 2)
   /// Real automation switches — every one is off until the owner turns it on, and each drives
   /// real behaviour in `DeliveryAutomationsService`.
-  autoEtaOnAssign   Boolean  @default(false) @map("auto_eta_on_assign")
-  autoEtaOnSlip     Boolean  @default(false) @map("auto_eta_on_slip")
-  slipThresholdMinutes Int   @default(10) @map("slip_threshold_minutes")
-  autoFlagStalePhone Boolean @default(false) @map("auto_flag_stale_phone")
-  autoWarnCashLimit Boolean  @default(false) @map("auto_warn_cash_limit")
-  autoTaskOnFailure Boolean  @default(false) @map("auto_task_on_failure")
-  sendProofToCustomer Boolean @default(false) @map("send_proof_to_customer")
-  shareLiveLocation Boolean  @default(false) @map("share_live_location")
+  autoEtaOnAssign        Boolean  @default(false) @map("auto_eta_on_assign")
+  autoEtaOnSlip          Boolean  @default(false) @map("auto_eta_on_slip")
+  slipThresholdMinutes   Int      @default(10) @map("slip_threshold_minutes")
+  autoFlagStalePhone     Boolean  @default(false) @map("auto_flag_stale_phone")
+  autoWarnCashLimit      Boolean  @default(false) @map("auto_warn_cash_limit")
+  autoTaskOnFailure      Boolean  @default(false) @map("auto_task_on_failure")
+  sendProofToCustomer    Boolean  @default(false) @map("send_proof_to_customer")
+  shareLiveLocation      Boolean  @default(false) @map("share_live_location")
   /// Zone rules enforced by the public ordering flow.
-  enforceZoneCoverage Boolean @default(false) @map("enforce_zone_coverage")
-  showFeeBeforeCheckout Boolean @default(false) @map("show_fee_before_checkout")
-  pausedZonesBlockOrders Boolean @default(false) @map("paused_zones_block_orders")
+  enforceZoneCoverage    Boolean  @default(false) @map("enforce_zone_coverage")
+  showFeeBeforeCheckout  Boolean  @default(false) @map("show_fee_before_checkout")
+  pausedZonesBlockOrders Boolean  @default(false) @map("paused_zones_block_orders")
   /// Whether a delivery created from the dashboard is handed to the least-busy active rider
   /// straight away (the behaviour that always existed, so it defaults on) or left for dispatch.
-  autoAssignNew     Boolean  @default(true) @map("auto_assign_new")
+  autoAssignNew          Boolean  @default(true) @map("auto_assign_new")
   /// The two rules behind the dispatch queue's priority chips — the owner's own numbers, not
   /// built-in guesses. `highValueAmount` null turns the high-value chip off.
-  urgentAfterMinutes Int     @default(15) @map("urgent_after_minutes")
-  highValueAmount   Decimal? @default(15000) @map("high_value_amount") @db.Decimal(12, 2)
+  urgentAfterMinutes     Int      @default(15) @map("urgent_after_minutes")
+  highValueAmount        Decimal? @default(15000) @map("high_value_amount") @db.Decimal(12, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

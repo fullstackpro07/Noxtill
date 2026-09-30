@@ -1,9 +1,4 @@
-import {
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { AiInfraService } from '../ai/ai-infra.service';
@@ -11,6 +6,7 @@ import { MasterListingService } from '../listings/master-listing.service';
 import { CreateTrackedKeywordDto } from './dto/create-tracked-keyword.dto';
 import { BulkAddKeywordsDto } from './dto/bulk-add-keywords.dto';
 import { SuggestKeywordsDto } from './dto/suggest-keywords.dto';
+import { UpdateTrackedKeywordDto } from './dto/update-tracked-keyword.dto';
 import {
   MARKETING_ERROR_CODES,
   MAX_TRACKED_KEYWORDS,
@@ -19,6 +15,36 @@ import { KeywordRankProcessor } from './jobs/keyword-rank.processor';
 
 const HISTORY_CHECKS = 12;
 const SUGGESTION_COUNT = 10;
+
+function normalizeTargetPageUrl(value: string): string {
+  const trimmed = value.trim();
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new AppException(
+      'KEYWORD_TARGET_URL_INVALID',
+      'Target page must be a valid absolute HTTP or HTTPS URL.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new AppException(
+      'KEYWORD_TARGET_URL_INVALID',
+      'Target page must use HTTP or HTTPS.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  url.hash = '';
+  if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, '');
+  return url.toString();
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
 
 /** Keyword rank tracking (new, BE-063 extension) — real CRUD + a pluggable SERP-rank provider. */
 @Injectable()
@@ -34,19 +60,84 @@ export class KeywordsService {
 
   async list() {
     const keywords = await this.tenantPrisma.client.trackedKeyword.findMany({
-      orderBy: { createdAt: 'asc' },
-      include: { snapshots: { orderBy: { capturedAt: 'desc' }, take: 2 } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      include: {
+        snapshots: {
+          orderBy: [{ capturedAt: 'desc' }, { id: 'desc' }],
+          take: 2,
+        },
+      },
     });
 
-    return keywords.map((k) => ({
-      id: k.id,
-      keyword: k.keyword,
-      latestRank: k.snapshots[0]?.rank ?? null,
-      previousRank: k.snapshots[1]?.rank ?? null,
-      topResultTitle: k.snapshots[0]?.topResultTitle ?? null,
-      searchInterest: k.snapshots[0]?.searchInterest ?? null,
-      lastCheckedAt: k.snapshots[0]?.capturedAt.toISOString() ?? null,
-    }));
+    const targetCounts = new Map<string, number>();
+    for (const keyword of keywords) {
+      if (!keyword.targetPageUrl) continue;
+      const normalized = normalizeTargetPageUrl(keyword.targetPageUrl);
+      targetCounts.set(normalized, (targetCounts.get(normalized) ?? 0) + 1);
+    }
+
+    return keywords.map((k) => {
+      const latestSnapshot = k.snapshots[0];
+      const resultUrls = latestSnapshot?.businessResultUrls;
+      const businessResultUrls = toStringArray(resultUrls);
+      return {
+        id: k.id,
+        keyword: k.keyword,
+        intent: k.intent,
+        targetPageUrl: k.targetPageUrl,
+        mappedKeywordCount: k.targetPageUrl
+          ? (targetCounts.get(normalizeTargetPageUrl(k.targetPageUrl)) ?? 0)
+          : 0,
+        mappingOverlap: k.targetPageUrl
+          ? (targetCounts.get(normalizeTargetPageUrl(k.targetPageUrl)) ?? 0) > 1
+          : false,
+        businessResultUrls,
+        // Missing/legacy snapshot data is unknown, not a clean bill of health. An empty array is
+        // real evidence that the latest provider check found no matching pages.
+        cannibalizationFlag: Array.isArray(resultUrls)
+          ? businessResultUrls.length > 1
+          : null,
+        latestRank: k.snapshots[0]?.rank ?? null,
+        previousRank: k.snapshots[1]?.rank ?? null,
+        topResultTitle: k.snapshots[0]?.topResultTitle ?? null,
+        searchInterest: k.snapshots[0]?.searchInterest ?? null,
+        lastCheckedAt: k.snapshots[0]?.capturedAt.toISOString() ?? null,
+      };
+    });
+  }
+
+  async update(id: string, dto: UpdateTrackedKeywordDto) {
+    if (dto.intent === undefined && dto.targetPageUrl === undefined) {
+      throw new AppException(
+        MARKETING_ERROR_CODES.KEYWORD_UPDATE_EMPTY,
+        'Choose an intent or target page to update.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const existing = await this.tenantPrisma.client.trackedKeyword.findFirst({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new AppException(
+        MARKETING_ERROR_CODES.KEYWORD_NOT_FOUND,
+        'Tracked keyword not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const data: { intent?: string | null; targetPageUrl?: string | null } = {};
+    if (dto.intent !== undefined) data.intent = dto.intent;
+    if (dto.targetPageUrl !== undefined) {
+      data.targetPageUrl = dto.targetPageUrl
+        ? normalizeTargetPageUrl(dto.targetPageUrl)
+        : null;
+    }
+    await this.tenantPrisma.client.trackedKeyword.update({
+      where: { id },
+      data,
+    });
+    return (await this.list()).find((keyword) => keyword.id === id)!;
   }
 
   async create(businessId: string, dto: CreateTrackedKeywordDto) {
@@ -85,6 +176,7 @@ export class KeywordsService {
     const existingKeywords = new Set(
       (
         await this.tenantPrisma.client.trackedKeyword.findMany({
+          orderBy: [{ keyword: 'asc' }, { id: 'asc' }],
           select: { keyword: true },
         })
       ).map((k) => k.keyword),
@@ -198,7 +290,11 @@ export class KeywordsService {
       where: { id },
     });
     if (!existing) {
-      throw new NotFoundException('Tracked keyword not found');
+      throw new AppException(
+        MARKETING_ERROR_CODES.KEYWORD_NOT_FOUND,
+        'Tracked keyword not found.',
+        HttpStatus.NOT_FOUND,
+      );
     }
     await this.tenantPrisma.client.trackedKeyword.delete({ where: { id } });
     return { success: true };
@@ -210,13 +306,17 @@ export class KeywordsService {
       where: { id },
     });
     if (!keyword) {
-      throw new NotFoundException('Tracked keyword not found');
+      throw new AppException(
+        MARKETING_ERROR_CODES.KEYWORD_NOT_FOUND,
+        'Tracked keyword not found.',
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     const snapshots =
       await this.tenantPrisma.client.keywordRankSnapshot.findMany({
         where: { keywordId: id },
-        orderBy: { capturedAt: 'desc' },
+        orderBy: [{ capturedAt: 'desc' }, { id: 'desc' }],
         take: HISTORY_CHECKS,
       });
 
@@ -231,7 +331,11 @@ export class KeywordsService {
       where: { id },
     });
     if (!keyword) {
-      throw new NotFoundException('Tracked keyword not found');
+      throw new AppException(
+        MARKETING_ERROR_CODES.KEYWORD_NOT_FOUND,
+        'Tracked keyword not found.',
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     await this.rankProcessor.checkOne(businessId, keyword.id, keyword.keyword);

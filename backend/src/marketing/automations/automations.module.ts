@@ -3,24 +3,50 @@ import { BullModule } from '@nestjs/bullmq';
 import { WorkflowsService } from './workflows.service';
 import { WorkflowsController } from './workflows.controller';
 import { WorkflowTriggerService } from './workflow-trigger.service';
+import { WorkflowApprovalsService } from './workflow-approvals.service';
 import { CreditOverdueScanScheduler } from './jobs/credit-overdue-scan.scheduler';
 import { CreditOverdueScanProcessor } from './jobs/credit-overdue-scan.processor';
-import { CREDIT_OVERDUE_SCAN_QUEUE } from './workflows.constants';
+import { WorkflowScheduleProcessor } from './jobs/workflow-schedule.processor';
+import { WorkflowScheduleScheduler } from './jobs/workflow-schedule.scheduler';
+import {
+  CREDIT_OVERDUE_SCAN_QUEUE,
+  WORKFLOW_SCHEDULE_QUEUE,
+} from './workflows.constants';
 import { MessagingModule } from '../../messaging/messaging.module';
 import { AutomationModule as OutboundWebhookAutomationModule } from '../../integrations/automation/automation.module';
+import { AiModule } from '../../ai/ai.module';
+import { WorkflowDataMapperService } from './workflow-data-mapper.service';
+import { WorkflowVariablesController } from './workflow-variables.controller';
+import { WorkflowVariablesService } from './workflow-variables.service';
+import { WorkflowDeadLettersController } from './workflow-dead-letters.controller';
+import { WorkflowDeadLettersService } from './workflow-dead-letters.service';
 
 @Module({
   imports: [
-    BullModule.registerQueue({ name: CREDIT_OVERDUE_SCAN_QUEUE }),
+    BullModule.registerQueue(
+      { name: CREDIT_OVERDUE_SCAN_QUEUE },
+      { name: WORKFLOW_SCHEDULE_QUEUE },
+    ),
     MessagingModule,
     OutboundWebhookAutomationModule,
+    AiModule,
   ],
-  controllers: [WorkflowsController],
+  controllers: [
+    WorkflowsController,
+    WorkflowVariablesController,
+    WorkflowDeadLettersController,
+  ],
   providers: [
     WorkflowsService,
     WorkflowTriggerService,
+    WorkflowApprovalsService,
+    WorkflowDataMapperService,
+    WorkflowVariablesService,
+    WorkflowDeadLettersService,
     CreditOverdueScanScheduler,
     CreditOverdueScanProcessor,
+    WorkflowScheduleScheduler,
+    WorkflowScheduleProcessor,
   ],
   exports: [WorkflowTriggerService],
 })

@@ -9,8 +9,8 @@ import { KEYWORD_RANK_QUEUE } from '../marketing.constants';
 /**
  * `keyword-rank-check` (BE-063 extension): weekly rank check for every tracked keyword across
  * every business, via the real SerpApi-shaped lookup. Structured identically to
- * CompetitorSnapshotProcessor. Also captures the real top-result title (same SerpApi call) and a
- * real search-interest figure (Google Trends, same SERPAPI_KEY) — Keyword Rankings depth fix.
+ * CompetitorSnapshotProcessor. It also captures the top-result title and the distinct URLs from
+ * the business domain in that same result set, plus Google Trends interest (same SERPAPI_KEY).
  */
 @Processor(KEYWORD_RANK_QUEUE)
 export class KeywordRankProcessor extends WorkerHost {
@@ -31,16 +31,33 @@ export class KeywordRankProcessor extends WorkerHost {
 
   async runCheck(): Promise<void> {
     const keywords = await this.prisma.trackedKeyword.findMany({
-      include: { business: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        businessId: true,
+        keyword: true,
+        business: {
+          select: {
+            name: true,
+            masterListing: { select: { website: true } },
+          },
+        },
+      },
     });
 
+    let skippedWithoutWebsite = 0;
     for (const keyword of keywords) {
+      if (!keyword.business.masterListing?.website?.trim()) {
+        skippedWithoutWebsite += 1;
+        continue;
+      }
       try {
         await this.checkOne(
           keyword.businessId,
           keyword.id,
           keyword.keyword,
           keyword.business.name,
+          keyword.business.masterListing?.website,
         );
       } catch (error) {
         // One keyword's business/provider hiccup shouldn't abort the whole weekly batch for everyone else.
@@ -51,7 +68,7 @@ export class KeywordRankProcessor extends WorkerHost {
     }
 
     this.logger.debug(
-      `Keyword rank check evaluated ${keywords.length} keyword(s)`,
+      `Keyword rank check evaluated ${keywords.length} keyword(s); skipped ${skippedWithoutWebsite} without a configured website`,
     );
   }
 
@@ -61,22 +78,35 @@ export class KeywordRankProcessor extends WorkerHost {
     keywordId: string,
     keyword: string,
     businessNameOverride?: string,
+    websiteOverride?: string | null,
   ): Promise<void> {
-    const businessName =
-      businessNameOverride ??
-      (
-        await this.prisma.business.findUniqueOrThrow({
-          where: { id: businessId },
-        })
-      ).name;
+    const business =
+      businessNameOverride === undefined || websiteOverride === undefined
+        ? await this.prisma.business.findUniqueOrThrow({
+            where: { id: businessId },
+            include: { masterListing: { select: { website: true } } },
+          })
+        : null;
+    const businessName = businessNameOverride ?? business?.name;
+    const website = websiteOverride ?? business?.masterListing?.website;
+    if (!businessName) {
+      throw new Error('Business name is required to check keyword rankings');
+    }
 
-    const [{ rank, topResultTitle }, searchInterest] = await Promise.all([
-      this.serpRank.fetchRank(keyword, businessName),
-      this.trends.fetchInterest(keyword),
-    ]);
+    const [{ rank, topResultTitle, businessResultUrls }, searchInterest] =
+      await Promise.all([
+        this.serpRank.fetchRank(keyword, businessName, website),
+        this.trends.fetchInterest(keyword),
+      ]);
 
     await this.prisma.keywordRankSnapshot.create({
-      data: { keywordId, rank, topResultTitle, searchInterest },
+      data: {
+        keywordId,
+        rank,
+        topResultTitle,
+        businessResultUrls,
+        searchInterest,
+      },
     });
   }
 }

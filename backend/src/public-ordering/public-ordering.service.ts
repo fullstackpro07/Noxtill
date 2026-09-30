@@ -12,6 +12,7 @@ import { resolvePolicies } from '../common/policies/policies.service';
 import { randomBytes } from 'crypto';
 import { computeDeliveryPricing } from '../delivery/delivery-pricing.util';
 import { DELIVERY_ERROR_CODES } from '../delivery/delivery.constants';
+import { ActivityService } from '../activity/activity.service';
 
 /**
  * Public online-ordering / dine-in endpoints (BE-029). No auth — the
@@ -20,7 +21,10 @@ import { DELIVERY_ERROR_CODES } from '../delivery/delivery.constants';
  */
 @Injectable()
 export class PublicOrderingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activity: ActivityService,
+  ) {}
 
   private async resolveBusiness(slug: string) {
     const business = await this.prisma.business.findUnique({ where: { slug } });
@@ -125,7 +129,8 @@ export class PublicOrderingService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    let deliveryId: string | undefined;
+    const order = await this.prisma.$transaction(async (tx) => {
       let customerId: string | undefined;
       if (dto.customerPhone) {
         const customer = await tx.customer.upsert({
@@ -237,7 +242,7 @@ export class PublicOrderingService {
           lat,
           lng,
         });
-        await tx.delivery.create({
+        const delivery = await tx.delivery.create({
           data: {
             businessId: business.id,
             orderId: order.id,
@@ -252,17 +257,30 @@ export class PublicOrderingService {
             trackingToken: randomBytes(16).toString('hex'),
           },
         });
-        await tx.activityEvent.create({
-          data: {
-            businessId: business.id,
-            type: 'delivery',
-            description: `New online delivery order #${orderNo} — waiting for a rider`,
-            entityType: 'Delivery',
-          },
-        });
+        deliveryId = delivery.id;
       }
 
       return order;
     });
+
+    // Record business events after the transaction commits so the shared activity pipeline can
+    // trigger native workflows and outbound webhooks without firing for a rolled-back order.
+    await this.activity.record(business.id, {
+      type: 'sale',
+      description: `Sale #${order.orderNo} — ${Number(order.total)}`,
+      amount: Number(order.total),
+      entityType: 'Order',
+      entityId: order.id,
+    });
+    if (deliveryId) {
+      await this.activity.record(business.id, {
+        type: 'delivery',
+        description: `New online delivery order #${order.orderNo} — waiting for a rider`,
+        entityType: 'Delivery',
+        entityId: deliveryId,
+      });
+    }
+
+    return order;
   }
 }

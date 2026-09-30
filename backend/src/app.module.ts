@@ -65,6 +65,7 @@ import { IntegrationDirectoryModule } from './integrations/directory/integration
 import { ConnectionDetailModule } from './integrations/connection-detail/connection-detail.module';
 import { DeveloperModule } from './developer/developer.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { CommerceModule } from './commerce/commerce.module';
 
 @Module({
   imports: [
@@ -135,6 +136,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     ConnectionDetailModule,
     DeveloperModule,
     AuditLogModule,
+    CommerceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

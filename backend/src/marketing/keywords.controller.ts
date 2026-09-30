@@ -1,8 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { KeywordsService } from './keywords.service';
 import { CreateTrackedKeywordDto } from './dto/create-tracked-keyword.dto';
 import { BulkAddKeywordsDto } from './dto/bulk-add-keywords.dto';
 import { SuggestKeywordsDto } from './dto/suggest-keywords.dto';
+import { UpdateTrackedKeywordDto } from './dto/update-tracked-keyword.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -43,6 +52,12 @@ export class KeywordsController {
     @Body() dto: SuggestKeywordsDto,
   ) {
     return this.keywordsService.suggest(user.businessId, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.COMPETITIVE_MANAGE)
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateTrackedKeywordDto) {
+    return this.keywordsService.update(id, dto);
   }
 
   @RequireCapability(CAPABILITIES.COMPETITIVE_MANAGE)

@@ -3,13 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
   Connector,
+  EcommerceListingDraftInput,
+  EcommerceListingDraftResult,
   EcommerceOrder,
   EcommerceProduct,
   OAuthTokens,
 } from '../connector.interface';
 import { IntegrationProvider } from '@prisma/client';
+import { plainTextAsProductHtml } from '../ecommerce/listing-content.util';
 
 const API_VERSION = '2024-01';
+const GRAPHQL_API_VERSION = '2026-07';
 const SCOPE = 'read_products,write_products,read_orders,write_inventory';
 
 interface ShopifyTokenResponse {
@@ -42,6 +46,39 @@ interface ShopifyOrder {
   total_price: string;
   created_at: string;
   line_items: ShopifyOrderLine[];
+}
+
+interface ShopifyGraphqlResponse<T> {
+  data?: T;
+  errors?: Array<{ message: string }>;
+}
+
+interface ShopifyProductSetPayload {
+  productSet?: {
+    product?: { id: string } | null;
+    userErrors?: Array<{ field?: string[] | null; message: string }>;
+  };
+  productByHandle?: {
+    id: string;
+    metafields: { nodes: Array<{ key: string; value: string }> };
+    variants: {
+      nodes: Array<{
+        id: string;
+        sku: string | null;
+        selectedOptions: Array<{ name: string; value: string }>;
+      }>;
+    };
+  } | null;
+  product?: {
+    id: string;
+    variants: {
+      nodes: Array<{
+        id: string;
+        sku: string | null;
+        selectedOptions: Array<{ name: string; value: string }>;
+      }>;
+    };
+  } | null;
 }
 
 /**
@@ -216,5 +253,183 @@ export class ShopifyConnector implements Connector {
         price: Number(line.price),
       })),
     }));
+  }
+
+  async upsertListingDraft(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    input: EcommerceListingDraftInput,
+    externalProductId?: string,
+  ): Promise<EcommerceListingDraftResult> {
+    const shop = meta.shop as string | undefined;
+    if (!shop) throw new Error('No Shopify store connected for this business');
+    const endpoint = `https://${shop}/admin/api/${GRAPHQL_API_VERSION}/graphql.json`;
+    const headers = {
+      'X-Shopify-Access-Token': tokens.accessToken,
+      'Content-Type': 'application/json',
+    };
+
+    let identifier: { id: string } | { handle: string };
+    let existingProduct: ShopifyProductSetPayload['productByHandle'] | null =
+      null;
+    if (externalProductId) {
+      const existing = await axios.post<
+        ShopifyGraphqlResponse<ShopifyProductSetPayload>
+      >(
+        endpoint,
+        {
+          query: `query NoxtillProductById($id: ID!) {
+            product(id: $id) {
+              id
+              variants(first: 2) { nodes { id sku selectedOptions { name value } } }
+            }
+          }`,
+          variables: { id: externalProductId },
+        },
+        { headers },
+      );
+      const lookupError = existing.data.errors?.[0]?.message;
+      if (lookupError)
+        throw new Error(`Shopify listing lookup failed: ${lookupError}`);
+      const product = existing.data.data?.product;
+      if (!product)
+        throw new Error('The linked Shopify product no longer exists');
+      existingProduct = {
+        ...product,
+        metafields: { nodes: [] },
+      };
+      identifier = { id: externalProductId };
+    } else {
+      const existing = await axios.post<
+        ShopifyGraphqlResponse<ShopifyProductSetPayload>
+      >(
+        endpoint,
+        {
+          query: `query NoxtillProductByHandle($handle: String!) {
+            productByHandle(handle: $handle) {
+              id
+              metafields(first: 10, namespace: "noxtill") { nodes { key value } }
+              variants(first: 2) { nodes { id sku selectedOptions { name value } } }
+            }
+          }`,
+          variables: { handle: input.handle },
+        },
+        { headers },
+      );
+      const lookupError = existing.data.errors?.[0]?.message;
+      if (lookupError)
+        throw new Error(`Shopify listing lookup failed: ${lookupError}`);
+      const product = existing.data.data?.productByHandle;
+      if (product) {
+        const markers = new Map(
+          product.metafields.nodes.map(({ key, value }) => [key, value]),
+        );
+        if (
+          markers.get('business_id') !== input.businessId ||
+          markers.get('product_id') !== input.productId
+        ) {
+          throw new Error(
+            'The generated Shopify handle is already used by a product not linked to this Noxtill product.',
+          );
+        }
+        existingProduct = product;
+        identifier = { id: product.id };
+      } else {
+        identifier = { handle: input.handle };
+      }
+    }
+
+    const creating = identifier && 'handle' in identifier;
+    let variants: Array<Record<string, unknown>> | undefined;
+    if (existingProduct) {
+      if (existingProduct.variants.nodes.length !== 1) {
+        throw new Error(
+          'The linked Shopify product has multiple variants. Variant-preserving updates are not supported for this product.',
+        );
+      }
+      const currentVariant = existingProduct.variants.nodes[0];
+      if (
+        currentVariant.sku !== input.sku ||
+        currentVariant.selectedOptions.length === 0
+      ) {
+        throw new Error(
+          'The linked Shopify variant no longer matches the canonical SKU and cannot be safely updated.',
+        );
+      }
+      variants = [
+        {
+          id: currentVariant.id,
+          sku: input.sku,
+          price: input.sellingPrice.toFixed(2),
+          optionValues: currentVariant.selectedOptions.map((option) => ({
+            optionName: option.name,
+            name: option.value,
+          })),
+        },
+      ];
+    } else {
+      variants = [
+        {
+          sku: input.sku,
+          price: input.sellingPrice.toFixed(2),
+          optionValues: [{ optionName: 'Title', name: 'Default Title' }],
+        },
+      ];
+    }
+
+    const productInput: Record<string, unknown> = {
+      handle: input.handle,
+      title: input.title,
+      descriptionHtml: plainTextAsProductHtml(input.description),
+      variants,
+    };
+    if (creating) {
+      productInput.status = 'DRAFT';
+      productInput.productOptions = [
+        { name: 'Title', values: [{ name: 'Default Title' }] },
+      ];
+      productInput.metafields = [
+        {
+          namespace: 'noxtill',
+          key: 'business_id',
+          type: 'single_line_text_field',
+          value: input.businessId,
+        },
+        {
+          namespace: 'noxtill',
+          key: 'product_id',
+          type: 'single_line_text_field',
+          value: input.productId,
+        },
+      ];
+    }
+
+    const response = await axios.post<
+      ShopifyGraphqlResponse<ShopifyProductSetPayload>
+    >(
+      endpoint,
+      {
+        query: `mutation NoxtillProductSet($input: ProductSetInput!, $identifier: ProductSetIdentifiers) {
+          productSet(input: $input, identifier: $identifier, synchronous: true) {
+            product { id }
+            userErrors { field message }
+          }
+        }`,
+        variables: {
+          identifier,
+          input: productInput,
+        },
+      },
+      { headers },
+    );
+    const graphqlError = response.data.errors?.[0]?.message;
+    if (graphqlError)
+      throw new Error(`Shopify listing sync failed: ${graphqlError}`);
+    const payload = response.data.data?.productSet;
+    const userError = payload?.userErrors?.[0]?.message;
+    if (userError) throw new Error(`Shopify listing sync failed: ${userError}`);
+    const returnedId = payload?.product?.id;
+    if (!returnedId) throw new Error('Shopify did not return a product ID');
+    return { externalProductId: returnedId };
   }
 }

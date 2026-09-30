@@ -16,6 +16,7 @@ import { RecentOrdersCard } from "./recent-orders-card";
 import { TopChannelsCard } from "./top-channels-card";
 import { QuickActionsGrid } from "./quick-actions-grid";
 import { GettingStartedCard } from "./getting-started-card";
+import { AutonomousCommerceCard } from "./autonomous-commerce-card";
 import { OverviewToolbar } from "./overview-toolbar";
 import { useSession } from "@/lib/session";
 import { DashboardSidePanel } from "./side-panel";
@@ -67,6 +68,8 @@ function renderRow(key: DashboardRowKey, currency: string, extraWidgetKeys: stri
       return <QuickActionsGrid />;
     case "intelligence":
       return <IntelligencePromoGrid />;
+    case "commerce":
+      return <AutonomousCommerceCard />;
     case "getting-started":
       return <GettingStartedCard />;
     default:

@@ -16,6 +16,7 @@ const AI_FEATURES: { key: string; label: string; description: string }[] = [
   { key: 'campaignCopy', label: 'Campaign copy', description: 'Drafts marketing message copy for a person to approve.' },
   { key: 'voiceEntry', label: 'Voice entry', description: 'Turns a spoken command into a draft you confirm before anything is saved.' },
   { key: 'photoDigitizer', label: 'Photo digitizer', description: 'Reads a photo of a list into rows you review before importing.' },
+  { key: 'workflowAgents', label: 'Workflow AI drafts', description: 'Creates a draft from values selected in a workflow prompt. Drafts appear in run history and are not sent automatically.' },
 ];
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -54,9 +55,9 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       affects: ['Bookings', 'Credit', 'Marketing', 'Reviews', 'Inventory'],
       affectsNote: 'Turning a workflow off stops it firing for new events; past runs are kept.',
       help: [
-        'A failed run is recorded with its reason. Failures are not retried automatically.',
-        'Workflows are event-driven: they run when the event happens, not on their own schedule.',
-        'Workflow actions are limited to messaging a customer or notifying you.',
+        'A failed run is recorded with its reason. You can manually retry eligible failed actions within the retry limit.',
+        'Workflows can run from matching events or from a configured schedule. Durable waits and schedule recovery require Redis.',
+        'Workflow actions can message customers, update customer tags and fields, wait, request approval, and create AI drafts saved to run history.',
       ],
       actions: [{ label: 'Open Automations', icon: 'external-link', href: '/marketing/automations', kind: 'link' }, { label: 'View history', icon: 'history', kind: 'history' }],
       groups: [
@@ -119,8 +120,22 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
           title: 'Safety',
           hint: 'Fixed behaviour',
           rows: [
-            row({ key: 'wf-retry', label: 'Failed runs', description: 'A failed run is recorded and is not retried.', state: () => ({ value: 'Recorded, not retried' }) }),
-            row({ key: 'wf-actions', label: 'What a workflow can do', description: 'The actions a workflow may take.', state: () => ({ value: 'Message a customer · Notify you' }) }),
+            row({
+              key: 'wf-retry',
+              label: 'Failed runs',
+              description:
+                'Eligible failed actions can be retried manually within a limit; actions are not retried automatically.',
+              state: () => ({ value: 'Manual retry · limited' }),
+            }),
+            row({
+              key: 'wf-actions',
+              label: 'What a workflow can do',
+              description: 'The actions currently supported by the workflow engine.',
+              state: () => ({
+                value:
+                  'Message · notify · tag · custom field · wait · approval · AI draft',
+              }),
+            }),
           ],
         },
       ],
