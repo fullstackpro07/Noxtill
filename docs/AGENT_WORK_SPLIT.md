@@ -60,7 +60,7 @@ Work top to bottom. Mark an item `✅` when its full done-check (AGENTS.md §2) 
 1. ✅ Commerce — Channel Listings page.
 2. ✅ Commerce — Fulfillment Network (nodes, product mappings, coverage).
 3. ✅ Commerce — Fulfillment Router (per-order source selection using the network).
-4. Commerce — Production & Assembly.
+4. ✅ Commerce — Production & Assembly.
 5. Module selection — each business chooses its own modules.
 
 **Handover (2026-09-30): Claude Code has stopped. Codex now owns Autonomous Commerce and module
@@ -86,3 +86,6 @@ Goal items: (1) stabilise + checkpoint commit, (2) Production & Assembly, (3) Ri
 (8) module selection. Local commits only, never push.
 
 - 02:15 — started item 1.
+- ~02:40 — item 1 ✅: removed 2 empty migration folders left by Codex, applied 20261001003100_seo_serp_page_overlap, fixed DLQ spec type + made resolve/dismiss async; tsc clean, jest 305/1973 green. Checkpoint commit 55c760f (local, not pushed).
+- item 2 ✅ Production & Assembly: BOM versions, work orders, atomic component consumption + finished-goods receipt as new stock movement kinds (production_consume/production_output, Inventory UI updated), quality hold/release, migration 20261001022339. jest 306/1980 green.
+- started item 3 (Risk & Compliance).

@@ -428,6 +428,10 @@ enum StockMovementKind {
   return
   transfer_out
   transfer_in
+  /// Components consumed by a completed Production & Assembly work order (negative qty).
+  production_consume
+  /// Finished goods received from a quality-released work order (positive qty).
+  production_output
 }
 
 enum StockTransferStatus {
@@ -874,6 +878,11 @@ model Business {
   commerceFulfillmentAudits    CommerceFulfillmentAudit[]
   commerceRoutingDecisions     CommerceRoutingDecision[]
   commerceRoutingAllocations   CommerceRoutingAllocation[]
+  commerceBoms                 CommerceBom[]
+  commerceBomItems             CommerceBomItem[]
+  commerceWorkOrders           CommerceWorkOrder[]
+  commerceWorkOrderMaterials   CommerceWorkOrderMaterial[]
+  commerceWorkOrderAudits      CommerceWorkOrderAudit[]
   seoAuditRuns                 SeoAuditRun[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
@@ -967,14 +976,14 @@ model User {
   /// Per-user interface preferences (motion, text size, notification sounds) the app applies.
   uiPreferences       Json      @default("{}") @map("ui_preferences")
 
-  businessUsers             BusinessUser[]
-  notifications             Notification[]
-  sessions                  Session[]
-  twoFactorCodes            TwoFactorCode[]
-  assistantConversations    AssistantConversation[]
-  workflowApprovalDecisions WorkflowApproval[]      @relation("WorkflowApprovalDecider")
-  workflowDeadLetterAssignments WorkflowDeadLetter[] @relation("WorkflowDeadLetterOwner")
-  workflowDeadLetterDecisions WorkflowDeadLetterDecision[] @relation("WorkflowDeadLetterDecisionActor")
+  businessUsers                 BusinessUser[]
+  notifications                 Notification[]
+  sessions                      Session[]
+  twoFactorCodes                TwoFactorCode[]
+  assistantConversations        AssistantConversation[]
+  workflowApprovalDecisions     WorkflowApproval[]           @relation("WorkflowApprovalDecider")
+  workflowDeadLetterAssignments WorkflowDeadLetter[]         @relation("WorkflowDeadLetterOwner")
+  workflowDeadLetterDecisions   WorkflowDeadLetterDecision[] @relation("WorkflowDeadLetterDecisionActor")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1592,6 +1601,10 @@ model Product {
   commerceListingDrafts   CommerceListingDraft[]
   commerceChannelListings CommerceChannelListing[]
   fulfillmentMappings     CommerceFulfillmentMapping[]
+  boms                    CommerceBom[]
+  bomComponentOf          CommerceBomItem[]
+  workOrders              CommerceWorkOrder[]
+  workOrderMaterials      CommerceWorkOrderMaterial[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2767,9 +2780,9 @@ model Workflow {
   archivedAt             DateTime?             @map("archived_at")
   version                Int                   @default(1)
 
-  runs      WorkflowRun[]
-  versions  WorkflowVersion[]
-  approvals WorkflowApproval[]
+  runs        WorkflowRun[]
+  versions    WorkflowVersion[]
+  approvals   WorkflowApproval[]
   deadLetters WorkflowDeadLetter[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -2896,12 +2909,12 @@ model WorkflowDeadLetter {
   workflowId         String                       @map("workflow_id")
   workflow           Workflow                     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   workflowRunId      String                       @unique @map("workflow_run_id")
-  workflowRun        WorkflowRun                 @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  workflowRun        WorkflowRun                  @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
   ownerUserId        String?                      @map("owner_user_id")
   ownerUser          User?                        @relation("WorkflowDeadLetterOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   ownerRole          Role                         @default(owner) @map("owner_role")
   status             WorkflowDeadLetterStatus     @default(open)
-  nextAction         WorkflowDeadLetterNextAction  @default(manual_review) @map("next_action")
+  nextAction         WorkflowDeadLetterNextAction @default(manual_review) @map("next_action")
   failureCode        String                       @map("failure_code") @db.VarChar(64)
   evidence           Json
   operatorRetryCount Int                          @default(0) @map("operator_retry_count")
@@ -2920,18 +2933,18 @@ model WorkflowDeadLetter {
 
 /// Append-only, human- and system-attributed decisions for each dead-letter record.
 model WorkflowDeadLetterDecision {
-  id             String                           @id @default(uuid())
-  businessId     String                           @map("business_id")
-  business       Business                         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  deadLetterId   String                           @map("dead_letter_id")
-  deadLetter     WorkflowDeadLetter              @relation(fields: [deadLetterId], references: [id], onDelete: Cascade)
-  actorUserId    String?                          @map("actor_user_id")
-  actorUser      User?                            @relation("WorkflowDeadLetterDecisionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  action         WorkflowDeadLetterDecisionAction
-  reason         String?                          @db.Text
-  before         Json?
-  after          Json?
-  createdAt      DateTime                         @default(now()) @map("created_at")
+  id           String                           @id @default(uuid())
+  businessId   String                           @map("business_id")
+  business     Business                         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  deadLetterId String                           @map("dead_letter_id")
+  deadLetter   WorkflowDeadLetter               @relation(fields: [deadLetterId], references: [id], onDelete: Cascade)
+  actorUserId  String?                          @map("actor_user_id")
+  actorUser    User?                            @relation("WorkflowDeadLetterDecisionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  action       WorkflowDeadLetterDecisionAction
+  reason       String?                          @db.Text
+  before       Json?
+  after        Json?
+  createdAt    DateTime                         @default(now()) @map("created_at")
 
   @@index([businessId, deadLetterId, createdAt])
   @@index([businessId, action, createdAt])
@@ -3486,6 +3499,134 @@ model CommerceRoutingAllocation {
   @@unique([decisionId, orderItemId], map: "commerce_routing_allocations_decision_item_key")
   @@index([businessId, nodeId], map: "commerce_routing_allocations_business_node_idx")
   @@map("commerce_routing_allocations")
+}
+
+enum CommerceBomStatus {
+  active
+  archived
+}
+
+enum CommerceWorkOrderStatus {
+  planned
+  in_progress
+  quality_hold
+  completed
+  cancelled
+}
+
+/// Bill of materials for a canonical finished product (Production & Assembly, screen 4). Versioned:
+/// saving a new BOM archives the previous active version; work orders snapshot what they used.
+model CommerceBom {
+  id                  String              @id @default(uuid())
+  businessId          String              @map("business_id")
+  business            Business            @relation(fields: [businessId], references: [id])
+  productId           String              @map("product_id")
+  product             Product             @relation(fields: [productId], references: [id])
+  version             Int
+  status              CommerceBomStatus   @default(active)
+  /// Expected extra component use for scrap, as a percentage (e.g. 5 = 5%).
+  scrapAllowancePct   Decimal             @default(0) @map("scrap_allowance_pct") @db.Decimal(5, 2)
+  laborCostPerUnit    Decimal?            @map("labor_cost_per_unit") @db.Decimal(12, 2)
+  overheadCostPerUnit Decimal?            @map("overhead_cost_per_unit") @db.Decimal(12, 2)
+  notes               String?             @db.Text
+  createdByUserId     String?             @map("created_by_user_id")
+  items               CommerceBomItem[]
+  workOrders          CommerceWorkOrder[]
+  createdAt           DateTime            @default(now()) @map("created_at")
+
+  @@unique([businessId, productId, version], map: "commerce_boms_business_product_version_key")
+  @@index([businessId, status], map: "commerce_boms_business_status_idx")
+  @@map("commerce_boms")
+}
+
+model CommerceBomItem {
+  id                 String      @id @default(uuid())
+  businessId         String      @map("business_id")
+  business           Business    @relation(fields: [businessId], references: [id])
+  bomId              String      @map("bom_id")
+  bom                CommerceBom @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  componentProductId String      @map("component_product_id")
+  component          Product     @relation(fields: [componentProductId], references: [id])
+  qtyPerUnit         Decimal     @map("qty_per_unit") @db.Decimal(12, 4)
+
+  @@unique([bomId, componentProductId], map: "commerce_bom_items_bom_component_key")
+  @@map("commerce_bom_items")
+}
+
+/// A production run. Components are consumed and finished goods received only on completion, both
+/// as canonical Inventory stock movements. A failed quality check puts the run on quality hold:
+/// components are consumed but no sellable stock is created until the hold is released.
+model CommerceWorkOrder {
+  id              String                      @id @default(uuid())
+  businessId      String                      @map("business_id")
+  business        Business                    @relation(fields: [businessId], references: [id])
+  number          Int
+  bomId           String                      @map("bom_id")
+  bom             CommerceBom                 @relation(fields: [bomId], references: [id])
+  productId       String                      @map("product_id")
+  product         Product                     @relation(fields: [productId], references: [id])
+  qtyPlanned      Int                         @map("qty_planned")
+  qtyGood         Int?                        @map("qty_good")
+  qtyScrap        Int?                        @map("qty_scrap")
+  status          CommerceWorkOrderStatus     @default(planned)
+  dueDate         DateTime?                   @map("due_date")
+  facility        String?                     @db.VarChar(120)
+  demandSource    String?                     @map("demand_source") @db.VarChar(200)
+  /// Snapshot at creation: component cost at then-current cost prices + labor/overhead.
+  estimatedCost   Decimal                     @map("estimated_cost") @db.Decimal(14, 2)
+  /// Set on completion from the cost prices at consumption time.
+  actualCost      Decimal?                    @map("actual_cost") @db.Decimal(14, 2)
+  qualityPassed   Boolean?                    @map("quality_passed")
+  qualityNotes    String?                     @map("quality_notes") @db.Text
+  startedAt       DateTime?                   @map("started_at")
+  completedAt     DateTime?                   @map("completed_at")
+  cancelledReason String?                     @map("cancelled_reason") @db.Text
+  createdByUserId String?                     @map("created_by_user_id")
+  materials       CommerceWorkOrderMaterial[]
+  audits          CommerceWorkOrderAudit[]
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
+
+  @@unique([businessId, number], map: "commerce_work_orders_business_number_key")
+  @@index([businessId, status, dueDate], map: "commerce_work_orders_business_status_due_idx")
+  @@map("commerce_work_orders")
+}
+
+/// Material requirement snapshot per work order; consumption fields are filled on completion.
+model CommerceWorkOrderMaterial {
+  id                 String            @id @default(uuid())
+  businessId         String            @map("business_id")
+  business           Business          @relation(fields: [businessId], references: [id])
+  workOrderId        String            @map("work_order_id")
+  workOrder          CommerceWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  componentProductId String            @map("component_product_id")
+  component          Product           @relation(fields: [componentProductId], references: [id])
+  qtyRequired        Int               @map("qty_required")
+  qtyConsumed        Int?              @map("qty_consumed")
+  unitCostEstimated  Decimal           @map("unit_cost_estimated") @db.Decimal(12, 2)
+  unitCostConsumed   Decimal?          @map("unit_cost_consumed") @db.Decimal(12, 2)
+
+  @@unique([workOrderId, componentProductId], map: "commerce_wo_materials_wo_component_key")
+  @@map("commerce_work_order_materials")
+}
+
+/// Append-only audit of BOM and work order changes.
+model CommerceWorkOrderAudit {
+  id          String             @id @default(uuid())
+  businessId  String             @map("business_id")
+  business    Business           @relation(fields: [businessId], references: [id])
+  workOrderId String?            @map("work_order_id")
+  workOrder   CommerceWorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  bomId       String?            @map("bom_id")
+  action      String             @db.VarChar(64)
+  reason      String?            @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?            @map("actor_user_id")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  @@index([businessId, workOrderId, createdAt], map: "commerce_wo_audits_biz_wo_created_idx")
+  @@map("commerce_work_order_audits")
 }
 
 enum CommerceListingDraftStatus {
@@ -4848,7 +4989,7 @@ model TrackedKeyword {
   business      Business @relation(fields: [businessId], references: [id])
   keyword       String
   intent        String?  @db.VarChar(24)
-  targetPageUrl String? @map("target_page_url") @db.VarChar(2048)
+  targetPageUrl String?  @map("target_page_url") @db.VarChar(2048)
 
   snapshots KeywordRankSnapshot[]
 
@@ -4863,7 +5004,7 @@ model KeywordRankSnapshot {
   keywordId          String         @map("keyword_id")
   keyword            TrackedKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
   /// Null means not found in the checked results window.
-  rank           Int?
+  rank               Int?
   /// Keyword Rankings depth fix — the #1 organic result's title at check time, captured from the
   /// SAME SerpApi call already made for `rank` (no extra API call). A real "who currently dominates
   /// this keyword" figure, not a fabricated "difficulty" score — this app has no real

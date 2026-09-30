@@ -17,6 +17,8 @@ import { CommerceFulfillmentController } from './commerce-fulfillment.controller
 import { CommerceFulfillmentService } from './commerce-fulfillment.service';
 import { CommerceFulfillmentRouterController } from './commerce-fulfillment-router.controller';
 import { CommerceFulfillmentRouterService } from './commerce-fulfillment-router.service';
+import { CommerceProductionController } from './commerce-production.controller';
+import { CommerceProductionService } from './commerce-production.service';
 
 @Module({
   imports: [ActivityModule, AiModule, IntegrationsModule],
@@ -28,6 +30,7 @@ import { CommerceFulfillmentRouterService } from './commerce-fulfillment-router.
     CommerceListingBuilderController,
     CommerceFulfillmentController,
     CommerceFulfillmentRouterController,
+    CommerceProductionController,
   ],
   providers: [
     ProductRadarService,
@@ -38,6 +41,7 @@ import { CommerceFulfillmentRouterService } from './commerce-fulfillment-router.
     CommerceChannelListingsService,
     CommerceFulfillmentService,
     CommerceFulfillmentRouterService,
+    CommerceProductionService,
   ],
 })
 export class CommerceModule {}
