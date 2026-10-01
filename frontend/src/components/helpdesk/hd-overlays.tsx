@@ -86,6 +86,7 @@ export function HdOverlays({ ws }: { ws: Workspace }) {
           F("desc", "Description", "area", { ph: "What does the customer need?" }),
           F("ch", "Channel", "select", { value: "Manual", options: O(ws.chanList) }),
           F("cat", "Category", "select", { value: cfg.categories[0], options: O(cfg.categories) }),
+          F("sub", "Subcategory", "text", { ph: "Optional, e.g. Duplicate charge" }),
           F("pri", "Priority", "select", { value: cfg.general.defaultPriority, options: O(PRIORITIES) }),
           F("agent", "Assigned agent", "select", { options: agentOpts }),
           F("q", "Queue", "select", { value: "", options: [{ v: "", t: `Default (routed by category, else ${cfg.general.defaultQueue})` }, ...ws.queues.filter((q) => q.active).map((q) => ({ v: q.id, t: q.name }))] }),
@@ -107,6 +108,7 @@ export function HdOverlays({ ws }: { ws: Workspace }) {
           put("description", v("desc"));
           put("channel", v("ch"));
           put("category", v("cat"));
+          put("subcategory", v("sub"));
           put("priority", v("pri"));
           put("agentId", v("agent"));
           put("queueId", v("q"));
@@ -408,7 +410,7 @@ export function HdOverlays({ ws }: { ws: Workspace }) {
         note: "Macros never bypass permissions — each action is checked against the applying agent’s role.",
         fields: [
           F("name", "Macro name", "text", { req: true, value: x?.name ?? "", af: true }),
-          F("cond", "Conditions", "text", { value: x?.conditions ?? "", ph: "e.g. Category = Billing", help: "Shown to agents as guidance for when to use it — macros only run when an agent applies them." }),
+          F("cond", "Conditions", "text", { value: x?.conditions ?? "", ph: "e.g. Category = Billing", help: "Field = Value joined with AND — Category, Queue, Channel, Status, Priority, Branch or Tag (use != to exclude). The macro is only offered, and only runs, on tickets that match. Leave empty for any ticket." }),
           F("a_reply", "Insert reply", "select", { value: get("Insert reply"), options: O((lib.data?.replies ?? []).map((r) => r.name), "— none —") }),
           F("a_status", "Set status", "select", { value: get("Set status"), options: O(statusList, "— none —") }),
           F("a_pri", "Set priority", "select", { value: get("Set priority"), options: O(PRIORITIES, "— none —") }),

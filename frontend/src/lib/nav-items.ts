@@ -120,6 +120,7 @@ import {
   LineChart,
   Users2,
   Coins,
+  Landmark,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -346,6 +347,14 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "staff-analytics", labelKey: "nav.staffAnalytics", href: "/profit/staff-analytics", icon: BarChart3 },
       { key: "health-score", labelKey: "nav.businessHealthScore", href: "/profit/health-score", icon: HeartPulse },
     ],
+  },
+  {
+    key: "finance",
+    labelKey: "nav.finance",
+    href: "/finance",
+    icon: Landmark,
+    roles: ["owner", "manager", "staff"],
+    isNew: true,
   },
   {
     key: "staff",

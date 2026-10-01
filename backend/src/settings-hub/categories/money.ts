@@ -194,7 +194,7 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
         'By default tax is added on top of prices: total = subtotal − discount + tax. If prices already include tax (set in Sales & POS), tax is taken out of the price instead and the total does not change.',
         'Noxtill will not tell you whether you are compliant — that is not something it can verify.',
       ],
-      notice: { text: 'Noxtill prepares tax reporting from your business data. It does not file returns, submit to any authority, or determine your legal liability.', icon: 'info', action: { label: 'Open Tax Reports', href: '/reports/tax' } },
+      notice: { text: 'Noxtill prepares tax reporting from your business data, and Finance & Accounting tracks tax on supplier bills and keeps tax returns with their filing evidence. It does not file returns, submit to any authority, or determine your legal liability.', icon: 'info', action: { label: 'Open Tax Reports', href: '/reports/tax' } },
       actions: [
         { label: 'Reset section', icon: 'rotate-ccw', kind: 'reset' },
         { label: 'View history', icon: 'history', kind: 'history' },
@@ -248,8 +248,13 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'tax-pricing',
               label: 'Pricing',
-              description: 'Tax is added on top of the listed price. Tax-inclusive pricing is not applied to sales.',
-              state: () => ({ value: 'Tax-exclusive' }),
+              description: 'Whether listed prices already include tax. Set in Sales & POS (“Prices include tax”).',
+              link: { label: 'Open Sales & POS settings', href: '/settings/sales' },
+              state: async (ctx) => {
+                const b = await d.prisma.business.findUniqueOrThrow({ where: { id: ctx.businessId }, select: { policies: true } });
+                const inc = (b.policies as Record<string, unknown> | null)?.['sales.pricesIncludeTax'] === true;
+                return { value: inc ? 'Tax-inclusive' : 'Tax-exclusive' };
+              },
             }),
             row({
               key: 'tax-filing-day',

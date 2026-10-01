@@ -375,7 +375,7 @@ export class HelpdeskJobsService {
             : 'from 1 to 5 stars';
       const r = await this.delivery.notice(
         t,
-        `How did we do with ${t.number}? Rate us ${scale}: ${link}`,
+        csatInvite(cfg.comms.lang, t.number, scale, link),
       );
       const ok = r.delivery !== 'failed';
       await this.prisma.helpdeskCsat.update({
@@ -530,4 +530,21 @@ export class HelpdeskJobsService {
     );
     return old.length;
   }
+}
+
+/** Settings › Customer Communication › Languages decides the survey invitation language. */
+export function csatInvite(
+  lang: string,
+  number: string,
+  scale: string,
+  link: string,
+): string {
+  const en = `How did we do with ${number}? Rate us ${scale}: ${link}`;
+  const ur = `${number} میں ہماری مدد کیسی رہی؟ براہِ کرم ریٹنگ دیں: ${link}`;
+  if (lang === 'Urdu') return ur;
+  if (lang === 'English + Urdu')
+    return `${en}
+
+${ur}`;
+  return en;
 }

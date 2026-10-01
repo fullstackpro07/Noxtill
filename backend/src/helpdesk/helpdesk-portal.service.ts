@@ -135,6 +135,7 @@ export class HelpdeskPortalService {
             : null,
         scale: csat?.scale ?? cfg.csat.scale,
         comment: cfg.csat.comment,
+        lang: cfg.comms.lang,
       },
       categories: cfg.categories,
       articles: arts.map((a) => this.articleCard(a)),

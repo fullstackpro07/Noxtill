@@ -172,6 +172,9 @@ enum ActionItemType {
   low_stock
   overdue_credit
   unreplied_review
+  /// A Finance approval (journal, bill, reconciliation, tax return, budget, period reopen,
+  /// settings or control-account change) waiting on the person viewing the Action Center.
+  finance_approval
 }
 
 enum ActionItemPriority {
@@ -6575,4 +6578,691 @@ model HelpdeskCsat {
   @@index([businessId, status, sendAt])
   @@index([businessId, respondedAt])
   @@map("helpdesk_csat")
+}
+
+// ───────────────────────────── Finance & Accounting ─────────────────────────────
+// One ledger per business group: every Fin* row's `businessId` is the group root; the branch a
+// line belongs to is `branchId`. `debit`/`credit` are always base currency (the root business's).
+
+model FinSettings {
+  id           String    @id @default(uuid())
+  businessId   String    @unique @map("business_id")
+  version      Int       @default(1)
+  config       Json
+  journalSeq   Int       @default(0) @map("journal_seq")
+  billSeq      Int       @default(0) @map("bill_seq")
+  assetSeq     Int       @default(0) @map("asset_seq")
+  taxSeq       Int       @default(0) @map("tax_seq")
+  /// When the source-posting sweep last finished, and when the one-time history backfill finished.
+  lastSweepAt  DateTime? @map("last_sweep_at")
+  backfilledAt DateTime? @map("backfilled_at")
+  sweepError   String?   @map("sweep_error") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("fin_settings")
+}
+
+model FinAccount {
+  id                 String  @id @default(uuid())
+  businessId         String  @map("business_id")
+  code               String  @db.VarChar(12)
+  name               String  @db.VarChar(120)
+  /// asset | liability | equity | revenue | expense
+  type               String  @db.VarChar(12)
+  subtype            String  @db.VarChar(40)
+  parentId           String? @map("parent_id")
+  /// null = base currency.
+  currency           String? @db.VarChar(3)
+  isHeader           Boolean @default(false) @map("is_header")
+  reconcilable       Boolean @default(false)
+  /// ar | ap | tax | bank | inventory | fa | null. Control accounts only take system postings.
+  control            String? @db.VarChar(12)
+  /// Stable key the posting rules resolve (e.g. `sales`, `ar`, `cash_drawer`).
+  systemKey          String? @map("system_key") @db.VarChar(40)
+  requiresDepartment Boolean @default(false) @map("requires_department")
+  active             Boolean @default(true)
+  description        String? @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code])
+  @@unique([businessId, systemKey])
+  @@map("fin_accounts")
+}
+
+model FinPeriod {
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  year       Int
+  month      Int
+  /// open | soft | locked
+  status     String    @default("open") @db.VarChar(8)
+  lockedById String?   @map("locked_by_id")
+  lockedAt   DateTime? @map("locked_at")
+  note       String?   @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, year, month])
+  @@map("fin_periods")
+}
+
+/// Manually maintained rates: 1 unit of `currency` = `rate` units of base currency from `effectiveOn`.
+model FinExchangeRate {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  currency    String   @db.VarChar(3)
+  rate        Decimal  @db.Decimal(18, 8)
+  effectiveOn DateTime @map("effective_on") @db.Date
+  note        String?  @db.VarChar(200)
+  createdById String?  @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, currency, effectiveOn])
+  @@map("fin_exchange_rates")
+}
+
+model FinJournal {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  number        String    @db.VarChar(24)
+  date          DateTime  @db.Date
+  /// Manual | Adjustment | Accrual | Prepayment | Reclass | System | Reversal | Depreciation | FX
+  type          String    @db.VarChar(16)
+  reference     String?   @db.VarChar(80)
+  memo          String?   @db.Text
+  /// Draft | Pending Review | Approval Required | Approved | Posted | Failed | Reversed | Voided
+  status        String    @db.VarChar(20)
+  /// System postings: the source record (Order, Payment, Expense, ...) this journal came from.
+  sourceType    String?   @map("source_type") @db.VarChar(24)
+  sourceId      String?   @map("source_id") @db.VarChar(64)
+  sourceEvent   String?   @map("source_event") @db.VarChar(24)
+  sourceRev     Int       @default(0) @map("source_rev")
+  sourceHash    String?   @map("source_hash") @db.VarChar(64)
+  sourceLabel   String?   @map("source_label") @db.VarChar(200)
+  /// True once a later edit/delete of the source superseded this journal (it was reversed).
+  superseded    Boolean   @default(false)
+  branchId      String?   @map("branch_id")
+  currency      String    @db.VarChar(3)
+  total         Decimal   @default(0) @db.Decimal(14, 2)
+  preparedById  String?   @map("prepared_by_id")
+  submittedAt   DateTime? @map("submitted_at")
+  approvedById  String?   @map("approved_by_id")
+  approvedAt    DateTime? @map("approved_at")
+  postedById    String?   @map("posted_by_id")
+  postedAt      DateTime? @map("posted_at")
+  version       Int       @default(1)
+  reversalOfId  String?   @map("reversal_of_id")
+  reversedById  String?   @map("reversed_by_id")
+  autoReverseOn DateTime? @map("auto_reverse_on") @db.Date
+  failureReason String?   @map("failure_reason") @db.VarChar(500)
+  batchId       String?   @map("batch_id") @db.VarChar(40)
+  attachments   Json      @default("[]")
+  department    String?   @db.VarChar(40)
+
+  lines FinJournalLine[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@unique([businessId, sourceType, sourceId, sourceEvent, sourceRev])
+  @@index([businessId, status, date])
+  @@index([businessId, date])
+  @@map("fin_journals")
+}
+
+model FinJournalLine {
+  id          String     @id @default(uuid())
+  businessId  String     @map("business_id")
+  journalId   String     @map("journal_id")
+  journal     FinJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  lineNo      Int        @map("line_no")
+  accountId   String?    @map("account_id")
+  description String?    @db.VarChar(300)
+  /// Base currency.
+  debit       Decimal    @default(0) @db.Decimal(14, 2)
+  credit      Decimal    @default(0) @db.Decimal(14, 2)
+  /// Transaction currency and the rate used (1 txn unit = fxRate base units).
+  currency    String     @db.VarChar(3)
+  fxRate      Decimal    @default(1) @map("fx_rate") @db.Decimal(18, 8)
+  txnDebit    Decimal    @default(0) @map("txn_debit") @db.Decimal(14, 2)
+  txnCredit   Decimal    @default(0) @map("txn_credit") @db.Decimal(14, 2)
+  branchId    String?    @map("branch_id")
+  department  String?    @db.VarChar(40)
+  customerId  String?    @map("customer_id")
+  supplierId  String?    @map("supplier_id")
+  assetId     String?    @map("asset_id")
+  taxCode     String?    @map("tax_code") @db.VarChar(20)
+  /// Denormalised from the journal so the ledger can be queried without a join.
+  date        DateTime   @db.Date
+  postedAt    DateTime?  @map("posted_at")
+
+  @@index([businessId, accountId, date])
+  @@index([businessId, date])
+  @@index([journalId])
+  @@map("fin_journal_lines")
+}
+
+model FinTaxCode {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  code       String  @db.VarChar(20)
+  name       String  @db.VarChar(80)
+  rate       Decimal @db.Decimal(6, 3)
+  /// output | input
+  kind       String  @db.VarChar(8)
+  accountId  String  @map("account_id")
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code])
+  @@map("fin_tax_codes")
+}
+
+model FinTaxReturn {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(24)
+  jurisdiction String    @db.VarChar(80)
+  periodStart  DateTime  @map("period_start") @db.Date
+  periodEnd    DateTime  @map("period_end") @db.Date
+  dueOn        DateTime  @map("due_on") @db.Date
+  /// Open | Calculated | Pending Review | Approval Required | Approved | Locked | Filed
+  status       String    @db.VarChar(20)
+  outputTax    Decimal   @default(0) @map("output_tax") @db.Decimal(14, 2)
+  inputTax     Decimal   @default(0) @map("input_tax") @db.Decimal(14, 2)
+  adjustments  Decimal   @default(0) @db.Decimal(14, 2)
+  snapshot     Json?
+  preparedById String?   @map("prepared_by_id")
+  approvedById String?   @map("approved_by_id")
+  approvedAt   DateTime? @map("approved_at")
+  filedAt      DateTime? @map("filed_at")
+  filingRef    String?   @map("filing_ref") @db.VarChar(80)
+  attachments  Json      @default("[]")
+  notes        String?   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, periodEnd])
+  @@map("fin_tax_returns")
+}
+
+model FinBankAccount {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  name             String    @db.VarChar(120)
+  /// bank | cash | card | clearing | wallet
+  kind             String    @db.VarChar(10)
+  institution      String?   @db.VarChar(120)
+  mask             String?   @db.VarChar(8)
+  currency         String    @db.VarChar(3)
+  glAccountId      String    @unique @map("gl_account_id")
+  branchId         String?   @map("branch_id")
+  /// Payments provider whose synced payouts feed this account (stripe | square | paypal).
+  payoutProvider   String?   @map("payout_provider") @db.VarChar(20)
+  active           Boolean   @default(true)
+  lastImportAt     DateTime? @map("last_import_at")
+  statementBalance Decimal?  @map("statement_balance") @db.Decimal(14, 2)
+  statementDate    DateTime? @map("statement_date") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("fin_bank_accounts")
+}
+
+model FinBankImport {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  bankAccountId  String    @map("bank_account_id")
+  fileName       String    @map("file_name") @db.VarChar(200)
+  /// csv | ofx | payout
+  format         String    @db.VarChar(8)
+  rows           Int       @default(0)
+  imported       Int       @default(0)
+  duplicates     Int       @default(0)
+  statementStart DateTime? @map("statement_start") @db.Date
+  statementEnd   DateTime? @map("statement_end") @db.Date
+  closingBalance Decimal?  @map("closing_balance") @db.Decimal(14, 2)
+  createdById    String?   @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, bankAccountId])
+  @@map("fin_bank_imports")
+}
+
+model FinBankLine {
+  id                String    @id @default(uuid())
+  businessId        String    @map("business_id")
+  bankAccountId     String    @map("bank_account_id")
+  importId          String?   @map("import_id")
+  date              DateTime  @db.Date
+  description       String    @db.VarChar(300)
+  payee             String?   @db.VarChar(160)
+  reference         String?   @db.VarChar(120)
+  /// Signed: money in > 0, money out < 0 (account currency).
+  amount            Decimal   @db.Decimal(14, 2)
+  dedupeKey         String    @map("dedupe_key") @db.VarChar(64)
+  /// import | payout
+  source            String    @db.VarChar(8)
+  externalPaymentId String?   @map("external_payment_id")
+  /// New | Suggested | Needs Review | Matched | Excluded
+  status            String    @db.VarChar(16)
+  suggestion        Json?
+  confidence        Int?
+  ruleId            String?   @map("rule_id")
+  matchedJournalId  String?   @map("matched_journal_id")
+  matchedLineIds    Json?     @map("matched_line_ids")
+  /// Set when matching created a new journal for this line (rule / split / quick create).
+  createdJournalId  String?   @map("created_journal_id")
+  excludeReason     String?   @map("exclude_reason") @db.VarChar(300)
+  reconciliationId  String?   @map("reconciliation_id")
+  matchedById       String?   @map("matched_by_id")
+  matchedAt         DateTime? @map("matched_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, bankAccountId, dedupeKey])
+  @@index([businessId, status])
+  @@index([bankAccountId, date])
+  @@map("fin_bank_lines")
+}
+
+model FinBankRule {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  name          String   @db.VarChar(120)
+  contains      String   @db.VarChar(120)
+  /// in | out | any
+  direction     String   @default("any") @db.VarChar(4)
+  accountId     String   @map("account_id")
+  taxCode       String?  @map("tax_code") @db.VarChar(20)
+  /// suggest | auto
+  mode          String   @default("suggest") @db.VarChar(8)
+  bankAccountId String?  @map("bank_account_id")
+  active        Boolean  @default(true)
+  hits          Int      @default(0)
+  createdById   String?  @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("fin_bank_rules")
+}
+
+model FinReconciliation {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  bankAccountId    String    @map("bank_account_id")
+  periodEnd        DateTime  @map("period_end") @db.Date
+  statementBalance Decimal   @map("statement_balance") @db.Decimal(14, 2)
+  /// Snapshot of the ledger balance at submission.
+  bookBalance      Decimal?  @map("book_balance") @db.Decimal(14, 2)
+  /// In Progress | Pending Review | Reconciled | Reopened
+  status           String    @db.VarChar(16)
+  /// Reconciling items (timing differences).
+  items            Json      @default("[]")
+  preparedById     String?   @map("prepared_by_id")
+  submittedAt      DateTime? @map("submitted_at")
+  approvedById     String?   @map("approved_by_id")
+  approvedAt       DateTime? @map("approved_at")
+  reopenReason     String?   @map("reopen_reason") @db.VarChar(500)
+  attachments      Json      @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, bankAccountId, periodEnd])
+  @@map("fin_reconciliations")
+}
+
+model FinBill {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  number          String    @db.VarChar(24)
+  supplierId      String?   @map("supplier_id")
+  vendorName      String    @map("vendor_name") @db.VarChar(160)
+  vendorInvoiceNo String?   @map("vendor_invoice_no") @db.VarChar(80)
+  billDate        DateTime  @map("bill_date") @db.Date
+  dueDate         DateTime  @map("due_date") @db.Date
+  purchaseOrderId String?   @map("purchase_order_id")
+  branchId        String?   @map("branch_id")
+  currency        String    @db.VarChar(3)
+  fxRate          Decimal   @default(1) @map("fx_rate") @db.Decimal(18, 8)
+  subtotal        Decimal   @default(0) @db.Decimal(14, 2)
+  tax             Decimal   @default(0) @db.Decimal(14, 2)
+  total           Decimal   @default(0) @db.Decimal(14, 2)
+  amountPaid      Decimal   @default(0) @map("amount_paid") @db.Decimal(14, 2)
+  /// Draft | Needs Review | Approval Required | Approved | Posted | Partially Paid | Paid | On Hold | Rejected | Voided
+  status          String    @db.VarChar(20)
+  /// Matched | Variance | No PO
+  matchStatus     String    @default("No PO") @map("match_status") @db.VarChar(12)
+  matchDetail     Json?     @map("match_detail")
+  /// Manual | Upload | Photo Digitizer
+  intake          String    @default("Manual") @db.VarChar(20)
+  ocr             Json?
+  attachments     Json      @default("[]")
+  holdReason      String?   @map("hold_reason") @db.VarChar(300)
+  rejectReason    String?   @map("reject_reason") @db.VarChar(300)
+  notes           String?   @db.Text
+  createdById     String?   @map("created_by_id")
+  approvedById    String?   @map("approved_by_id")
+  approvedAt      DateTime? @map("approved_at")
+  journalId       String?   @map("journal_id")
+  postedAt        DateTime? @map("posted_at")
+
+  lines    FinBillLine[]
+  payments FinBillPayment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, vendorInvoiceNo])
+  @@map("fin_bills")
+}
+
+model FinBillLine {
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  billId      String  @map("bill_id")
+  bill        FinBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  description String  @db.VarChar(300)
+  accountId   String  @map("account_id")
+  qty         Decimal @default(1) @db.Decimal(12, 3)
+  unitCost    Decimal @default(0) @map("unit_cost") @db.Decimal(14, 4)
+  amount      Decimal @db.Decimal(14, 2)
+  taxCode     String? @map("tax_code") @db.VarChar(20)
+  taxAmount   Decimal @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  poItemId    String? @map("po_item_id")
+  productId   String? @map("product_id")
+  department  String? @db.VarChar(40)
+
+  @@index([billId])
+  @@map("fin_bill_lines")
+}
+
+model FinBillPayment {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  billId        String    @map("bill_id")
+  bill          FinBill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+  bankAccountId String    @map("bank_account_id")
+  date          DateTime  @db.Date
+  /// Bill currency.
+  amount        Decimal   @db.Decimal(14, 2)
+  fxRate        Decimal   @default(1) @map("fx_rate") @db.Decimal(18, 8)
+  reference     String?   @db.VarChar(80)
+  journalId     String?   @map("journal_id")
+  createdById   String?   @map("created_by_id")
+  voidedAt      DateTime? @map("voided_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, billId])
+  @@map("fin_bill_payments")
+}
+
+model FinAsset {
+  id                String    @id @default(uuid())
+  businessId        String    @map("business_id")
+  number            String    @db.VarChar(24)
+  name              String    @db.VarChar(160)
+  category          String    @db.VarChar(60)
+  branchId          String?   @map("branch_id")
+  acquiredOn        DateTime  @map("acquired_on") @db.Date
+  inServiceOn       DateTime  @map("in_service_on") @db.Date
+  cost              Decimal   @db.Decimal(14, 2)
+  salvage           Decimal   @default(0) @db.Decimal(14, 2)
+  lifeMonths        Int       @map("life_months")
+  /// straight_line | declining
+  method            String    @default("straight_line") @db.VarChar(16)
+  assetAccountId    String    @map("asset_account_id")
+  accumAccountId    String    @map("accum_account_id")
+  expenseAccountId  String    @map("expense_account_id")
+  /// What the cost was credited to on capitalization (AP via a bill, a bank account, or clearing).
+  fundingAccountId  String?   @map("funding_account_id")
+  billId            String?   @map("bill_id")
+  /// Pending Capitalization | Active | Fully Depreciated | Disposed
+  status            String    @db.VarChar(24)
+  capitalJournalId  String?   @map("capital_journal_id")
+  disposedOn        DateTime? @map("disposed_on") @db.Date
+  disposalProceeds  Decimal?  @map("disposal_proceeds") @db.Decimal(14, 2)
+  disposalJournalId String?   @map("disposal_journal_id")
+  location          String?   @db.VarChar(120)
+  notes             String?   @db.Text
+  createdById       String?   @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("fin_assets")
+}
+
+model FinDepreciationRun {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  year       Int
+  month      Int
+  total      Decimal @db.Decimal(14, 2)
+  assets     Int
+  journalId  String  @map("journal_id")
+  runById    String? @map("run_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, year, month])
+  @@map("fin_depreciation_runs")
+}
+
+model FinBudget {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  name         String    @db.VarChar(120)
+  fiscalYear   Int       @map("fiscal_year")
+  version      Int       @default(1)
+  /// Draft | Submitted | Approved | Locked
+  status       String    @db.VarChar(12)
+  basedOnId    String?   @map("based_on_id")
+  branchId     String?   @map("branch_id")
+  notes        String?   @db.Text
+  createdById  String?   @map("created_by_id")
+  approvedById String?   @map("approved_by_id")
+  approvedAt   DateTime? @map("approved_at")
+
+  lines FinBudgetLine[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, fiscalYear])
+  @@map("fin_budgets")
+}
+
+model FinBudgetLine {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  budgetId    String    @map("budget_id")
+  budget      FinBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  accountId   String    @map("account_id")
+  year        Int
+  month       Int
+  amount      Decimal   @db.Decimal(14, 2)
+  department  String?   @db.VarChar(40)
+  explanation String?   @db.VarChar(500)
+
+  @@index([budgetId])
+  @@map("fin_budget_lines")
+}
+
+model FinCloseRun {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  year         Int
+  month        Int
+  /// In Progress | Pending Approval | Hard Closed | Reopened
+  status       String    @db.VarChar(20)
+  startedById  String?   @map("started_by_id")
+  approvedById String?   @map("approved_by_id")
+  approvedAt   DateTime? @map("approved_at")
+  reopenReason String?   @map("reopen_reason") @db.VarChar(500)
+
+  tasks FinCloseTask[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, year, month])
+  @@map("fin_close_runs")
+}
+
+model FinCloseTask {
+  id            String      @id @default(uuid())
+  businessId    String      @map("business_id")
+  runId         String      @map("run_id")
+  run           FinCloseRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  key           String      @db.VarChar(24)
+  title         String      @db.VarChar(200)
+  area          String      @db.VarChar(40)
+  ownerUserId   String?     @map("owner_user_id")
+  dueOn         DateTime    @map("due_on") @db.Date
+  /// Open | In Progress | Done | Blocked
+  status        String      @db.VarChar(12)
+  attachments   Json        @default("[]")
+  notes         String?     @db.Text
+  completedById String?     @map("completed_by_id")
+  completedAt   DateTime?   @map("completed_at")
+  sortOrder     Int         @default(0) @map("sort_order")
+
+  @@index([runId])
+  @@map("fin_close_tasks")
+}
+
+model FinApproval {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  /// journal | bill | reversal | period | settings | account | tax | reconciliation | budget
+  subjectType   String    @map("subject_type") @db.VarChar(16)
+  subjectId     String    @map("subject_id")
+  title         String    @db.VarChar(200)
+  amount        Decimal?  @db.Decimal(14, 2)
+  rule          String    @db.VarChar(200)
+  /// Finance Manager | Owner/Controller | Owner
+  approverRole  String    @map("approver_role") @db.VarChar(20)
+  requestedById String    @map("requested_by_id")
+  /// Pending | Approved | Rejected | Cancelled
+  status        String    @db.VarChar(10)
+  decidedById   String?   @map("decided_by_id")
+  decidedAt     DateTime? @map("decided_at")
+  comment       String?   @db.VarChar(500)
+  payload       Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@index([subjectType, subjectId])
+  @@map("fin_approvals")
+}
+
+model FinAccessGrant {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  userId         String?   @map("user_id")
+  businessUserId String?   @map("business_user_id")
+  name           String    @db.VarChar(120)
+  email          String    @db.VarChar(160)
+  firm           String?   @db.VarChar(120)
+  /// Read only | Prepare | Approve
+  permission     String    @db.VarChar(12)
+  /// Branch ids the grant covers; [] = all branches.
+  branches       Json      @default("[]")
+  expiresOn      DateTime  @map("expires_on") @db.Date
+  /// Invited | Active | Expired | Revoked
+  status         String    @db.VarChar(10)
+  invitedById    String?   @map("invited_by_id")
+  lastSeenAt     DateTime? @map("last_seen_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("fin_access_grants")
+}
+
+model FinAudit {
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  actorId     String? @map("actor_id")
+  actorName   String  @map("actor_name") @db.VarChar(120)
+  action      String  @db.VarChar(60)
+  subjectType String  @map("subject_type") @db.VarChar(20)
+  subjectId   String  @map("subject_id")
+  detail      String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, subjectType, subjectId])
+  @@index([businessId, createdAt])
+  @@map("fin_audit")
+}
+
+model FinDismissal {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  key           String    @db.VarChar(120)
+  dismissedById String?   @map("dismissed_by_id")
+  until         DateTime?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, key])
+  @@map("fin_dismissals")
+}
+
+model FinHealthRun {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  results    Json
+  ok         Int
+  issues     Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("fin_health_runs")
+}
+
+/// A receivable a customer disputes: excluded from collections until resolved.
+model FinArDispute {
+  id         String    @id @default(uuid())
+  businessId String    @map("business_id")
+  orderId    String    @map("order_id")
+  reason     String    @db.VarChar(300)
+  raisedById String?   @map("raised_by_id")
+  resolvedAt DateTime? @map("resolved_at")
+  resolution String?   @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, orderId])
+  @@map("fin_ar_disputes")
 }

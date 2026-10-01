@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CREDIT_NOTABLE_OVERDUE_DAYS } from './dashboard.constants';
 import { SnoozeActionItemDto } from './dto/snooze-action-item.dto';
 import {
@@ -72,7 +73,10 @@ const SNOOZE_DURATIONS_MS: Record<
  */
 @Injectable()
 export class ActionCenterService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async list(
     businessId: string,
@@ -196,14 +200,21 @@ export class ActionCenterService {
       return this.complaintItems(businessId, businessUserId);
     }
 
-    const [complaints, lowStock, overdueCredit, unrepliedReviews] =
+    const [complaints, lowStock, overdueCredit, unrepliedReviews, finance] =
       await Promise.all([
         this.complaintItems(businessId, null),
         this.lowStockItems(businessId),
         this.overdueCreditItems(businessId),
         this.unrepliedReviewItems(businessId),
+        this.financeApprovalItems(businessId, role),
       ]);
-    return [...complaints, ...lowStock, ...overdueCredit, ...unrepliedReviews];
+    return [
+      ...complaints,
+      ...lowStock,
+      ...overdueCredit,
+      ...unrepliedReviews,
+      ...finance,
+    ];
   }
 
   private async complaintItems(
@@ -279,6 +290,42 @@ export class ActionCenterService {
         deepLink: '/credit',
       };
     });
+  }
+
+  /**
+   * Finance approvals waiting on this person: an Owner sees every pending one; a Manager (who holds
+   * finance.approve by default) sees those at the Finance Manager level. The ledger belongs to the
+   * business group's root, so this reads it there rather than through the branch-scoped client.
+   */
+  private async financeApprovalItems(
+    businessId: string,
+    role: Role,
+  ): Promise<RawActionItem[]> {
+    const biz = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, parentId: true },
+    });
+    if (!biz) return [];
+    const rows = await this.prisma.finApproval.findMany({
+      where: {
+        businessId: biz.parentId ?? biz.id,
+        status: 'Pending',
+        ...(role === Role.owner ? {} : { approverRole: 'Finance Manager' }),
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((row) => ({
+      type: ActionItemType.finance_approval,
+      entityId: row.id,
+      priority:
+        row.approverRole === 'Finance Manager'
+          ? ActionItemPriority.normal
+          : ActionItemPriority.urgent,
+      title: `Approve: ${row.title}`,
+      reason: `${row.rule}${row.amount != null ? ` · ${Number(row.amount).toFixed(2)}` : ''}`,
+      occurredAt: row.createdAt,
+      deepLink: `/finance?open=${row.subjectType}:${row.subjectId}`,
+    }));
   }
 
   private async unrepliedReviewItems(

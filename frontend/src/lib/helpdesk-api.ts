@@ -148,8 +148,9 @@ export interface Workspace {
   breached: number;
   tags: string[];
   usage: { status: Record<string, { open: number; all: number }>; category: Record<string, number>; priorityOpen: Record<string, number> };
-  composer: { replies: Array<{ id: string; name: string; shortcut: string }>; macros: Array<{ id: string; name: string }>; articles: Array<{ id: string; title: string; visibility: string }> };
+  composer: { replies: Array<{ id: string; name: string; shortcut: string; team: string }>; macros: Array<{ id: string; name: string; conditions: string }>; articles: Array<{ id: string; title: string; visibility: string }> };
   via: Record<string, string>;
+  helpCenterUrl: string;
 }
 
 export interface TicketList {

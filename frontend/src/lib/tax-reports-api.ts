@@ -32,6 +32,8 @@ export interface TaxSummary {
     taxableSales: number;
     taxCollected: number;
     taxOnPurchasesTracked: boolean;
+    /** Input tax on supplier bills posted in Finance & Accounting (0 when not tracked). */
+    taxOnPurchases: number;
     refundsApproved: { amount: number; count: number };
     netTax: number;
     transactions: number;

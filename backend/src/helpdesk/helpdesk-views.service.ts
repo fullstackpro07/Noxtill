@@ -6,6 +6,7 @@ import { InboxChannelsService } from '../unified-inbox/inbox-channels.service';
 import { HdActor, HelpdeskContextService } from './helpdesk-context.service';
 import { HelpdeskLoaderService, Loaded, TRow } from './helpdesk-loader.service';
 import { HelpdeskOpsService } from './helpdesk-ops.service';
+import { HelpdeskDeliveryService } from './helpdesk-delivery.service';
 import { AnalyticsQuery } from './dto/helpdesk.dto';
 import {
   CHANNELS,
@@ -48,6 +49,7 @@ export class HelpdeskViewsService {
     private readonly loader: HelpdeskLoaderService,
     private readonly ops: HelpdeskOpsService,
     private readonly channels: InboxChannelsService,
+    private readonly delivery: HelpdeskDeliveryService,
   ) {}
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -78,6 +80,10 @@ export class HelpdeskViewsService {
 
   async channelStates(rootId: string) {
     const states = await this.channels.states(rootId);
+    const { slug } = await this.prisma.business.findUniqueOrThrow({
+      where: { id: rootId },
+      select: { slug: true },
+    });
     const st = (k: string) => states.get(k);
     const social = [...states.values()].filter(
       (s) => s.def.transport === 'social',
@@ -88,7 +94,7 @@ export class HelpdeskViewsService {
       {
         ch: 'Email',
         desc: st('email')?.send.ok
-          ? 'Replies go out by email'
+          ? 'Replies go out by email · Noxtill doesn’t receive email, so customers answer in their portal link'
           : 'Email sending isn’t set up',
         status: st('email')?.send.ok
           ? 'Connected'
@@ -103,7 +109,7 @@ export class HelpdeskViewsService {
       },
       {
         ch: 'Web',
-        desc: 'Help center request form',
+        desc: `Help center request form · ${this.delivery.helpCenterUrl(slug)}`,
         status: 'Connected',
         via: 'Helpdesk help center',
       },
@@ -314,8 +320,17 @@ export class HelpdeskViewsService {
                 ? actor.ri <= 1
                 : true,
           )
-          .map((r) => ({ id: r.id, name: r.name, shortcut: r.shortcut })),
-        macros: macros.map((m) => ({ id: m.id, name: m.name })),
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            shortcut: r.shortcut,
+            team: r.team,
+          })),
+        macros: macros.map((m) => ({
+          id: m.id,
+          name: m.name,
+          conditions: m.conditions,
+        })),
         articles: articles.map((a) => ({
           id: a.id,
           title: a.title,
@@ -323,6 +338,14 @@ export class HelpdeskViewsService {
         })),
       },
       via: VIA,
+      helpCenterUrl: this.delivery.helpCenterUrl(
+        (
+          await this.prisma.business.findUniqueOrThrow({
+            where: { id: actor.rootId },
+            select: { slug: true },
+          })
+        ).slug,
+      ),
     };
   }
 

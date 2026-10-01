@@ -1161,6 +1161,31 @@ export class ReportBuildersService {
   // ---------------------------------------------------------------- tax
 
   /** Also used by the Tax Reports screen, so the tab and the PDF can never disagree. */
+  /**
+   * Tax paid on purchases, from bills posted in Finance & Accounting (input tax account, this
+   * branch's lines, the month). `tracked` is false until the business has a Finance ledger.
+   */
+  async purchaseTax(businessId: string, month: string): Promise<{ tracked: boolean; amount: number; lines: number }> {
+    const biz = await this.prisma.business.findUnique({ where: { id: businessId }, select: { id: true, parentId: true } });
+    if (!biz) return { tracked: false, amount: 0, lines: 0 };
+    const rootId = biz.parentId ?? biz.id;
+    const acct = await this.prisma.finAccount.findFirst({ where: { businessId: rootId, systemKey: 'input_tax' }, select: { id: true } });
+    if (!acct) return { tracked: false, amount: 0, lines: 0 };
+    const [y, m] = month.split('-').map(Number);
+    const agg = await this.prisma.finJournalLine.aggregate({
+      where: {
+        businessId: rootId,
+        accountId: acct.id,
+        postedAt: { not: null },
+        date: { gte: new Date(Date.UTC(y, m - 1, 1)), lte: new Date(Date.UTC(y, m, 0)) },
+        ...(businessId === rootId ? { OR: [{ branchId: businessId }, { branchId: null }] } : { branchId: businessId }),
+      },
+      _sum: { debit: true, credit: true },
+      _count: true,
+    });
+    return { tracked: true, amount: round2(Number(agg._sum.debit ?? 0) - Number(agg._sum.credit ?? 0)), lines: agg._count };
+  }
+
   async taxFigures(businessId: string, month: string) {
     const { start, end } = monthBounds(month);
     const [orderAgg, inclusiveTax, rateRows, unrated, refunds] = await Promise.all([
@@ -1208,6 +1233,11 @@ export class ReportBuildersService {
     const ratedCollected = round2(f.rates.reduce((s, r) => s + r.collected, 0));
     const ratedDiff = round2(f.taxCollected - ratedCollected);
     const exclusions = f.unrated.orders > 0 ? [`${f.unrated.orders} transaction${f.unrated.orders === 1 ? ' has' : 's have'} no tax rate recorded — listed separately, not assumed to be zero-rated`] : [];
+    const pt = await this.purchaseTax(ctx.businessId, ctx.month);
+    const net = round2(f.taxCollected - (pt.tracked ? pt.amount : 0));
+    const purchaseNote = pt.tracked
+      ? `${label} paid on purchases is ${this.money(pt.amount, ctx)}, from supplier bills posted in Finance & Accounting; net ${label.toLowerCase()} is collected less purchases.`
+      : `${label} paid on purchases is not tracked, so net ${label.toLowerCase()} here is ${label.toLowerCase()} collected alone.`;
 
     return {
       kind: 'tax',
@@ -1218,12 +1248,12 @@ export class ReportBuildersService {
       summary:
         f.orders === 0
           ? `No taxable sales were recorded in ${monthLabel(ctx.month)}.`
-          : `Taxable sales were ${this.money(f.taxableSales, ctx)} with ${this.money(f.taxCollected, ctx)} of ${label} collected. ${f.refunds.count > 0 ? `${f.refunds.count} approved return${f.refunds.count === 1 ? '' : 's'} refunded ${this.money(f.refunds.amount, ctx)} in the period; this is shown for information and is not netted off. ` : ''}${exclusions.length ? `${exclusions[0]}. ` : ''}${label} paid on purchases is not tracked, so net ${label.toLowerCase()} here is ${label.toLowerCase()} collected alone.`,
+          : `Taxable sales were ${this.money(f.taxableSales, ctx)} with ${this.money(f.taxCollected, ctx)} of ${label} collected. ${f.refunds.count > 0 ? `${f.refunds.count} approved return${f.refunds.count === 1 ? '' : 's'} refunded ${this.money(f.refunds.amount, ctx)} in the period; this is shown for information and is not netted off. ` : ''}${exclusions.length ? `${exclusions[0]}. ` : ''}${purchaseNote}`,
       kpis: [
         { label: 'Taxable sales', display: this.money(f.taxableSales, ctx), ...this.delta(f.taxableSales, prevF.taxableSales) },
         { label: `${label} collected`, display: this.money(f.taxCollected, ctx), ...this.delta(f.taxCollected, prevF.taxCollected) },
-        { label: `${label} on purchases`, display: 'Not tracked' },
-        { label: `Net ${label.toLowerCase()}`, display: this.money(f.taxCollected, ctx) },
+        { label: `${label} on purchases`, display: pt.tracked ? this.money(pt.amount, ctx) : 'Not tracked' },
+        { label: `Net ${label.toLowerCase()}`, display: this.money(net, ctx) },
       ],
       table: {
         title: `${label} by rate`,
@@ -1243,9 +1273,9 @@ export class ReportBuildersService {
       metricRows: [
         { label: 'Taxable sales', value: this.money(f.taxableSales, ctx), tone: 'pos' },
         { label: `${label} collected`, value: this.money(f.taxCollected, ctx), tone: 'pos' },
-        { label: `${label} on purchases`, value: 'Not tracked' },
+        { label: `${label} on purchases`, value: pt.tracked ? this.money(pt.amount, ctx) : 'Not tracked' },
         { label: 'Refunds approved (gross, not netted)', value: this.money(f.refunds.amount, ctx) },
-        { label: `Net ${label.toLowerCase()}`, value: this.money(f.taxCollected, ctx) },
+        { label: `Net ${label.toLowerCase()}`, value: this.money(net, ctx) },
         { label: 'Transactions', value: String(f.orders) },
         { label: 'Transactions with no tax rate', value: String(f.unrated.orders), tone: f.unrated.orders ? 'neg' : 'pos' },
       ],
@@ -1264,7 +1294,9 @@ export class ReportBuildersService {
       ],
       footnotes: [
         `This is a reporting figure prepared from recorded transactions. It is not a legal determination of what is owed, and Noxtill does not file returns or submit to any tax authority.`,
-        `${label} on purchases is not tracked: no supplier invoice or expense records tax paid, so nothing is netted against ${label.toLowerCase()} collected.`,
+        pt.tracked
+          ? `${label} on purchases comes from supplier bills posted in Finance & Accounting (${pt.lines} tax line${pt.lines === 1 ? '' : 's'} this month). Expenses entered outside Finance carry no tax, so any tax in them is not reclaimed here.`
+          : `${label} on purchases is not tracked: no supplier bills have been entered in Finance & Accounting, so nothing is netted against ${label.toLowerCase()} collected.`,
         'A transaction with no tax rate recorded is listed on its own line, never assumed to be zero-rated, because that assumption would change net tax.',
         'Approved refunds are shown for information; how much of each refund was tax is not recorded, so no tax adjustment is calculated.',
       ],

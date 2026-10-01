@@ -122,9 +122,13 @@ export function TaxReportsView() {
         <KpiGrid>
           <Kpi label="Taxable sales" value={money(t.kpis.taxableSales)} meta={t.periodLabel} onClick={() => kpiPanel("Taxable sales", money2(t.kpis.taxableSales), t.periodLabel, "Order subtotals less discounts, for completed sales, excluding tax already inside tax-inclusive prices", "neutral")} />
           <Kpi label="Tax collected" value={money(t.kpis.taxCollected)} meta={`at ${t.taxRate}% ${t.taxLabel}`} onClick={() => kpiPanel("Tax collected", money2(t.kpis.taxCollected), `at ${t.taxRate}%`, "Sum of the tax charged on completed sales", "neutral")} />
-          <Kpi label="Tax on purchases" value="Not tracked" meta="no input tax is recorded" compact onClick={() => kpiPanel("Tax on purchases", "Not tracked", "no input tax is recorded", "Not calculated — no supplier invoice or expense records tax paid", "amber")} />
+          {t.kpis.taxOnPurchasesTracked ? (
+            <Kpi label="Tax on purchases" value={money(t.kpis.taxOnPurchases)} meta="from bills in Finance" compact onClick={() => kpiPanel("Tax on purchases", money2(t.kpis.taxOnPurchases), "from bills in Finance", "Input tax on supplier bills posted in Finance & Accounting this month", "green")} />
+          ) : (
+            <Kpi label="Tax on purchases" value="Not tracked" meta="no bills in Finance yet" compact onClick={() => kpiPanel("Tax on purchases", "Not tracked", "no bills in Finance yet", "Not calculated — enter supplier bills in Finance & Accounting to record tax paid", "amber")} />
+          )}
           <Kpi label="Adjustments" value={t.kpis.refundsApproved.count ? `− ${money(t.kpis.refundsApproved.amount)}` : "—"} meta={t.kpis.refundsApproved.count ? `${t.kpis.refundsApproved.count} approved return${t.kpis.refundsApproved.count === 1 ? "" : "s"} · not netted` : "no approved returns"} onClick={() => kpiPanel("Adjustments", t.kpis.refundsApproved.count ? `− ${money2(t.kpis.refundsApproved.amount)}` : "None", "refunds, shown not netted", "Sum of approved return refunds — how much of each was tax is not recorded, so it is not deducted", "neutral")} />
-          <Kpi label="Net tax" value={money(t.kpis.netTax)} meta="tax collected · purchases not tracked" tone="amber" onClick={() => kpiPanel("Net tax", money2(t.kpis.netTax), "collected only", "Tax collected (input tax on purchases is not tracked, so nothing is deducted)", "amber")} />
+          <Kpi label="Net tax" value={money(t.kpis.netTax)} meta={t.kpis.taxOnPurchasesTracked ? "collected less purchases" : "tax collected · purchases not tracked"} tone="amber" onClick={() => kpiPanel("Net tax", money2(t.kpis.netTax), t.kpis.taxOnPurchasesTracked ? "collected less purchases" : "collected only", t.kpis.taxOnPurchasesTracked ? "Tax collected less input tax on bills posted in Finance & Accounting" : "Tax collected (input tax on purchases is not tracked, so nothing is deducted)", "amber")} />
           <Kpi label="Next filing date" value={filing ? dayMonth(filing.nextDate) : "—"} meta={filing ? `${filingPast ? `${daysLabel(filing.daysUntil)} past` : daysLabel(filing.daysUntil)} · as configured` : ""} tone="amber" />
         </KpiGrid>
       )}
@@ -284,7 +288,9 @@ export function TaxReportsView() {
         <div style={{ padding: "12px 18px", borderTop: `1px solid ${R.divider}`, background: "#FCFCFD", fontSize: 11, color: R.faint }}>
           {noRate > 0
             ? `${noRate} transaction${noRate === 1 ? " has" : "s have"} no tax rate recorded. ${noRate === 1 ? "It is" : "They are"} listed separately rather than assumed to be zero-rated, because that assumption would change your tax.`
-            : "Every completed sale in these months carries a recorded tax rate. Tax on purchases is not tracked, so net tax equals tax collected."}
+            : t?.kpis.taxOnPurchasesTracked
+              ? "Every completed sale in these months carries a recorded tax rate. Tax on purchases comes from supplier bills in Finance & Accounting and is deducted in the Net tax figure above."
+              : "Every completed sale in these months carries a recorded tax rate. Tax on purchases is not tracked, so net tax equals tax collected."}
         </div>
       </div>
     </div>

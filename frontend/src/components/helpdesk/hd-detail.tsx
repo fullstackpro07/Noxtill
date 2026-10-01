@@ -9,7 +9,7 @@ import { useInboxStore } from "@/components/unified-inbox/inbox-store";
 import { useHd, useWorkspace } from "./hd-store";
 import { useHdActions } from "./hd-actions";
 import { Gate, LOCK, Skeleton, WARN } from "./hd-render";
-import { FILE_OK, O, PRI, PRIORITIES, btn, dt, errText, fileSize, fmtM, initials, priB, seg, stB, ago, type Btn } from "./hd-core";
+import { FILE_OK, macroMatches, O, PRI, PRIORITIES, btn, dt, errText, fileSize, fmtM, initials, priB, seg, stB, ago, type Btn } from "./hd-core";
 
 const card = { background: "#fff", border: "1px solid #E6EAF0", borderRadius: "16px" } as const;
 const KINDS: Record<string, [string, string, string, string, string, string, string, string]> = {
@@ -96,8 +96,8 @@ export function DetailScreen({ number }: { number: string }) {
   const custFirst = d.customer?.name.split(" ")[0] ?? "the customer";
   const macroOpts = [
     { v: "", t: "Insert saved reply / macro…" },
-    ...ws.composer.replies.map((r) => ({ v: "r:" + r.id, t: `Reply · ${r.name} ${r.shortcut}` })),
-    ...ws.composer.macros.map((m) => ({ v: "m:" + m.id, t: "Macro · " + m.name })),
+    ...ws.composer.replies.filter((r) => r.team === "All queues" || r.team === t.queueName).map((r) => ({ v: "r:" + r.id, t: `Reply · ${r.name} ${r.shortcut}` })),
+    ...ws.composer.macros.filter((m) => macroMatches(m.conditions, t)).map((m) => ({ v: "m:" + m.id, t: "Macro · " + m.name })),
     ...ws.composer.articles.filter((a) => note || a.visibility !== "Internal Only").map((a) => ({ v: "k:" + a.id, t: "Article · " + a.title })),
   ];
   const afterOpts = [{ v: "", t: "Keep status: " + t.status }, ...["Waiting on Customer", "In Progress", "Resolved"].filter((x) => x !== t.status && (x !== "Resolved" || can("Resolve"))).map((x) => ({ v: x, t: "Then set: " + x }))];
@@ -171,7 +171,7 @@ export function DetailScreen({ number }: { number: string }) {
     sf("Status", "status", t.status, O([...cfg.statuses, ...cfg.customStatuses])),
     sf("Priority", "priority", t.priority, PRIORITIES.map((p) => ({ v: p, t: `${PRI[p][2]} ${p}` })), !can("Change priority")),
     sf("Category", "category", t.category, O(cfg.categories.includes(t.category) ? cfg.categories : [t.category, ...cfg.categories])),
-    ro("Subcategory", t.subcategory || "—"),
+    { l: "Subcategory", k: "subcategory", v: t.subcategory ?? "", sel: false as const, text: true as const, fg: "#101828", dis: closed },
     sf("Assigned agent", "agent", t.agentUserId ?? "", O(ws.agents.map((a) => ({ v: a.id, t: `${a.name} · ${a.open}/${a.cap}` })), "Unassigned"), !canAssign),
     sf("Team / queue", "queue", t.queueId ?? "", ws.queues.filter((x) => x.active || x.id === t.queueId).map((x) => ({ v: x.id, t: x.name })), !can("Reassign"), "Requires Reassign permission"),
     sf("Branch", "branch", t.branchId, ws.branches.map((b) => ({ v: b.id, t: b.name })), !act.manager, "Agents can’t move tickets between branches"),
@@ -453,7 +453,21 @@ export function DetailScreen({ number }: { number: string }) {
               {fields.map((f) => (
                 <div key={f.l} style={{ display: "grid", gridTemplateColumns: "104px minmax(0,1fr)", gap: "8px", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #F8F9FB" }}>
                   <span style={{ fontSize: "11.5px", color: "#667085", fontWeight: 600 }}>{f.l}</span>
-                  {f.sel ? (
+                  {"text" in f ? (
+                    <input
+                      key={f.v}
+                      aria-label={f.l}
+                      defaultValue={f.v}
+                      placeholder="Add a subcategory"
+                      disabled={f.dis}
+                      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                      onBlur={(e) => {
+                        const v = e.currentTarget.value.trim();
+                        if (v !== f.v) void act.call("Update ticket", () => hdApi.setField(t.number, "subcategory", v), () => (v ? `Subcategory → ${v}` : "Subcategory cleared"));
+                      }}
+                      style={{ ...selSt, padding: "5px 8px" }}
+                    />
+                  ) : f.sel ? (
                     <select aria-label={f.l} value={f.v} onChange={(e) => dField(f.k, e.target.value)} disabled={f.dis} title={f.why} style={selSt}>
                       {f.opts.map((o) => (
                         <option key={o.v} value={o.v}>
@@ -602,7 +616,7 @@ export function DetailScreen({ number }: { number: string }) {
                 </button>
               </div>
             ))}
-            {!d.links.length ? <div style={{ fontSize: "12px", color: "#667085" }}>No linked records. Existing Orders, Bookings and Projects can be linked; Invoices, Payments, Contracts, Assets and Field Service jobs have no module in Noxtill yet.</div> : null}
+            {!d.links.length ? <div style={{ fontSize: "12px", color: "#667085" }}>No linked records. Existing Orders, Bookings, Projects and fixed assets (FA-…) can be linked; Invoices, Payments, Contracts and Field Service jobs have no module in Noxtill yet.</div> : null}
             {t.conversationId ? (
               <button
                 type="button"

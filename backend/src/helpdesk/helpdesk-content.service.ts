@@ -14,6 +14,7 @@ import {
   REPLY_VARIABLES,
 } from './helpdesk.constants';
 import { ArticleDto, MacroDto, SavedReplyDto } from './dto/helpdesk.dto';
+import { conditionsMatch, parseConditions } from './helpdesk-conditions.util';
 
 const bad = (m: string) =>
   new AppException(HD_ERRORS.INVALID, m, HttpStatus.BAD_REQUEST);
@@ -445,6 +446,8 @@ export class HelpdeskContentService {
       )
       .map((a) => [a[0], String(a[1]).trim()]);
     if (!acts.length) throw bad('Add at least one action.');
+    const parsed = parseConditions(dto.conditions ?? '');
+    if (!parsed.ok) throw bad(parsed.error);
     const data = {
       name: dto.name.trim(),
       conditions: (dto.conditions ?? '').trim() || 'Any ticket',
@@ -559,6 +562,23 @@ export class HelpdeskContentService {
     if (!mac) throw notFound('Macro not found or disabled.');
     if (t.status === 'Closed')
       throw bad('Ticket is closed — reopen it to apply a macro.');
+    const cond = parseConditions(mac.conditions);
+    const row = L.all[0];
+    if (
+      cond.ok &&
+      !conditionsMatch(cond.conds, {
+        category: t.category,
+        queue: row?.queueName ?? null,
+        channel: t.channel,
+        status: t.status,
+        priority: t.priority,
+        branch: row?.branchName ?? null,
+        tags: (t.tags as string[]) ?? [],
+      })
+    )
+      throw bad(
+        `“${mac.name}” only applies when ${mac.conditions} — this ticket doesn’t match.`,
+      );
     const done: string[] = [];
     const skipped: string[] = [];
     let text = '';

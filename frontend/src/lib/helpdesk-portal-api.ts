@@ -16,7 +16,7 @@ export interface TicketPortal {
   customer: string;
   ticket: { number: string; subject: string; status: string; open: boolean; closed: boolean; createdAt: string };
   messages: Array<{ id: string; mine: boolean; by: string; body: string; at: string; attachments: Array<{ i: number; name: string; type: string; size: number }> }>;
-  survey: { canRate: boolean; rated: { rating: number | null; comment: string | null } | null; scale: string; comment: boolean };
+  survey: { canRate: boolean; rated: { rating: number | null; comment: string | null } | null; scale: string; comment: boolean; lang: string };
   categories: string[];
   articles: PortalArticleCard[];
 }

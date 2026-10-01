@@ -126,7 +126,7 @@ export function SettingsScreen() {
     ];
   if (sec === "sla")
     rows = [
-      { kind: "text", key: "sla.warn", l: "Warning threshold (%)", v: String(D.sla.warn), h: "Ticket becomes “At risk” after this share of its target has elapsed. Each policy can override it.", type: "number" },
+      { kind: "text", key: "sla.warn", l: "Warning threshold (%)", v: String(D.sla.warn), h: "Pre-filled on new SLA policies. Each policy keeps its own threshold — a ticket becomes “At risk” once that share of its target has elapsed.", type: "number" },
       { kind: "toggle", key: "sla.pauseWaiting", l: "Pause on Waiting on Customer", on: D.sla.pauseWaiting, h: "Default for new policies." },
       { kind: "toggle", key: "sla.pauseInternal", l: "Pause on Waiting on Internal Team", on: D.sla.pauseInternal, h: "Usually off — internal delays should count." },
       { kind: "btn", key: "slas", l: "Policies", v: "Open SLA & Escalations" },
@@ -141,7 +141,7 @@ export function SettingsScreen() {
       { kind: "text", key: "comms.signature", l: "Reply signature", v: D.comms.signature, h: "Added to every public reply. Variables: {{agent_name}}, {{customer_name}}, {{ticket_number}}" },
       { kind: "toggle", key: "comms.ack", l: "Automatic acknowledgement", on: D.comms.ack, h: "Sent once on ticket creation via the ticket’s channel, with the customer’s portal link." },
       { kind: "text", key: "comms.ackText", l: "Acknowledgement text", v: D.comms.ackText, h: "Variables: {{ticket_number}}, {{customer_name}}" },
-      { kind: "select", key: "comms.lang", l: "Languages", v: D.comms.lang, opts: ["English", "English + Urdu", "Urdu"], h: "Your team’s reply languages. Nothing is translated automatically." },
+      { kind: "select", key: "comms.lang", l: "Languages", v: D.comms.lang, opts: ["English", "English + Urdu", "Urdu"], h: "Language of automatic customer messages: the CSAT survey invitation and the portal survey prompt. Your signature and acknowledgement are sent exactly as written." },
     ];
   if (sec === "perms") rows = [{ kind: "matrix", l: "Role capabilities", h: "Owner always has every capability. Staff members are Agents; Managers are Managers." }];
   if (sec === "retention")
@@ -161,6 +161,8 @@ export function SettingsScreen() {
 
   const save = async () => {
     if (!/\{#+\}/.test(D.general.numberFormat)) return act.flash("Ticket number format must include {#####}.");
+    const w = Number(D.sla.warn);
+    if (!Number.isInteger(w) || w < 10 || w > 99) return act.flash("Warning threshold must be a whole number between 10 and 99%.");
     set({ busy: true });
     try {
       const r = await hdApi.saveSettings(version, D);
@@ -210,7 +212,7 @@ export function SettingsScreen() {
                       {f.opts.map((o) => (typeof o === "string" ? <option key={o}>{o}</option> : <option key={o.v} value={o.v}>{o.t}</option>))}
                     </select>
                   ) : f.kind === "text" ? (
-                    <input type={f.type ?? "text"} aria-label={f.l} value={f.v} onChange={(e) => upd(f.key, f.key === "sla.warn" ? Math.max(0, Math.min(99, Number(e.target.value) || 0)) : e.target.value)} disabled={ro} style={inp} />
+                    <input type={f.type ?? "text"} aria-label={f.l} value={f.v} onChange={(e) => upd(f.key, f.key === "sla.warn" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)} min={f.key === "sla.warn" ? 10 : undefined} max={f.key === "sla.warn" ? 99 : undefined} disabled={ro} style={inp} />
                   ) : f.kind === "read" ? (
                     <div style={{ fontSize: "12.5px", color: "#344054", background: "#FAFBFC", borderRadius: "9px", padding: "9px 11px", lineHeight: 1.45 }}>{f.v}</div>
                   ) : f.kind === "toggle" ? (

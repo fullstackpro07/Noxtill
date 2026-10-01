@@ -1329,6 +1329,14 @@ export class HelpdeskTicketsService implements OnModuleInit {
       refId =
         (rows.find((r) => r.customerId === t.customerId) ?? rows[0])?.id ??
         null;
+    } else if (dto.type === 'Asset') {
+      refId =
+        (
+          await this.prisma.finAsset.findFirst({
+            where: { businessId: actor.rootId, number: rid },
+            select: { id: true },
+          })
+        )?.id ?? null;
     } else if (dto.type === 'Project') {
       refId =
         (

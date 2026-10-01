@@ -31,7 +31,7 @@ describe('ActionCenterService (UPD-BE-004)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new ActionCenterService(tenantPrisma);
+    service = new ActionCenterService(tenantPrisma, prisma);
 
     const business = await prisma.business.create({
       data: {

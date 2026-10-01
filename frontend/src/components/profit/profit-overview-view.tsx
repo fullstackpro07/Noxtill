@@ -448,6 +448,11 @@ export function ProfitOverviewView() {
           )}
           <p className="m-0 text-[11px]" style={{ padding: "10px 17px", borderTop: "1px solid var(--app-surface-2)", color: "var(--app-text-disabled)" }}>
             Expenses/Net profit per category split your real overhead total proportionally by revenue share — overhead has no per-category tracking in this data.
+            {" "}This is an operational view. The accounting Profit &amp; Loss — built from the posted ledger, with bills, depreciation and adjustments — is in{" "}
+            <Link href="/finance/statements" style={{ color: "#0E8442", fontWeight: 700 }}>
+              Finance › Financial Statements
+            </Link>
+            .
           </p>
         </div>
       )}

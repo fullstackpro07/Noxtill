@@ -90,8 +90,10 @@ export function OverviewScreen() {
   if (q.error || !q.data) return <Failed error={q.error} retry={() => void q.refetch()} />;
   const o = q.data;
   const k = o.kpis;
-  const cfg = ws.settings.config;
   const branchName = branch === "all" ? "All branches" : (ws.branches.find((b) => b.id === branch)?.name ?? "");
+  // Each active policy has its own warning threshold; say the real one when they agree.
+  const warns = [...new Set(ws.policies.filter((p) => p.active).map((p) => p.warn))];
+  const warnSub = warns.length === 1 ? `! Past the ${warns[0]}% warning threshold` : warns.length ? "! Past each policy’s warning threshold" : "! No active SLA policy";
   let rows: LayoutRow[];
   if (o.empty) {
     rows = [R("minmax(0,1fr)", [card({ empty: { t: "No support tickets yet.", d: "Tickets arrive from connected channels through Unified Inbox and the customer portal, or you can log one manually.", acts: [btn("new", "+ Create first ticket", "primary", !act.can("Reply")), btn("connect", "Connect support channel"), btn("settings", "Open Helpdesk Settings")] } })])];
@@ -112,7 +114,7 @@ export function OverviewScreen() {
         K("urgent", "Urgent Tickets", k.urgent, "▲▲ Highest priority, still open", "#B42318", "#F04438"),
         K("wcust", "Waiting on Customer", k.wcust, "SLA paused while waiting", null, "#F79009"),
         K("wteam", "Waiting on Team", k.wteam, "Blocked on another team", null, "#C11574"),
-        K("risk", "SLA At Risk", k.risk, `! Past the ${cfg.sla.warn}% warning threshold`, "#B54708", "#F79009"),
+        K("risk", "SLA At Risk", k.risk, warnSub, "#B54708", "#F79009"),
         K("breach", "SLA Breached", k.breach, "✕ Target already missed", "#B42318", "#F04438"),
         K("frt", "Avg First Response", fmtM(k.frt), `Tickets created in ${range.toLowerCase()}`, null, "#2E90FA"),
         K("res", "Avg Resolution", fmtM(k.res), "Resolved tickets in range", null, "#6941C6"),
@@ -528,7 +530,7 @@ export function KnowledgeScreen() {
         filters: { search: "Search titles, summaries, content and tags", q: f.q, sels: [sel("cat", "Category", f.cat, O(q.data.categories, "Any category")), sel("st", "Status", f.st, O(["Draft", "Published", "Archived"], "Any status")), sel("vis", "Visibility", f.vis, O(["Internal Only", "Customer Portal", "Public"], "Any visibility"))], nOn: [f.q, f.cat, f.st, f.vis, f.stale ? "x" : ""].filter(Boolean).length || null, count: `${L.length} articles` },
         table: L.length ? table : null,
         empty: L.length ? null : A.length ? { t: "No articles match.", d: "Try a different search term.", acts: [btn("kbclear", "Clear Filters", "primary")] } : { t: "Create your first help article.", d: "Articles can be internal-only for agents, shown on customers’ ticket pages, or published to your public help center.", acts: [btn("newart", "+ New Article", "primary")] },
-        info: "Internal-only articles are never returned by the customer portal or public help center and cannot be inserted into customer replies." + (pubOk ? "" : " Agents can write drafts; publishing requires a Manager."),
+        info: `Public articles appear in your help center (${ws.helpCenterUrl}); Customer Portal articles appear on customers’ ticket pages. Internal-only articles are never returned by either and cannot be inserted into customer replies.` + (pubOk ? "" : " Agents can write drafts; publishing requires a Manager."),
         api: "GET /helpdesk/knowledge · POST /helpdesk/knowledge · PATCH /helpdesk/knowledge/:id",
       }),
     ]),

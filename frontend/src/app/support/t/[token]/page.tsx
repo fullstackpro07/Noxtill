@@ -105,7 +105,7 @@ function TicketPortalPageInner() {
           {v.survey.canRate || v.survey.rated ? (
             v.survey.canRate ? (
               <section style={{ ...box, borderColor: "#D1F2DF" }}>
-                <div style={{ fontSize: "15px", fontWeight: 800 }}>How did we do?</div>
+                <div style={{ fontSize: "15px", fontWeight: 800 }}>{v.survey.lang === "Urdu" ? "ہماری مدد کیسی رہی؟" : v.survey.lang === "English + Urdu" ? "How did we do? · ہماری مدد کیسی رہی؟" : "How did we do?"}</div>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "10px 0" }}>
                   {choices.map(([n, l]) => (
                     <button key={n} type="button" onClick={() => setRating(n)} aria-pressed={rating === n} style={{ ...ghost, borderColor: rating === n ? "#12A150" : "#E6EAF0", background: rating === n ? "#ECFDF3" : "#fff", color: rating === n ? "#0E8442" : "#344054" }}>

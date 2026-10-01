@@ -664,13 +664,13 @@ const ISSUE_EXPLAIN: Record<string, { bulletsTitle: string; bullets: string[]; n
   purchases: {
     bulletsTitle: "Why this is empty",
     bullets: [
-      "No supplier invoice or expense in Noxtill records the tax paid",
+      "Tax paid is recorded on supplier bills entered in Finance & Accounting — none are posted for this business yet",
       "So input tax cannot be calculated and is not shown as zero",
-      "Net tax therefore equals tax collected; deduct your input tax in your own return",
+      "Net tax therefore equals tax collected until bills are entered in Finance",
     ],
     note: "Noxtill will not invent a figure it has no record of.",
     effect: "Net tax shown is tax collected only",
-    fix: "Not tracked — enter input tax in your own return",
+    fix: "Enter supplier bills in Finance & Accounting › Bills",
   },
 };
 

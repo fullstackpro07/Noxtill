@@ -46,7 +46,7 @@ export const LINK_TYPES: Record<string, { prefix: string; available: boolean; wh
   Invoice: { prefix: "INV-", available: false, why: "no invoicing module yet" },
   Payment: { prefix: "PAY-", available: false, why: "link the order instead" },
   Contract: { prefix: "CT-", available: false, why: "no contracts module yet" },
-  Asset: { prefix: "AST-", available: false, why: "no assets module yet" },
+  Asset: { prefix: "FA-", available: true },
   "Field Service job": { prefix: "FS-", available: false, why: "no field service module yet" },
 };
 export const FILE_OK = ["jpg", "jpeg", "png", "gif", "webp", "pdf", "txt", "csv", "doc", "docx", "xls", "xlsx"];
@@ -363,4 +363,28 @@ export function ticketTable(list: TRow[], mode: "full" | "compact", o: { sel?: s
       };
     }),
   };
+}
+
+// ── macro conditions (mirror of backend helpdesk-conditions.util.ts) ─────────
+
+const COND_FIELDS = ["category", "queue", "channel", "status", "priority", "branch", "tag"];
+
+/** Whether a macro's conditions ("Category = Billing AND Tag != vip") hold for a ticket. */
+export function macroMatches(conditions: string, t: Pick<TRow, "category" | "queueName" | "channel" | "status" | "priority" | "branchName" | "tags">): boolean {
+  const text = (conditions ?? "").trim();
+  if (!text || /^any ticket$/i.test(text)) return true;
+  const eq = (a: string | null | undefined, b: string) => (a ?? "").toLowerCase() === b.toLowerCase();
+  return text
+    .split(/\s+and\s+|,/i)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .every((part) => {
+      const m = /^([a-z]+)\s*(!=|=)\s*(.+)$/i.exec(part);
+      if (!m || !COND_FIELDS.includes(m[1].toLowerCase())) return false;
+      const f = m[1].toLowerCase();
+      const v = m[3].trim().replace(/^#/, "");
+      const val = f === "queue" ? t.queueName : f === "branch" ? t.branchName : f === "category" ? t.category : f === "channel" ? t.channel : f === "status" ? t.status : f === "priority" ? t.priority : null;
+      const hit = f === "tag" ? t.tags.some((g) => eq(g, v)) : eq(val, v);
+      return m[2] === "!=" ? !hit : hit;
+    });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ClipboardList, MoreVertical, PackageX } from "lucide-react";
 import { useSession } from "@/lib/session";
@@ -10,6 +11,7 @@ import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
 import {
   bulkUpdateOrderStatus,
+  fetchOrder,
   fetchOrders,
   fetchOrdersSummary,
   updateOrderStatus,
@@ -148,7 +150,12 @@ export function AllOrdersView() {
   const [datePreset, setDatePreset] = useState<DatePreset>("week");
   const [staffFilter, setStaffFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [viewing, setViewing] = useState<LiveOrder | null>(null);
+  const [viewingState, setViewing] = useState<LiveOrder | null>(null);
+  // Deep link (?order=<id>), e.g. "Open source" from Finance: opens that order's detail drawer.
+  const linkedId = useSearchParams().get("order");
+  const [linkClosed, setLinkClosed] = useState(false);
+  const { data: linked } = useQuery({ queryKey: ["order", linkedId], queryFn: () => fetchOrder(linkedId!), enabled: !!linkedId });
+  const viewing = viewingState ?? (linkClosed ? null : (linked ?? null));
   const [changingStatus, setChangingStatus] = useState<LiveOrder | null>(null);
   const [cancelling, setCancelling] = useState<LiveOrder | null>(null);
   const [printing, setPrinting] = useState<LiveOrder | null>(null);
@@ -387,7 +394,10 @@ export function AllOrdersView() {
       <OrderDetailDrawer
         order={viewing}
         currency={session.business.currency}
-        onClose={() => setViewing(null)}
+        onClose={() => {
+          setViewing(null);
+          setLinkClosed(true);
+        }}
         onPrint={() => setPrinting(viewing)}
         onCancel={() => setCancelling(viewing)}
         onChangeStatus={() => setChangingStatus(viewing)}

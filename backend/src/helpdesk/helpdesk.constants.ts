@@ -421,10 +421,9 @@ export const LINK_TYPES: Record<
     why: 'Noxtill has no contracts module yet.',
   },
   Asset: {
-    prefix: 'AST-',
-    module: 'Assets & Maintenance',
-    available: false,
-    why: 'Noxtill has no assets module yet.',
+    prefix: 'FA-',
+    module: 'Finance & Accounting › Fixed Assets',
+    available: true,
   },
   'Field Service job': {
     prefix: 'FS-',

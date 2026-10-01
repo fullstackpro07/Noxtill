@@ -21,7 +21,7 @@ import { HelpdeskLoaderService } from './helpdesk-loader.service';
 import { HelpdeskOpsService } from './helpdesk-ops.service';
 import { HelpdeskDeliveryService } from './helpdesk-delivery.service';
 import { HelpdeskTicketsService } from './helpdesk-tickets.service';
-import { HelpdeskJobsService } from './helpdesk-jobs.service';
+import { HelpdeskJobsService, csatInvite } from './helpdesk-jobs.service';
 import { HelpdeskAdminService } from './helpdesk-admin.service';
 import { HelpdeskContentService } from './helpdesk-content.service';
 import { HelpdeskViewsService } from './helpdesk-views.service';
@@ -337,7 +337,14 @@ describe('Helpdesk (real DB)', () => {
     jobs = new HelpdeskJobsService(prisma, ctx, ops, delivery, s3);
     admin = new HelpdeskAdminService(prisma, ctx, ops, jobs);
     content = new HelpdeskContentService(prisma, ctx, ops, tickets, delivery);
-    views = new HelpdeskViewsService(prisma, ctx, loader, ops, channels);
+    views = new HelpdeskViewsService(
+      prisma,
+      ctx,
+      loader,
+      ops,
+      channels,
+      delivery,
+    );
     portal = new HelpdeskPortalService(prisma, ctx, ops, tickets, s3);
     cls.set(CLS_KEY_USER_ID, ownerUserId);
     owner = await ctx.actor(au(ownerUserId, Role.owner));
@@ -648,6 +655,60 @@ describe('Helpdesk (real DB)', () => {
     expect(r.skipped).toEqual(['status Closed (needs Close)']);
     expect(r.done).toEqual(['tag handled']);
     expect((await ops.fresh(t.id)).status).not.toBe('Closed');
+  });
+
+  it('only offers and runs a macro on tickets matching its conditions', async () => {
+    await expectCode(
+      content.saveMacro(owner, null, {
+        name: 'Bad',
+        conditions: 'Colour = red',
+        actions: [['Add tag', 'x']],
+        status: 'Active',
+      }),
+      'HELPDESK_INVALID',
+    );
+    await content.saveMacro(owner, null, {
+      name: 'Billing only',
+      conditions: 'Category = Billing AND Tag != vip',
+      actions: [['Add tag', 'billed']],
+      status: 'Active',
+    });
+    const m = await prisma.helpdeskMacro.findFirstOrThrow({
+      where: { businessId, name: 'Billing only' },
+    });
+    const general = await newTicket({ category: 'General' });
+    await expectCode(
+      content.apply(owner, general.number, `m:${m.id}`, 'public'),
+      'HELPDESK_INVALID',
+    );
+    const billing = await newTicket({ category: 'Billing' });
+    const r = await content.apply(owner, billing.number, `m:${m.id}`, 'public');
+    expect(r.done).toEqual(['tag billed']);
+  });
+
+  it('re-times surveys still waiting to go out when the delay changes', async () => {
+    const cfg = await ctx.config(businessId);
+    const t = await ops.setStatus(await newTicket(), 'Resolved', owner, cfg);
+    const before = await prisma.helpdeskCsat.findUniqueOrThrow({
+      where: { ticketId: t.id },
+    });
+    await admin.saveCsatSettings(owner, { ...cfg.csat, delay: 'Immediately' });
+    const after = await prisma.helpdeskCsat.findUniqueOrThrow({
+      where: { ticketId: t.id },
+    });
+    expect(before.sendAt.getTime() - after.sendAt.getTime()).toBe(120 * 60000);
+    await admin.saveCsatSettings(owner, { ...cfg.csat, delay: '2 hours' });
+  });
+
+  it('writes the survey invitation in the configured language', () => {
+    expect(csatInvite('English', 'HD-1', 'from 1 to 5 stars', 'L')).toBe(
+      'How did we do with HD-1? Rate us from 1 to 5 stars: L',
+    );
+    expect(csatInvite('Urdu', 'HD-1', 'x', 'L')).not.toContain('How did we do');
+    expect(csatInvite('English + Urdu', 'HD-1', 'x', 'L')).toContain(
+      'How did we do',
+    );
+    expect(csatInvite('English + Urdu', 'HD-1', 'x', 'L')).toContain('ریٹنگ');
   });
 
   it('creates a Web ticket from the public help center request form', async () => {

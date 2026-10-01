@@ -100,6 +100,13 @@ export const CAPABILITIES = {
   /// Helpdesk: open the Helpdesk module at all. Every system role has it; a custom role without it
   /// gets the "no access to Helpdesk" screen. What a person can do inside is the Helpdesk matrix.
   HELPDESK_ACCESS: 'helpdesk.access',
+  /// Finance & Accounting: open the books (view), prepare journals/bills/imports (manage), approve
+  /// within the Finance Manager thresholds (approve), and change accounting settings, periods and
+  /// control accounts or approve above the Owner/Controller threshold (admin).
+  FINANCE_VIEW: 'finance.view',
+  FINANCE_MANAGE: 'finance.manage',
+  FINANCE_APPROVE: 'finance.approve',
+  FINANCE_ADMIN: 'finance.admin',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -147,6 +154,9 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.INBOX_MANAGE,
   CAPABILITIES.BRAIN_APPROVE,
   CAPABILITIES.HELPDESK_ACCESS,
+  CAPABILITIES.FINANCE_VIEW,
+  CAPABILITIES.FINANCE_MANAGE,
+  CAPABILITIES.FINANCE_APPROVE,
 ];
 
 /**

@@ -464,6 +464,7 @@ export class HelpdeskAdminService {
         version: { increment: 1 },
       },
     });
+    await this.retimeSurveys(rootId, cur.csat.delay, next.csat.delay);
     for (const c of changed)
       await this.ctx.log(
         rootId,
@@ -494,6 +495,7 @@ export class HelpdeskAdminService {
         version: { increment: 1 },
       },
     });
+    await this.retimeSurveys(rootId, cur.csat.delay, next.csat.delay);
     await this.ctx.log(
       rootId,
       actor,
@@ -501,6 +503,22 @@ export class HelpdeskAdminService {
       dto.enabled ? `On · ${dto.delay} · ${dto.channels.join(', ')}` : 'Off',
     );
     return { ok: true };
+  }
+
+  /** A new survey delay applies to surveys still waiting to go out, not just future ones. */
+  private async retimeSurveys(rootId: string, from: string, to: string) {
+    if (from === to) return;
+    const shift =
+      ((CSAT_DELAYS[to] ?? 120) - (CSAT_DELAYS[from] ?? 120)) * 60000;
+    const pending = await this.prisma.helpdeskCsat.findMany({
+      where: { businessId: rootId, status: 'scheduled' },
+      select: { id: true, sendAt: true },
+    });
+    for (const p of pending)
+      await this.prisma.helpdeskCsat.update({
+        where: { id: p.id },
+        data: { sendAt: new Date(p.sendAt.getTime() + shift) },
+      });
   }
 
   private async validate(

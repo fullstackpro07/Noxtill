@@ -30,8 +30,8 @@ export interface RecordFilingInput {
 /**
  * The real data behind Reports > Tax Reports. Every figure is prepared from recorded orders and
  * approved returns; the module never files anything, never assumes a rate for a transaction that
- * has none, and says plainly that tax paid on purchases is not tracked (no supplier invoice or
- * expense in this system records it).
+ * has none. Tax paid on purchases comes from supplier bills posted in Finance & Accounting; until a
+ * business has a Finance ledger it says plainly that it is not tracked.
  */
 @Injectable()
 export class TaxReportsService {
@@ -130,12 +130,14 @@ export class TaxReportsService {
         count: cur.refunds.count, tone: 'amber',
       });
     }
-    issues.push({
-      key: 'purchases',
-      title: `${business.taxLabel} on purchases is not tracked`,
-      meta: 'No supplier invoice or expense records tax paid',
-      count: 1, tone: 'amber',
-    });
+    const pt = await this.builders.purchaseTax(businessId, resolved);
+    if (!pt.tracked)
+      issues.push({
+        key: 'purchases',
+        title: `${business.taxLabel} on purchases is not tracked`,
+        meta: 'Enter supplier bills in Finance & Accounting to track tax paid',
+        count: 1, tone: 'amber',
+      });
 
     return {
       period: resolved,
@@ -147,9 +149,10 @@ export class TaxReportsService {
       kpis: {
         taxableSales: cur.taxableSales,
         taxCollected: cur.taxCollected,
-        taxOnPurchasesTracked: false,
+        taxOnPurchasesTracked: pt.tracked,
+        taxOnPurchases: pt.amount,
         refundsApproved: cur.refunds,
-        netTax: cur.taxCollected,
+        netTax: Math.round((cur.taxCollected - (pt.tracked ? pt.amount : 0)) * 100) / 100,
         transactions: cur.orders,
         unratedTransactions: cur.unrated.orders,
       },

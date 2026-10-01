@@ -48,7 +48,12 @@ async function bootstrap() {
   const corsAllowlist = (process.env.CORS_ALLOWLIST ?? 'http://localhost:3000')
     .split(',')
     .map((origin) => origin.trim());
-  app.enableCors({ origin: corsAllowlist, credentials: true });
+  // Downloads (Finance, Helpdesk) read their file name and row count from these response headers.
+  app.enableCors({
+    origin: corsAllowlist,
+    credentials: true,
+    exposedHeaders: ['Content-Disposition', 'X-Row-Count'],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
