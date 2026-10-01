@@ -28,6 +28,8 @@ import { CommerceSubscriptionsService } from './commerce-subscriptions.service';
 import { OrdersModule } from '../orders/orders.module';
 import { CommerceStoreOptimizerController } from './commerce-store-optimizer.controller';
 import { CommerceStoreOptimizerService } from './commerce-store-optimizer.service';
+import { CommerceExperimentsController } from './commerce-experiments.controller';
+import { CommerceExperimentsService } from './commerce-experiments.service';
 
 @Module({
   imports: [ActivityModule, AiModule, IntegrationsModule, OrdersModule],
@@ -44,6 +46,7 @@ import { CommerceStoreOptimizerService } from './commerce-store-optimizer.servic
     CommerceB2bController,
     CommerceSubscriptionsController,
     CommerceStoreOptimizerController,
+    CommerceExperimentsController,
   ],
   providers: [
     ProductRadarService,
@@ -59,6 +62,7 @@ import { CommerceStoreOptimizerService } from './commerce-store-optimizer.servic
     CommerceB2bService,
     CommerceSubscriptionsService,
     CommerceStoreOptimizerService,
+    CommerceExperimentsService,
   ],
 })
 export class CommerceModule {}

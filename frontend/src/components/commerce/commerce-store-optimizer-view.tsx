@@ -150,7 +150,8 @@ export function CommerceStoreOptimizerView() {
         These checks use your products, orders, returns, waitlist and listings
         {summary ? ` (sales and returns from the last ${summary.rules.lookbackDays} days; high returns = at least ${summary.rules.highReturnMinUnits} units and ${summary.rules.highReturnRatePct}% of units sold)` : ""}.
         Nothing on your live store is edited — each finding links to where you fix it, and it&rsquo;s marked <em>verified fixed</em> only when a re-check
-        shows the problem is gone. Test bigger changes in the Experiment Lab.
+        shows the problem is gone. Test bigger changes in the{" "}
+        <Link href="/autonomous-commerce/experiment-lab" className="font-bold underline">Experiment Lab</Link>.
       </p>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

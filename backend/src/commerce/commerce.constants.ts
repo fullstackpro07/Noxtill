@@ -154,3 +154,20 @@ export const COMMERCE_STORE_RULES = {
   highReturnMinUnits: 3,
   highReturnRatePct: 20,
 } as const;
+
+export const COMMERCE_EXPERIMENT_ERROR_CODES = {
+  NOT_FOUND: 'COMMERCE_EXPERIMENT_NOT_FOUND',
+  PRODUCT_NOT_FOUND: 'COMMERCE_EXPERIMENT_PRODUCT_NOT_FOUND',
+  INVALID_TRANSITION: 'COMMERCE_EXPERIMENT_INVALID_TRANSITION',
+  PRODUCT_BUSY: 'COMMERCE_EXPERIMENT_PRODUCT_BUSY',
+  NOTE_REQUIRED: 'COMMERCE_EXPERIMENT_NOTE_REQUIRED',
+} as const;
+
+/**
+ * Minimum evidence before Experiment Lab shows a directional read instead of "not enough data".
+ * A before/after comparison is never statistically significant proof — the UI says so.
+ */
+export const COMMERCE_EXPERIMENT_RULES = {
+  minDays: 7,
+  minUnitsPerWindow: 10,
+} as const;

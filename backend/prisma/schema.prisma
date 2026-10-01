@@ -901,6 +901,8 @@ model Business {
   commerceSubscriptionAudits   CommerceSubscriptionAudit[]
   commerceStoreOpportunities   CommerceStoreOpportunity[]
   commerceStoreAudits          CommerceStoreAudit[]
+  commerceExperiments          CommerceExperiment[]
+  commerceExperimentAudits     CommerceExperimentAudit[]
   seoAuditRuns                 SeoAuditRun[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
@@ -1632,6 +1634,7 @@ model Product {
   subscriptionPlans       CommerceSubscriptionPlan[]
   preorderCampaigns       CommercePreorderCampaign[]
   storeOpportunities      CommerceStoreOpportunity[]
+  commerceExperiments     CommerceExperiment[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -6968,4 +6971,80 @@ model SettingPin {
 
   @@unique([businessId, userId, category, rowKey])
   @@map("setting_pins")
+}
+
+enum CommerceExperimentType {
+  price
+  bundle
+  listing_copy
+  photo
+  shipping_offer
+  other
+}
+
+enum CommerceExperimentMetric {
+  units
+  revenue
+  gross_margin
+  return_rate
+}
+
+enum CommerceExperimentStatus {
+  draft
+  running
+  stopped
+  adopted
+  reverted
+  inconclusive
+}
+
+/// Experiment Lab (Autonomous Commerce). A before/after comparison for one product measured on real
+/// orders and returns — Noxtill has no storefront traffic and cannot split visitors, so this is not a
+/// randomized A/B test and conversion is not tracked. The change itself is made by the merchant;
+/// Noxtill only snapshots the product before/after and computes the comparison.
+model CommerceExperiment {
+  id                String                   @id @default(uuid())
+  businessId        String                   @map("business_id")
+  business          Business                 @relation(fields: [businessId], references: [id])
+  productId         String                   @map("product_id")
+  product           Product                  @relation(fields: [productId], references: [id])
+  name              String                   @db.VarChar(160)
+  type              CommerceExperimentType
+  hypothesis        String                   @db.Text
+  changeDescription String                   @map("change_description") @db.Text
+  primaryMetric     CommerceExperimentMetric @map("primary_metric")
+  /// Optional guardrail: flag the experiment if gross margin in the test window falls below this %.
+  minMarginPct      Decimal?                 @map("min_margin_pct") @db.Decimal(5, 2)
+  plannedDays       Int                      @default(14) @map("planned_days")
+  status            CommerceExperimentStatus @default(draft)
+  /// Product price/cost/details as they were when the experiment started and when it stopped.
+  startSnapshot     Json?                    @map("start_snapshot")
+  stopSnapshot      Json?                    @map("stop_snapshot")
+  /// Results frozen at stop so a later order edit can't silently change a decided experiment.
+  frozenResults     Json?                    @map("frozen_results")
+  decisionNote      String?                  @map("decision_note") @db.Text
+  startedAt         DateTime?                @map("started_at")
+  stoppedAt         DateTime?                @map("stopped_at")
+  decidedAt         DateTime?                @map("decided_at")
+  createdByUserId   String?                  @map("created_by_user_id")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+
+  @@index([businessId, status], map: "commerce_experiments_business_status_idx")
+  @@index([businessId, productId, status], map: "commerce_experiments_business_product_status_idx")
+  @@map("commerce_experiments")
+}
+
+model CommerceExperimentAudit {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  experimentId String   @map("experiment_id")
+  action       String   @db.VarChar(64)
+  note         String?  @db.Text
+  actorUserId  String?  @map("actor_user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, experimentId, createdAt], map: "commerce_experiment_audits_biz_exp_created_idx")
+  @@map("commerce_experiment_audits")
 }

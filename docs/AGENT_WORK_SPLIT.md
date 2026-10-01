@@ -126,3 +126,11 @@ Items: (1) B2B & Wholesale, (2) Subscriptions & Pre-orders, (3) Store Optimizer,
   button); dismiss needs a reason and stays dismissed. Conversion/drop-off/search/mobile shown as "Not
   tracked" (no storefront traffic data exists — grep-verified). Never edits the live store; links to
   where each fix happens. Migration 20261001123000 (3 FKs verified). jest 310/2001 green.
+- item 4 ✅ Experiment Lab: honest before/after experiments on one product (no storefront traffic → not
+  a randomized A/B test; conversion "Not tracked"). Test window vs an equal-length baseline on real
+  orders/returns (units, revenue, gross margin, return rate); a read only after 7 days + 10 units per
+  window, never called significant; optional margin guardrail; one running experiment per product;
+  product price snapshotted at start/stop (flags a price test whose price never changed); results frozen
+  at stop; adopt/revert/inconclusive needs a note; full audit trail. Never edits prices/listings.
+  Migration 20261001133000 (3 FKs verified). jest 311/2003 — marketing-assets + qr-poster (PDF render
+  timeouts under load, untouched code) failed once in the full run and passed on isolated reruns.
