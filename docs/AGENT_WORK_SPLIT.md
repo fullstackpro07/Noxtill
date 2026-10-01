@@ -134,3 +134,17 @@ Items: (1) B2B & Wholesale, (2) Subscriptions & Pre-orders, (3) Store Optimizer,
   at stop; adopt/revert/inconclusive needs a note; full audit trail. Never edits prices/listings.
   Migration 20261001133000 (3 FKs verified). jest 311/2003 — marketing-assets + qr-poster (PDF render
   timeouts under load, untouched code) failed once in the full run and passed on isolated reruns.
+- item 5 ✅ Module selection per business: new Settings → Modules category (owner-only toggle per
+  top-level module, grouped Core / Growth & channels / AI, history via the hub). Stored as
+  `Business.disabled_modules` (OFF list, so new modules default on) on the ROOT business — every branch
+  shares it. GET /business-modules (read-only, any signed-in user) feeds the sidebar (hidden items keep
+  their divider/section label) and a page gate that shows "X is turned off" instead of the page
+  (owner gets a link back to Settings → Modules); the floating AI assistant hides when AI Assistant is
+  off. Dashboard + Settings are always on. Hiding never deletes data and never blocks cross-module
+  data flow (it is a visibility choice, not an API permission). Migration 20261001140000 (JSON NOT
+  NULL DEFAULT JSON_ARRAY(), 0 null rows). DI graph verified in Nest preview mode.
+  jest --maxWorkers=3: 311/312 suites, 2004/2006 tests — the only failure is reviews/qr-poster (its own
+  15 s timeout on a headless-Chromium PDF render; flips pass/fail between isolated runs on this loaded
+  machine, also failed once before this item; untouched code). Default-worker runs showed more
+  timeout-only failures in other untouched suites, all passing in isolation.
+- Goal #2 complete. Not done for any page: live browser verification (needs a test login).

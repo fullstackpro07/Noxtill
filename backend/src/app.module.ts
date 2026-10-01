@@ -38,6 +38,7 @@ import { BillingModule } from './billing/billing.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { BusinessTypesModule } from './business-types/business-types.module';
+import { BusinessModulesModule } from './business-modules/business-modules.module';
 import { SearchModule } from './search/search.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
@@ -110,6 +111,7 @@ import { CommerceModule } from './commerce/commerce.module';
     DashboardModule,
     ActivityModule,
     BusinessTypesModule,
+    BusinessModulesModule,
     SearchModule,
     AnalyticsModule,
     PlatformAdminModule,

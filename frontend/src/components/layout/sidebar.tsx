@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { navItemsForRole, type Role } from "@/lib/nav-items";
+import { navItemsForRole, visibleNavItems, type Role } from "@/lib/nav-items";
+import { useDisabledModules } from "./module-gate";
 import { useTranslation } from "@/hooks/use-translation";
 
 interface SidebarProps {
@@ -20,9 +21,10 @@ function isRouteActive(pathname: string, href: string): boolean {
 
 function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string; onNavigate?: () => void }) {
   const { t } = useTranslation();
+  const disabledModules = useDisabledModules();
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3.5" style={{ paddingTop: 0 }}>
-      {navItemsForRole(role).map((item) => {
+      {visibleNavItems(navItemsForRole(role), disabledModules).map((item) => {
         const active = !item.disabled && isRouteActive(pathname, item.href);
         const Icon = item.icon;
 

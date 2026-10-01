@@ -696,7 +696,11 @@ model Business {
 
   /// Settings hub policies (see `common/policies`): the owner-tunable rules that sales, returns,
   /// stock, bookings, marketing, AI and backups actually enforce. A missing key means the default.
-  policies Json @default("{}")
+  policies        Json @default("{}")
+  /// Module selection: top-level Noxtill modules this business has turned off (sidebar keys, e.g.
+  /// `["bookings","credit"]`). Stored on the root business and shared by every branch. Stored as the
+  /// OFF list so a newly released module is on by default. Hiding a module never deletes its data.
+  disabledModules Json @default("[]") @map("disabled_modules")
 
   msgQuota Int @default(600) @map("msg_quota")
   msgUsed  Int @default(0) @map("msg_used")

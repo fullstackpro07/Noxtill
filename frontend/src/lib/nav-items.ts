@@ -687,3 +687,40 @@ export const NAV_ITEMS: NavItem[] = [
 export function navItemsForRole(role: Role): NavItem[] {
   return NAV_ITEMS.filter((item) => item.roles.includes(role));
 }
+
+/**
+ * Drops modules the business turned off (Settings → Modules). A hidden item's divider or section
+ * label moves to the next visible item so the sidebar's grouping survives.
+ */
+export function visibleNavItems(items: NavItem[], disabled: ReadonlySet<string>): NavItem[] {
+  const visible: NavItem[] = [];
+  let carryDivider = false;
+  let carryLabel: string | undefined;
+  for (const item of items) {
+    if (disabled.has(item.key)) {
+      carryDivider ||= Boolean(item.dividerBefore);
+      carryLabel ??= item.sectionLabel;
+      continue;
+    }
+    visible.push(
+      carryDivider || carryLabel
+        ? { ...item, dividerBefore: item.dividerBefore || carryDivider, sectionLabel: item.sectionLabel ?? carryLabel }
+        : item,
+    );
+    carryDivider = false;
+    carryLabel = undefined;
+  }
+  return visible;
+}
+
+/** The top-level module a route belongs to — longest matching href across items and their tabs. */
+export function navItemForPath(pathname: string): NavItem | undefined {
+  let best: { item: NavItem; length: number } | undefined;
+  for (const item of NAV_ITEMS) {
+    for (const href of [item.href, ...(item.children ?? []).map((child) => child.href)]) {
+      const matches = pathname === href || pathname.startsWith(`${href}/`);
+      if (matches && (!best || href.length > best.length)) best = { item, length: href.length };
+    }
+  }
+  return best?.item;
+}

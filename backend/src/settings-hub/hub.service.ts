@@ -47,6 +47,7 @@ import {
 } from './hub.core';
 import { HubDeps, QueueSnapshot } from './categories/hub.deps';
 import { platformCategories } from './categories/platform';
+import { modulesCategories } from './categories/modules';
 import {
   accessCategories,
   SENSITIVE_CAPS,
@@ -108,6 +109,7 @@ const CATEGORY_ORDER = [
   'language',
   'business',
   'branches',
+  'modules',
   'shortcuts',
   'accessibility',
   'sessions',
@@ -224,6 +226,7 @@ export class SettingsHubService {
     if (!this.categoriesCache) {
       this.categoriesCache = [
         ...platformCategories(this.deps),
+        ...modulesCategories(this.deps),
         ...accessCategories(this.deps),
         ...moneyCategories(this.deps),
         ...operationsCategories(this.deps),
