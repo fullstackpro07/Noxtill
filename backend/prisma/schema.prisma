@@ -888,6 +888,11 @@ model Business {
   commerceComplianceDocuments  CommerceComplianceDocument[]
   commerceMarketEligibility    CommerceMarketEligibility[]
   commerceRiskAudits           CommerceRiskAudit[]
+  commerceB2bTiers             CommerceB2bTier[]
+  commerceB2bPriceLists        CommerceB2bPriceList[]
+  commerceB2bPriceListItems    CommerceB2bPriceListItem[]
+  commerceB2bAccounts          CommerceB2bAccount[]
+  commerceB2bAudits            CommerceB2bAudit[]
   seoAuditRuns                 SeoAuditRun[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
@@ -1236,8 +1241,9 @@ model Customer {
   dataSubjectRequests    DataSubjectRequest[]
   vouchers               Voucher[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  b2bAccount CommerceB2bAccount?
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
 
   @@unique([businessId, phone])
   @@index([businessId, name])
@@ -1612,6 +1618,7 @@ model Product {
   workOrderMaterials      CommerceWorkOrderMaterial[]
   complianceDocuments     CommerceComplianceDocument[]
   marketEligibility       CommerceMarketEligibility[]
+  b2bPriceListItems       CommerceB2bPriceListItem[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3772,6 +3779,111 @@ model CommerceRiskAudit {
 
   @@index([businessId, entityType, entityId, createdAt], map: "commerce_risk_audits_biz_entity_created_idx")
   @@map("commerce_risk_audits")
+}
+
+enum CommerceB2bAccountStatus {
+  active
+  suspended
+}
+
+enum CommerceB2bPriceListStatus {
+  active
+  archived
+}
+
+/// Wholesale tier (B2B & Wholesale, screen 13): a default discount and ordering terms shared by
+/// accounts. Never changes canonical product prices; it is applied only when pricing for an account.
+model CommerceB2bTier {
+  id                 String               @id @default(uuid())
+  businessId         String               @map("business_id")
+  business           Business             @relation(fields: [businessId], references: [id])
+  name               String               @db.VarChar(80)
+  defaultDiscountPct Decimal              @default(0) @map("default_discount_pct") @db.Decimal(5, 2)
+  minOrderValue      Decimal?             @map("min_order_value") @db.Decimal(12, 2)
+  paymentTermsDays   Int?                 @map("payment_terms_days")
+  accounts           CommerceB2bAccount[]
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  @@unique([businessId, name], map: "commerce_b2b_tiers_business_name_key")
+  @@map("commerce_b2b_tiers")
+}
+
+/// Account-specific price overlay. A line applies only at or above its minimum quantity.
+model CommerceB2bPriceList {
+  id         String                     @id @default(uuid())
+  businessId String                     @map("business_id")
+  business   Business                   @relation(fields: [businessId], references: [id])
+  name       String                     @db.VarChar(120)
+  status     CommerceB2bPriceListStatus @default(active)
+  notes      String?                    @db.Text
+  items      CommerceB2bPriceListItem[]
+  accounts   CommerceB2bAccount[]
+  createdAt  DateTime                   @default(now()) @map("created_at")
+  updatedAt  DateTime                   @updatedAt @map("updated_at")
+
+  @@unique([businessId, name], map: "commerce_b2b_price_lists_business_name_key")
+  @@map("commerce_b2b_price_lists")
+}
+
+model CommerceB2bPriceListItem {
+  id          String               @id @default(uuid())
+  businessId  String               @map("business_id")
+  business    Business             @relation(fields: [businessId], references: [id])
+  priceListId String               @map("price_list_id")
+  priceList   CommerceB2bPriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId   String               @map("product_id")
+  product     Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unitPrice   Decimal              @map("unit_price") @db.Decimal(12, 2)
+  minQty      Int                  @default(1) @map("min_qty")
+
+  @@unique([priceListId, productId], map: "commerce_b2b_price_list_items_list_product_key")
+  @@map("commerce_b2b_price_list_items")
+}
+
+/// Wholesale layer on a canonical CRM customer: one account per customer. Credit limit and
+/// balance stay in Customers/Credit; quotes and invoices stay in Orders.
+model CommerceB2bAccount {
+  id               String                   @id @default(uuid())
+  businessId       String                   @map("business_id")
+  business         Business                 @relation(fields: [businessId], references: [id])
+  customerId       String                   @unique @map("customer_id")
+  customer         Customer                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  companyName      String                   @map("company_name") @db.VarChar(160)
+  taxId            String?                  @map("tax_id") @db.VarChar(64)
+  tierId           String?                  @map("tier_id")
+  tier             CommerceB2bTier?         @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  priceListId      String?                  @map("price_list_id")
+  priceList        CommerceB2bPriceList?    @relation(fields: [priceListId], references: [id], onDelete: SetNull)
+  /// Overrides the tier's terms/minimum when set.
+  paymentTermsDays Int?                     @map("payment_terms_days")
+  minOrderValue    Decimal?                 @map("min_order_value") @db.Decimal(12, 2)
+  status           CommerceB2bAccountStatus @default(active)
+  suspendedReason  String?                  @map("suspended_reason") @db.Text
+  notes            String?                  @db.Text
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+
+  @@index([businessId, status], map: "commerce_b2b_accounts_business_status_idx")
+  @@map("commerce_b2b_accounts")
+}
+
+/// Append-only audit for B2B accounts, tiers and price lists.
+model CommerceB2bAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  entityType  String   @map("entity_type") @db.VarChar(32)
+  entityId    String   @map("entity_id")
+  action      String   @db.VarChar(64)
+  reason      String?  @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, entityType, entityId, createdAt], map: "commerce_b2b_audits_biz_entity_created_idx")
+  @@map("commerce_b2b_audits")
 }
 
 enum CommerceListingDraftStatus {

@@ -103,3 +103,14 @@ Goal items: (1) stabilise + checkpoint commit, (2) Production & Assembly, (3) Ri
     the user to sign in (without sharing credentials) before verifying the protected screen.
 - Remaining queue after item 3: (4) B2B & Wholesale, (5) Subscriptions & Pre-orders, (6) Store Optimizer,
   (7) Experiment Lab, (8) module selection. Codex owns everything from here.
+
+## Progress log — goal #2 (Claude Code, started 2026-10-01 ~10:15)
+
+Items: (1) B2B & Wholesale, (2) Subscriptions & Pre-orders, (3) Store Optimizer, (4) Experiment Lab,
+(5) module selection. Local commits only, never push.
+
+- item 1 ✅ B2B & Wholesale: tiers, price lists (overlay, never changes product price), accounts on CRM
+  customers, canonical credit via v_credit_balances, quote price-check (formal quotes stay in Orders),
+  reorder estimate. Migration 20261001114247_commerce_b2b_wholesale (10 FKs verified). Also typed an
+  empty-array fallback in notifications.service.ts that became `never` after the Prisma client grew.
+  jest 308/1992 green.

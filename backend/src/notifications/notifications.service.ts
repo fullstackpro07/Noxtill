@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { NotificationPreference } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import {
   NOTIFICATION_CHANNELS,
@@ -129,7 +130,8 @@ export class NotificationsService {
         ? this.tenantPrisma.client.notificationPreference.findMany({
             where: { businessId, userId },
           })
-        : Promise.resolve([]),
+        : // Explicit element type: an untyped `[]` is inferred as never[] once the client grows.
+          Promise.resolve<NotificationPreference[]>([]),
     ]);
 
     const rows: {

@@ -354,6 +354,7 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "commerce-production", labelKey: "nav.production", href: "/autonomous-commerce/production", icon: Factory },
       { key: "commerce-supplier-claims", labelKey: "nav.supplierClaims", href: "/autonomous-commerce/supplier-claims", icon: ShieldCheck },
       { key: "commerce-risk-compliance", labelKey: "nav.riskCompliance", href: "/autonomous-commerce/risk-compliance", icon: ShieldCheck },
+      { key: "commerce-b2b", labelKey: "nav.b2bWholesale", href: "/autonomous-commerce/b2b", icon: Building2 },
     ],
   },
   {
