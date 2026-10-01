@@ -114,3 +114,9 @@ Items: (1) B2B & Wholesale, (2) Subscriptions & Pre-orders, (3) Store Optimizer,
   reorder estimate. Migration 20261001114247_commerce_b2b_wholesale (10 FKs verified). Also typed an
   empty-array fallback in notifications.service.ts that became `never` after the Prisma client grew.
   jest 308/1992 green.
+- item 2 ✅ Subscriptions & Pre-orders: plans, subscriptions, idempotent renewal cycles that create canonical
+  unpaid Orders via OrdersService (CommerceModule now imports OrdersModule — full app DI graph verified in
+  Nest preview mode, with a negative control), skip/pause/cancel, pre-order campaigns with an atomic
+  reservation cap, promise-date changes audited, promise risk from stock + Production work orders.
+  Migration 20261001115855 (15 FKs verified). jest 309/1998 green (one earlier order-policies flake
+  passed on rerun and alone).

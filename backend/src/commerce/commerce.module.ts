@@ -23,9 +23,12 @@ import { CommerceRiskController } from './commerce-risk.controller';
 import { CommerceRiskService } from './commerce-risk.service';
 import { CommerceB2bController } from './commerce-b2b.controller';
 import { CommerceB2bService } from './commerce-b2b.service';
+import { CommerceSubscriptionsController } from './commerce-subscriptions.controller';
+import { CommerceSubscriptionsService } from './commerce-subscriptions.service';
+import { OrdersModule } from '../orders/orders.module';
 
 @Module({
-  imports: [ActivityModule, AiModule, IntegrationsModule],
+  imports: [ActivityModule, AiModule, IntegrationsModule, OrdersModule],
   controllers: [
     ProductRadarController,
     ProductValidationController,
@@ -37,6 +40,7 @@ import { CommerceB2bService } from './commerce-b2b.service';
     CommerceProductionController,
     CommerceRiskController,
     CommerceB2bController,
+    CommerceSubscriptionsController,
   ],
   providers: [
     ProductRadarService,
@@ -50,6 +54,7 @@ import { CommerceB2bService } from './commerce-b2b.service';
     CommerceProductionService,
     CommerceRiskService,
     CommerceB2bService,
+    CommerceSubscriptionsService,
   ],
 })
 export class CommerceModule {}

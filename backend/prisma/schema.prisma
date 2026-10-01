@@ -893,6 +893,12 @@ model Business {
   commerceB2bPriceListItems    CommerceB2bPriceListItem[]
   commerceB2bAccounts          CommerceB2bAccount[]
   commerceB2bAudits            CommerceB2bAudit[]
+  commerceSubscriptionPlans    CommerceSubscriptionPlan[]
+  commerceSubscriptions        CommerceSubscription[]
+  commerceSubscriptionCycles   CommerceSubscriptionCycle[]
+  commercePreorderCampaigns    CommercePreorderCampaign[]
+  commercePreorders            CommercePreorder[]
+  commerceSubscriptionAudits   CommerceSubscriptionAudit[]
   seoAuditRuns                 SeoAuditRun[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
@@ -1241,9 +1247,11 @@ model Customer {
   dataSubjectRequests    DataSubjectRequest[]
   vouchers               Voucher[]
 
-  b2bAccount CommerceB2bAccount?
-  createdAt  DateTime            @default(now()) @map("created_at")
-  updatedAt  DateTime            @updatedAt @map("updated_at")
+  b2bAccount            CommerceB2bAccount?
+  commerceSubscriptions CommerceSubscription[]
+  commercePreorders     CommercePreorder[]
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
 
   @@unique([businessId, phone])
   @@index([businessId, name])
@@ -1619,6 +1627,8 @@ model Product {
   complianceDocuments     CommerceComplianceDocument[]
   marketEligibility       CommerceMarketEligibility[]
   b2bPriceListItems       CommerceB2bPriceListItem[]
+  subscriptionPlans       CommerceSubscriptionPlan[]
+  preorderCampaigns       CommercePreorderCampaign[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1703,8 +1713,10 @@ model Order {
   delivery         Delivery?
   routingDecisions CommerceRoutingDecision[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  subscriptionCycles CommerceSubscriptionCycle[]
+  preorders          CommercePreorder[]
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  updatedAt          DateTime                    @updatedAt @map("updated_at")
 
   @@unique([businessId, orderNo])
   @@unique([businessId, externalProvider, externalId])
@@ -3884,6 +3896,163 @@ model CommerceB2bAudit {
 
   @@index([businessId, entityType, entityId, createdAt], map: "commerce_b2b_audits_biz_entity_created_idx")
   @@map("commerce_b2b_audits")
+}
+
+enum CommerceSubscriptionInterval {
+  week
+  month
+}
+
+enum CommerceSubscriptionPlanStatus {
+  active
+  archived
+}
+
+enum CommerceSubscriptionStatus {
+  active
+  paused
+  cancelled
+}
+
+enum CommerceSubscriptionCycleStatus {
+  processing
+  order_created
+  skipped
+}
+
+enum CommercePreorderCampaignStatus {
+  open
+  closed
+  released
+}
+
+enum CommercePreorderStatus {
+  reserved
+  fulfilled
+  cancelled
+}
+
+/// Recurring offer for a canonical product (Subscriptions & Pre-orders, screen 14).
+model CommerceSubscriptionPlan {
+  id            String                         @id @default(uuid())
+  businessId    String                         @map("business_id")
+  business      Business                       @relation(fields: [businessId], references: [id])
+  name          String                         @db.VarChar(120)
+  productId     String                         @map("product_id")
+  product       Product                        @relation(fields: [productId], references: [id])
+  qtyPerCycle   Int                            @map("qty_per_cycle")
+  interval      CommerceSubscriptionInterval
+  intervalCount Int                            @default(1) @map("interval_count")
+  /// Null means "charge the product's current selling price at renewal".
+  pricePerUnit  Decimal?                       @map("price_per_unit") @db.Decimal(12, 2)
+  allowSkip     Boolean                        @default(true) @map("allow_skip")
+  status        CommerceSubscriptionPlanStatus @default(active)
+  subscriptions CommerceSubscription[]
+  createdAt     DateTime                       @default(now()) @map("created_at")
+  updatedAt     DateTime                       @updatedAt @map("updated_at")
+
+  @@unique([businessId, name], map: "commerce_subscription_plans_business_name_key")
+  @@map("commerce_subscription_plans")
+}
+
+/// A customer's subscription. Renewals create canonical unpaid Orders; nothing is charged here.
+model CommerceSubscription {
+  id            String                      @id @default(uuid())
+  businessId    String                      @map("business_id")
+  business      Business                    @relation(fields: [businessId], references: [id])
+  planId        String                      @map("plan_id")
+  plan          CommerceSubscriptionPlan    @relation(fields: [planId], references: [id])
+  customerId    String                      @map("customer_id")
+  customer      Customer                    @relation(fields: [customerId], references: [id])
+  status        CommerceSubscriptionStatus  @default(active)
+  startedAt     DateTime                    @default(now()) @map("started_at")
+  nextRenewalAt DateTime                    @map("next_renewal_at")
+  skipNextCycle Boolean                     @default(false) @map("skip_next_cycle")
+  statusReason  String?                     @map("status_reason") @db.Text
+  cycles        CommerceSubscriptionCycle[]
+  createdAt     DateTime                    @default(now()) @map("created_at")
+  updatedAt     DateTime                    @updatedAt @map("updated_at")
+
+  @@index([businessId, status, nextRenewalAt], map: "commerce_subscriptions_business_status_next_idx")
+  @@map("commerce_subscriptions")
+}
+
+/// One renewal period. Unique per (subscription, dueAt) so a renewal can never be processed twice.
+model CommerceSubscriptionCycle {
+  id             String                          @id @default(uuid())
+  businessId     String                          @map("business_id")
+  business       Business                        @relation(fields: [businessId], references: [id])
+  subscriptionId String                          @map("subscription_id")
+  subscription   CommerceSubscription            @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  dueAt          DateTime                        @map("due_at")
+  status         CommerceSubscriptionCycleStatus
+  orderId        String?                         @map("order_id")
+  order          Order?                          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt      DateTime                        @default(now()) @map("created_at")
+
+  @@unique([subscriptionId, dueAt], map: "commerce_subscription_cycles_subscription_due_key")
+  @@map("commerce_subscription_cycles")
+}
+
+/// Pre-order offer for a product not yet in stock. `reservedUnits` is maintained with a conditional
+/// update so concurrent reservations can never exceed `maxUnits`.
+model CommercePreorderCampaign {
+  id            String                         @id @default(uuid())
+  businessId    String                         @map("business_id")
+  business      Business                       @relation(fields: [businessId], references: [id])
+  productId     String                         @map("product_id")
+  product       Product                        @relation(fields: [productId], references: [id])
+  name          String                         @db.VarChar(120)
+  promisedDate  DateTime                       @map("promised_date")
+  maxUnits      Int?                           @map("max_units")
+  reservedUnits Int                            @default(0) @map("reserved_units")
+  status        CommercePreorderCampaignStatus @default(open)
+  notes         String?                        @db.Text
+  preorders     CommercePreorder[]
+  createdAt     DateTime                       @default(now()) @map("created_at")
+  updatedAt     DateTime                       @updatedAt @map("updated_at")
+
+  @@index([businessId, status], map: "commerce_preorder_campaigns_business_status_idx")
+  @@map("commerce_preorder_campaigns")
+}
+
+model CommercePreorder {
+  id           String                   @id @default(uuid())
+  businessId   String                   @map("business_id")
+  business     Business                 @relation(fields: [businessId], references: [id])
+  campaignId   String                   @map("campaign_id")
+  campaign     CommercePreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customerId   String                   @map("customer_id")
+  customer     Customer                 @relation(fields: [customerId], references: [id])
+  qty          Int
+  status       CommercePreorderStatus   @default(reserved)
+  /// Promise made to this customer at reservation time; compared with the campaign's current date.
+  promisedDate DateTime                 @map("promised_date")
+  orderId      String?                  @map("order_id")
+  order        Order?                   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt    DateTime                 @default(now()) @map("created_at")
+  updatedAt    DateTime                 @updatedAt @map("updated_at")
+
+  @@index([businessId, campaignId, status], map: "commerce_preorders_business_campaign_status_idx")
+  @@map("commerce_preorders")
+}
+
+/// Append-only audit for plans, subscriptions, renewals, pre-order campaigns and reservations.
+model CommerceSubscriptionAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  entityType  String   @map("entity_type") @db.VarChar(32)
+  entityId    String   @map("entity_id")
+  action      String   @db.VarChar(64)
+  reason      String?  @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, entityType, entityId, createdAt], map: "commerce_subscription_audits_biz_entity_created_idx")
+  @@map("commerce_subscription_audits")
 }
 
 enum CommerceListingDraftStatus {

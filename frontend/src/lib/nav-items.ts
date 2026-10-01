@@ -103,6 +103,7 @@ import {
   FileInput,
   Route,
   Factory,
+  Repeat,
   Target,
   Calculator,
   Stamp,
@@ -355,6 +356,7 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "commerce-supplier-claims", labelKey: "nav.supplierClaims", href: "/autonomous-commerce/supplier-claims", icon: ShieldCheck },
       { key: "commerce-risk-compliance", labelKey: "nav.riskCompliance", href: "/autonomous-commerce/risk-compliance", icon: ShieldCheck },
       { key: "commerce-b2b", labelKey: "nav.b2bWholesale", href: "/autonomous-commerce/b2b", icon: Building2 },
+      { key: "commerce-subscriptions", labelKey: "nav.subscriptionsPreorders", href: "/autonomous-commerce/subscriptions-preorders", icon: Repeat },
     ],
   },
   {
