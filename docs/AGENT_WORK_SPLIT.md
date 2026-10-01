@@ -120,3 +120,9 @@ Items: (1) B2B & Wholesale, (2) Subscriptions & Pre-orders, (3) Store Optimizer,
   reservation cap, promise-date changes audited, promise risk from stock + Production work orders.
   Migration 20261001115855 (15 FKs verified). jest 309/1998 green (one earlier order-policies flake
   passed on rerun and alone).
+- item 3 ✅ Store Optimizer: 6 explainable rules over real data (missing photo, no category, high return
+  rate with top reasons, out of stock with demand, priced below cost, approved listing not sent). Findings
+  are deduped; "verified fixed" is set only by a re-check that no longer finds the problem (never by a
+  button); dismiss needs a reason and stays dismissed. Conversion/drop-off/search/mobile shown as "Not
+  tracked" (no storefront traffic data exists — grep-verified). Never edits the live store; links to
+  where each fix happens. Migration 20261001123000 (3 FKs verified). jest 310/2001 green.

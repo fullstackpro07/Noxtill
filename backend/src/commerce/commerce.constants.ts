@@ -137,3 +137,20 @@ export const COMMERCE_SUBSCRIPTION_ERROR_CODES = {
   CAPACITY_EXCEEDED: 'COMMERCE_PREORDER_CAPACITY_EXCEEDED',
   NAME_TAKEN: 'COMMERCE_SUBSCRIPTION_NAME_TAKEN',
 } as const;
+
+export const COMMERCE_STORE_ERROR_CODES = {
+  NOT_FOUND: 'COMMERCE_STORE_OPPORTUNITY_NOT_FOUND',
+  INVALID_TRANSITION: 'COMMERCE_STORE_INVALID_TRANSITION',
+  REASON_REQUIRED: 'COMMERCE_STORE_REASON_REQUIRED',
+} as const;
+
+/**
+ * Documented Store Optimizer rule settings. Shown in the UI next to each finding so the merchant can
+ * see exactly why it fired.
+ */
+export const COMMERCE_STORE_RULES = {
+  lookbackDays: 90,
+  recentSalesDays: 30,
+  highReturnMinUnits: 3,
+  highReturnRatePct: 20,
+} as const;

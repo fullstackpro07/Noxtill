@@ -899,6 +899,8 @@ model Business {
   commercePreorderCampaigns    CommercePreorderCampaign[]
   commercePreorders            CommercePreorder[]
   commerceSubscriptionAudits   CommerceSubscriptionAudit[]
+  commerceStoreOpportunities   CommerceStoreOpportunity[]
+  commerceStoreAudits          CommerceStoreAudit[]
   seoAuditRuns                 SeoAuditRun[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
@@ -1629,6 +1631,7 @@ model Product {
   b2bPriceListItems       CommerceB2bPriceListItem[]
   subscriptionPlans       CommerceSubscriptionPlan[]
   preorderCampaigns       CommercePreorderCampaign[]
+  storeOpportunities      CommerceStoreOpportunity[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4053,6 +4056,72 @@ model CommerceSubscriptionAudit {
 
   @@index([businessId, entityType, entityId, createdAt], map: "commerce_subscription_audits_biz_entity_created_idx")
   @@map("commerce_subscription_audits")
+}
+
+enum CommerceStoreRuleKey {
+  missing_photo
+  missing_category
+  high_return_rate
+  out_of_stock_demand
+  below_cost_price
+  listing_not_synced
+}
+
+enum CommerceStoreOpportunityStatus {
+  open
+  in_progress
+  done
+  verified
+  dismissed
+}
+
+enum CommerceStoreImpact {
+  low
+  medium
+  high
+}
+
+/// A store improvement found by an explainable rule over real records (Store Optimizer, screen 10).
+/// `verified` is only set by a re-check that finds the condition gone — never by a button.
+model CommerceStoreOpportunity {
+  id              String                         @id @default(uuid())
+  businessId      String                         @map("business_id")
+  business        Business                       @relation(fields: [businessId], references: [id])
+  ruleKey         CommerceStoreRuleKey           @map("rule_key")
+  dedupeKey       String                         @map("dedupe_key") @db.VarChar(191)
+  productId       String?                        @map("product_id")
+  product         Product?                       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title           String                         @db.VarChar(200)
+  impact          CommerceStoreImpact
+  status          CommerceStoreOpportunityStatus @default(open)
+  evidence        Json
+  /// Current value of the rule's metric (e.g. return rate %) and its value when first detected.
+  metricValue     Decimal?                       @map("metric_value") @db.Decimal(12, 2)
+  baselineValue   Decimal?                       @map("baseline_value") @db.Decimal(12, 2)
+  resolution      String?                        @db.Text
+  firstDetectedAt DateTime                       @default(now()) @map("first_detected_at")
+  lastDetectedAt  DateTime                       @default(now()) @map("last_detected_at")
+  verifiedAt      DateTime?                      @map("verified_at")
+  updatedAt       DateTime                       @updatedAt @map("updated_at")
+
+  @@unique([businessId, dedupeKey], map: "commerce_store_opportunities_business_dedupe_key")
+  @@index([businessId, status, impact], map: "commerce_store_opportunities_business_status_impact_idx")
+  @@map("commerce_store_opportunities")
+}
+
+/// Append-only audit for Store Optimizer status changes and automatic verifications.
+model CommerceStoreAudit {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  opportunityId String   @map("opportunity_id")
+  action        String   @db.VarChar(64)
+  reason        String?  @db.Text
+  actorUserId   String?  @map("actor_user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, opportunityId, createdAt], map: "commerce_store_audits_biz_opp_created_idx")
+  @@map("commerce_store_audits")
 }
 
 enum CommerceListingDraftStatus {
