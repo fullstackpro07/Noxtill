@@ -353,6 +353,7 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "commerce-fulfillment-router", labelKey: "nav.fulfillmentRouter", href: "/autonomous-commerce/fulfillment-router", icon: Route },
       { key: "commerce-production", labelKey: "nav.production", href: "/autonomous-commerce/production", icon: Factory },
       { key: "commerce-supplier-claims", labelKey: "nav.supplierClaims", href: "/autonomous-commerce/supplier-claims", icon: ShieldCheck },
+      { key: "commerce-risk-compliance", labelKey: "nav.riskCompliance", href: "/autonomous-commerce/risk-compliance", icon: ShieldCheck },
     ],
   },
   {

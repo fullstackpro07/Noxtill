@@ -883,6 +883,11 @@ model Business {
   commerceWorkOrders           CommerceWorkOrder[]
   commerceWorkOrderMaterials   CommerceWorkOrderMaterial[]
   commerceWorkOrderAudits      CommerceWorkOrderAudit[]
+  commerceRiskRules            CommerceRiskRule[]
+  commerceRiskCases            CommerceRiskCase[]
+  commerceComplianceDocuments  CommerceComplianceDocument[]
+  commerceMarketEligibility    CommerceMarketEligibility[]
+  commerceRiskAudits           CommerceRiskAudit[]
   seoAuditRuns                 SeoAuditRun[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
@@ -1605,6 +1610,8 @@ model Product {
   bomComponentOf          CommerceBomItem[]
   workOrders              CommerceWorkOrder[]
   workOrderMaterials      CommerceWorkOrderMaterial[]
+  complianceDocuments     CommerceComplianceDocument[]
+  marketEligibility       CommerceMarketEligibility[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3627,6 +3634,144 @@ model CommerceWorkOrderAudit {
 
   @@index([businessId, workOrderId, createdAt], map: "commerce_wo_audits_biz_wo_created_idx")
   @@map("commerce_work_order_audits")
+}
+
+enum CommerceRiskRuleKey {
+  repeat_returns
+  over_returned_order
+  coupon_repeat_use
+}
+
+enum CommerceRiskCaseStatus {
+  open
+  investigating
+  resolved
+  dismissed
+}
+
+enum CommerceRiskSeverity {
+  low
+  medium
+  high
+}
+
+enum CommerceComplianceDocType {
+  certificate
+  test_report
+  license
+  declaration
+  safety_data_sheet
+  other
+}
+
+enum CommerceMarketEligibilityStatus {
+  eligible
+  review_required
+  blocked
+}
+
+/// Per-business thresholds for the explainable risk checks (Risk & Compliance, screen 12).
+/// Rows are created with documented defaults on first use; the merchant can tune or disable them.
+model CommerceRiskRule {
+  id         String              @id @default(uuid())
+  businessId String              @map("business_id")
+  business   Business            @relation(fields: [businessId], references: [id])
+  key        CommerceRiskRuleKey
+  enabled    Boolean             @default(true)
+  /// Count threshold (e.g. returns or coupon orders) — unused by rules that don't need one.
+  threshold  Int
+  windowDays Int                 @map("window_days")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  @@unique([businessId, key], map: "commerce_risk_rules_business_key_key")
+  @@map("commerce_risk_rules")
+}
+
+/// A flagged pattern with the exact evidence that triggered it. Never blocks an order by itself.
+model CommerceRiskCase {
+  id              String                 @id @default(uuid())
+  businessId      String                 @map("business_id")
+  business        Business               @relation(fields: [businessId], references: [id])
+  ruleKey         CommerceRiskRuleKey    @map("rule_key")
+  /// `${ruleKey}:${entityType}:${entityId}` — one case per pattern and entity.
+  dedupeKey       String                 @map("dedupe_key") @db.VarChar(191)
+  entityType      String                 @map("entity_type") @db.VarChar(32)
+  entityId        String                 @map("entity_id")
+  entityLabel     String                 @map("entity_label") @db.VarChar(200)
+  severity        CommerceRiskSeverity
+  status          CommerceRiskCaseStatus @default(open)
+  exposureAmount  Decimal                @default(0) @map("exposure_amount") @db.Decimal(14, 2)
+  /// Number of qualifying events at last detection; a closed case reopens only if this grows.
+  signalCount     Int                    @map("signal_count")
+  evidence        Json
+  resolution      String?                @db.Text
+  firstDetectedAt DateTime               @default(now()) @map("first_detected_at")
+  lastDetectedAt  DateTime               @default(now()) @map("last_detected_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  @@unique([businessId, dedupeKey], map: "commerce_risk_cases_business_dedupe_key")
+  @@index([businessId, status, severity], map: "commerce_risk_cases_business_status_severity_idx")
+  @@map("commerce_risk_cases")
+}
+
+/// Compliance evidence a merchant holds (certificates, test reports, licences). Stores the
+/// reference and expiry, not a legal judgement; eligibility decisions stay human.
+model CommerceComplianceDocument {
+  id         String                    @id @default(uuid())
+  businessId String                    @map("business_id")
+  business   Business                  @relation(fields: [businessId], references: [id])
+  productId  String?                   @map("product_id")
+  product    Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  docType    CommerceComplianceDocType @map("doc_type")
+  title      String                    @db.VarChar(200)
+  reference  String?                   @db.VarChar(200)
+  issuer     String?                   @db.VarChar(200)
+  markets    Json                      @default("[]")
+  issuedAt   DateTime?                 @map("issued_at")
+  expiresAt  DateTime?                 @map("expires_at")
+  notes      String?                   @db.Text
+  archivedAt DateTime?                 @map("archived_at")
+  createdAt  DateTime                  @default(now()) @map("created_at")
+  updatedAt  DateTime                  @updatedAt @map("updated_at")
+
+  @@index([businessId, expiresAt], map: "commerce_compliance_docs_business_expires_idx")
+  @@map("commerce_compliance_documents")
+}
+
+/// Human decision on whether a product may be sold in a market. `blocked` is enforced: the
+/// channel listing sync refuses to send that product to a listing for that market.
+model CommerceMarketEligibility {
+  id              String                          @id @default(uuid())
+  businessId      String                          @map("business_id")
+  business        Business                        @relation(fields: [businessId], references: [id])
+  productId       String                          @map("product_id")
+  product         Product                         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  market          String                          @db.VarChar(2)
+  status          CommerceMarketEligibilityStatus
+  reason          String?                         @db.Text
+  decidedByUserId String?                         @map("decided_by_user_id")
+  updatedAt       DateTime                        @updatedAt @map("updated_at")
+
+  @@unique([businessId, productId, market], map: "commerce_market_eligibility_biz_product_market_key")
+  @@map("commerce_market_eligibility")
+}
+
+/// Append-only audit for risk cases, rules, compliance documents and eligibility decisions.
+model CommerceRiskAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  entityType  String   @map("entity_type") @db.VarChar(32)
+  entityId    String   @map("entity_id")
+  action      String   @db.VarChar(64)
+  reason      String?  @db.Text
+  before      Json?
+  after       Json?
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, entityType, entityId, createdAt], map: "commerce_risk_audits_biz_entity_created_idx")
+  @@map("commerce_risk_audits")
 }
 
 enum CommerceListingDraftStatus {

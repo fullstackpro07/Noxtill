@@ -2,6 +2,7 @@ import { ClsService } from 'nestjs-cls';
 import {
   CommerceChannelListingStatus,
   CommerceListingDraftStatus,
+  CommerceMarketEligibilityStatus,
   IntegrationProvider,
   IntegrationStatus,
   Prisma,
@@ -294,6 +295,41 @@ describe('CommerceChannelListingsService (MySQL)', () => {
         where: { businessId, provider: IntegrationProvider.shopify },
       }),
     ).toMatchObject({ success: false, recordsProcessed: 0 });
+  });
+
+  it('refuses to sync to a market where Risk & Compliance blocked the product', async () => {
+    const draft = await createDraft();
+    await prisma.commerceListingDraft.update({
+      where: { id: draft.id },
+      data: { market: 'de' },
+    });
+    await connectShopify();
+    await prisma.commerceMarketEligibility.create({
+      data: {
+        businessId,
+        productId,
+        market: 'DE',
+        status: CommerceMarketEligibilityStatus.blocked,
+        reason: 'CE certificate missing',
+      },
+    });
+    try {
+      await expect(
+        service.syncApprovedDraft(
+          businessId,
+          'operator-1',
+          draft.id,
+          'shopify',
+        ),
+      ).rejects.toMatchObject({
+        response: { code: 'COMMERCE_LISTING_INVALID_STATE' },
+      });
+      expect(syncListing).not.toHaveBeenCalled();
+    } finally {
+      await prisma.commerceMarketEligibility.deleteMany({
+        where: { businessId },
+      });
+    }
   });
 
   it('rejects unsupported providers without calling integrations', async () => {

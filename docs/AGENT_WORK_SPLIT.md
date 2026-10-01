@@ -88,4 +88,18 @@ Goal items: (1) stabilise + checkpoint commit, (2) Production & Assembly, (3) Ri
 - 02:15 — started item 1.
 - ~02:40 — item 1 ✅: removed 2 empty migration folders left by Codex, applied 20261001003100_seo_serp_page_overlap, fixed DLQ spec type + made resolve/dismiss async; tsc clean, jest 305/1973 green. Checkpoint commit 55c760f (local, not pushed).
 - item 2 ✅ Production & Assembly: BOM versions, work orders, atomic component consumption + finished-goods receipt as new stock movement kinds (production_consume/production_output, Inventory UI updated), quality hold/release, migration 20261001022339. jest 306/1980 green.
-- started item 3 (Risk & Compliance).
+- item 3 (Risk & Compliance) implementation complete in local checkpoint. The MySQL migration
+  `20261001023455_commerce_risk_compliance` is applied; the fixture now supplies unique customer phones.
+  The page at `/autonomous-commerce/risk-compliance` has Risk Cases, Rules & Policies, Documents, and
+  Market Eligibility tabs. It wires real data/actions, decision audit history, nav and i18n. The UI
+  explicitly discloses that provider fraud/chargeback feeds, order holds, document uploads/authenticity
+  checks, and legal verification are not configured.
+  - Focused MySQL tests: 12/12 passed. Backend + frontend type checks and touched-file lint passed.
+  - Full Jest: `npx jest --maxWorkers=2` passed 307 suites / 1987 tests. Default parallel mode had a
+    resource-sensitive Marketing Assets timeout; serial mode timed out unrelated suites, so two workers
+    was the stable full-suite run.
+  - Prisma reports all 128 migrations applied and the schema up to date.
+  - Visual check is pending: the local browser now opens, but the app redirects to `/login`; waiting for
+    the user to sign in (without sharing credentials) before verifying the protected screen.
+- Remaining queue after item 3: (4) B2B & Wholesale, (5) Subscriptions & Pre-orders, (6) Store Optimizer,
+  (7) Experiment Lab, (8) module selection. Codex owns everything from here.

@@ -115,6 +115,7 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.fulfillmentNetwork": "Fulfillment Network",
     "nav.fulfillmentRouter": "Fulfillment Router",
     "nav.production": "Production & Assembly",
+    "nav.riskCompliance": "Risk & Compliance",
     "nav.campaigns": "Campaigns",
     "nav.campaignBuilder": "Campaign Builder",
     "nav.audiences": "Audiences & Segments",

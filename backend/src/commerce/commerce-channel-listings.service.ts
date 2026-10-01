@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   CommerceChannelListingStatus,
   CommerceListingDraftStatus,
+  CommerceMarketEligibilityStatus,
   IntegrationProvider,
   IntegrationStatus,
   Prisma,
@@ -236,6 +237,27 @@ export class CommerceChannelListingsService {
         'Set a positive canonical selling price in Products before syncing this listing.',
         HttpStatus.CONFLICT,
       );
+    }
+    // Risk & Compliance cascade: a human "blocked" decision for this product and market is final.
+    const market = draft.market?.trim().toUpperCase();
+    if (market && /^[A-Z]{2}$/.test(market)) {
+      const blocked =
+        await this.tenantPrisma.client.commerceMarketEligibility.findFirst({
+          where: {
+            businessId,
+            productId: draft.product.id,
+            market,
+            status: CommerceMarketEligibilityStatus.blocked,
+          },
+          select: { reason: true },
+        });
+      if (blocked) {
+        throw new AppException(
+          COMMERCE_LISTING_ERROR_CODES.INVALID_STATE,
+          `This product is blocked for ${market} in Risk & Compliance${blocked.reason ? `: ${blocked.reason}` : ''}.`,
+          HttpStatus.CONFLICT,
+        );
+      }
     }
     if (hasUnmappedVariants(draft.product.variations)) {
       throw new AppException(

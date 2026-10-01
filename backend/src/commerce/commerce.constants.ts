@@ -90,3 +90,22 @@ export const COMMERCE_PRODUCTION_ERROR_CODES = {
   INVALID_QUANTITY: 'COMMERCE_PRODUCTION_INVALID_QUANTITY',
   MATERIAL_SHORTAGE: 'COMMERCE_PRODUCTION_MATERIAL_SHORTAGE',
 } as const;
+
+export const COMMERCE_RISK_ERROR_CODES = {
+  CASE_NOT_FOUND: 'COMMERCE_RISK_CASE_NOT_FOUND',
+  INVALID_TRANSITION: 'COMMERCE_RISK_INVALID_TRANSITION',
+  REASON_REQUIRED: 'COMMERCE_RISK_REASON_REQUIRED',
+  DOCUMENT_NOT_FOUND: 'COMMERCE_COMPLIANCE_DOCUMENT_NOT_FOUND',
+  PRODUCT_NOT_FOUND: 'COMMERCE_COMPLIANCE_PRODUCT_NOT_FOUND',
+  ELIGIBILITY_NOT_FOUND: 'COMMERCE_COMPLIANCE_ELIGIBILITY_NOT_FOUND',
+} as const;
+
+/** Documented starting thresholds; each business can tune or disable them in the Rules tab. */
+export const COMMERCE_RISK_RULE_DEFAULTS = {
+  repeat_returns: { threshold: 3, windowDays: 90 },
+  over_returned_order: { threshold: 1, windowDays: 180 },
+  coupon_repeat_use: { threshold: 4, windowDays: 30 },
+} as const;
+
+/** A compliance document expiring within this many days is flagged "expiring soon". */
+export const COMMERCE_COMPLIANCE_EXPIRY_WARNING_DAYS = 30;
