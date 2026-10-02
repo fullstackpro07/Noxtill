@@ -16,6 +16,7 @@ import {
   ListingMerchantEvidenceDto,
   RegenerateCommerceListingDraftDto,
 } from './dto/commerce-listing-builder.dto';
+import { assertCommerceNotPaused } from './commerce-pause.util';
 
 export interface ListingSource {
   id: string;
@@ -332,6 +333,7 @@ export class CommerceListingBuilderService {
     actorUserId: string,
     dto: GenerateCommerceListingDraftDto,
   ) {
+    await assertCommerceNotPaused(this.tenantPrisma, businessId);
     const product = await this.tenantPrisma.client.product.findFirst({
       where: { id: dto.productId, businessId },
       select: {

@@ -2,6 +2,19 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AutonomousCommerceDashboardService } from './autonomous-commerce-dashboard.service';
 
 describe('AutonomousCommerceDashboardService', () => {
+  // Work-queue counts are covered against real MySQL in the .db.spec; these mocked tests only
+  // exercise the trailing-30-day summary maths.
+  beforeEach(() => {
+    jest
+      .spyOn(AutonomousCommerceDashboardService.prototype, 'operations')
+      .mockResolvedValue(
+        {} as Awaited<
+          ReturnType<AutonomousCommerceDashboardService['operations']>
+        >,
+      );
+  });
+  afterEach(() => jest.restoreAllMocks());
+
   it('uses canonical records and discloses missing delivery promise data', async () => {
     const orderFindMany = jest
       .fn()

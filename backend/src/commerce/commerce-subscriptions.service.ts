@@ -19,6 +19,7 @@ import type {
   ReserveCommercePreorderDto,
   SubscribeCommerceCustomerDto,
 } from './dto/commerce-subscription.dto';
+import { assertCommerceNotPaused } from './commerce-pause.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -380,6 +381,7 @@ export class CommerceSubscriptionsService {
     id: string,
     now = new Date(),
   ) {
+    await assertCommerceNotPaused(this.tenantPrisma, businessId);
     const subscription = await this.findSubscription(businessId, id);
     if (subscription.status !== CommerceSubscriptionStatus.active) {
       throw new AppException(
@@ -509,6 +511,7 @@ export class CommerceSubscriptionsService {
 
   /** Processes every due renewal one by one; a failure on one doesn't stop the others. */
   async processDueRenewals(businessId: string, actorUserId: string) {
+    await assertCommerceNotPaused(this.tenantPrisma, businessId);
     const due = await this.tenantPrisma.client.commerceSubscription.findMany({
       where: {
         businessId,

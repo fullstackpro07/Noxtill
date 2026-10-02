@@ -3,6 +3,7 @@
 import { type ReactNode } from "react";
 import { useModuleHeader } from "@/components/layout/module-header-context";
 import { ModuleTabs } from "@/components/layout/module-tabs";
+import { CommercePauseBanner } from "@/components/commerce/commerce-pause-banner";
 
 function CommerceHeader() {
   useModuleHeader({
@@ -13,5 +14,5 @@ function CommerceHeader() {
 }
 
 export default function AutonomousCommerceLayout({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-full flex-col"><CommerceHeader /><ModuleTabs moduleKey="autonomous-commerce" /><div className="flex-1">{children}</div></div>;
+  return <div className="flex min-h-full flex-col"><CommerceHeader /><ModuleTabs moduleKey="autonomous-commerce" /><CommercePauseBanner /><div className="flex-1">{children}</div></div>;
 }

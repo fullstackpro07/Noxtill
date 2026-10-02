@@ -1,9 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import {
+  CommerceB2bAccountStatus,
+  CommerceExperimentStatus,
+  CommerceListingDraftStatus,
+  CommercePreorderStatus,
+  CommerceRfqStatus,
+  CommerceRiskCaseStatus,
+  CommerceRiskSeverity,
+  CommerceStoreImpact,
+  CommerceStoreOpportunityStatus,
+  CommerceSubscriptionStatus,
   CommerceSupplierClaimStatus,
+  CommerceWorkOrderStatus,
   OrderStatus,
   ReturnStatus,
 } from '@prisma/client';
+import { commercePaused } from '../commerce/commerce-pause.util';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 
 function round2(value: number): number {
@@ -17,6 +29,123 @@ function round2(value: number): number {
 @Injectable()
 export class AutonomousCommerceDashboardService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
+
+  /** Live work-queue counts from each Autonomous Commerce screen (all canonical records). */
+  async operations(businessId: string, now = new Date()) {
+    const db = this.tenantPrisma.client;
+    const activeRisk = [
+      CommerceRiskCaseStatus.open,
+      CommerceRiskCaseStatus.investigating,
+    ];
+    const activeStore = [
+      CommerceStoreOpportunityStatus.open,
+      CommerceStoreOpportunityStatus.in_progress,
+    ];
+    const [
+      paused,
+      openRfqs,
+      listingsAwaitingApproval,
+      approvedListings,
+      openWorkOrders,
+      qualityHolds,
+      openRiskCases,
+      highRiskCases,
+      activeB2bAccounts,
+      activeSubscriptions,
+      dueRenewals,
+      reservedPreorders,
+      openStoreOpportunities,
+      highImpactStoreOpportunities,
+      runningExperiments,
+      experimentsAwaitingDecision,
+    ] = await Promise.all([
+      commercePaused(this.tenantPrisma, businessId),
+      db.commerceRfq.count({
+        where: { businessId, status: CommerceRfqStatus.open },
+      }),
+      db.commerceListingDraft.count({
+        where: {
+          businessId,
+          status: CommerceListingDraftStatus.review_required,
+        },
+      }),
+      db.commerceListingDraft.count({
+        where: { businessId, status: CommerceListingDraftStatus.approved },
+      }),
+      db.commerceWorkOrder.count({
+        where: {
+          businessId,
+          status: {
+            in: [
+              CommerceWorkOrderStatus.planned,
+              CommerceWorkOrderStatus.in_progress,
+              CommerceWorkOrderStatus.quality_hold,
+            ],
+          },
+        },
+      }),
+      db.commerceWorkOrder.count({
+        where: { businessId, status: CommerceWorkOrderStatus.quality_hold },
+      }),
+      db.commerceRiskCase.count({
+        where: { businessId, status: { in: activeRisk } },
+      }),
+      db.commerceRiskCase.count({
+        where: {
+          businessId,
+          status: { in: activeRisk },
+          severity: CommerceRiskSeverity.high,
+        },
+      }),
+      db.commerceB2bAccount.count({
+        where: { businessId, status: CommerceB2bAccountStatus.active },
+      }),
+      db.commerceSubscription.count({
+        where: { businessId, status: CommerceSubscriptionStatus.active },
+      }),
+      db.commerceSubscription.count({
+        where: {
+          businessId,
+          status: CommerceSubscriptionStatus.active,
+          nextRenewalAt: { lte: now },
+        },
+      }),
+      db.commercePreorder.count({
+        where: { businessId, status: CommercePreorderStatus.reserved },
+      }),
+      db.commerceStoreOpportunity.count({
+        where: { businessId, status: { in: activeStore } },
+      }),
+      db.commerceStoreOpportunity.count({
+        where: {
+          businessId,
+          status: { in: activeStore },
+          impact: CommerceStoreImpact.high,
+        },
+      }),
+      db.commerceExperiment.count({
+        where: { businessId, status: CommerceExperimentStatus.running },
+      }),
+      db.commerceExperiment.count({
+        where: { businessId, status: CommerceExperimentStatus.stopped },
+      }),
+    ]);
+    return {
+      paused,
+      sourcing: { openRfqs },
+      listings: { listingsAwaitingApproval, approvedDrafts: approvedListings },
+      production: { openWorkOrders, qualityHolds },
+      risk: { openRiskCases, highRiskCases },
+      b2b: { activeB2bAccounts },
+      subscriptions: { activeSubscriptions, dueRenewals, reservedPreorders },
+      growth: {
+        openStoreOpportunities,
+        highImpactStoreOpportunities,
+        runningExperiments,
+        experimentsAwaitingDecision,
+      },
+    };
+  }
 
   async summary(businessId: string) {
     const capturedAt = new Date();
@@ -127,7 +256,10 @@ export class AutonomousCommerceDashboardService {
       Number(activeClaimLoss._sum.otherLossAmount ?? 0);
     const activeRecoveryAmount = Number(activeClaimRecovery._sum.amount ?? 0);
 
+    const operations = await this.operations(businessId, capturedAt);
+
     return {
+      operations,
       period: { start: since, end: capturedAt, days: 30 },
       capturedAt,
       sales: {
@@ -204,7 +336,7 @@ export class AutonomousCommerceDashboardService {
         {
           key: 'commerce_approvals',
           reason:
-            'Autonomous Commerce agent actions are not yet registered in the shared Action Center. Pending return approvals are shown separately.',
+            'Autonomous Commerce agent actions are not yet registered in the shared Action Center. Pending return approvals and listings awaiting approval are shown separately.',
         },
         {
           key: 'supplier_dispute_rate',

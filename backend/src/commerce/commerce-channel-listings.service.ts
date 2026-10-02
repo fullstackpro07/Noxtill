@@ -12,6 +12,7 @@ import { ConnectorRegistry } from '../integrations/connector-registry';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { COMMERCE_LISTING_ERROR_CODES } from './commerce.constants';
+import { assertCommerceNotPaused } from './commerce-pause.util';
 
 type Provider =
   typeof IntegrationProvider.shopify | typeof IntegrationProvider.woocommerce;
@@ -177,6 +178,7 @@ export class CommerceChannelListingsService {
     draftId: string,
     providerValue: string,
   ) {
+    await assertCommerceNotPaused(this.tenantPrisma, businessId);
     const provider = parseProvider(providerValue);
     const draft = await this.tenantPrisma.client.commerceListingDraft.findFirst(
       {

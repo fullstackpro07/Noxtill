@@ -1,8 +1,14 @@
 import { ClsService } from 'nestjs-cls';
 import {
+  CommerceExperimentMetric,
+  CommerceExperimentStatus,
+  CommerceExperimentType,
+  CommerceStoreImpact,
+  CommerceStoreRuleKey,
   CommerceSupplierClaimSettlementType,
   CommerceSupplierClaimStatus,
 } from '@prisma/client';
+import { assertCommerceNotPaused } from '../commerce/commerce-pause.util';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,6 +31,7 @@ describe('AutonomousCommerceDashboardService (MySQL)', () => {
   let service: AutonomousCommerceDashboardService;
   let businessId: string;
   let supplierId: string;
+  let tenantPrisma: TenantPrismaService;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -38,9 +45,11 @@ describe('AutonomousCommerceDashboardService (MySQL)', () => {
     businessId = business.id;
     const cls = new FakeClsService();
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
-    service = new AutonomousCommerceDashboardService(
-      new TenantPrismaService(prisma, cls as unknown as ClsService),
+    tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
     );
+    service = new AutonomousCommerceDashboardService(tenantPrisma);
     const supplier = await prisma.supplier.create({
       data: { businessId, name: 'Dashboard claim test supplier' },
     });
@@ -52,6 +61,9 @@ describe('AutonomousCommerceDashboardService (MySQL)', () => {
   });
 
   afterAll(async () => {
+    await prisma.commerceExperiment.deleteMany({ where: { businessId } });
+    await prisma.commerceStoreOpportunity.deleteMany({ where: { businessId } });
+    await prisma.product.deleteMany({ where: { businessId } });
     await prisma.supplier.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
@@ -131,6 +143,62 @@ describe('AutonomousCommerceDashboardService (MySQL)', () => {
       recoverableValue: 135,
       agingClaims: 1,
       recoveredThisMonth: 20,
+    });
+  });
+
+  it('counts live work queues from the newer commerce screens and reports the kill switch', async () => {
+    const product = await prisma.product.create({
+      data: { businessId, name: 'Ops product', sellingPrice: 10 },
+    });
+    await prisma.commerceStoreOpportunity.create({
+      data: {
+        businessId,
+        productId: product.id,
+        ruleKey: CommerceStoreRuleKey.missing_photo,
+        dedupeKey: `missing_photo:${product.id}`,
+        title: 'Ops product has no photo',
+        impact: CommerceStoreImpact.high,
+        evidence: {},
+      },
+    });
+    await prisma.commerceExperiment.create({
+      data: {
+        businessId,
+        productId: product.id,
+        name: 'Ops test',
+        type: CommerceExperimentType.price,
+        hypothesis: 'Price matters',
+        changeDescription: 'Raise price',
+        primaryMetric: CommerceExperimentMetric.units,
+        status: CommerceExperimentStatus.running,
+        startedAt: new Date(),
+      },
+    });
+
+    const running = await service.summary(businessId);
+    expect(running.operations).toMatchObject({
+      paused: false,
+      growth: {
+        openStoreOpportunities: 1,
+        highImpactStoreOpportunities: 1,
+        runningExperiments: 1,
+        experimentsAwaitingDecision: 0,
+      },
+      subscriptions: { activeSubscriptions: 0, dueRenewals: 0 },
+    });
+    await expect(
+      assertCommerceNotPaused(tenantPrisma, businessId),
+    ).resolves.toBeUndefined();
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: { 'commerce.actionsPaused': true } },
+    });
+    expect((await service.operations(businessId)).paused).toBe(true);
+    await expect(
+      assertCommerceNotPaused(tenantPrisma, businessId),
+    ).rejects.toMatchObject({
+      response: { code: 'COMMERCE_ACTIONS_PAUSED' },
     });
   });
 });

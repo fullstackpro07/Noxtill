@@ -117,6 +117,30 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
           },
         },
         {
+          title: 'Autonomous Commerce',
+          hint: 'Kill switch',
+          rows: [
+            policyRow(d, {
+              key: 'commerce-paused',
+              policy: 'commerce.actionsPaused',
+              kind: 'toggle',
+              label: 'Pause all commerce actions',
+              description:
+                'Stops Autonomous Commerce from sending listings to sales channels, generating AI listings and running subscription renewals (which create orders). Viewing, reviewing and manual record keeping keep working.',
+              risk: 'Medium',
+              requires: CAPABILITIES.COMMERCE_MANAGE,
+              impact:
+                'While paused, subscriptions that come due stay due — none are skipped or lost, and they can be renewed after you resume.',
+              link: {
+                label: 'Open Autonomous Commerce',
+                href: '/autonomous-commerce/product-radar',
+              },
+              on: { text: 'Paused', tone: 'red' },
+              off: { text: 'Running', tone: 'green' },
+            }),
+          ],
+        },
+        {
           title: 'Safety',
           hint: 'Fixed behaviour',
           rows: [

@@ -3,12 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle, Boxes, ClipboardCheck, ShieldAlert, ShoppingBag, Truck, type LucideIcon } from "lucide-react";
-import { fetchAutonomousCommerceSummary } from "@/lib/autonomous-commerce-api";
+import { AUTONOMOUS_COMMERCE_SUMMARY_KEY, fetchAutonomousCommerceSummary, type CommerceOperations } from "@/lib/autonomous-commerce-api";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 export function AutonomousCommerceCard() {
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ["autonomous-commerce-summary"],
+    queryKey: AUTONOMOUS_COMMERCE_SUMMARY_KEY,
     queryFn: fetchAutonomousCommerceSummary,
     staleTime: 60_000,
   });
@@ -17,7 +17,12 @@ export function AutonomousCommerceCard() {
     <section className="rounded-[14px] p-[18px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-bold" style={{ color: "var(--app-text)" }}>Autonomous Commerce</h2>
+          <h2 className="flex items-center gap-2 text-[15px] font-bold" style={{ color: "var(--app-text)" }}>
+            Autonomous Commerce
+            {data?.operations.paused && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ background: "var(--app-danger-strong)" }}>Actions paused</span>
+            )}
+          </h2>
           <p className="mt-1 text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>Live summary from canonical orders inventory delivery and supplier-claim records</p>
         </div>
         <div className="flex items-center gap-3">
@@ -54,6 +59,8 @@ export function AutonomousCommerceCard() {
               <Link href="/autonomous-commerce/supplier-claims" className="flex min-h-[90px] items-center justify-center gap-1.5 rounded-[11px] p-3 text-center text-[11px] font-bold" style={{ background: "var(--app-success-bg)", color: "var(--app-success-text)" }}>Review supplier claims <ClipboardCheck className="h-3.5 w-3.5" aria-hidden /></Link>
             </div>
           </div>
+
+          <WorkQueues ops={data.operations} />
 
           {data.fulfillment.missingPromiseTime > 0 && (
             <p className="mt-3 flex items-start gap-1.5 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
@@ -100,6 +107,37 @@ function Metric({
       </div>
       <div className="mt-2 truncate text-[19px] font-extrabold tabular-nums" style={{ color: tone === "warning" ? "var(--app-warning-text)" : "var(--app-text)" }}>{value}</div>
       <div className="mt-1 truncate text-[10px]" style={{ color: "var(--app-text-disabled)" }}>{detail}</div>
+    </div>
+  );
+}
+
+/** Open work on each Commerce screen, linking straight to where it is handled. */
+function WorkQueues({ ops }: { ops: CommerceOperations }) {
+  const rows: { label: string; value: number; detail: string; href: string; warn?: boolean }[] = [
+    { label: "Open RFQs", value: ops.sourcing.openRfqs, detail: "Waiting on supplier quotes", href: "/autonomous-commerce/rfqs" },
+    { label: "Listings to approve", value: ops.listings.listingsAwaitingApproval, detail: `${ops.listings.approvedDrafts} approved drafts`, href: "/autonomous-commerce/listing-builder", warn: ops.listings.listingsAwaitingApproval > 0 },
+    { label: "Open work orders", value: ops.production.openWorkOrders, detail: `${ops.production.qualityHolds} on quality hold`, href: "/autonomous-commerce/production", warn: ops.production.qualityHolds > 0 },
+    { label: "Open risk cases", value: ops.risk.openRiskCases, detail: `${ops.risk.highRiskCases} high severity`, href: "/autonomous-commerce/risk-compliance", warn: ops.risk.highRiskCases > 0 },
+    { label: "Active B2B accounts", value: ops.b2b.activeB2bAccounts, detail: "Wholesale customers", href: "/autonomous-commerce/b2b" },
+    { label: "Renewals due", value: ops.subscriptions.dueRenewals, detail: `${ops.subscriptions.activeSubscriptions} active · ${ops.subscriptions.reservedPreorders} pre-orders reserved`, href: "/autonomous-commerce/subscriptions-preorders", warn: ops.subscriptions.dueRenewals > 0 },
+    { label: "Store fixes open", value: ops.growth.openStoreOpportunities, detail: `${ops.growth.highImpactStoreOpportunities} high impact`, href: "/autonomous-commerce/store-optimizer", warn: ops.growth.highImpactStoreOpportunities > 0 },
+    { label: "Experiments running", value: ops.growth.runningExperiments, detail: `${ops.growth.experimentsAwaitingDecision} awaiting a decision`, href: "/autonomous-commerce/experiment-lab", warn: ops.growth.experimentsAwaitingDecision > 0 },
+  ];
+  return (
+    <div className="mt-3 rounded-[11px] border p-3" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-[11.5px] font-bold" style={{ color: "var(--app-text)" }}>Work queues</h3>
+        <span className="text-[10px]" style={{ color: "var(--app-text-disabled)" }}>Live counts · click to open</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {rows.map((row) => (
+          <Link key={row.label} href={row.href} className="min-w-0 rounded-[11px] p-3" style={{ background: "var(--app-surface-2)" }}>
+            <div className="truncate text-[10.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{row.label}</div>
+            <div className="mt-1.5 text-[19px] font-extrabold tabular-nums" style={{ color: row.warn ? "var(--app-warning-text)" : "var(--app-text)" }}>{row.value}</div>
+            <div className="mt-1 truncate text-[10px]" style={{ color: "var(--app-text-disabled)" }}>{row.detail}</div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

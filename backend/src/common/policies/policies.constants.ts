@@ -24,6 +24,8 @@ export const POLICY_DEFS = {
     max: 100,
   },
   'sales.restrictPriceOverride': { kind: 'boolean', default: false },
+  // commerce/commerce-pause.util.ts (channel sync, AI listing generation, subscription renewals)
+  'commerce.actionsPaused': { kind: 'boolean', default: false },
   'sales.requireCustomer': { kind: 'boolean', default: false },
   'sales.allowNegativeStock': { kind: 'boolean', default: false },
   // orders/tables/quotations/public-ordering (computeOrderTotals) and report reconciliation

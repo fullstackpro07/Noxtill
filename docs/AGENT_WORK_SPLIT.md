@@ -186,3 +186,12 @@ screens, then Automations gaps. Local commits only, never push.
   prefix still wins, so module-only features under a shared root (e.g. ai/what-if) stay gated.
   Settings → Modules copy now says exactly that. Guard spec covers Fast Sale's real API roots.
   jest --maxWorkers=3: 314/314 suites, 2050/2050 tests (incl. Codex's PDF-test timeout bumps).
+- item 2 ✅ Commerce dashboard coverage + kill switch. Dashboard summary gains `operations`: live counts
+  from every newer screen (open RFQs, listings to approve, work orders/quality holds, risk cases, B2B
+  accounts, due renewals/pre-orders, store fixes, experiments) shown as a linked "Work queues" panel
+  on the dashboard card. Kill switch = owner-tunable policy `commerce.actionsPaused` (Settings →
+  Automations → Autonomous Commerce, requires commerce.manage, history via the hub) enforced by
+  `assertCommerceNotPaused` (HTTP 423, COMMERCE_ACTIONS_PAUSED) in channel sync, AI listing generation
+  and subscription renewals; reading and manual record keeping keep working. Commerce pages show a
+  Pause/Resume banner that saves through the same Settings API. No migration (policies JSON column).
+  jest --maxWorkers=3: 314/314 suites, 2051/2051 tests.
