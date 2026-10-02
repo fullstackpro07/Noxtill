@@ -10,8 +10,9 @@ function hasRank(
 
 /**
  * Read model for SEO Autopilot's overview. It intentionally derives only from canonical tracked
- * keyword snapshots already collected by the rank worker. Crawl, backlink and provider-volume
- * metrics are explicitly unavailable until corresponding verified sources exist.
+ * keyword snapshots already collected by the rank worker. Crawl, provider-volume and provider-wide
+ * backlink metrics are explicitly unavailable until corresponding verified sources exist. Manually
+ * entered backlink evidence is handled separately by Off-Page SEO.
  */
 @Injectable()
 export class SeoAutopilotService {
@@ -99,7 +100,7 @@ export class SeoAutopilotService {
         {
           key: 'backlinks',
           reason:
-            'No verified backlink source is configured for this business.',
+            'No backlink provider is configured. Manually entered link evidence is available in Off-Page SEO; provider-wide authority metrics are not tracked.',
         },
       ],
     };

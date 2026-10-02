@@ -918,6 +918,9 @@ model Business {
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
   seoAuditIssueAudits          SeoAuditIssueAudit[]
+  seoOffPageLinks              SeoOffPageLink[]
+  seoOffPageOpportunities      SeoOffPageOpportunity[]
+  seoOffPageAudits             SeoOffPageAudit[]
   contentItems                 ContentItem[]
   staffShifts                  StaffShift[]
   timeOff                      TimeOff[]
@@ -7283,4 +7286,82 @@ model SeoContentDismissal {
 
   @@unique([businessId, keywordId, kind], map: "seo_content_dismissals_business_keyword_kind_key")
   @@map("seo_content_dismissals")
+}
+
+/// Merchant-entered backlink observation. No backlink provider is configured, so these records
+/// are evidence supplied by the merchant and are never presented as a provider-wide profile.
+model SeoOffPageLink {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  relationshipKey   String   @map("relationship_key") @db.Char(64)
+  sourceDomain      String   @map("source_domain") @db.VarChar(253)
+  sourceUrl         String   @map("source_url") @db.VarChar(2048)
+  targetUrl         String   @map("target_url") @db.VarChar(2048)
+  anchorText        String?  @map("anchor_text") @db.Text
+  linkType          String   @default("unknown") @map("link_type") @db.VarChar(32)
+  status            String   @default("active") @db.VarChar(24)
+  firstSeenAt       DateTime? @map("first_seen_at")
+  lastSeenAt        DateTime? @map("last_seen_at")
+  evidenceNote      String   @map("evidence_note") @db.Text
+  relevanceNote     String?  @map("relevance_note") @db.Text
+  qualityNote       String?  @map("quality_note") @db.Text
+  riskNote          String?  @map("risk_note") @db.Text
+  sourceName        String   @default("merchant-entered") @map("source_name") @db.VarChar(64)
+  tracked           Boolean  @default(true)
+  createdByUserId   String?  @map("created_by_user_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, relationshipKey], map: "seo_off_page_links_business_relationship_key")
+  @@index([businessId, status, createdAt], map: "seo_off_page_links_business_status_created_idx")
+  @@index([businessId, lastSeenAt], map: "seo_off_page_links_business_last_seen_idx")
+  @@map("seo_off_page_links")
+}
+
+/// Manually researched prospect for a link opportunity. Quality and risk are merchant-recorded
+/// evidence, not a vendor authority score or an automatic legal/reputation classification.
+model SeoOffPageOpportunity {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  opportunityKey    String   @map("opportunity_key") @db.Char(64)
+  kind              String   @db.VarChar(32)
+  title             String   @db.VarChar(191)
+  prospectUrl       String   @map("prospect_url") @db.VarChar(2048)
+  targetUrl         String?  @map("target_url") @db.VarChar(2048)
+  evidenceNote      String   @map("evidence_note") @db.Text
+  relevanceNote     String   @map("relevance_note") @db.Text
+  qualityNote       String?  @map("quality_note") @db.Text
+  riskNote          String?  @map("risk_note") @db.Text
+  status            String   @default("open") @db.VarChar(24)
+  pipeline          String   @default("unassigned") @db.VarChar(24)
+  tracked           Boolean  @default(true)
+  dismissReason     String?  @map("dismiss_reason") @db.Text
+  createdByUserId   String?  @map("created_by_user_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, opportunityKey], map: "seo_off_page_opps_business_key_key")
+  @@index([businessId, status, kind], map: "seo_off_page_opps_business_status_kind_idx")
+  @@index([businessId, pipeline, status], map: "seo_off_page_opps_business_pipeline_status_idx")
+  @@map("seo_off_page_opportunities")
+}
+
+/// Append-only audit trail for backlink and prospect decisions.
+model SeoOffPageAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  entityType  String   @map("entity_type") @db.VarChar(24)
+  entityId    String   @map("entity_id")
+  action      String   @db.VarChar(48)
+  reason      String?  @db.Text
+  beforeState Json?    @map("before_state")
+  afterState  Json?    @map("after_state")
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, entityType, entityId, createdAt], map: "seo_off_page_audits_entity_created_idx")
+  @@map("seo_off_page_audits")
 }

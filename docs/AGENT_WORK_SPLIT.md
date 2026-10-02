@@ -239,3 +239,15 @@ screens, then Automations gaps. Local commits only, never push.
   `tsc --noEmit`, touched-file ESLint, full backend Jest (`--maxWorkers=2`: 318/318 suites,
   2062/2062 tests), and fabrication grep passed. Signed in to the local app and visually verified the
   rendered page; frontend route and API data loaded successfully.
+- item 7 ✅ SEO Off-Page (screen 8, /marketing/seo-autopilot/off-page). Added tenant-scoped manual
+  backlink observations, prospect records, and append-only decision audits; normalized URLs and
+  deduplication, lost/dismiss decisions requiring reasons, tracking state, and routing prospects to
+  Guest Posting or Link Building. Referring-domain/new/lost/risk-note figures are computed only from
+  merchant-entered records. No backlink or authority provider exists: provider-wide backlink data and
+  authority trend show “Not configured” / “Not tracked”; opportunity scoring shows “Not assessed”.
+  Verified no fabricated metrics. Migration 20261002160000 kept exactly 6 table/FK statements, applied
+  locally, with all 3 business FKs verified in information_schema; migration status is up to date.
+  Real-MySQL spec: 2/2; backend/frontend `tsc --noEmit`, touched-file ESLint, `npm run build`, and
+  full backend Jest (`--maxWorkers=2`: 319/319 suites, 2064/2064 tests) passed. Signed in to the local
+  app and visually verified the page and live API data. Stale overview copy now points to the manual
+  Off-Page evidence rather than implying provider data is available.

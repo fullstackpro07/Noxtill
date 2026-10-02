@@ -275,3 +275,154 @@ export function createSeoLocalPageBrief(locationId: string): Promise<{ id: strin
     { method: "POST" },
   );
 }
+
+export type SeoOffPageKind =
+  "competitor" | "resource" | "unlinked_mention" | "digital_pr" | "broken_link";
+export type SeoOffPageLinkStatus = "active" | "lost" | "unverified";
+export type SeoOffPagePipeline =
+  "unassigned" | "guest_posting" | "link_building";
+
+export interface SeoOffPageLink {
+  id: string;
+  sourceDomain: string;
+  sourceUrl: string;
+  targetUrl: string;
+  anchorText: string | null;
+  linkType: string;
+  status: SeoOffPageLinkStatus;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  evidenceNote: string;
+  relevanceNote: string | null;
+  qualityNote: string | null;
+  riskNote: string | null;
+  sourceName: string;
+  tracked: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeoOffPageOpportunity {
+  id: string;
+  kind: SeoOffPageKind;
+  title: string;
+  prospectUrl: string;
+  targetUrl: string | null;
+  evidenceNote: string;
+  relevanceNote: string;
+  qualityNote: string | null;
+  riskNote: string | null;
+  status: "open" | "dismissed";
+  pipeline: SeoOffPagePipeline;
+  tracked: boolean;
+  dismissReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeoOffPageAudit {
+  id: string;
+  entityType: "link" | "opportunity";
+  entityId: string;
+  action: string;
+  reason: string | null;
+  actorUserId: string | null;
+  createdAt: string;
+}
+
+export interface SeoOffPageOverview {
+  generatedAt: string;
+  summary: {
+    referringDomains: number;
+    newLinks: number;
+    lostLinks: number;
+    openOpportunities: number;
+    linksWithRiskNotes: number;
+    highValueOpportunities: null;
+    authorityTrend: null;
+    windowSince: string;
+  };
+  links: SeoOffPageLink[];
+  opportunities: SeoOffPageOpportunity[];
+  audits: SeoOffPageAudit[];
+  disclosures: {
+    provider: "Not configured";
+    backlinkData: string;
+    authority: string;
+    quality: string;
+    newLost: string;
+  };
+}
+
+export function fetchSeoOffPageOverview(): Promise<SeoOffPageOverview> {
+  return apiFetch<SeoOffPageOverview>("/seo-autopilot/off-page");
+}
+
+export function createSeoOffPageLink(
+  input: Partial<
+    Omit<
+      SeoOffPageLink,
+      | "id"
+      | "sourceDomain"
+      | "sourceName"
+      | "tracked"
+      | "createdAt"
+      | "updatedAt"
+    >
+  > &
+    Pick<SeoOffPageLink, "sourceUrl" | "targetUrl" | "evidenceNote">,
+): Promise<SeoOffPageLink> {
+  return apiFetch<SeoOffPageLink>("/seo-autopilot/off-page/links", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateSeoOffPageLink(
+  id: string,
+  input: { status?: SeoOffPageLinkStatus; tracked?: boolean; reason?: string },
+): Promise<SeoOffPageLink> {
+  return apiFetch<SeoOffPageLink>(
+    `/seo-autopilot/off-page/links/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function createSeoOffPageOpportunity(
+  input: Pick<
+    SeoOffPageOpportunity,
+    "kind" | "title" | "prospectUrl" | "evidenceNote" | "relevanceNote"
+  > &
+    Partial<
+      Pick<SeoOffPageOpportunity, "targetUrl" | "qualityNote" | "riskNote">
+    >,
+): Promise<SeoOffPageOpportunity> {
+  return apiFetch<SeoOffPageOpportunity>(
+    "/seo-autopilot/off-page/opportunities",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateSeoOffPageOpportunity(
+  id: string,
+  input: {
+    pipeline?: SeoOffPagePipeline;
+    status?: "open" | "dismissed";
+    tracked?: boolean;
+    reason?: string;
+  },
+): Promise<SeoOffPageOpportunity> {
+  return apiFetch<SeoOffPageOpportunity>(
+    `/seo-autopilot/off-page/opportunities/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}

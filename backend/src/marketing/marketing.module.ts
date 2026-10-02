@@ -52,6 +52,8 @@ import { SeoTechnicalController } from './seo-technical.controller';
 import { SeoTechnicalService } from './seo-technical.service';
 import { SeoContentController } from './seo-content.controller';
 import { SeoContentService } from './seo-content.service';
+import { SeoOffPageController } from './seo-off-page.controller';
+import { SeoOffPageService } from './seo-off-page.service';
 import { SeoLocalController } from './seo-local.controller';
 import { SeoLocalService } from './seo-local.service';
 import { SeoSiteAuditCrawler } from './seo-site-audit.crawler';
@@ -94,6 +96,7 @@ import { ActivityModule } from '../activity/activity.module';
     SeoOnPageController,
     SeoTechnicalController,
     SeoContentController,
+    SeoOffPageController,
     SeoLocalController,
   ],
   providers: [
@@ -124,6 +127,7 @@ import { ActivityModule } from '../activity/activity.module';
     SeoOnPageService,
     SeoTechnicalService,
     SeoContentService,
+    SeoOffPageService,
     SeoLocalService,
     SeoAuditIssuesService,
     SeoAuditScheduleService,

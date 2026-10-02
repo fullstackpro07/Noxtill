@@ -175,7 +175,8 @@ export function SeoAutopilotView() {
             >
               Track provider-reported keyword readings and run an
               evidence-based crawl of your configured website. Search-volume
-              and backlink figures are not estimated.
+              and provider-wide backlink figures are not estimated; manually
+              entered backlink evidence is available in Off-Page SEO.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -716,8 +717,9 @@ export function SeoAutopilotView() {
               Trend interest is a relative 0–100 Google Trends index, not
               monthly search volume. Position movement compares the two latest
               saved checks. Website audit findings are direct crawl
-              observations; backlink data is unavailable until a verified source
-              is configured.
+              observations; provider-wide backlink metrics are not tracked until
+              a verified source is configured. Manually entered evidence is in
+              Off-Page SEO.
             </p>
           </>
         )}
