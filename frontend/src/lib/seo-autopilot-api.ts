@@ -269,7 +269,9 @@ export function fetchSeoLocalOverview(): Promise<SeoLocalOverview> {
   return apiFetch<SeoLocalOverview>("/seo-autopilot/local/overview");
 }
 
-export function createSeoLocalPageBrief(locationId: string): Promise<{ id: string; topic: string }> {
+export function createSeoLocalPageBrief(
+  locationId: string,
+): Promise<{ id: string; topic: string }> {
   return apiFetch<{ id: string; topic: string }>(
     `/seo-autopilot/local/locations/${encodeURIComponent(locationId)}/local-page-brief`,
     { method: "POST" },
@@ -424,5 +426,316 @@ export function updateSeoOffPageOpportunity(
       method: "PATCH",
       body: JSON.stringify(input),
     },
+  );
+}
+
+export type SeoGuestPublicationStatus =
+  "prospect" | "qualified" | "disqualified";
+export type SeoGuestPitchStage =
+  | "topic_idea"
+  | "pitch_draft"
+  | "approval_required"
+  | "approved"
+  | "sent"
+  | "response_received"
+  | "accepted"
+  | "declined"
+  | "article_draft"
+  | "article_approval_required"
+  | "article_approved"
+  | "published"
+  | "verified";
+
+export interface SeoGuestPublication {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  topicNiches: string[];
+  market: string | null;
+  relevanceEvidence: string;
+  qualityEvidence: string;
+  guestPolicyUrl: string | null;
+  guestPolicyStatus: "accepting" | "not_accepting" | "unknown";
+  contactName: string | null;
+  contactEmail: string | null;
+  contactSource: string | null;
+  status: SeoGuestPublicationStatus;
+  sourceName: string;
+  lastReviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeoGuestPitch {
+  id: string;
+  publicationId: string;
+  topicIdea: string;
+  pitchSubject: string | null;
+  pitchBody: string | null;
+  sourceNotes: string | null;
+  draftSource: string;
+  articleTitle: string | null;
+  articleBody: string | null;
+  stage: SeoGuestPitchStage;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  decidedByUserId: string | null;
+  decisionNote: string | null;
+  outreachSentAt: string | null;
+  outreachSendMode: string | null;
+  responseAt: string | null;
+  responseStatus: "accepted" | "declined" | "revision_requested" | null;
+  responseNote: string | null;
+  publishedUrl: string | null;
+  publishedAt: string | null;
+  placementAnchor: string | null;
+  placementTargetUrl: string | null;
+  placementEvidence: string | null;
+  placementVerifiedAt: string | null;
+  placementVerifiedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publication: {
+    id: string;
+    name: string;
+    websiteUrl: string;
+    market: string | null;
+  };
+}
+
+export interface SeoGuestPostingAudit {
+  id: string;
+  entityType: "publication" | "pitch";
+  entityId: string;
+  action: string;
+  reason: string | null;
+  actorUserId: string | null;
+  createdAt: string;
+}
+
+export interface SeoGuestPostingOverview {
+  generatedAt: string;
+  summary: {
+    qualifiedPublications: number;
+    pitchesDrafted: number;
+    waitingApproval: number;
+    responses: number;
+    accepted: number;
+    publishedVerified: number;
+    publicationProspects: number;
+  };
+  publications: SeoGuestPublication[];
+  pitches: SeoGuestPitch[];
+  audits: SeoGuestPostingAudit[];
+  disclosures: {
+    discovery: string;
+    outreach: string;
+    responses: string;
+    placements: string;
+  };
+}
+
+export function fetchSeoGuestPostingOverview(): Promise<SeoGuestPostingOverview> {
+  return apiFetch<SeoGuestPostingOverview>("/seo-autopilot/guest-posting");
+}
+
+export function createSeoGuestPublication(input: {
+  name: string;
+  websiteUrl: string;
+  topicNiches: string[];
+  market?: string;
+  relevanceEvidence: string;
+  qualityEvidence: string;
+  guestPolicyUrl?: string;
+  guestPolicyStatus?: "accepting" | "not_accepting" | "unknown";
+  contactName?: string;
+  contactEmail?: string;
+  contactSource?: string;
+}): Promise<SeoGuestPublication> {
+  return apiFetch<SeoGuestPublication>(
+    "/seo-autopilot/guest-posting/publications",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateSeoGuestPublication(
+  id: string,
+  input: Partial<{
+    name: string;
+    websiteUrl: string;
+    topicNiches: string[];
+    market: string | null;
+    relevanceEvidence: string;
+    qualityEvidence: string;
+    guestPolicyUrl: string | null;
+    guestPolicyStatus: "accepting" | "not_accepting" | "unknown";
+    contactName: string | null;
+    contactEmail: string | null;
+    contactSource: string | null;
+  }>,
+): Promise<SeoGuestPublication> {
+  return apiFetch<SeoGuestPublication>(
+    `/seo-autopilot/guest-posting/publications/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function qualifySeoGuestPublication(
+  id: string,
+  input: { status: "qualified" | "disqualified"; reason?: string },
+): Promise<SeoGuestPublication> {
+  return apiFetch<SeoGuestPublication>(
+    `/seo-autopilot/guest-posting/publications/${encodeURIComponent(id)}/qualification`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function createSeoGuestTopicIdea(
+  publicationId: string,
+  input: { topicIdea: string; sourceNotes?: string },
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/publications/${encodeURIComponent(publicationId)}/topic-ideas`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function generateSeoGuestTopicIdeas(
+  publicationId: string,
+  sourceNotes: string,
+): Promise<SeoGuestPitch[]> {
+  return apiFetch<SeoGuestPitch[]>(
+    `/seo-autopilot/guest-posting/publications/${encodeURIComponent(publicationId)}/generate-topic-ideas`,
+    { method: "POST", body: JSON.stringify({ sourceNotes }) },
+  );
+}
+
+export function updateSeoGuestPitch(
+  id: string,
+  input: Partial<{
+    topicIdea: string;
+    pitchSubject: string | null;
+    pitchBody: string | null;
+    sourceNotes: string | null;
+  }>,
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function generateSeoGuestPitch(
+  id: string,
+  sourceNotes?: string,
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/generate-pitch`,
+    { method: "POST", body: JSON.stringify({ sourceNotes }) },
+  );
+}
+
+export function submitSeoGuestPitch(id: string): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/submit`,
+    { method: "POST" },
+  );
+}
+
+export function decideSeoGuestPitch(
+  id: string,
+  input: { decision: "approve" | "reject"; reason?: string },
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/decision`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function recordSeoGuestOutreachSent(
+  id: string,
+  note: string,
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/record-sent`,
+    { method: "POST", body: JSON.stringify({ note }) },
+  );
+}
+
+export function recordSeoGuestResponse(
+  id: string,
+  input: {
+    status: "accepted" | "declined" | "revision_requested";
+    note: string;
+  },
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/response`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function createSeoGuestArticleDraft(
+  id: string,
+  input: { articleTitle: string; articleBody: string; sourceNotes?: string },
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/article`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function generateSeoGuestArticle(
+  id: string,
+  sourceNotes?: string,
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/generate-article`,
+    { method: "POST", body: JSON.stringify({ sourceNotes }) },
+  );
+}
+
+export function submitSeoGuestArticle(id: string): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/article/submit`,
+    { method: "POST" },
+  );
+}
+
+export function decideSeoGuestArticle(
+  id: string,
+  input: { decision: "approve" | "reject"; reason?: string },
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/article/decision`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function recordSeoGuestPublished(
+  id: string,
+  input: {
+    publishedUrl: string;
+    placementTargetUrl?: string;
+    placementAnchor?: string;
+    placementEvidence: string;
+  },
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/published`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function verifySeoGuestPlacement(
+  id: string,
+  confirmation: string,
+): Promise<SeoGuestPitch> {
+  return apiFetch<SeoGuestPitch>(
+    `/seo-autopilot/guest-posting/pitches/${encodeURIComponent(id)}/verify`,
+    { method: "POST", body: JSON.stringify({ confirmation }) },
   );
 }

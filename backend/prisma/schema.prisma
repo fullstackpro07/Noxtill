@@ -921,6 +921,9 @@ model Business {
   seoOffPageLinks              SeoOffPageLink[]
   seoOffPageOpportunities      SeoOffPageOpportunity[]
   seoOffPageAudits             SeoOffPageAudit[]
+  seoGuestPublications         SeoGuestPublication[]
+  seoGuestPitches              SeoGuestPitch[]
+  seoGuestPostingAudits        SeoGuestPostingAudit[]
   contentItems                 ContentItem[]
   staffShifts                  StaffShift[]
   timeOff                      TimeOff[]
@@ -7291,27 +7294,27 @@ model SeoContentDismissal {
 /// Merchant-entered backlink observation. No backlink provider is configured, so these records
 /// are evidence supplied by the merchant and are never presented as a provider-wide profile.
 model SeoOffPageLink {
-  id                String   @id @default(uuid())
-  businessId        String   @map("business_id")
-  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  relationshipKey   String   @map("relationship_key") @db.Char(64)
-  sourceDomain      String   @map("source_domain") @db.VarChar(253)
-  sourceUrl         String   @map("source_url") @db.VarChar(2048)
-  targetUrl         String   @map("target_url") @db.VarChar(2048)
-  anchorText        String?  @map("anchor_text") @db.Text
-  linkType          String   @default("unknown") @map("link_type") @db.VarChar(32)
-  status            String   @default("active") @db.VarChar(24)
-  firstSeenAt       DateTime? @map("first_seen_at")
-  lastSeenAt        DateTime? @map("last_seen_at")
-  evidenceNote      String   @map("evidence_note") @db.Text
-  relevanceNote     String?  @map("relevance_note") @db.Text
-  qualityNote       String?  @map("quality_note") @db.Text
-  riskNote          String?  @map("risk_note") @db.Text
-  sourceName        String   @default("merchant-entered") @map("source_name") @db.VarChar(64)
-  tracked           Boolean  @default(true)
-  createdByUserId   String?  @map("created_by_user_id")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  relationshipKey String    @map("relationship_key") @db.Char(64)
+  sourceDomain    String    @map("source_domain") @db.VarChar(253)
+  sourceUrl       String    @map("source_url") @db.VarChar(2048)
+  targetUrl       String    @map("target_url") @db.VarChar(2048)
+  anchorText      String?   @map("anchor_text") @db.Text
+  linkType        String    @default("unknown") @map("link_type") @db.VarChar(32)
+  status          String    @default("active") @db.VarChar(24)
+  firstSeenAt     DateTime? @map("first_seen_at")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  evidenceNote    String    @map("evidence_note") @db.Text
+  relevanceNote   String?   @map("relevance_note") @db.Text
+  qualityNote     String?   @map("quality_note") @db.Text
+  riskNote        String?   @map("risk_note") @db.Text
+  sourceName      String    @default("merchant-entered") @map("source_name") @db.VarChar(64)
+  tracked         Boolean   @default(true)
+  createdByUserId String?   @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@unique([businessId, relationshipKey], map: "seo_off_page_links_business_relationship_key")
   @@index([businessId, status, createdAt], map: "seo_off_page_links_business_status_created_idx")
@@ -7322,25 +7325,25 @@ model SeoOffPageLink {
 /// Manually researched prospect for a link opportunity. Quality and risk are merchant-recorded
 /// evidence, not a vendor authority score or an automatic legal/reputation classification.
 model SeoOffPageOpportunity {
-  id                String   @id @default(uuid())
-  businessId        String   @map("business_id")
-  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  opportunityKey    String   @map("opportunity_key") @db.Char(64)
-  kind              String   @db.VarChar(32)
-  title             String   @db.VarChar(191)
-  prospectUrl       String   @map("prospect_url") @db.VarChar(2048)
-  targetUrl         String?  @map("target_url") @db.VarChar(2048)
-  evidenceNote      String   @map("evidence_note") @db.Text
-  relevanceNote     String   @map("relevance_note") @db.Text
-  qualityNote       String?  @map("quality_note") @db.Text
-  riskNote          String?  @map("risk_note") @db.Text
-  status            String   @default("open") @db.VarChar(24)
-  pipeline          String   @default("unassigned") @db.VarChar(24)
-  tracked           Boolean  @default(true)
-  dismissReason     String?  @map("dismiss_reason") @db.Text
-  createdByUserId   String?  @map("created_by_user_id")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  businessId      String   @map("business_id")
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  opportunityKey  String   @map("opportunity_key") @db.Char(64)
+  kind            String   @db.VarChar(32)
+  title           String   @db.VarChar(191)
+  prospectUrl     String   @map("prospect_url") @db.VarChar(2048)
+  targetUrl       String?  @map("target_url") @db.VarChar(2048)
+  evidenceNote    String   @map("evidence_note") @db.Text
+  relevanceNote   String   @map("relevance_note") @db.Text
+  qualityNote     String?  @map("quality_note") @db.Text
+  riskNote        String?  @map("risk_note") @db.Text
+  status          String   @default("open") @db.VarChar(24)
+  pipeline        String   @default("unassigned") @db.VarChar(24)
+  tracked         Boolean  @default(true)
+  dismissReason   String?  @map("dismiss_reason") @db.Text
+  createdByUserId String?  @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@unique([businessId, opportunityKey], map: "seo_off_page_opps_business_key_key")
   @@index([businessId, status, kind], map: "seo_off_page_opps_business_status_kind_idx")
@@ -7364,4 +7367,92 @@ model SeoOffPageAudit {
 
   @@index([businessId, entityType, entityId, createdAt], map: "seo_off_page_audits_entity_created_idx")
   @@map("seo_off_page_audits")
+}
+
+/// Publication prospect and evidence supplied by the merchant; discovery is not provider-backed.
+model SeoGuestPublication {
+  id                String          @id @default(uuid())
+  businessId        String          @map("business_id")
+  business          Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  publicationKey    String          @map("publication_key") @db.Char(64)
+  name              String          @db.VarChar(191)
+  websiteUrl        String          @map("website_url") @db.VarChar(2048)
+  topicNiches       Json            @map("topic_niches")
+  market            String?         @db.VarChar(96)
+  relevanceEvidence String          @map("relevance_evidence") @db.Text
+  qualityEvidence   String          @map("quality_evidence") @db.Text
+  guestPolicyUrl    String?         @map("guest_policy_url") @db.VarChar(2048)
+  guestPolicyStatus String          @default("unknown") @map("guest_policy_status") @db.VarChar(32)
+  contactName       String?         @map("contact_name") @db.VarChar(191)
+  contactEmail      String?         @map("contact_email") @db.VarChar(191)
+  contactSource     String?         @map("contact_source") @db.Text
+  status            String          @default("prospect") @db.VarChar(24)
+  sourceName        String          @default("merchant_entered") @map("source_name") @db.VarChar(32)
+  lastReviewedAt    DateTime?       @map("last_reviewed_at")
+  createdByUserId   String?         @map("created_by_user_id")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  pitches           SeoGuestPitch[]
+
+  @@unique([businessId, publicationKey], map: "seo_guest_publications_business_key_key")
+  @@index([businessId, status, updatedAt], map: "seo_guest_publications_business_status_updated_idx")
+  @@map("seo_guest_publications")
+}
+
+/// Outreach and article workflow; external delivery/publication is confirmed by the merchant.
+model SeoGuestPitch {
+  id                        String              @id @default(uuid())
+  businessId                String              @map("business_id")
+  business                  Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  publicationId             String              @map("publication_id")
+  publication               SeoGuestPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  topicIdea                 String              @map("topic_idea") @db.VarChar(300)
+  pitchSubject              String?             @map("pitch_subject") @db.VarChar(300)
+  pitchBody                 String?             @map("pitch_body") @db.Text
+  sourceNotes               String?             @map("source_notes") @db.Text
+  draftSource               String              @default("manual") @map("draft_source") @db.VarChar(24)
+  articleTitle              String?             @map("article_title") @db.VarChar(300)
+  articleBody               String?             @map("article_body") @db.MediumText
+  stage                     String              @default("topic_idea") @db.VarChar(48)
+  submittedAt               DateTime?           @map("submitted_at")
+  decidedAt                 DateTime?           @map("decided_at")
+  decidedByUserId           String?             @map("decided_by_user_id")
+  decisionNote              String?             @map("decision_note") @db.Text
+  outreachSentAt            DateTime?           @map("outreach_sent_at")
+  outreachSendMode          String?             @map("outreach_send_mode") @db.VarChar(24)
+  responseAt                DateTime?           @map("response_at")
+  responseStatus            String?             @map("response_status") @db.VarChar(32)
+  responseNote              String?             @map("response_note") @db.Text
+  publishedUrl              String?             @map("published_url") @db.VarChar(2048)
+  publishedAt               DateTime?           @map("published_at")
+  placementAnchor           String?             @map("placement_anchor") @db.VarChar(1000)
+  placementTargetUrl        String?             @map("placement_target_url") @db.VarChar(2048)
+  placementEvidence         String?             @map("placement_evidence") @db.Text
+  placementVerifiedAt       DateTime?           @map("placement_verified_at")
+  placementVerifiedByUserId String?             @map("placement_verified_by_user_id")
+  createdByUserId           String?             @map("created_by_user_id")
+  createdAt                 DateTime            @default(now()) @map("created_at")
+  updatedAt                 DateTime            @updatedAt @map("updated_at")
+
+  @@index([businessId, stage, updatedAt], map: "seo_guest_pitches_business_stage_updated_idx")
+  @@index([businessId, publicationId, stage], map: "seo_guest_pitches_business_publication_stage_idx")
+  @@map("seo_guest_pitches")
+}
+
+/// Append-only history for publication qualification, pitch approvals, responses, and placements.
+model SeoGuestPostingAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  entityType  String   @map("entity_type") @db.VarChar(24)
+  entityId    String   @map("entity_id")
+  action      String   @db.VarChar(48)
+  reason      String?  @db.Text
+  beforeState Json?    @map("before_state")
+  afterState  Json?    @map("after_state")
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, entityType, entityId, createdAt], map: "seo_guest_posting_audits_entity_created_idx")
+  @@map("seo_guest_posting_audits")
 }

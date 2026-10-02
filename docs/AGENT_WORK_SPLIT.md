@@ -251,3 +251,13 @@ screens, then Automations gaps. Local commits only, never push.
   full backend Jest (`--maxWorkers=2`: 319/319 suites, 2064/2064 tests) passed. Signed in to the local
   app and visually verified the page and live API data. Stale overview copy now points to the manual
   Off-Page evidence rather than implying provider data is available.
+- item 8 ✅ SEO Guest Posting (screen 9, /marketing/seo-autopilot/guest-posting). Added tenant-scoped
+  publication prospects, pitch/topic/article workflows, approval gates, manual outreach and reply
+  recording, merchant-confirmed placement evidence, and append-only audit history. AI drafts only use
+  merchant-provided source notes; Noxtill does not discover publications, send outreach, or crawl
+  third-party placements. Provider/sending limitations are disclosed in the screen. Migration
+  20261002170000 kept exactly 7 table/FK statements, applied locally, with all 4 foreign keys
+  verified in information_schema; migration status is up to date. Real-MySQL spec: 2/2; backend and
+  frontend `tsc --noEmit`, touched-file ESLint, backend build, and full backend Jest (`--maxWorkers=2`:
+  320/320 suites, 2066/2066 tests) passed. Signed in to the local app; visually verified the live
+  page and Add Publication form without saving sample data.

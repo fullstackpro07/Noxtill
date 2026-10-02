@@ -56,6 +56,8 @@ import { SeoOffPageController } from './seo-off-page.controller';
 import { SeoOffPageService } from './seo-off-page.service';
 import { SeoLocalController } from './seo-local.controller';
 import { SeoLocalService } from './seo-local.service';
+import { SeoGuestPostingController } from './seo-guest-posting.controller';
+import { SeoGuestPostingService } from './seo-guest-posting.service';
 import { SeoSiteAuditCrawler } from './seo-site-audit.crawler';
 import { SeoSiteAuditService } from './seo-site-audit.service';
 import { SeoAuditIssuesService } from './seo-audit-issues.service';
@@ -98,6 +100,7 @@ import { ActivityModule } from '../activity/activity.module';
     SeoContentController,
     SeoOffPageController,
     SeoLocalController,
+    SeoGuestPostingController,
   ],
   providers: [
     CampaignsService,
@@ -129,6 +132,7 @@ import { ActivityModule } from '../activity/activity.module';
     SeoContentService,
     SeoOffPageService,
     SeoLocalService,
+    SeoGuestPostingService,
     SeoAuditIssuesService,
     SeoAuditScheduleService,
     SeoAuditScheduleProcessor,

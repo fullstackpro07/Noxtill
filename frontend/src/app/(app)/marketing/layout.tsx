@@ -16,6 +16,7 @@ const SUBTITLE_BY_PATH: { prefix: string; subtitle: string }[] = [
   { prefix: "/marketing/automations/data-mapper", subtitle: "Safely preview JSON field mappings before adding them to a workflow." },
   { prefix: "/marketing/automations/variables", subtitle: "Manage tenant-scoped workflow values and references to server-held secrets." },
   { prefix: "/marketing/seo-autopilot/content", subtitle: "Create useful search-driven content from real opportunities and existing business knowledge." },
+  { prefix: "/marketing/seo-autopilot/guest-posting", subtitle: "Find relevant publications, prepare outreach and verify published placements." },
   { prefix: "/marketing/seo-autopilot/off-page", subtitle: "Review manually recorded backlink evidence and research relevant authority prospects." },
   { prefix: "/marketing/seo-autopilot/local", subtitle: "Improve local search visibility with location-specific evidence and tasks." },
   { prefix: "/marketing/seo-autopilot/technical", subtitle: "Find and safely resolve technical problems affecting search engines." },
