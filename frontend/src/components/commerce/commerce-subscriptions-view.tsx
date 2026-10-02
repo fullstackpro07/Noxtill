@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { askText } from "@/lib/ask-dialog";
 import { useModuleHeader } from "@/components/layout/module-header-context";
 import { fetchCustomers } from "@/lib/customers-api";
 import { fetchProducts } from "@/lib/products-api";
@@ -87,14 +88,9 @@ function useRefresh() {
     Promise.all(["subs-summary", "subs-plans", "subs-list", "subs-campaigns"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
 }
 
-/** Prompts for a reason with the browser dialog; returns null when cancelled or too short. */
-function askReason(message: string): string | null {
-  const value = window.prompt(message)?.trim() ?? "";
-  if (value.length < 3) {
-    if (value) toast.error("Please give a reason of at least 3 characters.");
-    return null;
-  }
-  return value;
+/** Asks for a reason in an in-page dialog (min. 3 characters); null when cancelled. */
+function askReason(message: string): Promise<string | null> {
+  return askText({ title: message, minLength: 3, placeholder: "At least 3 characters" });
 }
 
 function SubscriptionsTab({ currency }: { currency: string }) {
@@ -211,11 +207,11 @@ function SubscriptionsTab({ currency }: { currency: string }) {
                         </button>
                       )}
                       {row.status === "active" && (
-                        <button type="button" onClick={() => { const reason = askReason("Why pause this subscription?"); if (reason) void run(() => pauseSubscription(row.id, reason), "Subscription paused."); }} className="font-bold underline">Pause</button>
+                        <button type="button" onClick={async () => { const reason = await askReason("Why pause this subscription?"); if (reason) void run(() => pauseSubscription(row.id, reason), "Subscription paused."); }} className="font-bold underline">Pause</button>
                       )}
                       {row.status === "paused" && <button type="button" onClick={() => run(() => resumeSubscription(row.id), "Subscription resumed.")} className="font-bold underline">Resume</button>}
                       {row.status !== "cancelled" && (
-                        <button type="button" onClick={() => { const reason = askReason("Why cancel this subscription?"); if (reason) void run(() => cancelSubscription(row.id, reason), "Subscription cancelled."); }} className="font-bold underline" style={{ color: "var(--app-danger-strong)" }}>Cancel</button>
+                        <button type="button" onClick={async () => { const reason = await askReason("Why cancel this subscription?"); if (reason) void run(() => cancelSubscription(row.id, reason), "Subscription cancelled."); }} className="font-bold underline" style={{ color: "var(--app-danger-strong)" }}>Cancel</button>
                       )}
                     </div>
                   </td>
@@ -338,7 +334,7 @@ function CampaignCard({ campaign }: { campaign: PreorderCampaign }) {
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           {campaign.status !== "released" && (
-            <button type="button" onClick={() => { const date = window.prompt("New promise date (YYYY-MM-DD)"); if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return; const reason = askReason("Why is the promise date changing?"); if (reason) void act(() => changePromiseDate(campaign.id, dateInputToIso(date), reason), "Promise date changed."); }} className="font-bold underline">Change promise date</button>
+            <button type="button" onClick={async () => { const date = await askText({ title: "New promise date", placeholder: "YYYY-MM-DD" }); if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { if (date) toast.error("Use the format YYYY-MM-DD."); return; } const reason = await askReason("Why is the promise date changing?"); if (reason) void act(() => changePromiseDate(campaign.id, dateInputToIso(date), reason), "Promise date changed."); }} className="font-bold underline">Change promise date</button>
           )}
           {campaign.status === "open" && <button type="button" onClick={() => act(() => closeCampaign(campaign.id), "Campaign closed to new reservations.")} className="font-bold underline">Close</button>}
           {campaign.status !== "released" && <button type="button" onClick={() => act(() => releaseCampaign(campaign.id), "Marked released — reservations can now be fulfilled.")} className="font-bold underline" style={{ color: "var(--app-success-text)" }}>Mark released</button>}
@@ -366,7 +362,7 @@ function CampaignCard({ campaign }: { campaign: PreorderCampaign }) {
               {row.status === "reserved" && (
                 <span className="flex gap-2">
                   {campaign.status === "released" && <button type="button" onClick={() => act(() => fulfillPreorder(row.id), "Unpaid order created for this pre-order.")} className="font-bold underline">Fulfil</button>}
-                  <button type="button" onClick={() => { const reason = askReason("Why cancel this reservation?"); if (reason) void act(() => cancelPreorder(row.id, reason), "Reservation cancelled."); }} className="font-bold underline" style={{ color: "var(--app-danger-strong)" }}>Cancel</button>
+                  <button type="button" onClick={async () => { const reason = await askReason("Why cancel this reservation?"); if (reason) void act(() => cancelPreorder(row.id, reason), "Reservation cancelled."); }} className="font-bold underline" style={{ color: "var(--app-danger-strong)" }}>Cancel</button>
                 </span>
               )}
             </li>

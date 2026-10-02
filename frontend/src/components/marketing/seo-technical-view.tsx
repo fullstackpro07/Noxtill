@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { askConfirm, askText } from "@/lib/ask-dialog";
 import {
   createTechnicalAction,
   fetchTechnicalActions,
@@ -206,8 +207,8 @@ function ActionCard({ action }: { action: TechnicalAction }) {
             <button
               type="button"
               disabled={move.isPending}
-              onClick={() => {
-                if (action.risk !== "high" || window.confirm("This is a high-risk change that can remove pages from search or block crawling. Approve it?")) move.mutate({ status: "approved" });
+              onClick={async () => {
+                if (action.risk !== "high" || (await askConfirm({ title: "Approve a high-risk change?", description: "This change can remove pages from search or block crawling.", tone: "danger", confirmLabel: "Approve" }))) move.mutate({ status: "approved" });
               }}
               className="font-bold underline"
             >
@@ -216,8 +217,8 @@ function ActionCard({ action }: { action: TechnicalAction }) {
             <button
               type="button"
               disabled={move.isPending}
-              onClick={() => {
-                const note = window.prompt("Why reject this change?")?.trim();
+              onClick={async () => {
+                const note = await askText({ title: "Why reject this change?", tone: "danger", confirmLabel: "Reject" });
                 if (note) move.mutate({ status: "rejected", note });
               }}
               className="font-bold underline"
@@ -231,7 +232,9 @@ function ActionCard({ action }: { action: TechnicalAction }) {
           <button
             type="button"
             disabled={move.isPending}
-            onClick={() => window.confirm("Mark as applied? Only after you've made the change on your website or server — the next site audit checks it.") && move.mutate({ status: "applied" })}
+            onClick={async () => {
+              if (await askConfirm({ title: "Mark as applied?", description: "Only after you've made the change on your website or server — the next site audit checks it.", confirmLabel: "Mark applied" })) move.mutate({ status: "applied" });
+            }}
             className="font-bold underline"
           >
             I&rsquo;ve applied it

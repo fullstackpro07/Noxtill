@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { askConfirm, askText } from "@/lib/ask-dialog";
 import {
   createSeoRevision,
   editSeoRevision,
@@ -162,8 +163,8 @@ function RevisionCard({ revision, onChanged }: { revision: SeoRevision; onChange
             <button
               type="button"
               disabled={act.isPending}
-              onClick={() => {
-                const note = window.prompt("Why reject this revision?")?.trim();
+              onClick={async () => {
+                const note = await askText({ title: "Why reject this revision?", tone: "danger", confirmLabel: "Reject" });
                 if (note) act.mutate({ kind: "status", status: "rejected", note });
               }}
               className="font-bold underline"
@@ -177,8 +178,8 @@ function RevisionCard({ revision, onChanged }: { revision: SeoRevision; onChange
           <button
             type="button"
             disabled={act.isPending}
-            onClick={() => {
-              if (window.confirm("Mark as applied? Only do this after you've changed the page on your website — the next site audit checks it.")) {
+            onClick={async () => {
+              if (await askConfirm({ title: "Mark as applied?", description: "Only do this after you've changed the page on your website — the next site audit checks it.", confirmLabel: "Mark applied" })) {
                 act.mutate({ kind: "status", status: "applied" });
               }
             }}

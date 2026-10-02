@@ -10,6 +10,7 @@ import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { AssistantTriggerButton } from "@/components/assistant/assistant-trigger-button";
 import { useSession } from "@/lib/session";
 import { UiPreferencesApplier } from "./ui-preferences-applier";
+import { AskDialogHost } from "@/components/shared/ask-dialog-host";
 import { ModuleGate, useDisabledModules } from "./module-gate";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </ModuleHeaderProvider>
       </div>
       <UiPreferencesApplier />
+      <AskDialogHost />
       <DeepSearchOverlay />
       {!assistantOff && <AssistantPanel />}
       {!assistantOff && <AssistantTriggerButton />}

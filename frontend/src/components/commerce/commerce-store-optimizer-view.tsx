@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { askText } from "@/lib/ask-dialog";
 import { useModuleHeader } from "@/components/layout/module-header-context";
 import {
   fetchStoreOpportunities,
@@ -103,9 +104,9 @@ function Row({ row }: { row: StoreOpportunity }) {
           {(row.status === "open" || row.status === "in_progress") && (
             <button
               type="button"
-              onClick={() => {
-                const reason = window.prompt("Why dismiss this opportunity?")?.trim();
-                if (reason && reason.length >= 3) change.mutate({ status: "dismissed", reason });
+              onClick={async () => {
+                const reason = await askText({ title: "Why dismiss this opportunity?", minLength: 3, confirmLabel: "Dismiss" });
+                if (reason) change.mutate({ status: "dismissed", reason });
               }}
               className="font-bold underline"
               style={{ color: "var(--app-text-faint)" }}

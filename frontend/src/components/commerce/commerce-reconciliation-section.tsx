@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { askText } from "@/lib/ask-dialog";
 import { decideReconItem, fetchReconciliation, runReconciliation, type ReconItem } from "@/lib/commerce-reconciliation-api";
 
 const KIND_LABEL: Record<ReconItem["kind"], string> = {
@@ -75,8 +76,8 @@ export function CommerceReconciliationSection() {
                     key={status}
                     type="button"
                     disabled={decide.isPending}
-                    onClick={() => {
-                      const note = window.prompt(status === "resolved" ? "What did you do to fix it?" : "Why dismiss it?")?.trim();
+                    onClick={async () => {
+                      const note = await askText({ title: status === "resolved" ? "What did you do to fix it?" : "Why dismiss it?" });
                       if (note) decide.mutate({ id: item.id, status, note });
                     }}
                     className="font-bold underline"

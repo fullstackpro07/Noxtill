@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api-client";
 import { AUTONOMOUS_COMMERCE_SUMMARY_KEY, fetchAutonomousCommerceSummary } from "@/lib/autonomous-commerce-api";
 import { saveHubChanges } from "@/lib/settings-hub-api";
 import { toast } from "@/lib/toast";
+import { askConfirm } from "@/lib/ask-dialog";
 
 /**
  * Commerce kill switch. Saves through Settings (Automations → Autonomous Commerce) so the change is
@@ -27,8 +28,8 @@ export function CommercePauseBanner() {
   });
   if (!summary.data) return null;
 
-  const pause = () => {
-    if (window.confirm("Pause all commerce actions? Sending listings to channels, AI listing generation and subscription renewals will be refused until you resume.")) {
+  const pause = async () => {
+    if (await askConfirm({ title: "Pause all commerce actions?", description: "Sending listings to channels, AI listing generation and subscription renewals will be refused until you resume.", tone: "danger", confirmLabel: "Pause" })) {
       toggle.mutate(true);
     }
   };

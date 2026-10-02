@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { askText } from "@/lib/ask-dialog";
 import {
   dismissContentOpportunity,
   fetchContentBriefs,
@@ -218,8 +219,8 @@ function BriefEditor({ brief, onClose }: { brief: ContentBrief; onClose: () => v
               <button
                 type="button"
                 disabled={move.isPending}
-                onClick={() => {
-                  const note = window.prompt("What needs to change?")?.trim();
+                onClick={async () => {
+                  const note = await askText({ title: "What needs to change?", confirmLabel: "Send back" });
                   if (note) move.mutate({ status: "drafting", note });
                 }}
                 className="font-bold underline"
@@ -232,8 +233,8 @@ function BriefEditor({ brief, onClose }: { brief: ContentBrief; onClose: () => v
             <button
               type="button"
               disabled={move.isPending}
-              onClick={() => {
-                const note = window.prompt("Why dismiss this brief?")?.trim();
+              onClick={async () => {
+                const note = await askText({ title: "Why dismiss this brief?", confirmLabel: "Dismiss" });
                 if (note) move.mutate({ status: "dismissed", note });
               }}
               className="font-bold underline"
@@ -368,8 +369,8 @@ export function SeoContentView() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  const reason = window.prompt("Why dismiss this opportunity?")?.trim();
+                                onClick={async () => {
+                                  const reason = await askText({ title: "Why dismiss this opportunity?", confirmLabel: "Dismiss" });
                                   if (reason) dismiss.mutate({ row, reason });
                                 }}
                                 className="font-bold underline"

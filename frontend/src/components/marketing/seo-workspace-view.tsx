@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { askConfirm, askText } from "@/lib/ask-dialog";
 import { transitionContentBrief } from "@/lib/seo-content-api";
 import { transitionSeoRevision } from "@/lib/seo-on-page-api";
 import { transitionTechnicalAction } from "@/lib/seo-technical-api";
@@ -96,8 +97,8 @@ function QueueRow({ item }: { item: WorkspaceItem }) {
               <button
                 type="button"
                 disabled={act.isPending}
-                onClick={() => {
-                  if (item.risk !== "high" || window.confirm("This is a high-risk change. Approve it?")) act.mutate({ approve: true });
+                onClick={async () => {
+                  if (item.risk !== "high" || (await askConfirm({ title: "Approve a high-risk change?", tone: "danger", confirmLabel: "Approve" }))) act.mutate({ approve: true });
                 }}
                 className="font-bold underline"
               >
@@ -106,8 +107,8 @@ function QueueRow({ item }: { item: WorkspaceItem }) {
               <button
                 type="button"
                 disabled={act.isPending}
-                onClick={() => {
-                  const note = window.prompt(item.kind === "content" ? "What needs to change?" : "Why reject this?")?.trim();
+                onClick={async () => {
+                  const note = await askText({ title: item.kind === "content" ? "What needs to change?" : "Why reject this?", tone: item.kind === "content" ? "default" : "danger" });
                   if (note) act.mutate({ approve: false, note });
                 }}
                 className="font-bold underline"
