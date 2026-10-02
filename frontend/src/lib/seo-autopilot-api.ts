@@ -164,3 +164,114 @@ export function reopenSeoAuditIssue(
 export function runSeoSiteAudit(): Promise<SeoAuditRun> {
   return apiFetch<SeoAuditRun>("/seo-autopilot/audits", { method: "POST" });
 }
+
+export type SeoLocalKeywordMovement =
+  | "improving"
+  | "declining"
+  | "unchanged"
+  | "newly_found"
+  | "not_found"
+  | "not_comparable";
+
+export interface SeoLocalLocation {
+  businessId: string;
+  locationName: string;
+  listingName: string | null;
+  city: string | null;
+  address: string | null;
+  listing: {
+    configured: boolean;
+    missingFields: string[];
+    missingHours: boolean;
+    missingCategories: boolean;
+    categories: string[];
+    listingUrl: string;
+    issues: number;
+  };
+  citations: {
+    total: number;
+    stale: number;
+    mismatchCount: number;
+    records: {
+      provider: string;
+      syncedAt: string;
+      ageDays: number;
+      mismatchedFields: string[];
+      status: "stale" | "matches_snapshot";
+    }[];
+    sourceNote: string;
+  };
+  reviews90Days: { since: string; count: number; averageStars: number | null };
+  localKeywords: {
+    tracked: number;
+    improving: number;
+    declining: number;
+    unchanged: number;
+    records: {
+      id: string;
+      keyword: string;
+      currentRank: number | null;
+      previousRank: number | null;
+      positionsGained: number | null;
+      movement: SeoLocalKeywordMovement;
+      checkedAt: string | null;
+      comparedAt: string | null;
+    }[];
+  };
+  localPack: {
+    scanId: string;
+    keyword: string;
+    scannedAt: string;
+    visiblePoints: number;
+    totalPoints: number;
+    sharePercent: number | null;
+  } | null;
+  cityMentions: {
+    crawlStartedAt: string | null;
+    pageCount: number | null;
+    pages: { url: string; title: string | null; mentionFields: string[] }[];
+    checkedFields: string[];
+  };
+}
+
+export interface SeoLocalOverview {
+  generatedAt: string;
+  summary: {
+    locations: number;
+    locationsWithListingIssues: number;
+    missingListingFields: number;
+    staleCitations: number;
+    citationSnapshots: number;
+    reviewCount90Days: number;
+    averageReviewStars90Days: number | null;
+    localKeywords: number;
+    improvingLocalKeywords: number;
+    decliningLocalKeywords: number;
+    localPack: {
+      visiblePoints: number;
+      totalPoints: number;
+      sharePercent: number | null;
+      locationsWithScan: number;
+    };
+  };
+  locations: SeoLocalLocation[];
+  disclosures: {
+    localSchema: "Not tracked";
+    listingChanges: string;
+    reviews: string;
+    citations: string;
+    localPack: string;
+    cityMentions: string;
+  };
+}
+
+export function fetchSeoLocalOverview(): Promise<SeoLocalOverview> {
+  return apiFetch<SeoLocalOverview>("/seo-autopilot/local/overview");
+}
+
+export function createSeoLocalPageBrief(locationId: string): Promise<{ id: string; topic: string }> {
+  return apiFetch<{ id: string; topic: string }>(
+    `/seo-autopilot/local/locations/${encodeURIComponent(locationId)}/local-page-brief`,
+    { method: "POST" },
+  );
+}

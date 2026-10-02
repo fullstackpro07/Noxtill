@@ -229,3 +229,13 @@ screens, then Automations gaps. Local commits only, never push.
   Not tracked (grep-verified): page traffic. Migration 20261002140000 (4 FKs verified).
   jest --maxWorkers=2: 316/317 suites, 2059/2060 tests — the one failure was a 5 s timeout in the
   untouched digitizer spec under load; it passes 47/47 alone.
+- item 6 ✅ SEO Local (screen 7, /marketing/seo-autopilot/local). Per-location view across the root
+  business and active branches; listing completeness from MasterListing, field-mapped citation
+  snapshots from successful Noxtill syncs, 90-day ExternalReview aggregates, local-intent keyword
+  movement, latest local-pack heatmap scan, and city mentions in saved crawl title/description/H1.
+  Listing fixes deep-link to Business Listings; review records remain in Reviews; no listing or review
+  mutations from SEO. Local schema is disclosed as not tracked. Local-page briefs use the existing
+  SeoContentService. No new schema models or migration. Real-MySQL spec: 2/2; backend/frontend
+  `tsc --noEmit`, touched-file ESLint, full backend Jest (`--maxWorkers=2`: 318/318 suites,
+  2062/2062 tests), and fabrication grep passed. Signed in to the local app and visually verified the
+  rendered page; frontend route and API data loaded successfully.
