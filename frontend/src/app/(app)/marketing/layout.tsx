@@ -15,7 +15,7 @@ const SUBTITLE_BY_PATH: { prefix: string; subtitle: string }[] = [
   { prefix: "/marketing/automations/actions", subtitle: "Inspect supported action inputs, outputs, setup requirements and execution limits." },
   { prefix: "/marketing/automations/data-mapper", subtitle: "Safely preview JSON field mappings before adding them to a workflow." },
   { prefix: "/marketing/automations/variables", subtitle: "Manage tenant-scoped workflow values and references to server-held secrets." },
-  { prefix: "/marketing/seo-autopilot/reports", subtitle: "Understand what improved, what did not, and what changed alongside it." },
+  { prefix: "/marketing/seo-autopilot/settings", subtitle: "Configure SEO data sources, rules and safe Autopilot behavior." },
   { prefix: "/marketing/seo-autopilot/reports", subtitle: "Understand what improved, what did not, and what changed alongside it." },
   { prefix: "/marketing/seo-autopilot/agent-workspace", subtitle: "Review what Noxtill found, what it recommends and what is waiting for approval." },
   { prefix: "/marketing/seo-autopilot/content-calendar", subtitle: "Plan new content, optimizations and refreshes around SEO opportunities." },

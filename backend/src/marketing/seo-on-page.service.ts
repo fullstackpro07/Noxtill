@@ -9,6 +9,7 @@ import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import type { SeoAuditPage } from './seo-site-audit.util';
+import { assertSeoAiDraftsAllowed } from './seo-rules.util';
 
 export const SEO_ON_PAGE_ERROR_CODES = {
   NO_CRAWL: 'SEO_ON_PAGE_NO_CRAWL',
@@ -418,6 +419,7 @@ export class SeoOnPageService {
    * own keyword; it is told not to invent facts, and the result is an editable draft revision.
    */
   async suggest(businessId: string, actorUserId: string, pageUrl: string) {
+    await assertSeoAiDraftsAllowed(this.tenantPrisma, businessId);
     const data = await this.pages(businessId);
     const page = data.pages.find(
       (row) => pageKeyOf(row.url) === pageKeyOf(pageUrl),

@@ -18,7 +18,7 @@ export const SEO_TABS: { href: string; label: string }[] = [
   { href: "/marketing/seo-autopilot/content-calendar", label: "Content calendar" },
   { href: "/marketing/seo-autopilot/agent-workspace", label: "Agent workspace" },
   { href: "/marketing/seo-autopilot/reports", label: "Reports" },
-  { href: "/marketing/seo-autopilot/reports", label: "Reports" },
+  { href: "/marketing/seo-autopilot/settings", label: "Settings" },
   { href: "/marketing/seo-autopilot/competitor-seo", label: "Competitor SEO" },
 ];
 

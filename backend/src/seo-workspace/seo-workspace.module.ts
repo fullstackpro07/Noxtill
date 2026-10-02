@@ -5,6 +5,8 @@ import { SeoAgentWorkspaceController } from './seo-agent-workspace.controller';
 import { SeoAgentWorkspaceService } from './seo-agent-workspace.service';
 import { SeoReportsController } from './seo-reports.controller';
 import { SeoReportsService } from './seo-reports.service';
+import { SeoSettingsController } from './seo-settings.controller';
+import { SeoSettingsService } from './seo-settings.service';
 
 /**
  * SEO Autopilot screens 13–16 (Content Calendar, Agent Workspace, Reports, Settings). Kept in its own
@@ -15,7 +17,13 @@ import { SeoReportsService } from './seo-reports.service';
     SeoCalendarController,
     SeoAgentWorkspaceController,
     SeoReportsController,
+    SeoSettingsController,
   ],
-  providers: [SeoCalendarService, SeoAgentWorkspaceService, SeoReportsService],
+  providers: [
+    SeoCalendarService,
+    SeoAgentWorkspaceService,
+    SeoReportsService,
+    SeoSettingsService,
+  ],
 })
 export class SeoWorkspaceModule {}

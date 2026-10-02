@@ -122,6 +122,24 @@ export const POLICY_DEFS = {
   'digitizer.flagNameOnlyMatch': { kind: 'boolean', default: true },
   // digitizer/digitizer-pipeline.service.ts (a photo the model calls unreadable)
   'digitizer.rejectUnreadable': { kind: 'boolean', default: true },
+  // marketing/seo-on-page.service.ts (suggest), seo-content.service.ts (generateBrief/generateDraft)
+  'seo.aiDraftsEnabled': { kind: 'boolean', default: true },
+  // marketing/seo-content.service.ts (opportunities: "improve page" below this rank)
+  'seo.improveBelowRank': {
+    kind: 'number',
+    default: 10,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  // marketing/seo-content.service.ts (refresh queue), seo-workspace/seo-calendar.service.ts
+  'seo.refreshDropPositions': {
+    kind: 'number',
+    default: 5,
+    min: 1,
+    max: 50,
+    integer: true,
+  },
   // backups (exports/backup.service.ts)
   'backup.enabled': { kind: 'boolean', default: false },
   'backup.retentionDays': {

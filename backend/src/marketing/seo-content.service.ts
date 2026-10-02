@@ -5,6 +5,7 @@ import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { normalizePageUrl } from './seo-on-page.service';
 import type { SeoAuditPage } from './seo-site-audit.util';
+import { assertSeoAiDraftsAllowed, seoRules } from './seo-rules.util';
 
 export const SEO_CONTENT_ERROR_CODES = {
   NOT_FOUND: 'SEO_CONTENT_BRIEF_NOT_FOUND',
@@ -16,11 +17,7 @@ export const SEO_CONTENT_ERROR_CODES = {
   AI_INVALID: 'SEO_CONTENT_AI_INVALID',
 } as const;
 
-/** Rank at or below which a keyword's page is considered under-performing. */
-export const CONTENT_RULES = {
-  improveBelowRank: 10,
-  refreshDropPositions: 5,
-} as const;
+/** Thresholds come from Settings → SEO Autopilot (`seoRules`); defaults 10 and 5. */
 
 export type OpportunityKind = 'new_page' | 'missing_page' | 'improve';
 
@@ -116,6 +113,7 @@ export class SeoContentService {
   }
 
   async opportunities(businessId: string) {
+    const rules = await seoRules(this.tenantPrisma, businessId);
     const [keywords, { run, pages }, briefs, dismissals] = await Promise.all([
       this.keywordsWithRanks(businessId),
       this.crawledPages(businessId),
@@ -148,7 +146,7 @@ export class SeoContentService {
           : 'The mapped page was not found in the latest site audit.';
       } else if (
         latest &&
-        (latest.rank === null || latest.rank > CONTENT_RULES.improveBelowRank)
+        (latest.rank === null || latest.rank > rules.improveBelowRank)
       ) {
         kind = 'improve';
         evidence =
@@ -206,6 +204,7 @@ export class SeoContentService {
   }
 
   async refreshQueue(businessId: string) {
+    const rules = await seoRules(this.tenantPrisma, businessId);
     const published = await this.db.seoContentBrief.findMany({
       where: {
         businessId,
@@ -233,10 +232,7 @@ export class SeoContentService {
       if (brief.baselineRank !== null && latest) {
         if (current === null) {
           refreshReason = `Was #${brief.baselineRank} when published; not found in the latest rank check.`;
-        } else if (
-          current - brief.baselineRank >=
-          CONTENT_RULES.refreshDropPositions
-        ) {
+        } else if (current - brief.baselineRank >= rules.refreshDropPositions) {
           refreshReason = `Dropped from #${brief.baselineRank} to #${current} since publishing.`;
         }
       }
@@ -256,7 +252,7 @@ export class SeoContentService {
   }
 
   async summary(businessId: string) {
-    const [opps, counts, refresh] = await Promise.all([
+    const [opps, counts, refresh, rules] = await Promise.all([
       this.opportunities(businessId),
       this.db.seoContentBrief.groupBy({
         by: ['status'],
@@ -264,6 +260,7 @@ export class SeoContentService {
         _count: { _all: true },
       }),
       this.refreshQueue(businessId),
+      seoRules(this.tenantPrisma, businessId),
     ]);
     const count = (status: SeoContentBriefStatus) =>
       counts.find((row) => row.status === status)?._count._all ?? 0;
@@ -280,7 +277,10 @@ export class SeoContentService {
       refreshDue: refresh.filter((row) => row.refreshReason).length,
       publishedMonitoring: count(SeoContentBriefStatus.published),
       contentGaps: open.filter((row) => row.kind === 'new_page').length,
-      rules: CONTENT_RULES,
+      rules: {
+        improveBelowRank: rules.improveBelowRank,
+        refreshDropPositions: rules.refreshDropPositions,
+      },
     };
   }
 
@@ -405,6 +405,7 @@ export class SeoContentService {
     keywordId: string,
     strategyNote?: string,
   ) {
+    await assertSeoAiDraftsAllowed(this.tenantPrisma, businessId);
     const [keyword, { pages }, business] = await Promise.all([
       this.db.trackedKeyword.findFirst({
         where: { id: keywordId, businessId },
@@ -546,6 +547,7 @@ export class SeoContentService {
    * notes the draft is told to stay general and make no claims about the business.
    */
   async generateDraft(businessId: string, actorUserId: string, id: string) {
+    await assertSeoAiDraftsAllowed(this.tenantPrisma, businessId);
     const brief = await this.findOrThrow(businessId, id);
     if (
       brief.status !== SeoContentBriefStatus.brief &&

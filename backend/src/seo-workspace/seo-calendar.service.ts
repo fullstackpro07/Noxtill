@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { SeoContentBriefStatus } from '@prisma/client';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { CONTENT_RULES } from '../marketing/seo-content.service';
+import { seoRules } from '../marketing/seo-rules.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -48,6 +48,7 @@ export class SeoCalendarService {
   }
 
   async calendar(businessId: string, now = new Date()) {
+    const rules = await seoRules(this.tenantPrisma, businessId);
     const [briefs, members] = await Promise.all([
       this.db.seoContentBrief.findMany({
         where: { businessId, status: { not: SeoContentBriefStatus.dismissed } },
@@ -85,7 +86,7 @@ export class SeoCalendarService {
           refreshReason = `Was #${brief.baselineRank} when published; not found in the latest rank check.`;
         } else if (
           latest.rank - brief.baselineRank >=
-          CONTENT_RULES.refreshDropPositions
+          rules.refreshDropPositions
         ) {
           refreshReason = `Dropped from #${brief.baselineRank} to #${latest.rank} since publishing.`;
         }

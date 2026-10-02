@@ -315,3 +315,16 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   serp-rank.service.ts). Client-side CSV export; scheduled delivery disclosed as not available.
   Real-MySQL spec 2/2; tsc, eslint, full jest (--maxWorkers=2: 324/325 suites, 2079/2080 — the one
   failure was qr-poster PDF timeouts while two runs overlapped; it passes 5/5 alone).
+- goal #4 / Claude item 4 ✅ SEO Settings (screen 16, /marketing/seo-autopilot/settings). New Settings
+  hub category "SEO Autopilot" (history, reset, permission = seo.manage) with three real policy keys and
+  their consumers: `seo.aiDraftsEnabled` (L1 draft vs L0 observe — On-Page suggest and Content
+  brief/draft generation refuse with SEO_AI_DRAFTS_OFF when off), `seo.improveBelowRank` (Content
+  "improve page" opportunities, default 10), `seo.refreshDropPositions` (Content refresh queue and
+  Calendar, default 5) — defaults preserve previous behaviour. Read-only rows: approval always required
+  (L3/L4 auto-apply not available), rank provider configured or not (boolean only, never the key),
+  Search Console not connected, outreach identity not available. The SEO Settings screen shows setup
+  checks / configuration health, site, market and autopilot level, and edits the hub rows in place.
+  Also fixed a duplicated Reports tab/subtitle in HEAD (my line-staging re-added a line Codex's
+  competitor commit had already included). Real-MySQL spec 2/2; related suites 32/32; tsc, eslint,
+  full jest (--maxWorkers=2: 326/326 suites, 2082/2082 tests).
+- goal #4 (Claude part) complete: screens 13–16 committed.
