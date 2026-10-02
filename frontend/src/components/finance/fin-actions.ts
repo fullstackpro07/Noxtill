@@ -997,10 +997,10 @@ export function useFinActions(boot: Boot | undefined, screen: string) {
             const nbv = num((rec.kv.find((k) => k[0] === "Net book value")?.[1] ?? "0").replace("−", "-"));
             return s.openModal({
               title: `Dispose (accounting) — ${rec.title}`,
-              intro: "Derecognizes the asset: removes its cost and accumulated depreciation and books the gain or loss.",
+              intro: `Derecognizes the asset: removes its cost and accumulated depreciation and books the gain or loss.${rec.minDate && rec.minDate > todayIso() ? ` Depreciation is already posted through ${rec.minDate}, so the disposal can’t be dated earlier.` : ""}`,
               kv: rec.kv.filter((k) => ["Cost", "Accumulated depreciation", "Net book value"].includes(k[0])),
               fields: [{ k: "date", l: "Disposal date", type: "date", req: true }, { k: "p", l: "Sale proceeds", type: "number", ph: "0.00" }, { k: "acct", l: "Proceeds received into", type: "sel", opts: acctOptions(boot, (x) => x.type === "asset") }, { k: "reason", l: "Reason", type: "area", req: true }],
-              init: { date: todayIso(), p: "0", acct: boot?.bankAccounts[0]?.glAccountId ?? "" },
+              init: { date: rec.minDate && rec.minDate > todayIso() ? rec.minDate : todayIso(), p: "0", acct: boot?.bankAccounts[0]?.glAccountId ?? "" },
               live: (mf) => {
                 const g = r2(num(mf.p) - nbv);
                 return { t: `${g >= 0 ? "Gain" : "Loss"} on disposal ${money(Math.abs(g), boot?.base)}`, ok: g >= 0 };
