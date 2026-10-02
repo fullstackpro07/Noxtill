@@ -106,7 +106,7 @@ export class SerpRankService {
     if (!apiKey) {
       throw new AppException(
         MARKETING_ERROR_CODES.SERP_PROVIDER_NOT_CONFIGURED,
-        'Search ranking provider is not configured.',
+        'Rank provider is not configured. Configure SERPAPI_KEY on the server to check keyword positions.',
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }

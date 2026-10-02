@@ -29,8 +29,9 @@ export class KeywordRankProcessor extends WorkerHost {
     return this.runCheck();
   }
 
-  async runCheck(): Promise<void> {
+  async runCheck(businessId?: string): Promise<void> {
     const keywords = await this.prisma.trackedKeyword.findMany({
+      ...(businessId ? { where: { businessId } } : {}),
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,

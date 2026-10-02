@@ -7,6 +7,7 @@ import { ArrowLeft, Database, Pencil, Plus, Trash2 } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
 import { fetchBranches } from "@/lib/branches-api";
 import { toast } from "@/lib/toast";
+import { askConfirm } from "@/lib/ask-dialog";
 import {
   createWorkflowVariable,
   deleteWorkflowVariable,
@@ -349,7 +350,7 @@ export function WorkflowVariablesView() {
                   <td className="whitespace-nowrap px-4 py-3">{new Date(variable.updatedAt).toLocaleString()}</td>
                   <td className="px-4 py-3"><div className="flex items-center gap-1">
                     <button type="button" aria-label={`Edit ${variable.name}`} onClick={() => startEditing(variable)} className="inline-flex h-8 w-8 items-center justify-center rounded-[7px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Pencil className="h-3.5 w-3.5" aria-hidden /></button>
-                    <button type="button" aria-label={`Delete ${variable.name}`} disabled={isLoading} onClick={() => { if (window.confirm(`Delete variable ${variable.name}?`)) deleteMutation.mutate(variable.id); }} className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] disabled:opacity-50" style={{ border: "1px solid var(--app-border)", color: "var(--app-danger-strong)" }}><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
+                    <button type="button" aria-label={`Delete ${variable.name}`} disabled={isLoading} onClick={async () => { if (await askConfirm({ title: `Delete variable ${variable.name}?`, confirmLabel: "Delete", tone: "danger" })) deleteMutation.mutate(variable.id); }} className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] disabled:opacity-50" style={{ border: "1px solid var(--app-border)", color: "var(--app-danger-strong)" }}><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
                   </div></td>
                 </tr>;
               })}</tbody>

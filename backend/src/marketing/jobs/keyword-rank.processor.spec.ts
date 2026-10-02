@@ -128,7 +128,9 @@ describe('KeywordRankProcessor (BE-063 extension)', () => {
     });
     trends.fetchInterest.mockResolvedValue(30);
 
-    await processor.runCheck();
+    // Keep this integration test scoped: runCheck without an id is the production-wide scheduler
+    // path and would otherwise persist mocked SERP fixture data into every developer business.
+    await processor.runCheck(businessId);
 
     const snapshots = await prisma.keywordRankSnapshot.findMany({
       where: { keywordId: keyword.id },

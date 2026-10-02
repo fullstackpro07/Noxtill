@@ -49,6 +49,7 @@ import { ApiError } from "@/lib/api-client";
 import { fetchCustomerCustomFields } from "@/lib/customer-custom-fields-api";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { askConfirm } from "@/lib/ask-dialog";
 
 const CONDITION_OP_SYMBOL: Record<string, string> = {
   eq: "is",
@@ -1265,12 +1266,13 @@ export function AutomationsView({
                             type="button"
                             aria-label={`Archive ${w.name}`}
                             title="Archive and preserve run history"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Archive “${w.name}”? It will stop receiving new triggers, and its run history will be preserved.`,
-                                )
-                              ) {
+                            onClick={async () => {
+                              if (await askConfirm({
+                                title: `Archive “${w.name}”?`,
+                                description: "It will stop receiving new triggers, and its run history will be preserved.",
+                                confirmLabel: "Archive",
+                                tone: "danger",
+                              })) {
                                 archiveMutation.mutate(w.id);
                               }
                             }}
@@ -3453,12 +3455,13 @@ function RunHistoryDialog({
                 key={run.id}
                 run={run}
                 onRetry={() => retryMutation.mutate({ runId: run.id })}
-                onCancel={() => {
-                  if (
-                    window.confirm(
-                      "Cancel this run? An action already in progress may finish.",
-                    )
-                  ) {
+                onCancel={async () => {
+                  if (await askConfirm({
+                    title: "Cancel this run?",
+                    description: "An action already in progress may finish.",
+                    confirmLabel: "Cancel run",
+                    tone: "danger",
+                  })) {
                     cancelMutation.mutate({ runId: run.id });
                   }
                 }}

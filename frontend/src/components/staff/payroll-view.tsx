@@ -30,6 +30,7 @@ import { DrawerLabel } from "@/components/shared/side-drawer";
 import { PermissionLockCard } from "@/components/shared/permission-lock-card";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
+import { askText } from "@/lib/ask-dialog";
 
 export function PayrollView() {
   const session = useSession();
@@ -77,8 +78,8 @@ export function PayrollView() {
     setExportPreviewOpen(true);
   }
 
-  function handleSendToAccountant() {
-    const email = window.prompt("Accountant's email address:");
+  async function handleSendToAccountant() {
+    const email = await askText({ title: "Accountant's email address", placeholder: "name@example.com" });
     if (!email) return;
     const subject = encodeURIComponent(`Payroll — ${month}`);
     const body = encodeURIComponent(

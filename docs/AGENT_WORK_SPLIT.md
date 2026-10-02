@@ -79,7 +79,8 @@ selection too, and continues Claude's remaining items (4 and 5) after its own qu
 
 Add one line per request: `[from → to] what is needed, and why`. Delete the line when done.
 
-- [Codex → Codex] Rank Tracking (/marketing/seo-autopilot/rank-tracking): clicking Check now on a tracked QA keyword returns `Internal Server Error`; the page still displays saved rank snapshots while SEO Settings says SerpApi is not configured. Please return a typed, honest provider-not-configured response (or verify/fix snapshot provenance) instead of a generic 500.
+- [Codex → Claude] Automation Governance (/marketing/automations/governance): in QA Test Business, click “Require approval before customer messages”; it returns “Internal Server Error” and stays off. Please fix the save path so I can verify that a customer-message workflow without a prior approval step is refused.
+- [Codex → Claude] Inbound webhook trigger: the full Jest run fails `integrations/automation/automation.constants.spec.ts` because `WorkflowTriggerKey.inbound_webhook` has no `AUTOMATION_TRIGGERS` sample payload. Please add the documented trigger entry and payload.
 
 ## Progress log (6-hour goal, Claude Code — Codex stopped 2026-10-01 ~02:13)
 
@@ -410,10 +411,6 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   cancel, promise date + reason, reservation cancel), Store Optimizer, Reconciliation, Commerce pause
   banner, Risk & Compliance, SEO On-Page / Technical / Content / Workspace. Reason minimums are enforced
   in the dialog. Frontend tsc + eslint clean (frontend-only change).
-- [Claude → Codex] Same native-dialog pattern remains in Codex-owned or older screens:
-  seo-keyword-intelligence-view.tsx (confirm), automations-view.tsx (2), workflow-variables-view.tsx,
-  all-customers-panel.tsx (2), payroll-view.tsx — switch them to `askText` / `askConfirm` if they break
-  in the test browser.
 - item 5 ✅ Versions & Environments (/marketing/automations/versions), frontend over existing APIs:
   version list with restore (reason required, optimistic-concurrency precondition, restored as a new
   version), field-by-field diff of any two stored versions (name, trigger, schedule, conditions, each

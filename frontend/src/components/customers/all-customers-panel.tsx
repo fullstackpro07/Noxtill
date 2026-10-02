@@ -14,6 +14,7 @@ import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 import { useCustomersSearchStore } from "@/store/customers-search-store";
+import { askText } from "@/lib/ask-dialog";
 
 const selectStyle: React.CSSProperties = { border: "1px solid var(--app-border)", borderRadius: 10, padding: "9px 11px", fontSize: 12.5, fontWeight: 600, color: "var(--app-text-muted)", background: "var(--app-surface)", minHeight: 42 };
 const outlineBtn: React.CSSProperties = { border: "1px solid var(--app-border)", background: "var(--app-surface)", borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: "var(--app-text-muted)", minHeight: 42 };
@@ -222,7 +223,7 @@ export function AllCustomersPanel() {
             <span className="text-[12.5px] font-bold text-white">{selected.length} selected</span>
             <button type="button" onClick={() => setSelected([])} className="text-[12px] font-semibold" style={{ color: "#8FF0BB" }}>Clear selection</button>
             <span className="ml-auto flex flex-wrap gap-2">
-              <button type="button" onClick={() => { const tag = window.prompt("Tag to add to selected customers:"); if (tag?.trim()) bulkTagMutation.mutate(tag.trim()); }} disabled={bulkTagMutation.isPending} className="rounded-[9px] px-[14px] py-2 text-[12px] font-bold text-white" style={{ background: "var(--app-primary)" }}>Bulk Tag</button>
+              <button type="button" onClick={async () => { const tag = await askText({ title: "Tag to add to selected customers", placeholder: "Enter a tag" }); if (tag?.trim()) bulkTagMutation.mutate(tag.trim()); }} disabled={bulkTagMutation.isPending} className="rounded-[9px] px-[14px] py-2 text-[12px] font-bold text-white" style={{ background: "var(--app-primary)" }}>Bulk Tag</button>
               <button type="button" onClick={() => setMessageOpen(true)} disabled={tagFilter === "All tags"} title={tagFilter === "All tags" ? "Pick a tag filter above to message this group" : undefined} className="rounded-[9px] px-[14px] py-2 text-[12px] font-bold text-white" style={{ border: "1px solid #1D3547", background: "transparent", opacity: tagFilter === "All tags" ? 0.5 : 1 }}>Message Segment</button>
             </span>
           </div>
@@ -284,7 +285,7 @@ export function AllCustomersPanel() {
                       <td className="relative p-[11px_17px] text-end">
                         <span className="inline-flex flex-wrap justify-end gap-[7px]">
                           <a href={`https://wa.me/${c.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" style={smallOutline}>Message</a>
-                          <button type="button" onClick={() => { const tag = window.prompt(`Add a tag to ${c.name}:`); if (tag?.trim() && !c.tags.includes(tag.trim())) updateCustomer(c.id, { tags: [...c.tags, tag.trim()] }).then(() => queryClient.invalidateQueries({ queryKey: ["customers"] })); }} style={smallOutline}>Add Tag</button>
+                          <button type="button" onClick={async () => { const tag = await askText({ title: `Add a tag to ${c.name}`, placeholder: "Enter a tag" }); if (tag?.trim() && !c.tags.includes(tag.trim())) updateCustomer(c.id, { tags: [...c.tags, tag.trim()] }).then(() => queryClient.invalidateQueries({ queryKey: ["customers"] })); }} style={smallOutline}>Add Tag</button>
                           <button type="button" onClick={() => router.push(`/customers/${c.id}`)} style={smallPrimary}>View Profile</button>
                           <button type="button" onClick={() => setOpenMenuId(openMenuId === c.id ? null : c.id)} aria-label={`More actions for ${c.name}`} className="flex h-10 w-[38px] items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>⋯</button>
                           {openMenuId === c.id && (

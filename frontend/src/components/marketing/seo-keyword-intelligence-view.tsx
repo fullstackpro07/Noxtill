@@ -27,6 +27,7 @@ import {
   type TrackedKeywordRow,
 } from "@/lib/keywords-api";
 import { formatDate } from "@/lib/format";
+import { askConfirm } from "@/lib/ask-dialog";
 
 const INTENT_LABELS: Record<KeywordIntent, string> = {
   informational: "Informational",
@@ -495,12 +496,12 @@ export function SeoKeywordIntelligenceView() {
                     saving={save.isPending && save.variables?.id === row.id}
                     removing={remove.isPending && remove.variables === row.id}
                     onSave={(patch) => save.mutate({ id: row.id, patch })}
-                    onRemove={() => {
-                      if (
-                        window.confirm(
-                          `Remove “${row.keyword}” and its saved rank history?`,
-                        )
-                      ) {
+                    onRemove={async () => {
+                      if (await askConfirm({
+                        title: `Remove “${row.keyword}” and its saved rank history?`,
+                        tone: "danger",
+                        confirmLabel: "Remove",
+                      })) {
                         remove.mutate(row.id);
                       }
                     }}

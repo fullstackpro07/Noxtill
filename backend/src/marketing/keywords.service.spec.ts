@@ -1,10 +1,14 @@
+import { HttpStatus } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { KeywordsService } from './keywords.service';
 import { AppException } from '../common/filters/app.exception';
-import { MAX_TRACKED_KEYWORDS } from './marketing.constants';
+import {
+  MARKETING_ERROR_CODES,
+  MAX_TRACKED_KEYWORDS,
+} from './marketing.constants';
 import type { KeywordRankProcessor } from './jobs/keyword-rank.processor';
 import type { AiInfraService } from '../ai/ai-infra.service';
 import type { MasterListingService } from '../listings/master-listing.service';
@@ -134,6 +138,22 @@ describe('KeywordsService (BE-063 extension)', () => {
       businessId,
       keyword.id,
       'trigger-test',
+    );
+  });
+
+  it('propagates the typed provider-not-configured error from a manual rank check', async () => {
+    const keyword = await prisma.trackedKeyword.create({
+      data: { businessId, keyword: 'provider-not-configured-test' },
+    });
+    const providerError = new AppException(
+      MARKETING_ERROR_CODES.SERP_PROVIDER_NOT_CONFIGURED,
+      'Rank provider is not configured.',
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+    rankProcessor.checkOne.mockRejectedValueOnce(providerError);
+
+    await expect(service.triggerCheck(businessId, keyword.id)).rejects.toBe(
+      providerError,
     );
   });
 

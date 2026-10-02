@@ -16,7 +16,10 @@ describe('SerpRankService', () => {
     ).rejects.toMatchObject({
       response: {
         code: 'SERP_PROVIDER_NOT_CONFIGURED',
+        message:
+          'Rank provider is not configured. Configure SERPAPI_KEY on the server to check keyword positions.',
       },
+      status: 503,
     });
     expect(providerCall).not.toHaveBeenCalled();
   });
