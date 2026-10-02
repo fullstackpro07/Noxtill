@@ -375,3 +375,19 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   under load) that pass 8/8 alone.
 - goal #5 complete: Action Center commerce items, net sales/contribution, agent tool registry,
   reconciliation.
+
+## Progress log — goal #6 (Claude Code): Automations & Workflows
+
+- items 1+2 ✅ (one commit; they share nav/i18n/layout lines). Command Center
+  (/marketing/automations/command-center, GET /workflows/command-center): active/paused workflows,
+  runs in 24 h by status and failure rate, waiting runs and waits past their resume time, approvals
+  waiting (oldest 5), open Recovery items, next 5 scheduled runs, recent failures with errors, and live
+  BullMQ counts of the shared workflow-schedule queue (platform-wide, labelled; unreachable Redis is
+  flagged). Run cost and business value disclosed as not tracked. Approvals inbox
+  (/marketing/automations/approvals) over the existing approval API: waiting / approved / rejected /
+  cancelled tabs, steps that run on approval, decision notes; delegation, escalation and four-eyes
+  disclosed as not available. Real-MySQL spec 2/2.
+  Also fixed Codex's report: SEO AI drafts (On-Page suggest, Content brief + draft) now return
+  SEO_AI_NOT_CONFIGURED (503, clear message) when no AI provider key is set, and SEO_AI_FAILED for other
+  provider failures, instead of a generic 500 (unit spec 3/3). Full jest (--maxWorkers=2): 329/331 —
+  queue.integration (pre-existing) and qr-poster timeout (known flake).

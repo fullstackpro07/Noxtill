@@ -41,3 +41,45 @@ export async function assertSeoAiDraftsAllowed(
     );
   }
 }
+
+export const SEO_AI_NOT_CONFIGURED = 'SEO_AI_NOT_CONFIGURED';
+export const SEO_AI_FAILED = 'SEO_AI_FAILED';
+
+/**
+ * Calls the AI provider and turns infrastructure failures into clear messages: a missing provider key
+ * says so (instead of a generic 500), and any other provider failure says the draft wasn't created.
+ */
+export async function seoAiComplete(
+  ai: {
+    complete(
+      businessId: string,
+      prompt: string,
+      temperature: number,
+      kind: 'complete',
+    ): Promise<string>;
+  },
+  businessId: string,
+  prompt: string,
+  temperature: number,
+): Promise<string> {
+  try {
+    return await ai.complete(businessId, prompt, temperature, 'complete');
+  } catch (error) {
+    if (error instanceof AppException) throw error;
+    if (
+      error instanceof Error &&
+      error.message === 'ANTHROPIC_API_KEY is not configured'
+    ) {
+      throw new AppException(
+        SEO_AI_NOT_CONFIGURED,
+        'AI drafting is not set up on this server (no AI provider key is configured). Write the content yourself, or ask your administrator to configure the AI provider.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    throw new AppException(
+      SEO_AI_FAILED,
+      'The AI provider did not respond, so no draft was created. Try again in a moment.',
+      HttpStatus.BAD_GATEWAY,
+    );
+  }
+}

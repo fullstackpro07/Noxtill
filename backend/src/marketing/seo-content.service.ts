@@ -5,7 +5,11 @@ import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { normalizePageUrl } from './seo-on-page.service';
 import type { SeoAuditPage } from './seo-site-audit.util';
-import { assertSeoAiDraftsAllowed, seoRules } from './seo-rules.util';
+import {
+  assertSeoAiDraftsAllowed,
+  seoAiComplete,
+  seoRules,
+} from './seo-rules.util';
 
 export const SEO_CONTENT_ERROR_CODES = {
   NOT_FOUND: 'SEO_CONTENT_BRIEF_NOT_FOUND',
@@ -438,7 +442,7 @@ export class SeoContentService {
       `Site pages: ${JSON.stringify(sitePages)}`,
     ].join('\n');
     const parsed = this.parseJson(
-      await this.ai.complete(businessId, prompt, 0.3, 'complete'),
+      await seoAiComplete(this.ai, businessId, prompt, 0.3),
     );
     const format = Object.values(SeoContentFormat).includes(
       parsed.format as SeoContentFormat,
@@ -580,7 +584,7 @@ export class SeoContentService {
       `Merchant source notes: ${brief.sourceNotes ?? '(none — make no claims about the business)'}`,
     ].join('\n');
     const parsed = this.parseJson(
-      await this.ai.complete(businessId, prompt, 0.4, 'complete'),
+      await seoAiComplete(this.ai, businessId, prompt, 0.4),
     );
     if (typeof parsed.body !== 'string' || !parsed.body.trim()) {
       throw new AppException(

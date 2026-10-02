@@ -126,6 +126,8 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.audiences": "Audiences & Segments",
     "nav.contentPlanner": "Content Planner",
     "nav.automations": "Automations",
+    "nav.workflowCommandCenter": "Command Center",
+    "nav.workflowApprovals": "Approvals",
     "nav.workflowExecutions": "Executions",
     "nav.workflowRecovery": "Recovery Center",
     "nav.workflowTriggers": "Workflow Triggers",

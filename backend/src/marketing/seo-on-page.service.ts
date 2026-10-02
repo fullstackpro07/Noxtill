@@ -9,7 +9,7 @@ import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import type { SeoAuditPage } from './seo-site-audit.util';
-import { assertSeoAiDraftsAllowed } from './seo-rules.util';
+import { assertSeoAiDraftsAllowed, seoAiComplete } from './seo-rules.util';
 
 export const SEO_ON_PAGE_ERROR_CODES = {
   NO_CRAWL: 'SEO_ON_PAGE_NO_CRAWL',
@@ -449,7 +449,7 @@ export class SeoOnPageService {
       `Primary keyword chosen by the merchant: ${page.primaryKeyword ?? 'not set'}`,
       `Open issues found by the crawler: ${page.issues.join(', ') || 'none'}`,
     ].join('\n');
-    const raw = await this.ai.complete(businessId, prompt, 0.2, 'complete');
+    const raw = await seoAiComplete(this.ai, businessId, prompt, 0.2);
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(

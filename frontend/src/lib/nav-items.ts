@@ -324,6 +324,8 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "audiences", labelKey: "nav.audiences", href: "/marketing/audiences", icon: Filter },
       { key: "content-planner", labelKey: "nav.contentPlanner", href: "/marketing/content", icon: CalendarRange },
       { key: "automations", labelKey: "nav.automations", href: "/marketing/automations", icon: Zap },
+      { key: "workflow-command-center", labelKey: "nav.workflowCommandCenter", href: "/marketing/automations/command-center", icon: Gauge },
+      { key: "workflow-approvals", labelKey: "nav.workflowApprovals", href: "/marketing/automations/approvals", icon: ClipboardCheck },
       { key: "workflow-executions", labelKey: "nav.workflowExecutions", href: "/marketing/automations/executions", icon: History },
       { key: "workflow-recovery", labelKey: "nav.workflowRecovery", href: "/marketing/automations/recovery", icon: AlertTriangle },
       { key: "workflow-triggers", labelKey: "nav.workflowTriggers", href: "/marketing/automations/triggers", icon: Radio },

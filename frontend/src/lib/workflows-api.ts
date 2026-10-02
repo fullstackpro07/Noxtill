@@ -468,6 +468,7 @@ export interface WorkflowApproval {
   workflowRun: { createdAt: string };
   requestedAt: string;
   decidedAt: string | null;
+  decisionComment?: string | null;
 }
 
 export function fetchWorkflowApprovals(
