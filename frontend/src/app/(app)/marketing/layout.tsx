@@ -11,6 +11,8 @@ import { fetchMarketingTasks } from "@/lib/marketing-tasks-api";
 const SUBTITLE_BY_PATH: { prefix: string; subtitle: string }[] = [
   { prefix: "/marketing/automations/command-center", subtitle: "Health, failures, approvals and queues across every workflow." },
   { prefix: "/marketing/automations/approvals", subtitle: "Workflow steps waiting for a person to approve or reject." },
+  { prefix: "/marketing/automations/builder", subtitle: "See each workflow as a graph and inspect every step." },
+  { prefix: "/marketing/automations/schedules", subtitle: "Scheduled workflows, durable waits and the automation queue." },
   { prefix: "/marketing/automations/executions", subtitle: "Inspect workflow runs, attempts, failures and recovery actions." },
   { prefix: "/marketing/automations/triggers", subtitle: "Inspect the event context fields already exposed to workflow triggers." },
   { prefix: "/marketing/automations/templates", subtitle: "Install a fixture-checked starter as a paused draft and review it before activation." },

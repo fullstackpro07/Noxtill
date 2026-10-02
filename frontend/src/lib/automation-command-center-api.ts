@@ -17,3 +17,23 @@ export interface AutomationCommandCenter {
 }
 
 export const fetchAutomationCommandCenter = () => apiFetch<AutomationCommandCenter>("/workflows/command-center");
+
+export interface AutomationSchedules {
+  capturedAt: string;
+  queue: AutomationCommandCenter["queue"];
+  scheduled: {
+    id: string;
+    name: string;
+    active: boolean;
+    rule: string;
+    timezone: string;
+    nextScheduleAt: string | null;
+    lastScheduledAt: string | null;
+    lastRun: { status: string; createdAt: string } | null;
+    overdue: boolean;
+  }[];
+  waits: { id: string; workflowId: string; workflow: string; waitingUntil: string | null; startedAt: string; overdue: boolean }[];
+  fixed: string[];
+}
+
+export const fetchAutomationSchedules = () => apiFetch<AutomationSchedules>("/workflows/schedules-overview");

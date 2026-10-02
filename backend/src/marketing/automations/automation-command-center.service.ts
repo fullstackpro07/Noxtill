@@ -234,4 +234,88 @@ export class AutomationCommandCenterService {
       ],
     };
   }
+
+  /**
+   * Schedules & Queues (Automations spec area 10): every scheduled workflow with its rule and next
+   * run, durable waits in progress, and the shared queue's live counts. Concurrency limits,
+   * partitioning and fairness are fixed by the platform (one schedule queue, one worker) and are not
+   * configurable per business.
+   */
+  async schedules(businessId: string, now = new Date()) {
+    const db = this.tenantPrisma.client;
+    const [scheduled, waits, queue] = await Promise.all([
+      db.workflow.findMany({
+        where: {
+          businessId,
+          archivedAt: null,
+          OR: [
+            { scheduleEveryMinutes: { not: null } },
+            { scheduleCronExpression: { not: null } },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          active: true,
+          scheduleEveryMinutes: true,
+          scheduleCronExpression: true,
+          scheduleTimezone: true,
+          nextScheduleAt: true,
+          lastScheduledAt: true,
+          runs: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { status: true, createdAt: true },
+          },
+        },
+        orderBy: [{ active: 'desc' }, { nextScheduleAt: 'asc' }],
+        take: 200,
+      }),
+      db.workflowRun.findMany({
+        where: { businessId, status: WorkflowRunStatus.waiting },
+        select: {
+          id: true,
+          waitingUntil: true,
+          createdAt: true,
+          workflow: { select: { id: true, name: true } },
+        },
+        orderBy: { waitingUntil: 'asc' },
+        take: 200,
+      }),
+      this.queueHealth(),
+    ]);
+    const overdueAfter = new Date(now.getTime() - 5 * 60 * 1000);
+    return {
+      capturedAt: now,
+      queue,
+      scheduled: scheduled.map((row) => ({
+        id: row.id,
+        name: row.name,
+        active: row.active,
+        rule: row.scheduleCronExpression
+          ? `cron ${row.scheduleCronExpression}`
+          : `every ${row.scheduleEveryMinutes} min`,
+        timezone: row.scheduleTimezone,
+        nextScheduleAt: row.active ? row.nextScheduleAt : null,
+        lastScheduledAt: row.lastScheduledAt,
+        lastRun: row.runs[0] ?? null,
+        overdue: Boolean(
+          row.active && row.nextScheduleAt && row.nextScheduleAt < overdueAfter,
+        ),
+      })),
+      waits: waits.map((row) => ({
+        id: row.id,
+        workflowId: row.workflow.id,
+        workflow: row.workflow.name,
+        waitingUntil: row.waitingUntil,
+        startedAt: row.createdAt,
+        overdue: Boolean(row.waitingUntil && row.waitingUntil < overdueAfter),
+      })),
+      fixed: [
+        'One shared schedule queue and worker for all businesses',
+        'Schedules run at most every 15 minutes; waits up to 7 days',
+        'Per-workflow concurrency, partitioning and fairness are not configurable',
+      ],
+    };
+  }
 }

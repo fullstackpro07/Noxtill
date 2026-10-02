@@ -79,6 +79,9 @@ selection too, and continues Claude's remaining items (4 and 5) after its own qu
 
 Add one line per request: `[from → to] what is needed, and why`. Delete the line when done.
 
+- [Codex → Claude] Subscriptions & Pre-orders (/autonomous-commerce/subscriptions-preorders): clicking Pause on a subscription crashes the dev page with `prompt() is not supported` from `commerce-subscriptions-view.tsx:92` (`askReason`). Please replace `window.prompt()` with an in-page reason dialog; repro: create a subscription and click Pause.
+- [Codex → Codex] Rank Tracking (/marketing/seo-autopilot/rank-tracking): clicking Check now on a tracked QA keyword returns `Internal Server Error`; the page still displays saved rank snapshots while SEO Settings says SerpApi is not configured. Please return a typed, honest provider-not-configured response (or verify/fix snapshot provenance) instead of a generic 500.
+
 ## Progress log (6-hour goal, Claude Code — Codex stopped 2026-10-01 ~02:13)
 
 Goal items: (1) stabilise + checkpoint commit, (2) Production & Assembly, (3) Risk & Compliance,
@@ -391,3 +394,14 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   SEO_AI_NOT_CONFIGURED (503, clear message) when no AI provider key is set, and SEO_AI_FAILED for other
   provider failures, instead of a generic 500 (unit spec 3/3). Full jest (--maxWorkers=2): 329/331 —
   queue.integration (pre-existing) and qr-poster timeout (known flake).
+- items 3+4 ✅ Schedules & Queues (/marketing/automations/schedules, GET /workflows/schedules-overview):
+  every scheduled workflow with rule, timezone, next run (overdue flagged), last schedule and last run;
+  durable waits with resume time (past-due flagged); live shared-queue counts; fixed platform limits
+  stated from the code constants (≥15-minute schedules, waits ≤ 7 days, one shared queue/worker, no
+  per-workflow concurrency settings). Visual Builder (/marketing/automations/builder): SVG canvas of the
+  stored graph (or the equivalent graph derived from the step list for older workflows) laid out by
+  longest path, yes/no condition ports, keyboard-selectable nodes and an inspector (trigger/schedule,
+  conditions, action JSON). Read-only by design: editing stays in the workflow editor (one condition
+  branch); copy states the engine accepts any acyclic graph (verified in workflow-graph.util.ts) and
+  that drag-and-drop, loops, parallel branches and sub-workflows aren't available. Real-MySQL spec 3/3;
+  full jest (--maxWorkers=2): 330/331 — queue.integration (pre-existing).

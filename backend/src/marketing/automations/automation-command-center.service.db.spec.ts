@@ -143,4 +143,31 @@ describe('AutomationCommandCenterService (MySQL)', () => {
     });
     expect(overview.attention.map((row) => row.key)).not.toContain('queue');
   });
+
+  it('lists scheduled workflows with their rule and durable waits', async () => {
+    const trigger = Object.values(WorkflowTriggerKey)[0];
+    await prisma.workflow.create({
+      data: {
+        businessId,
+        name: 'Every hour',
+        triggerKey: trigger,
+        active: true,
+        scheduleEveryMinutes: 60,
+        nextScheduleAt: new Date(Date.now() - 60 * 60 * 1000),
+      },
+    });
+    const result = await new AutomationCommandCenterService(
+      tenant,
+      undefined,
+    ).schedules(businessId);
+    const hourly = result.scheduled.find((row) => row.name === 'Every hour')!;
+    expect(hourly).toMatchObject({
+      rule: 'every 60 min',
+      active: true,
+      overdue: true,
+    });
+    expect(result.waits).toHaveLength(2);
+    expect(result.waits.filter((row) => row.overdue)).toHaveLength(1);
+    expect(result.queue.reachable).toBe(false);
+  });
 });
