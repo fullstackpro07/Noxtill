@@ -37,3 +37,13 @@ export interface AutomationSchedules {
 }
 
 export const fetchAutomationSchedules = () => apiFetch<AutomationSchedules>("/workflows/schedules-overview");
+
+export interface GovernanceAuditRow {
+  kind: "version" | "approval" | "recovery";
+  at: string;
+  actor: string | null;
+  text: string;
+  note: string | null;
+}
+
+export const fetchGovernanceAudit = () => apiFetch<GovernanceAuditRow[]>("/workflows/governance-audit");

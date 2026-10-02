@@ -148,6 +148,18 @@ export const POLICY_DEFS = {
     max: 50,
     integer: true,
   },
+  // marketing/automations/automation-governance.util.ts (workflow editor, version restore, Settings toggle)
+  'automations.maxActiveWorkflows': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 1000,
+    integer: true,
+  },
+  'automations.requireApprovalBeforeCustomerMessages': {
+    kind: 'boolean',
+    default: false,
+  },
   // backups (exports/backup.service.ts)
   'backup.enabled': { kind: 'boolean', default: false },
   'backup.retentionDays': {

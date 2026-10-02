@@ -5,6 +5,11 @@ import { CAPABILITIES } from '../../common/capabilities/capabilities.constants';
 import { CategoryDef, HubValue, row, RowDef, plural, relativeTime } from '../hub.core';
 import { HubDeps, asJson, business, monthStart, updateBusiness } from './hub.deps';
 import { policyRow } from './policy-rows';
+import { assertAutomationGovernance } from '../../marketing/automations/automation-governance.util';
+import {
+  workflowGraphActions,
+  type WorkflowGraph,
+} from '../../marketing/automations/workflow-graph.util';
 
 const bad = (message: string) => new AppException('SETTING_INVALID', message, HttpStatus.BAD_REQUEST);
 
@@ -109,12 +114,60 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                 requires: CAPABILITIES.AUTOMATIONS_MANAGE,
                 link: { label: 'Edit workflow', href: '/marketing/automations' },
                 state: () => ({ value: w.active ? 'On' : 'Off', tone: w.active ? 'green' : 'neutral', control: { type: 'toggle', on: w.active } }),
-                write: async (_ctx, v) => {
-                  await d.prisma.workflow.update({ where: { id: w.id }, data: { active: Boolean(v) } });
+                write: async (ctx, v) => {
+                  const on = Boolean(v);
+                  if (on && !w.active) {
+                    const graph =
+                      (w.graph as unknown as WorkflowGraph | null) ?? null;
+                    const steps = graph
+                      ? workflowGraphActions(graph)
+                      : (w.actions as unknown as { type: string }[]);
+                    await assertAutomationGovernance(d.prisma, {
+                      businessId: ctx.businessId,
+                      workflowId: w.id,
+                      activating: true,
+                      activeAfter: true,
+                      actions: steps,
+                      graph,
+                    });
+                  }
+                  await d.prisma.workflow.update({ where: { id: w.id }, data: { active: on } });
                 },
               }),
             );
           },
+        },
+        {
+          title: 'Governance',
+          hint: 'Enforced when a workflow is switched on or changed',
+          rows: [
+            policyRow(d, {
+              key: 'wf-max-active',
+              policy: 'automations.maxActiveWorkflows',
+              kind: 'number',
+              label: 'Maximum active workflows',
+              description:
+                'Switching on a workflow is refused once this many are active. Empty means no limit.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              format: (n) => `${n} active`,
+              emptyLabel: 'No limit',
+            }),
+            policyRow(d, {
+              key: 'wf-approval-before-message',
+              policy: 'automations.requireApprovalBeforeCustomerMessages',
+              kind: 'toggle',
+              label: 'Require approval before customer messages',
+              description:
+                'An active workflow must pass a "Request approval" step before any step that messages a customer.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              impact:
+                'Saving or switching on a workflow that could message a customer without approval is refused. Already-active workflows keep running until they are next changed.',
+              on: { text: 'Required', tone: 'blue' },
+              off: { text: 'Not required', tone: 'neutral' },
+            }),
+          ],
         },
         {
           title: 'Autonomous Commerce',

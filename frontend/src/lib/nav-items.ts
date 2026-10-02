@@ -329,6 +329,7 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "workflow-approvals", labelKey: "nav.workflowApprovals", href: "/marketing/automations/approvals", icon: ClipboardCheck },
       { key: "workflow-schedules", labelKey: "nav.workflowSchedules", href: "/marketing/automations/schedules", icon: CalendarClock },
       { key: "workflow-versions", labelKey: "nav.workflowVersions", href: "/marketing/automations/versions", icon: History },
+      { key: "workflow-governance", labelKey: "nav.workflowGovernance", href: "/marketing/automations/governance", icon: ShieldCheck },
       { key: "workflow-executions", labelKey: "nav.workflowExecutions", href: "/marketing/automations/executions", icon: History },
       { key: "workflow-recovery", labelKey: "nav.workflowRecovery", href: "/marketing/automations/recovery", icon: AlertTriangle },
       { key: "workflow-triggers", labelKey: "nav.workflowTriggers", href: "/marketing/automations/triggers", icon: Radio },

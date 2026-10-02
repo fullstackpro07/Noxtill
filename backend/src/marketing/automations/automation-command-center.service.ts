@@ -318,4 +318,77 @@ export class AutomationCommandCenterService {
       ],
     };
   }
+
+  /**
+   * Governance audit (Automations spec area 18): who changed or decided what — version saves,
+   * approval decisions and Recovery Center decisions — newest first. Version saves don't record an
+   * author, so they show without one.
+   */
+  async audit(businessId: string) {
+    const db = this.tenantPrisma.client;
+    const [versions, approvals, decisions] = await Promise.all([
+      db.workflowVersion.findMany({
+        where: { businessId },
+        orderBy: { createdAt: 'desc' },
+        take: 60,
+        select: {
+          workflowId: true,
+          version: true,
+          name: true,
+          createdAt: true,
+        },
+      }),
+      db.workflowApproval.findMany({
+        where: { businessId, decidedAt: { not: null } },
+        orderBy: { decidedAt: 'desc' },
+        take: 60,
+        select: {
+          id: true,
+          status: true,
+          title: true,
+          decisionComment: true,
+          decidedAt: true,
+          decidedBy: { select: { name: true } },
+          workflow: { select: { name: true } },
+        },
+      }),
+      db.workflowDeadLetterDecision.findMany({
+        where: { businessId },
+        orderBy: { createdAt: 'desc' },
+        take: 60,
+        select: {
+          id: true,
+          action: true,
+          reason: true,
+          createdAt: true,
+          actorUser: { select: { name: true } },
+        },
+      }),
+    ]);
+    return [
+      ...versions.map((row) => ({
+        kind: 'version' as const,
+        at: row.createdAt,
+        actor: null as string | null,
+        text: `Saved “${row.name}” as version ${row.version}`,
+        note: null as string | null,
+      })),
+      ...approvals.map((row) => ({
+        kind: 'approval' as const,
+        at: row.decidedAt!,
+        actor: row.decidedBy?.name ?? null,
+        text: `${row.status === 'approved' ? 'Approved' : row.status === 'rejected' ? 'Rejected' : 'Closed'} “${row.title}” in ${row.workflow.name}`,
+        note: row.decisionComment,
+      })),
+      ...decisions.map((row) => ({
+        kind: 'recovery' as const,
+        at: row.createdAt,
+        actor: row.actorUser?.name ?? null,
+        text: `Recovery Center: ${row.action}`,
+        note: row.reason,
+      })),
+    ]
+      .sort((a, b) => b.at.getTime() - a.at.getTime())
+      .slice(0, 100);
+  }
 }

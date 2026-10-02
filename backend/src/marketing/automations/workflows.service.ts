@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { assertAutomationGovernance } from './automation-governance.util';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
 import { AppException } from '../../common/filters/app.exception';
 import {
@@ -427,6 +428,15 @@ export class WorkflowsService {
               )
           : undefined;
 
+    await assertAutomationGovernance(this.tenantPrisma.client, {
+      businessId: current.businessId,
+      workflowId: id,
+      activating: nextActive && !current.active,
+      activeAfter: nextActive,
+      actions: nextActions as unknown as { type: string }[],
+      graph: nextGraph,
+    });
+
     return this.tenantPrisma.client.$transaction(async (tx) => {
       const changed = await tx.workflow.updateMany({
         where: {
@@ -753,6 +763,17 @@ export class WorkflowsService {
           source.scheduleTimezone,
         );
       }
+
+      await assertAutomationGovernance(tx, {
+        businessId: current.businessId,
+        workflowId,
+        activating: false,
+        activeAfter: current.active,
+        actions: (source.graph
+          ? workflowGraphActions(source.graph as unknown as WorkflowGraph)
+          : source.actions) as unknown as { type: string }[],
+        graph: (source.graph as unknown as WorkflowGraph | null) ?? null,
+      });
 
       const scheduleStart = new Date();
       const nextScheduleAt =

@@ -170,4 +170,41 @@ describe('AutomationCommandCenterService (MySQL)', () => {
     expect(result.waits.filter((row) => row.overdue)).toHaveLength(1);
     expect(result.queue.reachable).toBe(false);
   });
+
+  it('builds a governance audit from version saves and decisions', async () => {
+    const workflow = await prisma.workflow.findFirstOrThrow({
+      where: { businessId, name: 'Nightly digest' },
+    });
+    await prisma.workflowVersion.create({
+      data: {
+        workflowId: workflow.id,
+        businessId,
+        version: 1,
+        name: 'Nightly digest',
+        triggerKey: workflow.triggerKey,
+        conditions: [],
+        actions: [],
+      },
+    });
+    await prisma.workflowApproval.updateMany({
+      where: { businessId },
+      data: {
+        status: 'rejected',
+        decidedAt: new Date(),
+        decisionComment: 'Wrong audience',
+      },
+    });
+    const audit = await new AutomationCommandCenterService(
+      tenant,
+      undefined,
+    ).audit(businessId);
+    expect(audit.map((row) => row.kind).sort()).toEqual([
+      'approval',
+      'version',
+    ]);
+    expect(audit.find((row) => row.kind === 'approval')).toMatchObject({
+      note: 'Wrong audience',
+    });
+    await prisma.workflowVersion.deleteMany({ where: { businessId } });
+  });
 });

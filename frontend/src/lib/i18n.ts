@@ -131,6 +131,7 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.workflowSchedules": "Schedules & Queues",
     "nav.workflowBuilder": "Visual Builder",
     "nav.workflowVersions": "Versions & Environments",
+    "nav.workflowGovernance": "Governance",
     "nav.workflowExecutions": "Executions",
     "nav.workflowRecovery": "Recovery Center",
     "nav.workflowTriggers": "Workflow Triggers",

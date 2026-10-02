@@ -422,3 +422,15 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   truth: every run uses production variables (verified: trigger/workflows services hard-code
   `environment: 'production'`), so staging runs and promotion are not available. "In-flight runs keep
   their version" verified (WorkflowRun.workflowVersion is reloaded on resume). Frontend tsc + eslint.
+- item 6 ✅ Governance (/marketing/automations/governance). New policies `automations.maxActiveWorkflows`
+  (null = no limit) and `automations.requireApprovalBeforeCustomerMessages`, editable in Settings →
+  Automations (history/reset) and on the page; enforced by `assertAutomationGovernance` in
+  WorkflowsService.update (switching on, or changing an active workflow), version restore, and the
+  Settings on/off toggle. Approval rule walks every path of the graph (or the step list) and refuses any
+  customer message reachable without a prior "Request approval" step. Audit trail endpoint
+  (GET /workflows/governance-audit): version saves (author not recorded — stated), approval decisions
+  with decider and note, Recovery decisions with actor. Permissions copy states only what is verified
+  (owner + manager hold automations.manage; staff don't). Quotas, retention settings and security scans
+  disclosed as not available. Specs: governance 4/4, command center 4/4; full jest (--maxWorkers=2):
+  331/332 — queue.integration (pre-existing).
+- goal #6 complete (6 items).
