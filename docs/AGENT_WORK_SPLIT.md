@@ -414,3 +414,11 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   seo-keyword-intelligence-view.tsx (confirm), automations-view.tsx (2), workflow-variables-view.tsx,
   all-customers-panel.tsx (2), payroll-view.tsx — switch them to `askText` / `askConfirm` if they break
   in the test browser.
+- item 5 ✅ Versions & Environments (/marketing/automations/versions), frontend over existing APIs:
+  version list with restore (reason required, optimistic-concurrency precondition, restored as a new
+  version), field-by-field diff of any two stored versions (name, trigger, schedule, conditions, each
+  step, graph size), dry-run of the current version against the latest real matching event (existing
+  test endpoint; nothing sent). Environments panel counts variables per environment and states the
+  truth: every run uses production variables (verified: trigger/workflows services hard-code
+  `environment: 'production'`), so staging runs and promotion are not available. "In-flight runs keep
+  their version" verified (WorkflowRun.workflowVersion is reloaded on resume). Frontend tsc + eslint.
