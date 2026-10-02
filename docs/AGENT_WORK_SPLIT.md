@@ -272,3 +272,26 @@ screens, then Automations gaps. Local commits only, never push.
   spec: 4/4; backend/frontend `tsc --noEmit`, touched-file ESLint, and full backend Jest
   (`--maxWorkers=2`: 321/321 suites, 2070/2070 tests) passed. Authenticated local page and Add
   Opportunity form were visually checked without saving sample data.
+
+## Split — goal #4: finish SEO Autopilot 100% (both agents, from 2026-10-02 afternoon)
+
+| Owner | Work | Files the owner may edit |
+|---|---|---|
+| **Codex** | (1) Fix migration order: rename `20261002153427_seo_link_building_workflow` to a timestamp after `20261002160000` (it FKs `seo_off_page_links`, created by `…160000_seo_off_page`, so a fresh DB fails); update `_prisma_migrations.migration_name` to match; `prisma migrate status` clean. (2) Finish Competitor SEO (screen 11): UI, DB spec, done-check, commit. (3) Browser QA of every SEO screen + the newer Commerce pages (logged in): load, empty states, console/network errors, one real create→approve flow per screen with obviously-named test data deleted afterwards. Report bugs under Requests with screen + steps. | `backend/src/marketing/seo-competitor*`, `seo-off-page*`, `seo-guest-posting*`, `seo-link-building*`, `seo-local*`, their migrations, matching frontend views/api files |
+| **Claude Code** | Screens 13 Content Calendar, 14 Agent Workspace, 15 SEO Reports, 16 SEO Settings — built without new database tables where possible (read models over existing SEO records + `Business.policies` for settings). Fix bugs Codex reports in On-Page / Technical / Content. | new `backend/src/seo-workspace/**` Nest module (registered in `app.module.ts`), `frontend/src/components/marketing/seo-{calendar,workspace,reports,settings}-view.tsx`, `frontend/src/lib/seo-{calendar,workspace,reports,settings}-api.ts`, their routes, `seo-on-page*`, `seo-technical*`, `seo-content*` |
+
+Shared files (re-read right before editing, smallest possible edit, never reformat): `schema.prisma`,
+`tenant.constants.ts`, `marketing.module.ts` (Claude does NOT touch it — uses its own module),
+`seo-autopilot-tabs.tsx`, `app/(app)/marketing/layout.tsx`, `policies.constants.ts`, settings-hub files.
+Commit with explicit paths (`git add <your files>`), never `git add -A`. If a shared file holds the
+other agent's unfinished hunk, don't commit that file — ask under Requests. Never push.
+- goal #4 / Claude item 1 ✅ SEO Content Calendar (screen 13, /marketing/seo-autopilot/content-calendar).
+  New `backend/src/seo-workspace/` module (registered in app.module.ts; MarketingModule untouched).
+  Schedule view over the canonical `SeoContentBrief` records — no new table, no second workflow:
+  calendar (month grid by due date / publish date), list and pipeline views; KPIs due this week
+  (incl. overdue), briefs ready, drafting, awaiting approval, scheduled (approved + dated), refresh due
+  (same rank-drop rule as the Content refresh queue). Reschedule and assign (active team members only)
+  for open items, both audited in `seo_content_brief_audits`. Status changes stay in Content SEO
+  (deep link `?brief=<id>` now opens the brief there). Task linking disclosed as not available (no
+  Projects & Tasks module exists). Real-MySQL spec 2/2; backend+frontend tsc, eslint, full backend jest
+  (--maxWorkers=2: 322/322 suites, 2072/2072 tests).

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
@@ -259,6 +259,17 @@ export function SeoContentView() {
   const [tab, setTab] = useState<Tab>("opportunities");
   const [showDismissed, setShowDismissed] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Deep link from the Content Calendar (?brief=<id>); read once on mount.
+  useEffect(() => {
+    const brief = new URLSearchParams(window.location.search).get("brief");
+    if (!brief) return;
+    // Deferred so it runs after hydration (the server render has no query string).
+    const timer = window.setTimeout(() => {
+      setTab("briefs");
+      setOpenId(brief);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const onError = (error: unknown) => toast.error(errorMessage(error, "Something went wrong."));
   const generate = useMutation({
     mutationFn: ({ keywordId, strategyNote }: { keywordId: string; strategyNote?: string }) => generateContentBrief(keywordId, strategyNote),
