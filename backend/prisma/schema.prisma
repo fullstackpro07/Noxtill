@@ -924,6 +924,8 @@ model Business {
   seoGuestPublications         SeoGuestPublication[]
   seoGuestPitches              SeoGuestPitch[]
   seoGuestPostingAudits        SeoGuestPostingAudit[]
+  seoCompetitorGaps            SeoCompetitorGap[]
+  seoCompetitorGapAudits       SeoCompetitorGapAudit[]
   contentItems                 ContentItem[]
   staffShifts                  StaffShift[]
   timeOff                      TimeOff[]
@@ -5314,6 +5316,7 @@ model Competitor {
 
   snapshots    CompetitorSnapshot[]
   observations CompetitorObservation[]
+  seoGaps      SeoCompetitorGap[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -7473,4 +7476,54 @@ model SeoGuestPostingAudit {
 
   @@index([businessId, entityType, entityId, createdAt], map: "seo_guest_posting_audits_entity_created_idx")
   @@map("seo_guest_posting_audits")
+}
+
+/// SEO competitor evidence is entered by the merchant or sourced from a saved, attributed SERP
+/// observation. It is not a provider-wide competitor keyword/content/backlink index.
+model SeoCompetitorGap {
+  id              String     @id @default(uuid())
+  businessId      String     @map("business_id")
+  business        Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  competitorId    String     @map("competitor_id")
+  competitor      Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  kind            String     @db.VarChar(24)
+  title           String     @db.VarChar(191)
+  keyword         String?    @db.VarChar(191)
+  intent          String?    @db.VarChar(24)
+  competitorUrl   String?    @map("competitor_url") @db.VarChar(2048)
+  ownedPageUrl    String?    @map("owned_page_url") @db.VarChar(2048)
+  sourceUrl       String     @map("source_url") @db.VarChar(2048)
+  sourceLabel     String     @map("source_label") @db.VarChar(191)
+  evidenceNote    String     @map("evidence_note") @db.Text
+  competitorRank  Int?       @map("competitor_rank")
+  observedAt      DateTime   @map("observed_at")
+  status          String     @default("open") @db.VarChar(24)
+  actionType      String?    @map("action_type") @db.VarChar(24)
+  actionEntityId  String?    @map("action_entity_id") @db.VarChar(191)
+  createdByUserId String?    @map("created_by_user_id") @db.VarChar(191)
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  audits          SeoCompetitorGapAudit[]
+
+  @@index([businessId, kind, status, observedAt], map: "seo_competitor_gaps_biz_kind_status_observed_idx")
+  @@index([businessId, competitorId, observedAt], map: "seo_competitor_gaps_biz_competitor_observed_idx")
+  @@map("seo_competitor_gaps")
+}
+
+/// Append-only history for evidence, cross-screen actions, and close/reopen decisions.
+model SeoCompetitorGapAudit {
+  id          String          @id @default(uuid())
+  businessId  String          @map("business_id")
+  business    Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  gapId       String          @map("gap_id")
+  gap         SeoCompetitorGap @relation(fields: [gapId], references: [id], onDelete: Cascade)
+  action      String          @db.VarChar(48)
+  reason      String?         @db.Text
+  beforeState Json?           @map("before_state")
+  afterState  Json?           @map("after_state")
+  actorUserId String?         @map("actor_user_id") @db.VarChar(191)
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@index([businessId, gapId, createdAt], map: "seo_competitor_gap_audits_biz_gap_created_idx")
+  @@map("seo_competitor_gap_audits")
 }

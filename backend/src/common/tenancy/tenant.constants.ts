@@ -133,6 +133,8 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'SeoGuestPublication',
   'SeoGuestPitch',
   'SeoGuestPostingAudit',
+  'SeoCompetitorGap',
+  'SeoCompetitorGapAudit',
   'SeoAuditRun',
   'SeoAuditSchedule',
   'SeoAuditIssue',

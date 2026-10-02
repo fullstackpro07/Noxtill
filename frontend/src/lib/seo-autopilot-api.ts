@@ -924,3 +924,118 @@ export function recoverSeoLostLink(id: string, evidence: string): Promise<SeoOff
     { method: "POST", body: JSON.stringify({ evidence }) },
   );
 }
+
+export type SeoCompetitorKind =
+  | "keyword"
+  | "content"
+  | "backlink"
+  | "ranking"
+  | "page"
+  | "serp_feature";
+export type SeoCompetitorStatus = "open" | "actioned" | "resolved" | "dismissed";
+export type SeoCompetitorAction = "keyword" | "content" | "link";
+
+export interface SeoCompetitorGap {
+  id: string;
+  competitorId: string;
+  competitorName: string;
+  kind: SeoCompetitorKind;
+  title: string;
+  keyword: string | null;
+  intent: string | null;
+  competitorUrl: string | null;
+  ownedPageUrl: string | null;
+  sourceUrl: string;
+  sourceLabel: string;
+  evidenceNote: string;
+  competitorRank: number | null;
+  ownedRank: number | null;
+  ownedRankCheckedAt: string | null;
+  positionComparison: "not_comparable" | "competitor_ahead" | "business_ahead" | "same_position";
+  observedAt: string;
+  status: SeoCompetitorStatus;
+  actionType: SeoCompetitorAction | null;
+  actionEntityId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  audits: {
+    id: string;
+    action: string;
+    reason: string | null;
+    beforeState: unknown;
+    afterState: unknown;
+    actorUserId: string | null;
+    createdAt: string;
+  }[];
+}
+
+export interface SeoCompetitorOverview {
+  checkedAt: string;
+  competitors: { id: string; name: string; priority: string }[];
+  trackedCompetitors: number;
+  counts: {
+    keywordGaps: number;
+    contentGaps: number;
+    backlinkGaps: number;
+    serpGaps: number;
+    recordedEvidence: number;
+  };
+  gaps: SeoCompetitorGap[];
+  disclosures: {
+    evidence: string;
+    keywordData: string;
+    contentData: string;
+    backlinkData: string;
+    serpFeatures: string;
+  };
+}
+
+export function fetchSeoCompetitorOverview(): Promise<SeoCompetitorOverview> {
+  return apiFetch<SeoCompetitorOverview>("/seo-autopilot/competitor");
+}
+
+export function createSeoCompetitorGap(input: {
+  competitorId: string;
+  kind: SeoCompetitorKind;
+  title: string;
+  keyword?: string;
+  intent?: string;
+  competitorUrl?: string;
+  ownedPageUrl?: string;
+  sourceUrl: string;
+  sourceLabel?: string;
+  evidenceNote: string;
+  competitorRank?: number;
+  observedAt?: string;
+}): Promise<SeoCompetitorGap> {
+  return apiFetch<SeoCompetitorGap>("/seo-autopilot/competitor/gaps", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function createSeoCompetitorAction(
+  id: string,
+  action: SeoCompetitorAction,
+): Promise<{
+  id: string;
+  actionType: SeoCompetitorAction;
+  actionEntityId: string;
+  actionUrl: string;
+  status: "actioned";
+}> {
+  return apiFetch(`/seo-autopilot/competitor/gaps/${encodeURIComponent(id)}/actions`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
+export function transitionSeoCompetitorGap(
+  id: string,
+  input: { status: "open" | "resolved" | "dismissed"; reason: string },
+): Promise<SeoCompetitorGap> {
+  return apiFetch<SeoCompetitorGap>(
+    `/seo-autopilot/competitor/gaps/${encodeURIComponent(id)}/transition`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
