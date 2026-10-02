@@ -340,3 +340,12 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   `approvals.commerceItemsWaiting` count shown on the card. Migration 20261002200000 (enum MODIFY,
   verified in information_schema). Real-MySQL spec 2/2; full jest (--maxWorkers=2: 327/327 suites,
   2084/2084 tests).
+- item 2 ✅ Commerce dashboard net sales + contribution. New `profitability` block (trailing 30 days):
+  gross = completed order totals; refunds = approved returns on those same orders (allocated to the
+  order's period); net sales = gross − refunds; contribution = net sales − recorded order-line cost −
+  recorded Delivery.deliveryCost. Always reported `incomplete` with named missing components (payment
+  fees, marketplace fees, ad spend — not recorded per order; plus counts of order lines with zero cost
+  and deliveries with no cost model). Ad spend excluded because provider stat windows differ (Meta
+  stores last-30-day rollups). Stale `net_sales_after_refunds` / `contribution_profit_and_margin`
+  disclosures removed. Real-MySQL spec covers refunds (pending excluded), zero-cost line, delivery cost.
+  Full jest (--maxWorkers=2: 327/327 suites, 2085/2085 tests).

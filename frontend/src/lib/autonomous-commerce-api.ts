@@ -12,8 +12,27 @@ export interface CommerceOperations {
   growth: { openStoreOpportunities: number; highImpactStoreOpportunities: number; runningExperiments: number; experimentsAwaitingDecision: number };
 }
 
+export interface CommerceProfitability {
+  currency: string;
+  grossSales: number;
+  refunds: number;
+  refundedReturns: number;
+  netSales: number;
+  costOfGoods: number;
+  deliveryCost: number;
+  deliveries: number;
+  linesWithoutCost: number;
+  lines: number;
+  contributionBeforeOtherCosts: number;
+  contributionMarginPct: number | null;
+  status: "incomplete";
+  missingComponents: string[];
+  definition: string;
+}
+
 export interface AutonomousCommerceSummary {
   operations: CommerceOperations;
+  profitability: CommerceProfitability;
   period: { start: string; end: string; days: number };
   capturedAt: string;
   sales: {

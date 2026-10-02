@@ -26,6 +26,13 @@ describe('AutonomousCommerceDashboardService', () => {
           experimentsAwaitingDecision: 0,
         },
       });
+    jest
+      .spyOn(AutonomousCommerceDashboardService.prototype, 'profitability')
+      .mockResolvedValue(
+        {} as Awaited<
+          ReturnType<AutonomousCommerceDashboardService['profitability']>
+        >,
+      );
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -118,7 +125,6 @@ describe('AutonomousCommerceDashboardService', () => {
     );
     expect(result.unavailableMetrics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: 'net_sales_after_refunds' }),
         expect.objectContaining({ key: 'supplier_dispute_rate' }),
       ]),
     );

@@ -201,4 +201,97 @@ describe('AutonomousCommerceDashboardService (MySQL)', () => {
       response: { code: 'COMMERCE_ACTIONS_PAUSED' },
     });
   });
+
+  it('reports net sales after refunds and an explicitly incomplete contribution', async () => {
+    const customer = await prisma.customer.create({
+      data: { businessId, name: 'Buyer', phone: `+1777${Date.now()}` },
+    });
+    const product = await prisma.product.create({
+      data: { businessId, name: 'Profit lamp', costPrice: 4, sellingPrice: 10 },
+    });
+    const order = await prisma.order.create({
+      data: {
+        businessId,
+        orderNo: 9001,
+        customerId: customer.id,
+        status: 'completed',
+        total: 100,
+        items: {
+          create: [
+            { productId: product.id, name: 'Lamp', price: 10, cost: 4, qty: 8 },
+            {
+              productId: product.id,
+              name: 'Gift wrap',
+              price: 20,
+              cost: 0,
+              qty: 1,
+            },
+          ],
+        },
+      },
+    });
+    await prisma.return.create({
+      data: {
+        businessId,
+        orderId: order.id,
+        reason: 'damaged',
+        refundMethod: 'cash',
+        refundAmount: 10,
+        status: 'approved',
+      },
+    });
+    await prisma.return.create({
+      data: {
+        businessId,
+        orderId: order.id,
+        reason: 'changed mind',
+        refundMethod: 'cash',
+        refundAmount: 50,
+        status: 'pending',
+      },
+    });
+    await prisma.delivery.create({
+      data: {
+        businessId,
+        orderId: order.id,
+        addressLine: '1 Main St',
+        deliveryCost: 5,
+      },
+    });
+    const now = new Date();
+    const result = await service.profitability(
+      businessId,
+      new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      new Date(now.getTime() + 1000),
+    );
+    expect(result).toMatchObject({
+      grossSales: 100,
+      refunds: 10,
+      netSales: 90,
+      costOfGoods: 32,
+      deliveryCost: 5,
+      contributionBeforeOtherCosts: 53,
+      contributionMarginPct: 58.89,
+      linesWithoutCost: 1,
+      status: 'incomplete',
+    });
+    expect(result.missingComponents).toEqual(
+      expect.arrayContaining(['Payment processing fees', 'Allocated ad spend']),
+    );
+    expect(result.missingComponents.join(' ')).toMatch(/1 of 2 order lines/);
+
+    const returns = await prisma.return.findMany({
+      where: { businessId },
+      select: { id: true },
+    });
+    await prisma.returnItem.deleteMany({
+      where: { returnId: { in: returns.map((row) => row.id) } },
+    });
+    await prisma.return.deleteMany({ where: { businessId } });
+    await prisma.delivery.deleteMany({ where: { orderId: order.id } });
+    await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
+    await prisma.order.delete({ where: { id: order.id } });
+    await prisma.product.delete({ where: { id: product.id } });
+    await prisma.customer.delete({ where: { id: customer.id } });
+  });
 });

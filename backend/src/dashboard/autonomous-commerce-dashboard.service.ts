@@ -147,6 +147,102 @@ export class AutonomousCommerceDashboardService {
     };
   }
 
+  /**
+   * Net sales and contribution for completed orders in the window. Refunds are approved returns on
+   * those same orders (allocated to the order's period, not the refund date). Contribution here is
+   * net sales minus recorded cost of goods only — shipping, payment, marketplace and ad costs are not
+   * recorded per order, so the figure is always reported as incomplete with those components named.
+   */
+  async profitability(businessId: string, since: Date, until: Date) {
+    const db = this.tenantPrisma.client;
+    const orders = await db.order.findMany({
+      where: {
+        businessId,
+        status: OrderStatus.completed,
+        isQuotation: false,
+        createdAt: { gte: since, lte: until },
+      },
+      select: {
+        id: true,
+        total: true,
+        items: { select: { cost: true, qty: true } },
+      },
+    });
+    const orderIds = orders.map((order) => order.id);
+    const refunds = orderIds.length
+      ? await db.return.aggregate({
+          where: {
+            businessId,
+            status: ReturnStatus.approved,
+            orderId: { in: orderIds },
+          },
+          _sum: { refundAmount: true },
+          _count: { _all: true },
+        })
+      : { _sum: { refundAmount: null }, _count: { _all: 0 } };
+    let gross = 0;
+    let cogs = 0;
+    let lines = 0;
+    let linesWithoutCost = 0;
+    for (const order of orders) {
+      gross += Number(order.total);
+      for (const item of order.items) {
+        lines += 1;
+        const cost = Number(item.cost);
+        if (cost <= 0) linesWithoutCost += 1;
+        cogs += cost * item.qty;
+      }
+    }
+    const deliveries = orderIds.length
+      ? await db.delivery.findMany({
+          where: { businessId, orderId: { in: orderIds } },
+          select: { deliveryCost: true },
+        })
+      : [];
+    const deliveryCost = deliveries.reduce(
+      (sum, row) => sum + Number(row.deliveryCost ?? 0),
+      0,
+    );
+    const deliveriesWithoutCost = deliveries.filter(
+      (row) => row.deliveryCost === null,
+    ).length;
+    const refunded = Number(refunds._sum.refundAmount ?? 0);
+    const netSales = round2(gross - refunded);
+    const contribution = round2(netSales - cogs - deliveryCost);
+    return {
+      grossSales: round2(gross),
+      refunds: round2(refunded),
+      refundedReturns: refunds._count._all,
+      netSales,
+      costOfGoods: round2(cogs),
+      deliveryCost: round2(deliveryCost),
+      deliveries: deliveries.length,
+      linesWithoutCost,
+      lines,
+      contributionBeforeOtherCosts: contribution,
+      contributionMarginPct:
+        netSales > 0 ? round2((contribution / netSales) * 100) : null,
+      status: 'incomplete' as const,
+      missingComponents: [
+        ...(deliveriesWithoutCost > 0
+          ? [
+              `Delivery cost on ${deliveriesWithoutCost} of ${deliveries.length} deliveries (no cost model)`,
+            ]
+          : []),
+        'Payment processing fees',
+        'Marketplace fees',
+        'Allocated ad spend',
+        ...(linesWithoutCost > 0
+          ? [
+              `Cost of goods on ${linesWithoutCost} of ${lines} order lines (recorded cost is 0)`,
+            ]
+          : []),
+      ],
+      definition:
+        'Net sales = completed order totals less approved refunds on those same orders. Contribution = net sales less the cost recorded on each order line and the delivery cost recorded by Delivery & Riders; returned stock is not credited back. Payment, marketplace and ad costs are not recorded per order, so this is not full contribution profit.',
+    };
+  }
+
   async summary(businessId: string) {
     const capturedAt = new Date();
     const since = new Date(capturedAt.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -256,10 +352,14 @@ export class AutonomousCommerceDashboardService {
       Number(activeClaimLoss._sum.otherLossAmount ?? 0);
     const activeRecoveryAmount = Number(activeClaimRecovery._sum.amount ?? 0);
 
-    const operations = await this.operations(businessId, capturedAt);
+    const [operations, profitability] = await Promise.all([
+      this.operations(businessId, capturedAt),
+      this.profitability(businessId, since, capturedAt),
+    ]);
 
     return {
       operations,
+      profitability: { ...profitability, currency: business.currency },
       period: { start: since, end: capturedAt, days: 30 },
       capturedAt,
       sales: {
@@ -325,16 +425,6 @@ export class AutonomousCommerceDashboardService {
           'Open claims are submitted, acknowledged or partially settled canonical supplier-claim records. Recoverable value is their recorded line-loss amount less recorded settlements. Aging means submitted more than 30 days ago. Recovered this month uses the UTC calendar month and recorded supplier settlements; it is not an accounting posting.',
       },
       unavailableMetrics: [
-        {
-          key: 'net_sales_after_refunds',
-          reason:
-            'Refunds are recorded separately from orders and are not yet allocated to the original order period in this dashboard.',
-        },
-        {
-          key: 'contribution_profit_and_margin',
-          reason:
-            'The current dashboard does not yet reconcile variable fulfillment, payment and acquisition costs against each order.',
-        },
         {
           key: 'ad_spend_mer_and_cac',
           reason:

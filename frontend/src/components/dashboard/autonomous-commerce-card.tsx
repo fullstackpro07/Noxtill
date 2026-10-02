@@ -61,6 +61,20 @@ export function AutonomousCommerceCard() {
             </div>
           </div>
 
+          <div className="mt-3 rounded-[11px] border p-3" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-[11.5px] font-bold" style={{ color: "var(--app-text)" }}>Net sales &amp; contribution · 30 days</h3>
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: "var(--app-surface-2)", color: "var(--app-warning-text)" }}>Contribution incomplete</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Metric icon={ShoppingBag} label="Net sales" value={formatCurrency(data.profitability.netSales, data.profitability.currency)} detail={`${formatCurrency(data.profitability.refunds, data.profitability.currency)} refunded`} />
+              <Metric icon={Boxes} label="Goods + delivery cost" value={formatCurrency(data.profitability.costOfGoods + data.profitability.deliveryCost, data.profitability.currency)} detail={`${formatCurrency(data.profitability.deliveryCost, data.profitability.currency)} delivery on ${data.profitability.deliveries} deliveries`} tone={data.profitability.linesWithoutCost > 0 ? "warning" : "default"} />
+              <Metric icon={ClipboardCheck} label="Contribution (partial)" value={formatCurrency(data.profitability.contributionBeforeOtherCosts, data.profitability.currency)} detail={data.profitability.contributionMarginPct === null ? "No net sales" : `${data.profitability.contributionMarginPct}% of net sales`} />
+              <Metric icon={AlertTriangle} label="Not included" value={String(data.profitability.missingComponents.length)} detail="Cost types not recorded" tone="warning" />
+            </div>
+            <p className="mt-2 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>Not included: {data.profitability.missingComponents.join(" · ")}</p>
+          </div>
+
           <WorkQueues ops={data.operations} />
 
           {data.fulfillment.missingPromiseTime > 0 && (
@@ -75,6 +89,7 @@ export function AutonomousCommerceCard() {
             <p className="mt-2 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{data.sales.definition}</p>
             <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{data.fulfillment.definition}</p>
             <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{data.supplierClaims.definition}</p>
+            <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{data.profitability.definition}</p>
             <ul className="mt-2 list-disc space-y-1 ps-4 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
               {data.unavailableMetrics.map((metric) => (
                 <li key={metric.key}><span className="font-semibold">{metric.key.replaceAll("_", " ")}:</span> {metric.reason}</li>
