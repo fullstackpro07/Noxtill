@@ -18,6 +18,8 @@ export interface SeoAuditPage {
   title: string | null;
   description: string | null;
   h1Count: number | null;
+  /** Text of the first H1 (absent on runs recorded before this field existed). */
+  h1?: string | null;
   imagesMissingAlt: number | null;
   canonicalUrl: string | null;
   noindex: boolean;
@@ -27,6 +29,7 @@ export interface ParsedHtmlPage {
   title: string | null;
   description: string | null;
   h1Count: number;
+  h1: string | null;
   imagesMissingAlt: number;
   canonicalUrl: string | null;
   noindex: boolean;
@@ -228,6 +231,7 @@ export function parseHtmlPage(html: string, pageUrl: string): ParsedHtmlPage {
   let canonicalUrl: string | null = null;
   let noindex = false;
   let h1Count = 0;
+  let h1: string | null = null;
   let imagesMissingAlt = 0;
   let insecureResourceCount = 0;
   const internalLinks: string[] = [];
@@ -263,6 +267,12 @@ export function parseHtmlPage(html: string, pageUrl: string): ParsedHtmlPage {
       }
     } else if (tagName === 'h1') {
       h1Count += 1;
+      if (h1 === null) {
+        const body = cleaned
+          .slice(tags.lastIndex)
+          .match(/^([\s\S]*?)<\/h1\s*>/i);
+        h1 = body ? normalizedText(body[1].replace(/<[^>]*>/g, ' ')) : null;
+      }
     } else if (
       tagName === 'img' &&
       !Object.prototype.hasOwnProperty.call(attributes, 'alt')
@@ -308,6 +318,7 @@ export function parseHtmlPage(html: string, pageUrl: string): ParsedHtmlPage {
     title,
     description,
     h1Count,
+    h1,
     imagesMissingAlt,
     canonicalUrl,
     noindex,

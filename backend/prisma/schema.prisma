@@ -908,6 +908,8 @@ model Business {
   commerceExperiments          CommerceExperiment[]
   commerceExperimentAudits     CommerceExperimentAudit[]
   seoAuditRuns                 SeoAuditRun[]
+  seoContentRevisions          SeoContentRevision[]
+  seoContentRevisionAudits     SeoContentRevisionAudit[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
   seoAuditIssueAudits          SeoAuditIssueAudit[]
@@ -7051,4 +7053,67 @@ model CommerceExperimentAudit {
 
   @@index([businessId, experimentId, createdAt], map: "commerce_experiment_audits_biz_exp_created_idx")
   @@map("commerce_experiment_audits")
+}
+
+enum SeoContentRevisionStatus {
+  draft
+  approval_required
+  approved
+  rejected
+  applied
+  verified
+  superseded
+}
+
+/// SEO Autopilot — On-Page SEO (screen 4). A versioned proposal for one page's title / meta
+/// description / H1. Noxtill does not host or publish the merchant's website, so a revision is never
+/// written to a live page: after approval the merchant applies it on their site and marks it applied,
+/// and it becomes `verified` only when a later site crawl observes the proposed values live.
+model SeoContentRevision {
+  id                      String                   @id @default(uuid())
+  businessId              String                   @map("business_id")
+  business                Business                 @relation(fields: [businessId], references: [id])
+  pageUrl                 String                   @map("page_url") @db.VarChar(2048)
+  /// sha256 of the normalized page URL — used for per-page versioning (URLs are too long to index).
+  pageKey                 String                   @map("page_key") @db.Char(64)
+  version                 Int
+  status                  SeoContentRevisionStatus @default(draft)
+  /// The page as last crawled when this revision was created (title, description, h1Count, run id).
+  beforeSnapshot          Json                     @map("before_snapshot")
+  proposedTitle           String?                  @map("proposed_title") @db.VarChar(300)
+  proposedMetaDescription String?                  @map("proposed_meta_description") @db.VarChar(500)
+  proposedH1              String?                  @map("proposed_h1") @db.VarChar(300)
+  primaryKeyword          String?                  @map("primary_keyword") @db.VarChar(191)
+  rationale               String?                  @db.Text
+  source                  String                   @default("manual") @db.VarChar(16)
+  createdByUserId         String?                  @map("created_by_user_id")
+  submittedAt             DateTime?                @map("submitted_at")
+  decidedAt               DateTime?                @map("decided_at")
+  decidedByUserId         String?                  @map("decided_by_user_id")
+  decisionNote            String?                  @map("decision_note") @db.Text
+  appliedAt               DateTime?                @map("applied_at")
+  appliedByUserId         String?                  @map("applied_by_user_id")
+  verifiedAt              DateTime?                @map("verified_at")
+  /// Last verification attempt: which run, and which proposed fields matched / did not match live.
+  verification            Json?
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+
+  @@unique([businessId, pageKey, version], map: "seo_content_revisions_business_page_version_key")
+  @@index([businessId, status, updatedAt], map: "seo_content_revisions_business_status_updated_idx")
+  @@map("seo_content_revisions")
+}
+
+model SeoContentRevisionAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  revisionId  String   @map("revision_id")
+  action      String   @db.VarChar(64)
+  note        String?  @db.Text
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, revisionId, createdAt], map: "seo_content_revision_audits_biz_rev_created_idx")
+  @@map("seo_content_revision_audits")
 }

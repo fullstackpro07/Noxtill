@@ -195,3 +195,14 @@ screens, then Automations gaps. Local commits only, never push.
   and subscription renewals; reading and manual record keeping keep working. Commerce pages show a
   Pause/Resume banner that saves through the same Settings API. No migration (policies JSON column).
   jest --maxWorkers=3: 314/314 suites, 2051/2051 tests.
+- item 3 ✅ SEO On-Page (screen 4, /marketing/seo-autopilot/on-page). Pages from the latest site audit
+  with real open on-page issues, mapped keyword, last optimized and latest revision. Versioned
+  `SeoContentRevision` proposals (title / meta description / H1; manual, AI draft or restore) →
+  approval (reject needs a reason) → merchant applies on their own site → `verified` only when a
+  later crawl sees every proposed value live (checked after each audit and on demand). Crawler now
+  records the first H1's text so H1 changes are verifiable. Honest gaps: no website publishing
+  (Noxtill doesn't host sites), organic performance not tracked (no Search Console), internal-link
+  opportunities not tracked (link graph not stored). Added an SEO tab bar (layout) for all SEO screens.
+  Migration 20261002100000 (2 FKs verified). jest --maxWorkers=2: 315/315 suites, 2054/2054 tests
+  (a --maxWorkers=3 run on the loaded machine had 4 timeout/contention failures in untouched suites,
+  all passing alone).

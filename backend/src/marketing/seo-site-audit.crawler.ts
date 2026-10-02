@@ -495,6 +495,7 @@ export class SeoSiteAuditCrawler {
       title: parsed?.title ?? null,
       description: parsed?.description ?? null,
       h1Count: parsed?.h1Count ?? null,
+      h1: parsed?.h1 ?? null,
       imagesMissingAlt: parsed?.imagesMissingAlt ?? null,
       canonicalUrl: parsed?.canonicalUrl ?? null,
       noindex,

@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { ActivityEventType, Prisma } from '@prisma/client';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -13,6 +13,7 @@ import {
   type SeoAuditPage,
 } from './seo-site-audit.util';
 import { ActivityService } from '../activity/activity.service';
+import { SeoOnPageService } from './seo-on-page.service';
 import { SeoAuditIssuesService } from './seo-audit-issues.service';
 
 const SEO_AUDIT_NOT_FOUND = 'SEO_AUDIT_NOT_FOUND';
@@ -27,6 +28,7 @@ export class SeoSiteAuditService {
     private readonly crawler: SeoSiteAuditCrawler,
     private readonly activity: ActivityService,
     private readonly auditIssues: SeoAuditIssuesService,
+    @Optional() private readonly onPage?: SeoOnPageService,
   ) {}
 
   async list(businessId: string) {
@@ -310,6 +312,10 @@ export class SeoSiteAuditService {
       pages: auditResult.pages,
       issues: auditResult.issues,
     });
+
+    // On-Page SEO: a fresh crawl is the evidence that confirms (or not) applied revisions.
+    // Never let verification break the audit that already succeeded.
+    await this.onPage?.verifyApplied(businessId).catch(() => undefined);
 
     const highPriorityIssueCount = issueChanges.newlyDetectedHighPriorityCount;
     if (highPriorityIssueCount > 0) {

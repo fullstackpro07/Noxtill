@@ -46,6 +46,8 @@ import { MarketingSettingsService } from './marketing-settings.service';
 import { MarketingSettingsController } from './marketing-settings.controller';
 import { SeoAutopilotService } from './seo-autopilot.service';
 import { SeoAutopilotController } from './seo-autopilot.controller';
+import { SeoOnPageController } from './seo-on-page.controller';
+import { SeoOnPageService } from './seo-on-page.service';
 import { SeoSiteAuditCrawler } from './seo-site-audit.crawler';
 import { SeoSiteAuditService } from './seo-site-audit.service';
 import { SeoAuditIssuesService } from './seo-audit-issues.service';
@@ -83,6 +85,7 @@ import { ActivityModule } from '../activity/activity.module';
     MarketingTasksController,
     MarketingSettingsController,
     SeoAutopilotController,
+    SeoOnPageController,
   ],
   providers: [
     CampaignsService,
@@ -109,6 +112,7 @@ import { ActivityModule } from '../activity/activity.module';
     SeoAutopilotService,
     SeoSiteAuditCrawler,
     SeoSiteAuditService,
+    SeoOnPageService,
     SeoAuditIssuesService,
     SeoAuditScheduleService,
     SeoAuditScheduleProcessor,
