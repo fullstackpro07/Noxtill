@@ -359,6 +359,7 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "commerce-subscriptions", labelKey: "nav.subscriptionsPreorders", href: "/autonomous-commerce/subscriptions-preorders", icon: Repeat },
       { key: "commerce-store-optimizer", labelKey: "nav.storeOptimizer", href: "/autonomous-commerce/store-optimizer", icon: Sparkles },
       { key: "commerce-experiment-lab", labelKey: "nav.experimentLab", href: "/autonomous-commerce/experiment-lab", icon: FlaskConical },
+      { key: "commerce-agent-tools", labelKey: "nav.agentTools", href: "/autonomous-commerce/agent-tools", icon: Bot },
     ],
   },
   {

@@ -138,6 +138,23 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               on: { text: 'Paused', tone: 'red' },
               off: { text: 'Running', tone: 'green' },
             }),
+            policyRow(d, {
+              key: 'commerce-autonomy',
+              policy: 'commerce.autonomyLevel',
+              kind: 'number',
+              label: 'Commerce agent autonomy level',
+              description:
+                '0 disabled · 1 observe (read tools) · 2 recommend (drafts) · 3 approval-gated · 4 limited · 5 full configured autonomy. Medium-risk and higher tools always need approval.',
+              risk: 'High',
+              requires: CAPABILITIES.COMMERCE_MANAGE,
+              impact:
+                'Controls which registered commerce tools an agent may use. Higher levels never skip approval for high-risk, financial or irreversible actions.',
+              link: {
+                label: 'Open Agents & Tools',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              format: (n) => `Level ${n}`,
+            }),
           ],
         },
         {

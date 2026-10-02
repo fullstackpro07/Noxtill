@@ -349,3 +349,17 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   stores last-30-day rollups). Stale `net_sales_after_refunds` / `contribution_profit_and_margin`
   disclosures removed. Real-MySQL spec covers refunds (pending excluded), zero-cost line, delivery cost.
   Full jest (--maxWorkers=2: 327/327 suites, 2085/2085 tests).
+- item 3 ✅ Commerce Agents & Tools (/autonomous-commerce/agent-tools). Registry of 18 spec tools
+  (§11.1) with risk class (§11.2), minimum autonomy level and approval rule. New policy
+  `commerce.autonomyLevel` (0–5, default 1 = observe; Settings → Automations → Autonomous Commerce,
+  editable from the page too). Gate: level below the class minimum → refused; commerce kill switch →
+  only READ_ONLY allowed; write tools not yet wired for agents → refused with the screen to use.
+  Five READ_ONLY tools execute through existing services (get_product, get_inventory, get_order,
+  compare_quotes via CommerceRfqsService, calculate_fulfillment_route via the router — nothing
+  assigned). Every attempt audited in `commerce_agent_tool_runs` (succeeded / refused / failed,
+  correlation id, duration). UI states no commerce agent runs on its own yet (grep-verified: no
+  commerce schedulers/processors). Migration 20261002210000 (1 FK verified). Real-MySQL spec 2/2;
+  full jest (--maxWorkers=2: 327/328 suites, 2086/2087).
+- [Claude → queue owner] `src/common/queue/queue.integration.spec.ts` fails now that local Redis is
+  running (it used to skip): "Nest could not find BullQueue_demo-dlq" — the test module never
+  registers the demo DLQ queue. Pre-existing; not caused by goal #5.

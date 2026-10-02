@@ -909,6 +909,7 @@ model Business {
   commerceStoreAudits          CommerceStoreAudit[]
   commerceExperiments          CommerceExperiment[]
   commerceExperimentAudits     CommerceExperimentAudit[]
+  commerceAgentToolRuns        CommerceAgentToolRun[]
   seoAuditRuns                 SeoAuditRun[]
   seoContentRevisions          SeoContentRevision[]
   seoContentRevisionAudits     SeoContentRevisionAudit[]
@@ -7299,28 +7300,28 @@ model SeoContentDismissal {
 /// Merchant-entered backlink observation. No backlink provider is configured, so these records
 /// are evidence supplied by the merchant and are never presented as a provider-wide profile.
 model SeoOffPageLink {
-  id              String    @id @default(uuid())
-  businessId      String    @map("business_id")
-  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  relationshipKey String    @map("relationship_key") @db.Char(64)
-  sourceDomain    String    @map("source_domain") @db.VarChar(253)
-  sourceUrl       String    @map("source_url") @db.VarChar(2048)
-  targetUrl       String    @map("target_url") @db.VarChar(2048)
-  anchorText      String?   @map("anchor_text") @db.Text
-  linkType        String    @default("unknown") @map("link_type") @db.VarChar(32)
-  status          String    @default("active") @db.VarChar(24)
-  firstSeenAt     DateTime? @map("first_seen_at")
-  lastSeenAt      DateTime? @map("last_seen_at")
-  evidenceNote    String    @map("evidence_note") @db.Text
-  relevanceNote   String?   @map("relevance_note") @db.Text
-  qualityNote     String?   @map("quality_note") @db.Text
-  riskNote        String?   @map("risk_note") @db.Text
-  sourceName      String    @default("merchant-entered") @map("source_name") @db.VarChar(64)
-  tracked         Boolean   @default(true)
-  createdByUserId String?   @map("created_by_user_id")
+  id               String                 @id @default(uuid())
+  businessId       String                 @map("business_id")
+  business         Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  relationshipKey  String                 @map("relationship_key") @db.Char(64)
+  sourceDomain     String                 @map("source_domain") @db.VarChar(253)
+  sourceUrl        String                 @map("source_url") @db.VarChar(2048)
+  targetUrl        String                 @map("target_url") @db.VarChar(2048)
+  anchorText       String?                @map("anchor_text") @db.Text
+  linkType         String                 @default("unknown") @map("link_type") @db.VarChar(32)
+  status           String                 @default("active") @db.VarChar(24)
+  firstSeenAt      DateTime?              @map("first_seen_at")
+  lastSeenAt       DateTime?              @map("last_seen_at")
+  evidenceNote     String                 @map("evidence_note") @db.Text
+  relevanceNote    String?                @map("relevance_note") @db.Text
+  qualityNote      String?                @map("quality_note") @db.Text
+  riskNote         String?                @map("risk_note") @db.Text
+  sourceName       String                 @default("merchant-entered") @map("source_name") @db.VarChar(64)
+  tracked          Boolean                @default(true)
+  createdByUserId  String?                @map("created_by_user_id")
   wonByOpportunity SeoOffPageOpportunity? @relation("SeoOffPageWonLink")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
 
   @@unique([businessId, relationshipKey], map: "seo_off_page_links_business_relationship_key")
   @@index([businessId, status, createdAt], map: "seo_off_page_links_business_status_created_idx")
@@ -7331,41 +7332,41 @@ model SeoOffPageLink {
 /// Manually researched prospect for a link opportunity. Quality and risk are merchant-recorded
 /// evidence, not a vendor authority score or an automatic legal/reputation classification.
 model SeoOffPageOpportunity {
-  id              String   @id @default(uuid())
-  businessId      String   @map("business_id")
-  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  opportunityKey  String   @map("opportunity_key") @db.Char(64)
-  kind            String   @db.VarChar(32)
-  title           String   @db.VarChar(191)
-  prospectUrl     String   @map("prospect_url") @db.VarChar(2048)
-  targetUrl       String?  @map("target_url") @db.VarChar(2048)
-  evidenceNote    String   @map("evidence_note") @db.Text
-  relevanceNote   String   @map("relevance_note") @db.Text
-  qualityNote     String?  @map("quality_note") @db.Text
-  riskNote        String?  @map("risk_note") @db.Text
-  status          String   @default("open") @db.VarChar(24)
-  pipeline        String   @default("unassigned") @db.VarChar(24)
-  tracked         Boolean  @default(true)
-  dismissReason   String?  @map("dismiss_reason") @db.Text
-  stage           String   @default("identified") @db.VarChar(32)
-  ownerUserId     String?  @map("owner_user_id") @db.VarChar(191)
-  contactName     String?  @map("contact_name") @db.VarChar(191)
-  contactEmail    String?  @map("contact_email") @db.VarChar(191)
-  contactSource   String?  @map("contact_source") @db.VarChar(512)
-  outreachAngle   String?  @map("outreach_angle") @db.Text
-  outreachDraft   String?  @map("outreach_draft") @db.Text
-  approvalRequestedAt DateTime? @map("approval_requested_at")
-  approvedAt      DateTime? @map("approved_at")
-  approvedByUserId String? @map("approved_by_user_id") @db.VarChar(191)
-  sentAt          DateTime? @map("sent_at")
-  responseAt      DateTime? @map("response_at")
-  responseNote    String?  @map("response_note") @db.Text
-  outcomeReason   String?  @map("outcome_reason") @db.Text
-  wonLinkId       String?  @unique @map("won_link_id")
-  wonLink         SeoOffPageLink? @relation("SeoOffPageWonLink", fields: [wonLinkId], references: [id], onDelete: SetNull)
-  createdByUserId String?  @map("created_by_user_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                  String          @id @default(uuid())
+  businessId          String          @map("business_id")
+  business            Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  opportunityKey      String          @map("opportunity_key") @db.Char(64)
+  kind                String          @db.VarChar(32)
+  title               String          @db.VarChar(191)
+  prospectUrl         String          @map("prospect_url") @db.VarChar(2048)
+  targetUrl           String?         @map("target_url") @db.VarChar(2048)
+  evidenceNote        String          @map("evidence_note") @db.Text
+  relevanceNote       String          @map("relevance_note") @db.Text
+  qualityNote         String?         @map("quality_note") @db.Text
+  riskNote            String?         @map("risk_note") @db.Text
+  status              String          @default("open") @db.VarChar(24)
+  pipeline            String          @default("unassigned") @db.VarChar(24)
+  tracked             Boolean         @default(true)
+  dismissReason       String?         @map("dismiss_reason") @db.Text
+  stage               String          @default("identified") @db.VarChar(32)
+  ownerUserId         String?         @map("owner_user_id") @db.VarChar(191)
+  contactName         String?         @map("contact_name") @db.VarChar(191)
+  contactEmail        String?         @map("contact_email") @db.VarChar(191)
+  contactSource       String?         @map("contact_source") @db.VarChar(512)
+  outreachAngle       String?         @map("outreach_angle") @db.Text
+  outreachDraft       String?         @map("outreach_draft") @db.Text
+  approvalRequestedAt DateTime?       @map("approval_requested_at")
+  approvedAt          DateTime?       @map("approved_at")
+  approvedByUserId    String?         @map("approved_by_user_id") @db.VarChar(191)
+  sentAt              DateTime?       @map("sent_at")
+  responseAt          DateTime?       @map("response_at")
+  responseNote        String?         @map("response_note") @db.Text
+  outcomeReason       String?         @map("outcome_reason") @db.Text
+  wonLinkId           String?         @unique @map("won_link_id")
+  wonLink             SeoOffPageLink? @relation("SeoOffPageWonLink", fields: [wonLinkId], references: [id], onDelete: SetNull)
+  createdByUserId     String?         @map("created_by_user_id")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
 
   @@unique([businessId, opportunityKey], map: "seo_off_page_opps_business_key_key")
   @@index([businessId, status, kind], map: "seo_off_page_opps_business_status_kind_idx")
@@ -7483,28 +7484,28 @@ model SeoGuestPostingAudit {
 /// SEO competitor evidence is entered by the merchant or sourced from a saved, attributed SERP
 /// observation. It is not a provider-wide competitor keyword/content/backlink index.
 model SeoCompetitorGap {
-  id              String     @id @default(uuid())
-  businessId      String     @map("business_id")
-  business        Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  competitorId    String     @map("competitor_id")
-  competitor      Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
-  kind            String     @db.VarChar(24)
-  title           String     @db.VarChar(191)
-  keyword         String?    @db.VarChar(191)
-  intent          String?    @db.VarChar(24)
-  competitorUrl   String?    @map("competitor_url") @db.VarChar(2048)
-  ownedPageUrl    String?    @map("owned_page_url") @db.VarChar(2048)
-  sourceUrl       String     @map("source_url") @db.VarChar(2048)
-  sourceLabel     String     @map("source_label") @db.VarChar(191)
-  evidenceNote    String     @map("evidence_note") @db.Text
-  competitorRank  Int?       @map("competitor_rank")
-  observedAt      DateTime   @map("observed_at")
-  status          String     @default("open") @db.VarChar(24)
-  actionType      String?    @map("action_type") @db.VarChar(24)
-  actionEntityId  String?    @map("action_entity_id") @db.VarChar(191)
-  createdByUserId String?    @map("created_by_user_id") @db.VarChar(191)
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
+  id              String                  @id @default(uuid())
+  businessId      String                  @map("business_id")
+  business        Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  competitorId    String                  @map("competitor_id")
+  competitor      Competitor              @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  kind            String                  @db.VarChar(24)
+  title           String                  @db.VarChar(191)
+  keyword         String?                 @db.VarChar(191)
+  intent          String?                 @db.VarChar(24)
+  competitorUrl   String?                 @map("competitor_url") @db.VarChar(2048)
+  ownedPageUrl    String?                 @map("owned_page_url") @db.VarChar(2048)
+  sourceUrl       String                  @map("source_url") @db.VarChar(2048)
+  sourceLabel     String                  @map("source_label") @db.VarChar(191)
+  evidenceNote    String                  @map("evidence_note") @db.Text
+  competitorRank  Int?                    @map("competitor_rank")
+  observedAt      DateTime                @map("observed_at")
+  status          String                  @default("open") @db.VarChar(24)
+  actionType      String?                 @map("action_type") @db.VarChar(24)
+  actionEntityId  String?                 @map("action_entity_id") @db.VarChar(191)
+  createdByUserId String?                 @map("created_by_user_id") @db.VarChar(191)
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
   audits          SeoCompetitorGapAudit[]
 
   @@index([businessId, kind, status, observedAt], map: "seo_competitor_gaps_biz_kind_status_observed_idx")
@@ -7514,18 +7515,43 @@ model SeoCompetitorGap {
 
 /// Append-only history for evidence, cross-screen actions, and close/reopen decisions.
 model SeoCompetitorGapAudit {
-  id          String          @id @default(uuid())
-  businessId  String          @map("business_id")
-  business    Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  gapId       String          @map("gap_id")
+  id          String           @id @default(uuid())
+  businessId  String           @map("business_id")
+  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  gapId       String           @map("gap_id")
   gap         SeoCompetitorGap @relation(fields: [gapId], references: [id], onDelete: Cascade)
-  action      String          @db.VarChar(48)
-  reason      String?         @db.Text
-  beforeState Json?           @map("before_state")
-  afterState  Json?           @map("after_state")
-  actorUserId String?         @map("actor_user_id") @db.VarChar(191)
-  createdAt   DateTime        @default(now()) @map("created_at")
+  action      String           @db.VarChar(48)
+  reason      String?          @db.Text
+  beforeState Json?            @map("before_state")
+  afterState  Json?            @map("after_state")
+  actorUserId String?          @map("actor_user_id") @db.VarChar(191)
+  createdAt   DateTime         @default(now()) @map("created_at")
 
   @@index([businessId, gapId, createdAt], map: "seo_competitor_gap_audits_biz_gap_created_idx")
   @@map("seo_competitor_gap_audits")
+}
+
+/// Autonomous Commerce agent tool registry (backend spec §11): one row per attempt to use a
+/// registered commerce tool — who asked, with what input, whether policy allowed it, and the result.
+/// Refusals are recorded too, so the audit shows what the autonomy level and kill switch stopped.
+model CommerceAgentToolRun {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  toolKey       String   @map("tool_key") @db.VarChar(64)
+  riskClass     String   @map("risk_class") @db.VarChar(24)
+  /// `user` for a person testing a tool; an agent identifier once agents call tools themselves.
+  actorType     String   @default("user") @map("actor_type") @db.VarChar(16)
+  actorUserId   String?  @map("actor_user_id")
+  autonomyLevel Int      @map("autonomy_level")
+  input         Json
+  outcome       String   @db.VarChar(16)
+  refusalReason String?  @map("refusal_reason") @db.Text
+  resultSummary String?  @map("result_summary") @db.Text
+  correlationId String   @map("correlation_id") @db.VarChar(64)
+  durationMs    Int      @map("duration_ms")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt], map: "commerce_agent_tool_runs_business_created_idx")
+  @@map("commerce_agent_tool_runs")
 }

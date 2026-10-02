@@ -120,6 +120,7 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.subscriptionsPreorders": "Subscriptions & Pre-orders",
     "nav.storeOptimizer": "Store Optimizer",
     "nav.experimentLab": "Experiment Lab",
+    "nav.agentTools": "Agents & Tools",
     "nav.campaigns": "Campaigns",
     "nav.campaignBuilder": "Campaign Builder",
     "nav.audiences": "Audiences & Segments",
