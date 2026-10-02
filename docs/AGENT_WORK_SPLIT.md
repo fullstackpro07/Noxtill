@@ -328,3 +328,15 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   competitor commit had already included). Real-MySQL spec 2/2; related suites 32/32; tsc, eslint,
   full jest (--maxWorkers=2: 326/326 suites, 2082/2082 tests).
 - goal #4 (Claude part) complete: screens 13–16 committed.
+
+## Progress log — goal #5 (Claude Code): Autonomous Commerce shared layer
+
+- item 1 ✅ Commerce work in the Dashboard Action Center. New `ActionItemType.commerce` (entityId
+  `<kind>:<id>`) synthesized live from commerce records: listing drafts awaiting review, stopped
+  experiments awaiting a decision, open high-severity risk cases (urgent), work orders on quality hold
+  (urgent), due subscription renewals; dismiss/snooze work through the existing ActionItemState; hidden
+  when the business turned Autonomous Commerce off; staff still see only their complaints. Commerce
+  dashboard: stale "commerce_approvals not in Action Center" disclosure removed and replaced with a real
+  `approvals.commerceItemsWaiting` count shown on the card. Migration 20261002200000 (enum MODIFY,
+  verified in information_schema). Real-MySQL spec 2/2; full jest (--maxWorkers=2: 327/327 suites,
+  2084/2084 tests).

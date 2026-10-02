@@ -288,6 +288,8 @@ enum ActionItemType {
   low_stock
   overdue_credit
   unreplied_review
+  /// Autonomous Commerce work waiting on a person (entityId = "<kind>:<record id>").
+  commerce
 }
 
 enum ActionItemPriority {

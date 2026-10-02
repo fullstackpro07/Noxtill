@@ -42,10 +42,11 @@ export function AutonomousCommerceCard() {
         </div>
       ) : (
         <>
-          <div className="mt-4 grid grid-cols-2 gap-2.5 xl:grid-cols-5">
+          <div className="mt-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
             <Metric icon={ShoppingBag} label="Recorded sales · 30 days" value={formatCurrency(data.sales.recordedOrderTotal, data.sales.currency)} detail={`${data.sales.completedOrders} completed orders`} />
             <Metric icon={ShoppingBag} label="Average order value" value={data.sales.averageOrderValue === null ? "—" : formatCurrency(data.sales.averageOrderValue, data.sales.currency)} detail={data.sales.averageOrderValue === null ? "No completed orders in this period" : "From completed orders"} />
             <Metric icon={Boxes} label="Low-stock products" value={String(data.inventory.lowStockProducts)} detail={`of ${data.inventory.activeProducts} active products`} tone={data.inventory.lowStockProducts > 0 ? "warning" : "default"} />
+            <Metric icon={ClipboardCheck} label="Commerce items waiting" value={String(data.approvals.commerceItemsWaiting)} detail="In the Action Center" tone={data.approvals.commerceItemsWaiting > 0 ? "warning" : "default"} />
             <Metric icon={ClipboardCheck} label="Pending return approvals" value={String(data.approvals.pendingReturns)} detail={data.approvals.pendingRefundAmount > 0 ? `${formatCurrency(data.approvals.pendingRefundAmount, data.sales.currency)} awaiting review` : "No refund amount awaiting review"} tone={data.approvals.pendingReturns > 0 ? "warning" : "default"} />
             <Metric icon={Truck} label="On-time delivery" value={data.fulfillment.onTimeRate === null ? "—" : `${data.fulfillment.onTimeRate.toFixed(1)}%`} detail={data.fulfillment.status === "unavailable" ? "No delivered orders with a promise time" : `${data.fulfillment.onTimeOrders} of ${data.fulfillment.eligibleDeliveredOrders} eligible deliveries`} tone={data.fulfillment.status === "partial" ? "warning" : "default"} />
           </div>

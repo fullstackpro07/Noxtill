@@ -2,10 +2,17 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CREDIT_NOTABLE_OVERDUE_DAYS } from './dashboard.constants';
 import { SnoozeActionItemDto } from './dto/snooze-action-item.dto';
+import { parseDisabled } from '../business-modules/business-modules.service';
 import {
   ActionItemPriority,
   ActionItemStatus,
   ActionItemType,
+  CommerceExperimentStatus,
+  CommerceListingDraftStatus,
+  CommerceRiskCaseStatus,
+  CommerceRiskSeverity,
+  CommerceSubscriptionStatus,
+  CommerceWorkOrderStatus,
   FeedbackStatus,
   Role,
 } from '@prisma/client';
@@ -196,14 +203,21 @@ export class ActionCenterService {
       return this.complaintItems(businessId, businessUserId);
     }
 
-    const [complaints, lowStock, overdueCredit, unrepliedReviews] =
+    const [complaints, lowStock, overdueCredit, unrepliedReviews, commerce] =
       await Promise.all([
         this.complaintItems(businessId, null),
         this.lowStockItems(businessId),
         this.overdueCreditItems(businessId),
         this.unrepliedReviewItems(businessId),
+        this.commerceItems(businessId),
       ]);
-    return [...complaints, ...lowStock, ...overdueCredit, ...unrepliedReviews];
+    return [
+      ...complaints,
+      ...lowStock,
+      ...overdueCredit,
+      ...unrepliedReviews,
+      ...commerce,
+    ];
   }
 
   private async complaintItems(
@@ -298,5 +312,166 @@ export class ActionCenterService {
       occurredAt: row.createdAt,
       deepLink: '/reviews',
     }));
+  }
+
+  /**
+   * Autonomous Commerce work waiting on a person, from the commerce records themselves: listings
+   * awaiting approval, experiments awaiting a decision, open high-severity risk cases, work orders on
+   * quality hold and subscription renewals that are due. Hidden when the business turned the
+   * Autonomous Commerce module off.
+   */
+  private async commerceItems(businessId: string): Promise<RawActionItem[]> {
+    const db = this.tenantPrisma.client;
+    const business = await db.business.findUnique({
+      where: { id: businessId },
+      select: {
+        parentId: true,
+        disabledModules: true,
+        parent: { select: { disabledModules: true } },
+      },
+    });
+    const disabled = parseDisabled(
+      business?.parentId
+        ? business.parent?.disabledModules
+        : business?.disabledModules,
+    );
+    if (disabled.includes('autonomous-commerce')) return [];
+    const now = new Date();
+    const [drafts, experiments, risks, holds, renewals] = await Promise.all([
+      db.commerceListingDraft.findMany({
+        where: {
+          businessId,
+          status: CommerceListingDraftStatus.review_required,
+        },
+        select: {
+          id: true,
+          channel: true,
+          updatedAt: true,
+          product: { select: { name: true } },
+        },
+        take: 100,
+      }),
+      db.commerceExperiment.findMany({
+        where: { businessId, status: CommerceExperimentStatus.stopped },
+        select: { id: true, name: true, stoppedAt: true, updatedAt: true },
+        take: 100,
+      }),
+      db.commerceRiskCase.findMany({
+        where: {
+          businessId,
+          severity: CommerceRiskSeverity.high,
+          status: {
+            in: [
+              CommerceRiskCaseStatus.open,
+              CommerceRiskCaseStatus.investigating,
+            ],
+          },
+        },
+        select: {
+          id: true,
+          ruleKey: true,
+          entityLabel: true,
+          firstDetectedAt: true,
+        },
+        take: 100,
+      }),
+      db.commerceWorkOrder.findMany({
+        where: { businessId, status: CommerceWorkOrderStatus.quality_hold },
+        select: {
+          id: true,
+          qtyPlanned: true,
+          updatedAt: true,
+          product: { select: { name: true } },
+        },
+        take: 100,
+      }),
+      db.commerceSubscription.findMany({
+        where: {
+          businessId,
+          status: CommerceSubscriptionStatus.active,
+          nextRenewalAt: { lte: now },
+        },
+        select: {
+          id: true,
+          nextRenewalAt: true,
+          customer: { select: { name: true } },
+        },
+        take: 100,
+      }),
+    ]);
+    const item = (
+      kind: string,
+      id: string,
+      priority: ActionItemPriority,
+      title: string,
+      reason: string,
+      occurredAt: Date,
+      deepLink: string,
+    ): RawActionItem => ({
+      type: ActionItemType.commerce,
+      entityId: `${kind}:${id}`,
+      priority,
+      title,
+      reason,
+      occurredAt,
+      deepLink,
+    });
+    return [
+      ...drafts.map((row) =>
+        item(
+          'listing_draft',
+          row.id,
+          ActionItemPriority.normal,
+          `Approve listing: ${row.product.name}`,
+          `${row.channel} draft is waiting for review`,
+          row.updatedAt,
+          '/autonomous-commerce/listing-builder',
+        ),
+      ),
+      ...experiments.map((row) =>
+        item(
+          'experiment',
+          row.id,
+          ActionItemPriority.normal,
+          `Decide experiment: ${row.name}`,
+          'Stopped — results frozen, waiting for adopt / revert / inconclusive',
+          row.stoppedAt ?? row.updatedAt,
+          '/autonomous-commerce/experiment-lab',
+        ),
+      ),
+      ...risks.map((row) =>
+        item(
+          'risk_case',
+          row.id,
+          ActionItemPriority.urgent,
+          `High-risk case: ${row.entityLabel}`,
+          `Open high-severity ${row.ruleKey.replaceAll('_', ' ')} case`,
+          row.firstDetectedAt,
+          '/autonomous-commerce/risk-compliance',
+        ),
+      ),
+      ...holds.map((row) =>
+        item(
+          'quality_hold',
+          row.id,
+          ActionItemPriority.urgent,
+          `Quality hold: ${row.qtyPlanned} × ${row.product.name}`,
+          'Finished goods are held and cannot be sold until released',
+          row.updatedAt,
+          '/autonomous-commerce/production',
+        ),
+      ),
+      ...renewals.map((row) =>
+        item(
+          'renewal',
+          row.id,
+          ActionItemPriority.normal,
+          `Renewal due: ${row.customer.name}`,
+          `Subscription renewal was due ${row.nextRenewalAt.toISOString().slice(0, 10)}`,
+          row.nextRenewalAt,
+          '/autonomous-commerce/subscriptions-preorders',
+        ),
+      ),
+    ];
   }
 }

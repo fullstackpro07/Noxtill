@@ -34,6 +34,7 @@ export interface AutonomousCommerceSummary {
     status: "available";
     pendingReturns: number;
     pendingRefundAmount: number;
+    commerceItemsWaiting: number;
     definition: string;
   };
   fulfillment: {

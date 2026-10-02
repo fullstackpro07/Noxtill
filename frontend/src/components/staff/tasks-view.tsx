@@ -15,6 +15,7 @@ const SOURCE_LABEL: Record<ActionItemType, string> = {
   low_stock: "Inventory",
   overdue_credit: "Credit",
   unreplied_review: "Reviews",
+  commerce: "Autonomous Commerce",
 };
 const PRIORITY_LABEL: Record<LiveActionItem["priority"], string> = { urgent: "High", normal: "Normal", low: "Low" };
 

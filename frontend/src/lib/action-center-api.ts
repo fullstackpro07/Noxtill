@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review";
+export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "commerce";
 export type ActionItemPriority = "urgent" | "normal" | "low";
 export type SnoozeDuration = "1h" | "tomorrow" | "next_week";
 
@@ -29,6 +29,7 @@ export const ACTION_ITEM_TYPE_LABEL: Record<ActionItemType, string> = {
   low_stock: "Low stock",
   overdue_credit: "Overdue credit",
   unreplied_review: "Unreplied review",
+  commerce: "Commerce",
 };
 
 /** GET /actions — staff see only complaints assigned to them (server-enforced); owners/managers see everything. */

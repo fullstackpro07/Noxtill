@@ -7,11 +7,25 @@ describe('AutonomousCommerceDashboardService', () => {
   beforeEach(() => {
     jest
       .spyOn(AutonomousCommerceDashboardService.prototype, 'operations')
-      .mockResolvedValue(
-        {} as Awaited<
-          ReturnType<AutonomousCommerceDashboardService['operations']>
-        >,
-      );
+      .mockResolvedValue({
+        paused: false,
+        sourcing: { openRfqs: 0 },
+        listings: { listingsAwaitingApproval: 2, approvedDrafts: 0 },
+        production: { openWorkOrders: 0, qualityHolds: 1 },
+        risk: { openRiskCases: 0, highRiskCases: 0 },
+        b2b: { activeB2bAccounts: 0 },
+        subscriptions: {
+          activeSubscriptions: 0,
+          dueRenewals: 0,
+          reservedPreorders: 0,
+        },
+        growth: {
+          openStoreOpportunities: 0,
+          highImpactStoreOpportunities: 0,
+          runningExperiments: 0,
+          experimentsAwaitingDecision: 0,
+        },
+      });
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -98,10 +112,13 @@ describe('AutonomousCommerceDashboardService', () => {
       agingClaims: 1,
       recoveredThisMonth: 40,
     });
+    expect(result.approvals.commerceItemsWaiting).toBe(3);
+    expect(result.unavailableMetrics.map((metric) => metric.key)).not.toContain(
+      'commerce_approvals',
+    );
     expect(result.unavailableMetrics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'net_sales_after_refunds' }),
-        expect.objectContaining({ key: 'commerce_approvals' }),
         expect.objectContaining({ key: 'supplier_dispute_rate' }),
       ]),
     );

@@ -283,8 +283,15 @@ export class AutonomousCommerceDashboardService {
         status: 'available' as const,
         pendingReturns: pendingReturns.length,
         pendingRefundAmount,
+        /** Same items the Action Center lists as Commerce work (before snooze/dismiss). */
+        commerceItemsWaiting:
+          operations.listings.listingsAwaitingApproval +
+          operations.growth.experimentsAwaitingDecision +
+          operations.risk.highRiskCases +
+          operations.production.qualityHolds +
+          operations.subscriptions.dueRenewals,
         definition:
-          'Currently pending Returns records only. This does not include approvals for autonomous Commerce agent actions.',
+          'Pending Returns, plus Commerce work waiting on a person in the Action Center: listings to approve, experiments to decide, open high-severity risk cases, quality holds and due renewals.',
       },
       fulfillment: {
         status:
@@ -332,11 +339,6 @@ export class AutonomousCommerceDashboardService {
           key: 'ad_spend_mer_and_cac',
           reason:
             'No complete order-level attribution source is connected to this dashboard summary.',
-        },
-        {
-          key: 'commerce_approvals',
-          reason:
-            'Autonomous Commerce agent actions are not yet registered in the shared Action Center. Pending return approvals and listings awaiting approval are shown separately.',
         },
         {
           key: 'supplier_dispute_rate',
