@@ -287,6 +287,8 @@ export class FinanceTaxService {
       jurisdiction: string;
       taxType: string;
       drift: number;
+      /** Live output/input differ from the submitted or locked figures. */
+      changed: boolean;
     }[] = [];
     for (const r of rows) {
       const b = byId.get(r.jurisdiction);
@@ -297,7 +299,11 @@ export class FinanceTaxService {
         r.periodEnd,
       );
       const frozen = ['Locked', 'Filed'].includes(r.status);
-      const snap = frozen ? (r.snapshot as unknown as TaxCalc) : null;
+      // A submitted return shows what its preparer submitted, so the approver signs off on those figures.
+      const snap =
+        (frozen || r.status === 'Approval Required') && r.snapshot
+          ? (r.snapshot as unknown as TaxCalc)
+          : null;
       let status = r.status;
       if (
         !frozen &&
@@ -320,6 +326,10 @@ export class FinanceTaxService {
           : 'Unknown branch',
         taxType: b ? `${b.taxLabel} ${num(b.taxRate)}%` : 'Tax',
         drift: snap ? r2(live.net - snap.net) : 0,
+        changed:
+          !!snap &&
+          (r2(live.output - snap.output) !== 0 ||
+            r2(live.input - snap.input) !== 0),
       });
     }
     return out;
@@ -416,6 +426,17 @@ export class FinanceTaxService {
       r.periodStart,
       r.periodEnd,
     );
+    // Never lock figures other than the ones the preparer submitted.
+    const sub = r.snapshot as unknown as TaxCalc | null;
+    if (
+      sub &&
+      (r2(calc.output - sub.output) !== 0 || r2(calc.input - sub.input) !== 0)
+    )
+      throw new AppException(
+        FIN_ERRORS.CONFLICT,
+        `The ledger changed after this return was submitted (net ${sub.net.toFixed(2)} → ${calc.net.toFixed(2)}). Reopen it to recalculate and resubmit.`,
+        HttpStatus.CONFLICT,
+      );
     await this.prisma.$transaction(async (tx) => {
       await tx.finTaxReturn.update({
         where: { id },

@@ -634,6 +634,79 @@ describe('Finance ledger (real DB)', () => {
       assets.run(owner, businessId, year, month),
       'FINANCE_CONFLICT',
     );
+    // Depreciation is dated at month end; disposing earlier would strand it in accumulated depreciation.
+    const monthEnd = new Date(Date.UTC(year, month, 0));
+    if (monthEnd > today)
+      await expectCode(
+        assets.dispose(owner, a.id, { date: iso(today), proceeds: 0 }),
+        'FINANCE_CONFLICT',
+      );
+    const accumBefore = await balanceOf('fa_accum');
+    await assets.dispose(owner, a.id, { date: iso(monthEnd), proceeds: 0 });
+    expect((await assets.accumulated(businessId)).get(a.id)).toBe(0);
+    expect(r2((await balanceOf('fa_accum')) - accumBefore)).toBe(100); // contra-asset credit balance cleared
+  });
+
+  it('locks only the tax figures that were submitted', async () => {
+    const maps = await ctx.accountMaps(businessId);
+    const gen = maps.byKey.get('general')!.id;
+    const { year, month } = monthKey(today);
+    const prevDay = iso(new Date(Date.UTC(year, month - 2, 10)));
+    const prevKey = monthKey(new Date(Date.UTC(year, month - 2, 10)));
+    // An earlier test locks last month; this one needs it open.
+    const prevPeriod = await ctx.period(
+      businessId,
+      prevKey.year,
+      prevKey.month,
+    );
+    await prisma.finPeriod.update({
+      where: { id: prevPeriod.id },
+      data: { status: 'open' },
+    });
+    const taxedBill = async (inv: string) => {
+      const b = await ap.create(manager, {
+        vendorName: 'Tax Test Supply',
+        vendorInvoiceNo: inv,
+        billDate: prevDay,
+        dueDate: prevDay,
+        lines: [
+          {
+            description: 'Supplies',
+            accountId: gen,
+            amount: 100,
+            taxCode: 'IN',
+          },
+        ],
+      });
+      await ap.submit(manager, b.id);
+      await ap.approve(owner, b.id);
+      await ap.post(owner, b.id);
+    };
+    await taxedBill('TX-1');
+    const prevStart = new Date(Date.UTC(year, month - 2, 1)).getTime();
+    const ret = (await tax.list(businessId)).find(
+      (r) =>
+        r.ret.jurisdiction === businessId &&
+        r.ret.periodStart.getTime() === prevStart,
+    )!;
+    await tax.submit(manager, ret.ret.id);
+    await taxedBill('TX-2'); // the ledger moves after submission
+    const after = (await tax.list(businessId)).find(
+      (r) => r.ret.id === ret.ret.id,
+    )!;
+    expect(after.calc.input).toBe(10); // still the submitted figures
+    expect(after.changed).toBe(true);
+    await expectCode(tax.approve(owner, ret.ret.id), 'FINANCE_CONFLICT');
+    await tax.reopen(owner, ret.ret.id, 'Late bill');
+    await tax.submit(manager, ret.ret.id);
+    await tax.approve(owner, ret.ret.id);
+    const locked = await tax.mustReturn(businessId, ret.ret.id);
+    expect(locked.status).toBe('Locked');
+    expect(num(locked.inputTax)).toBe(20);
+    await prisma.finPeriod.update({
+      where: { id: prevPeriod.id },
+      data: { status: prevPeriod.status },
+    });
   });
 
   it('computes the tax return from the tax accounts', async () => {

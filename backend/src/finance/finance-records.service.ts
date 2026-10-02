@@ -58,6 +58,8 @@ export interface Rec {
   compare?: unknown;
   threeWay?: unknown;
   evidence?: { type: string; id: string };
+  /** Earliest valid date for a dated action on this record (asset disposal), YYYY-MM-DD. */
+  minDate?: string;
   cur: string;
 }
 
@@ -1902,17 +1904,22 @@ export class FinanceRecordsService {
         dis: true,
         why: 'The period hasn’t ended yet',
       });
+    const cfg = await this.ctx.config(c.rootId);
+    const own = cfg.sod.sod1 && r.ret.preparedById === a.userId;
+    const lockWhy = !a.admin
+      ? 'Needs Owner / Controller'
+      : own
+        ? 'You prepared this return'
+        : r.changed
+          ? 'Figures changed since submission — reopen and resubmit'
+          : '';
     if (r.status === 'Approval Required')
       acts.push({
         l: 'Approve & Lock Calculation',
         a: `taxApprove:${id}`,
         kind: 'p',
-        dis: !a.admin || r.ret.preparedById === a.userId,
-        why: !a.admin
-          ? 'Needs Owner / Controller'
-          : r.ret.preparedById === a.userId
-            ? 'You prepared this return'
-            : '',
+        dis: !!lockWhy,
+        why: lockWhy,
       });
     if (['Approval Required', 'Locked'].includes(r.status))
       acts.push({
@@ -1944,10 +1951,12 @@ export class FinanceRecordsService {
         'Filing',
         'Audit',
       ],
-      note: r.drift
-        ? `The ledger changed by ${money(r.drift, c.base)} for this period since the return was locked. Reopen to recalculate, or post the difference to the next return.`
-        : 'Filed status requires a filing confirmation reference. Noxtill never claims a return was filed without one.',
-      noteTone: r.drift ? 'warn' : 'info',
+      note: !r.changed
+        ? 'Filed status requires a filing confirmation reference. Noxtill never claims a return was filed without one.'
+        : r.status === 'Approval Required'
+          ? `The ledger changed for this period after the return was submitted (net now differs by ${money(r.drift, c.base)}). Reopen to recalculate and resubmit before it can be locked.`
+          : `The ledger changed by ${money(r.drift, c.base)} for this period since the return was locked. Reopen to recalculate, or post the difference to the next return.`,
+      noteTone: r.changed ? 'warn' : 'info',
       kv: [
         ['Taxable base', money(calc.base, c.base)],
         ['Output / collected', money(calc.output, c.base)],
@@ -2102,6 +2111,11 @@ export class FinanceRecordsService {
         { mod: 'Fixed asset book', ref: a.number, d: a.status },
       ],
       lists: { Audit: await this.audit(c.rootId, 'asset', a.id) },
+      // Disposal can't predate depreciation already posted for the asset.
+      minDate: lines
+        .find((l) => l.accountId === a.accumAccountId)
+        ?.date.toISOString()
+        .slice(0, 10),
       actions:
         a.status === 'Disposed'
           ? []

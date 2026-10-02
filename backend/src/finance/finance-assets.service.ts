@@ -520,6 +520,23 @@ export class FinanceAssetsService {
         HttpStatus.CONFLICT,
       );
     const date = dayOf(dto.date);
+    // Depreciation already posted after the disposal date would stay in the accumulated account
+    // once the asset is derecognized, so the register and GL would disagree.
+    const lastDep = await this.prisma.finJournalLine.aggregate({
+      where: {
+        businessId: actor.rootId,
+        assetId: a.id,
+        accountId: a.accumAccountId,
+        postedAt: { not: null },
+      },
+      _max: { date: true },
+    });
+    if (lastDep._max.date && lastDep._max.date > date)
+      throw new AppException(
+        FIN_ERRORS.CONFLICT,
+        `Depreciation is already posted through ${ymd(lastDep._max.date)}. Dispose on or after that date.`,
+        HttpStatus.CONFLICT,
+      );
     const acc = (await this.accumulated(actor.rootId, date)).get(a.id) ?? 0;
     const proceeds = r2(dto.proceeds || 0);
     const maps = await this.ctx.accountMaps(actor.rootId);
