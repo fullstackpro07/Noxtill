@@ -206,3 +206,15 @@ screens, then Automations gaps. Local commits only, never push.
   Migration 20261002100000 (2 FKs verified). jest --maxWorkers=2: 315/315 suites, 2054/2054 tests
   (a --maxWorkers=3 run on the loaded machine had 4 timeout/contention failures in untouched suites,
   all passing alone).
+- item 4 ✅ SEO Technical (screen 5, /marketing/seo-autopilot/technical). KPIs from the latest crawl:
+  critical technical issues, indexable pages, sitemap coverage (crawler now records `inSitemap` per
+  page; null = no readable sitemap → shown "Unknown", never 0%), broken links, canonical conflicts,
+  redirected pages. Tabs: grouped technical issues, redirects, canonicals, changes, not tracked.
+  `SeoTechnicalAction` proposals (redirect / canonical / index-noindex / sitemap / robots / other) with
+  spec risk bands (robots + noindex high), pre-approval validation re-run at every gate (self-loop,
+  cross-proposal loop, chain, 4xx/noindex destination, other domain, homepage noindex), approval with
+  rejection reasons, merchant applies, crawl verification (redirect/canonical/noindex/sitemap; robots &
+  other recorded as not verifiable). Not tracked (grep-verified): structured data, Core Web Vitals,
+  hreflang/rendering, re-index requests. Migration 20261002120000 (2 FKs verified; an empty migration
+  record created by a failed script was deleted from _prisma_migrations before re-applying).
+  jest --maxWorkers=2: 316/316 suites, 2057/2057 tests.

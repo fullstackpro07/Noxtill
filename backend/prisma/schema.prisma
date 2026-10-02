@@ -910,6 +910,8 @@ model Business {
   seoAuditRuns                 SeoAuditRun[]
   seoContentRevisions          SeoContentRevision[]
   seoContentRevisionAudits     SeoContentRevisionAudit[]
+  seoTechnicalActions          SeoTechnicalAction[]
+  seoTechnicalActionAudits     SeoTechnicalActionAudit[]
   seoAuditSchedule             SeoAuditSchedule?
   seoAuditIssues               SeoAuditIssue[]
   seoAuditIssueAudits          SeoAuditIssueAudit[]
@@ -7116,4 +7118,71 @@ model SeoContentRevisionAudit {
 
   @@index([businessId, revisionId, createdAt], map: "seo_content_revision_audits_biz_rev_created_idx")
   @@map("seo_content_revision_audits")
+}
+
+enum SeoTechnicalActionType {
+  redirect
+  canonical
+  indexability
+  sitemap
+  robots
+  other
+}
+
+enum SeoTechnicalActionStatus {
+  draft
+  approval_required
+  approved
+  rejected
+  applied
+  verified
+  cancelled
+}
+
+/// SEO Autopilot — Technical SEO (screen 5). A proposed technical change (redirect, canonical,
+/// noindex, sitemap inclusion, robots rule…) with a risk band from the spec's approval rules and a
+/// pre-approval validation (redirect loops/chains, broken targets). Noxtill does not control the
+/// merchant's server, so the merchant applies an approved change; it is `verified` only when a later
+/// crawl observes the target state. robots.txt / "other" changes cannot be verified by the crawler.
+model SeoTechnicalAction {
+  id              String                   @id @default(uuid())
+  businessId      String                   @map("business_id")
+  business        Business                 @relation(fields: [businessId], references: [id])
+  type            SeoTechnicalActionType
+  status          SeoTechnicalActionStatus @default(draft)
+  risk            String                   @db.VarChar(16)
+  sourceUrl       String                   @map("source_url") @db.VarChar(2048)
+  /// Redirect / canonical destination; indexability "index" | "noindex"; sitemap "include" | "exclude".
+  targetValue     String?                  @map("target_value") @db.VarChar(2048)
+  description     String?                  @db.Text
+  /// What the latest crawl showed for the source URL when the change was proposed.
+  currentState    Json                     @map("current_state")
+  /// Pre-approval checks: { ok, problems: string[], warnings: string[] }.
+  validation      Json?
+  issueId         String?                  @map("issue_id")
+  createdByUserId String?                  @map("created_by_user_id")
+  decidedByUserId String?                  @map("decided_by_user_id")
+  decisionNote    String?                  @map("decision_note") @db.Text
+  appliedAt       DateTime?                @map("applied_at")
+  verifiedAt      DateTime?                @map("verified_at")
+  verification    Json?
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
+
+  @@index([businessId, status, updatedAt], map: "seo_technical_actions_business_status_updated_idx")
+  @@map("seo_technical_actions")
+}
+
+model SeoTechnicalActionAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  actionId    String   @map("action_id")
+  action      String   @db.VarChar(64)
+  note        String?  @db.Text
+  actorUserId String?  @map("actor_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, actionId, createdAt], map: "seo_technical_action_audits_biz_action_created_idx")
+  @@map("seo_technical_action_audits")
 }

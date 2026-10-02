@@ -126,6 +126,8 @@ export class SeoSiteAuditCrawler {
     let sitemapAvailable = false;
     let sitemapExplicitlyMissing = false;
     let sitemapCheckFailed = false;
+    /** Page keys listed in a sitemap this audit could read (for sitemap coverage). */
+    const sitemapKeys = new Set<string>();
     for (const sitemapUrl of sitemapCandidates.slice(0, 3)) {
       try {
         const url = new URL(sitemapUrl, siteUrl);
@@ -147,6 +149,7 @@ export class SeoSiteAuditCrawler {
             const pageUrl = this.crawlableUrl(entry, siteUrl, startingHostname);
             if (!pageUrl || !this.isAllowedByRobots(pageUrl, robots)) continue;
             const key = this.pageKey(pageUrl);
+            sitemapKeys.add(key);
             if (!queued.has(key) && queue.length < MAX_PAGES) {
               queued.add(key);
               queue.push({ url: pageUrl, depth: 1 });
@@ -200,6 +203,10 @@ export class SeoSiteAuditCrawler {
           .trim()
           .toLowerCase();
         const page = this.inspectPage(current.url, response, contentType);
+        // Unknown (null) when no sitemap could be read — never "not in sitemap" by default.
+        page.observation.inSitemap = sitemapAvailable
+          ? sitemapKeys.has(key)
+          : null;
         pages.push(page.observation);
         issues.push(...page.issues);
 

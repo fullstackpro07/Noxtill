@@ -14,6 +14,7 @@ import {
 } from './seo-site-audit.util';
 import { ActivityService } from '../activity/activity.service';
 import { SeoOnPageService } from './seo-on-page.service';
+import { SeoTechnicalService } from './seo-technical.service';
 import { SeoAuditIssuesService } from './seo-audit-issues.service';
 
 const SEO_AUDIT_NOT_FOUND = 'SEO_AUDIT_NOT_FOUND';
@@ -29,6 +30,7 @@ export class SeoSiteAuditService {
     private readonly activity: ActivityService,
     private readonly auditIssues: SeoAuditIssuesService,
     @Optional() private readonly onPage?: SeoOnPageService,
+    @Optional() private readonly technical?: SeoTechnicalService,
   ) {}
 
   async list(businessId: string) {
@@ -316,6 +318,7 @@ export class SeoSiteAuditService {
     // On-Page SEO: a fresh crawl is the evidence that confirms (or not) applied revisions.
     // Never let verification break the audit that already succeeded.
     await this.onPage?.verifyApplied(businessId).catch(() => undefined);
+    await this.technical?.verifyApplied(businessId).catch(() => undefined);
 
     const highPriorityIssueCount = issueChanges.newlyDetectedHighPriorityCount;
     if (highPriorityIssueCount > 0) {

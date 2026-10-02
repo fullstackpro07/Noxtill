@@ -20,6 +20,8 @@ export interface SeoAuditPage {
   h1Count: number | null;
   /** Text of the first H1 (absent on runs recorded before this field existed). */
   h1?: string | null;
+  /** Listed in a readable same-site sitemap; null when no sitemap could be read, absent on old runs. */
+  inSitemap?: boolean | null;
   imagesMissingAlt: number | null;
   canonicalUrl: string | null;
   noindex: boolean;
