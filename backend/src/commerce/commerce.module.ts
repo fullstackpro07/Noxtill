@@ -32,6 +32,8 @@ import { CommerceExperimentsController } from './commerce-experiments.controller
 import { CommerceExperimentsService } from './commerce-experiments.service';
 import { CommerceAgentToolsController } from './commerce-agent-tools.controller';
 import { CommerceAgentToolsService } from './commerce-agent-tools.service';
+import { CommerceReconciliationController } from './commerce-reconciliation.controller';
+import { CommerceReconciliationService } from './commerce-reconciliation.service';
 
 @Module({
   imports: [ActivityModule, AiModule, IntegrationsModule, OrdersModule],
@@ -50,6 +52,7 @@ import { CommerceAgentToolsService } from './commerce-agent-tools.service';
     CommerceStoreOptimizerController,
     CommerceExperimentsController,
     CommerceAgentToolsController,
+    CommerceReconciliationController,
   ],
   providers: [
     ProductRadarService,
@@ -67,6 +70,7 @@ import { CommerceAgentToolsService } from './commerce-agent-tools.service';
     CommerceStoreOptimizerService,
     CommerceExperimentsService,
     CommerceAgentToolsService,
+    CommerceReconciliationService,
   ],
 })
 export class CommerceModule {}

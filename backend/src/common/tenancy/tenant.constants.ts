@@ -121,6 +121,8 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'CommerceExperiment',
   'CommerceExperimentAudit',
   'CommerceAgentToolRun',
+  'CommerceReconciliationRun',
+  'CommerceReconciliationItem',
   'SeoContentRevision',
   'SeoContentRevisionAudit',
   'SeoTechnicalAction',

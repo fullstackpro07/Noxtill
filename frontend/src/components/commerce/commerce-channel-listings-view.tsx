@@ -8,6 +8,7 @@ import { formatDate } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { useModuleHeader } from "@/components/layout/module-header-context";
+import { CommerceReconciliationSection } from "@/components/commerce/commerce-reconciliation-section";
 import { fetchIntegrations } from "@/lib/integrations-api";
 import type { ConnectorStatus } from "@/lib/integrations";
 import {
@@ -445,6 +446,7 @@ export function CommerceChannelListingsView() {
           </div>
         )}
       </section>
+      <CommerceReconciliationSection />
     </main>
   );
 }

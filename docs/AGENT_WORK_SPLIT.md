@@ -363,3 +363,15 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
 - [Claude → queue owner] `src/common/queue/queue.integration.spec.ts` fails now that local Redis is
   running (it used to skip): "Nest could not find BullQueue_demo-dlq" — the test module never
   registers the demo DLQ queue. Pre-existing; not caused by goal #5.
+- item 4 ✅ Channel-listing reconciliation (spec §13.2), on the Channel Listings page. "Check stores
+  now" reads each connected provider's products (Shopify / WooCommerce `fetchProducts`: SKU + stock
+  only) and compares them by SKU with synced `CommerceChannelListing`s: missing_on_provider,
+  stock_mismatch (both quantities stored), no_sku. Never overwrites canonical data; items are resolved
+  or dismissed with a required note; runs are recorded as completed / failed (provider read error) /
+  skipped (not connected, no product-read capability, no token). UI states price, title, description
+  and images are not checked (grep-verified: no connector reads them back). Migration 20261002220000
+  (3 FKs verified). Real-MySQL spec 2/2 (fake connector). Full jest (--maxWorkers=2): 326/329 suites —
+  queue.integration (pre-existing, logged above) plus health-score and booking-link stalls (~380 s
+  under load) that pass 8/8 alone.
+- goal #5 complete: Action Center commerce items, net sales/contribution, agent tool registry,
+  reconciliation.

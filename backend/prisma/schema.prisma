@@ -910,6 +910,8 @@ model Business {
   commerceExperiments          CommerceExperiment[]
   commerceExperimentAudits     CommerceExperimentAudit[]
   commerceAgentToolRuns        CommerceAgentToolRun[]
+  commerceReconciliationRuns   CommerceReconciliationRun[]
+  commerceReconciliationItems  CommerceReconciliationItem[]
   seoAuditRuns                 SeoAuditRun[]
   seoContentRevisions          SeoContentRevision[]
   seoContentRevisionAudits     SeoContentRevisionAudit[]
@@ -7554,4 +7556,50 @@ model CommerceAgentToolRun {
 
   @@index([businessId, createdAt], map: "commerce_agent_tool_runs_business_created_idx")
   @@map("commerce_agent_tool_runs")
+}
+
+/// Channel-listing reconciliation (backend spec §13.2): one run per provider compares Noxtill's synced
+/// channel listings with what the provider returns. It never overwrites canonical data; each
+/// discrepancy becomes an item that a person resolves or dismisses with a reason.
+model CommerceReconciliationRun {
+  id              String                       @id @default(uuid())
+  businessId      String                       @map("business_id")
+  business        Business                     @relation(fields: [businessId], references: [id])
+  provider        IntegrationProvider
+  /// completed | failed | skipped (not connected / connector can't read products)
+  status          String                       @db.VarChar(16)
+  listingsChecked Int                          @default(0) @map("listings_checked")
+  discrepancies   Int                          @default(0)
+  detail          String?                      @db.Text
+  actorUserId     String?                      @map("actor_user_id")
+  startedAt       DateTime                     @default(now()) @map("started_at")
+  finishedAt      DateTime?                    @map("finished_at")
+  items           CommerceReconciliationItem[]
+
+  @@index([businessId, startedAt], map: "commerce_recon_runs_business_started_idx")
+  @@map("commerce_reconciliation_runs")
+}
+
+model CommerceReconciliationItem {
+  id               String                    @id @default(uuid())
+  businessId       String                    @map("business_id")
+  business         Business                  @relation(fields: [businessId], references: [id])
+  runId            String                    @map("run_id")
+  run              CommerceReconciliationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  channelListingId String                    @map("channel_listing_id")
+  provider         IntegrationProvider
+  /// missing_on_provider | stock_mismatch | no_sku
+  kind             String                    @db.VarChar(32)
+  local            Json
+  remote           Json?
+  /// open | resolved | dismissed
+  status           String                    @default("open") @db.VarChar(16)
+  resolutionNote   String?                   @map("resolution_note") @db.Text
+  resolvedByUserId String?                   @map("resolved_by_user_id")
+  resolvedAt       DateTime?                 @map("resolved_at")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+
+  @@index([businessId, status, createdAt], map: "commerce_recon_items_business_status_created_idx")
+  @@index([runId], map: "commerce_recon_items_run_idx")
+  @@map("commerce_reconciliation_items")
 }
