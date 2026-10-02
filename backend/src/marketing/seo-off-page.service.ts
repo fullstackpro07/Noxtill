@@ -156,7 +156,10 @@ export class SeoOffPageService {
           (link) => link.status === 'lost' && lostIds.has(link.id),
         ).length,
         openOpportunities: opportunities.filter(
-          (opportunity) => opportunity.tracked && opportunity.status === 'open',
+          (opportunity) =>
+            opportunity.tracked &&
+            opportunity.status === 'open' &&
+            !['won', 'lost', 'declined'].includes(opportunity.stage),
         ).length,
         linksWithRiskNotes: tracked.filter((link) => clean(link.riskNote))
           .length,

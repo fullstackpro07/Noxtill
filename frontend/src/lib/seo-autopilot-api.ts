@@ -739,3 +739,188 @@ export function verifySeoGuestPlacement(
     { method: "POST", body: JSON.stringify({ confirmation }) },
   );
 }
+
+export type SeoLinkBuildingStage =
+  | "identified"
+  | "qualified"
+  | "drafted"
+  | "approval_required"
+  | "approved"
+  | "sent"
+  | "response_received"
+  | "accepted"
+  | "declined"
+  | "won"
+  | "lost";
+
+export interface SeoLinkBuildingOpportunity extends SeoOffPageOpportunity {
+  stage: SeoLinkBuildingStage;
+  ownerUserId: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactSource: string | null;
+  outreachAngle: string | null;
+  outreachDraft: string | null;
+  approvalRequestedAt: string | null;
+  approvedAt: string | null;
+  approvedByUserId: string | null;
+  sentAt: string | null;
+  responseAt: string | null;
+  responseNote: string | null;
+  outcomeReason: string | null;
+  wonLinkId: string | null;
+}
+
+export interface SeoLinkBuildingOverview {
+  generatedAt: string;
+  summary: {
+    openOpportunities: number;
+    qualified: number;
+    contacted: number;
+    responses: number;
+    won: number;
+    lost: number;
+    lostLinkAlerts: number;
+  };
+  opportunities: SeoLinkBuildingOpportunity[];
+  lostLinks: SeoOffPageLink[];
+  audits: SeoOffPageAudit[];
+  targetPages: { url: string; title: string | null }[];
+  targetPagesFromAuditRun: string | null;
+  targetPagesCheckedAt: string | null;
+  team: { userId: string; name: string; email: string | null; role: string }[];
+  disclosures: {
+    discovery: string;
+    outreach: string;
+    verification: string;
+    targetPages: string;
+    authority: string;
+  };
+}
+
+export function fetchSeoLinkBuildingOverview(): Promise<SeoLinkBuildingOverview> {
+  return apiFetch<SeoLinkBuildingOverview>("/seo-autopilot/link-building");
+}
+
+export function createSeoLinkBuildingOpportunity(
+  input: Pick<SeoOffPageOpportunity, "kind" | "title" | "prospectUrl" | "targetUrl" | "evidenceNote" | "relevanceNote"> &
+    Partial<Pick<SeoOffPageOpportunity, "qualityNote" | "riskNote">> & {
+      ownerUserId?: string;
+      contactName?: string;
+      contactEmail?: string;
+      contactSource?: string;
+    },
+): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>("/seo-autopilot/link-building/opportunities", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateSeoLinkBuildingOpportunity(
+  id: string,
+  input: {
+    targetUrl?: string;
+    evidenceNote?: string;
+    relevanceNote?: string;
+    qualityNote?: string | null;
+    riskNote?: string | null;
+    ownerUserId?: string | null;
+    contactName?: string | null;
+    contactEmail?: string | null;
+    contactSource?: string | null;
+  },
+): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function qualifySeoLinkBuildingOpportunity(id: string): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/qualify`,
+    { method: "POST" },
+  );
+}
+
+export function draftSeoLinkBuildingWithAi(id: string): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/draft-ai`,
+    { method: "POST" },
+  );
+}
+
+export function saveSeoLinkBuildingDraft(
+  id: string,
+  input: { outreachAngle: string; outreachDraft: string },
+): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/draft`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function requestSeoLinkBuildingApproval(id: string): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/request-approval`,
+    { method: "POST" },
+  );
+}
+
+export function decideSeoLinkBuildingApproval(
+  id: string,
+  input: { approved: boolean; reason?: string },
+): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/approval`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function markSeoLinkBuildingSent(id: string): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/sent`,
+    { method: "POST" },
+  );
+}
+
+export function recordSeoLinkBuildingResponse(
+  id: string,
+  input: { disposition: "accepted" | "declined" | "other"; responseNote: string },
+): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/response`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function markSeoLinkBuildingWon(
+  id: string,
+  input: {
+    sourceUrl: string;
+    targetUrl: string;
+    anchorText?: string;
+    linkType?: "follow" | "nofollow" | "sponsored" | "ugc" | "unknown";
+    evidenceNote: string;
+  },
+): Promise<{ opportunity: SeoLinkBuildingOpportunity; link: SeoOffPageLink }> {
+  return apiFetch(`/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/won`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function markSeoLinkBuildingLost(id: string, reason: string): Promise<SeoLinkBuildingOpportunity> {
+  return apiFetch<SeoLinkBuildingOpportunity>(
+    `/seo-autopilot/link-building/opportunities/${encodeURIComponent(id)}/lost`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+}
+
+export function recoverSeoLostLink(id: string, evidence: string): Promise<SeoOffPageLink> {
+  return apiFetch<SeoOffPageLink>(
+    `/seo-autopilot/link-building/links/${encodeURIComponent(id)}/recover`,
+    { method: "POST", body: JSON.stringify({ evidence }) },
+  );
+}

@@ -261,3 +261,14 @@ screens, then Automations gaps. Local commits only, never push.
   frontend `tsc --noEmit`, touched-file ESLint, backend build, and full backend Jest (`--maxWorkers=2`:
   320/320 suites, 2066/2066 tests) passed. Signed in to the local app; visually verified the live
   page and Add Publication form without saving sample data.
+- item 9 ✅ SEO Link Building (screen 10, /marketing/seo-autopilot/link-building). Added a manual
+  prospect-to-placement workflow with ownership, merchant-evidence-based qualification, outreach
+  draft and approval, manual send/response recording, accepted placement confirmation, lost-link
+  recovery, and decision audit history. Link records are created only after merchant-confirmed URLs
+  and evidence; same-site targets use the latest saved crawl when available. Noxtill does not discover
+  prospects, send outreach, crawl third-party pages, or provide backlink/authority metrics; these
+  limits are shown in the UI. Migration 20261002153427 kept exactly 4 statements, applied locally,
+  with the won-link FK verified in information_schema; Prisma schema validation passes. Real-MySQL
+  spec: 4/4; backend/frontend `tsc --noEmit`, touched-file ESLint, and full backend Jest
+  (`--maxWorkers=2`: 321/321 suites, 2070/2070 tests) passed. Authenticated local page and Add
+  Opportunity form were visually checked without saving sample data.

@@ -13,6 +13,7 @@ export const SEO_TABS: { href: string; label: string }[] = [
   { href: "/marketing/seo-autopilot/local", label: "Local SEO" },
   { href: "/marketing/seo-autopilot/off-page", label: "Off-Page SEO" },
   { href: "/marketing/seo-autopilot/guest-posting", label: "Guest Posting" },
+  { href: "/marketing/seo-autopilot/link-building", label: "Link Building" },
   { href: "/marketing/seo-autopilot/rank-tracking", label: "Rank tracking" },
 ];
 

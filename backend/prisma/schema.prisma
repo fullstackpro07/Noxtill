@@ -7313,6 +7313,7 @@ model SeoOffPageLink {
   sourceName      String    @default("merchant-entered") @map("source_name") @db.VarChar(64)
   tracked         Boolean   @default(true)
   createdByUserId String?   @map("created_by_user_id")
+  wonByOpportunity SeoOffPageOpportunity? @relation("SeoOffPageWonLink")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -7341,6 +7342,22 @@ model SeoOffPageOpportunity {
   pipeline        String   @default("unassigned") @db.VarChar(24)
   tracked         Boolean  @default(true)
   dismissReason   String?  @map("dismiss_reason") @db.Text
+  stage           String   @default("identified") @db.VarChar(32)
+  ownerUserId     String?  @map("owner_user_id") @db.VarChar(191)
+  contactName     String?  @map("contact_name") @db.VarChar(191)
+  contactEmail    String?  @map("contact_email") @db.VarChar(191)
+  contactSource   String?  @map("contact_source") @db.VarChar(512)
+  outreachAngle   String?  @map("outreach_angle") @db.Text
+  outreachDraft   String?  @map("outreach_draft") @db.Text
+  approvalRequestedAt DateTime? @map("approval_requested_at")
+  approvedAt      DateTime? @map("approved_at")
+  approvedByUserId String? @map("approved_by_user_id") @db.VarChar(191)
+  sentAt          DateTime? @map("sent_at")
+  responseAt      DateTime? @map("response_at")
+  responseNote    String?  @map("response_note") @db.Text
+  outcomeReason   String?  @map("outcome_reason") @db.Text
+  wonLinkId       String?  @unique @map("won_link_id")
+  wonLink         SeoOffPageLink? @relation("SeoOffPageWonLink", fields: [wonLinkId], references: [id], onDelete: SetNull)
   createdByUserId String?  @map("created_by_user_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -7348,6 +7365,7 @@ model SeoOffPageOpportunity {
   @@unique([businessId, opportunityKey], map: "seo_off_page_opps_business_key_key")
   @@index([businessId, status, kind], map: "seo_off_page_opps_business_status_kind_idx")
   @@index([businessId, pipeline, status], map: "seo_off_page_opps_business_pipeline_status_idx")
+  @@index([businessId, pipeline, stage], map: "seo_off_page_opps_business_pipeline_stage_idx")
   @@map("seo_off_page_opportunities")
 }
 
