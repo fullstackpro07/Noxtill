@@ -1002,14 +1002,20 @@ export class FinanceViewsService {
         ? { year: tk.year - 1, month: 12 }
         : { year: tk.year, month: tk.month - 1 };
     const pp = await this.ctx.period(c.rootId, pk.year, pk.month);
+    // Last month is only overdue for locking once your close policy's target day has passed.
+    const closeTarget = FinanceCloseService.closeDue(
+      await this.ctx.config(c.rootId),
+      pk.year,
+      pk.month,
+    );
     const cpp = await this.ctx.period(c.rootId, tk.year, tk.month);
     const word = (s: string) =>
       s === 'locked' ? 'locked' : s === 'soft' ? 'soft-closed' : 'open';
     rows.push(
       H(
         'Periods',
-        `${monthLabel(pk.year, pk.month)} ${word(pp.status)} · ${monthLabel(tk.year, tk.month)} ${word(cpp.status)}`,
-        pp.status === 'locked' || today.getUTCDate() <= 10 ? 'ok' : 'warn',
+        `${monthLabel(pk.year, pk.month)} ${word(pp.status)} · ${monthLabel(tk.year, tk.month)} ${word(cpp.status)}${pp.status === 'locked' ? '' : ` · close target ${md(closeTarget)}`}`,
+        pp.status === 'locked' || today <= closeTarget ? 'ok' : 'warn',
         pp.status === 'locked' ? '' : 'Close',
         'go:close',
       ),
@@ -2868,7 +2874,9 @@ export class FinanceViewsService {
             T(md(r.ret.dueOn)),
             S(
               r.status,
-              r.drift ? `Changed ${this.m(c, r.drift)} since lock` : '',
+              r.changed
+                ? `Changed ${this.m(c, r.drift)} since ${r.status === 'Approval Required' ? 'submission' : 'lock'}`
+                : '',
             ),
             A(),
           ],
@@ -3877,7 +3885,13 @@ export class FinanceViewsService {
           ? `Needed for ${needed.join(', ')}. Rates are entered by hand — Noxtill has no rate feed.`
           : 'All branches and accounts use the base currency.',
         rows: [
-          ...needed.map((cur) => {
+          // Needed currencies first, then any other currency a rate was entered for (e.g. foreign bills).
+          ...[
+            ...needed,
+            ...[...new Set(fx.map((x) => x.currency))].filter(
+              (cur) => !needed.includes(cur),
+            ),
+          ].map((cur) => {
             const r = fx.find((x) => x.currency === cur);
             return stat(
               `${cur} → ${c.base}`,

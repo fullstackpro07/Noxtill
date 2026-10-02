@@ -151,13 +151,8 @@ export class FinanceCloseService {
             title,
             area,
             ownerUserId: actor.userId,
-            dueOn: addBusinessDays(
-              monthEnd(year, month),
-              Math.min(
-                CLOSE_DAYS[cfg.close.closeDay] ?? 5,
-                1 + Math.floor(i / 4),
-              ),
-            ),
+            // Every control is due by the close policy's target day; owners can be reassigned.
+            dueOn: due,
             status: 'Open',
             sortOrder: i,
           })),

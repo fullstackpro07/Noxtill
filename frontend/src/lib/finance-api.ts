@@ -212,6 +212,7 @@ export interface Rec {
   compare?: { left: [string, string][]; right: [string, string][]; diff: string; dfg: string; conf: string; ev: string; hasRight: boolean } | null;
   threeWay?: { rows: { a: string; b: string; c: string; d: string; e: string; fg: string }[]; tol: string } | null;
   evidence?: { type: string; id: string };
+  minDate?: string;
   cur: string;
 }
 
