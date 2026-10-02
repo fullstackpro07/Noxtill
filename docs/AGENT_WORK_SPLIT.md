@@ -295,3 +295,13 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   (deep link `?brief=<id>` now opens the brief there). Task linking disclosed as not available (no
   Projects & Tasks module exists). Real-MySQL spec 2/2; backend+frontend tsc, eslint, full backend jest
   (--maxWorkers=2: 322/322 suites, 2072/2072 tests).
+- goal #4 / Claude item 2 ✅ SEO Agent Workspace (screen 14, /marketing/seo-autopilot/agent-workspace).
+  Read-only queue over existing SEO action records (audit findings first seen in the last 7 days,
+  On-Page revisions, Technical changes, Content briefs) grouped by stage: new → draft ready → waiting
+  approval → ready to apply → verification required → not matched (latest crawl disagrees) → completed
+  (last 30 days). Approve / reject / send back call each owning screen's API, so their rules and audit
+  trails apply — the workspace adds no state. Decision history merges the four audit trails. Expected
+  impact disclosed as not estimated; each item shows its origin (AI draft / team / site audit) instead
+  of an invented confidence score. Links out to Local / Off-Page / Guest Posting / Link Building /
+  Competitor queues. Real-MySQL spec 2/2; tsc, eslint, full jest (--maxWorkers=2: 324/324 suites,
+  2078/2078 tests).
