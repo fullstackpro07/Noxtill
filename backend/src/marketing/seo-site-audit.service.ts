@@ -15,6 +15,7 @@ import {
 import { ActivityService } from '../activity/activity.service';
 import { SeoOnPageService } from './seo-on-page.service';
 import { SeoTechnicalService } from './seo-technical.service';
+import { SeoContentService } from './seo-content.service';
 import { SeoAuditIssuesService } from './seo-audit-issues.service';
 
 const SEO_AUDIT_NOT_FOUND = 'SEO_AUDIT_NOT_FOUND';
@@ -31,6 +32,7 @@ export class SeoSiteAuditService {
     private readonly auditIssues: SeoAuditIssuesService,
     @Optional() private readonly onPage?: SeoOnPageService,
     @Optional() private readonly technical?: SeoTechnicalService,
+    @Optional() private readonly content?: SeoContentService,
   ) {}
 
   async list(businessId: string) {
@@ -319,6 +321,7 @@ export class SeoSiteAuditService {
     // Never let verification break the audit that already succeeded.
     await this.onPage?.verifyApplied(businessId).catch(() => undefined);
     await this.technical?.verifyApplied(businessId).catch(() => undefined);
+    await this.content?.confirmPublished(businessId).catch(() => undefined);
 
     const highPriorityIssueCount = issueChanges.newlyDetectedHighPriorityCount;
     if (highPriorityIssueCount > 0) {

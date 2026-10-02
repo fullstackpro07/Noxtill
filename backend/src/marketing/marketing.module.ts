@@ -50,6 +50,8 @@ import { SeoOnPageController } from './seo-on-page.controller';
 import { SeoOnPageService } from './seo-on-page.service';
 import { SeoTechnicalController } from './seo-technical.controller';
 import { SeoTechnicalService } from './seo-technical.service';
+import { SeoContentController } from './seo-content.controller';
+import { SeoContentService } from './seo-content.service';
 import { SeoSiteAuditCrawler } from './seo-site-audit.crawler';
 import { SeoSiteAuditService } from './seo-site-audit.service';
 import { SeoAuditIssuesService } from './seo-audit-issues.service';
@@ -89,6 +91,7 @@ import { ActivityModule } from '../activity/activity.module';
     SeoAutopilotController,
     SeoOnPageController,
     SeoTechnicalController,
+    SeoContentController,
   ],
   providers: [
     CampaignsService,
@@ -117,6 +120,7 @@ import { ActivityModule } from '../activity/activity.module';
     SeoSiteAuditService,
     SeoOnPageService,
     SeoTechnicalService,
+    SeoContentService,
     SeoAuditIssuesService,
     SeoAuditScheduleService,
     SeoAuditScheduleProcessor,

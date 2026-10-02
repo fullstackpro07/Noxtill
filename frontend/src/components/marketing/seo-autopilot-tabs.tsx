@@ -9,6 +9,7 @@ export const SEO_TABS: { href: string; label: string }[] = [
   { href: "/marketing/seo-autopilot/keywords", label: "Keywords" },
   { href: "/marketing/seo-autopilot/on-page", label: "On-Page" },
   { href: "/marketing/seo-autopilot/technical", label: "Technical" },
+  { href: "/marketing/seo-autopilot/content", label: "Content" },
   { href: "/marketing/seo-autopilot/rank-tracking", label: "Rank tracking" },
 ];
 

@@ -218,3 +218,14 @@ screens, then Automations gaps. Local commits only, never push.
   hreflang/rendering, re-index requests. Migration 20261002120000 (2 FKs verified; an empty migration
   record created by a failed script was deleted from _prisma_migrations before re-applying).
   jest --maxWorkers=2: 316/316 suites, 2057/2057 tests.
+- item 5 ✅ SEO Content (screen 6, /marketing/seo-autopilot/content). Opportunities derived live from
+  tracked keywords + latest rank snapshot + latest crawl + briefs (new page / mapped page missing or
+  4xx / ranking worse than #10 or not found), each with its evidence; interest shown as Google Trends'
+  relative index, never volume; no invented scores. `SeoContentBrief` (manual or AI brief — internal
+  links limited to crawled URLs; duplicate keyword intent blocked without a strategy note) → draft
+  (manual or AI from merchant source notes only) → approval (send-back needs a reason) → merchant
+  publishes and records URL → crawl confirms live. Refresh queue: published content whose keyword fell
+  5+ places since publishing (baseline vs current shown). Dismiss/reopen opportunities with reasons.
+  Not tracked (grep-verified): page traffic. Migration 20261002140000 (4 FKs verified).
+  jest --maxWorkers=2: 316/317 suites, 2059/2060 tests — the one failure was a 5 s timeout in the
+  untouched digitizer spec under load; it passes 47/47 alone.
