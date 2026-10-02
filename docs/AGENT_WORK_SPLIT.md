@@ -305,3 +305,13 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   of an invented confidence score. Links out to Local / Off-Page / Guest Posting / Link Building /
   Competitor queues. Real-MySQL spec 2/2; tsc, eslint, full jest (--maxWorkers=2: 324/324 suites,
   2078/2078 tests).
+- goal #4 / Claude item 3 ✅ SEO Reports (screen 15, /marketing/seo-autopilot/reports). Compares the
+  last 7/30/90 days with the period before, only from records Noxtill holds: tracked keywords in the
+  top 10 / top 3 and rank distribution (latest check before each period end), site-audit issues (all
+  and high), content published, new external reviews and their average, merchant-recorded backlinks,
+  SEO changes confirmed live. Each metric carries source, freshness and caveat; changes are labelled
+  correlation, not cause. Organic clicks/impressions, conversions/revenue and landing-page traffic are
+  listed as not tracked; rank caveat states checks use SerpApi's default location/device (verified in
+  serp-rank.service.ts). Client-side CSV export; scheduled delivery disclosed as not available.
+  Real-MySQL spec 2/2; tsc, eslint, full jest (--maxWorkers=2: 324/325 suites, 2079/2080 — the one
+  failure was qr-poster PDF timeouts while two runs overlapped; it passes 5/5 alone).
