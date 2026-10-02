@@ -9,6 +9,7 @@ import { fetchAiInsights, AI_INSIGHT_CATEGORY_LABEL } from "@/lib/ai-insights-ap
 import { fetchAppointments } from "@/lib/bookings-api";
 import { formatRelativeTime, formatCurrency } from "@/lib/format";
 import { useNow } from "@/hooks/use-now";
+import { useDisabledModules } from "@/components/layout/module-gate";
 
 function todayIsoDate(): string {
   const d = new Date();
@@ -77,11 +78,16 @@ function LiveActivityCard({ currency }: { currency: string }) {
 }
 
 function AiInsightCard() {
+  const disabledModules = useDisabledModules();
+  const enabled = !disabledModules.has("business-brain");
   const { data } = useQuery({
     queryKey: ["ai-insights", "sidebar-top"],
     queryFn: () => fetchAiInsights({ status: "new" }),
+    enabled,
   });
   const top = data?.[0];
+
+  if (!enabled) return null;
 
   return (
     <SidePanelCard title="AI Insight" href="/dashboard/insights">
@@ -116,15 +122,20 @@ function AiInsightCard() {
 }
 
 function UpcomingBookingsCard() {
+  const disabledModules = useDisabledModules();
+  const enabled = !disabledModules.has("bookings");
   const { data, isPending } = useQuery({
     queryKey: ["appointments", "today"],
     queryFn: () => fetchAppointments({ from: todayIsoDate(), to: todayIsoDate() }),
+    enabled,
   });
   const now = new Date();
   const upcoming = (data ?? [])
     .filter((a) => new Date(a.startsAt).getTime() >= now.getTime() && a.status !== "cancelled")
     .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
   const top = upcoming.slice(0, 4);
+
+  if (!enabled) return null;
 
   return (
     <SidePanelCard title="Upcoming Bookings" href="/bookings">

@@ -2,18 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Mail, MapPin, MessageCircle, Phone, Smartphone, Store, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WizardProgress } from "@/components/onboarding/wizard-progress";
 import { BusinessTypePicker } from "@/components/onboarding/business-type-picker";
+import { ModuleSelectionStep } from "@/components/onboarding/module-selection-step";
 import { useOnboardingStore } from "@/store/onboarding-store";
 import { toast } from "@/lib/toast";
+import {
+  BUSINESS_MODULES_QUERY_KEY,
+  saveBusinessModuleSelection,
+} from "@/lib/business-modules-api";
 
-const STEP_LABELS = ["Business type", "Profile", "Branding", "Team", "Messaging"];
-/** Every step is skippable except step 1 (index 0) — FE-006. */
-const REQUIRED_STEPS = new Set([0]);
+const STEP_LABELS = ["Business type", "Modules", "Profile", "Branding", "Team", "Messaging"];
+/** Business type and an explicit module choice are required; the remaining setup steps are skippable. */
+const REQUIRED_STEPS = new Set([0, 1]);
 
 function StepBusinessType() {
   const { data, updateData } = useOnboardingStore();
@@ -198,10 +204,16 @@ function StepMessaging() {
 
 export default function SetupWizardPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { step, setStep, data, reset } = useOnboardingStore();
+  const [saving, setSaving] = useState(false);
 
   const isLastStep = step === STEP_LABELS.length - 1;
-  const canContinue = !REQUIRED_STEPS.has(step) || !!data.businessTypeKey;
+  const canContinue = step === 0
+    ? !!data.businessTypeKey
+    : step === 1
+      ? Array.isArray(data.enabledModuleKeys)
+      : true;
 
   function handleBack() {
     if (step > 0) setStep(step - 1);
@@ -209,20 +221,41 @@ export default function SetupWizardPage() {
 
   function handleSkip() {
     if (REQUIRED_STEPS.has(step)) return;
-    if (isLastStep) return finish();
+    if (isLastStep) {
+      void finish();
+      return;
+    }
     setStep(step + 1);
   }
 
   function handleContinue() {
     if (!canContinue) return;
-    if (isLastStep) return finish();
+    if (isLastStep) {
+      void finish();
+      return;
+    }
     setStep(step + 1);
   }
 
-  function finish() {
-    toast.success("You're all set! Live save wires up in INT-001.");
-    reset();
-    router.push("/dashboard");
+  async function finish() {
+    if (!Array.isArray(data.enabledModuleKeys)) {
+      toast.error("Choose your modules before finishing setup.");
+      setStep(1);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveBusinessModuleSelection(data.enabledModuleKeys);
+      await queryClient.invalidateQueries({ queryKey: BUSINESS_MODULES_QUERY_KEY });
+      toast.success("Your module choices are saved.");
+      reset();
+      router.push("/dashboard");
+    } catch {
+      toast.error("Couldn't save your module choices — please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -231,23 +264,24 @@ export default function SetupWizardPage() {
 
       <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-6 sm:p-8">
         {step === 0 && <StepBusinessType />}
-        {step === 1 && <StepProfile />}
-        {step === 2 && <StepBranding />}
-        {step === 3 && <StepTeam />}
-        {step === 4 && <StepMessaging />}
+        {step === 1 && <ModuleSelectionStep />}
+        {step === 2 && <StepProfile />}
+        {step === 3 && <StepBranding />}
+        {step === 4 && <StepTeam />}
+        {step === 5 && <StepMessaging />}
 
         <div className="mt-8 flex items-center justify-between border-t border-border pt-5">
-          <Button type="button" variant="ghost" onClick={handleBack} disabled={step === 0}>
+          <Button type="button" variant="ghost" onClick={handleBack} disabled={step === 0 || saving}>
             Back
           </Button>
           <div className="flex items-center gap-2">
             {!REQUIRED_STEPS.has(step) && (
-              <Button type="button" variant="ghost" onClick={handleSkip}>
+              <Button type="button" variant="ghost" onClick={handleSkip} disabled={saving}>
                 Skip for now
               </Button>
             )}
-            <Button type="button" onClick={handleContinue} disabled={!canContinue}>
-              {isLastStep ? "Finish setup" : "Continue"}
+            <Button type="button" onClick={handleContinue} disabled={!canContinue || saving}>
+              {saving ? "Saving…" : isLastStep ? "Finish setup" : "Continue"}
             </Button>
           </div>
         </div>

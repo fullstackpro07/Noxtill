@@ -13,12 +13,13 @@ function rangeFor(key: string, days: DashboardRange): DashboardRange | undefined
   return widgetByKey(key)?.rangeAware ? days : undefined;
 }
 
-export function useWidgetData(key: string, days: DashboardRange = 30) {
+export function useWidgetData(key: string, days: DashboardRange = 30, enabled = true) {
   const effectiveDays = rangeFor(key, days);
   return useQuery({
     queryKey: ["widget", key, effectiveDays],
     queryFn: () => fetchWidgetData(key, effectiveDays),
     staleTime: WIDGET_STALE_TIME_MS,
+    enabled,
   });
 }
 

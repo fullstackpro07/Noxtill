@@ -26,7 +26,9 @@ import { AddWidgetDrawer } from "./add-widget-drawer";
 import { useDashboardStore } from "@/store/dashboard-store";
 import { fetchDashboardConfig, saveDashboardConfig } from "@/lib/widgets-api";
 import { toast } from "@/lib/toast";
-import { DASHBOARD_ROWS, DASHBOARD_LAYOUT_VERSION, type DashboardRowKey } from "@/lib/dashboard-rows";
+import { DASHBOARD_ROWS, DASHBOARD_LAYOUT_VERSION, dashboardRowIsEnabled, type DashboardRowKey } from "@/lib/dashboard-rows";
+import { widgetModuleKey } from "@/lib/widgets";
+import { useDisabledModules } from "@/components/layout/module-gate";
 
 const KNOWN_ROW_KEYS = new Set<string>(DASHBOARD_ROWS.map((r) => r.key));
 
@@ -37,22 +39,33 @@ const INNER_ROW_KEYS = new Set<DashboardRowKey>(DASHBOARD_ROWS.filter((r) => r.s
  * the design — reordering swaps whole rows' positions; the cards *inside* a row (e.g. Business
  * Health's fixed 292px column beside the flexible Business Overview chart) are never rearranged,
  * since that inner grid is literal design markup, not driven by the reorder list. */
-function renderRow(key: DashboardRowKey, currency: string, extraWidgetKeys: string[]) {
+function renderRow(
+  key: DashboardRowKey,
+  currency: string,
+  extraWidgetKeys: string[],
+  disabledModules: ReadonlySet<string>,
+) {
   switch (key) {
     case "kpi":
       return <KpiRow currency={currency} extraWidgetKeys={extraWidgetKeys} />;
-    case "insights":
+    case "insights": {
+      const needsAttentionEnabled = !disabledModules.has("profit");
       return (
-        <div className="grid grid-cols-1 gap-[15px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_300px]">
+        <div className={`grid grid-cols-1 gap-[15px] ${needsAttentionEnabled ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_300px]" : "lg:grid-cols-[minmax(0,1fr)_300px]"}`}>
           <OpportunitiesCard currency={currency} />
-          <NeedsAttentionCard currency={currency} />
+          {needsAttentionEnabled && <NeedsAttentionCard currency={currency} />}
           <BusinessHealthSnapshotCard />
         </div>
       );
+    }
     case "overview":
       return (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_292px]">
-          <BusinessOverviewCard currency={currency} />
+          <BusinessOverviewCard
+            currency={currency}
+            ordersEnabled={!disabledModules.has("orders")}
+            bookingsEnabled={!disabledModules.has("bookings")}
+          />
           <BusinessHealthGaugeCard />
         </div>
       );
@@ -79,6 +92,7 @@ function renderRow(key: DashboardRowKey, currency: string, extraWidgetKeys: stri
 
 export function DashboardView({ currency }: { currency: string; businessName: string }) {
   const session = useSession();
+  const disabledModules = useDisabledModules();
   const layout = useDashboardStore((s) => s.layout);
   const setLayout = useDashboardStore((s) => s.setLayout);
   const kpiExtras = useDashboardStore((s) => s.kpiExtras);
@@ -89,8 +103,16 @@ export function DashboardView({ currency }: { currency: string; businessName: st
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const outerRows = layout.filter((k): k is DashboardRowKey => OUTER_ROW_KEYS.has(k as DashboardRowKey));
-  const innerRows = layout.filter((k): k is DashboardRowKey => INNER_ROW_KEYS.has(k as DashboardRowKey));
+  const visibleKpiExtras = kpiExtras.filter((key) => {
+    const moduleKey = widgetModuleKey(key);
+    return !moduleKey || !disabledModules.has(moduleKey);
+  });
+  const defaultKpiModules = ["sales", "profit", "reviews", "credit", "bookings", "orders"];
+  const showKpiRow = defaultKpiModules.some((moduleKey) => !disabledModules.has(moduleKey)) || visibleKpiExtras.length > 0;
+  const rowIsEnabled = (key: string) =>
+    (key !== "kpi" || showKpiRow) && dashboardRowIsEnabled(key, disabledModules);
+  const outerRows = layout.filter((k): k is DashboardRowKey => OUTER_ROW_KEYS.has(k as DashboardRowKey) && rowIsEnabled(k));
+  const innerRows = layout.filter((k): k is DashboardRowKey => INNER_ROW_KEYS.has(k as DashboardRowKey) && rowIsEnabled(k));
 
   // Hydrates the layout from the server's saved dashboard config, if one exists — server wins over whatever's locally cached.
   const { data: serverConfig } = useQuery({
@@ -193,7 +215,7 @@ export function DashboardView({ currency }: { currency: string; businessName: st
       ) : (
         <div className="flex w-full flex-col gap-4 px-6 pb-7 pt-4.5">
           <OverviewToolbar
-            branches={session.business.branches}
+            branches={disabledModules.has("branches") ? [] : session.business.branches}
             onAddWidget={() => {
               // Add Widget fix-it: the drawer only ever writes into draftLayout/draftKpiExtras,
               // which stay null until enterCustomize() seeds them — opening the drawer directly
@@ -203,16 +225,16 @@ export function DashboardView({ currency }: { currency: string; businessName: st
             }}
           />
 
-          <ExecSummaryBanner currency={currency} />
+          {!disabledModules.has("profit") && <ExecSummaryBanner currency={currency} />}
 
           {outerRows.map((key) => (
-            <div key={key}>{renderRow(key, currency, kpiExtras)}</div>
+            <div key={key}>{renderRow(key, currency, visibleKpiExtras, disabledModules)}</div>
           ))}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_336px]">
             <div className="flex flex-col gap-4">
               {innerRows.map((key) => (
-                <div key={key}>{renderRow(key, currency, kpiExtras)}</div>
+                <div key={key}>{renderRow(key, currency, visibleKpiExtras, disabledModules)}</div>
               ))}
             </div>
             <DashboardSidePanel currency={currency} />

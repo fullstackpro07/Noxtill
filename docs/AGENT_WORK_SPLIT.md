@@ -134,8 +134,9 @@ Items: (1) B2B & Wholesale, (2) Subscriptions & Pre-orders, (3) Store Optimizer,
   at stop; adopt/revert/inconclusive needs a note; full audit trail. Never edits prices/listings.
   Migration 20261001133000 (3 FKs verified). jest 311/2003 — marketing-assets + qr-poster (PDF render
   timeouts under load, untouched code) failed once in the full run and passed on isolated reruns.
-- item 5 ✅ Module selection per business: new Settings → Modules category (owner-only toggle per
-  top-level module, grouped Core / Growth & channels / AI, history via the hub). Stored as
+- item 5 Module selection per business (implementation present; full DoD not yet met): Settings →
+  Modules category has an owner-only toggle per top-level module, grouped Core / Growth & channels /
+  AI, with history via the hub. Stored as
   `Business.disabled_modules` (OFF list, so new modules default on) on the ROOT business — every branch
   shares it. GET /business-modules (read-only, any signed-in user) feeds the sidebar (hidden items keep
   their divider/section label) and a page gate that shows "X is turned off" instead of the page
@@ -147,4 +148,41 @@ Items: (1) B2B & Wholesale, (2) Subscriptions & Pre-orders, (3) Store Optimizer,
   15 s timeout on a headless-Chromium PDF render; flips pass/fail between isolated runs on this loaded
   machine, also failed once before this item; untouched code). Default-worker runs showed more
   timeout-only failures in other untouched suites, all passing in isolation.
-- Goal #2 complete. Not done for any page: live browser verification (needs a test login).
+- Implementation pass complete; verification remained open because there was no test login at the time.
+
+## Verification follow-up — 2026-10-01
+
+- The current worktree contains an uncommitted module-selection implementation (Settings toggles,
+  onboarding step/API, sidebar and dashboard filtering, and authenticated backend API gating). No
+  application functionality was changed during this verification pass.
+- Authenticated browser smoke checks now load Risk & Compliance (all four tabs), B2B & Wholesale
+  (accounts and tiers), Subscriptions & Pre-orders (subscriptions, plans and pre-orders), Store
+  Optimizer (To do and All), Experiment Lab, and Settings → Modules. These were read-only; no
+  business data or module setting was changed. Settings displayed 12/12 Core, 9/9 Growth & channels,
+  and 8/8 AI modules on, with changes saved. The browser's screenshot capture failed, so this is
+  semantic UI verification only; pixel comparison and console/network inspection remain open.
+- Current checks: backend and frontend `npx tsc --noEmit` pass; touched-file ESLint passes; the three
+  module-selection Jest specs pass (28/28); `npx prisma migrate status` reports 133 migrations and
+  the database schema up to date.
+- Full backend Jest is not green. With `--maxWorkers=2`: 312/314 suites and 2027/2031 tests passed;
+  four PDF/QR rendering tests timed out. With `--maxWorkers=1`: 312/314 suites and 2028/2031 tests
+  passed; the QR poster PNG test timed out, and Marketing Assets had one render timeout plus a
+  reproducible assertion failure (`Popular right now` appears when the test expects no products).
+  The Marketing Assets and QR-poster files are outside the current worktree changes. The isolated
+  Marketing Assets suite reproduces its timeout and assertion failure.
+- Do not mark module selection ✅ or commit it until the full Jest gate is green and the browser
+  visual/console checks are completed. No new migration was added in this verification pass.
+
+## Progress log — goal #3 (Claude Code, started 2026-10-02; Codex stopped, Claude owns all areas)
+
+Items: (1) finish module selection, (2) commerce dashboard coverage + kill switch, (3…) SEO Autopilot
+screens, then Automations gaps. Local commits only, never push.
+
+- item 1 ✅ Module selection finished. Kept Codex's onboarding module step, dashboard/widget filtering,
+  PATCH /business-modules/selection (owner only) and the API guard, but narrowed the guard: it now uses
+  `gatedModuleForApiPath`, which never blocks shared business data (`SHARED_DATA_API_PREFIXES`:
+  products, customers, orders, returns, sales, cash, credit, stock, staff, branches, generic AI, media,
+  integrations…). Before this, turning Products/Customers/Credit off broke Fast Sale. The most specific
+  prefix still wins, so module-only features under a shared root (e.g. ai/what-if) stay gated.
+  Settings → Modules copy now says exactly that. Guard spec covers Fast Sale's real API roots.
+  jest --maxWorkers=3: 314/314 suites, 2050/2050 tests (incl. Codex's PDF-test timeout bumps).

@@ -27,7 +27,7 @@ export function modulesCategories(d: HubDeps): CategoryDef[] {
       description,
       requires: 'owner',
       impact:
-        'Turning a module off hides it from the sidebar and its pages for everyone in the business, including every branch. Its data is kept and comes back when you turn it on again.',
+        'Turning a module off hides its pages and blocks its own features for everyone in the business, including every branch. Shared records it uses (products, customers, orders, stock, staff, credit) stay available to other modules, and nothing is deleted.',
       reset: { label: 'On', value: true },
       state: async (ctx) => {
         const on = !(await service.disabledFor(ctx.businessId)).includes(key);
@@ -57,13 +57,13 @@ export function modulesCategories(d: HubDeps): CategoryDef[] {
       icon: 'boxes',
       group: 'Platform',
       description:
-        'Choose the Noxtill modules your business uses. Turned-off modules disappear from the sidebar so your team only sees what you need.',
+        'Choose the Noxtill modules your business uses. Turned-off modules disappear from the sidebar and dashboard, and their own features stop accepting requests.',
       affects: ['Sidebar', 'Every branch', 'Every team member'],
       affectsNote:
         'The choice is shared by the whole business — every branch and every team member sees the same modules.',
       help: [
-        'Turning a module off hides it; it never deletes data.',
-        'Data that other modules rely on keeps flowing — for example, Fast Sale still creates orders when Orders is hidden.',
+        'Turning a module off hides its pages and blocks its own features; it never deletes data.',
+        'Shared business records stay available — for example, Fast Sale still lists products and records sales and credit when Products, Orders or Credit is off.',
         'Dashboard and Settings are always on, so you can always turn a module back on here.',
       ],
       actions: [{ label: 'View history', icon: 'history', kind: 'history' }],

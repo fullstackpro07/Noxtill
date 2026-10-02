@@ -14,6 +14,7 @@ import { useNow } from "@/hooks/use-now";
 import { SlideDrawer } from "./slide-drawer";
 import { KpiDrawerBody, type KpiDriver, type KpiSourceRecord } from "./kpi-drawer-body";
 import { KpiExtraCard } from "./kpi-extra-card";
+import { useDisabledModules } from "@/components/layout/module-gate";
 
 type KpiKey = "sales" | "profit" | "rating" | "credit" | "bookings" | "orders";
 
@@ -113,26 +114,34 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
  * attention" flag and current balance still show). */
 export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraWidgetKeys?: string[] }) {
   const [drawer, setDrawer] = useState<KpiKey | null>(null);
+  const disabledModules = useDisabledModules();
+  const salesEnabled = !disabledModules.has("sales");
+  const profitEnabled = !disabledModules.has("profit");
+  const profitCardEnabled = profitEnabled && !disabledModules.has("orders");
+  const reviewsEnabled = !disabledModules.has("reviews");
+  const creditEnabled = !disabledModules.has("credit");
+  const bookingsEnabled = !disabledModules.has("bookings");
+  const ordersEnabled = !disabledModules.has("orders");
   const now = useNow();
   const today = new Date();
-  const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const yesterdayDate = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 
-  const revenueToday = useWidgetData("revenue_today");
-  const ordersToday = useWidgetData("orders_today");
-  const creditOutstanding = useWidgetData("credit_outstanding");
-  const appointmentsToday = useWidgetData("pending_appointments_today");
+  const revenueToday = useWidgetData("revenue_today", 30, salesEnabled);
+  const ordersToday = useWidgetData("orders_today", 30, salesEnabled);
+  const creditOutstanding = useWidgetData("credit_outstanding", 30, creditEnabled);
+  const appointmentsToday = useWidgetData("pending_appointments_today", 30, bookingsEnabled);
 
-  const { data: series } = useQuery({ queryKey: ["revenue-series", 2], queryFn: () => fetchRevenueSeries(2) });
-  const { data: overdueAgeing } = useQuery({ queryKey: ["credit", "overdue-ageing", "kpi"], queryFn: fetchOverdueAgeing });
-  const reviewsSummaryQ = useQuery({ queryKey: ["reviews-summary"], queryFn: fetchReviewsSummary });
-  const pendingOrdersQ = useQuery({ queryKey: ["orders", "pending", "kpi"], queryFn: () => fetchOrders("pending") });
-  const { data: allOrders } = useQuery({ queryKey: ["orders", "all", "kpi"], queryFn: () => fetchOrders() });
-  const { data: reviews } = useQuery({ queryKey: ["reviews", "kpi"], queryFn: fetchReviews });
-  const { data: debtors } = useQuery({ queryKey: ["credit", "debtors", "kpi"], queryFn: () => fetchDebtors("balance"), enabled: drawer === "credit" });
-  const { data: collectedToday } = useQuery({ queryKey: ["credit", "collected-today", "kpi"], queryFn: fetchCollectedToday, enabled: drawer === "credit" });
-  const { data: creditHistory } = useQuery({ queryKey: ["credit", "balance-history", "kpi"], queryFn: () => fetchCreditBalanceHistory(8) });
-  const { data: todaysBookingsList } = useQuery({ queryKey: ["appointments", "kpi-today"], queryFn: () => fetchAppointments({ from: isoDate(), to: isoDate() }) });
-  const { data: yesterdaysBookings } = useQuery({ queryKey: ["appointments", "kpi-yesterday"], queryFn: () => fetchAppointments({ from: isoDate(-1), to: isoDate(-1) }) });
+  const { data: series } = useQuery({ queryKey: ["revenue-series", 2], queryFn: () => fetchRevenueSeries(2), enabled: profitEnabled });
+  const { data: overdueAgeing } = useQuery({ queryKey: ["credit", "overdue-ageing", "kpi"], queryFn: fetchOverdueAgeing, enabled: creditEnabled });
+  const reviewsSummaryQ = useQuery({ queryKey: ["reviews-summary"], queryFn: fetchReviewsSummary, enabled: reviewsEnabled });
+  const pendingOrdersQ = useQuery({ queryKey: ["orders", "pending", "kpi"], queryFn: () => fetchOrders("pending"), enabled: ordersEnabled });
+  const { data: allOrders } = useQuery({ queryKey: ["orders", "all", "kpi"], queryFn: () => fetchOrders(), enabled: ordersEnabled });
+  const { data: reviews } = useQuery({ queryKey: ["reviews", "kpi"], queryFn: fetchReviews, enabled: reviewsEnabled });
+  const { data: debtors } = useQuery({ queryKey: ["credit", "debtors", "kpi"], queryFn: () => fetchDebtors("balance"), enabled: creditEnabled && drawer === "credit" });
+  const { data: collectedToday } = useQuery({ queryKey: ["credit", "collected-today", "kpi"], queryFn: fetchCollectedToday, enabled: creditEnabled && drawer === "credit" });
+  const { data: creditHistory } = useQuery({ queryKey: ["credit", "balance-history", "kpi"], queryFn: () => fetchCreditBalanceHistory(8), enabled: creditEnabled });
+  const { data: todaysBookingsList } = useQuery({ queryKey: ["appointments", "kpi-today"], queryFn: () => fetchAppointments({ from: isoDate(), to: isoDate() }), enabled: bookingsEnabled });
+  const { data: yesterdaysBookings } = useQuery({ queryKey: ["appointments", "kpi-yesterday"], queryFn: () => fetchAppointments({ from: isoDate(-1), to: isoDate(-1) }), enabled: bookingsEnabled });
 
   const revenue = revenueToday.data as { revenue: number; orders?: number } | undefined;
   const orders = ordersToday.data as { count: number } | undefined;
@@ -231,7 +240,7 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
   return (
     <>
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
-        <KpiCard
+        {salesEnabled && <KpiCard
           label="Today's Sales"
           value={revenue ? formatCurrency(revenue.revenue, currency) : null}
           delta={salesDelta !== null ? { label: `${Math.abs(salesDelta).toFixed(1)}%`, up: salesDelta >= 0 } : undefined}
@@ -239,17 +248,17 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
           recs={orders ? `${orders.count} transaction${orders.count === 1 ? "" : "s"}` : undefined}
           updatedAt={revenueToday.dataUpdatedAt}
           onOpen={() => setDrawer("sales")}
-        />
-        <KpiCard
+        />}
+        {profitEnabled && <KpiCard
           label="Today's Profit"
-          value={todaysOrders.length > 0 ? formatCurrency(todayProfit, currency) : null}
-          placeholder="No sales yet today"
+          value={profitCardEnabled && todaysOrders.length > 0 ? formatCurrency(todayProfit, currency) : null}
+          placeholder={profitCardEnabled ? "No sales yet today" : "Requires Orders to calculate"}
           delta={profitDelta !== null ? { label: `${Math.abs(profitDelta).toFixed(1)}%`, up: profitDelta >= 0 } : undefined}
           prev={yesterdaysOrders.length > 0 ? `${formatCurrency(yesterdayProfit, currency)} yesterday` : undefined}
           recs={todaysOrders.length > 0 ? `${todaysOrders.length} transaction${todaysOrders.length === 1 ? "" : "s"}` : undefined}
-          onOpen={() => setDrawer("profit")}
-        />
-        <KpiCard
+          onOpen={profitCardEnabled ? () => setDrawer("profit") : undefined}
+        />}
+        {reviewsEnabled && <KpiCard
           label="New Reviews"
           value={formatNumber(todaysReviews.length)}
           badge={reviewsSummary ? `Avg ${reviewsSummary.averageRating.toFixed(1)}★` : undefined}
@@ -257,8 +266,8 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
           recs={`${externalReviews.length} review${externalReviews.length === 1 ? "" : "s"}`}
           updatedAt={reviewsSummaryQ.dataUpdatedAt}
           onOpen={() => setDrawer("rating")}
-        />
-        <KpiCard
+        />}
+        {creditEnabled && <KpiCard
           label="Credit Outstanding"
           value={credit ? formatCurrency(credit.balance ?? credit.amount ?? 0, currency) : null}
           delta={creditDelta !== null ? { label: `${Math.abs(creditDelta).toFixed(1)}%`, up: creditDelta >= 0 } : undefined}
@@ -266,41 +275,41 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
           needsAttention={(overdueAgeing?.atRisk.count ?? 0) > 0}
           updatedAt={creditOutstanding.dataUpdatedAt}
           onOpen={() => setDrawer("credit")}
-        />
-        <KpiCard
+        />}
+        {bookingsEnabled && <KpiCard
           label="Today's Bookings"
           value={bookings ? formatNumber(bookings.count) : null}
           delta={bookingsDelta !== null ? { label: `${Math.abs(bookingsDelta).toFixed(0)}%`, up: bookingsDelta >= 0 } : undefined}
           prev={yesterdaysBookings ? `${yesterdaysBookings.length} yesterday` : undefined}
           updatedAt={appointmentsToday.dataUpdatedAt}
           onOpen={() => setDrawer("bookings")}
-        />
-        <KpiCard
+        />}
+        {ordersEnabled && <KpiCard
           label="Pending Orders"
           value={pendingOrders ? formatNumber(pendingOrders.length) : null}
           delta={pendingDelta !== null && pendingDelta !== 0 ? { label: `${Math.abs(pendingDelta)}`, up: pendingDelta >= 0 } : undefined}
           prev={pendingDelta !== null ? `${yesterdaysNewPending} new yesterday` : undefined}
           updatedAt={pendingOrdersQ.dataUpdatedAt}
           onOpen={() => setDrawer("orders")}
-        />
+        />}
         {/* Add Widget fix-it: extra real metric tiles a user chose to append to the KPI row. */}
         {(extraWidgetKeys ?? []).map((key) => (
           <KpiExtraCard key={key} widgetKey={key} currency={currency} />
         ))}
       </div>
 
-      <SlideDrawer open={drawer === "sales"} onClose={() => setDrawer(null)} title="Today's Sales">
+      <SlideDrawer open={drawer === "sales" && salesEnabled} onClose={() => setDrawer(null)} title="Today's Sales">
         <KpiDrawerBody
           value={revenue ? formatCurrency(revenue.revenue, currency) : "—"}
           comparedWith={yesterdaySeries ? `${formatCurrency(yesterdaySeries.revenue, currency)} yesterday` : undefined}
           source={`Fast Sale + Orders · ${orders?.count ?? 0} transaction(s)`}
           drivers={salesDrivers}
           records={salesRecords}
-          emptyRecordsLabel="No orders yet today."
+          emptyRecordsLabel={ordersEnabled ? "No orders yet today." : "Order details aren't available while Orders is turned off."}
         />
       </SlideDrawer>
 
-      <SlideDrawer open={drawer === "profit"} onClose={() => setDrawer(null)} title="Today's Profit">
+      <SlideDrawer open={drawer === "profit" && profitCardEnabled} onClose={() => setDrawer(null)} title="Today's Profit">
         <KpiDrawerBody
           value={todaysOrders.length > 0 ? formatCurrency(todayProfit, currency) : "—"}
           comparedWith={yesterdaysOrders.length > 0 ? `${formatCurrency(yesterdayProfit, currency)} yesterday` : undefined}
@@ -311,7 +320,7 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
         />
       </SlideDrawer>
 
-      <SlideDrawer open={drawer === "rating"} onClose={() => setDrawer(null)} title="New Reviews">
+      <SlideDrawer open={drawer === "rating" && reviewsEnabled} onClose={() => setDrawer(null)} title="New Reviews">
         <KpiDrawerBody
           value={formatNumber(todaysReviews.length)}
           comparedWith={`${yesterdaysReviews.length} yesterday`}
@@ -322,7 +331,7 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
         />
       </SlideDrawer>
 
-      <SlideDrawer open={drawer === "credit"} onClose={() => setDrawer(null)} title="Credit Outstanding">
+      <SlideDrawer open={drawer === "credit" && creditEnabled} onClose={() => setDrawer(null)} title="Credit Outstanding">
         <KpiDrawerBody
           value={credit ? formatCurrency(credit.balance ?? credit.amount ?? 0, currency) : "—"}
           comparedWith={creditWeekAgo ? `${formatCurrency(creditWeekAgo.balance, currency)} a week ago` : undefined}
@@ -340,7 +349,7 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
         )}
       </SlideDrawer>
 
-      <SlideDrawer open={drawer === "bookings"} onClose={() => setDrawer(null)} title="Today's Bookings">
+      <SlideDrawer open={drawer === "bookings" && bookingsEnabled} onClose={() => setDrawer(null)} title="Today's Bookings">
         <KpiDrawerBody
           value={bookings ? formatNumber(bookings.count) : "—"}
           comparedWith={yesterdaysBookings ? `${yesterdaysBookings.length} yesterday` : undefined}
@@ -351,7 +360,7 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
         />
       </SlideDrawer>
 
-      <SlideDrawer open={drawer === "orders"} onClose={() => setDrawer(null)} title="Pending Orders">
+      <SlideDrawer open={drawer === "orders" && ordersEnabled} onClose={() => setDrawer(null)} title="Pending Orders">
         <KpiDrawerBody
           value={pendingOrders ? formatNumber(pendingOrders.length) : "—"}
           source="Real orders still awaiting fulfillment"

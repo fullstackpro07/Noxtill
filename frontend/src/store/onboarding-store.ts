@@ -4,6 +4,8 @@ import { persist } from "zustand/middleware";
 export interface OnboardingData {
   businessTypeKey: string | null;
   businessTypeLabel: string | null;
+  /** null means the user has not confirmed a module choice yet; [] is an explicit minimal setup. */
+  enabledModuleKeys: string[] | null;
   businessName: string;
   businessPhone: string;
   address: string;
@@ -15,6 +17,7 @@ export interface OnboardingData {
 const EMPTY_DATA: OnboardingData = {
   businessTypeKey: null,
   businessTypeLabel: null,
+  enabledModuleKeys: null,
   businessName: "",
   businessPhone: "",
   address: "",

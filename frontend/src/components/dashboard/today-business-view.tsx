@@ -12,6 +12,7 @@ import { fetchStaffList } from "@/lib/staff-api";
 import { formatCurrency, formatTime } from "@/lib/format";
 import { fetchTodayBusiness, type TodayBusinessFilters, type LiveTodayBusiness } from "@/lib/today-business-api";
 import type { LivePaymentMethod } from "@/lib/orders-api";
+import { useDisabledModules } from "@/components/layout/module-gate";
 
 const PAYMENT_METHODS: LivePaymentMethod[] = ["cash", "card", "online", "credit"];
 const ORDER_TYPES = ["counter", "online", "dine_in", "takeaway", "delivery"] as const;
@@ -72,6 +73,7 @@ const selectStyle: React.CSSProperties = {
 
 export function TodayBusinessView() {
   const session = useSession();
+  const disabledModules = useDisabledModules();
   const [filters, setFilters] = useState<TodayBusinessFilters>({});
   const now = useNow(60_000);
 
@@ -86,15 +88,15 @@ export function TodayBusinessView() {
     () =>
       data
         ? [
-            { label: "Sales count", value: String(data.cards.salesCount) },
-            { label: "Revenue", value: formatCurrency(data.cards.revenue, session.business.currency) },
-            { label: "Average ticket", value: formatCurrency(data.cards.avgTicket, session.business.currency) },
-            { label: "Customers served", value: String(data.cards.customersServed) },
-            { label: "Staff on duty", value: String(data.cards.staffOnDuty) },
-            { label: "Open orders", value: String(data.cards.openOrders) },
-          ]
+            { label: "Sales count", value: String(data.cards.salesCount), module: "sales" },
+            { label: "Revenue", value: formatCurrency(data.cards.revenue, session.business.currency), module: "sales" },
+            { label: "Average ticket", value: formatCurrency(data.cards.avgTicket, session.business.currency), module: "sales" },
+            { label: "Customers served", value: String(data.cards.customersServed), module: "customers" },
+            { label: "Staff on duty", value: String(data.cards.staffOnDuty), module: "staff" },
+            { label: "Open orders", value: String(data.cards.openOrders), module: "orders" },
+          ].filter((card) => !disabledModules.has(card.module)).map(({ label, value }) => ({ label, value }))
         : [],
-    [data, session.business.currency],
+    [data, session.business.currency, disabledModules],
   );
 
   return (
@@ -123,14 +125,14 @@ export function TodayBusinessView() {
             <Printer className="h-3.5 w-3.5" aria-hidden />
             Print day sheet
           </button>
-          <Link
+          {!disabledModules.has("sales") && <Link
             href="/sales"
             className="flex items-center gap-1.5 rounded-[10px] px-4 py-[9px] text-[12.5px] font-bold text-white"
             style={{ background: "var(--app-primary)" }}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden />
             New sale
-          </Link>
+          </Link>}
         </div>
       </div>
 
@@ -290,18 +292,14 @@ function PaymentSplitDonut({ data, currency }: { data: { method: string; amount:
   }
   const total = data.reduce((sum, d) => sum + d.amount, 0) || 1;
   const C = 2 * Math.PI * 46;
-  let acc = 0;
   return (
     <div className="flex items-center gap-3">
       <svg viewBox="0 0 130 130" className="h-28 w-28 shrink-0">
         <g transform="rotate(-90 65 65)">
-          {data.map((d) => {
+          {data.map((d, index) => {
             const len = (d.amount / total) * C;
-            const el = (
-              <circle key={d.method} cx={65} cy={65} r={46} fill="none" stroke={METHOD_COLOR[d.method] ?? "#98A2B3"} strokeWidth={26} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-acc} />
-            );
-            acc += len;
-            return el;
+            const offset = data.slice(0, index).reduce((sum, item) => sum + (item.amount / total) * C, 0);
+            return <circle key={d.method} cx={65} cy={65} r={46} fill="none" stroke={METHOD_COLOR[d.method] ?? "#98A2B3"} strokeWidth={26} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-offset} />;
           })}
         </g>
         <circle cx={65} cy={65} r={30} fill="var(--app-surface)" />

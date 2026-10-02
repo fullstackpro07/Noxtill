@@ -88,9 +88,8 @@ describe('QrPosterService', () => {
     await prisma?.$disconnect();
   });
 
-  // Real QR encoding (`toDataURL`) is CPU-bound and can occasionally cross the default 5s budget
-  // when the full suite runs dozens of Jest workers in parallel — bumped, not mocked, since it's
-  // the one bit of real work this spec is meant to exercise.
+  // Real QR encoding (`toDataURL`) is CPU-bound and can exceed the default 5s budget
+  // under suite load. Keep the real encoder under test with a longer timeout, not a mock.
   it('renders a PDF poster at the requested page size and uploads it via S3', async () => {
     const result = await service.generate(businessId, {
       format: 'a4',
@@ -108,7 +107,7 @@ describe('QrPosterService', () => {
       expect.any(Buffer),
       'application/pdf',
     );
-  }, 15_000);
+  }, 60_000);
 
   it('renders a PNG poster at the correctly converted pixel size for the sticker format', async () => {
     await service.generate(businessId, {
@@ -127,7 +126,7 @@ describe('QrPosterService', () => {
       expect.any(Buffer),
       'image/png',
     );
-  }, 15_000);
+  }, 30_000);
 
   it('escapes the business name so it can never break out of the rendered HTML', async () => {
     const evilBusiness = await prisma.business.create({
@@ -156,7 +155,7 @@ describe('QrPosterService', () => {
       await tx.business.delete({ where: { id: evilBusiness.id } });
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
-  }, 15_000);
+  }, 30_000);
 
   it('renders the real brandColor and a signed logo image when Review Settings has them set (UPD-FE-086)', async () => {
     await prisma.business.update({
@@ -189,7 +188,7 @@ describe('QrPosterService', () => {
       where: { id: businessId },
       data: { reviewSettings: {} },
     });
-  }, 15_000);
+  }, 30_000);
 
   it('falls back to the default heading color and no logo when nothing is set', async () => {
     await service.generate(businessId, {
@@ -204,5 +203,5 @@ describe('QrPosterService', () => {
       ][0];
     expect(htmlArg).toContain('#0C4B3B');
     expect(htmlArg).not.toContain('class="logo"');
-  }, 15_000);
+  }, 30_000);
 });

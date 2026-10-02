@@ -1,4 +1,6 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { AppException } from '../common/filters/app.exception';
+import { BUSINESS_MODULES } from './business-modules.constants';
 import { BusinessModulesService } from './business-modules.service';
 
 describe('BusinessModulesService (MySQL)', () => {
@@ -73,5 +75,39 @@ describe('BusinessModulesService (MySQL)', () => {
       data: { disabledModules: ['credit', 'removed-module', 42, 'credit'] },
     });
     expect(await service.disabledFor(branchId)).toEqual(['credit']);
+  });
+
+  it('persists an explicit onboarding selection and rejects disabled APIs with a typed error', async () => {
+    const enabled = ['sales', 'orders'];
+    const disabled = BUSINESS_MODULES.map((module) => module.key)
+      .filter((key) => !enabled.includes(key))
+      .sort();
+
+    await expect(service.setSelection(branchId, enabled)).resolves.toEqual(
+      disabled,
+    );
+    expect(await service.disabledFor(rootId)).toEqual(disabled);
+    expect(await service.disabledFor(branchId)).toEqual(disabled);
+    await expect(
+      service.assertEnabled(rootId, 'sales'),
+    ).resolves.toBeUndefined();
+
+    try {
+      await service.assertEnabled(branchId, 'autonomous-commerce');
+      throw new Error('Expected the disabled module to be rejected');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppException);
+      const appError = error as AppException;
+      expect(appError.getStatus()).toBe(403);
+      expect(appError.getResponse()).toMatchObject({
+        code: 'BUSINESS_MODULE_DISABLED',
+      });
+    }
+
+    await expect(
+      service.setSelection(rootId, ['removed-module']),
+    ).rejects.toMatchObject({
+      response: { code: 'BUSINESS_MODULE_UNKNOWN' },
+    });
   });
 });

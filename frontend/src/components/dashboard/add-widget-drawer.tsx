@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Search, X, Check } from "lucide-react";
-import { DASHBOARD_ROWS, DASHBOARD_ROW_MODULES } from "@/lib/dashboard-rows";
-import { WIDGETS, CATEGORY_LABELS, type WidgetCategory } from "@/lib/widgets";
+import { DASHBOARD_ROWS, DASHBOARD_ROW_MODULES, dashboardRowIsEnabled } from "@/lib/dashboard-rows";
+import { WIDGETS, CATEGORY_LABELS, type WidgetCategory, widgetModuleKey } from "@/lib/widgets";
 import { useDashboardStore } from "@/store/dashboard-store";
 import { useNxPortalTarget } from "@/hooks/use-nx-portal-target";
+import { useDisabledModules } from "@/components/layout/module-gate";
 
 const EMPTY_LAYOUT: string[] = [];
 type Tab = "rows" | "kpi";
@@ -20,6 +21,7 @@ export function AddWidgetDrawer({ open, onClose }: { open: boolean; onClose: () 
   const [query, setQuery] = useState("");
   const [rowModule, setRowModule] = useState<string | "all">("all");
   const [kpiCategory, setKpiCategory] = useState<WidgetCategory | "all">("all");
+  const disabledModules = useDisabledModules();
 
   const draftLayout = useDashboardStore((s) => s.draftLayout) ?? EMPTY_LAYOUT;
   const addWidget = useDashboardStore((s) => s.addWidget);
@@ -39,13 +41,20 @@ export function AddWidgetDrawer({ open, onClose }: { open: boolean; onClose: () 
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return DASHBOARD_ROWS.filter((r) => (rowModule === "all" || r.module === rowModule) && (!q || r.title.toLowerCase().includes(q)));
-  }, [query, rowModule]);
+    return DASHBOARD_ROWS.filter((r) => dashboardRowIsEnabled(r.key, disabledModules) && (rowModule === "all" || r.module === rowModule) && (!q || r.title.toLowerCase().includes(q)));
+  }, [disabledModules, query, rowModule]);
 
   const filteredKpiWidgets = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return WIDGETS.filter((w) => (kpiCategory === "all" || w.category === kpiCategory) && (!q || w.title.toLowerCase().includes(q)));
-  }, [query, kpiCategory]);
+    return WIDGETS.filter((w) => {
+      const moduleKey = widgetModuleKey(w.key);
+      return (!moduleKey || !disabledModules.has(moduleKey)) && (kpiCategory === "all" || w.category === kpiCategory) && (!q || w.title.toLowerCase().includes(q));
+    });
+  }, [disabledModules, query, kpiCategory]);
+
+  const visibleRowModules = DASHBOARD_ROW_MODULES.filter((moduleName) =>
+    DASHBOARD_ROWS.some((row) => row.module === moduleName && dashboardRowIsEnabled(row.key, disabledModules)),
+  );
 
   const portalTarget = useNxPortalTarget();
   if (!open || !portalTarget) return null;
@@ -120,7 +129,7 @@ export function AddWidgetDrawer({ open, onClose }: { open: boolean; onClose: () 
               >
                 All
               </button>
-              {DASHBOARD_ROW_MODULES.map((m) => (
+              {visibleRowModules.map((m) => (
                 <button
                   key={m}
                   type="button"

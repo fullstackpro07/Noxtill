@@ -20,3 +20,9 @@ export interface BusinessModules {
 export const BUSINESS_MODULES_QUERY_KEY = ["settings-hub", "business-modules"] as const;
 
 export const fetchBusinessModules = () => apiFetch<BusinessModules>("/business-modules");
+
+export const saveBusinessModuleSelection = (enabled: string[]) =>
+  apiFetch<{ disabled: string[] }>("/business-modules/selection", {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });

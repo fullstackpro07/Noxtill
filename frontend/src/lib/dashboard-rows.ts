@@ -15,6 +15,8 @@ export interface DashboardRowDef {
   key: DashboardRowKey;
   title: string;
   module: string;
+  /** Optional top-level modules whose data appears in this row; every one must remain enabled. */
+  modules?: string[];
   icon: LucideIcon;
   /** "outer" rows are full-width, above the main/sidebar split; "inner" rows sit inside the main
    * column next to the fixed sidebar. Reordering only ever happens within the same scope, so the
@@ -27,13 +29,13 @@ export interface DashboardRowDef {
  * (e.g. Business Health's fixed 292px column beside the flexible Business Overview chart) never
  * get rearranged, since that inner layout is literal design markup, not driven by this list. */
 export const DASHBOARD_ROWS: DashboardRowDef[] = [
-  { key: "kpi", title: "KPI Row (6 metrics)", module: "Dashboard", icon: Gauge, scope: "outer" },
+  { key: "kpi", title: "KPI Row", module: "Dashboard", icon: Gauge, scope: "outer" },
   { key: "insights", title: "Opportunities, Needs Attention & Business Health", module: "Dashboard", icon: Lightbulb, scope: "outer" },
-  { key: "overview", title: "Business Overview chart & Health Score", module: "Profit & Analytics", icon: LineChart, scope: "inner" },
-  { key: "products", title: "Top Products, Recent Orders & Top Channels", module: "Products", icon: Trophy, scope: "inner" },
+  { key: "overview", title: "Business Overview chart & Health Score", module: "Profit & Analytics", modules: ["profit", "sales"], icon: LineChart, scope: "inner" },
+  { key: "products", title: "Top Products, Recent Orders & Top Channels", module: "Products", modules: ["products", "sales", "orders", "integrations"], icon: Trophy, scope: "inner" },
   { key: "quick", title: "Quick Actions", module: "Dashboard", icon: LayoutGrid, scope: "inner" },
   { key: "intelligence", title: "Business Intelligence", module: "Dashboard", icon: Sparkles, scope: "inner" },
-  { key: "commerce", title: "Autonomous Commerce", module: "Autonomous Commerce", icon: ShoppingBasket, scope: "inner" },
+  { key: "commerce", title: "Autonomous Commerce", module: "Autonomous Commerce", modules: ["autonomous-commerce"], icon: ShoppingBasket, scope: "inner" },
   { key: "getting-started", title: "Getting Started", module: "Dashboard", icon: Rocket, scope: "inner" },
 ];
 
@@ -47,6 +49,11 @@ export const DASHBOARD_LAYOUT_VERSION = 3;
 
 export function dashboardRowByKey(key: string): DashboardRowDef | undefined {
   return DASHBOARD_ROWS.find((r) => r.key === key);
+}
+
+export function dashboardRowIsEnabled(key: string, disabledModules: ReadonlySet<string>): boolean {
+  const row = dashboardRowByKey(key);
+  return !row?.modules?.some((moduleKey) => disabledModules.has(moduleKey));
 }
 
 export const DASHBOARD_ROW_MODULES: string[] = Array.from(new Set(DASHBOARD_ROWS.map((r) => r.module)));

@@ -5,9 +5,10 @@ import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-ki
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, ChevronUp, ChevronDown, X } from "lucide-react";
-import { DASHBOARD_ROWS, dashboardRowByKey, type DashboardRowKey } from "@/lib/dashboard-rows";
-import { widgetByKey } from "@/lib/widgets";
+import { DASHBOARD_ROWS, dashboardRowByKey, dashboardRowIsEnabled, type DashboardRowKey } from "@/lib/dashboard-rows";
+import { widgetByKey, widgetModuleKey } from "@/lib/widgets";
 import { useDashboardStore } from "@/store/dashboard-store";
+import { useDisabledModules } from "@/components/layout/module-gate";
 
 const OUTER_KEYS = new Set(DASHBOARD_ROWS.filter((r) => r.scope === "outer").map((r) => r.key));
 const INNER_KEYS = new Set(DASHBOARD_ROWS.filter((r) => r.scope === "inner").map((r) => r.key));
@@ -26,9 +27,12 @@ export function WidgetGridCustomize() {
   const reorderDraft = useDashboardStore((s) => s.reorderDraft);
   const removeWidget = useDashboardStore((s) => s.removeWidget);
   const removeKpiExtra = useDashboardStore((s) => s.removeKpiExtra);
+  const disabledModules = useDisabledModules();
 
-  const outerRows = draftLayout.filter((k): k is DashboardRowKey => OUTER_KEYS.has(k as DashboardRowKey));
-  const innerRows = draftLayout.filter((k): k is DashboardRowKey => INNER_KEYS.has(k as DashboardRowKey));
+  const allOuterRows = draftLayout.filter((k): k is DashboardRowKey => OUTER_KEYS.has(k as DashboardRowKey));
+  const allInnerRows = draftLayout.filter((k): k is DashboardRowKey => INNER_KEYS.has(k as DashboardRowKey));
+  const outerRows = allOuterRows.filter((key) => dashboardRowIsEnabled(key, disabledModules));
+  const innerRows = allInnerRows.filter((key) => dashboardRowIsEnabled(key, disabledModules));
 
   function moveWithinScope(scopeRows: DashboardRowKey[], key: string, direction: -1 | 1) {
     const i = scopeRows.indexOf(key as DashboardRowKey);
@@ -42,7 +46,15 @@ export function WidgetGridCustomize() {
   function applyScopeOrder(nextOuter: DashboardRowKey[], nextInner: DashboardRowKey[]) {
     // Absolute interleaving in the stored array doesn't matter — the Overview page filters into
     // outer/inner separately and renders each in its own relative order, so concatenating is safe.
-    reorderDraft([...nextOuter, ...nextInner]);
+    const preserveHidden = (all: DashboardRowKey[], visibleOrder: DashboardRowKey[]) => {
+      const visible = new Set(all.filter((key) => dashboardRowIsEnabled(key, disabledModules)));
+      let visibleIndex = 0;
+      return all.map((key) => visible.has(key) ? visibleOrder[visibleIndex++] : key);
+    };
+    reorderDraft([
+      ...preserveHidden(allOuterRows, nextOuter),
+      ...preserveHidden(allInnerRows, nextInner),
+    ]);
   }
 
   return (
@@ -71,7 +83,10 @@ export function WidgetGridCustomize() {
             <span className="text-[11.5px]" style={{ color: "var(--app-text-faintest)" }}>Appended to the end of the KPI row</span>
           </div>
           <div className="flex flex-col gap-2.5">
-            {draftKpiExtras.map((key) => {
+            {draftKpiExtras.filter((key) => {
+              const moduleKey = widgetModuleKey(key);
+              return !moduleKey || !disabledModules.has(moduleKey);
+            }).map((key) => {
               const widget = widgetByKey(key);
               if (!widget) return null;
               return (

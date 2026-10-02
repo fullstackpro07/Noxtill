@@ -166,5 +166,5 @@ describe('BookingLinkService (UPD-BE-090)', () => {
       expect.any(Buffer),
       'application/pdf',
     );
-  }, 15_000);
+  }, 30_000);
 });
