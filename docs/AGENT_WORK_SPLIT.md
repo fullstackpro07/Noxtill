@@ -487,3 +487,13 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   yet"; both settings cleared afterwards. Redis now runs as a user LaunchAgent
   (~/Library/LaunchAgents/com.noxtill.redis.plist, 127.0.0.1 only, starts at login) — dev machine only;
   production still needs managed Redis.
+
+## Progress log — Business Intelligence
+
+- Screen 1 ✅ BI Overview (`/business-intelligence`). Reads five metrics from the existing Dashboard
+  widget registry and new insights from the canonical AI Insights records; no KPI formula or second
+  metric store added. Displays source evidence, recorded impact (or "Impact not quantified"), and
+  source-module links; source-insight confidence is disclosed as unrecorded. The page discloses the
+  Dashboard cache may be up to 60 seconds old. Real-MySQL spec covers empty sources, real order data,
+  and tenant isolation. No migration. Backend/frontend `tsc`, touched-file eslint and full backend
+  Jest pass (338 suites / 2,122 tests); browser page loaded in QA Test Business with real data.

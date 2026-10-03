@@ -68,6 +68,7 @@ import { ConnectionDetailModule } from './integrations/connection-detail/connect
 import { DeveloperModule } from './developer/developer.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { CommerceModule } from './commerce/commerce.module';
+import { BusinessIntelligenceModule } from './business-intelligence/business-intelligence.module';
 
 @Module({
   imports: [
@@ -141,6 +142,7 @@ import { CommerceModule } from './commerce/commerce.module';
     DeveloperModule,
     AuditLogModule,
     CommerceModule,
+    BusinessIntelligenceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -647,12 +647,20 @@ export const NAV_ITEMS: NavItem[] = [
 
   // ---- Group 3 (all new AI modules) ----
   {
+    key: "business-intelligence",
+    labelKey: "nav.businessIntelligence",
+    href: "/business-intelligence",
+    icon: Brain,
+    roles: ["owner", "manager"],
+    sectionLabel: "Business intelligence",
+    isNew: true,
+  },
+  {
     key: "business-brain",
     labelKey: "nav.businessBrain",
     href: "/business-brain",
     icon: Brain,
     roles: ["owner", "manager"],
-    sectionLabel: "Business intelligence",
     isNew: true,
   },
   {
