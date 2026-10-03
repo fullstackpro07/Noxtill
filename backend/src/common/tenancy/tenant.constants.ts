@@ -40,6 +40,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'BiBrainAnswer',
   'BiDiagnosisHypothesis',
   'BiScenarioVersion',
+  'BiTwinAssumptionVersion',
   'ActionItemState',
   'HeldSale',
   'CashShift',

@@ -538,3 +538,16 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   backend Jest (`--maxWorkers=2`, 338 suites / 2,125 tests) passed. Browser QA in the separate QA Test
   Business confirmed route/header and the honest no-insights empty state; no source insight existed
   there to exercise the hypothesis form live, so that mutation flow is verified by the MySQL spec.
+- Screen 6 ✅ Digital Twin (`/digital-twin`). Reads canonical root/active-branch, membership, scheduled
+  shift, product/service/stock, supplier/purchase-order, branch-local expense, integration (without
+  credentials), and workflow records. Currency totals remain separate by branch. The module persists
+  only immutable, audited assumptions; creating v2 preserves v1 and never writes operational data.
+  The MySQL spec verifies the live branch-group sources, USD/EUR cost separation, tenant isolation,
+  audited v1/v2, invalid assumption rejection, secret-field exclusion, and unchanged product/expense
+  rows (2/2). Hand-written `bi_twin_assumption_versions` migration applied; its business FK was
+  verified and Prisma reports 151 migrations up to date. Backend/frontend `tsc`, touched-file eslint,
+  and full backend Jest (`--maxWorkers=2`, 339 suites / 2,127 tests) passed. Browser QA in QA Test
+  Business confirmed live data, empty assumptions, saved a labelled 5% v1 and 7% v2, and compared
+  earlier history. That QA-only test assumption remains in the test business. Physical equipment and
+  supplier lead times are disclosed as not tracked; staff/service capacity and product cost coverage
+  are disclosed as partial for the documented source-data gaps.

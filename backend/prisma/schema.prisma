@@ -260,6 +260,22 @@ enum BiDiagnosisHypothesisStatus {
   resolved
 }
 
+enum BiTwinEntityType {
+  business
+  branch
+  staff
+  product
+  supplier
+}
+
+enum BiTwinAssumptionKey {
+  staff_weekly_hours
+  supplier_lead_days
+  product_reorder_buffer_units
+  branch_daily_capacity
+  expense_adjustment_percent
+}
+
 enum ProductValidationDecision {
   approve_test
   approve_launch
@@ -842,6 +858,7 @@ model Business {
   biBrainAnswers               BiBrainAnswer[]
   biDiagnosisHypotheses        BiDiagnosisHypothesis[]
   biScenarioVersions           BiScenarioVersion[]
+  biTwinAssumptionVersions     BiTwinAssumptionVersion[]
   actionItemStates             ActionItemState[]
   heldSales                    HeldSale[]
   cashShifts                   CashShift[]
@@ -5592,6 +5609,27 @@ model BiScenarioVersion {
   @@unique([businessId, seriesId, version], map: "bi_scenario_versions_business_series_version_key")
   @@index([businessId, createdAt], map: "bi_scenario_versions_business_created_idx")
   @@map("bi_scenario_versions")
+}
+
+/// Immutable model assumptions only. Operational entities and measures remain canonical in their
+/// owning modules and are resolved live by BusinessIntelligenceService.digitalTwinContext().
+model BiTwinAssumptionVersion {
+  id             String              @id @default(uuid())
+  businessId     String              @map("business_id")
+  business       Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  seriesId       String              @map("series_id") @db.Char(36)
+  version        Int
+  entityType     BiTwinEntityType    @map("entity_type")
+  entityId       String              @map("entity_id")
+  assumptionKey  BiTwinAssumptionKey @map("assumption_key")
+  value          Decimal             @db.Decimal(14, 4)
+  rationale      String              @db.Text
+  createdByUserId String             @map("created_by_user_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  @@unique([businessId, seriesId, version], map: "bi_twin_assumption_versions_business_series_version_key")
+  @@index([businessId, entityType, entityId], map: "bi_twin_assumption_versions_business_entity_idx")
+  @@map("bi_twin_assumption_versions")
 }
 
 /// Action Center (UPD-BE-004) — synthesized action items (complaints/low-stock/overdue-credit/

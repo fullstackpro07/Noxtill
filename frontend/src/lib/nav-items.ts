@@ -694,7 +694,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Cpu,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
   },
 ];
 

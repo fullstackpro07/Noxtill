@@ -16,10 +16,15 @@ import { AskBusinessBrainDto } from './dto/ask-business-brain.dto';
 import { CreateBiScenarioDto } from './dto/create-bi-scenario.dto';
 import { CreateBiDiagnosisHypothesisDto } from './dto/create-bi-diagnosis-hypothesis.dto';
 import { ResolveBiDiagnosisHypothesisDto } from './dto/resolve-bi-diagnosis-hypothesis.dto';
+import { CreateBiTwinAssumptionDto } from './dto/create-bi-twin-assumption.dto';
+import { DigitalTwinService } from './digital-twin.service';
 
 @Controller('business-intelligence')
 export class BusinessIntelligenceController {
-  constructor(private readonly service: BusinessIntelligenceService) {}
+  constructor(
+    private readonly service: BusinessIntelligenceService,
+    private readonly digitalTwin: DigitalTwinService,
+  ) {}
 
   @Get('overview')
   @RequireCapability(CAPABILITIES.PROFIT_VIEW)
@@ -115,5 +120,26 @@ export class BusinessIntelligenceController {
     @Body() dto: CreateBiScenarioDto,
   ) {
     return this.service.createSimulatorScenario(user.businessId, user.sub, dto);
+  }
+
+  @Get('digital-twin/context')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  digitalTwinContext(@CurrentUser() user: AuthenticatedUser) {
+    return this.digitalTwin.context(user.businessId);
+  }
+
+  @Get('digital-twin/assumptions')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  digitalTwinAssumptions(@CurrentUser() user: AuthenticatedUser) {
+    return this.digitalTwin.listAssumptions(user.businessId);
+  }
+
+  @Post('digital-twin/assumptions')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  createDigitalTwinAssumption(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateBiTwinAssumptionDto,
+  ) {
+    return this.digitalTwin.createAssumption(user.businessId, user.sub, dto);
   }
 }
