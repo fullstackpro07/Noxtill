@@ -10,6 +10,9 @@ import {
   workflowGraphActions,
   type WorkflowGraph,
 } from '../../marketing/automations/workflow-graph.util';
+import { BI_OVERVIEW_WIDGETS } from '../../business-intelligence/business-intelligence.constants';
+import { WIDGET_REGISTRY } from '../../widgets/widget-registry';
+import { WIDGET_CACHE_TTL_MS } from '../../widgets/widgets.constants';
 
 const bad = (message: string) => new AppException('SETTING_INVALID', message, HttpStatus.BAD_REQUEST);
 
@@ -50,6 +53,221 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
     });
 
   return [
+    {
+      key: 'business-intelligence',
+      label: 'Intelligence Settings',
+      title: 'Intelligence Settings',
+      icon: 'brain',
+      group: 'Intelligence',
+      description:
+        'Set on-screen confidence and impact thresholds and optional starting assumptions for BI simulations.',
+      affects: ['BI Overview', 'Opportunity Radar', 'Business Simulator'],
+      affectsNote:
+        'Thresholds label source records; simulation defaults prefill hypothetical inputs only. Nothing here edits source business records or sends alerts.',
+      help: [
+        'BI reads the canonical Dashboard widget registry. These settings do not redefine metric formulas.',
+        'Confidence values are source-recorded Product Radar values, not calibrated probabilities. Thresholds add labels only and do not change ranking.',
+        'Impact thresholds add an on-screen marker to recorded insight amounts; BI threshold notifications are not available.',
+        'Simulation defaults prefill assumptions for review. Saving a scenario never writes to live products, prices, staff or campaigns.',
+        'AI provider setup and feature permissions stay in AI & Governance; BI does not store provider credentials or override those controls.',
+      ],
+      notice: {
+        text: 'Metric definitions remain owned by their source modules. BI thresholds are guidance markers, not causal claims or automated actions.',
+        icon: 'shield-check',
+      },
+      actions: [
+        {
+          label: 'Open BI Overview',
+          icon: 'external-link',
+          href: '/business-intelligence',
+          kind: 'link',
+        },
+        {
+          label: 'Open AI & Governance',
+          icon: 'external-link',
+          href: '/settings/ai',
+          kind: 'link',
+        },
+        { label: 'Reset section', icon: 'rotate-ccw', kind: 'reset' },
+        { label: 'View history', icon: 'history', kind: 'history' },
+      ],
+      groups: [
+        {
+          title: 'Canonical sources',
+          hint: 'Read-only references',
+          rows: [
+            row({
+              key: 'bi-ai-governance',
+              label: 'AI models and permissions',
+              description:
+                'Provider configuration, monthly limits and AI feature access remain in the existing AI & Governance controls. BI has no separate per-business model allowlist.',
+              link: { label: 'Open AI settings', href: '/settings/ai' },
+              state: () => ({ value: 'Managed in AI & Governance' }),
+            }),
+            row({
+              key: 'bi-approval-policy',
+              label: 'Approval policy',
+              description:
+                'BI does not execute source-module changes. Permissions and any required approvals are enforced by the owning module.',
+              state: () => ({ value: 'Owned by source modules' }),
+            }),
+            row({
+              key: 'bi-retention-policy',
+              label: 'BI record retention',
+              description:
+                'A separate BI retention setting is not configured here. This view does not change how source records are retained.',
+              state: () => ({ value: 'No BI-specific policy' }),
+            }),
+            row({
+              key: 'bi-freshness-policy',
+              label: 'Dashboard metric freshness',
+              description:
+                'The BI Overview uses the Dashboard widget cache. This freshness interval is set by the Dashboard service, not configurable here.',
+              state: () => ({
+                value: `Dashboard cache · ${WIDGET_CACHE_TTL_MS / 1000} seconds`,
+              }),
+            }),
+            row({
+              key: 'bi-notifications',
+              label: 'Threshold notifications',
+              description:
+                'BI does not currently send notifications when a threshold is crossed. Thresholds are shown as on-screen markers only.',
+              state: () => ({ value: 'Not available', tone: 'neutral' }),
+            }),
+          ],
+          dynamicRows: () => {
+            const registered = new Set(
+              WIDGET_REGISTRY.map((widget) => widget.key),
+            );
+            const unresolved = BI_OVERVIEW_WIDGETS.filter(
+              (key) => !registered.has(key),
+            );
+            return Promise.resolve([
+              row({
+                key: 'bi-metric-registry',
+                label: 'Metric definitions',
+                description: `BI checks its Dashboard metric references against the canonical widget registry when this screen loads: ${BI_OVERVIEW_WIDGETS.join(', ')}. Formulas remain owned by Dashboard.`,
+                link: {
+                  label: 'Open BI Overview',
+                  href: '/business-intelligence',
+                },
+                state: () =>
+                  unresolved.length
+                    ? {
+                        value: `Unresolved: ${unresolved.join(', ')}`,
+                        tone: 'red',
+                      }
+                    : {
+                        value: 'All BI references resolve',
+                        tone: 'green',
+                      },
+              }),
+            ]);
+          },
+        },
+        {
+          title: 'Confidence and impact markers',
+          hint: 'Labels only · no ranking or notification changes',
+          rows: [
+            policyRow(d, {
+              key: 'bi-confidence-review-below',
+              policy: 'bi.confidenceReviewBelow',
+              kind: 'number',
+              label: 'Flag source confidence below',
+              description:
+                'Adds a review label to Product Radar candidates below this recorded confidence score (0–100). Empty means no review threshold.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n} / 100`,
+              emptyLabel: 'No threshold',
+            }),
+            policyRow(d, {
+              key: 'bi-confidence-high-at',
+              policy: 'bi.confidenceHighAtOrAbove',
+              kind: 'number',
+              label: 'Mark source confidence high at',
+              description:
+                'Adds a high-confidence label at or above this recorded Product Radar score (0–100). Empty means no high-confidence threshold.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n} / 100`,
+              emptyLabel: 'No threshold',
+            }),
+            policyRow(d, {
+              key: 'bi-impact-alert-threshold',
+              policy: 'bi.insightImpactAlertThreshold',
+              kind: 'number',
+              label: 'Insight impact alert threshold',
+              description:
+                'Marks recorded AI Insight impact at or above this amount in the business currency. This is an on-screen marker only; no notification is sent.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n.toLocaleString('en-US')} (business currency)`,
+              emptyLabel: 'No threshold',
+              step: 0.01,
+            }),
+          ],
+        },
+        {
+          title: 'Simulation defaults',
+          hint: 'Optional starting assumptions · never applied live',
+          footer:
+            'These values prefill a new what-if form. Review them before saving; scenarios do not alter operational records.',
+          rows: [
+            policyRow(d, {
+              key: 'bi-simulation-price-default',
+              policy: 'bi.simulationPriceChangePercent',
+              kind: 'number',
+              label: 'Default hypothetical price change',
+              description:
+                'Prefills the price-change assumption for a new scenario. Empty leaves the input blank.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n}%`,
+              emptyLabel: 'No default',
+              step: 0.01,
+            }),
+            policyRow(d, {
+              key: 'bi-simulation-stock-default',
+              policy: 'bi.simulationAdditionalStockUnits',
+              kind: 'number',
+              label: 'Default additional stock units',
+              description:
+                'Prefills the hypothetical additional units input. Empty leaves the input blank.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n} units`,
+              emptyLabel: 'No default',
+            }),
+            policyRow(d, {
+              key: 'bi-simulation-staff-default',
+              policy: 'bi.simulationStaffCountChange',
+              kind: 'number',
+              label: 'Default staff-size change',
+              description:
+                'Prefills the hypothetical headcount change. Empty leaves the input blank.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n > 0 ? '+' : ''}${n} people`,
+              emptyLabel: 'No default',
+            }),
+            policyRow(d, {
+              key: 'bi-simulation-marketing-default',
+              policy: 'bi.simulationMarketingBudgetChange',
+              kind: 'number',
+              label: 'Default marketing budget change',
+              description:
+                'Prefills a hypothetical amount in the business currency. Empty leaves the input blank; no marketing ROI is estimated.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n.toLocaleString('en-US')} (business currency)`,
+              emptyLabel: 'No default',
+              step: 0.01,
+            }),
+          ],
+        },
+      ],
+    },
     {
       key: 'automations',
       label: 'Automations',

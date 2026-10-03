@@ -695,6 +695,14 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["owner", "manager"],
     isNew: true,
   },
+  {
+    key: "intelligence-settings",
+    labelKey: "nav.intelligenceSettings",
+    href: "/settings/business-intelligence",
+    icon: Sliders,
+    roles: ["owner", "manager"],
+    isNew: true,
+  },
 ];
 
 export function navItemsForRole(role: Role): NavItem[] {

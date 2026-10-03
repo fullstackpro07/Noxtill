@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calculator,
@@ -317,6 +317,7 @@ export function BusinessSimulatorView() {
   const [additionalStock, setAdditionalStock] = useState("");
   const [staffChange, setStaffChange] = useState("");
   const [marketingBudgetChange, setMarketingBudgetChange] = useState("");
+  const simulationDefaultsApplied = useRef(false);
   const save = useMutation({
     mutationFn: saveBiScenarioVersion,
     onSuccess: async (saved) => {
@@ -326,6 +327,16 @@ export function BusinessSimulatorView() {
       });
     },
   });
+
+  useEffect(() => {
+    if (!context.data || simulationDefaultsApplied.current) return;
+    const defaults = context.data.simulationDefaults;
+    setPriceChange(String(defaults.priceChangePercent ?? ""));
+    setAdditionalStock(String(defaults.additionalStockUnits ?? ""));
+    setStaffChange(String(defaults.staffCountChange ?? ""));
+    setMarketingBudgetChange(String(defaults.marketingBudgetChange ?? ""));
+    simulationDefaultsApplied.current = true;
+  }, [context.data]);
 
   const groups = useMemo(() => {
     const bySeries = new Map<string, BiScenarioVersion[]>();
@@ -347,11 +358,19 @@ export function BusinessSimulatorView() {
     setName("");
     setScenarioType("price");
     setSeriesId(undefined);
-    setPriceChange("");
+    setPriceChange(
+      String(context.data?.simulationDefaults.priceChangePercent ?? ""),
+    );
     setProductId("");
-    setAdditionalStock("");
-    setStaffChange("");
-    setMarketingBudgetChange("");
+    setAdditionalStock(
+      String(context.data?.simulationDefaults.additionalStockUnits ?? ""),
+    );
+    setStaffChange(
+      String(context.data?.simulationDefaults.staffCountChange ?? ""),
+    );
+    setMarketingBudgetChange(
+      String(context.data?.simulationDefaults.marketingBudgetChange ?? ""),
+    );
     save.reset();
   }
 
@@ -469,7 +488,7 @@ export function BusinessSimulatorView() {
                     {seriesId ? "Create a new version" : "Build a scenario"}
                   </h2>
                   <p className="text-xs text-[var(--app-text-muted)]">
-                    Only assumptions and snapshots are saved
+                    Saved defaults prefill assumptions for review
                   </p>
                 </div>
               </div>

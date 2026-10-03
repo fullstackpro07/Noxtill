@@ -131,6 +131,7 @@ const CATEGORY_ORDER = [
   'sounds',
   'communication',
   'automations',
+  'business-intelligence',
   'seo',
   'ai',
   'integrations',

@@ -180,6 +180,12 @@ export function BusinessIntelligenceOverviewView() {
                           }).format(insight.estimatedImpact)}
                         </span>
                       )}
+                      <span
+                        className="rounded-full border border-[var(--app-border)] px-2 py-1 text-xs text-[var(--app-text-muted)]"
+                        title="Thresholds add an on-screen marker only"
+                      >
+                        {insight.impactThresholdStatus}
+                      </span>
                       {insight.nextDecisionHref && (
                         <Link
                           href={insight.nextDecisionHref}

@@ -148,6 +148,53 @@ export const POLICY_DEFS = {
     max: 50,
     integer: true,
   },
+  // business-intelligence.service.ts (BI Overview, Opportunity Radar, Simulator)
+  'bi.confidenceReviewBelow': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0,
+    max: 100,
+    integer: true,
+  },
+  'bi.confidenceHighAtOrAbove': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0,
+    max: 100,
+    integer: true,
+  },
+  'bi.insightImpactAlertThreshold': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0,
+    max: 100_000_000,
+  },
+  'bi.simulationPriceChangePercent': {
+    kind: 'nullableNumber',
+    default: null,
+    min: -90,
+    max: 500,
+  },
+  'bi.simulationAdditionalStockUnits': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 1_000_000,
+    integer: true,
+  },
+  'bi.simulationStaffCountChange': {
+    kind: 'nullableNumber',
+    default: null,
+    min: -100,
+    max: 100,
+    integer: true,
+  },
+  'bi.simulationMarketingBudgetChange': {
+    kind: 'nullableNumber',
+    default: null,
+    min: -1_000_000,
+    max: 1_000_000,
+  },
   // marketing/automations/automation-governance.util.ts (workflow editor, version restore, Settings toggle)
   'automations.maxActiveWorkflows': {
     kind: 'nullableNumber',

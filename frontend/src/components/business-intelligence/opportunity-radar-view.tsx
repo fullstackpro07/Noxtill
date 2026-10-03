@@ -93,6 +93,9 @@ function InsightCard({
           {insight.evidence || "Evidence not recorded"}
         </p>
       </div>
+      <p className="mt-3 text-xs text-[var(--app-text-faint)]">
+        Impact marker · {insight.impactThresholdStatus}
+      </p>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-[var(--app-text-faint)]">
           {insight.rankBasis} · Recorded{" "}
@@ -178,6 +181,9 @@ function CommerceCandidateCard({
           </div>
         ))}
       </dl>
+      <p className="mt-3 text-xs text-[var(--app-text-faint)]">
+        Confidence marker · {candidate.confidenceBandStatus}
+      </p>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-[var(--app-text-faint)]">
           {candidate.rankBasis}

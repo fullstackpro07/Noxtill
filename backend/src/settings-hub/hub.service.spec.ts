@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClsService } from 'nestjs-cls';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppException } from '../common/filters/app.exception';
 import { PoliciesService } from '../common/policies/policies.service';
 import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { SessionsService } from '../auth/sessions.service';
@@ -105,6 +106,88 @@ describe('SettingsHubService', () => {
     const day = (d: typeof owner) => d.groups.flatMap((g) => g.rows).find((r) => r.key === 'tax-filing-day')!;
     expect(day(owner)).toMatchObject({ editable: true, value: '15th of each month' });
     expect(day(manager)).toMatchObject({ editable: false, locked: 'Only the owner can change this.' });
+  });
+
+  it('exposes BI thresholds and simulation defaults as editable business policies', async () => {
+    const owner = await ctxOf(ownerId, Role.owner);
+    const manager = await ctxOf(managerId, Role.manager);
+    const detail = await hub.detail('business-intelligence', owner);
+    const rows = detail.groups.flatMap((group) => group.rows);
+    expect(rows.map((row) => row.key)).toEqual(
+      expect.arrayContaining([
+        'bi-confidence-review-below',
+        'bi-confidence-high-at',
+        'bi-impact-alert-threshold',
+        'bi-metric-registry',
+        'bi-approval-policy',
+        'bi-retention-policy',
+        'bi-freshness-policy',
+        'bi-simulation-price-default',
+        'bi-simulation-stock-default',
+        'bi-simulation-staff-default',
+        'bi-simulation-marketing-default',
+      ]),
+    );
+    expect(
+      rows.find((row) => row.key === 'bi-impact-alert-threshold'),
+    ).toMatchObject({ editable: true, value: 'No threshold' });
+    expect(rows.find((row) => row.key === 'bi-metric-registry')).toMatchObject({
+      value: 'All BI references resolve',
+    });
+    expect(
+      rows.find((row) => row.key === 'bi-freshness-policy')?.value,
+    ).toMatch(/^Dashboard cache · \d+ seconds$/);
+    expect(
+      (await hub.detail('business-intelligence', manager)).groups
+        .flatMap((group) => group.rows)
+        .find((row) => row.key === 'bi-impact-alert-threshold'),
+    ).toMatchObject({ editable: true, value: 'No threshold' });
+
+    await hub.saveChanges(owner, [
+      {
+        category: 'business-intelligence',
+        rowKey: 'bi-impact-alert-threshold',
+        value: 125.5,
+      },
+      {
+        category: 'business-intelligence',
+        rowKey: 'bi-confidence-review-below',
+        value: 60,
+      },
+    ]);
+    const business = await prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+    });
+    expect(business.policies).toMatchObject({
+      'bi.insightImpactAlertThreshold': 125.5,
+      'bi.confidenceReviewBelow': 60,
+    });
+    await expect(
+      hub.saveChanges(owner, [
+        {
+          category: 'business-intelligence',
+          rowKey: 'bi-confidence-review-below',
+          value: 101,
+        },
+      ]),
+    ).rejects.toBeInstanceOf(AppException);
+
+    await hub.resetRow(
+      owner,
+      'business-intelligence',
+      'bi-impact-alert-threshold',
+    );
+    expect(
+      await hub.rowHistory(
+        owner,
+        'business-intelligence',
+        'bi-impact-alert-threshold',
+      ),
+    ).toHaveLength(2);
+    expect(
+      (await prisma.business.findUniqueOrThrow({ where: { id: businessId } }))
+        .policies,
+    ).toMatchObject({ 'bi.insightImpactAlertThreshold': null });
   });
 
   it('saves a change to the real field, audits before/after, and validates input', async () => {

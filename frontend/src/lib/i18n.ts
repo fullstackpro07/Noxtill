@@ -298,6 +298,7 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.businessSimulator": "Business Simulator",
     "nav.diagnosisCenter": "Diagnosis Center",
     "nav.digitalTwin": "Digital Twin",
+    "nav.intelligenceSettings": "Intelligence Settings",
 
     "topbar.searchPlaceholder": "Search customers, orders…",
     "topbar.openMenu": "Open menu",

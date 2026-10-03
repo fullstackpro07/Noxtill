@@ -134,6 +134,20 @@ describe('BusinessIntelligenceService (MySQL)', () => {
     ).toEqual({ count: 0 });
 
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'bi.confidenceReviewBelow': 70,
+          'bi.confidenceHighAtOrAbove': 90,
+          'bi.insightImpactAlertThreshold': 40,
+          'bi.simulationPriceChangePercent': 5,
+          'bi.simulationAdditionalStockUnits': 3,
+          'bi.simulationStaffCountChange': 2,
+          'bi.simulationMarketingBudgetChange': 125.5,
+        },
+      },
+    });
     await prisma.order.create({
       data: {
         businessId,
@@ -219,6 +233,13 @@ describe('BusinessIntelligenceService (MySQL)', () => {
     );
     expect(salesInsight?.sourceFigure).toContain('Revenue source evidence');
     expect(salesInsight?.nextDecisionHref).toBe('/profit');
+    expect(salesInsight?.impactThresholdStatus).toBe('Impact not quantified');
+    const marketingInsight = result.insights.find(
+      (insight) => insight.category === 'marketing',
+    );
+    expect(marketingInsight?.impactThresholdStatus).toBe(
+      'Below impact threshold',
+    );
 
     const radar = await service.opportunityRadar(businessId);
     expect(radar.recordedInsights[0]).toMatchObject({
@@ -231,12 +252,37 @@ describe('BusinessIntelligenceService (MySQL)', () => {
     expect(radar.commerceCandidates[0]).toMatchObject({
       title: 'QA radar candidate',
       confidence: 80,
+      confidenceBandStatus: 'Within configured confidence band',
       sourceHref: '/autonomous-commerce/product-radar',
     });
     expect(radar.themeCounts.growth).toBe(3);
     expect(radar.themeCounts.savings).toBe(0);
     expect(radar.themeCounts.unclassified).toBe(1);
     expect(radar.disclosure).toContain('not a forecast');
+
+    const simulator = await service.simulatorContext(businessId);
+    expect(simulator.simulationDefaults).toEqual({
+      priceChangePercent: 5,
+      additionalStockUnits: 3,
+      staffCountChange: 2,
+      marketingBudgetChange: 125.5,
+    });
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: {} },
+    });
+    const cleared = await service.simulatorContext(businessId);
+    expect(cleared.simulationDefaults).toEqual({
+      priceChangePercent: null,
+      additionalStockUnits: null,
+      staffCountChange: null,
+      marketingBudgetChange: null,
+    });
+    const unconfiguredRadar = await service.opportunityRadar(businessId);
+    expect(unconfiguredRadar.commerceCandidates[0].confidenceBandStatus).toBe(
+      'Confidence thresholds not configured',
+    );
   });
 
   it('saves grounded answers with real sources and refuses an unsourced number', async () => {

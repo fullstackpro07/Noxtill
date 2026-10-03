@@ -11,17 +11,11 @@ import {
 } from '@prisma/client';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
+import { resolvePolicies } from '../common/policies/policies.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { WidgetsService } from '../widgets/widgets.service';
+import { BI_OVERVIEW_WIDGETS } from './business-intelligence.constants';
 import { CreateBiScenarioDto } from './dto/create-bi-scenario.dto';
-
-const OVERVIEW_WIDGETS = [
-  'revenue_today',
-  'orders_today',
-  'revenue_this_month',
-  'low_stock_count',
-  'new_customers_month',
-] as const;
 
 const INSIGHT_DESTINATIONS: Partial<Record<AiInsightCategory, string>> = {
   sales: '/profit',
@@ -36,6 +30,43 @@ const INSIGHT_THEMES: Partial<Record<AiInsightCategory, string>> = {
   marketing: 'growth',
   customers: 'retention',
 };
+
+function confidenceBandStatus(
+  value: number | null,
+  reviewBelow: number | null,
+  highAtOrAbove: number | null,
+): string {
+  if (value === null) return 'Confidence not recorded';
+  if (reviewBelow === null && highAtOrAbove === null)
+    return 'Confidence thresholds not configured';
+  if (
+    reviewBelow !== null &&
+    highAtOrAbove !== null &&
+    reviewBelow > highAtOrAbove
+  ) {
+    return 'Configured thresholds conflict';
+  }
+  if (reviewBelow !== null && value < reviewBelow)
+    return 'Below review threshold';
+  if (highAtOrAbove !== null && value >= highAtOrAbove)
+    return 'High-confidence threshold met';
+  if (reviewBelow !== null && highAtOrAbove !== null)
+    return 'Within configured confidence band';
+  return reviewBelow !== null
+    ? 'At or above review threshold'
+    : 'Below high-confidence threshold';
+}
+
+function impactThresholdStatus(
+  value: number | null,
+  threshold: number | null,
+): string {
+  if (value === null) return 'Impact not quantified';
+  if (threshold === null) return 'Impact threshold not configured';
+  return value >= threshold
+    ? 'At or above impact threshold'
+    : 'Below impact threshold';
+}
 
 @Injectable()
 export class BusinessIntelligenceService {
@@ -52,7 +83,7 @@ export class BusinessIntelligenceService {
   async overview(businessId: string) {
     const [metrics, insights, business] = await Promise.all([
       Promise.all(
-        OVERVIEW_WIDGETS.map(async (key) => {
+        BI_OVERVIEW_WIDGETS.map(async (key) => {
           const definition = this.widgets
             .listRegistry()
             .find((widget) => widget.key === key);
@@ -79,9 +110,12 @@ export class BusinessIntelligenceService {
       }),
       this.tenantPrisma.client.business.findUniqueOrThrow({
         where: { id: businessId },
-        select: { currency: true },
+        select: { currency: true, policies: true },
       }),
     ]);
+
+    const policies = resolvePolicies(business);
+    const impactThreshold = policies.num('bi.insightImpactAlertThreshold');
 
     return {
       requestedAt: new Date().toISOString(),
@@ -95,10 +129,17 @@ export class BusinessIntelligenceService {
           insight.estimatedImpact === null
             ? null
             : Number(insight.estimatedImpact),
+        impactThresholdStatus: impactThresholdStatus(
+          insight.estimatedImpact === null
+            ? null
+            : Number(insight.estimatedImpact),
+          impactThreshold,
+        ),
         nextDecisionHref: INSIGHT_DESTINATIONS[insight.category] ?? null,
       })),
+      impactThreshold,
       disclosure:
-        'KPIs use the existing Dashboard definitions. BI reads the source modules and does not store a second copy. No insight is shown unless it exists in AI Insights. Dashboard metric values use the existing cache and may be up to 60 seconds old.',
+        'KPIs use the existing Dashboard definitions. BI reads the source modules and does not store a second copy. No insight is shown unless it exists in AI Insights. Dashboard metric values use the existing cache and may be up to 60 seconds old. The configured impact threshold adds an on-screen marker only; it does not send a notification.',
     };
   }
 
@@ -114,7 +155,7 @@ export class BusinessIntelligenceService {
     const [currencyBusiness, insights, commerceRecords] = await Promise.all([
       this.tenantPrisma.client.business.findUniqueOrThrow({
         where: { id: businessId },
-        select: { currency: true },
+        select: { currency: true, policies: true },
       }),
       this.tenantPrisma.client.aiInsight.findMany({
         where: { businessId, status: 'new' },
@@ -163,6 +204,10 @@ export class BusinessIntelligenceService {
       }),
     ]);
 
+    const policies = resolvePolicies(currencyBusiness);
+    const reviewBelow = policies.num('bi.confidenceReviewBelow');
+    const highAtOrAbove = policies.num('bi.confidenceHighAtOrAbove');
+
     const insightRows = insights
       .map((insight) => ({
         id: insight.id,
@@ -198,6 +243,10 @@ export class BusinessIntelligenceService {
           row.sourceRecordedImpact === null
             ? 'No source-recorded impact; ordered by recency.'
             : 'Ordered by the source-recorded impact amount, then recency. This is not projected upside.',
+        impactThresholdStatus: impactThresholdStatus(
+          row.sourceRecordedImpact,
+          policies.num('bi.insightImpactAlertThreshold'),
+        ),
       }));
 
     const commerceRows = commerceRecords
@@ -223,6 +272,11 @@ export class BusinessIntelligenceService {
             : record.sourceFreshAt
               ? 'No source confidence; ordered by source freshness.'
               : 'Not ranked by evidence: source confidence and freshness are not recorded.',
+        confidenceBandStatus: confidenceBandStatus(
+          record.confidence,
+          reviewBelow,
+          highAtOrAbove,
+        ),
         sourceHref: '/autonomous-commerce/product-radar',
       }));
 
@@ -405,7 +459,7 @@ export class BusinessIntelligenceService {
       await Promise.all([
         this.tenantPrisma.client.business.findUniqueOrThrow({
           where: { id: businessId },
-          select: { currency: true },
+          select: { currency: true, policies: true },
         }),
         this.widgets.getWidgetData('revenue_this_month'),
         this.widgets.getWidgetData('staff_count'),
@@ -424,9 +478,18 @@ export class BusinessIntelligenceService {
       ]);
     const revenue = this.metricNumber(revenueMetric, 'revenue');
     const teamSize = this.metricNumber(staffMetric, 'count');
+    const policies = resolvePolicies(business);
 
     return {
       currency: business.currency,
+      simulationDefaults: {
+        priceChangePercent: policies.num('bi.simulationPriceChangePercent'),
+        additionalStockUnits: policies.num('bi.simulationAdditionalStockUnits'),
+        staffCountChange: policies.num('bi.simulationStaffCountChange'),
+        marketingBudgetChange: policies.num(
+          'bi.simulationMarketingBudgetChange',
+        ),
+      },
       priceBaseline: {
         widget: 'revenue_this_month',
         value: revenue,

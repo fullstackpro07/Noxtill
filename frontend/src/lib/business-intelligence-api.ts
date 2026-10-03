@@ -12,6 +12,7 @@ export interface BusinessIntelligenceInsight {
   observation: string;
   sourceFigure: string;
   estimatedImpact: number | null;
+  impactThresholdStatus: string;
   status: string;
   createdAt: string;
   nextDecisionHref: string | null;
@@ -24,6 +25,7 @@ export interface BusinessIntelligenceOverview {
   metrics: BusinessIntelligenceMetric[];
   insightSource: string;
   insights: BusinessIntelligenceInsight[];
+  impactThreshold: number | null;
   disclosure: string;
 }
 
@@ -55,6 +57,7 @@ export interface BusinessOpportunityInsight {
   sourceHref: string | null;
   rank: number;
   rankBasis: string;
+  impactThresholdStatus: string;
 }
 
 export interface BusinessCommerceCandidate {
@@ -75,6 +78,7 @@ export interface BusinessCommerceCandidate {
   updatedAt: string;
   rank: number;
   rankBasis: string;
+  confidenceBandStatus: string;
   sourceHref: string;
 }
 
@@ -95,6 +99,12 @@ export type BiScenarioType = "price" | "stock" | "staff" | "marketing";
 
 export interface BiScenarioContext {
   currency: string;
+  simulationDefaults: {
+    priceChangePercent: number | null;
+    additionalStockUnits: number | null;
+    staffCountChange: number | null;
+    marketingBudgetChange: number | null;
+  };
   priceBaseline: { widget: string; value: number | null; status: string };
   staffBaseline: { widget: string; value: number | null; status: string };
   products: {

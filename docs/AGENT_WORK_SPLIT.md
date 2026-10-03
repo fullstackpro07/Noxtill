@@ -551,3 +551,17 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   earlier history. That QA-only test assumption remains in the test business. Physical equipment and
   supplier lead times are disclosed as not tracked; staff/service capacity and product cost coverage
   are disclosed as partial for the documented source-data gaps.
+- Screen 7 ✅ Intelligence Settings (`/settings/business-intelligence`, Settings Hub). Business
+  policies configure source-confidence bands, an on-screen recorded-impact marker and optional
+  price/stock/staff/marketing what-if defaults. BI Overview and Opportunity Radar display threshold
+  status without changing source ranking; the Simulator pre-fills only new hypothetical inputs.
+  Settings checks BI metric references against the Dashboard widget registry and reads the actual
+  Dashboard cache TTL. Per-business model allowlists, BI approval/retention controls and threshold
+  notifications are not available; provider controls remain in AI & Governance. Real-MySQL specs
+  cover policy persistence/reset, range enforcement, threshold behavior and simulator defaults; no
+  migration. Backend/frontend `tsc` and full backend Jest (`--maxWorkers=2`, 339 suites / 2,128 tests)
+  passed. Frontend touched-file eslint passed; all new backend sections are clean, while pre-existing
+  formatting and unsafe-test lint findings remain elsewhere in the legacy Intelligence Settings and
+  Hub test files, plus a pre-existing `require-await` finding in `hub.service.ts`. Browser QA saved a
+  confidence threshold and a 5% scenario
+  default, verified the Simulator prefill, then reset the test settings.
