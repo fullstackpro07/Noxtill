@@ -17,7 +17,7 @@ import { VouchersService } from '../marketing/vouchers.service';
 import { LoyaltyService } from '../customers/loyalty.service';
 import { ActivityService } from '../activity/activity.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
-import { BillingService } from '../billing/billing.service';
+import { ModuleRef } from '@nestjs/core';
 import { AppException } from '../common/filters/app.exception';
 import { deleteCrossTestBusinessRows } from '../common/testing/cleanup-test-business';
 
@@ -42,7 +42,8 @@ describe('ReturnsService (UPD-BE-011)', () => {
     recordSaleMovement: jest.fn().mockResolvedValue(undefined),
     recordRefundMovement: jest.fn().mockResolvedValue(undefined),
   };
-  const billing = { refund: jest.fn() };
+  const payRefunds = { createFromReturn: jest.fn() };
+  const moduleRef = { get: () => payRefunds };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -84,7 +85,7 @@ describe('ReturnsService (UPD-BE-011)', () => {
       tenantPrisma,
       cls as unknown as ClsService,
       cashRegister as unknown as CashRegisterService,
-      billing as unknown as BillingService,
+      moduleRef as unknown as ModuleRef,
     );
 
     const business = await prisma.business.create({
@@ -118,7 +119,7 @@ describe('ReturnsService (UPD-BE-011)', () => {
 
   afterEach(() => {
     cashRegister.recordRefundMovement.mockClear();
-    billing.refund.mockReset();
+    payRefunds.createFromReturn.mockReset();
   });
 
   afterAll(async () => {
@@ -246,7 +247,7 @@ describe('ReturnsService (UPD-BE-011)', () => {
     ).toBe(true);
   });
 
-  it('a card refund with no recorded Payment.providerRef fails cleanly rather than faking success, and leaves the return pending', async () => {
+  it('a card refund is approved and handed to Payments & Billing for execution (never refunded through the platform key)', async () => {
     const order = await ordersService.createSale(businessId, {
       customerId,
       items: [{ productId, qty: 1 }],
@@ -259,15 +260,15 @@ describe('ReturnsService (UPD-BE-011)', () => {
       items: [{ productId, qty: 1 }],
     });
 
-    await expect(
-      returnsService.approve(businessId, ret.id),
-    ).rejects.toBeInstanceOf(AppException);
-    expect(billing.refund).not.toHaveBeenCalled();
-
-    const stillPending = await prisma.return.findUniqueOrThrow({
-      where: { id: ret.id },
-    });
-    expect(stillPending.status).toBe('pending');
+    const approved = await returnsService.approve(businessId, ret.id);
+    expect(approved.status).toBe('approved');
+    expect(payRefunds.createFromReturn).toHaveBeenCalledTimes(1);
+    const [handed, rootId] = payRefunds.createFromReturn.mock.calls[0] as [
+      { id: string },
+      string,
+    ];
+    expect(handed.id).toBe(ret.id);
+    expect(rootId).toBe(businessId);
   });
 
   it('rejecting a return records the reviewer and leaves stock/money untouched', async () => {

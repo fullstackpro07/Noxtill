@@ -60,6 +60,8 @@ type Seed = [
   boolean,
   boolean,
 ];
+/** System accounts added after ledgers were first seeded; created on demand for existing ledgers. */
+export const LATE_SYSTEM_KEYS = ['repairs'];
 export const COA_TEMPLATE: Seed[] = [
   ['1000', 'Assets', 'asset', 'Header', null, null, null, false, true],
   ['1100', 'Cash & Bank', 'asset', 'Header', '1000', null, null, false, true],
@@ -417,6 +419,17 @@ export const COA_TEMPLATE: Seed[] = [
     '6000',
     null,
     'utilities',
+    false,
+    false,
+  ],
+  [
+    '6450',
+    'Repairs & Maintenance',
+    'expense',
+    'Occupancy',
+    '6000',
+    null,
+    'repairs',
     false,
     false,
   ],
