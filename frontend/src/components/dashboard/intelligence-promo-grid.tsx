@@ -6,7 +6,7 @@ const MODULES = [
   { icon: Brain, module: "business-brain", tint: "#EEF4FF", fg: "#3538CD", title: "Noxtill Business Brain", href: "/business-brain", description: "One place that answers questions about your business in plain words, citing the records it used." },
   { icon: Radar, module: "opportunity-radar", tint: "#E8F7EE", fg: "#0E8442", title: "Opportunity Radar", href: "/opportunity-radar", description: "Recorded signals from AI Insights and Commerce Product Radar, with evidence and source links — no predicted upside." },
   { icon: FlaskConical, module: "business-simulator", tint: "#FEF6E7", fg: "#B54708", title: "Business Simulator", href: "/business-simulator", description: "Compare price, stock, team-size and marketing assumptions without changing live records." },
-  { icon: Stethoscope, module: "diagnosis-center", tint: "#FEF3F2", fg: "#B42318", title: "Business Diagnosis Center", href: "/diagnosis-center", description: "A health check across sales, stock, cash, staff and service, with the weak spot named first." },
+  { icon: Stethoscope, module: "diagnosis-center", tint: "#FEF3F2", fg: "#B42318", title: "Business Diagnosis Center", href: "/diagnosis-center", description: "Investigate recorded business signals and hypotheses; correlations are not stated as causes." },
   { icon: Cpu, module: "digital-twin", tint: "#F5EBFE", fg: "#7E22CE", title: "Business Digital Twin", href: "/digital-twin", description: "A live model of the shop — branches, stock, riders and staff — so you can see the knock-on effects." },
 ];
 

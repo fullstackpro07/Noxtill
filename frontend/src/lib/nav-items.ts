@@ -686,7 +686,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Stethoscope,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
   },
   {
     key: "digital-twin",

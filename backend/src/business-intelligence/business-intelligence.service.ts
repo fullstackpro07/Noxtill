@@ -2,6 +2,8 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   AiInsightCategory,
+  AiInsightStatus,
+  BiDiagnosisHypothesisStatus,
   BiScenarioCalculationStatus,
   BiScenarioType,
   Prisma,
@@ -242,6 +244,160 @@ export class BusinessIntelligenceService {
       disclosure:
         'This view reads open AI Insights and Product Radar records. Sales/Marketing insights are grouped as growth signals and customer insights as retention signals; stock and credit records remain unclassified because they do not establish a savings opportunity. Savings is shown only when a source records an explicit savings opportunity. Insight ranking uses only its source-recorded impact amount and recency; Commerce candidates use only source-recorded confidence and freshness. Impact is not a forecast or promised uplift. Missing source evidence, impact, confidence, or freshness is shown as unavailable.',
     };
+  }
+
+  async listDiagnoses(businessId: string, category?: string, status = 'new') {
+    const validCategories = Object.values(AiInsightCategory) as string[];
+    const validStatuses = [...Object.values(AiInsightStatus), 'all'];
+    if (category && !validCategories.includes(category)) {
+      throw new AppException(
+        'BI_DIAGNOSIS_INVALID_FILTER',
+        'Choose a valid diagnosis domain.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!validStatuses.includes(status)) {
+      throw new AppException(
+        'BI_DIAGNOSIS_INVALID_FILTER',
+        'Choose a valid diagnosis status.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const where: Prisma.AiInsightWhereInput = {
+      businessId,
+      ...(category ? { category: category as AiInsightCategory } : {}),
+      ...(status !== 'all' ? { status: status as AiInsightStatus } : {}),
+    };
+    const [business, total, rows] = await Promise.all([
+      this.tenantPrisma.client.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: { currency: true },
+      }),
+      this.tenantPrisma.client.aiInsight.count({ where }),
+      this.tenantPrisma.client.aiInsight.findMany({
+        where,
+        include: {
+          diagnosisHypotheses: {
+            where: { businessId },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+      }),
+    ]);
+
+    return {
+      total,
+      currency: business.currency,
+      rows: rows.map((row) => ({
+        ...row,
+        evidenceStrength: row.sourceFigure
+          ? 'A source figure is recorded'
+          : 'Not available',
+        confidence: null,
+        causalStatus: 'Correlation only; a cause is not established',
+      })),
+      disclosure:
+        'These records are canonical AI Insights and their underlying source figures. They show associated signals, not proven root causes. Confidence and severity are not tracked. Compare the same source metric over a suitable prior period before treating a relationship as causal.',
+    };
+  }
+
+  async createDiagnosisHypothesis(
+    businessId: string,
+    actorUserId: string,
+    insightId: string,
+    hypothesis: string,
+  ) {
+    const insight = await this.tenantPrisma.client.aiInsight.findFirst({
+      where: { id: insightId, businessId },
+      select: { id: true },
+    });
+    if (!insight) {
+      throw new AppException(
+        'BI_DIAGNOSIS_NOT_FOUND',
+        'The source insight was not found in this business.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      const row = await tx.biDiagnosisHypothesis.create({
+        data: {
+          businessId,
+          insightId,
+          hypothesis: hypothesis.trim(),
+          createdByUserId: actorUserId,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          businessId,
+          actorUserId,
+          action: 'diagnosis.hypothesis.created',
+          entity: 'bi_diagnosis_hypothesis',
+          entityId: row.id,
+          after: {
+            insightId,
+            hypothesis: row.hypothesis,
+            status: row.status,
+          },
+        },
+      });
+      return row;
+    });
+  }
+
+  async resolveDiagnosisHypothesis(
+    businessId: string,
+    actorUserId: string,
+    hypothesisId: string,
+    reason: string,
+  ) {
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      const before = await tx.biDiagnosisHypothesis.findFirst({
+        where: { id: hypothesisId, businessId },
+      });
+      if (!before) {
+        throw new AppException(
+          'BI_DIAGNOSIS_HYPOTHESIS_NOT_FOUND',
+          'The hypothesis was not found in this business.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (before.status !== BiDiagnosisHypothesisStatus.open) {
+        throw new AppException(
+          'BI_DIAGNOSIS_HYPOTHESIS_ALREADY_RESOLVED',
+          'This hypothesis has already been resolved.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const row = await tx.biDiagnosisHypothesis.update({
+        where: { id: before.id },
+        data: {
+          status: BiDiagnosisHypothesisStatus.resolved,
+          resolutionNote: reason.trim(),
+          resolvedByUserId: actorUserId,
+          resolvedAt: new Date(),
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          businessId,
+          actorUserId,
+          action: 'diagnosis.hypothesis.resolved',
+          entity: 'bi_diagnosis_hypothesis',
+          entityId: row.id,
+          before: {
+            status: before.status,
+            resolutionNote: before.resolutionNote,
+          },
+          after: { status: row.status, resolutionNote: row.resolutionNote },
+        },
+      });
+      return row;
+    });
   }
 
   async simulatorContext(businessId: string) {

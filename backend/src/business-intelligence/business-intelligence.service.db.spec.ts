@@ -77,6 +77,17 @@ describe('BusinessIntelligenceService (MySQL)', () => {
   });
 
   afterAll(async () => {
+    await prisma.biDiagnosisHypothesis.deleteMany({
+      where: {
+        businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
+      },
+    });
+    await prisma.auditLog.deleteMany({
+      where: {
+        businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
+        entity: 'bi_diagnosis_hypothesis',
+      },
+    });
     await prisma.biScenarioVersion.deleteMany({
       where: {
         businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
@@ -414,6 +425,97 @@ describe('BusinessIntelligenceService (MySQL)', () => {
     expect(foreignSeriesError).toBeInstanceOf(AppException);
     expect((foreignSeriesError as AppException).getResponse()).toMatchObject({
       code: 'BI_SCENARIO_NOT_FOUND',
+    });
+  });
+
+  it('investigates canonical insights with audited hypotheses and tenant isolation', async () => {
+    const insight = await prisma.aiInsight.create({
+      data: {
+        businessId,
+        category: 'sales',
+        observation: 'Recorded sales decreased during the selected period.',
+        sourceFigure: 'Revenue widget: 15% lower than the prior period',
+        estimatedImpact: 42,
+      },
+    });
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+
+    const result = await service.listDiagnoses(businessId);
+    const diagnosis = result.rows.find((row) => row.id === insight.id);
+    expect(diagnosis).toMatchObject({
+      evidenceStrength: 'A source figure is recorded',
+      confidence: null,
+      causalStatus: 'Correlation only; a cause is not established',
+      diagnosisHypotheses: [],
+    });
+    expect(diagnosis?.sourceFigure).toBe(insight.sourceFigure);
+
+    const hypothesis = await service.createDiagnosisHypothesis(
+      businessId,
+      'integration-user',
+      insight.id,
+      'Check whether the sales change coincided with shorter business hours.',
+    );
+    expect(hypothesis).toMatchObject({
+      businessId,
+      insightId: insight.id,
+      status: 'open',
+    });
+
+    const resolved = await service.resolveDiagnosisHypothesis(
+      businessId,
+      'integration-user',
+      hypothesis.id,
+      'Compared operating-hour records; relationship not confirmed.',
+    );
+    expect(resolved).toMatchObject({
+      status: 'resolved',
+      resolutionNote:
+        'Compared operating-hour records; relationship not confirmed.',
+    });
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          businessId,
+          entity: 'bi_diagnosis_hypothesis',
+          entityId: hypothesis.id,
+        },
+      }),
+    ).toBe(2);
+
+    cls.set(CLS_KEY_BUSINESS_ID, otherBusinessId);
+    const otherTenant = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    const otherService = new BusinessIntelligenceService(
+      otherTenant,
+      new WidgetsService(otherTenant, cls as unknown as ClsService),
+      {} as AiInfraService,
+    );
+    const otherDiagnoses = await otherService.listDiagnoses(otherBusinessId);
+    expect(otherDiagnoses.rows.some((row) => row.id === insight.id)).toBe(
+      false,
+    );
+    await expect(
+      otherService.createDiagnosisHypothesis(
+        otherBusinessId,
+        'other-user',
+        insight.id,
+        'This cross-tenant hypothesis must be rejected.',
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'BI_DIAGNOSIS_NOT_FOUND' },
+    });
+    await expect(
+      otherService.resolveDiagnosisHypothesis(
+        otherBusinessId,
+        'other-user',
+        hypothesis.id,
+        'This cross-tenant resolution must be rejected.',
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'BI_DIAGNOSIS_HYPOTHESIS_NOT_FOUND' },
     });
   });
 });

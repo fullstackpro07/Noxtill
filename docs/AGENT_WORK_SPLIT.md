@@ -528,3 +528,13 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   the stock result matched the QA product's recorded quantity and threshold, and the UI confirmed
   live records were unchanged. Created a QA-only product for the stock flow. No production data
   touched.
+- Screen 5 ✅ Diagnosis Center (`/diagnosis-center`). Reads canonical AI Insights and their recorded
+  source figures; displays correlations as correlations, leaves cause unestablished, and discloses
+  that insight confidence/severity are not tracked. Merchants can record an explicitly unverified
+  hypothesis and resolve it with a reason; these BI notes are audited and never change the source
+  insight. Real-MySQL spec covers source linkage, hypothesis create/resolve, audit entries and tenant
+  isolation (4/4). Hand-written `bi_diagnosis_hypotheses` migration applied; both business and source
+  insight FKs verified, Prisma schema up to date. Backend/frontend `tsc`, touched-file eslint and full
+  backend Jest (`--maxWorkers=2`, 338 suites / 2,125 tests) passed. Browser QA in the separate QA Test
+  Business confirmed route/header and the honest no-insights empty state; no source insight existed
+  there to exercise the hypothesis form live, so that mutation flow is verified by the MySQL spec.

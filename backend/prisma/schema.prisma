@@ -255,6 +255,11 @@ enum BiScenarioCalculationStatus {
   assumptions_only
 }
 
+enum BiDiagnosisHypothesisStatus {
+  open
+  resolved
+}
+
 enum ProductValidationDecision {
   approve_test
   approve_launch
@@ -835,6 +840,7 @@ model Business {
   activityEvents               ActivityEvent[]
   aiInsights                   AiInsight[]
   biBrainAnswers               BiBrainAnswer[]
+  biDiagnosisHypotheses        BiDiagnosisHypothesis[]
   biScenarioVersions           BiScenarioVersion[]
   actionItemStates             ActionItemState[]
   heldSales                    HeldSale[]
@@ -5515,11 +5521,35 @@ model AiInsight {
   estimatedImpact Decimal?          @map("estimated_impact") @db.Decimal(12, 2)
   status          AiInsightStatus   @default(new)
 
+  diagnosisHypotheses BiDiagnosisHypothesis[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([businessId, status, createdAt])
   @@map("ai_insights")
+}
+
+/// Merchant-entered hypothesis attached to an existing canonical AI Insight. It records a question
+/// to investigate, not an asserted cause, and never duplicates or changes the source insight.
+model BiDiagnosisHypothesis {
+  id               String                     @id @default(uuid())
+  businessId       String                     @map("business_id")
+  business         Business                   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  insightId        String                     @map("insight_id")
+  insight          AiInsight                  @relation(fields: [insightId], references: [id], onDelete: Cascade)
+  hypothesis       String                     @db.Text
+  status           BiDiagnosisHypothesisStatus @default(open)
+  resolutionNote   String?                    @map("resolution_note") @db.VarChar(500)
+  createdByUserId  String                     @map("created_by_user_id")
+  resolvedByUserId String?                    @map("resolved_by_user_id")
+  resolvedAt       DateTime?                  @map("resolved_at")
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+
+  @@index([businessId, status, createdAt], map: "bi_diagnosis_hypotheses_business_status_created_idx")
+  @@index([businessId, insightId], map: "bi_diagnosis_hypotheses_business_insight_idx")
+  @@map("bi_diagnosis_hypotheses")
 }
 
 /// Business Brain answers keep an auditable copy of the exact source metrics and caveats shown

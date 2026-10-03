@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
@@ -6,6 +14,8 @@ import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { BusinessIntelligenceService } from './business-intelligence.service';
 import { AskBusinessBrainDto } from './dto/ask-business-brain.dto';
 import { CreateBiScenarioDto } from './dto/create-bi-scenario.dto';
+import { CreateBiDiagnosisHypothesisDto } from './dto/create-bi-diagnosis-hypothesis.dto';
+import { ResolveBiDiagnosisHypothesisDto } from './dto/resolve-bi-diagnosis-hypothesis.dto';
 
 @Controller('business-intelligence')
 export class BusinessIntelligenceController {
@@ -27,6 +37,50 @@ export class BusinessIntelligenceController {
   @RequireCapability(CAPABILITIES.PROFIT_VIEW)
   opportunityRadar(@CurrentUser() user: AuthenticatedUser) {
     return this.service.opportunityRadar(user.businessId);
+  }
+
+  @Get('diagnosis-center')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  diagnoses(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('category') category?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.service.listDiagnoses(
+      user.businessId,
+      category,
+      status ?? 'new',
+    );
+  }
+
+  @Post('diagnosis-center/:insightId/hypotheses')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  createDiagnosisHypothesis(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('insightId') insightId: string,
+    @Body() dto: CreateBiDiagnosisHypothesisDto,
+  ) {
+    return this.service.createDiagnosisHypothesis(
+      user.businessId,
+      user.sub,
+      insightId,
+      dto.hypothesis,
+    );
+  }
+
+  @Patch('diagnosis-center/hypotheses/:hypothesisId/resolve')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  resolveDiagnosisHypothesis(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('hypothesisId') hypothesisId: string,
+    @Body() dto: ResolveBiDiagnosisHypothesisDto,
+  ) {
+    return this.service.resolveDiagnosisHypothesis(
+      user.businessId,
+      user.sub,
+      hypothesisId,
+      dto.reason,
+    );
   }
 
   @Post('brain/ask')

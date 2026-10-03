@@ -137,6 +137,46 @@ export interface CreateBiScenarioInput {
   marketingBudgetChange?: number;
 }
 
+export type BiDiagnosisCategory =
+  "sales" | "stock" | "customers" | "marketing" | "credit";
+export type BiDiagnosisStatus = "new" | "actioned" | "dismissed" | "all";
+
+export interface BiDiagnosisHypothesis {
+  id: string;
+  insightId: string;
+  hypothesis: string;
+  status: "open" | "resolved";
+  resolutionNote: string | null;
+  createdByUserId: string;
+  resolvedByUserId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BiDiagnosisRecord {
+  id: string;
+  businessId: string;
+  category: BiDiagnosisCategory;
+  observation: string;
+  sourceFigure: string;
+  estimatedImpact: string | number | null;
+  status: Exclude<BiDiagnosisStatus, "all">;
+  createdAt: string;
+  updatedAt: string;
+  evidenceStrength: string;
+  confidence: null;
+  causalStatus: string;
+  diagnosisHypotheses: BiDiagnosisHypothesis[];
+}
+
+export interface BiDiagnosisResponse {
+  total: number;
+  currency: string;
+  rows: BiDiagnosisRecord[];
+  disclosure: string;
+}
+
 export function fetchBusinessIntelligenceOverview(): Promise<BusinessIntelligenceOverview> {
   return apiFetch<BusinessIntelligenceOverview>(
     "/business-intelligence/overview",
@@ -182,5 +222,36 @@ export function saveBiScenarioVersion(
   return apiFetch<BiScenarioVersion>(
     "/business-intelligence/simulator/scenarios",
     { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function fetchBiDiagnoses(
+  category: BiDiagnosisCategory | "all",
+  status: BiDiagnosisStatus,
+): Promise<BiDiagnosisResponse> {
+  const query = new URLSearchParams({ status });
+  if (category !== "all") query.set("category", category);
+  return apiFetch<BiDiagnosisResponse>(
+    `/business-intelligence/diagnosis-center?${query.toString()}`,
+  );
+}
+
+export function createBiDiagnosisHypothesis(
+  insightId: string,
+  hypothesis: string,
+): Promise<BiDiagnosisHypothesis> {
+  return apiFetch<BiDiagnosisHypothesis>(
+    `/business-intelligence/diagnosis-center/${insightId}/hypotheses`,
+    { method: "POST", body: JSON.stringify({ hypothesis }) },
+  );
+}
+
+export function resolveBiDiagnosisHypothesis(
+  hypothesisId: string,
+  reason: string,
+): Promise<BiDiagnosisHypothesis> {
+  return apiFetch<BiDiagnosisHypothesis>(
+    `/business-intelligence/diagnosis-center/hypotheses/${hypothesisId}/resolve`,
+    { method: "PATCH", body: JSON.stringify({ reason }) },
   );
 }
