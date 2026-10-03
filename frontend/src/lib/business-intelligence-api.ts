@@ -91,6 +91,52 @@ export interface BusinessOpportunityRadar {
   disclosure: string;
 }
 
+export type BiScenarioType = "price" | "stock" | "staff" | "marketing";
+
+export interface BiScenarioContext {
+  currency: string;
+  priceBaseline: { widget: string; value: number | null; status: string };
+  staffBaseline: { widget: string; value: number | null; status: string };
+  products: {
+    id: string;
+    name: string;
+    stockQty: number;
+    lowStockThreshold: number;
+  }[];
+  marketingBaseline: {
+    campaignRecords: number;
+    budgetAndAttributedRevenue: string;
+  };
+  disclosure: string;
+}
+
+export interface BiScenarioVersion {
+  id: string;
+  businessId: string;
+  seriesId: string;
+  version: number;
+  name: string;
+  scenarioType: BiScenarioType;
+  assumptions: Record<string, unknown>;
+  baseline: Record<string, unknown>;
+  outcome: Record<string, unknown> | null;
+  calculationStatus: "calculated" | "assumptions_only";
+  calculationNote: string;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface CreateBiScenarioInput {
+  name: string;
+  scenarioType: BiScenarioType;
+  seriesId?: string;
+  priceChangePercent?: number;
+  productId?: string;
+  additionalStockUnits?: number;
+  staffCountChange?: number;
+  marketingBudgetChange?: number;
+}
+
 export function fetchBusinessIntelligenceOverview(): Promise<BusinessIntelligenceOverview> {
   return apiFetch<BusinessIntelligenceOverview>(
     "/business-intelligence/overview",
@@ -115,5 +161,26 @@ export function askBusinessBrain(
 export function fetchBusinessOpportunityRadar(): Promise<BusinessOpportunityRadar> {
   return apiFetch<BusinessOpportunityRadar>(
     "/business-intelligence/opportunity-radar",
+  );
+}
+
+export function fetchBiSimulatorContext(): Promise<BiScenarioContext> {
+  return apiFetch<BiScenarioContext>(
+    "/business-intelligence/simulator/context",
+  );
+}
+
+export function fetchBiScenarioVersions(): Promise<BiScenarioVersion[]> {
+  return apiFetch<BiScenarioVersion[]>(
+    "/business-intelligence/simulator/scenarios",
+  );
+}
+
+export function saveBiScenarioVersion(
+  input: CreateBiScenarioInput,
+): Promise<BiScenarioVersion> {
+  return apiFetch<BiScenarioVersion>(
+    "/business-intelligence/simulator/scenarios",
+    { method: "POST", body: JSON.stringify(input) },
   );
 }

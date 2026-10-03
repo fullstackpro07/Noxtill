@@ -1,10 +1,17 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { AiInsightCategory, ProductOpportunityStatus } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import {
+  AiInsightCategory,
+  BiScenarioCalculationStatus,
+  BiScenarioType,
+  Prisma,
+  ProductOpportunityStatus,
+} from '@prisma/client';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { WidgetsService } from '../widgets/widgets.service';
+import { CreateBiScenarioDto } from './dto/create-bi-scenario.dto';
 
 const OVERVIEW_WIDGETS = [
   'revenue_today',
@@ -235,6 +242,338 @@ export class BusinessIntelligenceService {
       disclosure:
         'This view reads open AI Insights and Product Radar records. Sales/Marketing insights are grouped as growth signals and customer insights as retention signals; stock and credit records remain unclassified because they do not establish a savings opportunity. Savings is shown only when a source records an explicit savings opportunity. Insight ranking uses only its source-recorded impact amount and recency; Commerce candidates use only source-recorded confidence and freshness. Impact is not a forecast or promised uplift. Missing source evidence, impact, confidence, or freshness is shown as unavailable.',
     };
+  }
+
+  async simulatorContext(businessId: string) {
+    const [business, revenueMetric, staffMetric, products, campaignCount] =
+      await Promise.all([
+        this.tenantPrisma.client.business.findUniqueOrThrow({
+          where: { id: businessId },
+          select: { currency: true },
+        }),
+        this.widgets.getWidgetData('revenue_this_month'),
+        this.widgets.getWidgetData('staff_count'),
+        this.tenantPrisma.client.product.findMany({
+          where: { businessId, active: true, kind: 'product' },
+          orderBy: [{ name: 'asc' }, { id: 'asc' }],
+          take: 500,
+          select: {
+            id: true,
+            name: true,
+            stockQty: true,
+            lowStockThreshold: true,
+          },
+        }),
+        this.tenantPrisma.client.campaign.count({ where: { businessId } }),
+      ]);
+    const revenue = this.metricNumber(revenueMetric, 'revenue');
+    const teamSize = this.metricNumber(staffMetric, 'count');
+
+    return {
+      currency: business.currency,
+      priceBaseline: {
+        widget: 'revenue_this_month',
+        value: revenue,
+        status: revenue === null ? 'Not available' : 'Recorded',
+      },
+      staffBaseline: {
+        widget: 'staff_count',
+        value: teamSize,
+        status: teamSize === null ? 'Not available' : 'Recorded team size',
+      },
+      products,
+      marketingBaseline: {
+        campaignRecords: campaignCount,
+        budgetAndAttributedRevenue: 'Not tracked',
+      },
+      disclosure:
+        'Price uses the canonical Dashboard revenue widget and assumes unit volume stays unchanged. Stock uses the selected Product quantity and reorder threshold. Staff models only the recorded team-size count, not hours or service capacity. Campaign records do not include spend or attributed revenue, so marketing ROI is not available. Saving a scenario version never writes to source records.',
+    };
+  }
+
+  async listSimulatorScenarios(businessId: string) {
+    return this.tenantPrisma.client.biScenarioVersion.findMany({
+      where: { businessId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+    });
+  }
+
+  async createSimulatorScenario(
+    businessId: string,
+    actorUserId: string,
+    dto: CreateBiScenarioDto,
+  ) {
+    const calculation = await this.calculateScenario(businessId, dto);
+    const seriesId = dto.seriesId ?? randomUUID();
+    try {
+      return await this.tenantPrisma.client.$transaction(async (tx) => {
+        const latest = dto.seriesId
+          ? await tx.biScenarioVersion.findFirst({
+              where: { businessId, seriesId },
+              orderBy: [{ version: 'desc' }, { id: 'desc' }],
+              select: { version: true, scenarioType: true },
+            })
+          : null;
+        if (dto.seriesId && !latest) {
+          throw new AppException(
+            'BI_SCENARIO_NOT_FOUND',
+            'The scenario version group was not found for this business.',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        if (latest && latest.scenarioType !== dto.scenarioType) {
+          throw new AppException(
+            'BI_SCENARIO_TYPE_MISMATCH',
+            'A new version must keep the scenario type of its earlier versions.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        return tx.biScenarioVersion.create({
+          data: {
+            businessId,
+            seriesId,
+            version: (latest?.version ?? 0) + 1,
+            name: dto.name.trim(),
+            scenarioType: dto.scenarioType,
+            assumptions: calculation.assumptions as Prisma.InputJsonValue,
+            baseline: calculation.baseline as Prisma.InputJsonValue,
+            outcome: calculation.outcome
+              ? (calculation.outcome as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+            calculationStatus: calculation.calculationStatus,
+            calculationNote: calculation.calculationNote,
+            createdByUserId: actorUserId,
+          },
+        });
+      });
+    } catch (error) {
+      if (error instanceof AppException) throw error;
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new AppException(
+          'BI_SCENARIO_VERSION_CONFLICT',
+          'Another version was saved at the same time. Refresh scenarios and try again.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async calculateScenario(
+    businessId: string,
+    dto: CreateBiScenarioDto,
+  ): Promise<{
+    assumptions: Record<string, unknown>;
+    baseline: Record<string, unknown>;
+    outcome: Record<string, unknown> | null;
+    calculationStatus: BiScenarioCalculationStatus;
+    calculationNote: string;
+  }> {
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { currency: true },
+    });
+    switch (dto.scenarioType) {
+      case BiScenarioType.price: {
+        const change = this.requiredNumber(
+          dto.priceChangePercent,
+          'Enter a price change percentage.',
+        );
+        if (change < -90 || change > 500) {
+          this.invalidAssumption('Price change must be between -90 and 500.');
+        }
+        const metric = await this.widgets.getWidgetData('revenue_this_month');
+        const recordedRevenue = this.metricNumber(metric, 'revenue');
+        const assumptions = {
+          priceChangePercent: change,
+          unitVolume: 'assumed unchanged',
+        };
+        if (recordedRevenue === null) {
+          return {
+            assumptions,
+            baseline: { currency: business.currency, revenue: null },
+            outcome: null,
+            calculationStatus: BiScenarioCalculationStatus.assumptions_only,
+            calculationNote:
+              'The canonical revenue widget did not return a number, so no price outcome was calculated.',
+          };
+        }
+        const revenueAtUnchangedVolume = this.round2(
+          recordedRevenue * (1 + change / 100),
+        );
+        return {
+          assumptions,
+          baseline: {
+            currency: business.currency,
+            revenueThisMonth: recordedRevenue,
+            source: 'Dashboard revenue_this_month widget',
+          },
+          outcome: {
+            revenueAtUnchangedVolume,
+            revenueDeltaAtUnchangedVolume: this.round2(
+              revenueAtUnchangedVolume - recordedRevenue,
+            ),
+          },
+          calculationStatus: BiScenarioCalculationStatus.calculated,
+          calculationNote:
+            'Arithmetic only: recorded revenue × (1 + price change ÷ 100). Assumes the number of units sold is unchanged; this is not a demand or revenue forecast.',
+        };
+      }
+      case BiScenarioType.stock: {
+        const productId = dto.productId?.trim();
+        const addedUnits = this.requiredNumber(
+          dto.additionalStockUnits,
+          'Choose a product and enter additional stock units.',
+        );
+        if (!productId || !Number.isInteger(addedUnits) || addedUnits < 1) {
+          this.invalidAssumption(
+            'Choose a product and enter a positive whole number of stock units.',
+          );
+        }
+        const product = await this.tenantPrisma.client.product.findFirst({
+          where: { id: productId, businessId, active: true, kind: 'product' },
+          select: {
+            id: true,
+            name: true,
+            stockQty: true,
+            lowStockThreshold: true,
+          },
+        });
+        if (!product) {
+          throw new AppException(
+            'BI_SIMULATOR_PRODUCT_NOT_FOUND',
+            'The selected product is not available in this business.',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const projectedStockQty = product.stockQty + addedUnits;
+        return {
+          assumptions: {
+            productId: product.id,
+            additionalStockUnits: addedUnits,
+          },
+          baseline: {
+            productName: product.name,
+            stockQty: product.stockQty,
+            lowStockThreshold: product.lowStockThreshold,
+          },
+          outcome: {
+            projectedStockQty,
+            atOrAboveReorderThreshold:
+              projectedStockQty > product.lowStockThreshold,
+          },
+          calculationStatus: BiScenarioCalculationStatus.calculated,
+          calculationNote:
+            'Arithmetic only: recorded stock quantity + assumed units. No inventory or purchase order was changed; this does not predict sales or stockout risk.',
+        };
+      }
+      case BiScenarioType.staff: {
+        const countChange = this.requiredNumber(
+          dto.staffCountChange,
+          'Enter a staff-count change.',
+        );
+        if (
+          !Number.isInteger(countChange) ||
+          countChange < -100 ||
+          countChange > 100
+        ) {
+          this.invalidAssumption(
+            'Staff-count change must be a whole number between -100 and 100.',
+          );
+        }
+        const metric = await this.widgets.getWidgetData('staff_count');
+        const recordedTeamSize = this.metricNumber(metric, 'count');
+        if (recordedTeamSize === null) {
+          return {
+            assumptions: { staffCountChange: countChange },
+            baseline: { recordedTeamSize: null },
+            outcome: null,
+            calculationStatus: BiScenarioCalculationStatus.assumptions_only,
+            calculationNote:
+              'The canonical team-size widget did not return a number, so no headcount outcome was calculated.',
+          };
+        }
+        if (recordedTeamSize + countChange < 0) {
+          this.invalidAssumption(
+            'The scenario cannot reduce the recorded team size below zero.',
+          );
+        }
+        return {
+          assumptions: { staffCountChange: countChange },
+          baseline: {
+            recordedTeamSize,
+            source: 'Dashboard staff_count widget',
+          },
+          outcome: { hypotheticalTeamSize: recordedTeamSize + countChange },
+          calculationStatus: BiScenarioCalculationStatus.calculated,
+          calculationNote:
+            'Headcount arithmetic only. The source does not provide validated working hours, service capacity, payroll cost, or productivity response.',
+        };
+      }
+      case BiScenarioType.marketing: {
+        const budgetChange = this.requiredNumber(
+          dto.marketingBudgetChange,
+          'Enter a hypothetical marketing budget change.',
+        );
+        if (budgetChange < -1_000_000 || budgetChange > 1_000_000) {
+          this.invalidAssumption(
+            'Marketing budget change must be within one million in either direction.',
+          );
+        }
+        const campaignRecords = await this.tenantPrisma.client.campaign.count({
+          where: { businessId },
+        });
+        return {
+          assumptions: {
+            marketingBudgetChange: budgetChange,
+            currency: business.currency,
+          },
+          baseline: {
+            campaignRecords,
+            budgetAndAttributedRevenue: null,
+          },
+          outcome: null,
+          calculationStatus: BiScenarioCalculationStatus.assumptions_only,
+          calculationNote:
+            'Marketing spend, attributable revenue and conversion response are not recorded in the campaign source; ROI and sales impact are not available.',
+        };
+      }
+      default:
+        this.invalidAssumption('Choose a supported scenario type.');
+    }
+  }
+
+  private metricNumber(value: unknown, key: string): number | null {
+    if (typeof value !== 'object' || value === null || !(key in value)) {
+      return null;
+    }
+    const result = (value as Record<string, unknown>)[key];
+    return typeof result === 'number' && Number.isFinite(result)
+      ? result
+      : null;
+  }
+
+  private requiredNumber(value: number | undefined, message: string): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      this.invalidAssumption(message);
+    }
+    return value;
+  }
+
+  private invalidAssumption(message: string): never {
+    throw new AppException(
+      'BI_SIMULATOR_INVALID_ASSUMPTION',
+      message,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  private round2(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
   async askBusinessBrain(

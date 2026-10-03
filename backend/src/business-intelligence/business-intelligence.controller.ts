@@ -5,6 +5,7 @@ import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { BusinessIntelligenceService } from './business-intelligence.service';
 import { AskBusinessBrainDto } from './dto/ask-business-brain.dto';
+import { CreateBiScenarioDto } from './dto/create-bi-scenario.dto';
 
 @Controller('business-intelligence')
 export class BusinessIntelligenceController {
@@ -39,5 +40,26 @@ export class BusinessIntelligenceController {
       user.sub,
       dto.question,
     );
+  }
+
+  @Get('simulator/context')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  simulatorContext(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.simulatorContext(user.businessId);
+  }
+
+  @Get('simulator/scenarios')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  simulatorScenarios(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.listSimulatorScenarios(user.businessId);
+  }
+
+  @Post('simulator/scenarios')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  createSimulatorScenario(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateBiScenarioDto,
+  ) {
+    return this.service.createSimulatorScenario(user.businessId, user.sub, dto);
   }
 }

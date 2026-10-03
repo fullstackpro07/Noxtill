@@ -678,7 +678,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: FlaskConical,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
   },
   {
     key: "diagnosis-center",

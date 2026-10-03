@@ -1,4 +1,5 @@
 import { ClsService } from 'nestjs-cls';
+import { BiScenarioType } from '@prisma/client';
 import { AppException } from '../common/filters/app.exception';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -26,6 +27,7 @@ describe('BusinessIntelligenceService (MySQL)', () => {
   let otherBusinessId: string;
   let emptyBusinessId: string;
   let cls: FakeClsService;
+  let widgets: WidgetsService;
   let aiAnswer =
     'The recorded source metrics provide the requested business context.';
 
@@ -62,7 +64,7 @@ describe('BusinessIntelligenceService (MySQL)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    const widgets = new WidgetsService(tenant, cls as unknown as ClsService);
+    widgets = new WidgetsService(tenant, cls as unknown as ClsService);
     service = new BusinessIntelligenceService(tenant, widgets, {
       createMessage: () =>
         Promise.resolve({
@@ -75,6 +77,17 @@ describe('BusinessIntelligenceService (MySQL)', () => {
   });
 
   afterAll(async () => {
+    await prisma.biScenarioVersion.deleteMany({
+      where: {
+        businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
+      },
+    });
+    await prisma.product.deleteMany({
+      where: {
+        businessId,
+        name: { startsWith: 'BI Simulator QA ' },
+      },
+    });
     await prisma.biBrainAnswer.deleteMany({
       where: {
         businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
@@ -275,5 +288,132 @@ describe('BusinessIntelligenceService (MySQL)', () => {
       ),
     ).rejects.toBeInstanceOf(AppException);
     expect(await service.listBrainAnswers(businessId)).toHaveLength(2);
+  });
+
+  it('stores immutable what-if versions without changing live business records', async () => {
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    const product = await prisma.product.create({
+      data: {
+        businessId,
+        name: `BI Simulator QA ${Date.now()}`,
+        sellingPrice: 25,
+        stockQty: 2,
+        lowStockThreshold: 5,
+      },
+    });
+    const revenueBefore = await widgets.getWidgetData('revenue_this_month');
+    const recordedRevenue = (revenueBefore as { revenue: number }).revenue;
+    const orderCountBefore = await prisma.order.count({
+      where: { businessId },
+    });
+
+    const priceV1 = await service.createSimulatorScenario(
+      businessId,
+      'integration-user',
+      {
+        name: 'QA price scenario',
+        scenarioType: BiScenarioType.price,
+        priceChangePercent: 10,
+      },
+    );
+    expect(priceV1).toMatchObject({ version: 1, scenarioType: 'price' });
+    expect(priceV1.baseline).toMatchObject({
+      revenueThisMonth: recordedRevenue,
+      source: 'Dashboard revenue_this_month widget',
+    });
+    expect(priceV1.outcome).toMatchObject({
+      revenueAtUnchangedVolume: Math.round(recordedRevenue * 1.1 * 100) / 100,
+    });
+
+    const priceV2 = await service.createSimulatorScenario(
+      businessId,
+      'integration-user',
+      {
+        name: 'QA price scenario',
+        scenarioType: BiScenarioType.price,
+        priceChangePercent: 20,
+        seriesId: priceV1.seriesId,
+      },
+    );
+    expect(priceV2).toMatchObject({
+      seriesId: priceV1.seriesId,
+      version: 2,
+      scenarioType: 'price',
+    });
+
+    const stockScenario = await service.createSimulatorScenario(
+      businessId,
+      'integration-user',
+      {
+        name: 'QA stock scenario',
+        scenarioType: BiScenarioType.stock,
+        productId: product.id,
+        additionalStockUnits: 4,
+      },
+    );
+    expect(stockScenario.outcome).toMatchObject({
+      projectedStockQty: 6,
+      atOrAboveReorderThreshold: true,
+    });
+    const unchangedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(unchangedProduct.stockQty).toBe(2);
+    expect(Number(unchangedProduct.sellingPrice)).toBe(25);
+
+    const staffScenario = await service.createSimulatorScenario(
+      businessId,
+      'integration-user',
+      {
+        name: 'QA team-size scenario',
+        scenarioType: BiScenarioType.staff,
+        staffCountChange: 2,
+      },
+    );
+    expect(staffScenario.outcome).toMatchObject({ hypotheticalTeamSize: 2 });
+
+    const marketingScenario = await service.createSimulatorScenario(
+      businessId,
+      'integration-user',
+      {
+        name: 'QA marketing scenario',
+        scenarioType: BiScenarioType.marketing,
+        marketingBudgetChange: 300,
+      },
+    );
+    expect(marketingScenario).toMatchObject({
+      calculationStatus: 'assumptions_only',
+      outcome: null,
+    });
+    expect(marketingScenario.calculationNote).toContain('ROI');
+    expect(await prisma.order.count({ where: { businessId } })).toBe(
+      orderCountBefore,
+    );
+
+    cls.set(CLS_KEY_BUSINESS_ID, otherBusinessId);
+    const otherTenant = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    const otherService = new BusinessIntelligenceService(
+      otherTenant,
+      new WidgetsService(otherTenant, cls as unknown as ClsService),
+      {} as AiInfraService,
+    );
+    expect(await otherService.listSimulatorScenarios(otherBusinessId)).toEqual(
+      [],
+    );
+    const foreignSeriesError = await otherService
+      .createSimulatorScenario(otherBusinessId, 'other-user', {
+        name: 'Foreign series attempt',
+        scenarioType: BiScenarioType.price,
+        priceChangePercent: 5,
+        seriesId: priceV1.seriesId,
+      })
+      .catch((error: unknown) => error);
+    expect(foreignSeriesError).toBeInstanceOf(AppException);
+    expect((foreignSeriesError as AppException).getResponse()).toMatchObject({
+      code: 'BI_SCENARIO_NOT_FOUND',
+    });
   });
 });

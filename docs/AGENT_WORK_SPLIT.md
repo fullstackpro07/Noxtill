@@ -516,3 +516,15 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   suites pass; the unrelated Billing suite hit a 5-second `beforeAll` timeout and teardown FK error,
   then passed alone (11/11). Browser QA in the QA Test Business showed real insight rows, theme
   filtering and the honest no-savings state.
+- Screen 4 ✅ Business Simulator (`/business-simulator`). Versioned, read-only what-if snapshots for
+  price, stock, staff headcount and marketing-budget assumptions. Price and stock use arithmetic
+  over the canonical Dashboard metric / Product row and state the unchanged-volume or no-live-write
+  assumptions; staff is headcount only, and marketing ROI is explicitly unavailable because spend
+  and attribution are not recorded. Real-MySQL spec verifies v1/v2, stock arithmetic, no source-row
+  mutation, and tenant isolation (3/3). Hand-written `bi_scenario_versions` migration applied; its
+  business FK was verified and Prisma reports schema up to date. Backend/frontend `tsc`, touched-file
+  eslint, and full backend Jest (`--maxWorkers=2`, 338 suites / 2,124 tests) passed. Browser QA in a
+  separate QA Test Business loaded the empty state and saved named price and stock v1 scenarios;
+  the stock result matched the QA product's recorded quantity and threshold, and the UI confirmed
+  live records were unchanged. Created a QA-only product for the stock flow. No production data
+  touched.

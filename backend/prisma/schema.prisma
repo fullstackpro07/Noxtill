@@ -243,6 +243,18 @@ enum ProductOpportunityRisk {
   blocked
 }
 
+enum BiScenarioType {
+  price
+  stock
+  staff
+  marketing
+}
+
+enum BiScenarioCalculationStatus {
+  calculated
+  assumptions_only
+}
+
 enum ProductValidationDecision {
   approve_test
   approve_launch
@@ -823,6 +835,7 @@ model Business {
   activityEvents               ActivityEvent[]
   aiInsights                   AiInsight[]
   biBrainAnswers               BiBrainAnswer[]
+  biScenarioVersions           BiScenarioVersion[]
   actionItemStates             ActionItemState[]
   heldSales                    HeldSale[]
   cashShifts                   CashShift[]
@@ -5526,6 +5539,29 @@ model BiBrainAnswer {
 
   @@index([businessId, createdAt])
   @@map("bi_brain_answers")
+}
+
+/// Immutable versioned what-if snapshot. Baselines and outcomes are analytical snapshots only;
+/// this model has no write path into Products, Orders, Staff, Campaigns, or other source records.
+model BiScenarioVersion {
+  id                String                      @id @default(uuid())
+  businessId        String                      @map("business_id")
+  business          Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  seriesId          String                      @map("series_id") @db.Char(36)
+  version           Int
+  name              String                      @db.VarChar(120)
+  scenarioType      BiScenarioType              @map("scenario_type")
+  assumptions       Json
+  baseline          Json
+  outcome           Json?
+  calculationStatus BiScenarioCalculationStatus @map("calculation_status")
+  calculationNote   String                      @map("calculation_note") @db.Text
+  createdByUserId   String                      @map("created_by_user_id")
+  createdAt         DateTime                    @default(now()) @map("created_at")
+
+  @@unique([businessId, seriesId, version], map: "bi_scenario_versions_business_series_version_key")
+  @@index([businessId, createdAt], map: "bi_scenario_versions_business_created_idx")
+  @@map("bi_scenario_versions")
 }
 
 /// Action Center (UPD-BE-004) — synthesized action items (complaints/low-stock/overdue-credit/
