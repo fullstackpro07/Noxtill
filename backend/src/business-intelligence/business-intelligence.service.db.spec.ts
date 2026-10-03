@@ -1,8 +1,10 @@
 import { ClsService } from 'nestjs-cls';
+import { AppException } from '../common/filters/app.exception';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WidgetsService } from '../widgets/widgets.service';
+import { AiInfraService } from '../ai/ai-infra.service';
 import { BusinessIntelligenceService } from './business-intelligence.service';
 
 class FakeClsService {
@@ -24,6 +26,8 @@ describe('BusinessIntelligenceService overview (MySQL)', () => {
   let otherBusinessId: string;
   let emptyBusinessId: string;
   let cls: FakeClsService;
+  let aiAnswer =
+    'The recorded source metrics provide the requested business context.';
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -59,10 +63,23 @@ describe('BusinessIntelligenceService overview (MySQL)', () => {
       cls as unknown as ClsService,
     );
     const widgets = new WidgetsService(tenant, cls as unknown as ClsService);
-    service = new BusinessIntelligenceService(tenant, widgets);
+    service = new BusinessIntelligenceService(tenant, widgets, {
+      createMessage: () =>
+        Promise.resolve({
+          content: [{ type: 'text', text: aiAnswer }],
+          stopReason: 'end_turn',
+          inputTokens: 12,
+          outputTokens: 8,
+        }),
+    } as unknown as AiInfraService);
   });
 
   afterAll(async () => {
+    await prisma.biBrainAnswer.deleteMany({
+      where: {
+        businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
+      },
+    });
     await prisma.aiInsight.deleteMany({
       where: {
         businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
@@ -135,5 +152,67 @@ describe('BusinessIntelligenceService overview (MySQL)', () => {
       'Revenue source evidence',
     );
     expect(result.insights[0].nextDecisionHref).toBe('/profit');
+  });
+
+  it('saves grounded answers with real sources and refuses an unsourced number', async () => {
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    const foreignKeys = await prisma.$queryRaw<{ name: string }[]>`
+      SELECT CONSTRAINT_NAME AS name
+      FROM information_schema.KEY_COLUMN_USAGE
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'bi_brain_answers'
+        AND COLUMN_NAME = 'business_id'
+        AND REFERENCED_TABLE_NAME = 'businesses'
+    `;
+    expect(foreignKeys.map((row) => row.name)).toContain(
+      'bi_brain_answers_business_id_fkey',
+    );
+
+    const saved = await service.askBusinessBrain(
+      businessId,
+      'integration-user',
+      'Summarize the available sales records',
+    );
+    expect(saved.sourceMetrics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'revenue_today' }),
+      ]),
+    );
+    expect(saved.calculation).toContain('No new KPI formula');
+    expect(saved.confidenceNote).toContain('Not numerically calibrated');
+    expect(await service.listBrainAnswers(businessId)).toHaveLength(1);
+    aiAnswer = 'Recorded revenue was 125.00.';
+    await expect(
+      service.askBusinessBrain(
+        businessId,
+        'integration-user',
+        'Summarize the available sales records',
+      ),
+    ).resolves.toMatchObject({ answer: 'Recorded revenue was 125.00.' });
+    expect(await service.listBrainAnswers(businessId)).toHaveLength(2);
+    cls.set(CLS_KEY_BUSINESS_ID, otherBusinessId);
+    const otherTenant = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    const otherService = new BusinessIntelligenceService(
+      otherTenant,
+      new WidgetsService(otherTenant, cls as unknown as ClsService),
+      {} as AiInfraService,
+    );
+    expect(await otherService.listBrainAnswers(otherBusinessId)).toHaveLength(
+      0,
+    );
+
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    aiAnswer = 'The recorded total is 987654321.';
+    await expect(
+      service.askBusinessBrain(
+        businessId,
+        'integration-user',
+        'Summarize the available sales records',
+      ),
+    ).rejects.toBeInstanceOf(AppException);
+    expect(await service.listBrainAnswers(businessId)).toHaveLength(2);
   });
 });

@@ -37,6 +37,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'HealthScoreWeightChange',
   'ActivityEvent',
   'AiInsight',
+  'BiBrainAnswer',
   'ActionItemState',
   'HeldSale',
   'CashShift',

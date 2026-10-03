@@ -822,6 +822,7 @@ model Business {
   goal                         BusinessGoal?
   activityEvents               ActivityEvent[]
   aiInsights                   AiInsight[]
+  biBrainAnswers               BiBrainAnswer[]
   actionItemStates             ActionItemState[]
   heldSales                    HeldSale[]
   cashShifts                   CashShift[]
@@ -5506,6 +5507,25 @@ model AiInsight {
 
   @@index([businessId, status, createdAt])
   @@map("ai_insights")
+}
+
+/// Business Brain answers keep an auditable copy of the exact source metrics and caveats shown
+/// alongside an AI-written response. This stores analysis output, never a second source of KPI data.
+model BiBrainAnswer {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  askedByUserId  String?  @map("asked_by_user_id")
+  question       String   @db.VarChar(500)
+  answer         String   @db.Text
+  sourceMetrics  Json     @map("source_metrics")
+  calculation    String   @db.Text
+  assumptions    Json
+  confidenceNote String   @map("confidence_note") @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("bi_brain_answers")
 }
 
 /// Action Center (UPD-BE-004) — synthesized action items (complaints/low-stock/overdue-credit/

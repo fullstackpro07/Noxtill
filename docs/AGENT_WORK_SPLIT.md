@@ -497,3 +497,12 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   Dashboard cache may be up to 60 seconds old. Real-MySQL spec covers empty sources, real order data,
   and tenant isolation. No migration. Backend/frontend `tsc`, touched-file eslint and full backend
   Jest pass (338 suites / 2,122 tests); browser page loaded in QA Test Business with real data.
+- Screen 2 ✅ Business Brain (`/business-brain`). Answers are limited to canonical Dashboard widget
+  outputs, numeric claims are checked against source values, and each saved answer includes source
+  metrics, calculation, assumptions, and an explicit uncalibrated-confidence disclosure. Uses
+  `AiInfraService.createMessage`; the live page gracefully displayed Anthropic's actual insufficient-
+  credit error without crashing. A live successful AI answer could not be verified while the provider
+  account has $0 credit. Real-MySQL tests cover persistence, source evidence, numeric guardrails,
+  tenant isolation, and the FK. Hand-written `bi_brain_answers` migration was applied and its FK
+  verified. Backend/frontend `tsc`, touched-file eslint, focused MySQL spec (2/2), and full backend
+  Jest pass (338 suites / 2,123 tests); browser QA in the QA Test Business covered provider failure.

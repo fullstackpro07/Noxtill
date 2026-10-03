@@ -27,8 +27,40 @@ export interface BusinessIntelligenceOverview {
   disclosure: string;
 }
 
+export interface BusinessBrainSource {
+  key: string;
+  title: string;
+  value: Record<string, unknown>;
+}
+
+export interface BusinessBrainAnswer {
+  id: string;
+  question: string;
+  answer: string;
+  sourceMetrics: BusinessBrainSource[];
+  calculation: string;
+  assumptions: string[];
+  confidenceNote: string;
+  createdAt: string;
+}
+
 export function fetchBusinessIntelligenceOverview(): Promise<BusinessIntelligenceOverview> {
   return apiFetch<BusinessIntelligenceOverview>(
     "/business-intelligence/overview",
   );
+}
+
+export function fetchBusinessBrainAnswers(): Promise<BusinessBrainAnswer[]> {
+  return apiFetch<BusinessBrainAnswer[]>(
+    "/business-intelligence/brain/answers",
+  );
+}
+
+export function askBusinessBrain(
+  question: string,
+): Promise<BusinessBrainAnswer> {
+  return apiFetch<BusinessBrainAnswer>("/business-intelligence/brain/ask", {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
 }
