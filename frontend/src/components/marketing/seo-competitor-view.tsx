@@ -287,19 +287,28 @@ export function SeoCompetitorView() {
           </div>
 
           {filtersOpen ? (
-            <Card className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Field label="Competitor">
-                <select className={fieldClass} style={fieldStyle} value={competitorFilter} onChange={(event) => setCompetitorFilter(event.target.value)}>
-                  <option value="">All tracked competitors</option>
-                  {(data?.competitors ?? []).map((competitor) => <option key={competitor.id} value={competitor.id}>{competitor.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Evidence state">
-                <select className={fieldClass} style={fieldStyle} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                  <option value="open">Open</option><option value="actioned">Action created</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option><option value="all">All states</option>
-                </select>
-              </Field>
-            </Card>
+            <Drawer title="More competitor filters" onClose={() => setFiltersOpen(false)}>
+              <div className="grid gap-4">
+                <Field label="Competitor">
+                  <select className={fieldClass} style={fieldStyle} value={competitorFilter} onChange={(event) => setCompetitorFilter(event.target.value)}>
+                    <option value="">All tracked competitors</option>
+                    {(data?.competitors ?? []).map((competitor) => <option key={competitor.id} value={competitor.id}>{competitor.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Evidence state">
+                  <select className={fieldClass} style={fieldStyle} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                    <option value="open">Open</option><option value="actioned">Action created</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option><option value="all">All states</option>
+                  </select>
+                </Field>
+                <p className="m-0 text-xs" style={{ color: "var(--app-text-faint)" }}>
+                  Results update as you change these filters.
+                </p>
+                <div className="flex justify-between gap-2 border-t pt-4" style={{ borderColor: "var(--app-border)" }}>
+                  <Button onClick={() => { setCompetitorFilter(""); setStatusFilter("open"); }}>Reset filters</Button>
+                  <Button primary onClick={() => setFiltersOpen(false)}>Done</Button>
+                </div>
+              </div>
+            </Drawer>
           ) : null}
 
           <Card className="mt-4 overflow-hidden p-0">

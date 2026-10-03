@@ -1,5 +1,5 @@
 import { ClsService } from 'nestjs-cls';
-import { Role } from '@prisma/client';
+import { Role, SeoContentBriefStatus } from '@prisma/client';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -29,6 +29,7 @@ describe('SeoCompetitorService (MySQL)', () => {
   let ownerUserId: string;
   let competitorId: string;
   let foreignCompetitorId: string;
+  let contentService: SeoContentService;
   const stamp = Date.now();
 
   beforeAll(async () => {
@@ -86,10 +87,11 @@ describe('SeoCompetitorService (MySQL)', () => {
       ai,
       {} as never,
     );
+    contentService = new SeoContentService(tenantPrisma, ai);
     service = new SeoCompetitorService(
       tenantPrisma,
       keywords,
-      new SeoContentService(tenantPrisma, ai),
+      contentService,
       new SeoLinkBuildingService(tenantPrisma, ai),
     );
   });
@@ -276,5 +278,61 @@ describe('SeoCompetitorService (MySQL)', () => {
       where: { businessId, gapId: gap.id, action: 'action_created_keyword' },
     });
     expect(audit?.actorUserId).toBe(ownerUserId);
+  });
+
+  it('routes content-gap actions through the canonical brief approval workflow', async () => {
+    const gap = await service.createGap(businessId, ownerUserId, {
+      ...evidence(`Content action evidence ${stamp}`),
+      kind: 'content',
+    });
+    const action = await service.createAction(
+      businessId,
+      ownerUserId,
+      gap.id,
+      'content',
+    );
+
+    const brief = await prisma.seoContentBrief.findFirst({
+      where: { id: action.actionEntityId, businessId },
+    });
+    expect(brief).toMatchObject({
+      topic: gap.title,
+      status: SeoContentBriefStatus.brief,
+      briefSource: 'manual',
+    });
+    if (!brief) throw new Error('Expected the canonical content brief.');
+
+    await contentService.updateBrief(businessId, ownerUserId, brief.id, {
+      draftTitle: gap.title,
+      draftBody: 'A short, evidence-based draft for review.',
+    });
+    await contentService.transition(
+      businessId,
+      ownerUserId,
+      brief.id,
+      SeoContentBriefStatus.approval_required,
+    );
+    await contentService.transition(
+      businessId,
+      ownerUserId,
+      brief.id,
+      SeoContentBriefStatus.approved,
+      'Reviewed against the merchant-recorded competitor evidence.',
+    );
+
+    const approved = await prisma.seoContentBrief.findFirst({
+      where: { id: brief.id, businessId },
+    });
+    expect(approved?.status).toBe(SeoContentBriefStatus.approved);
+    expect(
+      await prisma.seoCompetitorGapAudit.findFirst({
+        where: {
+          businessId,
+          gapId: gap.id,
+          action: 'action_created_content',
+          actorUserId: ownerUserId,
+        },
+      }),
+    ).not.toBeNull();
   });
 });

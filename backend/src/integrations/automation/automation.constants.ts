@@ -292,6 +292,16 @@ export const AUTOMATION_TRIGGERS: Array<{
     },
   },
   {
+    key: WorkflowTriggerKey.inbound_webhook,
+    label: 'Inbound webhook received',
+    samplePayload: {
+      description: 'Inbound webhook call',
+      receivedAt: '2026-10-02T12:00:00.000Z',
+      body_orderId: 'A1',
+      body_status: 'paid',
+    },
+  },
+  {
     key: WorkflowTriggerKey.scheduled,
     label: 'Recurring workflow run',
     samplePayload: {

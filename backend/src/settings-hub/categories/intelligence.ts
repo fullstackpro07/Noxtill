@@ -163,7 +163,7 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               risk: 'Medium',
               requires: CAPABILITIES.AUTOMATIONS_MANAGE,
               impact:
-                'Saving or switching on a workflow that could message a customer without approval is refused. Already-active workflows keep running until they are next changed.',
+                'Turning on a workflow, or saving changes to an active workflow, is refused if a customer message can run without a prior approval step. Existing active workflows keep running until changed.',
               on: { text: 'Required', tone: 'blue' },
               off: { text: 'Not required', tone: 'neutral' },
             }),

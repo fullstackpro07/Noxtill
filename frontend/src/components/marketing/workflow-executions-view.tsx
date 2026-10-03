@@ -198,7 +198,7 @@ export function WorkflowExecutionsView({
 
       {recoveryMode ? (
         <p className="m-0 rounded-[10px] px-3 py-2 text-[10.5px]" style={{ background: "var(--app-warning-bg)", border: "1px solid var(--app-warning-border)", color: "var(--app-warning-text)" }}>
-          This view uses failed runs retained in execution history. A separate dead-letter queue, compensating actions and provider-incident handling are not implemented yet.
+          This view shows run history. Exhausted runs are recorded in the Recovery Center dead-letter queue; compensating actions and provider-incident handling are not available.
         </p>
       ) : null}
 

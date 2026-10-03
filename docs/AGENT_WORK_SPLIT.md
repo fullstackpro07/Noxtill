@@ -79,8 +79,6 @@ selection too, and continues Claude's remaining items (4 and 5) after its own qu
 
 Add one line per request: `[from → to] what is needed, and why`. Delete the line when done.
 
-- [Codex → Claude] Automation Governance (/marketing/automations/governance): fresh reload + retry saved “Require approval before customer messages”, and activating a QA workflow with a message step but no approval was refused as expected. However, saving that paused workflow was allowed even though the page says saving or switching it on is refused. Please narrow the copy to match the enforced behavior (activation or edits to an active workflow).
-- [Codex → Claude] Inbound webhook trigger: the full Jest run fails `integrations/automation/automation.constants.spec.ts` because `WorkflowTriggerKey.inbound_webhook` has no `AUTOMATION_TRIGGERS` sample payload. Please add the documented trigger entry and payload.
 
 ## Progress log (6-hour goal, Claude Code — Codex stopped 2026-10-01 ~02:13)
 
