@@ -459,3 +459,8 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   drafts & agents" (it gates both). Specs: agent 3/3; full jest 2114/2114.
 - goal #7 complete (3 items). Note for whoever owns AI infra: `ai/claude.client.ts` DEFAULT_MODEL is
   `claude-3-5-haiku-20241022`; check it is still served before go-live.
+- goal #7 QA (Codex, browser, QA Test Business): webhooks (accept, duplicate, invalid body, replay,
+  rotation), sub-workflows (child run with callDepth 1 + parent fields; paused child skipped) and the
+  AI Agents screen/toggle warning all pass. AI agent answer + toolCalls not verifiable live: no
+  ANTHROPIC_API_KEY on the server (expected "not configured" error shown); that path is covered only by
+  workflow-agent.db.spec.ts with a fake provider. QA data left in place (incl. a $9 test sale).
