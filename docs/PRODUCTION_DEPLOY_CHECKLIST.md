@@ -176,3 +176,48 @@ Only Email is fully deep and live-ready today — it just needs the Postmark key
 Not blocking launch, but worth knowing
 Help-doc article URLs (HelpArticle.url, used by the AI assistant's citations) point at /help/[slug] pages that don't exist yet — citations render as plain text, not broken links, so this is cosmetic only.
 Postmark webhook → real open/click tracking for email campaigns was deliberately deferred (funnel numbers will read 0 until this exists).
+
+---
+
+## 7. Update — 2026-10-03 audit (after SEO Autopilot, Autonomous Commerce and Automations)
+
+Compared every env var the backend reads (`process.env.*` / `ConfigService.get`) with this file.
+Status here is this dev machine's `backend/.env` (names checked, values never printed).
+
+### 7.1 Status changes since §1 / §6
+
+| Item | Now |
+|---|---|
+| `ANTHROPIC_API_KEY` | Set locally (2026-10-03). Workflow AI drafts, the AI agent step and SEO AI actions use it. |
+| `SERPAPI_KEY` | Set locally; SEO rank tracking provider reports configured. |
+| `EMAIL_PROVIDER_KEY` | Set locally. |
+| Redis | Reachable locally (Redis 8.10.2 built from source, running as a foreground process — not a service). Production still needs managed Redis ≥5. Full backend suite incl. `queue.integration.spec` passes against it. |
+| AI model | `backend/src/ai/claude.client.ts` hard-codes `DEFAULT_MODEL = 'claude-3-5-haiku-20241022'`. **Confirm Anthropic still serves this model before launch** — if not, every AI feature fails. |
+
+### 7.2 Env vars used by code but not listed above (all unset locally)
+
+| Var(s) | Powers | Needed for launch? |
+|---|---|---|
+| `REDIS_URL`, `REDIS_USERNAME`, `REDIS_PASSWORD`, `REDIS_TLS` | Managed-Redis connection (`common/queue/redis-connection.util.ts`) | **Yes** — use these for a managed/TLS Redis instead of host/port. |
+| `PLATFORM_ADMIN_KEY` | Platform admin routes guard | **Yes** — set a fresh random value. |
+| `LOCAL_STORAGE_ROOT` | Local file storage fallback when S3 isn't set | Only if not using S3. |
+| `OPENAI_API_KEY` | AI image generation, voice transcription | If those features launch. |
+| `SHOPIFY_CLIENT_ID` / `_SECRET` | Shopify connector (Commerce channel listings publish/sync) | If Shopify launches. WooCommerce uses per-store keys, no env var. |
+| `FACEBOOK_APP_SECRET` | Social inbox webhook + Instagram connector | If social inbox launches. |
+| `TELNYX_PUBLIC_KEY`, `VOICE_TRANSFER_NUMBER`, `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` (Polly) | AI Phone / voice | If AI Phone launches. |
+| `MAPS_PROVIDER_API_KEY` | Delivery geocoding and routing | If Deliveries launches. |
+| `META_AD_LIBRARY_ACCESS_TOKEN` | Competitive ads lookup | Optional. |
+| `ADS_LEADS_WEBHOOK_SECRET` | Ad lead-form webhook | If ad lead capture launches. |
+| `META_WA_API_VERSION` | WhatsApp Graph API version override | Optional (has a default). |
+| `AMAZON_ADS_*`, `MICROSOFT_ADS_*` (+ developer token), `LINKEDIN_ADS_*`, `PINTEREST_ADS_*`, `REDDIT_ADS_*`, `SNAPCHAT_ADS_*` | Ad-platform connectors | Each needs a registered developer app (account step, not code). |
+| `QUICKBOOKS_*`, `XERO_*` | Accounting connectors | Same — registered app per provider. |
+| `BING_PLACES_*`, `YELP_*`, `APPLE_BUSINESS_CONNECT_API_KEY` | Business listings connectors | Same. |
+
+### 7.3 New go-live checks from the recent modules
+
+- `npx prisma migrate deploy` must apply all migrations in order on a fresh DB (local `migrate status`: up to date; the SEO link-building order issue was fixed by renaming its migration).
+- Public inbound-webhook route `POST /api/v1/public/workflow-hooks/:token` must be reachable from the internet through the proxy / load balancer (the URL shown in Automations → Webhooks is built from the site origin + `/api/v1`).
+- Workflow schedules, waits and retries run on the BullMQ schedule queue — they need Redis and a running backend worker.
+- External data still not connected (screens say so): storefront traffic/conversion, supplier sourcing provider, payment fraud/chargeback feed, marketplace publishing beyond Shopify/WooCommerce.
+- Local QA data lives in the "QA Test Business" in the dev DB only; nothing to clean up in production.
+- Verified 2026-10-03: backend + frontend `tsc --noEmit` clean, `prisma migrate status` up to date, backend Jest 335 suites / 2114 tests passing.
