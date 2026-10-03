@@ -422,4 +422,38 @@ export const WORKFLOW_ACTION_CATALOG: WorkflowActionCatalogEntry[] = [
     rateLimits:
       'One tenant-scoped database read per action. Secret-reference variables are never resolved or returned.',
   },
+  {
+    type: 'run_workflow',
+    label: 'Run another workflow',
+    description:
+      'Starts another active workflow of this business that uses the "Run by another workflow" trigger, passing this run’s values as {{parent_name}} fields.',
+    category: 'Flow control',
+    effect: 'control',
+    risk: 'medium',
+    requiresCustomerContext: false,
+    provider: 'Noxtill workflow runtime',
+    setup:
+      'Create the reusable workflow with the "Run by another workflow" trigger, switch it on, then pick it in this step.',
+    inputs: [
+      {
+        name: 'workflowId',
+        type: 'string',
+        required: true,
+        description:
+          'A different workflow of this business with the "Run by another workflow" trigger.',
+      },
+    ],
+    outputs: [
+      {
+        name: 'childRunId',
+        type: 'string | null',
+        description:
+          'The started run, shown in Executions. This step does not wait for it to finish.',
+      },
+    ],
+    idempotency:
+      'Each calling run and step starts at most one child run; a retry reuses it.',
+    rateLimits:
+      'Nesting stops at 3 levels. A paused or archived target is skipped and reported.',
+  },
 ];

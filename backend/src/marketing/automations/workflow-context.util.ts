@@ -549,3 +549,49 @@ export function inboundBodyFields(
   }
   return fields;
 }
+
+/**
+ * Context for a workflow started by another workflow's "Run another workflow" step. The caller's
+ * text / number / true-false values are passed as `parent_<key>` (max 50); the caller's customer, if
+ * any, stays the customer of the child run so customer steps act on the same person.
+ */
+export function subWorkflowContext(
+  parent: Record<string, unknown>,
+  input: {
+    eventId: string;
+    parentRunId: string;
+    parentWorkflowId: string;
+    callDepth: number;
+  },
+): Record<string, unknown> {
+  const passed: Record<string, string | number | boolean> = {};
+  let count = 0;
+  for (const [key, value] of Object.entries(parent)) {
+    if (count >= 50) break;
+    if (key === 'eventId' || key === 'callDepth' || key.startsWith('parent'))
+      continue;
+    const safe = key.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 80);
+    if (!safe) continue;
+    if (typeof value === 'string')
+      passed[`parent_${safe}`] = value.slice(0, 1000);
+    else if (typeof value === 'number' && Number.isFinite(value))
+      passed[`parent_${safe}`] = value;
+    else if (typeof value === 'boolean') passed[`parent_${safe}`] = value;
+    else continue;
+    count += 1;
+  }
+  return {
+    eventId: input.eventId,
+    description: 'Started by another workflow',
+    parentRunId: input.parentRunId,
+    parentWorkflowId: input.parentWorkflowId,
+    callDepth: input.callDepth,
+    ...(typeof parent.customerId === 'string'
+      ? { customerId: parent.customerId }
+      : {}),
+    ...(typeof parent.customerName === 'string'
+      ? { customerName: parent.customerName }
+      : {}),
+    ...passed,
+  };
+}

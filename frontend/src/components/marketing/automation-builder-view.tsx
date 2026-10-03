@@ -57,6 +57,8 @@ function actionTitle(action: WorkflowAction): string {
       return `Map ${action.mappings.length} field(s)`;
     case "get_variable":
       return `Read variable ${action.name}`;
+    case "run_workflow":
+      return "Run another workflow";
   }
 }
 

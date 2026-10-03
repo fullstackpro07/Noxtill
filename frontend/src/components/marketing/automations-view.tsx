@@ -225,6 +225,7 @@ function describeAction(action: WorkflowAction): string {
   if (action.type === "generate_ai_draft") return "Generate AI draft";
   if (action.type === "map_data") return "Map event data";
   if (action.type === "get_variable") return `Get variable: ${action.name || "choose a variable"}`;
+  if (action.type === "run_workflow") return "Run another workflow";
   if (action.type === "set_customer_custom_field") {
     return `Set customer field: ${action.fieldName || "choose a field"}`;
   }
@@ -309,6 +310,12 @@ function replaceActionType(
       scope: action.type === "get_variable" ? action.scope : "business",
     };
   }
+  if (type === "run_workflow") {
+    return {
+      type,
+      workflowId: action.type === "run_workflow" ? action.workflowId : "",
+    };
+  }
   return {
     type,
     messageBody:
@@ -319,6 +326,7 @@ function replaceActionType(
       || action.type === "generate_ai_draft"
       || action.type === "map_data"
       || action.type === "get_variable"
+      || action.type === "run_workflow"
         ? ""
         : action.messageBody,
   };
@@ -1675,6 +1683,15 @@ function ActionsEditor({
   );
   const triggerFields =
     triggers.find((trigger) => trigger.key === triggerKey)?.fields ?? [];
+  const needsWorkflowList = actions.some((action) => action.type === "run_workflow");
+  const { data: allWorkflows = [] } = useQuery({
+    queryKey: ["workflows", false],
+    queryFn: () => fetchWorkflows(false),
+    enabled: needsWorkflowList,
+  });
+  const subWorkflows = allWorkflows.filter(
+    (workflow) => workflow.triggerKey === "sub_workflow" && !workflow.archivedAt,
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -2110,6 +2127,35 @@ function ActionsEditor({
                   Reads a non-secret Production variable into this run. Add it before any message or AI action that uses {`{{variables.${a.name || "name"}}}`}.
                 </p>
               </div>
+            ) : a.type === "run_workflow" ? (
+              <div className="flex flex-col gap-1">
+                <select
+                  value={a.workflowId}
+                  onChange={(event) => onChange(actions.map((item, idx) =>
+                    idx === i && item.type === "run_workflow"
+                      ? { ...item, workflowId: event.target.value }
+                      : item,
+                  ))}
+                  aria-label="Workflow to run"
+                  className="w-full rounded-[9px] p-2 text-[12px]"
+                  style={{ border: "1px solid var(--app-border)" }}
+                >
+                  <option value="">Choose a reusable workflow…</option>
+                  {subWorkflows.map((workflow) => (
+                    <option key={workflow.id} value={workflow.id}>
+                      {workflow.name}{workflow.active ? "" : " (paused)"}
+                    </option>
+                  ))}
+                  {a.workflowId && !subWorkflows.some((workflow) => workflow.id === a.workflowId) && (
+                    <option value={a.workflowId}>Unavailable workflow</option>
+                  )}
+                </select>
+                <p className="m-0 text-[10.5px]" style={{ color: "var(--app-text-muted)" }}>
+                  {subWorkflows.length === 0
+                    ? "No reusable workflows yet. Create one with the \u201cRun by another workflow\u201d trigger first."
+                    : "Starts the chosen workflow with this run\u2019s values as {{parent_name}} fields, and doesn\u2019t wait for it to finish. A paused workflow is skipped. Up to 3 levels deep."}
+                </p>
+              </div>
             ) : (
               <textarea
                 value={a.messageBody}
@@ -2123,7 +2169,8 @@ function ActionsEditor({
                       x.type !== "request_approval" &&
                       x.type !== "generate_ai_draft" &&
                       x.type !== "map_data" &&
-                      x.type !== "get_variable"
+                      x.type !== "get_variable" &&
+                      x.type !== "run_workflow"
                         ? { ...x, messageBody: e.target.value }
                         : x,
                     ),
@@ -2367,6 +2414,8 @@ function WorkflowFormDialog({
                   action.name !== "__proto__" &&
                   action.name !== "prototype" &&
                   action.name !== "constructor"
+              : action.type === "run_workflow"
+                ? action.workflowId.length > 0
               : action.messageBody.trim().length > 0,
   );
   const graphNodeCount =
@@ -2953,7 +3002,7 @@ function TestDialog({
                                 </p>
                               )}
                             </>
-                          ) : a.type === "generate_ai_draft" || a.type === "map_data" || a.type === "get_variable" ? (
+                          ) : a.type === "generate_ai_draft" || a.type === "map_data" || a.type === "get_variable" || a.type === "run_workflow" ? (
                             <>
                               {describeAction(a)}
                               {preview?.body && (
@@ -3323,7 +3372,8 @@ function VersionHistoryEntry({
             action.type === "request_approval" ||
             action.type === "generate_ai_draft" ||
             action.type === "map_data" ||
-            action.type === "get_variable"
+            action.type === "get_variable" ||
+            action.type === "run_workflow"
               ? describeAction(action)
               : `${describeAction(action)}: ${action.messageBody}`}
           </li>

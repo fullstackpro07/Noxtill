@@ -302,6 +302,17 @@ export const AUTOMATION_TRIGGERS: Array<{
     },
   },
   {
+    key: WorkflowTriggerKey.sub_workflow,
+    label: 'Run by another workflow',
+    samplePayload: {
+      description: 'Started by another workflow',
+      parentWorkflowId: 'workflow_123',
+      parentRunId: 'run_123',
+      callDepth: 1,
+      parent_amount: 100,
+    },
+  },
+  {
     key: WorkflowTriggerKey.scheduled,
     label: 'Recurring workflow run',
     samplePayload: {

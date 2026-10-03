@@ -36,6 +36,7 @@ const TRIGGER_MODULES: Record<WorkflowTriggerKey, string> = {
   [WorkflowTriggerKey.commerce_supplier_claim_settled]: 'Autonomous Commerce',
   [WorkflowTriggerKey.scheduled]: 'Automations & Workflows',
   [WorkflowTriggerKey.inbound_webhook]: 'Automations & Workflows',
+  [WorkflowTriggerKey.sub_workflow]: 'Automations & Workflows',
 };
 
 /** Fields are the real values produced by buildTriggerContext for each event type. */
@@ -312,6 +313,18 @@ const TRIGGER_METADATA: Record<
     label: 'An external system calls this workflow’s webhook URL',
     // Plus `body_<key>` for each top-level text / number / true-false value in the JSON body.
     fields: ['description', 'receivedAt'],
+  },
+  [WorkflowTriggerKey.sub_workflow]: {
+    label: 'Run by another workflow',
+    // Plus `parent_<key>` for each text / number / true-false value of the calling run (see subWorkflowContext).
+    fields: [
+      'description',
+      'parentWorkflowId',
+      'parentRunId',
+      'callDepth',
+      'customerId',
+      'customerName',
+    ],
   },
 };
 

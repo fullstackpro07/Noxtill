@@ -27,7 +27,8 @@ export type WorkflowTriggerKey =
   | "commerce_supplier_claim_created"
   | "commerce_supplier_claim_settled"
   | "scheduled"
-  | "inbound_webhook";
+  | "inbound_webhook"
+  | "sub_workflow";
 
 export interface WorkflowTriggerCatalogEntry {
   key: WorkflowTriggerKey;
@@ -181,6 +182,10 @@ export type WorkflowAction =
       type: "get_variable";
       name: string;
       scope: "business" | "workflow";
+    }
+  | {
+      type: "run_workflow";
+      workflowId: string;
     };
 
 export type WorkflowActionType = WorkflowAction["type"];

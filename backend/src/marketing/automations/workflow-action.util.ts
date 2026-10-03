@@ -35,4 +35,12 @@ export type WorkflowAction =
       type: 'get_variable';
       name: string;
       scope: 'business' | 'workflow';
+    }
+  | {
+      /** Starts another active workflow of this business that uses the sub_workflow trigger. */
+      type: 'run_workflow';
+      workflowId: string;
     };
+
+/** A workflow started by "Run another workflow" may itself start at most this many nested levels. */
+export const MAX_SUB_WORKFLOW_DEPTH = 3;

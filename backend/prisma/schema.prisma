@@ -151,6 +151,8 @@ enum WorkflowTriggerKey {
   scheduled
   /// Fired by an external system calling the workflow's own secret webhook URL.
   inbound_webhook
+  /// Started only by another workflow's "Run another workflow" step.
+  sub_workflow
 }
 
 enum WorkflowRunStatus {

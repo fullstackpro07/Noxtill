@@ -63,12 +63,15 @@ export function validateWorkflowDefinition(
     WORKFLOW_TRIGGER_CATALOG.find((trigger) => trigger.key === triggerKey)
       ?.fields ?? [],
   );
-  // Inbound webhooks also expose each top-level body value as `body_<key>` (see inboundBodyFields).
+  // Inbound webhooks also expose each top-level body value as `body_<key>` (see inboundBodyFields);
+  // sub-workflows expose the caller's scalar values as `parent_<key>` (see subWorkflowContext).
   const supportedFields = {
     has: (field: string) =>
       catalogFields.has(field) ||
       (triggerKey === WorkflowTriggerKey.inbound_webhook &&
-        /^body_[A-Za-z0-9_]{1,60}$/.test(field)),
+        /^body_[A-Za-z0-9_]{1,60}$/.test(field)) ||
+      (triggerKey === WorkflowTriggerKey.sub_workflow &&
+        /^parent_[A-Za-z0-9_]{1,80}$/.test(field)),
   };
 
   for (const [index, condition] of conditions.entries()) {
@@ -163,18 +166,23 @@ export function validateWorkflowDefinition(
               ? !supportsCustomerActions
               : action.type === 'map_data'
                 ? validateWorkflowDataMappings(action.mappings) !== null
-                : action.type === 'get_variable'
-                  ? typeof action.name !== 'string' ||
-                    !/^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(action.name) ||
-                    RESERVED_VARIABLE_NAMES.has(action.name) ||
-                    (action.scope !== 'business' && action.scope !== 'workflow')
-                  : action.type === 'generate_ai_draft'
-                    ? typeof action.prompt !== 'string' ||
-                      action.prompt.trim().length === 0 ||
-                      Array.from(action.prompt).length >
-                        MAX_WORKFLOW_AI_DRAFT_PROMPT_LENGTH
-                    : !MESSAGE_ACTION_TYPES.has(action.type) ||
-                      (ownerOnlyTrigger && action.type !== 'notify_owner'))
+                : action.type === 'run_workflow'
+                  ? typeof action.workflowId !== 'string' ||
+                    action.workflowId.trim().length === 0 ||
+                    action.workflowId.length > 191
+                  : action.type === 'get_variable'
+                    ? typeof action.name !== 'string' ||
+                      !/^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(action.name) ||
+                      RESERVED_VARIABLE_NAMES.has(action.name) ||
+                      (action.scope !== 'business' &&
+                        action.scope !== 'workflow')
+                    : action.type === 'generate_ai_draft'
+                      ? typeof action.prompt !== 'string' ||
+                        action.prompt.trim().length === 0 ||
+                        Array.from(action.prompt).length >
+                          MAX_WORKFLOW_AI_DRAFT_PROMPT_LENGTH
+                      : !MESSAGE_ACTION_TYPES.has(action.type) ||
+                        (ownerOnlyTrigger && action.type !== 'notify_owner'))
     ) {
       return action.type === 'wait'
         ? `Action ${index + 1} needs a wait from 1 to ${MAX_WORKFLOW_WAIT_MINUTES} minutes.`
@@ -182,12 +190,14 @@ export function validateWorkflowDefinition(
           ? `Action ${index + 1} needs a non-empty AI prompt of ${MAX_WORKFLOW_AI_DRAFT_PROMPT_LENGTH} characters or fewer.`
           : action.type === 'map_data'
             ? `Action ${index + 1} has an invalid data mapping configuration.`
-            : action.type === 'get_variable'
-              ? `Action ${index + 1} needs a valid variable name and business or workflow scope.`
-              : `Action ${index + 1} has an unsupported type.`;
+            : action.type === 'run_workflow'
+              ? `Action ${index + 1} needs a workflow to run.`
+              : action.type === 'get_variable'
+                ? `Action ${index + 1} needs a valid variable name and business or workflow scope.`
+                : `Action ${index + 1} has an unsupported type.`;
     }
 
-    if (action.type === 'wait') continue;
+    if (action.type === 'wait' || action.type === 'run_workflow') continue;
     if (action.type === 'map_data') {
       for (const mapping of action.mappings as Array<Record<string, unknown>>) {
         if (

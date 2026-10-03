@@ -92,7 +92,7 @@ export class WorkflowsService {
     };
   }
 
-  create(businessId: string, dto: CreateWorkflowDto) {
+  async create(businessId: string, dto: CreateWorkflowDto) {
     const graph = dto.graph as unknown as WorkflowGraph | undefined;
     const conditions = graph ? [] : (dto.conditions ?? []);
     const conditionMode = dto.conditionMode ?? WorkflowConditionMode.all;
@@ -119,6 +119,10 @@ export class WorkflowsService {
     }
     const conditionsJson = conditions as Prisma.InputJsonValue;
     const actionsJson = actions as Prisma.InputJsonValue;
+    await this.assertSubWorkflowTargets(
+      null,
+      actions as unknown as WorkflowAction[],
+    );
 
     return this.tenantPrisma.client.$transaction(async (tx) => {
       const workflow = await tx.workflow.create({
@@ -428,6 +432,10 @@ export class WorkflowsService {
               )
           : undefined;
 
+    await this.assertSubWorkflowTargets(
+      id,
+      nextActions as unknown as WorkflowAction[],
+    );
     await assertAutomationGovernance(this.tenantPrisma.client, {
       businessId: current.businessId,
       workflowId: id,
@@ -764,6 +772,12 @@ export class WorkflowsService {
         );
       }
 
+      await this.assertSubWorkflowTargets(
+        workflowId,
+        (source.graph
+          ? workflowGraphActions(source.graph as unknown as WorkflowGraph)
+          : source.actions) as unknown as WorkflowAction[],
+      );
       await assertAutomationGovernance(tx, {
         businessId: current.businessId,
         workflowId,
@@ -858,6 +872,45 @@ export class WorkflowsService {
       });
       return restored;
     });
+  }
+
+  /**
+   * "Run another workflow" steps must point at a different, non-archived workflow of this business
+   * that uses the sub-workflow trigger. Checked again at run time (it may be paused or archived later).
+   */
+  private async assertSubWorkflowTargets(
+    workflowId: string | null,
+    actions: WorkflowAction[],
+  ): Promise<void> {
+    const targetIds = [
+      ...new Set(
+        (Array.isArray(actions) ? actions : []).flatMap((action) =>
+          action?.type === 'run_workflow' ? [action.workflowId] : [],
+        ),
+      ),
+    ];
+    if (targetIds.length === 0) return;
+    if (workflowId && targetIds.includes(workflowId)) {
+      throw new AppException(
+        WORKFLOW_ERROR_CODES.INVALID_DEFINITION,
+        'A workflow cannot run itself.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const found = await this.tenantPrisma.client.workflow.count({
+      where: {
+        id: { in: targetIds },
+        triggerKey: WorkflowTriggerKey.sub_workflow,
+        archivedAt: null,
+      },
+    });
+    if (found !== targetIds.length) {
+      throw new AppException(
+        WORKFLOW_ERROR_CODES.INVALID_DEFINITION,
+        '"Run another workflow" must point to a workflow of this business that uses the "Run by another workflow" trigger.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   private validateDefinition(
@@ -1063,6 +1116,20 @@ export class WorkflowsService {
       }),
     );
     const variableReadByKey = new Map(variableReadEntries);
+    const subWorkflowIds = actions.flatMap((action) =>
+      action.type === 'run_workflow' ? [action.workflowId] : [],
+    );
+    const subWorkflows = subWorkflowIds.length
+      ? await this.tenantPrisma.client.workflow.findMany({
+          where: {
+            id: { in: subWorkflowIds },
+            triggerKey: WorkflowTriggerKey.sub_workflow,
+            archivedAt: null,
+          },
+          select: { id: true, name: true, active: true },
+        })
+      : [];
+    const subWorkflowById = new Map(subWorkflows.map((row) => [row.id, row]));
     const actionPreviews = actions.flatMap((action, position) => {
       const actionIndex = selectedActionIndexes[position];
       if (action.type === 'add_customer_tag' || action.type === 'wait')
@@ -1131,6 +1198,22 @@ export class WorkflowsService {
             actionIndex,
             body: `Dry run only: would load "${action.name}" into this run.`,
             error: null,
+          },
+        ];
+      }
+      if (action.type === 'run_workflow') {
+        const target = subWorkflowById.get(action.workflowId);
+        return [
+          {
+            actionIndex,
+            body: target
+              ? `Dry run only: would start "${target.name}"; it is not started.`
+              : 'Dry run only: no workflow is started.',
+            error: !target
+              ? 'The selected workflow was not found or no longer uses the "Run by another workflow" trigger.'
+              : target.active
+                ? null
+                : `"${target.name}" is paused, so a live run would skip this step.`,
           },
         ];
       }

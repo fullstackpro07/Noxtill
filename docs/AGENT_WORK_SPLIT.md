@@ -429,3 +429,20 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   disclosed as not available. Specs: governance 4/4, command center 4/4; full jest (--maxWorkers=2):
   331/332 — queue.integration (pre-existing).
 - goal #6 complete (6 items).
+- goal #7 (Claude) — remaining Automations gaps:
+- item 1 ✅ Inbound webhooks (97190bd). `inbound_webhook` trigger; per-workflow secret URL
+  (POST /public/workflow-hooks/:token, only the sha256 is stored, URL shown once, rotate/disable);
+  32 KB JSON-object bodies; dedupe by Idempotency-Key or body hash; every call logged
+  (accepted / duplicate / workflow_inactive / payload_rejected / failed) with replay. Top-level scalars
+  become `body_<key>` fields for conditions and templates. Screen /marketing/automations/webhooks.
+  HMAC signing and custom responses disclosed as not available. Spec 3/3.
+- item 2 ✅ Sub-workflows. `sub_workflow` trigger ("Run by another workflow") + `run_workflow` step.
+  Saved only when the target is a non-archived sub-workflow of the same business and not itself
+  (create, update, version restore); re-checked at run time (paused target → skipped, reported).
+  Child run gets the caller's scalar values as `parent_<key>`, its customer, parentRunId/WorkflowId and
+  callDepth; nesting stops at 3 levels; event id `subflow:<runId>:<step>` so a retried step reuses the
+  child run. The step starts the child and does not wait for it. Dry-run preview and approval
+  summaries added. Also fixed: approval summaries showed "Unsupported action (will not be executed)"
+  for AI-draft and get-variable steps, which do run (no stored approvals held that text). Migration
+  20261003000000 (3 enum MODIFYs). Specs: sub-workflows 5/5; full jest (--maxWorkers=2) 2110/2111 —
+  the one failure was the action-catalog list, updated and passing.

@@ -8,7 +8,7 @@ import {
   evaluateConditions,
   WorkflowCondition,
 } from './workflow-condition.util';
-import { WorkflowAction } from './workflow-action.util';
+import { MAX_SUB_WORKFLOW_DEPTH, WorkflowAction } from './workflow-action.util';
 import {
   buildWorkflowApprovalSnapshot,
   hashWorkflowApprovalBinding,
@@ -25,7 +25,11 @@ import {
   previewWorkflowDataMapping,
   validateWorkflowDataMappings,
 } from './workflow-data-mapper.util';
-import { buildTriggerContext, TriggerEvent } from './workflow-context.util';
+import {
+  buildTriggerContext,
+  subWorkflowContext,
+  TriggerEvent,
+} from './workflow-context.util';
 import { mapActivityEventToTriggerKey } from './workflow-trigger-map.util';
 import {
   parseWorkflowGraphExecutionPlan,
@@ -1187,6 +1191,98 @@ export class WorkflowTriggerService {
     });
   }
 
+  /**
+   * "Run another workflow": starts an active sub-workflow of the same business with the caller's
+   * values, at most MAX_SUB_WORKFLOW_DEPTH levels deep. The event id is fixed per calling run and
+   * step, so a retried step never starts a second child run. The child runs on its own; this step
+   * does not wait for it to finish.
+   */
+  private async runSubWorkflow(
+    businessId: string,
+    targetId: string,
+    context: Record<string, unknown>,
+    runId: string,
+    callerWorkflowId: string,
+    actionIndex: number,
+  ): Promise<Record<string, unknown>> {
+    const fail = (error: string) => ({
+      actionIndex,
+      type: 'run_workflow',
+      completed: false,
+      retryable: false,
+      error,
+    });
+    const depth =
+      typeof context.callDepth === 'number' &&
+      Number.isInteger(context.callDepth)
+        ? context.callDepth
+        : 0;
+    if (depth >= MAX_SUB_WORKFLOW_DEPTH) {
+      return fail(
+        `Workflows can call other workflows at most ${MAX_SUB_WORKFLOW_DEPTH} levels deep; nothing was started.`,
+      );
+    }
+    if (typeof targetId !== 'string' || targetId === callerWorkflowId) {
+      return fail('A workflow cannot run itself.');
+    }
+    const target = await this.prisma.workflow.findFirst({
+      where: {
+        id: targetId,
+        businessId,
+        triggerKey: WorkflowTriggerKey.sub_workflow,
+        archivedAt: null,
+      },
+    });
+    if (!target) {
+      return fail(
+        'The workflow to run was not found or no longer uses the "Run by another workflow" trigger.',
+      );
+    }
+    if (!target.active) {
+      return {
+        actionIndex,
+        type: 'run_workflow',
+        skipped: true,
+        reason: `"${target.name}" is paused, so it was not started.`,
+        childWorkflowId: target.id,
+      };
+    }
+    const eventId = `subflow:${runId}:${actionIndex}`;
+    const childContext = subWorkflowContext(context, {
+      eventId,
+      parentRunId: runId,
+      parentWorkflowId: callerWorkflowId,
+      callDepth: depth + 1,
+    });
+    try {
+      await this.runWorkflow(businessId, target, childContext, eventId);
+    } catch (error) {
+      this.logger.warn(
+        `Sub-workflow ${target.id} failed to start from run ${runId}: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+      return fail('The other workflow could not be started.');
+    }
+    const child = await this.prisma.workflowRun.findFirst({
+      where: { businessId, workflowId: target.id, triggerEventId: eventId },
+      select: { id: true, status: true },
+    });
+    return {
+      actionIndex,
+      type: 'run_workflow',
+      completed: Boolean(child),
+      ...(child
+        ? {}
+        : {
+            retryable: false,
+            error: 'No run was recorded for the other workflow.',
+          }),
+      childWorkflowId: target.id,
+      childWorkflowName: target.name,
+      childRunId: child?.id ?? null,
+      childRunStatus: child?.status ?? null,
+    };
+  }
+
   private async executeActions(
     businessId: string,
     actions: WorkflowAction[],
@@ -1255,7 +1351,8 @@ export class WorkflowTriggerService {
           actionType !== 'wait' &&
           actionType !== 'request_approval' &&
           actionType !== 'map_data' &&
-          actionType !== 'get_variable')
+          actionType !== 'get_variable' &&
+          actionType !== 'run_workflow')
       ) {
         results.push({
           actionIndex,
@@ -1444,6 +1541,20 @@ export class WorkflowTriggerService {
           variableName: action.name,
           valueType: variable.valueType,
         });
+        continue;
+      }
+
+      if (action.type === 'run_workflow') {
+        results.push(
+          await this.runSubWorkflow(
+            businessId,
+            action.workflowId,
+            context,
+            runId,
+            run.workflowId,
+            actionIndex,
+          ),
+        );
         continue;
       }
 

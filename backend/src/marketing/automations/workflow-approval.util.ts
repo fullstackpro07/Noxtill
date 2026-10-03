@@ -68,6 +68,24 @@ export function buildWorkflowApprovalSnapshot(
         summary: `Map ${action.mappings.length} field(s) into workflow run data`,
       };
     }
+    if (action.type === 'get_variable') {
+      return {
+        type: action.type,
+        summary: `Read ${action.scope} variable “${action.name}”`,
+      };
+    }
+    if (action.type === 'generate_ai_draft') {
+      return {
+        type: action.type,
+        summary: `Generate an AI draft: ${resolveText(action.prompt, binding.context)}`,
+      };
+    }
+    if (action.type === 'run_workflow') {
+      return {
+        type: action.type,
+        summary: `Run another workflow (${action.workflowId})`,
+      };
+    }
     if (action.type === 'request_approval') {
       return {
         type: action.type,
