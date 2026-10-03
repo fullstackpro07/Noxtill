@@ -482,3 +482,8 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   Claude's review fix: skipped runs (conditions not met / already blocked) no longer use the quota;
   "calendar month" stated as UTC; idempotency spec mock updated. Specs: retention, run limit (3),
   command center; full jest 2120/2121 before the mock fix, which then passed.
+- QA (Codex, browser) ✅ run limit + retention: capped triggers saved as Skipped with the limit reason,
+  Command Center count excludes skipped runs; retention 30 days saved, Governance "No cleanup has run
+  yet"; both settings cleared afterwards. Redis now runs as a user LaunchAgent
+  (~/Library/LaunchAgents/com.noxtill.redis.plist, 127.0.0.1 only, starts at login) — dev machine only;
+  production still needs managed Redis.
