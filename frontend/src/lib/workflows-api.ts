@@ -26,7 +26,8 @@ export type WorkflowTriggerKey =
   | "commerce_rfq_awarded"
   | "commerce_supplier_claim_created"
   | "commerce_supplier_claim_settled"
-  | "scheduled";
+  | "scheduled"
+  | "inbound_webhook";
 
 export interface WorkflowTriggerCatalogEntry {
   key: WorkflowTriggerKey;

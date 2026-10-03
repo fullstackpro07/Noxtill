@@ -149,6 +149,8 @@ enum WorkflowTriggerKey {
   commerce_supplier_claim_created
   commerce_supplier_claim_settled
   scheduled
+  /// Fired by an external system calling the workflow's own secret webhook URL.
+  inbound_webhook
 }
 
 enum WorkflowRunStatus {
@@ -912,6 +914,8 @@ model Business {
   commerceAgentToolRuns        CommerceAgentToolRun[]
   commerceReconciliationRuns   CommerceReconciliationRun[]
   commerceReconciliationItems  CommerceReconciliationItem[]
+  workflowEndpoints            WorkflowEndpoint[]
+  workflowEndpointDeliveries   WorkflowEndpointDelivery[]
   seoAuditRuns                 SeoAuditRun[]
   seoContentRevisions          SeoContentRevision[]
   seoContentRevisionAudits     SeoContentRevisionAudit[]
@@ -2840,6 +2844,7 @@ model Workflow {
   versions    WorkflowVersion[]
   approvals   WorkflowApproval[]
   deadLetters WorkflowDeadLetter[]
+  endpoint    WorkflowEndpoint?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -7602,4 +7607,49 @@ model CommerceReconciliationItem {
   @@index([businessId, status, createdAt], map: "commerce_recon_items_business_status_created_idx")
   @@index([runId], map: "commerce_recon_items_run_idx")
   @@map("commerce_reconciliation_items")
+}
+
+/// Inbound webhook endpoint for one workflow (Automations spec area 9). The URL token is shown once;
+/// only its SHA-256 hash is stored. Rotating replaces the hash, so the old URL stops working.
+model WorkflowEndpoint {
+  id             String                     @id @default(uuid())
+  businessId     String                     @map("business_id")
+  business       Business                   @relation(fields: [businessId], references: [id])
+  workflowId     String                     @unique @map("workflow_id")
+  workflow       Workflow                   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tokenHash      String                     @unique @map("token_hash") @db.Char(64)
+  /// Last 4 characters of the token, to recognise which URL is in use.
+  tokenHint      String                     @map("token_hint") @db.VarChar(8)
+  enabled        Boolean                    @default(true)
+  rotatedAt      DateTime?                  @map("rotated_at")
+  lastReceivedAt DateTime?                  @map("last_received_at")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+  deliveries     WorkflowEndpointDelivery[]
+
+  @@index([businessId])
+  @@map("workflow_endpoints")
+}
+
+/// One call to an inbound webhook: what arrived, whether it was accepted, and the run it started.
+model WorkflowEndpointDelivery {
+  id           String           @id @default(uuid())
+  businessId   String           @map("business_id")
+  business     Business         @relation(fields: [businessId], references: [id])
+  endpointId   String           @map("endpoint_id")
+  endpoint     WorkflowEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  /// accepted | duplicate | workflow_inactive | payload_rejected | failed
+  status       String           @db.VarChar(24)
+  /// Caller's Idempotency-Key header, else a hash of the body — repeats are not run twice.
+  dedupeKey    String           @map("dedupe_key") @db.VarChar(191)
+  payload      Json?
+  payloadBytes Int              @map("payload_bytes")
+  runId        String?          @map("run_id")
+  error        String?          @db.Text
+  replayOfId   String?          @map("replay_of_id")
+  receivedAt   DateTime         @default(now()) @map("received_at")
+
+  @@index([businessId, endpointId, receivedAt], map: "workflow_endpoint_deliveries_biz_endpoint_received_idx")
+  @@index([endpointId, dedupeKey], map: "workflow_endpoint_deliveries_endpoint_dedupe_idx")
+  @@map("workflow_endpoint_deliveries")
 }

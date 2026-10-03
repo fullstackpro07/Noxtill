@@ -4,6 +4,8 @@ export interface TriggerEvent {
   eventId?: string;
   description: string;
   scheduledAt?: string;
+  /** Inbound webhook JSON body (top-level scalar values become `body_<key>` fields). */
+  body?: Record<string, unknown>;
   entityType?: string | null;
   entityId?: string | null;
   amount?: number | null;
@@ -220,6 +222,12 @@ async function buildBaseTriggerContext(
       return {
         ...base,
         scheduledAt: event.scheduledAt,
+      };
+    case WorkflowTriggerKey.inbound_webhook:
+      return {
+        ...base,
+        receivedAt: event.scheduledAt,
+        ...inboundBodyFields(event.body),
       };
     case WorkflowTriggerKey.sale: {
       const order = event.entityId
@@ -522,4 +530,22 @@ async function buildBaseTriggerContext(
     default:
       return base;
   }
+}
+
+/** Top-level scalar values of an inbound webhook body as `body_<key>` context fields (max 50). */
+export function inboundBodyFields(
+  body: Record<string, unknown> | undefined,
+): Record<string, string | number | boolean> {
+  const fields: Record<string, string | number | boolean> = {};
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return fields;
+  for (const [key, value] of Object.entries(body).slice(0, 50)) {
+    const safe = key.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 60);
+    if (!safe) continue;
+    if (typeof value === 'string')
+      fields[`body_${safe}`] = value.slice(0, 1000);
+    else if (typeof value === 'number' && Number.isFinite(value))
+      fields[`body_${safe}`] = value;
+    else if (typeof value === 'boolean') fields[`body_${safe}`] = value;
+  }
+  return fields;
 }

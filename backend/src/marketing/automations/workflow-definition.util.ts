@@ -59,10 +59,17 @@ export function validateWorkflowDefinition(
     return 'Workflow conditions must be a list.';
   }
 
-  const supportedFields = new Set(
+  const catalogFields = new Set(
     WORKFLOW_TRIGGER_CATALOG.find((trigger) => trigger.key === triggerKey)
       ?.fields ?? [],
   );
+  // Inbound webhooks also expose each top-level body value as `body_<key>` (see inboundBodyFields).
+  const supportedFields = {
+    has: (field: string) =>
+      catalogFields.has(field) ||
+      (triggerKey === WorkflowTriggerKey.inbound_webhook &&
+        /^body_[A-Za-z0-9_]{1,60}$/.test(field)),
+  };
 
   for (const [index, condition] of conditions.entries()) {
     if (!isRecord(condition)) {

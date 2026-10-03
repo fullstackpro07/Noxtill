@@ -167,6 +167,47 @@ export class WorkflowTriggerService {
     }
   }
 
+  /**
+   * Runs an active inbound-webhook workflow for one accepted delivery. The delivery id is the event
+   * id, so a retried delivery can never start a second run. Returns the run id (null when skipped).
+   */
+  async runInbound(
+    businessId: string,
+    workflowId: string,
+    deliveryId: string,
+    body: Record<string, unknown> | undefined,
+    receivedAt: Date,
+  ): Promise<string | null> {
+    const workflow = await this.prisma.workflow.findFirst({
+      where: {
+        id: workflowId,
+        businessId,
+        triggerKey: WorkflowTriggerKey.inbound_webhook,
+        active: true,
+        archivedAt: null,
+      },
+    });
+    if (!workflow) return null;
+    const eventId = `workflow-webhook:${deliveryId}`;
+    const context = await buildTriggerContext(
+      this.prisma,
+      businessId,
+      WorkflowTriggerKey.inbound_webhook,
+      {
+        eventId,
+        description: 'Inbound webhook call',
+        scheduledAt: receivedAt.toISOString(),
+        body,
+      },
+    );
+    await this.runWorkflow(businessId, workflow, context, eventId);
+    const run = await this.prisma.workflowRun.findFirst({
+      where: { businessId, workflowId, triggerEventId: eventId },
+      select: { id: true },
+    });
+    return run?.id ?? null;
+  }
+
   /** Runs one persisted interval occurrence using a deterministic event ID for safe recovery. */
   async runScheduled(
     businessId: string,

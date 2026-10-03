@@ -22,6 +22,11 @@ import { WorkflowDeadLettersController } from './workflow-dead-letters.controlle
 import { WorkflowDeadLettersService } from './workflow-dead-letters.service';
 import { AutomationCommandCenterController } from './automation-command-center.controller';
 import { AutomationCommandCenterService } from './automation-command-center.service';
+import {
+  WorkflowEndpointsController,
+  WorkflowHookReceiverController,
+} from './workflow-endpoints.controller';
+import { WorkflowEndpointsService } from './workflow-endpoints.service';
 
 @Module({
   imports: [
@@ -36,6 +41,8 @@ import { AutomationCommandCenterService } from './automation-command-center.serv
   controllers: [
     // Before WorkflowsController so its fixed path isn't captured by `workflows/:id`.
     AutomationCommandCenterController,
+    WorkflowEndpointsController,
+    WorkflowHookReceiverController,
     WorkflowsController,
     WorkflowVariablesController,
     WorkflowDeadLettersController,
@@ -48,6 +55,7 @@ import { AutomationCommandCenterService } from './automation-command-center.serv
     WorkflowVariablesService,
     WorkflowDeadLettersService,
     AutomationCommandCenterService,
+    WorkflowEndpointsService,
     CreditOverdueScanScheduler,
     CreditOverdueScanProcessor,
     WorkflowScheduleScheduler,

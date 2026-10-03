@@ -159,4 +159,16 @@ describe('Automation governance in WorkflowsService (MySQL)', () => {
     });
     await setPolicies({});
   });
+
+  it('accepts the inbound webhook trigger in the workflow editor', async () => {
+    const hook = await service.create(businessId, {
+      name: 'From Zapier',
+      triggerKey: WorkflowTriggerKey.inbound_webhook,
+      conditions: [{ field: 'body_status', operator: 'eq', value: 'paid' }],
+      actions: [{ type: 'notify_owner', messageBody: 'Webhook received' }],
+    });
+    await expect(
+      service.update(hook.id, { active: true }),
+    ).resolves.toMatchObject({ active: true });
+  });
 });
