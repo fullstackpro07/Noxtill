@@ -670,7 +670,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Radar,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
   },
   {
     key: "business-simulator",

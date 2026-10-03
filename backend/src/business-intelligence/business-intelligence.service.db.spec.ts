@@ -19,7 +19,7 @@ class FakeClsService {
   }
 }
 
-describe('BusinessIntelligenceService overview (MySQL)', () => {
+describe('BusinessIntelligenceService (MySQL)', () => {
   let prisma: PrismaService;
   let service: BusinessIntelligenceService;
   let businessId: string;
@@ -85,6 +85,11 @@ describe('BusinessIntelligenceService overview (MySQL)', () => {
         businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
       },
     });
+    await prisma.productOpportunity.deleteMany({
+      where: {
+        businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
+      },
+    });
     await prisma.order.deleteMany({
       where: {
         businessId: { in: [businessId, otherBusinessId, emptyBusinessId] },
@@ -141,17 +146,73 @@ describe('BusinessIntelligenceService overview (MySQL)', () => {
         sourceFigure: 'Should not appear.',
       },
     });
+    await prisma.aiInsight.create({
+      data: {
+        businessId,
+        category: 'marketing',
+        observation: 'A recorded marketing signal.',
+        sourceFigure: 'Recorded campaign comparison.',
+        estimatedImpact: 35,
+      },
+    });
+    await prisma.aiInsight.create({
+      data: {
+        businessId,
+        category: 'stock',
+        observation: 'A low-stock signal needs review.',
+        sourceFigure: '2 products below the recorded stock threshold.',
+      },
+    });
+    await prisma.productOpportunity.create({
+      data: {
+        businessId,
+        title: 'QA radar candidate',
+        source: 'QA integration record',
+        status: 'discovered',
+        confidence: 80,
+        sourceFreshAt: new Date(),
+        evidence: 'Observed source evidence',
+      },
+    });
+    await prisma.productOpportunity.create({
+      data: {
+        businessId: otherBusinessId,
+        title: 'Other tenant candidate',
+        source: 'QA integration record',
+        status: 'discovered',
+        confidence: 99,
+      },
+    });
 
     const result = await service.overview(businessId);
     const todayRevenue = result.metrics.find(
       (metric) => metric.key === 'revenue_today',
     );
     expect(todayRevenue?.value).toMatchObject({ revenue: 125, orders: 1 });
-    expect(result.insights).toHaveLength(1);
-    expect(result.insights[0].sourceFigure).toContain(
-      'Revenue source evidence',
+    expect(result.insights).toHaveLength(3);
+    const salesInsight = result.insights.find(
+      (insight) => insight.category === 'sales',
     );
-    expect(result.insights[0].nextDecisionHref).toBe('/profit');
+    expect(salesInsight?.sourceFigure).toContain('Revenue source evidence');
+    expect(salesInsight?.nextDecisionHref).toBe('/profit');
+
+    const radar = await service.opportunityRadar(businessId);
+    expect(radar.recordedInsights[0]).toMatchObject({
+      theme: 'growth',
+      sourceRecordedImpact: 35,
+      sourceHref: '/marketing',
+      rank: 1,
+    });
+    expect(radar.commerceCandidates).toHaveLength(1);
+    expect(radar.commerceCandidates[0]).toMatchObject({
+      title: 'QA radar candidate',
+      confidence: 80,
+      sourceHref: '/autonomous-commerce/product-radar',
+    });
+    expect(radar.themeCounts.growth).toBe(3);
+    expect(radar.themeCounts.savings).toBe(0);
+    expect(radar.themeCounts.unclassified).toBe(1);
+    expect(radar.disclosure).toContain('not a forecast');
   });
 
   it('saves grounded answers with real sources and refuses an unsourced number', async () => {

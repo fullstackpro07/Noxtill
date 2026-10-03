@@ -22,6 +22,12 @@ export class BusinessIntelligenceController {
     return this.service.listBrainAnswers(user.businessId);
   }
 
+  @Get('opportunity-radar')
+  @RequireCapability(CAPABILITIES.PROFIT_VIEW)
+  opportunityRadar(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.opportunityRadar(user.businessId);
+  }
+
   @Post('brain/ask')
   @RequireCapability(CAPABILITIES.PROFIT_VIEW)
   ask(

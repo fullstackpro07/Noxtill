@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AiInsightCategory } from '@prisma/client';
+import { AiInsightCategory, ProductOpportunityStatus } from '@prisma/client';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -20,6 +20,12 @@ const INSIGHT_DESTINATIONS: Partial<Record<AiInsightCategory, string>> = {
   customers: '/customers',
   marketing: '/marketing',
   credit: '/credit',
+};
+
+const INSIGHT_THEMES: Partial<Record<AiInsightCategory, string>> = {
+  sales: 'growth',
+  marketing: 'growth',
+  customers: 'retention',
 };
 
 @Injectable()
@@ -93,6 +99,142 @@ export class BusinessIntelligenceService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 20,
     });
+  }
+
+  async opportunityRadar(businessId: string) {
+    const [currencyBusiness, insights, commerceRecords] = await Promise.all([
+      this.tenantPrisma.client.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: { currency: true },
+      }),
+      this.tenantPrisma.client.aiInsight.findMany({
+        where: { businessId, status: 'new' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          category: true,
+          observation: true,
+          sourceFigure: true,
+          estimatedImpact: true,
+          createdAt: true,
+        },
+      }),
+      this.tenantPrisma.client.productOpportunity.findMany({
+        where: {
+          businessId,
+          status: {
+            in: [
+              ProductOpportunityStatus.discovered,
+              ProductOpportunityStatus.saved,
+              ProductOpportunityStatus.watching,
+              ProductOpportunityStatus.validation_requested,
+            ],
+          },
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          title: true,
+          source: true,
+          category: true,
+          market: true,
+          demandSignal: true,
+          competitionScore: true,
+          trendVelocity: true,
+          storeFitScore: true,
+          risk: true,
+          status: true,
+          evidence: true,
+          confidence: true,
+          sourceFreshAt: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
+
+    const insightRows = insights
+      .map((insight) => ({
+        id: insight.id,
+        theme: INSIGHT_THEMES[insight.category] ?? 'unclassified',
+        sourceCategory: insight.category,
+        title: insight.observation,
+        evidence: insight.sourceFigure,
+        sourceRecordedImpact:
+          insight.estimatedImpact === null
+            ? null
+            : Number(insight.estimatedImpact),
+        createdAt: insight.createdAt,
+        sourceHref: INSIGHT_DESTINATIONS[insight.category] ?? null,
+      }))
+      .sort((a, b) => {
+        if (a.sourceRecordedImpact === null && b.sourceRecordedImpact !== null)
+          return 1;
+        if (a.sourceRecordedImpact !== null && b.sourceRecordedImpact === null)
+          return -1;
+        if (
+          a.sourceRecordedImpact !== null &&
+          b.sourceRecordedImpact !== null &&
+          a.sourceRecordedImpact !== b.sourceRecordedImpact
+        ) {
+          return b.sourceRecordedImpact - a.sourceRecordedImpact;
+        }
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      })
+      .map((row, index) => ({
+        ...row,
+        rank: index + 1,
+        rankBasis:
+          row.sourceRecordedImpact === null
+            ? 'No source-recorded impact; ordered by recency.'
+            : 'Ordered by the source-recorded impact amount, then recency. This is not projected upside.',
+      }));
+
+    const commerceRows = commerceRecords
+      .sort((a, b) => {
+        if (a.confidence === null && b.confidence !== null) return 1;
+        if (a.confidence !== null && b.confidence === null) return -1;
+        if (
+          a.confidence !== null &&
+          b.confidence !== null &&
+          a.confidence !== b.confidence
+        )
+          return b.confidence - a.confidence;
+        const aFresh = a.sourceFreshAt?.getTime() ?? 0;
+        const bFresh = b.sourceFreshAt?.getTime() ?? 0;
+        return bFresh - aFresh || b.updatedAt.getTime() - a.updatedAt.getTime();
+      })
+      .map((record, index) => ({
+        ...record,
+        rank: index + 1,
+        rankBasis:
+          record.confidence !== null
+            ? 'Source-recorded confidence; ties are ordered by source freshness.'
+            : record.sourceFreshAt
+              ? 'No source confidence; ordered by source freshness.'
+              : 'Not ranked by evidence: source confidence and freshness are not recorded.',
+        sourceHref: '/autonomous-commerce/product-radar',
+      }));
+
+    const themeCounts = {
+      growth:
+        insightRows.filter((row) => row.theme === 'growth').length +
+        commerceRows.length,
+      savings: insightRows.filter((row) => row.theme === 'savings').length,
+      retention: insightRows.filter((row) => row.theme === 'retention').length,
+      unclassified: insightRows.filter((row) => row.theme === 'unclassified')
+        .length,
+    };
+
+    return {
+      currency: currencyBusiness.currency,
+      recordedInsights: insightRows,
+      commerceCandidates: commerceRows,
+      themeCounts,
+      disclosure:
+        'This view reads open AI Insights and Product Radar records. Sales/Marketing insights are grouped as growth signals and customer insights as retention signals; stock and credit records remain unclassified because they do not establish a savings opportunity. Savings is shown only when a source records an explicit savings opportunity. Insight ranking uses only its source-recorded impact amount and recency; Commerce candidates use only source-recorded confidence and freshness. Impact is not a forecast or promised uplift. Missing source evidence, impact, confidence, or freshness is shown as unavailable.',
+    };
   }
 
   async askBusinessBrain(

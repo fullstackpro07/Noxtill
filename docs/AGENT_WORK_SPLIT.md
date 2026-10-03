@@ -506,3 +506,13 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   tenant isolation, and the FK. Hand-written `bi_brain_answers` migration was applied and its FK
   verified. Backend/frontend `tsc`, touched-file eslint, focused MySQL spec (2/2), and full backend
   Jest pass (338 suites / 2,123 tests); browser QA in the QA Test Business covered provider failure.
+- Screen 3 ✅ Opportunity Radar (`/opportunity-radar`). Reads canonical open AI Insights and Product
+  Radar candidates; ranks each source group only by its own recorded impact or confidence/freshness,
+  with no cross-source score or projected uplift. Growth/retention themes use source categories;
+  stock/credit remain unclassified because they do not establish savings. The explicit savings empty
+  state says no source-backed savings opportunity is recorded. Source-module handoffs are read-only.
+  Real-MySQL spec verifies ranking, source evidence and tenant isolation (2/2); no migration.
+  Backend/frontend `tsc` and touched-file eslint passed. Full Jest (`--maxWorkers=2`) had 337/338
+  suites pass; the unrelated Billing suite hit a 5-second `beforeAll` timeout and teardown FK error,
+  then passed alone (11/11). Browser QA in the QA Test Business showed real insight rows, theme
+  filtering and the honest no-savings state.
