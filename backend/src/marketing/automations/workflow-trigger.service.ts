@@ -14,6 +14,7 @@ import type {
   AnthropicMessage,
 } from '../../ai/claude.client';
 import {
+  aiProviderErrorReason,
   isWorkflowAgentTool,
   MAX_WORKFLOW_AGENT_ANSWER_LENGTH,
   MAX_WORKFLOW_AGENT_OUTPUT_TOKENS,
@@ -1311,7 +1312,8 @@ export class WorkflowTriggerService {
           ? 'The AI agent is not configured on the server.'
           : error instanceof AppException
             ? error.message
-            : 'The AI agent failed. Check the AI provider configuration and try again.',
+            : (aiProviderErrorReason(error) ??
+              'The AI agent failed. Check the AI provider configuration and try again.'),
         { toolCalls, inputTokens, outputTokens },
       );
     }
@@ -1940,7 +1942,10 @@ export class WorkflowTriggerService {
               error instanceof Error &&
               error.message === 'ANTHROPIC_API_KEY is not configured'
                 ? 'AI draft generation is not configured on the server.'
-                : 'AI draft generation failed. Check the AI provider configuration and try again.',
+                : error instanceof AppException
+                  ? error.message
+                  : (aiProviderErrorReason(error) ??
+                    'AI draft generation failed. Check the AI provider configuration and try again.'),
           });
         }
       } else if (action.type === 'send_customer_message') {

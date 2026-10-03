@@ -7,6 +7,7 @@ import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service'
 import type { SendGateService } from '../../messaging/send-gate.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AutomationCommandCenterService } from './automation-command-center.service';
+import { aiProviderErrorReason } from './workflow-agent.util';
 import { validateWorkflowDefinition } from './workflow-definition.util';
 import { WorkflowTriggerService } from './workflow-trigger.service';
 
@@ -256,5 +257,34 @@ describe('AI agent step (MySQL)', () => {
     expect(result).toMatchObject({ completed: false });
     expect(String(result.error)).toMatch(/did not finish within 2/);
     expect(context.agentAnswer).toBeUndefined();
+  });
+});
+
+describe('aiProviderErrorReason', () => {
+  const providerError = (status: number, type: string, message: string) => ({
+    response: { status, data: { error: { type, message } } },
+  });
+
+  it('names the real provider problem instead of a generic failure', () => {
+    expect(
+      aiProviderErrorReason(
+        providerError(
+          400,
+          'invalid_request_error',
+          'Your credit balance is too low to access the Anthropic API.',
+        ),
+      ),
+    ).toMatch(/out of credit/);
+    expect(
+      aiProviderErrorReason(
+        providerError(404, 'not_found_error', 'model: claude-x not found'),
+      ),
+    ).toMatch(/model is not available/);
+    expect(
+      aiProviderErrorReason(
+        providerError(401, 'authentication_error', 'invalid x-api-key'),
+      ),
+    ).toMatch(/key was rejected/);
+    expect(aiProviderErrorReason(new Error('socket hang up'))).toBeNull();
   });
 });

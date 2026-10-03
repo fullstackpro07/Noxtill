@@ -161,3 +161,44 @@ export async function runWorkflowAgentTool(
   }
   return JSON.stringify(result).slice(0, MAX_TOOL_RESULT_LENGTH);
 }
+
+/**
+ * Plain reason for an Anthropic API failure (axios error with the provider's error body), so a run
+ * says why it failed instead of a generic message. Null when the error isn't a recognised provider
+ * error. Never includes the request or key.
+ */
+export function aiProviderErrorReason(error: unknown): string | null {
+  const response = (
+    error as {
+      response?: {
+        status?: number;
+        data?: { error?: { type?: unknown; message?: unknown } };
+      };
+    } | null
+  )?.response;
+  if (!response) return null;
+  const type =
+    typeof response.data?.error?.type === 'string'
+      ? response.data.error.type
+      : '';
+  const message =
+    typeof response.data?.error?.message === 'string'
+      ? response.data.error.message.toLowerCase()
+      : '';
+  if (message.includes('credit balance')) {
+    return 'The AI provider account is out of credit. Add credit in the Anthropic console, then retry.';
+  }
+  if (type === 'not_found_error' && message.includes('model')) {
+    return "The server's AI model is not available from the provider.";
+  }
+  if (response.status === 401 || type === 'authentication_error') {
+    return "The server's AI provider key was rejected.";
+  }
+  if (response.status === 429 || type === 'rate_limit_error') {
+    return 'The AI provider is limiting requests right now; try again shortly.';
+  }
+  if (response.status === 529 || type === 'overloaded_error') {
+    return 'The AI provider is overloaded right now; try again shortly.';
+  }
+  return null;
+}
