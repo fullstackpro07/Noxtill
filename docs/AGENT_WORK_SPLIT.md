@@ -472,3 +472,13 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   from. Migration 20261003100000 (enum + column + index). Checklist corrected: the code uses Resend,
   not Postmark. Spec: email campaigns 8/8; full jest 2113/2116 — ad-stats-sync flaked under load, 7/7
   alone.
+- Codex built, Claude reviewed and finished ✅ Run-history retention + monthly run limit (2026-10-03).
+  Policies `automations.runRetentionDays` (30–3650, null = keep forever) and
+  `automations.maxRunsPerMonth` (null = no limit), Settings rows, shown on Governance and Command
+  Center. Nightly job (03:30 UTC, `workflow-retention` queue) deletes only finished runs older than the
+  cutoff — never running/waiting runs, runs with a pending approval or an open Recovery item — and
+  records each pass (`workflow_retention_cleanups`, migration 20261003110000, FK verified). Run limit is
+  checked in a serializable transaction; a blocked trigger is saved as a skipped run with the reason.
+  Claude's review fix: skipped runs (conditions not met / already blocked) no longer use the quota;
+  "calendar month" stated as UTC; idempotency spec mock updated. Specs: retention, run limit (3),
+  command center; full jest 2120/2121 before the mock fix, which then passed.

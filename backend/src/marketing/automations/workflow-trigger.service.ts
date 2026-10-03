@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendGateService } from '../../messaging/send-gate.service';
 import { AppException } from '../../common/filters/app.exception';
+import { resolvePolicies } from '../../common/policies/policies.service';
 import { AiInfraService } from '../../ai/ai-infra.service';
 import {
   evaluateConditions,
@@ -91,6 +92,15 @@ function isPrismaNotFoundError(error: unknown): boolean {
     error !== null &&
     'code' in error &&
     (error as { code?: unknown }).code === 'P2025'
+  );
+}
+
+function isTransactionConflictError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'P2034'
   );
 }
 
@@ -289,32 +299,15 @@ export class WorkflowTriggerService {
     const executionPlan = graph
       ? resolveWorkflowGraphPath(graph, context)
       : null;
-    let run: { id: string };
+    let run: { id: string; skippedByMonthlyLimit: boolean };
     try {
-      run = await this.prisma.workflowRun.create({
-        data: {
-          workflowId: workflow.id,
-          businessId,
-          workflowVersion: workflow.version,
-          triggerEventId: eventId ?? null,
-          status: WorkflowRunStatus.running,
-          context: context as Prisma.InputJsonValue,
-          ...(executionPlan
-            ? {
-                executionPlan:
-                  executionPlan as unknown as Prisma.InputJsonValue,
-              }
-            : {}),
-          attempts: {
-            create: {
-              businessId,
-              attemptNumber: 1,
-              status: WorkflowRunStatus.running,
-            },
-          },
-        },
-        select: { id: true },
-      });
+      run = await this.createWorkflowRun(
+        businessId,
+        workflow,
+        context,
+        eventId,
+        executionPlan,
+      );
     } catch (error) {
       if (eventId && isUniqueConstraintError(error)) {
         this.logger.debug(
@@ -324,6 +317,7 @@ export class WorkflowTriggerService {
       }
       throw error;
     }
+    if (run.skippedByMonthlyLimit) return;
 
     const conditions = (workflow.conditions ??
       []) as unknown as WorkflowCondition[];
@@ -423,6 +417,118 @@ export class WorkflowTriggerService {
         message,
       );
     }
+  }
+
+  /** Atomically checks the monthly quota and records either a running or visible skipped run. */
+  private async createWorkflowRun(
+    businessId: string,
+    workflow: {
+      id: string;
+      version: number;
+    },
+    context: Record<string, unknown>,
+    eventId: string | undefined,
+    executionPlan: ReturnType<typeof resolveWorkflowGraphPath> | null,
+  ): Promise<{ id: string; skippedByMonthlyLimit: boolean }> {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { policies: true },
+    });
+    const limit = resolvePolicies(business).num('automations.maxRunsPerMonth');
+    const now = new Date();
+    const baseData = {
+      workflowId: workflow.id,
+      businessId,
+      workflowVersion: workflow.version,
+      triggerEventId: eventId ?? null,
+      context: context as Prisma.InputJsonValue,
+      ...(executionPlan
+        ? {
+            executionPlan: executionPlan as unknown as Prisma.InputJsonValue,
+          }
+        : {}),
+    };
+
+    if (limit === null) {
+      const run = await this.prisma.workflowRun.create({
+        data: {
+          ...baseData,
+          status: WorkflowRunStatus.running,
+          attempts: {
+            create: {
+              businessId,
+              attemptNumber: 1,
+              status: WorkflowRunStatus.running,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return { id: run.id, skippedByMonthlyLimit: false };
+    }
+
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const nextMonthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
+    const reason = `Monthly workflow run limit reached (${limit}). Raise it in Settings → Automations.`;
+
+    // Serializable isolation prevents two concurrent triggers from both seeing the final slot as free.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            // Skipped runs (conditions not met, or already over the limit) don't use the quota.
+            const monthlyRuns = await tx.workflowRun.count({
+              where: {
+                businessId,
+                createdAt: { gte: monthStart, lt: nextMonthStart },
+                status: { not: WorkflowRunStatus.skipped },
+              },
+            });
+            const blocked = monthlyRuns >= limit;
+            const result = blocked
+              ? ([
+                  {
+                    type: 'monthly_run_limit',
+                    skipped: true,
+                    reason,
+                  },
+                ] as Prisma.InputJsonValue)
+              : undefined;
+            const run = await tx.workflowRun.create({
+              data: {
+                ...baseData,
+                status: blocked
+                  ? WorkflowRunStatus.skipped
+                  : WorkflowRunStatus.running,
+                ...(blocked ? { error: reason, result } : {}),
+                attempts: {
+                  create: {
+                    businessId,
+                    attemptNumber: 1,
+                    status: blocked
+                      ? WorkflowRunStatus.skipped
+                      : WorkflowRunStatus.running,
+                    ...(blocked
+                      ? { error: reason, result, finishedAt: now }
+                      : {}),
+                  },
+                },
+              },
+              select: { id: true },
+            });
+            return { id: run.id, skippedByMonthlyLimit: blocked };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!isTransactionConflictError(error) || attempt === 2) throw error;
+      }
+    }
+    throw new Error('Monthly workflow run limit reservation failed.');
   }
 
   /**

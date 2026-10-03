@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
+import { resolvePolicies } from '../../common/policies/policies.service';
 import type { WorkflowAction } from './workflow-action.util';
 import { WORKFLOW_AGENT_TOOL_LABELS } from './workflow-agent.util';
 import {
@@ -74,6 +75,9 @@ export class AutomationCommandCenterService {
   async overview(businessId: string, now = new Date()) {
     const db = this.tenantPrisma.client;
     const since = new Date(now.getTime() - DAY_MS);
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
     const [
       workflows,
       runsByStatus,
@@ -84,6 +88,8 @@ export class AutomationCommandCenterService {
       upcoming,
       recentFailures,
       queue,
+      runsThisMonth,
+      business,
     ] = await Promise.all([
       db.workflow.groupBy({
         by: ['active'],
@@ -146,6 +152,17 @@ export class AutomationCommandCenterService {
         take: 5,
       }),
       this.queueHealth(),
+      db.workflowRun.count({
+        where: {
+          businessId,
+          createdAt: { gte: monthStart },
+          status: { not: WorkflowRunStatus.skipped },
+        },
+      }),
+      db.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      }),
     ]);
     const pendingApprovals = await db.workflowApproval.count({
       where: { businessId, status: WorkflowApprovalStatus.pending },
@@ -213,6 +230,10 @@ export class AutomationCommandCenterService {
           success + failed > 0
             ? Math.round((failed / (success + failed)) * 1000) / 10
             : null,
+      },
+      runsThisMonth: {
+        count: runsThisMonth,
+        limit: resolvePolicies(business).num('automations.maxRunsPerMonth'),
       },
       waiting,
       overdueWaits,
@@ -514,5 +535,48 @@ export class AutomationCommandCenterService {
     ]
       .sort((a, b) => b.at.getTime() - a.at.getTime())
       .slice(0, 100);
+  }
+
+  /** Current monthly usage and the most recent completed retention pass for Governance. */
+  async governanceSummary(businessId: string, now = new Date()) {
+    const db = this.tenantPrisma.client;
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const [business, runsThisMonth, lastCleanup] = await Promise.all([
+      db.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      }),
+      db.workflowRun.count({
+        where: {
+          businessId,
+          createdAt: { gte: monthStart },
+          status: { not: WorkflowRunStatus.skipped },
+        },
+      }),
+      db.workflowRetentionCleanup.findFirst({
+        where: { businessId },
+        orderBy: [{ cleanedAt: 'desc' }, { id: 'desc' }],
+        select: { cleanedAt: true, deletedRuns: true, retentionDays: true },
+      }),
+    ]);
+    const policies = resolvePolicies(business);
+    return {
+      runsThisMonth: {
+        count: runsThisMonth,
+        limit: policies.num('automations.maxRunsPerMonth'),
+      },
+      runRetention: {
+        days: policies.num('automations.runRetentionDays'),
+        lastCleanup: lastCleanup
+          ? {
+              cleanedAt: lastCleanup.cleanedAt,
+              deletedRuns: lastCleanup.deletedRuns,
+              retentionDays: lastCleanup.retentionDays,
+            }
+          : null,
+      },
+    };
   }
 }

@@ -71,9 +71,10 @@ export function AutomationCommandCenterView() {
         </p>
       )}
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <Kpi label="Active workflows" value={data.workflows.active} hint={`${data.workflows.paused} paused`} href="/marketing/automations" />
         <Kpi label="Runs · 24 h" value={data.runs24h.total} hint={`${data.runs24h.success} succeeded · ${data.runs24h.skipped} skipped`} href="/marketing/automations/executions" />
+        <Kpi label="Runs this month" value={`${data.runsThisMonth.count} / ${data.runsThisMonth.limit ?? "No limit"}`} hint="Runs that weren't skipped, this calendar month (UTC)" href="/marketing/automations/executions" />
         <Kpi label="Failure rate · 24 h" value={data.runs24h.failureRatePct === null ? "—" : `${data.runs24h.failureRatePct}%`} hint={`${data.runs24h.failed} failed`} tone={data.runs24h.failed > 0 ? "danger" : "good"} href="/marketing/automations/executions" />
         <Kpi label="Waiting runs" value={data.waiting} hint={data.overdueWaits ? `${data.overdueWaits} past resume time` : "Durable waits in progress"} tone={data.overdueWaits ? "warning" : undefined} />
         <Kpi label="Approvals waiting" value={data.pendingApprovals} hint="Human decisions needed" tone={data.pendingApprovals ? "warning" : undefined} href="/marketing/automations/approvals" />

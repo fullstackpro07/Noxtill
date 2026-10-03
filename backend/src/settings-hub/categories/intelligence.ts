@@ -154,6 +154,30 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               emptyLabel: 'No limit',
             }),
             policyRow(d, {
+              key: 'wf-max-runs-month',
+              policy: 'automations.maxRunsPerMonth',
+              kind: 'number',
+              label: 'Maximum workflow runs per month',
+              description:
+                'After this many workflow runs in a calendar month (UTC), later triggers are recorded as skipped. Skipped runs, such as conditions not met, do not count. Empty means no limit.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              format: (n) => `${n} runs per month`,
+              emptyLabel: 'No limit',
+            }),
+            policyRow(d, {
+              key: 'wf-run-retention-days',
+              policy: 'automations.runRetentionDays',
+              kind: 'number',
+              label: 'Run-history retention',
+              description:
+                'Delete finished workflow runs older than this many days. Running, waiting, approval-pending and open Recovery runs are kept. Empty means keep forever.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              format: (n) => `${n} days`,
+              emptyLabel: 'Keep forever',
+            }),
+            policyRow(d, {
               key: 'wf-approval-before-message',
               policy: 'automations.requireApprovalBeforeCustomerMessages',
               kind: 'toggle',

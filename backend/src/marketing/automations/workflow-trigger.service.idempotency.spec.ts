@@ -34,6 +34,8 @@ describe('WorkflowTriggerService event idempotency', () => {
           callback({ workflowRun: { update: updateRun } }),
       ),
       workflow: { findMany: jest.fn().mockResolvedValue([workflow]) },
+      // Monthly run limit lookup (no policy set → unlimited).
+      business: { findUnique: jest.fn().mockResolvedValue({ policies: {} }) },
       workflowRun: {
         create: createRun,
         update: updateRun,

@@ -27,12 +27,16 @@ import {
   WorkflowHookReceiverController,
 } from './workflow-endpoints.controller';
 import { WorkflowEndpointsService } from './workflow-endpoints.service';
+import { WorkflowRetentionScheduler } from './jobs/workflow-retention.scheduler';
+import { WorkflowRetentionProcessor } from './jobs/workflow-retention.processor';
+import { WORKFLOW_RETENTION_QUEUE } from './workflows.constants';
 
 @Module({
   imports: [
     BullModule.registerQueue(
       { name: CREDIT_OVERDUE_SCAN_QUEUE },
       { name: WORKFLOW_SCHEDULE_QUEUE },
+      { name: WORKFLOW_RETENTION_QUEUE },
     ),
     MessagingModule,
     OutboundWebhookAutomationModule,
@@ -60,6 +64,8 @@ import { WorkflowEndpointsService } from './workflow-endpoints.service';
     CreditOverdueScanProcessor,
     WorkflowScheduleScheduler,
     WorkflowScheduleProcessor,
+    WorkflowRetentionScheduler,
+    WorkflowRetentionProcessor,
   ],
   exports: [WorkflowTriggerService],
 })

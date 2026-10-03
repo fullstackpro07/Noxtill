@@ -51,3 +51,5 @@ export const AUTOMATION_MESSAGE_TEMPLATE_KEY = 'automation_message';
 export const CREDIT_OVERDUE_SCAN_QUEUE = 'credit-overdue-scan';
 
 export const WORKFLOW_SCHEDULE_QUEUE = 'workflow-schedule';
+
+export const WORKFLOW_RETENTION_QUEUE = 'workflow-retention';

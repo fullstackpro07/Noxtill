@@ -26,4 +26,9 @@ export class AutomationCommandCenterController {
   audit(@CurrentUser() user: AuthenticatedUser) {
     return this.commandCenter.audit(user.businessId);
   }
+
+  @Get('governance-summary')
+  governanceSummary(@CurrentUser() user: AuthenticatedUser) {
+    return this.commandCenter.governanceSummary(user.businessId);
+  }
 }

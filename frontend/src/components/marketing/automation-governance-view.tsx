@@ -7,9 +7,9 @@ import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { fetchHubCategory, saveHubChanges, type HubRow } from "@/lib/settings-hub-api";
-import { fetchGovernanceAudit } from "@/lib/automation-command-center-api";
+import { fetchAutomationGovernanceSummary, fetchGovernanceAudit } from "@/lib/automation-command-center-api";
 
-const GOVERNANCE_ROWS = ["wf-max-active", "wf-approval-before-message"];
+const GOVERNANCE_ROWS = ["wf-max-active", "wf-max-runs-month", "wf-run-retention-days", "wf-approval-before-message"];
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
@@ -62,6 +62,7 @@ function RuleRow({ row }: { row: HubRow }) {
 export function AutomationGovernanceView() {
   const category = useQuery({ queryKey: ["settings-hub", "category", "automations"], queryFn: () => fetchHubCategory("automations") });
   const audit = useQuery({ queryKey: ["automation-governance-audit"], queryFn: fetchGovernanceAudit });
+  const summary = useQuery({ queryKey: ["automation-governance-summary"], queryFn: fetchAutomationGovernanceSummary });
   const rows = (category.data?.groups ?? []).flatMap((group) => group.rows).filter((row) => GOVERNANCE_ROWS.includes(row.key));
 
   return (
@@ -90,8 +91,20 @@ export function AutomationGovernanceView() {
           <Link href="/settings/team" className="underline">Settings → Team</Link>.
         </p>
         <p className="m-0 mt-2" style={{ color: "var(--app-text-faint)" }}>
-          Not available yet: per-plan run quotas, run-history retention settings, and automated security scans of workflows.
+          Not available yet: automated security scans of workflows.
         </p>
+        {summary.data && (
+          <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--app-border)", color: "var(--app-text-faint)" }}>
+            <p className="m-0">Runs this month: {summary.data.runsThisMonth.count} / {summary.data.runsThisMonth.limit ?? "No limit"}</p>
+            <p className="m-0 mt-1">
+              Last run-history cleanup: {summary.data.runRetention.lastCleanup
+                ? `${formatDate(summary.data.runRetention.lastCleanup.cleanedAt)} · ${summary.data.runRetention.lastCleanup.deletedRuns} run(s) deleted (${summary.data.runRetention.lastCleanup.retentionDays}-day policy)`
+                : summary.data.runRetention.days === null
+                  ? "Not run — retention is set to keep history forever"
+                  : "No cleanup has run yet"}
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>

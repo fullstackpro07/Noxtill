@@ -4,6 +4,7 @@ export interface AutomationCommandCenter {
   capturedAt: string;
   workflows: { active: number; paused: number };
   runs24h: { total: number; success: number; failed: number; skipped: number; cancelled: number; running: number; failureRatePct: number | null };
+  runsThisMonth: { count: number; limit: number | null };
   waiting: number;
   overdueWaits: number;
   pendingApprovals: number;
@@ -47,6 +48,16 @@ export interface GovernanceAuditRow {
 }
 
 export const fetchGovernanceAudit = () => apiFetch<GovernanceAuditRow[]>("/workflows/governance-audit");
+
+export interface AutomationGovernanceSummary {
+  runsThisMonth: { count: number; limit: number | null };
+  runRetention: {
+    days: number | null;
+    lastCleanup: { cleanedAt: string; deletedRuns: number; retentionDays: number } | null;
+  };
+}
+
+export const fetchAutomationGovernanceSummary = () => apiFetch<AutomationGovernanceSummary>("/workflows/governance-summary");
 
 export interface AutomationAgentsOverview {
   enabledInAiSettings: boolean;

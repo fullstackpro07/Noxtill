@@ -873,6 +873,7 @@ model Business {
   workflowVariables            WorkflowVariable[]
   workflowDeadLetters          WorkflowDeadLetter[]
   workflowDeadLetterDecisions  WorkflowDeadLetterDecision[]
+  workflowRetentionCleanups    WorkflowRetentionCleanup[]
   productOpportunities         ProductOpportunity[]
   productOpportunityAudits     ProductOpportunityAudit[]
   productValidationRuns        ProductValidationRun[]
@@ -2916,6 +2917,20 @@ model WorkflowRun {
   @@index([businessId, workflowId, createdAt])
   @@index([businessId, status, waitingUntil], map: "workflow_runs_waiting_due_idx")
   @@map("workflow_runs")
+}
+
+/// Per-business record of each automated run-history retention pass, including zero-delete runs.
+model WorkflowRetentionCleanup {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  retentionDays Int      @map("retention_days")
+  deletedRuns   Int      @map("deleted_runs")
+  cutoffAt      DateTime @map("cutoff_at")
+  cleanedAt     DateTime @default(now()) @map("cleaned_at")
+
+  @@index([businessId, cleanedAt])
+  @@map("workflow_retention_cleanups")
 }
 
 /// Immutable execution-attempt record for a workflow run (initial attempt plus manual retries).

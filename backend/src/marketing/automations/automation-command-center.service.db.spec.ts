@@ -85,6 +85,7 @@ describe('AutomationCommandCenterService (MySQL)', () => {
   });
 
   afterAll(async () => {
+    await prisma.workflowRetentionCleanup.deleteMany({ where: { businessId } });
     await prisma.workflowApproval.deleteMany({ where: { businessId } });
     await prisma.workflowRun.deleteMany({ where: { businessId } });
     await prisma.workflow.deleteMany({ where: { businessId } });
@@ -102,6 +103,7 @@ describe('AutomationCommandCenterService (MySQL)', () => {
       failed: 1,
       failureRatePct: 33.3,
     });
+    expect(overview.runsThisMonth).toMatchObject({ count: 5, limit: null });
     expect(overview).toMatchObject({
       waiting: 2,
       overdueWaits: 1,
@@ -206,5 +208,38 @@ describe('AutomationCommandCenterService (MySQL)', () => {
       note: 'Wrong audience',
     });
     await prisma.workflowVersion.deleteMany({ where: { businessId } });
+  });
+
+  it('shows monthly usage and the latest retention result in Governance', async () => {
+    const cleanedAt = new Date();
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'automations.maxRunsPerMonth': 8,
+          'automations.runRetentionDays': 30,
+        },
+      },
+    });
+    await prisma.workflowRetentionCleanup.create({
+      data: {
+        businessId,
+        retentionDays: 30,
+        deletedRuns: 4,
+        cutoffAt: new Date(cleanedAt.getTime() - 30 * 24 * 60 * 60 * 1000),
+        cleanedAt,
+      },
+    });
+
+    const summary = await new AutomationCommandCenterService(
+      tenant,
+      undefined,
+    ).governanceSummary(businessId);
+
+    expect(summary.runsThisMonth).toMatchObject({ count: 5, limit: 8 });
+    expect(summary.runRetention).toMatchObject({
+      days: 30,
+      lastCleanup: { deletedRuns: 4, retentionDays: 30, cleanedAt },
+    });
   });
 });

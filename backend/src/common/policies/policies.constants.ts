@@ -156,6 +156,21 @@ export const POLICY_DEFS = {
     max: 1000,
     integer: true,
   },
+  // marketing/automations/workflow-trigger.service.ts (monthly workflow run quota)
+  'automations.maxRunsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    integer: true,
+  },
+  // marketing/automations/jobs/workflow-retention.processor.ts (completed run history cleanup)
+  'automations.runRetentionDays': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 30,
+    max: 3650,
+    integer: true,
+  },
   'automations.requireApprovalBeforeCustomerMessages': {
     kind: 'boolean',
     default: false,
