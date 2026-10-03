@@ -47,3 +47,27 @@ export interface GovernanceAuditRow {
 }
 
 export const fetchGovernanceAudit = () => apiFetch<GovernanceAuditRow[]>("/workflows/governance-audit");
+
+export interface AutomationAgentsOverview {
+  enabledInAiSettings: boolean;
+  monthWorkflowAiCalls: number;
+  monthWorkflowAiCostUsd: number;
+  agents: {
+    workflowId: string;
+    name: string;
+    active: boolean;
+    triggerKey: string;
+    steps: { goal: string; maxSteps: number; tools: { key: string; label: string }[] }[];
+    last30Days: {
+      agentRuns: number;
+      completed: number;
+      failed: number;
+      toolCalls: number;
+      blockedToolCalls: number;
+      inputTokens: number;
+      outputTokens: number;
+    };
+  }[];
+}
+
+export const fetchAutomationAgents = () => apiFetch<AutomationAgentsOverview>("/workflows/agents-overview");

@@ -35,6 +35,7 @@ import {
   type WorkflowAction,
   type WorkflowTriggerKey,
   type WorkflowActionType,
+  WORKFLOW_AGENT_TOOL_OPTIONS,
   type WorkflowGraph,
   type WorkflowGraphNode,
   type WorkflowTestResult,
@@ -226,6 +227,7 @@ function describeAction(action: WorkflowAction): string {
   if (action.type === "map_data") return "Map event data";
   if (action.type === "get_variable") return `Get variable: ${action.name || "choose a variable"}`;
   if (action.type === "run_workflow") return "Run another workflow";
+  if (action.type === "ai_agent") return "AI agent (read-only)";
   if (action.type === "set_customer_custom_field") {
     return `Set customer field: ${action.fieldName || "choose a field"}`;
   }
@@ -316,6 +318,11 @@ function replaceActionType(
       workflowId: action.type === "run_workflow" ? action.workflowId : "",
     };
   }
+  if (type === "ai_agent") {
+    return action.type === "ai_agent"
+      ? action
+      : { type, goal: "", tools: ["get_run_values"], maxSteps: 3 };
+  }
   return {
     type,
     messageBody:
@@ -327,6 +334,7 @@ function replaceActionType(
       || action.type === "map_data"
       || action.type === "get_variable"
       || action.type === "run_workflow"
+      || action.type === "ai_agent"
         ? ""
         : action.messageBody,
   };
@@ -2127,6 +2135,64 @@ function ActionsEditor({
                   Reads a non-secret Production variable into this run. Add it before any message or AI action that uses {`{{variables.${a.name || "name"}}}`}.
                 </p>
               </div>
+            ) : a.type === "ai_agent" ? (
+              <div className="flex flex-col gap-1.5">
+                <textarea
+                  value={a.goal}
+                  onChange={(event) => onChange(actions.map((item, idx) =>
+                    idx === i && item.type === "ai_agent"
+                      ? { ...item, goal: event.target.value }
+                      : item,
+                  ))}
+                  rows={2}
+                  maxLength={2000}
+                  placeholder="Decide if {{customerName}} is a regular and suggest one sentence of thanks."
+                  aria-label="Agent goal"
+                  className="w-full rounded-[9px] p-2 text-[12.5px]"
+                  style={{ border: "1px solid var(--app-border)" }}
+                />
+                <div className="flex flex-wrap items-center gap-3 text-[11.5px]">
+                  {WORKFLOW_AGENT_TOOL_OPTIONS.map((tool) => (
+                    <label key={tool.key} className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={a.tools.includes(tool.key)}
+                        onChange={(event) => onChange(actions.map((item, idx) =>
+                          idx === i && item.type === "ai_agent"
+                            ? {
+                                ...item,
+                                tools: event.target.checked
+                                  ? [...item.tools, tool.key]
+                                  : item.tools.filter((key) => key !== tool.key),
+                              }
+                            : item,
+                        ))}
+                      />
+                      {tool.label}
+                    </label>
+                  ))}
+                  <label className="flex items-center gap-1">
+                    Max steps
+                    <input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={a.maxSteps}
+                      onChange={(event) => onChange(actions.map((item, idx) =>
+                        idx === i && item.type === "ai_agent"
+                          ? { ...item, maxSteps: Math.min(5, Math.max(1, Number(event.target.value) || 1)) }
+                          : item,
+                      ))}
+                      aria-label="Agent max steps"
+                      className="w-14 rounded-[7px] p-1 text-[12px]"
+                      style={{ border: "1px solid var(--app-border)" }}
+                    />
+                  </label>
+                </div>
+                <p className="m-0 text-[10.5px]" style={{ color: "var(--app-text-muted)" }}>
+                  The agent can only read; it can&rsquo;t send messages or change records. Its answer is saved as {"{{agentAnswer}}"} for the steps after it. Each model call counts toward your AI limits.
+                </p>
+              </div>
             ) : a.type === "run_workflow" ? (
               <div className="flex flex-col gap-1">
                 <select
@@ -2170,7 +2236,8 @@ function ActionsEditor({
                       x.type !== "generate_ai_draft" &&
                       x.type !== "map_data" &&
                       x.type !== "get_variable" &&
-                      x.type !== "run_workflow"
+                      x.type !== "run_workflow" &&
+                      x.type !== "ai_agent"
                         ? { ...x, messageBody: e.target.value }
                         : x,
                     ),
@@ -2416,6 +2483,11 @@ function WorkflowFormDialog({
                   action.name !== "constructor"
               : action.type === "run_workflow"
                 ? action.workflowId.length > 0
+              : action.type === "ai_agent"
+                ? action.goal.trim().length > 0 &&
+                  action.goal.length <= 2000 &&
+                  action.maxSteps >= 1 &&
+                  action.maxSteps <= 5
               : action.messageBody.trim().length > 0,
   );
   const graphNodeCount =
@@ -3002,7 +3074,7 @@ function TestDialog({
                                 </p>
                               )}
                             </>
-                          ) : a.type === "generate_ai_draft" || a.type === "map_data" || a.type === "get_variable" || a.type === "run_workflow" ? (
+                          ) : a.type === "generate_ai_draft" || a.type === "map_data" || a.type === "get_variable" || a.type === "run_workflow" || a.type === "ai_agent" ? (
                             <>
                               {describeAction(a)}
                               {preview?.body && (
@@ -3373,7 +3445,8 @@ function VersionHistoryEntry({
             action.type === "generate_ai_draft" ||
             action.type === "map_data" ||
             action.type === "get_variable" ||
-            action.type === "run_workflow"
+            action.type === "run_workflow" ||
+            action.type === "ai_agent"
               ? describeAction(action)
               : `${describeAction(action)}: ${action.messageBody}`}
           </li>

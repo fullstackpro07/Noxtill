@@ -1201,6 +1201,19 @@ export class WorkflowsService {
           },
         ];
       }
+      if (action.type === 'ai_agent') {
+        const template = workflowMessageTemplateFields(action.goal);
+        const resolved = resolveWorkflowMessageTemplate(action.goal, context);
+        return [
+          {
+            actionIndex,
+            body: `Dry run only: the AI agent is not called (read-only tools, up to ${action.maxSteps} steps).`,
+            error: template.malformed
+              ? 'Agent goal template syntax is invalid. Use {{fieldName}}.'
+              : resolved.error,
+          },
+        ];
+      }
       if (action.type === 'run_workflow') {
         const target = subWorkflowById.get(action.workflowId);
         return [

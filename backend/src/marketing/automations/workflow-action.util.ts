@@ -1,3 +1,4 @@
+import type { WorkflowAgentTool } from './workflow-agent.util';
 import type { WorkflowDataMapping } from './workflow-data-mapper.util';
 
 export type WorkflowAction =
@@ -40,6 +41,13 @@ export type WorkflowAction =
       /** Starts another active workflow of this business that uses the sub_workflow trigger. */
       type: 'run_workflow';
       workflowId: string;
+    }
+  | {
+      /** Bounded AI agent with read-only tools; its answer becomes {{agentAnswer}}. */
+      type: 'ai_agent';
+      goal: string;
+      tools: WorkflowAgentTool[];
+      maxSteps: number;
     };
 
 /** A workflow started by "Run another workflow" may itself start at most this many nested levels. */

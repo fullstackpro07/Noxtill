@@ -21,7 +21,7 @@ const AI_FEATURES: { key: string; label: string; description: string }[] = [
   { key: 'campaignCopy', label: 'Campaign copy', description: 'Drafts marketing message copy for a person to approve.' },
   { key: 'voiceEntry', label: 'Voice entry', description: 'Turns a spoken command into a draft you confirm before anything is saved.' },
   { key: 'photoDigitizer', label: 'Photo digitizer', description: 'Reads a photo of a list into rows you review before importing.' },
-  { key: 'workflowAgents', label: 'Workflow AI drafts', description: 'Creates a draft from values selected in a workflow prompt. Drafts appear in run history and are not sent automatically.' },
+  { key: 'workflowAgents', label: 'Workflow AI drafts & agents', description: 'AI-draft and read-only AI agent workflow steps. Their output appears in run history and is not sent automatically.' },
 ];
 
 const PROVIDER_LABELS: Record<string, string> = {

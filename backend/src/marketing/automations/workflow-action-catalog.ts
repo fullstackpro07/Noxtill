@@ -423,6 +423,59 @@ export const WORKFLOW_ACTION_CATALOG: WorkflowActionCatalogEntry[] = [
       'One tenant-scoped database read per action. Secret-reference variables are never resolved or returned.',
   },
   {
+    type: 'ai_agent',
+    label: 'AI agent (read-only)',
+    description:
+      'Works toward a goal using only the read-only tools you allow, then saves its answer as {{agentAnswer}} for later steps. It cannot send messages or change records.',
+    category: 'AI',
+    effect: 'AI generation',
+    risk: 'low',
+    requiresCustomerContext: false,
+    provider: 'Anthropic Claude through AI Settings guardrails',
+    setup:
+      'Requires the server AI provider key and "Workflow AI drafts & agents" switched on in AI Settings. Add a message or approval step after it to act on the answer.',
+    inputs: [
+      {
+        name: 'goal',
+        type: 'string',
+        required: true,
+        description:
+          'What the agent should work out. May use run fields like {{customerName}}. Up to 2000 characters.',
+      },
+      {
+        name: 'tools',
+        type: 'get_customer_profile | get_customer_orders | get_run_values',
+        required: false,
+        description:
+          "Read-only tools limited to this run's business and customer.",
+      },
+      {
+        name: 'maxSteps',
+        type: 'integer 1–5',
+        required: true,
+        description: 'Most model calls this step may make.',
+      },
+    ],
+    outputs: [
+      {
+        name: 'agentAnswer',
+        type: 'string',
+        description:
+          'The final answer (up to 2000 characters), usable in later steps as {{agentAnswer}}.',
+      },
+      {
+        name: 'toolCalls',
+        type: 'array',
+        description:
+          'Each tool the agent asked for, and whether it was allowed.',
+      },
+    ],
+    idempotency:
+      'Not idempotent: a retry calls the model again and may return a different answer.',
+    rateLimits:
+      'Each model call counts toward the business AI rate limit and monthly AI cost cap; at most 5 calls of 800 output tokens.',
+  },
+  {
     type: 'run_workflow',
     label: 'Run another workflow',
     description:

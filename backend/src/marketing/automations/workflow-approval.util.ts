@@ -80,6 +80,12 @@ export function buildWorkflowApprovalSnapshot(
         summary: `Generate an AI draft: ${resolveText(action.prompt, binding.context)}`,
       };
     }
+    if (action.type === 'ai_agent') {
+      return {
+        type: action.type,
+        summary: `AI agent (read-only, up to ${action.maxSteps} steps): ${resolveText(action.goal, binding.context)}`,
+      };
+    }
     if (action.type === 'run_workflow') {
       return {
         type: action.type,

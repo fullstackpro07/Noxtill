@@ -1,4 +1,9 @@
 import { WorkflowTriggerKey } from '@prisma/client';
+import {
+  isWorkflowAgentTool,
+  MAX_WORKFLOW_AGENT_GOAL_LENGTH,
+  MAX_WORKFLOW_AGENT_STEPS,
+} from './workflow-agent.util';
 import { WORKFLOW_TRIGGER_CATALOG } from './workflow-trigger-catalog';
 import { workflowMessageTemplateFields } from './workflow-message-template.util';
 import {
@@ -117,6 +122,8 @@ export function validateWorkflowDefinition(
             mappedTemplateFields.add(`mappedData.${mapping.targetPath}`);
           }
         }
+      } else if (action.type === 'ai_agent') {
+        workflowVariableFields.add('agentAnswer');
       } else if (
         action.type === 'get_variable' &&
         typeof action.name === 'string' &&
@@ -166,23 +173,35 @@ export function validateWorkflowDefinition(
               ? !supportsCustomerActions
               : action.type === 'map_data'
                 ? validateWorkflowDataMappings(action.mappings) !== null
-                : action.type === 'run_workflow'
-                  ? typeof action.workflowId !== 'string' ||
-                    action.workflowId.trim().length === 0 ||
-                    action.workflowId.length > 191
-                  : action.type === 'get_variable'
-                    ? typeof action.name !== 'string' ||
-                      !/^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(action.name) ||
-                      RESERVED_VARIABLE_NAMES.has(action.name) ||
-                      (action.scope !== 'business' &&
-                        action.scope !== 'workflow')
-                    : action.type === 'generate_ai_draft'
-                      ? typeof action.prompt !== 'string' ||
-                        action.prompt.trim().length === 0 ||
-                        Array.from(action.prompt).length >
-                          MAX_WORKFLOW_AI_DRAFT_PROMPT_LENGTH
-                      : !MESSAGE_ACTION_TYPES.has(action.type) ||
-                        (ownerOnlyTrigger && action.type !== 'notify_owner'))
+                : action.type === 'ai_agent'
+                  ? typeof action.goal !== 'string' ||
+                    action.goal.trim().length === 0 ||
+                    Array.from(action.goal).length >
+                      MAX_WORKFLOW_AGENT_GOAL_LENGTH ||
+                    !Array.isArray(action.tools) ||
+                    !action.tools.every(isWorkflowAgentTool) ||
+                    new Set(action.tools).size !== action.tools.length ||
+                    typeof action.maxSteps !== 'number' ||
+                    !Number.isInteger(action.maxSteps) ||
+                    action.maxSteps < 1 ||
+                    action.maxSteps > MAX_WORKFLOW_AGENT_STEPS
+                  : action.type === 'run_workflow'
+                    ? typeof action.workflowId !== 'string' ||
+                      action.workflowId.trim().length === 0 ||
+                      action.workflowId.length > 191
+                    : action.type === 'get_variable'
+                      ? typeof action.name !== 'string' ||
+                        !/^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(action.name) ||
+                        RESERVED_VARIABLE_NAMES.has(action.name) ||
+                        (action.scope !== 'business' &&
+                          action.scope !== 'workflow')
+                      : action.type === 'generate_ai_draft'
+                        ? typeof action.prompt !== 'string' ||
+                          action.prompt.trim().length === 0 ||
+                          Array.from(action.prompt).length >
+                            MAX_WORKFLOW_AI_DRAFT_PROMPT_LENGTH
+                        : !MESSAGE_ACTION_TYPES.has(action.type) ||
+                          (ownerOnlyTrigger && action.type !== 'notify_owner'))
     ) {
       return action.type === 'wait'
         ? `Action ${index + 1} needs a wait from 1 to ${MAX_WORKFLOW_WAIT_MINUTES} minutes.`
@@ -190,11 +209,13 @@ export function validateWorkflowDefinition(
           ? `Action ${index + 1} needs a non-empty AI prompt of ${MAX_WORKFLOW_AI_DRAFT_PROMPT_LENGTH} characters or fewer.`
           : action.type === 'map_data'
             ? `Action ${index + 1} has an invalid data mapping configuration.`
-            : action.type === 'run_workflow'
-              ? `Action ${index + 1} needs a workflow to run.`
-              : action.type === 'get_variable'
-                ? `Action ${index + 1} needs a valid variable name and business or workflow scope.`
-                : `Action ${index + 1} has an unsupported type.`;
+            : action.type === 'ai_agent'
+              ? `Action ${index + 1} needs a goal of ${MAX_WORKFLOW_AGENT_GOAL_LENGTH} characters or fewer, known read-only tools, and 1 to ${MAX_WORKFLOW_AGENT_STEPS} steps.`
+              : action.type === 'run_workflow'
+                ? `Action ${index + 1} needs a workflow to run.`
+                : action.type === 'get_variable'
+                  ? `Action ${index + 1} needs a valid variable name and business or workflow scope.`
+                  : `Action ${index + 1} has an unsupported type.`;
     }
 
     if (action.type === 'wait' || action.type === 'run_workflow') continue;
@@ -279,6 +300,19 @@ export function validateWorkflowDefinition(
         ) {
           return `Action ${index + 1} uses an invalid or unsupported customer-field template value.`;
         }
+      }
+      continue;
+    }
+    if (action.type === 'ai_agent') {
+      const template = workflowMessageTemplateFields(action.goal as string);
+      if (
+        template.malformed ||
+        template.fields.some((field) => !isSupportedTemplateField(field))
+      ) {
+        return `Action ${index + 1} uses an invalid or unsupported field in the agent goal.`;
+      }
+      if (!allowForwardMappedDataReferences) {
+        workflowVariableFields.add('agentAnswer');
       }
       continue;
     }

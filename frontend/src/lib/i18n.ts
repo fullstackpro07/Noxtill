@@ -133,6 +133,7 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.workflowVersions": "Versions & Environments",
     "nav.workflowGovernance": "Governance",
     "nav.workflowWebhooks": "Webhooks & APIs",
+    "nav.workflowAgents": "AI Agents",
     "nav.workflowExecutions": "Executions",
     "nav.workflowRecovery": "Recovery Center",
     "nav.workflowTriggers": "Workflow Triggers",

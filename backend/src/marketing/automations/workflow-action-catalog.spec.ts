@@ -15,6 +15,7 @@ describe('WORKFLOW_ACTION_CATALOG', () => {
       'map_data',
       'get_variable',
       'run_workflow',
+      'ai_agent',
     ];
 
     expect([...types].sort()).toEqual([...executableTypes].sort());

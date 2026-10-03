@@ -49,7 +49,7 @@ const FEATURE_LABELS: Record<keyof AiFeatureToggles, { name: string; note: strin
   insights: { name: "AI Insights", note: "Refreshes daily on your own data" },
   whatIf: { name: "What-If Simulation", note: "Labelled as simulation, never as actual" },
   assistant: { name: "Assistant & Help", note: "Business Chat and Help Assistant, read-only" },
-  workflowAgents: { name: "Workflow AI drafts", note: "Creates drafts in run history — does not send them" },
+  workflowAgents: { name: "Workflow AI drafts & agents", note: "Drafts and read-only agent answers in run history — never sent by themselves" },
 };
 
 /** Derived from the real, fixed tool registry (`backend/src/assistant/assistant-tools.ts`) — every

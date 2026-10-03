@@ -59,6 +59,8 @@ function actionTitle(action: WorkflowAction): string {
       return `Read variable ${action.name}`;
     case "run_workflow":
       return "Run another workflow";
+    case "ai_agent":
+      return "AI agent";
   }
 }
 

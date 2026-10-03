@@ -446,3 +446,16 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   for AI-draft and get-variable steps, which do run (no stored approvals held that text). Migration
   20261003000000 (3 enum MODIFYs). Specs: sub-workflows 5/5; full jest (--maxWorkers=2) 2110/2111 —
   the one failure was the action-catalog list, updated and passing.
+- item 3 ✅ AI agent step + AI Agents screen (/marketing/automations/agents). New `ai_agent` step:
+  goal (templated, ≤2000 chars), chosen read-only tools (customer profile, customer orders, run
+  values — no arguments, scoped to the run's business and customer, so injected text can't widen
+  access), 1–5 model calls of ≤800 output tokens through AiInfraService (rate limit, monthly cost cap,
+  AI Settings toggle, call log). A tool the step didn't allow is refused and recorded as blocked.
+  Answer saved as {{agentAnswer}} for later steps; never sends or writes. Dry-run, approval summary,
+  catalog entry. Screen lists workflows with agent steps, their config and real 30-day stats from run
+  results (runs, answered, failed, tool calls, blocked, tokens) plus the month's workflow AI calls/cost
+  (shared with AI drafts — stated). Disclosed: no agent profiles, memory, handoffs, write tools,
+  evaluations, playground or model choice. AI Settings / Settings hub toggle renamed "Workflow AI
+  drafts & agents" (it gates both). Specs: agent 3/3; full jest 2114/2114.
+- goal #7 complete (3 items). Note for whoever owns AI infra: `ai/claude.client.ts` DEFAULT_MODEL is
+  `claude-3-5-haiku-20241022`; check it is still served before go-live.

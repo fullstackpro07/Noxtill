@@ -7,6 +7,12 @@ import {
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
+import type { WorkflowAction } from './workflow-action.util';
+import { WORKFLOW_AGENT_TOOL_LABELS } from './workflow-agent.util';
+import {
+  workflowGraphActions,
+  type WorkflowGraph,
+} from './workflow-graph.util';
 import { WORKFLOW_SCHEDULE_QUEUE } from './workflows.constants';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -324,6 +330,124 @@ export class AutomationCommandCenterService {
    * approval decisions and Recovery Center decisions — newest first. Version saves don't record an
    * author, so they show without one.
    */
+  /**
+   * AI Agents screen: every workflow with an AI agent step, its configured goal / tools / step limit,
+   * and what its runs in the last 30 days actually did (from the stored step results). Cost is only
+   * available as the month's total for all workflow AI steps (drafts and agents share one AI kind).
+   */
+  async agents(businessId: string, now = new Date()) {
+    const since = new Date(now.getTime() - 30 * DAY_MS);
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const workflows = await this.tenantPrisma.client.workflow.findMany({
+      where: { businessId, archivedAt: null },
+      select: {
+        id: true,
+        name: true,
+        active: true,
+        triggerKey: true,
+        actions: true,
+        graph: true,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const withAgents = workflows.flatMap((workflow) => {
+      const actions = workflow.graph
+        ? workflowGraphActions(workflow.graph as unknown as WorkflowGraph)
+        : ((workflow.actions ?? []) as unknown as WorkflowAction[]);
+      const steps = actions.flatMap((action) =>
+        action?.type === 'ai_agent'
+          ? [
+              {
+                goal: action.goal,
+                maxSteps: action.maxSteps,
+                tools: (action.tools ?? []).map((tool) => ({
+                  key: tool,
+                  label: WORKFLOW_AGENT_TOOL_LABELS[tool] ?? tool,
+                })),
+              },
+            ]
+          : [],
+      );
+      return steps.length ? [{ ...workflow, steps }] : [];
+    });
+    const runs = withAgents.length
+      ? await this.tenantPrisma.client.workflowRun.findMany({
+          where: {
+            businessId,
+            workflowId: { in: withAgents.map((workflow) => workflow.id) },
+            createdAt: { gte: since },
+          },
+          select: { workflowId: true, result: true },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 2000,
+        })
+      : [];
+    const [business, cost] = await Promise.all([
+      this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { aiFeatureToggles: true },
+      }),
+      this.tenantPrisma.client.aiCallLog.aggregate({
+        where: {
+          businessId,
+          kind: 'workflow_agent',
+          createdAt: { gte: monthStart },
+        },
+        _sum: { estimatedCostUsd: true },
+        _count: { _all: true },
+      }),
+    ]);
+    const toggles = (business?.aiFeatureToggles ?? {}) as Record<
+      string,
+      boolean
+    >;
+    return {
+      enabledInAiSettings: toggles.workflowAgents !== false,
+      monthWorkflowAiCalls: cost._count._all,
+      monthWorkflowAiCostUsd: Number(cost._sum.estimatedCostUsd ?? 0),
+      agents: withAgents.map((workflow) => {
+        const stats = {
+          agentRuns: 0,
+          completed: 0,
+          failed: 0,
+          toolCalls: 0,
+          blockedToolCalls: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+        };
+        for (const run of runs) {
+          if (run.workflowId !== workflow.id || !Array.isArray(run.result))
+            continue;
+          for (const step of run.result as Array<Record<string, unknown>>) {
+            if (step?.type !== 'ai_agent') continue;
+            stats.agentRuns += 1;
+            if (step.completed === true) stats.completed += 1;
+            else if (step.error) stats.failed += 1;
+            const calls = Array.isArray(step.toolCalls)
+              ? (step.toolCalls as Array<{ allowed?: unknown }>)
+              : [];
+            stats.toolCalls += calls.length;
+            stats.blockedToolCalls += calls.filter(
+              (call) => call.allowed === false,
+            ).length;
+            stats.inputTokens += Number(step.inputTokens ?? 0) || 0;
+            stats.outputTokens += Number(step.outputTokens ?? 0) || 0;
+          }
+        }
+        return {
+          workflowId: workflow.id,
+          name: workflow.name,
+          active: workflow.active,
+          triggerKey: workflow.triggerKey,
+          steps: workflow.steps,
+          last30Days: stats,
+        };
+      }),
+    };
+  }
+
   async audit(businessId: string) {
     const db = this.tenantPrisma.client;
     const [versions, approvals, decisions] = await Promise.all([

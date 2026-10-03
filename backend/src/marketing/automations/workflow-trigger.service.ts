@@ -9,6 +9,20 @@ import {
   WorkflowCondition,
 } from './workflow-condition.util';
 import { MAX_SUB_WORKFLOW_DEPTH, WorkflowAction } from './workflow-action.util';
+import type {
+  AnthropicContentBlock,
+  AnthropicMessage,
+} from '../../ai/claude.client';
+import {
+  isWorkflowAgentTool,
+  MAX_WORKFLOW_AGENT_ANSWER_LENGTH,
+  MAX_WORKFLOW_AGENT_OUTPUT_TOKENS,
+  MAX_WORKFLOW_AGENT_STEPS,
+  runWorkflowAgentTool,
+  WORKFLOW_AGENT_SYSTEM_PROMPT,
+  workflowAgentToolDefinitions,
+  type WorkflowAgentTool,
+} from './workflow-agent.util';
 import {
   buildWorkflowApprovalSnapshot,
   hashWorkflowApprovalBinding,
@@ -1192,6 +1206,152 @@ export class WorkflowTriggerService {
   }
 
   /**
+   * AI agent step: up to `maxSteps` model calls through AiInfraService (rate limit, monthly cost cap,
+   * AI Settings toggle and call log), each allowed to use only the step's chosen read-only tools.
+   * The final answer is saved to the run as `agentAnswer`; every tool call is recorded in the result.
+   */
+  private async runAgentStep(
+    businessId: string,
+    action: Extract<WorkflowAction, { type: 'ai_agent' }>,
+    context: Record<string, unknown>,
+    runId: string,
+    actionIndex: number,
+  ): Promise<Record<string, unknown>> {
+    const fail = (error: string, extra: Record<string, unknown> = {}) => ({
+      actionIndex,
+      type: 'ai_agent',
+      completed: false,
+      retryable: false,
+      error,
+      ...extra,
+    });
+    if (!this.aiInfra)
+      return fail('The AI agent is unavailable in this runtime.');
+    const tools = Array.isArray(action.tools)
+      ? action.tools.filter(isWorkflowAgentTool)
+      : [];
+    const maxSteps =
+      Number.isInteger(action.maxSteps) &&
+      action.maxSteps >= 1 &&
+      action.maxSteps <= MAX_WORKFLOW_AGENT_STEPS
+        ? action.maxSteps
+        : 1;
+    const goal = resolveWorkflowMessageTemplate(action.goal, context);
+    if (!goal.body) {
+      return fail(goal.error ?? 'The agent goal could not be filled in.');
+    }
+    const messages: AnthropicMessage[] = [
+      { role: 'user', content: JSON.stringify({ goal: goal.body }) },
+    ];
+    const toolCalls: Array<{ step: number; tool: string; allowed: boolean }> =
+      [];
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let answer: string | null = null;
+    try {
+      for (let step = 1; step <= maxSteps; step += 1) {
+        const response = await this.aiInfra.createMessage(
+          businessId,
+          'workflow_agent',
+          {
+            system: WORKFLOW_AGENT_SYSTEM_PROMPT,
+            messages,
+            ...(tools.length
+              ? { tools: workflowAgentToolDefinitions(tools) }
+              : {}),
+            temperature: 0,
+            maxTokens: MAX_WORKFLOW_AGENT_OUTPUT_TOKENS,
+          },
+        );
+        inputTokens += response.inputTokens;
+        outputTokens += response.outputTokens;
+        const uses = response.content.filter(
+          (block) => block.type === 'tool_use' && typeof block.id === 'string',
+        );
+        if (response.stopReason !== 'tool_use' || uses.length === 0) {
+          answer =
+            response.content
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text ?? '')
+              .join('\n')
+              .trim() || null;
+          break;
+        }
+        if (step === maxSteps) break;
+        messages.push({ role: 'assistant', content: response.content });
+        const toolResults: AnthropicContentBlock[] = [];
+        for (const use of uses) {
+          const allowed =
+            isWorkflowAgentTool(use.name) && tools.includes(use.name);
+          toolCalls.push({ step, tool: String(use.name), allowed });
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: use.id,
+            content: allowed
+              ? await runWorkflowAgentTool(
+                  this.prisma,
+                  businessId,
+                  context,
+                  use.name as WorkflowAgentTool,
+                )
+              : JSON.stringify({
+                  error: 'This tool is not allowed for this step.',
+                }),
+          });
+        }
+        messages.push({ role: 'user', content: toolResults });
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Workflow AI agent failed for run ${runId}, action ${actionIndex}: ${error instanceof Error ? error.message : 'unknown provider error'}`,
+      );
+      return fail(
+        error instanceof Error &&
+          error.message === 'ANTHROPIC_API_KEY is not configured'
+          ? 'The AI agent is not configured on the server.'
+          : error instanceof AppException
+            ? error.message
+            : 'The AI agent failed. Check the AI provider configuration and try again.',
+        { toolCalls, inputTokens, outputTokens },
+      );
+    }
+    if (!answer) {
+      return fail(
+        `The agent did not finish within ${maxSteps} step(s); nothing was saved.`,
+        { toolCalls, inputTokens, outputTokens },
+      );
+    }
+    const agentAnswer = Array.from(answer)
+      .slice(0, MAX_WORKFLOW_AGENT_ANSWER_LENGTH)
+      .join('');
+    const nextContext = { ...context, agentAnswer };
+    const saved = await this.prisma.workflowRun.updateMany({
+      where: { id: runId, businessId, status: WorkflowRunStatus.running },
+      data: { context: nextContext },
+    });
+    if (saved.count !== 1) {
+      return fail(
+        'Workflow run changed before the agent answer could be saved.',
+        {
+          toolCalls,
+        },
+      );
+    }
+    Object.assign(context, nextContext);
+    return {
+      actionIndex,
+      type: 'ai_agent',
+      completed: true,
+      aiGenerated: true,
+      provider: 'anthropic',
+      output: agentAnswer,
+      toolCalls,
+      inputTokens,
+      outputTokens,
+    };
+  }
+
+  /**
    * "Run another workflow": starts an active sub-workflow of the same business with the caller's
    * values, at most MAX_SUB_WORKFLOW_DEPTH levels deep. The event id is fixed per calling run and
    * step, so a retried step never starts a second child run. The child runs on its own; this step
@@ -1352,7 +1512,8 @@ export class WorkflowTriggerService {
           actionType !== 'request_approval' &&
           actionType !== 'map_data' &&
           actionType !== 'get_variable' &&
-          actionType !== 'run_workflow')
+          actionType !== 'run_workflow' &&
+          actionType !== 'ai_agent')
       ) {
         results.push({
           actionIndex,
@@ -1541,6 +1702,19 @@ export class WorkflowTriggerService {
           variableName: action.name,
           valueType: variable.valueType,
         });
+        continue;
+      }
+
+      if (action.type === 'ai_agent') {
+        results.push(
+          await this.runAgentStep(
+            businessId,
+            action,
+            context,
+            runId,
+            actionIndex,
+          ),
+        );
         continue;
       }
 

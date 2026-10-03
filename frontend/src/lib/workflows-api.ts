@@ -186,7 +186,21 @@ export type WorkflowAction =
   | {
       type: "run_workflow";
       workflowId: string;
+    }
+  | {
+      type: "ai_agent";
+      goal: string;
+      tools: WorkflowAgentTool[];
+      maxSteps: number;
     };
+
+export type WorkflowAgentTool = "get_customer_profile" | "get_customer_orders" | "get_run_values";
+
+export const WORKFLOW_AGENT_TOOL_OPTIONS: Array<{ key: WorkflowAgentTool; label: string }> = [
+  { key: "get_customer_profile", label: "Read customer profile" },
+  { key: "get_customer_orders", label: "Read customer orders" },
+  { key: "get_run_values", label: "Read run values" },
+];
 
 export type WorkflowActionType = WorkflowAction["type"];
 

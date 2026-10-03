@@ -17,6 +17,11 @@ export class AutomationCommandCenterController {
     return this.commandCenter.schedules(user.businessId);
   }
 
+  @Get('agents-overview')
+  agents(@CurrentUser() user: AuthenticatedUser) {
+    return this.commandCenter.agents(user.businessId);
+  }
+
   @Get('governance-audit')
   audit(@CurrentUser() user: AuthenticatedUser) {
     return this.commandCenter.audit(user.businessId);
