@@ -45,7 +45,7 @@ to. A production deploy must replace every placeholder row before going live.
 | `META_WA_TOKEN` / `META_WA_PHONE_ID` / `META_APP_SECRET` | **Disclosed placeholder (empty)** | WhatsApp send + webhook signature verification both real; webhook now fails closed (503) without `META_APP_SECRET`, matching this ticket's security fix. |
 | `META_WA_VERIFY_TOKEN` | Populated (dev value) | Rotate for production. |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | **Disclosed placeholder (empty)** | SMS fallback channel + webhook; same fail-closed behavior as Meta. |
-| `EMAIL_PROVIDER_KEY` | **Disclosed placeholder (empty)** | Postmark transactional + campaign sends both real, reach the actual API call. |
+| `EMAIL_PROVIDER_KEY` | Set locally (2026-10-03) | **Resend** API key (the code calls `api.resend.com`, not Postmark). Transactional + campaign sends both real. |
 | `EMAIL_FROM_ADDRESS` | Populated (dev value) | Rotate to a real verified sending domain. |
 | `EMAIL_WEBHOOK_SECRET` | Populated (dev value) | Shared-secret check now uses constant-time comparison (`safeEqual`) and fails closed if unset — rotate for production. |
 
@@ -141,7 +141,7 @@ Everything below is real, working code that just needs a real credential, accoun
 4	AWS S3 (or S3-compatible) access key + secret	Every generated file: invoices, statements, reports, exports, QR posters	AWS IAM, or R2/MinIO if avoiding AWS
 5	Meta WhatsApp Cloud API token + phone number ID + app secret	Primary messaging channel	developers.facebook.com (WhatsApp Business Platform)
 6	Twilio account SID + auth token + from-number	SMS fallback channel	twilio.com
-7	Postmark (or SES) API key	Transactional email + email marketing campaigns	postmarkapp.com
+7	Resend API key (code uses Resend, not Postmark)	Transactional email + email marketing campaigns	resend.com
 8	Google Places API key	Competitor rating snapshots	Google Cloud Console
 9	SerpApi key	Keyword rank tracking	serpapi.com
 2. OAuth app registrations needed (Module 18 — Integrations Hub)
@@ -151,7 +151,7 @@ These 5 connectors have real, correctly-written OAuth code, but each needs an ac
  Google Ads developer token — separate approval process on top of the OAuth app, required for every Ads API call
  Meta developer app (app ID + secret, distinct from the WhatsApp app above) — powers Meta Ads connector
  TikTok for Business developer app (app ID + secret) — powers TikTok Ads connector
-Only Email is fully deep and live-ready today — it just needs the Postmark key from the table above, no OAuth app required.
+Only Email is fully deep and live-ready today — it just needs the Resend key from the table above, no OAuth app required.
 
 3. Infrastructure to provision
  Managed Redis, version ≥5.0 — confirmed this week the wrong version silently breaks BullMQ; don't reuse an old/legacy Redis instance
@@ -175,7 +175,7 @@ Only Email is fully deep and live-ready today — it just needs the Postmark key
  Decide whether/when to build the deferred deep features for the 5 non-Email connectors (GMB posts, Google Ads campaign creation, Merchant feed sync, Meta creative rendering, TikTok slideshow generation) — their screens exist but stay mocked until each OAuth app is real
 Not blocking launch, but worth knowing
 Help-doc article URLs (HelpArticle.url, used by the AI assistant's citations) point at /help/[slug] pages that don't exist yet — citations render as plain text, not broken links, so this is cosmetic only.
-Postmark webhook → real open/click tracking for email campaigns was deliberately deferred (funnel numbers will read 0 until this exists).
+Email open/click/bounce tracking: built 2026-10-03. In Resend, add a webhook to `https://<api-origin>/api/v1/webhooks/email?token=<EMAIL_WEBHOOK_SECRET>` for delivered, opened, clicked and bounced events, and turn on open/click tracking for the sending domain. Until then the funnel reads 0.
 
 ---
 

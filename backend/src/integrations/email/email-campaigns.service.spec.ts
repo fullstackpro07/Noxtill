@@ -9,6 +9,9 @@ import type { AiInfraService } from '../../ai/ai-infra.service';
 import { EmailCampaignsService } from './email-campaigns.service';
 import { signPayload } from '../signed-token.util';
 import { AppException } from '../../common/filters/app.exception';
+import { WebhookEventsProcessor } from '../../webhooks/webhook-events.processor';
+import type { WhatsappWindowService } from '../../whatsapp/whatsapp-window.service';
+import type { Job } from 'bullmq';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -164,6 +167,54 @@ describe('EmailCampaignsService (BE-083)', () => {
     const funnel = await service.funnel(businessId, campaign.id);
     expect(funnel.sent).toBe(1);
     expect(funnel.unsubscribed).toBe(0);
+  });
+
+  it('records delivered / opened / clicked / bounced from the email webhook, once per sent email', async () => {
+    const providerId = `resend-${Date.now()}`;
+    mockedAxios.post.mockResolvedValue({ data: { id: providerId } });
+    await prisma.emailEvent.deleteMany({
+      where: { emailCampaign: { businessId } },
+    });
+    const campaign = await service.create(businessId, {
+      subject: 'Tracked',
+      body: 'Hello <friend>\nSecond line',
+      segment: 'all',
+    });
+    const [, payload] = mockedAxios.post.mock.calls[0] as [
+      string,
+      { html: string },
+    ];
+    expect(payload.html).toContain('Hello &lt;friend&gt;<br>Second line');
+    expect(payload.html).toContain('/unsubscribe?token=');
+
+    const processor = new WebhookEventsProcessor(
+      prisma,
+      {} as unknown as WhatsappWindowService,
+    );
+    const event = (type: string) =>
+      processor.process({
+        name: 'email-event',
+        data: { type, data: { email_id: providerId } },
+      } as unknown as Job);
+    await event('email.delivered');
+    await event('email.opened');
+    await event('email.opened');
+    await event('email.clicked');
+    await event('email.complained');
+    await processor.process({
+      name: 'email-event',
+      data: { type: 'email.opened', data: { email_id: 'unknown-id' } },
+    } as unknown as Job);
+
+    expect(await service.funnel(businessId, campaign.id)).toMatchObject({
+      sent: 1,
+      delivered: 1,
+      opened: 1,
+      clicked: 1,
+    });
+    expect((await service.listHealth(businessId)).bounced).toBe(0);
+    await event('email.bounced');
+    expect((await service.listHealth(businessId)).bounced).toBe(1);
   });
 
   it('funnel() throws a typed not-found error for a campaign outside this business', async () => {

@@ -464,3 +464,11 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   AI Agents screen/toggle warning all pass. AI agent answer + toolCalls not verifiable live: no
   ANTHROPIC_API_KEY on the server (expected "not configured" error shown); that path is covered only by
   workflow-agent.db.spec.ts with a fake provider. QA data left in place (incl. a $9 test sale).
+- Claude ✅ Email campaign tracking (2026-10-03). Campaign sends now include an HTML part (needed for
+  provider open/click tracking) and store Resend's message id on the `sent` EmailEvent
+  (`provider_ref`). The existing email webhook (`POST /webhooks/email?token=`) now also records
+  campaign `delivered` / `open` / `click` / `bounce` events, once per sent email; List health "Bounced"
+  is a real count (was hard-coded 0). Email screen shows Delivered and states where the numbers come
+  from. Migration 20261003100000 (enum + column + index). Checklist corrected: the code uses Resend,
+  not Postmark. Spec: email campaigns 8/8; full jest 2113/2116 — ad-stats-sync flaked under load, 7/7
+  alone.

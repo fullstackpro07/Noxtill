@@ -4,7 +4,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWindowService } from '../whatsapp/whatsapp-window.service';
 import { WEBHOOK_EVENTS_QUEUE } from './webhooks.constants';
-import { MessageStatus } from '@prisma/client';
+import { EmailEventType, MessageStatus } from '@prisma/client';
 
 const META_STATUS_MAP: Record<string, MessageStatus> = {
   sent: MessageStatus.sent,
@@ -37,6 +37,14 @@ const RESEND_STATUS_MAP: Record<string, MessageStatus> = {
   'email.opened': MessageStatus.read,
   'email.bounced': MessageStatus.failed,
   'email.complained': MessageStatus.failed,
+};
+
+/** Resend webhook event → campaign funnel event. */
+const RESEND_CAMPAIGN_EVENT_MAP: Record<string, EmailEventType> = {
+  'email.delivered': EmailEventType.delivered,
+  'email.opened': EmailEventType.open,
+  'email.clicked': EmailEventType.click,
+  'email.bounced': EmailEventType.bounce,
 };
 
 /**
@@ -172,12 +180,44 @@ export class WebhookEventsProcessor extends WorkerHost {
     const emailId = body.data?.email_id;
     if (!emailId || !body.type) return;
     const mapped = RESEND_STATUS_MAP[body.type];
-    if (!mapped) return;
-    await this.prisma.message
-      .updateMany({
-        where: { providerRef: emailId },
-        data: { status: mapped },
-      })
-      .catch(() => undefined);
+    if (mapped) {
+      await this.prisma.message
+        .updateMany({
+          where: { providerRef: emailId },
+          data: { status: mapped },
+        })
+        .catch(() => undefined);
+    }
+    await this.recordCampaignEmailEvent(emailId, body.type);
+  }
+
+  /**
+   * Campaign funnel (delivered / opened / clicked / bounced): maps the provider message id back to
+   * the campaign's `sent` row and records one event per type per sent email.
+   */
+  private async recordCampaignEmailEvent(
+    emailId: string,
+    providerType: string,
+  ): Promise<void> {
+    const type = RESEND_CAMPAIGN_EVENT_MAP[providerType];
+    if (!type) return;
+    const sent = await this.prisma.emailEvent.findFirst({
+      where: { providerRef: emailId, type: EmailEventType.sent },
+      select: { emailCampaignId: true, recipient: true },
+    });
+    if (!sent) return;
+    const existing = await this.prisma.emailEvent.findFirst({
+      where: { providerRef: emailId, type },
+      select: { id: true },
+    });
+    if (existing) return;
+    await this.prisma.emailEvent.create({
+      data: {
+        emailCampaignId: sent.emailCampaignId,
+        recipient: sent.recipient,
+        type,
+        providerRef: emailId,
+      },
+    });
   }
 }

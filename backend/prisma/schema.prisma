@@ -570,6 +570,8 @@ enum EmailEventType {
   open
   click
   unsub
+  /// Provider reported a bounce for this recipient (email webhook).
+  bounce
 }
 
 enum LoyaltyProgramType {
@@ -6293,10 +6295,13 @@ model EmailEvent {
   emailCampaign   EmailCampaign  @relation(fields: [emailCampaignId], references: [id])
   recipient       String
   type            EmailEventType
+  /// Email provider's message id (Resend), set on `sent` rows so webhook events map back to the campaign.
+  providerRef     String?        @map("provider_ref")
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([emailCampaignId])
+  @@index([providerRef])
   @@map("email_events")
 }
 
