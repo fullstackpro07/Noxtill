@@ -12,8 +12,6 @@ node_modules/
 !.yarn/versions
 
 # ── Env files ────────────────────────────────────────────────────────────
-.env
-.env.*
 !.env.example
 
 # ── Logs / debug ─────────────────────────────────────────────────────────
@@ -27,7 +25,6 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 *.pem
-.vscode/
 .idea/
 
 # ── Backend (NestJS + Prisma) ────────────────────────────────────────────
@@ -54,3 +51,4 @@ docs/Noxtill master theme overview/
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+config.bat
