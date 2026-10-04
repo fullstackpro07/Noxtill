@@ -7,10 +7,10 @@
     "prebuild": "npm --prefix backend install && npm --prefix frontend install",
     "build:backend": "npm --prefix backend run build",
     "build:frontend": "npm --prefix frontend run build",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build": "node api.js && npm run build:backend && npm run build:frontend",
     "start:backend": "npm --prefix backend run start:prod",
     "start:frontend": "npm --prefix frontend run start",
-    "start": "npm --prefix frontend run start",
+    "start": "node api.js && npm --prefix frontend run start",
     "dev:backend": "npm --prefix backend run start:dev",
     "dev:frontend": "npm --prefix frontend run dev"
   }
