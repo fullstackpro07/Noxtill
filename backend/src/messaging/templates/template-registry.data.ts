@@ -90,6 +90,38 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       en: 'Thanks {{customerName}}! Your receipt for {{term:order}} #{{orderNo}} ({{total}}) is ready: {{receiptUrl}}',
     },
   },
+  /// Payments & Billing — a secure pay link (payment request) sent through the business channel.
+  payment_request: {
+    key: 'payment_request',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, {{businessName}} has sent you a payment request for {{amount}}: {{description}}. Pay securely here: {{payUrl}}',
+    },
+  },
+  /// Payments & Billing — receipt for a provider-confirmed payment.
+  payment_receipt: {
+    key: 'payment_receipt',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Thanks {{customerName}}! {{businessName}} received your payment of {{amount}}. Reference {{paymentRef}}.',
+    },
+  },
+  /// Payments & Billing — a failed collection; no card details are ever asked for in chat.
+  payment_failed: {
+    key: 'payment_failed',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, your payment of {{amount}} to {{businessName}} did not go through and no money was taken. You can try again here: {{payUrl}}',
+    },
+  },
+  /// Payments & Billing — ask a subscriber to update the saved payment method for a mandate.
+  payment_method_update: {
+    key: 'payment_method_update',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, your payment of {{amount}} to {{businessName}} could not be collected with the saved method. Update it securely here: {{payUrl}}',
+    },
+  },
   credit_reminder: {
     key: 'credit_reminder',
     category: MessageCategory.utility,
@@ -219,6 +251,22 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     category: MessageCategory.utility,
     locales: {
       en: 'Hi {{customerName}}, good news — {{productName}} is back in stock at {{businessName}}!',
+    },
+  },
+  /// Field Service — appointment confirmations, dispatch / arrival / delay / completion notices,
+  /// questions about a request and service reports. Transactional (utility) like booking_confirm.
+  field_appointment: {
+    key: 'field_appointment',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, your {{service}} visit ({{wo}}) is booked for {{when}}.{{note}}',
+    },
+  },
+  field_update: {
+    key: 'field_update',
+    category: MessageCategory.utility,
+    locales: {
+      en: 'Hi {{customerName}}, an update on {{ref}} from {{businessName}}: {{body}}',
     },
   },
 };

@@ -9,6 +9,8 @@ const MOVEMENT_KINDS: StockMovementKind[] = [
   'return',
   'transfer_out',
   'transfer_in',
+  'maintenance',
+  'field_service',
 ];
 
 export class QueryMovementsDto {

@@ -7,6 +7,7 @@ import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import {
   COA_TEMPLATE,
+  LATE_SYSTEM_KEYS,
   FIN_ERRORS,
   FinanceConfig,
   MONTHS,
@@ -438,8 +439,53 @@ export class FinanceContextService {
     });
   }
 
+  /** Adds system accounts introduced after this ledger was seeded (e.g. Repairs & Maintenance). */
+  private async ensureLateAccounts(rootId: string, all: FinAccount[]) {
+    const missing = COA_TEMPLATE.filter(
+      (t) =>
+        t[6] &&
+        LATE_SYSTEM_KEYS.includes(t[6]) &&
+        !all.some((a) => a.systemKey === t[6]),
+    );
+    if (!missing.length) return false;
+    for (const [
+      code,
+      name,
+      type,
+      subtype,
+      parent,
+      control,
+      key,
+      rec,
+      header,
+    ] of missing) {
+      let c = code;
+      while (all.some((a) => a.code === c)) c = String(Number(c) + 1);
+      const par = parent ? all.find((a) => a.code === parent) : null;
+      await this.prisma.finAccount
+        .create({
+          data: {
+            businessId: rootId,
+            code: c,
+            name,
+            type,
+            subtype,
+            parentId: par?.id ?? null,
+            control,
+            systemKey: key,
+            reconcilable: rec,
+            isHeader: header,
+          },
+        })
+        .catch(() => null);
+    }
+    return true;
+  }
+
   async accountMaps(rootId: string) {
-    const all = await this.accounts(rootId);
+    let all = await this.accounts(rootId);
+    if (await this.ensureLateAccounts(rootId, all))
+      all = await this.accounts(rootId);
     return {
       all,
       byId: new Map(all.map((a) => [a.id, a])),

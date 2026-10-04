@@ -16,6 +16,8 @@ const KIND_LABEL: Record<MovementKind, string> = {
   return: "Return",
   transfer_out: "Transfer out",
   transfer_in: "Transfer in",
+  maintenance: "Maintenance",
+  field_service: "Field service",
 };
 const KIND_TONE: Record<MovementKind, Tone> = {
   purchase: "green",
@@ -25,6 +27,8 @@ const KIND_TONE: Record<MovementKind, Tone> = {
   return: "neutral",
   transfer_out: "purple",
   transfer_in: "purple",
+  maintenance: "blue",
+  field_service: "blue",
 };
 const BAR_COLORS: Record<MovementKind, string> = {
   purchase: "#0E8442",
@@ -34,6 +38,8 @@ const BAR_COLORS: Record<MovementKind, string> = {
   return: "#475467",
   transfer_out: "#7E22CE",
   transfer_in: "#7E22CE",
+  maintenance: "#175CD3",
+  field_service: "#175CD3",
 };
 const RANGE_DAYS: Record<string, number> = { "Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90 };
 
