@@ -10,6 +10,7 @@ import { IntegrationProvider, Prisma } from '@prisma/client';
 
 export const PAYMENT_PROVIDERS: IntegrationProvider[] = [
   IntegrationProvider.stripe,
+  IntegrationProvider.stripe_test,
   IntegrationProvider.square,
   IntegrationProvider.paypal,
 ];
@@ -81,19 +82,48 @@ export class CapabilitySyncService {
         (integration.meta as Record<string, unknown>) ?? {},
         since,
       );
-      const created = await this.prisma.externalPayment.createMany({
-        data: payments.map((p) => ({
-          businessId,
-          provider,
-          externalId: p.externalId,
-          kind: p.kind,
-          status: p.status,
-          amount: new Prisma.Decimal(p.amount),
-          currency: p.currency,
-          occurredAt: new Date(p.occurredAt),
-        })),
-        skipDuplicates: true,
-      });
+      // Upsert, not insert-once: a payout moves pending → in_transit → paid and a charge can be
+      // refunded later, and Finance's bank lines and Payments read these statuses.
+      const known = new Set(
+        (
+          await this.prisma.externalPayment.findMany({
+            where: {
+              businessId,
+              provider,
+              externalId: { in: payments.map((p) => p.externalId) },
+            },
+            select: { externalId: true },
+          })
+        ).map((x) => x.externalId),
+      );
+      for (const p of payments)
+        await this.prisma.externalPayment.upsert({
+          where: {
+            businessId_provider_externalId: {
+              businessId,
+              provider,
+              externalId: p.externalId,
+            },
+          },
+          create: {
+            businessId,
+            provider,
+            externalId: p.externalId,
+            kind: p.kind,
+            status: p.status,
+            amount: new Prisma.Decimal(p.amount),
+            currency: p.currency,
+            occurredAt: new Date(p.occurredAt),
+          },
+          update: {
+            status: p.status,
+            amount: new Prisma.Decimal(p.amount),
+            occurredAt: new Date(p.occurredAt),
+          },
+        });
+      const created = {
+        count: payments.filter((p) => !known.has(p.externalId)).length,
+      };
       const message = `Read ${payments.length} transaction(s), ${created.count} new`;
       await this.runs.record(businessId, provider, {
         startedAt,

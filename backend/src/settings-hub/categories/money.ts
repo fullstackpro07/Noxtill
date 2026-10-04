@@ -125,10 +125,13 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
       affectsNote: 'These rules describe what happens at the counter and on returns. They do not change payments already recorded.',
       help: [
         'Customer payment data and Noxtill subscription billing are kept strictly apart.',
-        'The payment methods list is a stored preference; the counter currently offers every method.',
+        'The payment methods list is a stored preference; the counter currently offers every method. Payment links follow Payments › Methods & Routing.',
         'Who may approve a refund is a permission, shown below.',
       ],
-      actions: [{ label: 'Open Branches', icon: 'external-link', href: '/branches/settings', kind: 'link' }],
+      actions: [
+        { label: 'Open Payments & Billing', icon: 'external-link', href: '/payments/settings', kind: 'link' },
+        { label: 'Open Branches', icon: 'external-link', href: '/branches/settings', kind: 'link' },
+      ],
       groups: [
         {
           title: 'Payment methods',
@@ -145,6 +148,19 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
                 return { value: list.length ? list.join(' · ') : 'None listed' };
               },
             }),
+            row({
+              key: 'card-provider',
+              label: 'Card payments and payment links',
+              description: 'Taken, captured, refunded and disputed through your own connected Stripe account in Payments & Billing. Square and PayPal are read-only imports.',
+              link: { label: 'Open Payments › Methods & Routing', href: '/payments/routing' },
+              state: async (ctx) => {
+                const b = await d.prisma.business.findUniqueOrThrow({ where: { id: ctx.businessId }, select: { id: true, parentId: true } });
+                const c = await d.prisma.payConnection.findFirst({ where: { businessId: b.parentId ?? b.id, provider: 'stripe', env: 'live' } });
+                if (!c || c.status === 'Disconnected') return { value: 'No provider connected', tone: 'amber' };
+                if (!c.writeEnabled) return { value: 'Stripe connected read-only', tone: 'amber' };
+                return { value: `Stripe · ${c.status}`, tone: c.status === 'Connected' ? 'green' : 'amber' };
+              },
+            }),
           ],
         },
         {
@@ -152,6 +168,7 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
           hint: 'Some fixed, some set in Sales & POS',
           rows: [
             capabilityRow(d, { key: CAPABILITIES.RETURNS_APPROVE, label: 'Approve returns and refunds', description: 'A return creates a pending request; only a role holding this permission can approve it.', impact: 'Approving a return refunds money and puts stock back.' }),
+            row({ key: 'card-refunds', label: 'Card and online refunds', description: 'Approving a card/online return hands the refund to Payments & Billing, which executes it on the provider (Owner approval above the threshold set there). Cash refunds come out of the drawer.', link: { label: 'Open Payments › Refunds', href: '/payments/refunds' }, state: () => ({ value: 'Executed in Payments & Billing', tone: 'green' }) }),
             row({ key: 'refund-amount', label: 'Refund amount', description: 'The refund is recomputed from the order’s recorded prices — it can never exceed what was sold.', risk: 'High', state: () => ({ value: 'Computed by Noxtill', tone: 'green' }) }),
             row({
               key: 'refund-limit',

@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "finance_approval";
+export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "finance_approval" | "payment_approval" | "payment_dispute_due" | "payment_failed" | "asset_pm_overdue" | "asset_down_critical" | "asset_wo_approval" | "field_approval" | "field_sla_breach" | "field_unassigned_urgent";
 export type ActionItemPriority = "urgent" | "normal" | "low";
 export type SnoozeDuration = "1h" | "tomorrow" | "next_week";
 
@@ -30,6 +30,15 @@ export const ACTION_ITEM_TYPE_LABEL: Record<ActionItemType, string> = {
   overdue_credit: "Overdue credit",
   unreplied_review: "Unreplied review",
   finance_approval: "Finance approval",
+  payment_approval: "Payment approval",
+  payment_dispute_due: "Dispute deadline",
+  payment_failed: "Failed payment",
+  asset_pm_overdue: "Overdue maintenance",
+  asset_down_critical: "Critical asset down",
+  asset_wo_approval: "Work order approval",
+  field_approval: "Field approval",
+  field_sla_breach: "Field SLA breached",
+  field_unassigned_urgent: "Unassigned urgent job",
 };
 
 /** GET /actions — staff see only complaints assigned to them (server-enforced); owners/managers see everything. */

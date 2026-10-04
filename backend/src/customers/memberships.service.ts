@@ -1,7 +1,9 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
+import { ModuleRef } from '@nestjs/core';
 import { BillingService } from '../billing/billing.service';
+import { PayRecurringService } from '../payments/pay-recurring.service';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { MEMBERSHIP_ERROR_CODES } from './memberships.constants';
@@ -22,11 +24,10 @@ function nextPeriodEnd(from: Date, interval: 'monthly' | 'yearly'): Date {
  * "charges on schedule" for cash means a real `currentPeriodEnd` due date plus a real lapse job
  * (`CrmJobsProcessor.runMembershipExpiry`) and a real `renewCash()` action, since there's no
  * gateway to auto-charge cash. `method: 'online'` memberships create a real Stripe subscription
- * Checkout session; `POST /billing/webhook` → `StripeWebhookProcessor` activates it automatically
- * once checkout completes and keeps `currentPeriodEnd` in sync on every real Stripe renewal —
- * kept deliberately separate from that processor's business-plan path (disambiguated by real
- * `membershipId` metadata) so a membership event can never be mistaken for — or corrupt — the
- * business's own subscription state. `POST /memberships/:id/activate` still exists as a manual
+ * Checkout session on the business's OWN connected Stripe account (Payments & Billing); its
+ * Connect webhook (`/webhooks/stripe-connect`) activates it and keeps `currentPeriodEnd` in sync
+ * on every renewal. Memberships created earlier on the platform account still renew through
+ * `/webhooks/stripe` (legacy). `POST /memberships/:id/activate` still exists as a manual
  * fallback for a business without webhooks configured.
  */
 @Injectable()
@@ -34,7 +35,17 @@ export class MembershipsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly billing: BillingService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /** Payments & Billing runs online memberships on the business's own Stripe account (resolved lazily). */
+  private recurring(): PayRecurringService | null {
+    try {
+      return this.moduleRef.get(PayRecurringService, { strict: false });
+    } catch {
+      return null;
+    }
+  }
 
   createPlan(dto: CreateMembershipPlanDto) {
     return this.tenantPrisma.client.membershipPlan.create({
@@ -81,13 +92,6 @@ export class MembershipsService {
       return { membership, checkoutUrl: null as string | null };
     }
 
-    if (!plan.stripePriceId) {
-      throw new AppException(
-        MEMBERSHIP_ERROR_CODES.ONLINE_NOT_CONFIGURED,
-        `Plan "${plan.name}" has no Stripe price configured for online billing yet — use "cash" for now`,
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
     if (!dto.successUrl || !dto.cancelUrl) {
       throw new AppException(
         MEMBERSHIP_ERROR_CODES.ONLINE_NOT_CONFIGURED,
@@ -95,7 +99,17 @@ export class MembershipsService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const recurring = this.recurring();
+    if (!recurring) {
+      throw new AppException(
+        MEMBERSHIP_ERROR_CODES.ONLINE_NOT_CONFIGURED,
+        'Online memberships need Payments & Billing — use cash for now',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
 
+    // Online memberships bill on the business's OWN connected Stripe account (Payments &
+    // Billing creates the product/price/customer there) — never on Noxtill's platform account.
     const membership = await this.tenantPrisma.client.membership.create({
       data: {
         businessId,
@@ -105,17 +119,27 @@ export class MembershipsService {
         method: 'online',
       },
     });
-
-    const session = await this.billing.createSubscriptionCheckout({
-      referenceId: membership.id,
-      referenceKey: 'membershipId',
-      customerEmail: customer.email ?? undefined,
-      priceRef: plan.stripePriceId,
-      successUrl: dto.successUrl,
-      cancelUrl: dto.cancelUrl,
-    });
-
-    return { membership, checkoutUrl: session.url };
+    try {
+      const url = await recurring.startMembershipCheckout(
+        membership,
+        plan,
+        {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+        },
+        dto.successUrl,
+        dto.cancelUrl,
+      );
+      return { membership, checkoutUrl: url };
+    } catch (e) {
+      // No half-created pending membership when there is no provider to collect it.
+      await this.tenantPrisma.client.membership.delete({
+        where: { id: membership.id },
+      });
+      throw e;
+    }
   }
 
   listMemberships(customerId?: string) {
@@ -172,13 +196,20 @@ export class MembershipsService {
         ? membership.currentPeriodEnd
         : new Date();
 
-    return this.tenantPrisma.client.membership.update({
+    const renewed = await this.tenantPrisma.client.membership.update({
       where: { id },
       data: {
         status: MembershipStatus.active,
         currentPeriodEnd: nextPeriodEnd(renewFrom, membership.plan.interval),
       },
     });
+    // The cash collected at the counter is a real payment in the payment ledger (best-effort).
+    try {
+      await this.recurring()?.recordCashRenewal(id, renewed.currentPeriodEnd);
+    } catch {
+      // the projector picks it up on the next run
+    }
+    return renewed;
   }
 
   async cancel(id: string) {
@@ -197,7 +228,11 @@ export class MembershipsService {
     // Real Stripe cancellation, not swallowed — if this throws, the membership stays as-is
     // rather than the local status silently drifting from what Stripe still thinks is active.
     if (membership.stripeSubscriptionId) {
-      await this.billing.cancelSubscription(membership.stripeSubscriptionId);
+      const where =
+        (await this.recurring()?.cancelMembershipSubscription(id)) ?? 'legacy';
+      // Memberships created before the business's own Stripe connection live on the platform account.
+      if (where !== 'connected')
+        await this.billing.cancelSubscription(membership.stripeSubscriptionId);
     }
 
     return this.tenantPrisma.client.membership.update({
