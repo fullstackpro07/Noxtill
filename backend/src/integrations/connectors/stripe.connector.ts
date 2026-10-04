@@ -38,6 +38,7 @@ interface StripeTokenResponse {
   refresh_token?: string;
   stripe_user_id: string;
   livemode: boolean;
+  scope?: string;
 }
 
 interface StripeList<T> {
@@ -67,28 +68,49 @@ interface StripePayout {
 }
 
 /**
- * Stripe connector — Stripe Connect (standard) with the `read_only` scope. Noxtill can read the
- * business's own charges, refunds and payouts; it cannot create or change anything in the account.
- * The platform's `STRIPE_SECRET_KEY` authenticates the OAuth token exchange (Stripe's documented
- * Connect flow), and each business's own `access_token` is what reads that business's data.
+ * Stripe connector — Stripe Connect (standard) with the `read_write` scope, so Payments & Billing
+ * can take payments, capture, refund, answer disputes and read payouts on the business's own
+ * account (the platform key acts on it through the Stripe-Account header). The platform's secret
+ * key for this mode authenticates the OAuth token exchange (Stripe's documented Connect flow).
+ * Connections made before the read_write upgrade keep `scope: read_only` in their meta and stay
+ * read-only until reconnected. `StripeTestConnector` is the same flow in Stripe test mode.
  */
 @Injectable()
 export class StripeConnector implements Connector {
-  readonly provider = IntegrationProvider.stripe;
+  readonly provider: IntegrationProvider = IntegrationProvider.stripe;
+  protected readonly mode: 'live' | 'test' = 'live';
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(protected readonly config: ConfigService) {}
+
+  protected clientId(): string {
+    return (
+      this.config.get<string>(
+        this.mode === 'test'
+          ? 'STRIPE_CONNECT_CLIENT_ID_TEST'
+          : 'STRIPE_CONNECT_CLIENT_ID',
+      ) ?? ''
+    );
+  }
+
+  protected secretKey(): string {
+    return (
+      this.config.get<string>(
+        this.mode === 'test' ? 'STRIPE_TEST_SECRET_KEY' : 'STRIPE_SECRET_KEY',
+      ) ?? ''
+    );
+  }
 
   private redirectUri(): string {
     const backendUrl =
       this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
-    return `${backendUrl}/integrations/stripe/callback`;
+    return `${backendUrl}/integrations/${this.provider}/callback`;
   }
 
   authUrl(state: string): string {
     const params = new URLSearchParams({
       response_type: 'code',
-      client_id: this.config.get<string>('STRIPE_CONNECT_CLIENT_ID') ?? '',
-      scope: 'read_only',
+      client_id: this.clientId(),
+      scope: 'read_write',
       redirect_uri: this.redirectUri(),
       state,
     });
@@ -105,7 +127,7 @@ export class StripeConnector implements Connector {
       {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         auth: {
-          username: this.config.get<string>('STRIPE_SECRET_KEY') ?? '',
+          username: this.secretKey(),
           password: '',
         },
       },
@@ -116,6 +138,7 @@ export class StripeConnector implements Connector {
       providerMeta: {
         accountId: response.data.stripe_user_id,
         livemode: response.data.livemode,
+        scope: response.data.scope ?? 'read_write',
       },
     };
   }
@@ -139,13 +162,13 @@ export class StripeConnector implements Connector {
     await axios.post(
       DEAUTHORIZE_URL,
       new URLSearchParams({
-        client_id: this.config.get<string>('STRIPE_CONNECT_CLIENT_ID') ?? '',
+        client_id: this.clientId(),
         stripe_user_id: accountId,
       }).toString(),
       {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         auth: {
-          username: this.config.get<string>('STRIPE_SECRET_KEY') ?? '',
+          username: this.secretKey(),
           password: '',
         },
       },
@@ -210,4 +233,12 @@ export class StripeConnector implements Connector {
       })),
     ];
   }
+}
+
+/** The same Stripe Connect flow in Stripe test mode (sandbox keys, test data only). */
+@Injectable()
+export class StripeTestConnector extends StripeConnector {
+  override readonly provider: IntegrationProvider =
+    IntegrationProvider.stripe_test;
+  protected override readonly mode = 'test' as const;
 }

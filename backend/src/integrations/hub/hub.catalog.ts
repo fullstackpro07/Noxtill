@@ -535,13 +535,31 @@ export const HUB_CATALOG: HubProviderDef[] = [
     name: 'Stripe',
     initials: 'ST',
     category: 'Payments',
-    benefit: 'Import card charges, refunds and payouts',
+    benefit:
+      'Take card payments, refunds, disputes and payouts in Payments & Billing',
     direction: 'Inbound',
-    modules: ['Integrations'],
-    permissions: 'Read charges, refunds and payouts (read-only)',
+    modules: ['Payments & Billing', 'Finance & Accounting'],
+    permissions:
+      'Read and write payments on your Stripe account (Connect read_write): payment links, capture, refunds, dispute responses; read balances and payouts',
     source: integ(IntegrationProvider.stripe),
     connectKind: 'oauth',
     envKeys: ['STRIPE_CONNECT_CLIENT_ID', 'STRIPE_SECRET_KEY'],
+    recordsUnit: 'transactions',
+  },
+  {
+    key: 'stripe_test',
+    name: 'Stripe — test mode',
+    initials: 'ST',
+    category: 'Payments',
+    benefit:
+      'Try payment links, refunds and disputes with Stripe sandbox data — never real money',
+    direction: 'Inbound',
+    modules: ['Payments & Billing'],
+    permissions:
+      'Read and write test-mode payments on your Stripe account (Connect read_write, sandbox keys)',
+    source: integ(IntegrationProvider.stripe_test),
+    connectKind: 'oauth',
+    envKeys: ['STRIPE_CONNECT_CLIENT_ID_TEST', 'STRIPE_TEST_SECRET_KEY'],
     recordsUnit: 'transactions',
   },
   {

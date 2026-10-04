@@ -16,6 +16,15 @@ const SOURCE_LABEL: Record<ActionItemType, string> = {
   overdue_credit: "Credit",
   unreplied_review: "Reviews",
   finance_approval: "Finance",
+  payment_approval: "Payments",
+  payment_dispute_due: "Payments",
+  payment_failed: "Payments",
+  asset_pm_overdue: "Assets",
+  asset_down_critical: "Assets",
+  asset_wo_approval: "Assets",
+  field_approval: "Field Service",
+  field_sla_breach: "Field Service",
+  field_unassigned_urgent: "Field Service",
 };
 const PRIORITY_LABEL: Record<LiveActionItem["priority"], string> = { urgent: "High", normal: "Normal", low: "Low" };
 

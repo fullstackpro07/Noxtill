@@ -523,7 +523,7 @@ function NewPlanDialog({ open, onClose }: { open: boolean; onClose: () => void }
           </Select>
         </div>
         <Input label="Benefits (optional)" value={benefits} onChange={(e) => setBenefits(e.target.value)} />
-        <Input label="Stripe price ID (optional — enables online enrollment)" value={stripePriceId} onChange={(e) => setStripePriceId(e.target.value)} />
+        <Input label="Legacy platform Stripe price ID (optional — new online memberships bill on your own Stripe account automatically)" value={stripePriceId} onChange={(e) => setStripePriceId(e.target.value)} />
       </div>
     </Dialog>
   );
@@ -537,7 +537,6 @@ function EnrollMembershipDialog({ open, onClose, plans, currency }: { open: bool
   const queryClient = useQueryClient();
 
   const { data: results } = useQuery({ queryKey: ["customer-search", query], queryFn: () => searchCustomers(query), enabled: query.trim().length > 1 });
-  const plan = plans.find((p) => p.id === (planId || plans[0]?.id));
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -610,9 +609,7 @@ function EnrollMembershipDialog({ open, onClose, plans, currency }: { open: bool
         </Select>
         <Select label="Payment method" value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
           <option value="cash">Cash (active immediately)</option>
-          <option value="online" disabled={!plan?.stripePriceId}>
-            Online — real Stripe subscription{!plan?.stripePriceId ? " (no Stripe price configured for this plan)" : ""}
-          </option>
+          <option value="online">Online — subscription on your connected Stripe account (Payments &amp; Billing)</option>
         </Select>
       </div>
     </Dialog>

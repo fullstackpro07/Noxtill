@@ -6,6 +6,6 @@ import { CustomRolesController } from './custom-roles.controller';
 @Module({
   controllers: [CustomRolesController],
   providers: [CustomRolesService, SystemRoleOverridesService],
-  exports: [SystemRoleOverridesService],
+  exports: [SystemRoleOverridesService, CustomRolesService],
 })
 export class RolesModule {}

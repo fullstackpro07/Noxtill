@@ -57,6 +57,9 @@ import { BusinessBrainModule } from './business-brain/business-brain.module';
 import { ProjectsModule } from './projects/projects.module';
 import { HelpdeskModule } from './helpdesk/helpdesk.module';
 import { FinanceModule } from './finance/finance.module';
+import { PaymentsModule } from './payments/payments.module';
+import { AssetsModule } from './assets/assets.module';
+import { FieldServiceModule } from './field-service/field-service.module';
 import { CompetitiveModule } from './competitive/competitive.module';
 import { VoiceModule } from './voice/voice.module';
 import { DigitizerModule } from './digitizer/digitizer.module';
@@ -134,6 +137,9 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     ProjectsModule,
     HelpdeskModule,
     FinanceModule,
+    PaymentsModule,
+    AssetsModule,
+    FieldServiceModule,
     CompetitiveModule,
     VoiceModule,
     DigitizerModule,

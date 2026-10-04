@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Box,
   LayoutDashboard,
   Clock3,
   HeartPulse,
@@ -121,6 +122,7 @@ import {
   Users2,
   Coins,
   Landmark,
+  WalletCards,
 } from "lucide-react";
 
 export type Role = "owner" | "manager" | "staff";
@@ -347,6 +349,22 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "staff-analytics", labelKey: "nav.staffAnalytics", href: "/profit/staff-analytics", icon: BarChart3 },
       { key: "health-score", labelKey: "nav.businessHealthScore", href: "/profit/health-score", icon: HeartPulse },
     ],
+  },
+  {
+    key: "payments",
+    labelKey: "nav.payments",
+    href: "/payments",
+    icon: WalletCards,
+    roles: ["owner", "manager", "staff"],
+    isNew: true,
+  },
+  {
+    key: "assets-maintenance",
+    labelKey: "nav.assetsMaintenance",
+    href: "/assets-maintenance",
+    icon: Box,
+    roles: ["owner", "manager", "staff"],
+    isNew: true,
   },
   {
     key: "finance",

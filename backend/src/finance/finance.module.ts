@@ -53,6 +53,6 @@ import { FinanceProcessor, FinanceScheduler } from './finance.processor';
     FinanceScheduler,
     FinanceProcessor,
   ],
-  exports: [FinanceContextService, FinanceLedgerService],
+  exports: [FinanceContextService, FinanceLedgerService, FinanceAssetsService],
 })
 export class FinanceModule {}
