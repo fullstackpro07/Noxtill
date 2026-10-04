@@ -107,6 +107,44 @@ export const CAPABILITIES = {
   FINANCE_MANAGE: 'finance.manage',
   FINANCE_APPROVE: 'finance.approve',
   FINANCE_ADMIN: 'finance.admin',
+  /// Payments & Billing: open the module (view; staff see only payments they took), create and
+  /// send payment requests (request), retry failed payments and run mandates (recover), execute
+  /// approved refunds and captures (refund), work provider disputes (dispute), resolve provider
+  /// reconciliation (reconcile), approve above the Owner thresholds (approve), and change routing,
+  /// payment policy and see raw provider data (admin). Fees, customer PII and exports are
+  /// field-level: without them the value is never sent to the browser.
+  PAYMENTS_VIEW: 'payments.view',
+  PAYMENTS_REQUEST: 'payments.request',
+  PAYMENTS_RECOVER: 'payments.recover',
+  PAYMENTS_REFUND: 'payments.refund',
+  PAYMENTS_DISPUTE: 'payments.dispute',
+  PAYMENTS_RECONCILE: 'payments.reconcile',
+  PAYMENTS_APPROVE: 'payments.approve',
+  PAYMENTS_ADMIN: 'payments.admin',
+  PAYMENTS_FEES: 'payments.fees',
+  PAYMENTS_PII: 'payments.pii',
+  PAYMENTS_EXPORT: 'payments.export',
+  /// Assets & Maintenance: open the module (view), register assets (create), edit them and bulk
+  /// changes (edit), transfer them (transfer), retire/dispose/archive (retire), raise maintenance
+  /// requests (request), triage requests and approve/assign/schedule/close work orders (approve),
+  /// start and progress work orders including issuing parts (start), complete work orders and record
+  /// inspections, service events and downtime (complete), manage preventive plans (pm), see costs
+  /// (cost — field-level: without it cost values are never sent), export (export), record meter
+  /// readings (reading) and change asset settings (settings).
+  ASSETS_VIEW: 'assets.view',
+  ASSETS_CREATE: 'assets.create',
+  ASSETS_EDIT: 'assets.edit',
+  ASSETS_TRANSFER: 'assets.transfer',
+  ASSETS_RETIRE: 'assets.retire',
+  ASSETS_REQUEST: 'assets.request',
+  ASSETS_APPROVE: 'assets.approve',
+  ASSETS_START: 'assets.start',
+  ASSETS_COMPLETE: 'assets.complete',
+  ASSETS_PM: 'assets.pm',
+  ASSETS_COST: 'assets.cost',
+  ASSETS_EXPORT: 'assets.export',
+  ASSETS_READING: 'assets.reading',
+  ASSETS_SETTINGS: 'assets.settings',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -157,6 +195,24 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.FINANCE_VIEW,
   CAPABILITIES.FINANCE_MANAGE,
   CAPABILITIES.FINANCE_APPROVE,
+  CAPABILITIES.PAYMENTS_VIEW,
+  CAPABILITIES.PAYMENTS_REQUEST,
+  CAPABILITIES.PAYMENTS_RECOVER,
+  CAPABILITIES.PAYMENTS_FEES,
+  CAPABILITIES.PAYMENTS_PII,
+  CAPABILITIES.ASSETS_VIEW,
+  CAPABILITIES.ASSETS_CREATE,
+  CAPABILITIES.ASSETS_EDIT,
+  CAPABILITIES.ASSETS_TRANSFER,
+  CAPABILITIES.ASSETS_RETIRE,
+  CAPABILITIES.ASSETS_REQUEST,
+  CAPABILITIES.ASSETS_APPROVE,
+  CAPABILITIES.ASSETS_START,
+  CAPABILITIES.ASSETS_COMPLETE,
+  CAPABILITIES.ASSETS_PM,
+  CAPABILITIES.ASSETS_COST,
+  CAPABILITIES.ASSETS_EXPORT,
+  CAPABILITIES.ASSETS_READING,
 ];
 
 /**
@@ -170,5 +226,12 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
 export const SYSTEM_ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   [Role.owner]: ALL_CAPABILITIES,
   [Role.manager]: OWNER_AND_MANAGER_CAPABILITIES,
-  [Role.staff]: [CAPABILITIES.HELPDESK_ACCESS],
+  [Role.staff]: [
+    CAPABILITIES.HELPDESK_ACCESS,
+    CAPABILITIES.PAYMENTS_VIEW,
+    CAPABILITIES.PAYMENTS_REQUEST,
+    CAPABILITIES.ASSETS_VIEW,
+    CAPABILITIES.ASSETS_REQUEST,
+    CAPABILITIES.ASSETS_READING,
+  ],
 };

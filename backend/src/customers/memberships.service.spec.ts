@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { MembershipsService } from './memberships.service';
+import { ModuleRef } from '@nestjs/core';
 import { BillingService } from '../billing/billing.service';
 import { AppException } from '../common/filters/app.exception';
 
@@ -25,6 +26,14 @@ describe('MembershipsService (UPD-BE-025)', () => {
     createSubscriptionCheckout: jest.fn(),
     cancelSubscription: jest.fn(),
   };
+  // Payments & Billing (resolved lazily by the service) — online memberships bill on the
+  // business's own connected Stripe account through it.
+  const recurring = {
+    startMembershipCheckout: jest.fn(),
+    cancelMembershipSubscription: jest.fn(),
+    recordCashRenewal: jest.fn(),
+  };
+  const moduleRef = { get: () => recurring };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -38,6 +47,7 @@ describe('MembershipsService (UPD-BE-025)', () => {
     membershipsService = new MembershipsService(
       tenantPrisma,
       billing as unknown as BillingService,
+      moduleRef as unknown as ModuleRef,
     );
 
     const business = await prisma.business.create({
@@ -58,6 +68,9 @@ describe('MembershipsService (UPD-BE-025)', () => {
   afterEach(() => {
     billing.createSubscriptionCheckout.mockReset();
     billing.cancelSubscription.mockReset();
+    recurring.startMembershipCheckout.mockReset();
+    recurring.cancelMembershipSubscription.mockReset();
+    recurring.recordCashRenewal.mockReset();
   });
 
   afterAll(async () => {
@@ -98,9 +111,12 @@ describe('MembershipsService (UPD-BE-025)', () => {
     expect(daysUntilDue).toBeLessThan(32);
   });
 
-  it('an online membership with no stripePriceId configured fails cleanly rather than faking checkout', async () => {
+  it('an online membership with no connected payment provider fails cleanly and leaves nothing pending', async () => {
+    recurring.startMembershipCheckout.mockRejectedValue(
+      new AppException('PAYMENT_PROVIDER_REQUIRED', 'Connect Stripe', 422),
+    );
     const plan = await membershipsService.createPlan({
-      name: 'No Stripe Plan',
+      name: 'No Provider Plan',
       price: 40,
     });
 
@@ -114,17 +130,18 @@ describe('MembershipsService (UPD-BE-025)', () => {
       }),
     ).rejects.toBeInstanceOf(AppException);
     expect(billing.createSubscriptionCheckout).not.toHaveBeenCalled();
+    expect(await prisma.membership.count({ where: { planId: plan.id } })).toBe(
+      0,
+    );
   });
 
-  it('an online membership with a configured plan creates a real Stripe checkout session and lands pending, keyed by membershipId not businessId', async () => {
-    billing.createSubscriptionCheckout.mockResolvedValue({
-      url: 'https://checkout.stripe.com/session/abc',
-      sessionRef: 'cs_test_abc',
-    });
+  it('an online membership opens checkout on the business’s own Stripe account (never the platform key) and lands pending', async () => {
+    recurring.startMembershipCheckout.mockResolvedValue(
+      'https://checkout.stripe.com/session/abc',
+    );
     const plan = await membershipsService.createPlan({
       name: 'Stripe Plan',
       price: 50,
-      stripePriceId: 'price_test_123',
     });
 
     const result = await membershipsService.create(businessId, {
@@ -137,20 +154,19 @@ describe('MembershipsService (UPD-BE-025)', () => {
 
     expect(result.membership.status).toBe('pending');
     expect(result.checkoutUrl).toBe('https://checkout.stripe.com/session/abc');
-    expect(billing.createSubscriptionCheckout).toHaveBeenCalledWith(
-      expect.objectContaining({
-        referenceId: result.membership.id,
-        referenceKey: 'membershipId',
-        priceRef: 'price_test_123',
-      }),
-    );
+    expect(billing.createSubscriptionCheckout).not.toHaveBeenCalled();
+    const [m, p] = recurring.startMembershipCheckout.mock.calls[0] as [
+      { id: string },
+      { id: string },
+    ];
+    expect(m.id).toBe(result.membership.id);
+    expect(p.id).toBe(plan.id);
   });
 
   it('activate() moves a pending membership to active, and rejects doing it twice', async () => {
-    billing.createSubscriptionCheckout.mockResolvedValue({
-      url: 'https://checkout.stripe.com/session/def',
-      sessionRef: 'cs_test_def',
-    });
+    recurring.startMembershipCheckout.mockResolvedValue(
+      'https://checkout.stripe.com/session/def',
+    );
     const plan = await membershipsService.createPlan({
       name: 'Activate Plan',
       price: 20,
@@ -188,7 +204,8 @@ describe('MembershipsService (UPD-BE-025)', () => {
     expect(billing.cancelSubscription).not.toHaveBeenCalled();
   });
 
-  it('cancel() does not flip local status if the real Stripe cancellation fails', async () => {
+  it('cancel() of a legacy platform-billed membership does not flip local status if the real Stripe cancellation fails', async () => {
+    recurring.cancelMembershipSubscription.mockResolvedValue('legacy');
     billing.cancelSubscription.mockRejectedValue(new Error('Stripe down'));
     await prisma.membershipPlan.create({
       data: {
@@ -258,6 +275,10 @@ describe('MembershipsService (UPD-BE-025)', () => {
       expect(renewed.currentPeriodEnd!.getTime()).toBeGreaterThan(
         before.getTime(),
       );
+      expect(recurring.recordCashRenewal).toHaveBeenCalledWith(
+        membership.id,
+        renewed.currentPeriodEnd,
+      );
       const gapDays =
         (renewed.currentPeriodEnd!.getTime() - before.getTime()) /
         (24 * 60 * 60 * 1000);
@@ -292,10 +313,9 @@ describe('MembershipsService (UPD-BE-025)', () => {
         price: 25,
         stripePriceId: 'price_renew_test',
       });
-      billing.createSubscriptionCheckout.mockResolvedValue({
-        url: 'https://checkout.stripe.com/session/renew',
-        sessionRef: 'cs_renew',
-      });
+      recurring.startMembershipCheckout.mockResolvedValue(
+        'https://checkout.stripe.com/session/renew',
+      );
       const { membership } = await membershipsService.create(businessId, {
         customerId,
         planId: plan.id,

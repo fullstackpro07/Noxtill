@@ -19,7 +19,10 @@ import { QuickBooksConnector } from './connectors/quickbooks.connector';
 import { XeroConnector } from './connectors/xero.connector';
 import { ShopifyConnector } from './connectors/shopify.connector';
 import { WooCommerceConnector } from './connectors/woocommerce.connector';
-import { StripeConnector } from './connectors/stripe.connector';
+import {
+  StripeConnector,
+  StripeTestConnector,
+} from './connectors/stripe.connector';
 import { SquareConnector } from './connectors/square.connector';
 import { PayPalConnector } from './connectors/paypal.connector';
 import { GoogleAnalyticsConnector } from './connectors/google-analytics.connector';
@@ -62,6 +65,7 @@ export class ConnectorRegistry {
     shopify: ShopifyConnector,
     wooCommerce: WooCommerceConnector,
     stripe: StripeConnector,
+    stripeTest: StripeTestConnector,
     square: SquareConnector,
     payPal: PayPalConnector,
     googleAnalytics: GoogleAnalyticsConnector,
@@ -94,6 +98,7 @@ export class ConnectorRegistry {
       [IntegrationProvider.shopify]: shopify,
       [IntegrationProvider.woocommerce]: wooCommerce,
       [IntegrationProvider.stripe]: stripe,
+      [IntegrationProvider.stripe_test]: stripeTest,
       [IntegrationProvider.square]: square,
       [IntegrationProvider.paypal]: payPal,
       [IntegrationProvider.google_analytics]: googleAnalytics,

@@ -23,7 +23,10 @@ import { QuickBooksConnector } from './connectors/quickbooks.connector';
 import { XeroConnector } from './connectors/xero.connector';
 import { ShopifyConnector } from './connectors/shopify.connector';
 import { WooCommerceConnector } from './connectors/woocommerce.connector';
-import { StripeConnector } from './connectors/stripe.connector';
+import {
+  StripeConnector,
+  StripeTestConnector,
+} from './connectors/stripe.connector';
 import { SquareConnector } from './connectors/square.connector';
 import { PayPalConnector } from './connectors/paypal.connector';
 import { GoogleAnalyticsConnector } from './connectors/google-analytics.connector';
@@ -64,6 +67,7 @@ import { EmailCampaignsModule } from './email/email-campaigns.module';
     ShopifyConnector,
     WooCommerceConnector,
     StripeConnector,
+    StripeTestConnector,
     SquareConnector,
     PayPalConnector,
     GoogleAnalyticsConnector,
