@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
-import { StripeConnector } from './stripe.connector';
+import { StripeConnector, StripeTestConnector } from './stripe.connector';
 import { SquareConnector } from './square.connector';
 import { PayPalConnector } from './paypal.connector';
 
@@ -20,14 +20,52 @@ afterEach(() => jest.resetAllMocks());
 describe('StripeConnector', () => {
   const connector = new StripeConnector(config);
 
-  it('builds a Connect authorize URL that asks for read_only access only', () => {
+  it('builds a Connect authorize URL that asks for read_write access (Payments & Billing)', () => {
     const url = new URL(connector.authUrl('state-1'));
     expect(url.origin + url.pathname).toBe(
       'https://connect.stripe.com/oauth/authorize',
     );
-    expect(url.searchParams.get('scope')).toBe('read_only');
+    expect(url.searchParams.get('scope')).toBe('read_write');
     expect(url.searchParams.get('client_id')).toBe('ca_test');
     expect(url.searchParams.get('state')).toBe('state-1');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:5000/api/v1/integrations/stripe/callback',
+    );
+  });
+
+  it('runs the same flow in Stripe test mode with the test client id and key', async () => {
+    const test = new StripeTestConnector(
+      new ConfigService({
+        BACKEND_URL: 'http://localhost:5000/api/v1',
+        STRIPE_CONNECT_CLIENT_ID_TEST: 'ca_sandbox',
+        STRIPE_TEST_SECRET_KEY: 'sk_test_sandbox',
+      }),
+    );
+    const url = new URL(test.authUrl('state-2'));
+    expect(url.searchParams.get('client_id')).toBe('ca_sandbox');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:5000/api/v1/integrations/stripe_test/callback',
+    );
+    mockedAxios.post.mockResolvedValue({
+      data: {
+        access_token: 'a',
+        stripe_user_id: 'acct_t',
+        livemode: false,
+        scope: 'read_write',
+      },
+    });
+    const tokens = await test.handleCallback('c');
+    expect(tokens.providerMeta).toMatchObject({
+      accountId: 'acct_t',
+      livemode: false,
+      scope: 'read_write',
+    });
+    const [, , options] = mockedAxios.post.mock.calls[0] as unknown as [
+      string,
+      string,
+      { auth: { username: string } },
+    ];
+    expect(options.auth.username).toBe('sk_test_sandbox');
   });
 
   it('exchanges the code with the platform secret key and keeps the connected account id', async () => {

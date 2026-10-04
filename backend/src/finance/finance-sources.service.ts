@@ -65,6 +65,7 @@ export const SOURCE_MODULE: Record<string, string> = {
   depreciation: 'Fixed Assets',
   bankline: 'Bank feeds',
   fx: 'FX revaluation',
+  payprovider: 'Payments & Billing',
 };
 
 /**
@@ -142,6 +143,7 @@ export class FinanceSourcesService {
         ['expenses', () => this.expenses(c, ids, since)],
         ['cash', () => this.cash(c, ids, since)],
         ['deposits', () => this.deposits(c, ids, since)],
+        ['payprovider', () => this.providerCosts(c, since)],
       ];
       for (const [name, fn] of steps) {
         try {
@@ -724,6 +726,23 @@ export class FinanceSourcesService {
               this.cr(c.key('inventory_transit').id, value, label),
             ];
             break;
+          case 'maintenance':
+            // Parts issued to (qty < 0) or returned from (qty > 0) a maintenance work order.
+            label =
+              m.qty < 0
+                ? `Maintenance parts · ${what}`
+                : `Maintenance parts returned · ${what}`;
+            lines =
+              m.qty < 0
+                ? [
+                    this.dr(c.key('repairs').id, value, label),
+                    this.cr(inv, value, label),
+                  ]
+                : [
+                    this.dr(inv, value, label),
+                    this.cr(c.key('repairs').id, value, label),
+                  ];
+            break;
         }
         return {
           type: 'stock',
@@ -1021,5 +1040,77 @@ export class FinanceSourcesService {
       error: s.sweepError,
       running: this.running.has(rootId),
     };
+  }
+
+  // ── payment provider costs (Payments & Billing) ──────────────────────────
+
+  /**
+   * Fees a payment provider deducted, and chargebacks it took back, as reported by its balance
+   * transactions (live mode only). Card money sits in Payment Clearing until the payout lands, so
+   * each cost moves out of clearing: fees to bank fees, a lost chargeback to bad debt (a won
+   * dispute's reversal posts back). Test-mode data never reaches the ledger.
+   */
+  private async providerCosts(c: SweepCtx, since: Date | null) {
+    const rows = await this.prisma.payBalanceTxn.findMany({
+      where: {
+        businessId: c.rootId,
+        env: 'live',
+        ...(since ? { updatedAt: { gte: since } } : {}),
+      },
+      orderBy: { occurredAt: 'asc' },
+    });
+    const items: Implied[] = [];
+    for (const b of rows) {
+      if (b.currency !== c.base) {
+        const msg = `Provider costs in ${b.currency} aren’t posted automatically (base is ${c.base}) — record them with a journal.`;
+        if (!c.report.errors.includes(msg)) c.report.errors.push(msg);
+        continue;
+      }
+      const fee = num(b.fee);
+      const dispute =
+        (b.category ?? '').startsWith('dispute') || b.type === 'dispute';
+      const amt = num(b.amount);
+      const lines: LineInput[] = [];
+      if (fee)
+        lines.push(
+          this.dr(c.key('bank_fees').id, fee, `Provider fee · ${b.type}`),
+          this.cr(
+            c.key('clearing').id,
+            fee,
+            `Fee deducted by provider · ${b.providerTxnId}`,
+          ),
+        );
+      if (dispute && amt < 0)
+        lines.push(
+          this.dr(
+            c.key('bad_debt').id,
+            -amt,
+            `Chargeback · ${b.sourceObjectId ?? b.providerTxnId}`,
+          ),
+          this.cr(c.key('clearing').id, -amt, 'Taken back by provider'),
+        );
+      if (dispute && amt > 0)
+        lines.push(
+          this.dr(c.key('clearing').id, amt, 'Chargeback reversed by provider'),
+          this.cr(
+            c.key('bad_debt').id,
+            amt,
+            `Dispute won · ${b.sourceObjectId ?? b.providerTxnId}`,
+          ),
+        );
+      if (!lines.length) continue;
+      items.push({
+        type: 'payprovider',
+        id: b.id,
+        event: 'cost',
+        label: `Provider ${dispute ? 'chargeback' : 'fee'} · ${b.providerTxnId}`,
+        reference: b.providerTxnId.slice(0, 60),
+        date: b.occurredAt,
+        branchId: c.rootId,
+        memo: `${b.type}${b.category ? ` (${b.category})` : ''} reported by the payment provider`,
+        lines,
+      });
+    }
+    await this.apply(c, 'payprovider', items);
   }
 }

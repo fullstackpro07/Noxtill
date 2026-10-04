@@ -26,6 +26,8 @@ const FLOW_LABEL: Record<MovementKind, string> = {
   return: "Returns",
   transfer_out: "Transfers out",
   transfer_in: "Transfers in",
+  maintenance: "Maintenance",
+  field_service: "Field service",
 };
 const FLOW_COLOR: Record<MovementKind, string> = {
   purchase: "#0E8442",
@@ -35,6 +37,8 @@ const FLOW_COLOR: Record<MovementKind, string> = {
   return: "#475467",
   transfer_out: "#7E22CE",
   transfer_in: "#7E22CE",
+  maintenance: "#175CD3",
+  field_service: "#175CD3",
 };
 
 export function InventoryOverviewView() {

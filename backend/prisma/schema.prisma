@@ -164,9 +164,9 @@ enum CompetitiveOpportunityKind {
   social
 }
 
-/// Real, currently-backed Action Center types (UPD-BE-004). "Failed payment" and "Expiring
-/// warranty" are in the spec's filter list but have no underlying data model anywhere yet (no
-/// PaymentStatus/warranty concept exists) — disclosed scope gap, not implemented until one does.
+/// Real, currently-backed Action Center types (UPD-BE-004). "Failed payment" is backed by Payments
+/// & Billing recovery cases. "Expiring warranty" is in the spec's filter list but has no underlying
+/// data model anywhere yet — disclosed scope gap, not implemented until one does.
 enum ActionItemType {
   complaint
   low_stock
@@ -175,6 +175,22 @@ enum ActionItemType {
   /// A Finance approval (journal, bill, reconciliation, tax return, budget, period reopen,
   /// settings or control-account change) waiting on the person viewing the Action Center.
   finance_approval
+  /// A Payments approval (refund execution above the Owner threshold, a large dispute response or a
+  /// high-risk payment-policy change) waiting on the Owner.
+  payment_approval
+  /// A provider dispute whose evidence deadline falls within the policy warning window.
+  payment_dispute_due
+  /// A failed customer payment with an open Payments recovery case.
+  payment_failed
+  /// An active preventive-maintenance plan past its due date (Assets & Maintenance).
+  asset_pm_overdue
+  /// A critical asset with open downtime past its criticality escalation threshold.
+  asset_down_critical
+  /// A maintenance work order above its criticality approval threshold, waiting in Draft.
+  asset_wo_approval
+  field_approval
+  field_sla_breach
+  field_unassigned_urgent
 }
 
 enum ActionItemPriority {
@@ -315,6 +331,10 @@ enum StockMovementKind {
   return
   transfer_out
   transfer_in
+  /// Parts issued to (qty < 0) or returned from (qty > 0) a maintenance work order (Assets & Maintenance).
+  maintenance
+  /// Parts issued to (qty < 0) or returned from (qty > 0) a field service job (Field Service).
+  field_service
 }
 
 enum StockTransferStatus {
@@ -380,6 +400,8 @@ enum IntegrationProvider {
   whatsapp
   outlook
   stripe
+  /// Payments & Billing: the business Stripe account connected in Stripe test mode (sandbox).
+  stripe_test
   paypal
   square
   mailchimp
@@ -6882,20 +6904,20 @@ model FinBankLine {
 }
 
 model FinBankRule {
-  id            String   @id @default(uuid())
-  businessId    String   @map("business_id")
-  name          String   @db.VarChar(120)
-  contains      String   @db.VarChar(120)
+  id            String  @id @default(uuid())
+  businessId    String  @map("business_id")
+  name          String  @db.VarChar(120)
+  contains      String  @db.VarChar(120)
   /// in | out | any
-  direction     String   @default("any") @db.VarChar(4)
-  accountId     String   @map("account_id")
-  taxCode       String?  @map("tax_code") @db.VarChar(20)
+  direction     String  @default("any") @db.VarChar(4)
+  accountId     String  @map("account_id")
+  taxCode       String? @map("tax_code") @db.VarChar(20)
   /// suggest | auto
-  mode          String   @default("suggest") @db.VarChar(8)
-  bankAccountId String?  @map("bank_account_id")
-  active        Boolean  @default(true)
-  hits          Int      @default(0)
-  createdById   String?  @map("created_by_id")
+  mode          String  @default("suggest") @db.VarChar(8)
+  bankAccountId String? @map("bank_account_id")
+  active        Boolean @default(true)
+  hits          Int     @default(0)
+  createdById   String? @map("created_by_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -7265,4 +7287,1770 @@ model FinArDispute {
 
   @@index([businessId, orderId])
   @@map("fin_ar_disputes")
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Payments & Billing — provider-facing payment operations (not the accounting GL).
+// Every table is keyed by the business group's root (like Finance); money is Decimal major units.
+// `env` is "live" or "test" on every provider-facing row; test rows never reach live totals.
+// ════════════════════════════════════════════════════════════════════════════
+
+model PaySettings {
+  id            String    @id @default(uuid())
+  businessId    String    @unique @map("business_id")
+  /// Current operational payment policy (9 sections); history lives in PayPolicyVersion.
+  policy        Json
+  policyVersion Int       @default(1) @map("policy_version")
+  txSeq         Int       @default(0) @map("tx_seq")
+  requestSeq    Int       @default(0) @map("request_seq")
+  refundSeq     Int       @default(0) @map("refund_seq")
+  ruleSeq       Int       @default(0) @map("rule_seq")
+  /// Last time the Noxtill-source projector ran (freshness for cash/manual data).
+  projectedAt   DateTime? @map("projected_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("pay_settings")
+}
+
+model PayPolicyVersion {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  version    Int
+  policy     Json
+  /// Section keys changed in this version.
+  changed    Json
+  reason     String? @db.VarChar(500)
+  highRisk   Boolean @default(false) @map("high_risk")
+  byId       String  @map("by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, version])
+  @@map("pay_policy_versions")
+}
+
+/// A payment provider account as Payments sees it. Credentials stay on the Integration row.
+model PayConnection {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  /// stripe | square | paypal
+  provider        String    @db.VarChar(12)
+  /// live | test (from the provider livemode flag, never chosen in the UI)
+  env             String    @db.VarChar(4)
+  integrationId   String    @map("integration_id")
+  accountId       String?   @map("account_id") @db.VarChar(64)
+  /// Connected | Degraded | Disconnected | Connection Required
+  status          String    @db.VarChar(20)
+  /// The connection was granted write scope (Stripe Connect read_write).
+  writeEnabled    Boolean   @default(false) @map("write_enabled")
+  /// The 12 supports* capability flags.
+  caps            Json
+  /// Per-feed { lastOkAt, lastAttemptAt, lastError, cursor }.
+  syncState       Json      @map("sync_state")
+  lastEventAt     DateTime? @map("last_event_at")
+  lastErrorCode   String?   @map("last_error_code") @db.VarChar(40)
+  lastErrorAt     DateTime? @map("last_error_at")
+  /// Provider-reported payout schedule and destination.
+  payoutSchedule  String?   @map("payout_schedule") @db.VarChar(80)
+  destination     String?   @db.VarChar(80)
+  defaultCurrency String?   @map("default_currency") @db.VarChar(3)
+  country         String?   @db.VarChar(2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, provider, env])
+  @@index([accountId])
+  @@map("pay_connections")
+}
+
+/// The canonical payment ledger: every collection attempt Noxtill knows about, from its own
+/// records (sales, deposits, credit payments, installments) or from a provider.
+model PayTransaction {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  branchId         String?   @map("branch_id")
+  env              String    @db.VarChar(4)
+  number           String    @db.VarChar(20)
+  /// noxtill | provider
+  origin           String    @db.VarChar(8)
+  /// Dedupe key for the projector / provider sync, e.g. payment:<id> or stripe:ch_x.
+  sourceKey        String    @map("source_key") @db.VarChar(120)
+  /// Order | Invoice | Booking | Credit balance | Installment | Membership | Payment request | Provider
+  sourceType       String    @map("source_type") @db.VarChar(20)
+  sourceId         String?   @map("source_id")
+  sourceRef        String?   @map("source_ref") @db.VarChar(60)
+  paymentId        String?   @unique @map("payment_id")
+  orderId          String?   @map("order_id")
+  depositId        String?   @map("deposit_id")
+  customerId       String?   @map("customer_id")
+  requestId        String?   @map("request_id")
+  mandateId        String?   @map("mandate_id")
+  /// manual | stripe | square | paypal
+  provider         String    @db.VarChar(12)
+  connectionId     String?   @map("connection_id")
+  /// POS | Website | Payment Link | Customer Portal | Recurring | Staff
+  channel          String    @db.VarChar(20)
+  /// Card | Wallet | Mobile wallet | Bank transfer | Cash | Credit | Voucher | Other
+  method           String    @db.VarChar(20)
+  methodBrand      String?   @map("method_brand") @db.VarChar(20)
+  methodLast4      String?   @map("method_last4") @db.VarChar(4)
+  /// Succeeded | Pending | Pending Verification | Authorized | Failed | Cancelled | Provider Unknown
+  status           String    @db.VarChar(24)
+  /// Authorized | Requested | Declined | -
+  authStatus       String    @map("auth_status") @db.VarChar(16)
+  /// Captured | Not captured | Partially captured | Expired | -
+  captureStatus    String    @map("capture_status") @db.VarChar(20)
+  amount           Decimal   @db.Decimal(14, 2)
+  captured         Decimal   @default(0) @db.Decimal(14, 2)
+  refunded         Decimal   @default(0) @db.Decimal(14, 2)
+  disputed         Decimal   @default(0) @db.Decimal(14, 2)
+  /// Provider fee; null until the provider reports it.
+  fee              Decimal?  @db.Decimal(14, 2)
+  /// actual | none (cash/manual, no fee) | pending (provider has not reported yet)
+  feeSource        String    @map("fee_source") @db.VarChar(8)
+  currency         String    @db.VarChar(3)
+  fxRate           Decimal?  @map("fx_rate") @db.Decimal(18, 8)
+  fxSource         String?   @map("fx_source") @db.VarChar(80)
+  /// Amount in the group base currency; null when an FX rate is missing.
+  reportAmount     Decimal?  @map("report_amount") @db.Decimal(14, 2)
+  providerIntentId String?   @map("provider_intent_id") @db.VarChar(80)
+  providerChargeId String?   @map("provider_charge_id") @db.VarChar(80)
+  payoutRef        String?   @map("payout_ref") @db.VarChar(80)
+  failureCode      String?   @map("failure_code") @db.VarChar(80)
+  failureMessage   String?   @map("failure_message") @db.VarChar(300)
+  failureCategory  String?   @map("failure_category") @db.VarChar(40)
+  riskOutcome      String?   @map("risk_outcome") @db.VarChar(40)
+  correlationId    String    @map("correlation_id") @db.VarChar(40)
+  idempotencyKey   String?   @map("idempotency_key") @db.VarChar(120)
+  initiatedBy      String    @map("initiated_by") @db.VarChar(120)
+  createdById      String?   @map("created_by_id")
+  occurredAt       DateTime  @map("occurred_at")
+  authorizedAt     DateTime? @map("authorized_at")
+  capturedAt       DateTime? @map("captured_at")
+  authExpiresAt    DateTime? @map("auth_expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, sourceKey])
+  @@index([businessId, env, occurredAt])
+  @@index([businessId, env, status])
+  @@index([providerChargeId])
+  @@index([providerIntentId])
+  @@index([orderId])
+  @@index([customerId])
+  @@index([requestId])
+  @@map("pay_transactions")
+}
+
+/// Provider webhook/API events (sanitised) and the module timeline events.
+model PayEvent {
+  id          String   @id @default(uuid())
+  businessId  String?  @map("business_id")
+  provider    String   @db.VarChar(16)
+  env         String   @db.VarChar(4)
+  externalId  String   @map("external_id") @db.VarChar(120)
+  accountId   String?  @map("account_id") @db.VarChar(64)
+  type        String   @db.VarChar(80)
+  txId        String?  @map("tx_id")
+  refType     String?  @map("ref_type") @db.VarChar(20)
+  refId       String?  @map("ref_id")
+  payload     Json
+  payloadHash String   @map("payload_hash") @db.VarChar(64)
+  /// Verified | API re-fetch | Invalid | Internal
+  signature   String   @db.VarChar(16)
+  /// Applied | Duplicate | Ignored (stale) | Unroutable | Failed
+  processing  String   @db.VarChar(20)
+  error       String?  @db.VarChar(300)
+  receivedAt  DateTime @default(now()) @map("received_at")
+
+  @@unique([provider, externalId])
+  @@index([businessId, txId])
+  @@index([businessId, receivedAt])
+  @@map("pay_events")
+}
+
+model PayIdempotency {
+  id               String  @id @default(uuid())
+  businessId       String  @map("business_id")
+  key              String  @unique @db.VarChar(160)
+  op               String  @db.VarChar(40)
+  requestHash      String  @map("request_hash") @db.VarChar(64)
+  /// in_flight | done | failed | unknown
+  status           String  @db.VarChar(10)
+  providerObjectId String? @map("provider_object_id") @db.VarChar(80)
+  result           Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("pay_idempotency")
+}
+
+model PayRequest {
+  id                String    @id @default(uuid())
+  businessId        String    @map("business_id")
+  branchId          String?   @map("branch_id")
+  env               String    @db.VarChar(4)
+  number            String    @db.VarChar(20)
+  customerId        String?   @map("customer_id")
+  recipientName     String    @map("recipient_name") @db.VarChar(160)
+  /// whatsapp | sms | email | none
+  contact           String    @db.VarChar(10)
+  /// Order | Invoice | Booking | Credit balance | null (standalone)
+  linkType          String?   @map("link_type") @db.VarChar(16)
+  linkId            String?   @map("link_id")
+  linkRef           String?   @map("link_ref") @db.VarChar(60)
+  /// Fixed | Flexible
+  amountType        String    @map("amount_type") @db.VarChar(8)
+  amount            Decimal?  @db.Decimal(14, 2)
+  allowPartial      Boolean   @default(false) @map("allow_partial")
+  currency          String    @db.VarChar(3)
+  description       String    @db.VarChar(300)
+  reference         String?   @db.VarChar(120)
+  dueOn             DateTime? @map("due_on") @db.Date
+  expiresAt         DateTime  @map("expires_at")
+  methods           Json
+  note              String?   @db.VarChar(1000)
+  redirectUrl       String?   @map("redirect_url") @db.VarChar(300)
+  /// Draft | Open | Sent | Viewed | Partially Paid | Paid | Expired | Cancelled
+  status            String    @db.VarChar(16)
+  amountPaid        Decimal   @default(0) @map("amount_paid") @db.Decimal(14, 2)
+  viewCount         Int       @default(0) @map("view_count")
+  lastViewedAt      DateTime? @map("last_viewed_at")
+  tokenHash         String    @unique @map("token_hash") @db.VarChar(64)
+  tokenNonce        String    @map("token_nonce") @db.VarChar(32)
+  template          String?   @db.VarChar(20)
+  checkoutSessionId String?   @map("checkout_session_id") @db.VarChar(120)
+  createdById       String    @map("created_by_id")
+  sentAt            DateTime? @map("sent_at")
+  closedAt          DateTime? @map("closed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, env, status])
+  @@index([businessId, linkType, linkId])
+  @@map("pay_requests")
+}
+
+model PayRequestDelivery {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  requestId      String   @map("request_id")
+  channel        String   @db.VarChar(40)
+  messageId      String?  @map("message_id")
+  conversationId String?  @map("conversation_id")
+  /// Mirrors Message.status: Queued | Sent | Delivered | Read | Failed
+  status         String   @db.VarChar(12)
+  error          String?  @db.VarChar(300)
+  sentAt         DateTime @default(now()) @map("sent_at")
+
+  @@index([businessId, requestId])
+  @@map("pay_request_deliveries")
+}
+
+model PayRecoveryCase {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  txId           String    @unique @map("tx_id")
+  customerId     String?   @map("customer_id")
+  /// Normalized: Soft decline | Hard decline | Insufficient funds | Authentication required | ...
+  category       String    @db.VarChar(40)
+  rawCode        String    @map("raw_code") @db.VarChar(80)
+  /// Soft | Needs customer | Unrecoverable | Blocked | Manual review
+  recoverability String    @db.VarChar(16)
+  guidance       String    @db.VarChar(200)
+  attempts       Int       @default(1)
+  nextRetryAt    DateTime? @map("next_retry_at")
+  /// Scheduled | Waiting on customer | Manual Review | Blocked | Paused | Recovered | Unrecoverable | Resolved elsewhere
+  status         String    @db.VarChar(24)
+  ownerId        String?   @map("owner_id")
+  notifiedAt     DateTime? @map("notified_at")
+  notifyChannel  String?   @map("notify_channel") @db.VarChar(12)
+  retryable      Boolean   @default(false)
+  recoveredTxId  String?   @map("recovered_tx_id")
+  firstFailedAt  DateTime  @map("first_failed_at")
+  lastAttemptAt  DateTime  @map("last_attempt_at")
+  note           String?   @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("pay_recovery_cases")
+}
+
+model PayRefund {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  env              String    @db.VarChar(4)
+  number           String    @db.VarChar(20)
+  returnId         String?   @unique @map("return_id")
+  txId             String?   @map("tx_id")
+  /// noxtill (from an Orders return) | provider (issued outside Noxtill) | manual
+  origin           String    @db.VarChar(8)
+  approvedAmount   Decimal   @map("approved_amount") @db.Decimal(14, 2)
+  amount           Decimal   @db.Decimal(14, 2)
+  currency         String    @db.VarChar(3)
+  /// Approval Required | Ready | Queued | Processing | Provider Accepted | Pending | Succeeded | Failed | Provider Unknown | Manual Review
+  status           String    @db.VarChar(20)
+  reason           String    @db.VarChar(300)
+  method           String    @db.VarChar(20)
+  upstreamById     String?   @map("upstream_by_id")
+  upstreamAt       DateTime? @map("upstream_at")
+  approvalId       String?   @map("approval_id")
+  providerRefundId String?   @unique @map("provider_refund_id") @db.VarChar(80)
+  idempotencyKey   String    @map("idempotency_key") @db.VarChar(120)
+  failureCode      String?   @map("failure_code") @db.VarChar(300)
+  attempts         Int       @default(0)
+  submittedAt      DateTime? @map("submitted_at")
+  verifiedAt       DateTime? @map("verified_at")
+  executedById     String?   @map("executed_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@index([txId])
+  @@map("pay_refunds")
+}
+
+model PayDispute {
+  id                String    @id @default(uuid())
+  businessId        String    @map("business_id")
+  connectionId      String    @map("connection_id")
+  env               String    @db.VarChar(4)
+  providerDisputeId String    @unique @map("provider_dispute_id") @db.VarChar(80)
+  txId              String?   @map("tx_id")
+  providerChargeId  String?   @map("provider_charge_id") @db.VarChar(80)
+  reason            String    @db.VarChar(80)
+  /// Needs Response | Under Review | Approval Required | Won | Lost | Accepted (lost) | Warning
+  status            String    @db.VarChar(20)
+  amount            Decimal   @db.Decimal(14, 2)
+  currency          String    @db.VarChar(3)
+  fee               Decimal?  @db.Decimal(14, 2)
+  dueBy             DateTime? @map("due_by")
+  chargeRefundable  Boolean   @default(false) @map("charge_refundable")
+  ownerId           String?   @map("owner_id")
+  submittedAt       DateTime? @map("submitted_at")
+  approvalId        String?   @map("approval_id")
+  outcome           String?   @db.VarChar(20)
+  draft             String?   @db.Text
+  response          String?   @db.Text
+  openedAt          DateTime  @map("opened_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("pay_disputes")
+}
+
+model PayDisputeEvidence {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  disputeId   String    @map("dispute_id")
+  /// The Noxtill module and record the evidence comes from (always a real, existing record).
+  module      String    @db.VarChar(30)
+  entityType  String    @map("entity_type") @db.VarChar(30)
+  entityId    String    @map("entity_id")
+  entityRef   String    @map("entity_ref") @db.VarChar(60)
+  label       String    @db.VarChar(200)
+  /// Required | Recommended
+  requirement String    @db.VarChar(12)
+  /// Missing | Added | Submitted
+  status      String    @db.VarChar(10)
+  /// Provider evidence field this fills (e.g. shipping_documentation).
+  field       String?   @db.VarChar(40)
+  content     String?   @db.Text
+  addedById   String?   @map("added_by_id")
+  addedAt     DateTime? @map("added_at")
+
+  @@index([businessId, disputeId])
+  @@map("pay_dispute_evidence")
+}
+
+model PayPayout {
+  id                String    @id @default(uuid())
+  businessId        String    @map("business_id")
+  connectionId      String    @map("connection_id")
+  env               String    @db.VarChar(4)
+  providerPayoutId  String    @unique @map("provider_payout_id") @db.VarChar(80)
+  amount            Decimal   @db.Decimal(14, 2)
+  currency          String    @db.VarChar(3)
+  /// Pending | In Transit | Paid | Failed | Cancelled
+  status            String    @db.VarChar(12)
+  arrivalDate       DateTime? @map("arrival_date") @db.Date
+  providerCreatedAt DateTime  @map("provider_created_at")
+  destination       String?   @db.VarChar(80)
+  automatic         Boolean   @default(true)
+  failureCode       String?   @map("failure_code") @db.VarChar(80)
+  externalPaymentId String?   @map("external_payment_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, env, status])
+  @@map("pay_payouts")
+}
+
+model PayBalanceTxn {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  connectionId   String   @map("connection_id")
+  env            String   @db.VarChar(4)
+  providerTxnId  String   @unique @map("provider_txn_id") @db.VarChar(80)
+  /// Provider type: charge | refund | adjustment | dispute | payout | stripe_fee | reserve_transaction | ...
+  type           String   @db.VarChar(40)
+  category       String?  @db.VarChar(40)
+  amount         Decimal  @db.Decimal(14, 2)
+  fee            Decimal  @default(0) @db.Decimal(14, 2)
+  net            Decimal  @db.Decimal(14, 2)
+  currency       String   @db.VarChar(3)
+  availableOn    DateTime @map("available_on")
+  /// pending | available
+  status         String   @db.VarChar(12)
+  sourceObjectId String?  @map("source_object_id") @db.VarChar(80)
+  payoutRef      String?  @map("payout_ref") @db.VarChar(80)
+  txId           String?  @map("tx_id")
+  occurredAt     DateTime @map("occurred_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, env, occurredAt])
+  @@index([payoutRef])
+  @@index([sourceObjectId])
+  @@map("pay_balance_txns")
+}
+
+model PayBalanceSnapshot {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  connectionId String   @map("connection_id")
+  /// [{ currency, amount }]
+  available    Json
+  pending      Json
+  reserved     Json?
+  fetchedAt    DateTime @default(now()) @map("fetched_at")
+
+  @@index([connectionId, fetchedAt])
+  @@map("pay_balance_snapshots")
+}
+
+model PayMandate {
+  id                     String    @id @default(uuid())
+  businessId             String    @map("business_id")
+  env                    String    @db.VarChar(4)
+  /// provider (charged by the provider on schedule) | manual (collected at the counter)
+  kind                   String    @db.VarChar(8)
+  /// Memberships | Credit installments
+  sourceModule           String    @map("source_module") @db.VarChar(24)
+  membershipId           String?   @unique @map("membership_id")
+  installmentPlanId      String?   @unique @map("installment_plan_id")
+  customerId             String?   @map("customer_id")
+  planName               String    @map("plan_name") @db.VarChar(160)
+  planRef                String    @map("plan_ref") @db.VarChar(60)
+  /// Status of the source plan in its own module.
+  planStatus             String    @map("plan_status") @db.VarChar(16)
+  provider               String    @db.VarChar(12)
+  connectionId           String?   @map("connection_id")
+  providerSubscriptionId String?   @map("provider_subscription_id") @db.VarChar(80)
+  providerCustomerId     String?   @map("provider_customer_id") @db.VarChar(80)
+  amount                 Decimal   @db.Decimal(14, 2)
+  currency               String    @db.VarChar(3)
+  /// Weekly | Monthly | Yearly | Schedule
+  frequency              String    @db.VarChar(10)
+  nextChargeAt           DateTime? @map("next_charge_at")
+  lastChargeAt           DateTime? @map("last_charge_at")
+  /// Active | Past Due | Paused | Cancelled | Incomplete
+  status                 String    @db.VarChar(12)
+  attempts               Int       @default(0)
+  /// Billed on the Noxtill platform Stripe account (pre-dates merchant connections).
+  legacyPlatform         Boolean   @default(false) @map("legacy_platform")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, env, status])
+  @@map("pay_mandates")
+}
+
+model PayMandateAttempt {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  mandateId         String   @map("mandate_id")
+  txId              String?  @map("tx_id")
+  providerInvoiceId String?  @unique @map("provider_invoice_id") @db.VarChar(80)
+  dueAt             DateTime @map("due_at")
+  /// Succeeded | Failed | Pending
+  status            String   @db.VarChar(10)
+  amount            Decimal  @db.Decimal(14, 2)
+  failureCode       String?  @map("failure_code") @db.VarChar(80)
+  idemKey           String   @map("idem_key") @db.VarChar(120)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([mandateId, idemKey])
+  @@index([businessId, dueAt])
+  @@map("pay_mandate_attempts")
+}
+
+model PayProviderCustomer {
+  id                 String @id @default(uuid())
+  businessId         String @map("business_id")
+  connectionId       String @map("connection_id")
+  customerId         String @map("customer_id")
+  providerCustomerId String @map("provider_customer_id") @db.VarChar(80)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([connectionId, customerId])
+  @@map("pay_provider_customers")
+}
+
+model PayPlanPrice {
+  id               String  @id @default(uuid())
+  businessId       String  @map("business_id")
+  connectionId     String  @map("connection_id")
+  membershipPlanId String  @map("membership_plan_id")
+  productId        String  @map("product_id") @db.VarChar(80)
+  priceId          String  @map("price_id") @db.VarChar(80)
+  amount           Decimal @db.Decimal(14, 2)
+  interval         String  @db.VarChar(8)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([connectionId, membershipPlanId, amount, interval])
+  @@map("pay_plan_prices")
+}
+
+model PayMethodConfig {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  method     String  @db.VarChar(24)
+  enabled    Boolean @default(true)
+  channels   Json
+  primary    String? @db.VarChar(12)
+  fallback   String? @db.VarChar(12)
+  minAmount  Decimal @default(0) @map("min_amount") @db.Decimal(14, 2)
+  maxAmount  Decimal @map("max_amount") @db.Decimal(14, 2)
+  riskPolicy String  @map("risk_policy") @db.VarChar(160)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, method])
+  @@map("pay_method_configs")
+}
+
+model PayRoutingRule {
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  number      Int
+  name        String  @db.VarChar(120)
+  /// Branch | Channel | Country / currency | Global default
+  level       String  @db.VarChar(20)
+  priority    Int
+  /// { branch, channel, country, currency, minAmount, maxAmount }
+  conditions  Json
+  method      String  @db.VarChar(24)
+  primary     String  @db.VarChar(12)
+  fallback    String? @db.VarChar(12)
+  /// Active | Disabled
+  status      String  @db.VarChar(10)
+  version     Int     @default(1)
+  createdById String  @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@map("pay_routing_rules")
+}
+
+model PayRoutingRuleVersion {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  ruleId     String  @map("rule_id")
+  version    Int
+  snapshot   Json
+  byId       String  @map("by_id")
+  reason     String? @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([ruleId, version])
+  @@map("pay_routing_rule_versions")
+}
+
+model PayReconItem {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  connectionId  String    @map("connection_id")
+  env           String    @db.VarChar(4)
+  batchRef      String?   @map("batch_ref") @db.VarChar(80)
+  providerRef   String    @map("provider_ref") @db.VarChar(80)
+  balanceTxnId  String?   @unique @map("balance_txn_id")
+  txId          String?   @map("tx_id")
+  /// Charge | Refund | Batch settlement | Adjustment
+  type          String    @db.VarChar(20)
+  providerGross Decimal?  @map("provider_gross") @db.Decimal(14, 2)
+  noxtillGross  Decimal?  @map("noxtill_gross") @db.Decimal(14, 2)
+  providerFee   Decimal?  @map("provider_fee") @db.Decimal(14, 2)
+  noxtillFee    Decimal?  @map("noxtill_fee") @db.Decimal(14, 2)
+  currency      String    @db.VarChar(3)
+  occurredAt    DateTime  @map("occurred_at")
+  /// Matched | Pending | Suggested | Amount Mismatch | Fee Mismatch | Unmatched Provider | Unmatched Noxtill | Manual Review | Resolved | Ignored
+  status        String    @db.VarChar(20)
+  /// Exact provider ID | Metadata mapping | Manual | Split
+  matchMethod   String?   @map("match_method") @db.VarChar(20)
+  confidence    String?   @db.VarChar(8)
+  candidateTxId String?   @map("candidate_tx_id")
+  suggestionWhy String?   @map("suggestion_why") @db.VarChar(300)
+  splitTxIds    Json?     @map("split_tx_ids")
+  note          String?   @db.VarChar(300)
+  resolution    String?   @db.VarChar(300)
+  resolvedById  String?   @map("resolved_by_id")
+  resolvedAt    DateTime? @map("resolved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, env, status])
+  @@index([txId])
+  @@map("pay_recon_items")
+}
+
+model PayReconResolution {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  itemId     String @map("item_id")
+  action     String @db.VarChar(30)
+  reason     String @db.VarChar(300)
+  byId       String @map("by_id")
+  before     Json?
+  after      Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("pay_recon_resolutions")
+}
+
+model PayApproval {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  /// refund | dispute | policy
+  kind          String    @db.VarChar(12)
+  subjectId     String    @map("subject_id")
+  title         String    @db.VarChar(200)
+  amount        Decimal?  @db.Decimal(14, 2)
+  rule          String    @db.VarChar(200)
+  requestedById String    @map("requested_by_id")
+  /// Pending | Approved | Rejected | Cancelled
+  status        String    @db.VarChar(10)
+  decidedById   String?   @map("decided_by_id")
+  decidedAt     DateTime? @map("decided_at")
+  comment       String?   @db.VarChar(500)
+  payload       Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status])
+  @@index([kind, subjectId])
+  @@map("pay_approvals")
+}
+
+/// Append-only: the service exposes no update or delete.
+model PayAudit {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  actorId    String? @map("actor_id")
+  actorName  String  @map("actor_name") @db.VarChar(120)
+  action     String  @db.VarChar(120)
+  entityType String  @map("entity_type") @db.VarChar(20)
+  entityId   String  @map("entity_id")
+  detail     String  @db.VarChar(500)
+  corr       String? @db.VarChar(40)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([entityType, entityId])
+  @@map("pay_audit")
+}
+
+/// Transactional events other modules consume (Finance reads PayBalanceTxn directly).
+model PayOutbox {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  event       String    @db.VarChar(60)
+  payload     Json
+  consumers   Json
+  /// Pending | Delivered | Failed
+  status      String    @db.VarChar(10)
+  deliveredAt DateTime? @map("delivered_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("pay_outbox")
+}
+
+model PaySavedView {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  userId     String @map("user_id")
+  name       String @db.VarChar(60)
+  filters    Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, userId, name])
+  @@map("pay_saved_views")
+}
+
+// ───────────────────────── Assets & Maintenance ─────────────────────────
+// Keyed by the group root business (branches are Business children). Statuses are the design's
+// strings; transitions are validated in the service (am.constants.ts ASSET_T / WO_T).
+
+/// Versioned asset settings (12 sections) and number sequences.
+model AmSettings {
+  id         String @id @default(uuid())
+  businessId String @unique @map("business_id")
+  config     Json
+  version    Int    @default(1)
+  nextAsset  Int    @default(1) @map("next_asset")
+  nextReq    Int    @default(1) @map("next_req")
+  nextWo     Int    @default(1) @map("next_wo")
+  nextPm     Int    @default(1) @map("next_pm")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("am_settings")
+}
+
+model AmSettingsVersion {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  version    Int
+  config     Json
+  changed    Json
+  byUserId   String @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, version])
+  @@map("am_settings_versions")
+}
+
+model AmCategory {
+  id           String  @id @default(uuid())
+  businessId   String  @map("business_id")
+  name         String  @db.VarChar(120)
+  code         String  @db.VarChar(24)
+  parentId     String? @map("parent_id")
+  /// Default criticality for new assets: Critical | High | Medium | Low
+  criticality  String  @default("Medium") @db.VarChar(10)
+  templateId   String? @map("template_id")
+  warrantyType String? @map("warranty_type") @db.VarChar(24)
+  lifeYears    Int?    @map("life_years")
+  description  String? @db.Text
+  /// Active | Inactive
+  status       String  @default("Active") @db.VarChar(10)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code])
+  @@map("am_categories")
+}
+
+/// Physical locations below a branch. Branch rows are the group's Business records, never stored here.
+model AmLocation {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  /// The branch (Business) this location belongs to.
+  branchId   String  @map("branch_id")
+  /// Null = directly under the branch.
+  parentId   String? @map("parent_id")
+  name       String  @db.VarChar(120)
+  code       String  @db.VarChar(40)
+  /// Site | Building | Floor | Area | Room | Functional Position
+  type       String  @db.VarChar(20)
+  status     String  @default("Active") @db.VarChar(10)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code])
+  @@index([businessId, branchId])
+  @@map("am_locations")
+}
+
+model AmTeam {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  name       String @db.VarChar(80)
+  status     String @default("Active") @db.VarChar(10)
+
+  members AmTeamMember[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, name])
+  @@map("am_teams")
+}
+
+model AmTeamMember {
+  id     String @id @default(uuid())
+  teamId String @map("team_id")
+  team   AmTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId String @map("user_id")
+
+  @@unique([teamId, userId])
+  @@map("am_team_members")
+}
+
+model AmPmTemplate {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  name       String @db.VarChar(120)
+  /// string[] — checklist steps copied onto each generated work order.
+  checklist  Json
+  status     String @default("Active") @db.VarChar(10)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, name])
+  @@map("am_pm_templates")
+}
+
+model AmCustomField {
+  id          String @id @default(uuid())
+  businessId  String @map("business_id")
+  name        String @db.VarChar(80)
+  /// Text | Number | Date | Dropdown | Yes/No | Staff reference
+  type        String @db.VarChar(20)
+  options     Json
+  /// Category ids; empty = all categories.
+  categoryIds Json   @map("category_ids")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, name])
+  @@map("am_custom_fields")
+}
+
+model AmAsset {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  number           String    @db.VarChar(30)
+  tag              String?   @db.VarChar(60)
+  barcode          String?   @db.VarChar(80)
+  serial           String?   @db.VarChar(80)
+  name             String    @db.VarChar(160)
+  description      String?   @db.Text
+  categoryId       String?   @map("category_id")
+  /// Business-owned | Customer-owned | Leased | Rented | Supplier-owned | Other
+  ownerType        String    @default("Business-owned") @map("owner_type") @db.VarChar(20)
+  customerId       String?   @map("customer_id")
+  /// Branch (Business) the asset sits in; derived from the location when one is set.
+  branchId         String?   @map("branch_id")
+  locationId       String?   @map("location_id")
+  manufacturer     String?   @db.VarChar(80)
+  model            String?   @db.VarChar(80)
+  status           String    @db.VarChar(20)
+  /// Excellent | Good | Fair | Poor | Critical | Unknown
+  condition        String    @default("Good") @db.VarChar(10)
+  criticality      String    @default("Medium") @db.VarChar(10)
+  purchasedOn      DateTime? @map("purchased_on") @db.Date
+  installedOn      DateTime? @map("installed_on") @db.Date
+  cost             Decimal?  @db.Decimal(14, 2)
+  warrantyProvider String?   @map("warranty_provider") @db.VarChar(120)
+  warrantyType     String?   @map("warranty_type") @db.VarChar(24)
+  warrantyStart    DateTime? @map("warranty_start") @db.Date
+  warrantyEnd      DateTime? @map("warranty_end") @db.Date
+  /// Hours | Kilometers | Cycles | Units Produced (or a custom meter type from Settings)
+  meterType        String?   @map("meter_type") @db.VarChar(24)
+  meterUnit        String?   @map("meter_unit") @db.VarChar(12)
+  teamId           String?   @map("team_id")
+  parentId         String?   @map("parent_id")
+  productId        String?   @map("product_id")
+  finAssetId       String?   @map("fin_asset_id")
+  custom           Json?
+  version          Int       @default(1)
+  createdById      String?   @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, branchId])
+  @@map("am_assets")
+}
+
+model AmDocument {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  assetId    String @map("asset_id")
+  /// Manual | Warranty | Certificate | Photo | Inspection Document | Service report
+  type       String @db.VarChar(24)
+  name       String @db.VarChar(255)
+  storageKey String @map("storage_key") @db.VarChar(400)
+  mime       String @db.VarChar(120)
+  size       Int
+  byUserId   String @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, assetId])
+  @@map("am_documents")
+}
+
+/// Append-only meter observations; a correction is a new row pointing at the one it supersedes.
+model AmReading {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  assetId        String   @map("asset_id")
+  value          Decimal  @db.Decimal(14, 2)
+  takenAt        DateTime @map("taken_at")
+  /// Manual | Photo of meter | Correction | Initial | Request MR-x | Completion MWO-x
+  source         String   @db.VarChar(40)
+  byUserId       String   @map("by_user_id")
+  correctionOfId String?  @map("correction_of_id")
+  reason         String?  @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, assetId, takenAt])
+  @@map("am_readings")
+}
+
+model AmRequest {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  number      String    @db.VarChar(20)
+  assetId     String    @map("asset_id")
+  issueType   String    @map("issue_type") @db.VarChar(40)
+  title       String    @db.VarChar(200)
+  description String?   @db.Text
+  priority    String    @db.VarChar(10)
+  safety      Boolean   @default(false)
+  down        Boolean   @default(false)
+  observed    String?   @db.VarChar(10)
+  reporterId  String    @map("reporter_id")
+  triageId    String?   @map("triage_id")
+  /// Draft | Open | Awaiting Triage | Needs Information | Approved | Rejected | Converted | Closed | Cancelled
+  status      String    @db.VarChar(20)
+  woId        String?   @map("wo_id")
+  preferredOn DateTime? @map("preferred_on") @db.Date
+  triagedAt   DateTime? @map("triaged_at")
+
+  notes AmRequestNote[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, assetId])
+  @@map("am_requests")
+}
+
+model AmRequestNote {
+  id        String    @id @default(uuid())
+  requestId String    @map("request_id")
+  request   AmRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  text      String    @db.Text
+  byUserId  String    @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("am_request_notes")
+}
+
+model AmWorkOrder {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  number         String    @db.VarChar(20)
+  assetId        String    @map("asset_id")
+  type           String    @db.VarChar(30)
+  priority       String    @db.VarChar(10)
+  safety         Boolean   @default(false)
+  /// Draft | Approved | Scheduled | Assigned | In Progress | Paused | Waiting Parts | Waiting Vendor | Completed | Closed | Cancelled
+  status         String    @db.VarChar(20)
+  assigneeUserId String?   @map("assignee_user_id")
+  teamId         String?   @map("team_id")
+  supplierId     String?   @map("supplier_id")
+  scheduledAt    DateTime? @map("scheduled_at")
+  dueAt          DateTime  @map("due_at")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  closedAt       DateTime? @map("closed_at")
+  expectedDownH  Decimal?  @map("expected_down_h") @db.Decimal(8, 2)
+  requestId      String?   @map("request_id")
+  pmPlanId       String?   @map("pm_plan_id")
+  pmKey          String?   @map("pm_key") @db.VarChar(80)
+  scope          String    @db.Text
+  outcome        String?   @db.VarChar(30)
+  workDone       String?   @map("work_done") @db.Text
+  approvedById   String?   @map("approved_by_id")
+  version        Int       @default(1)
+  createdById    String    @map("created_by_id")
+
+  checklist AmWoChecklist[]
+  parts     AmWoPart[]
+  labor     AmWoLabor[]
+  costs     AmWoCost[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, assetId])
+  @@map("am_work_orders")
+}
+
+model AmWoChecklist {
+  id       String      @id @default(uuid())
+  woId     String      @map("wo_id")
+  wo       AmWorkOrder @relation(fields: [woId], references: [id], onDelete: Cascade)
+  seq      Int
+  text     String      @db.VarChar(255)
+  done     Boolean     @default(false)
+  doneById String?     @map("done_by_id")
+  doneAt   DateTime?   @map("done_at")
+
+  @@map("am_wo_checklist")
+}
+
+model AmWoPart {
+  id        String      @id @default(uuid())
+  woId      String      @map("wo_id")
+  wo        AmWorkOrder @relation(fields: [woId], references: [id], onDelete: Cascade)
+  productId String      @map("product_id")
+  planned   Int
+  issued    Int         @default(0)
+  used      Int         @default(0)
+  returned  Int         @default(0)
+
+  moves AmWoPartMove[]
+
+  @@map("am_wo_parts")
+}
+
+/// One confirmed Inventory movement (issue qty < 0, return qty > 0).
+model AmWoPartMove {
+  id              String   @id @default(uuid())
+  partId          String   @map("part_id")
+  part            AmWoPart @relation(fields: [partId], references: [id], onDelete: Cascade)
+  stockMovementId String   @map("stock_movement_id")
+  qty             Int
+  unitCost        Decimal  @map("unit_cost") @db.Decimal(12, 2)
+  byUserId        String   @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("am_wo_part_moves")
+}
+
+model AmWoLabor {
+  id     String      @id @default(uuid())
+  woId   String      @map("wo_id")
+  wo     AmWorkOrder @relation(fields: [woId], references: [id], onDelete: Cascade)
+  userId String      @map("user_id")
+  hours  Decimal     @db.Decimal(8, 2)
+  /// BusinessUser.hourlyRate at the time — null when the person has no rate set.
+  rate   Decimal?    @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("am_wo_labor")
+}
+
+/// Cost references. Parts are valued from the stock movement; Vendor/Other link a Finance bill when one exists.
+model AmWoCost {
+  id        String      @id @default(uuid())
+  woId      String      @map("wo_id")
+  wo        AmWorkOrder @relation(fields: [woId], references: [id], onDelete: Cascade)
+  /// Labor | Parts | Vendor | Other
+  type      String      @db.VarChar(10)
+  amount    Decimal     @db.Decimal(14, 2)
+  /// What produced it: labor:<laborId> | part:<moveId> | entry
+  source    String      @db.VarChar(60)
+  finBillId String?     @map("fin_bill_id")
+  note      String?     @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("am_wo_costs")
+}
+
+model AmPmPlan {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  number         String    @db.VarChar(20)
+  name           String    @db.VarChar(160)
+  assetId        String    @map("asset_id")
+  templateId     String?   @map("template_id")
+  /// Time | Meter | Hybrid
+  trigger        String    @db.VarChar(8)
+  interval       Int
+  /// days | weeks | months | years (time); meter plans use the asset's meter unit
+  unit           String    @db.VarChar(10)
+  nextDueOn      DateTime? @map("next_due_on") @db.Date
+  nextDueMeter   Decimal?  @map("next_due_meter") @db.Decimal(14, 2)
+  meterInterval  Decimal?  @map("meter_interval") @db.Decimal(14, 2)
+  tolerance      String    @db.VarChar(40)
+  assigneeUserId String?   @map("assignee_user_id")
+  teamId         String?   @map("team_id")
+  supplierId     String?   @map("supplier_id")
+  autoCreate     Boolean   @default(true) @map("auto_create")
+  leadDays       Int       @default(7) @map("lead_days")
+  /// Active | Paused | Archived | Closed — asset retired
+  status         String    @db.VarChar(24)
+  lastDoneOn     DateTime? @map("last_done_on") @db.Date
+  version        Int       @default(1)
+
+  instances AmPmInstance[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("am_pm_plans")
+}
+
+/// One due occurrence of a plan. The unique key makes work-order generation idempotent.
+model AmPmInstance {
+  id     String   @id @default(uuid())
+  planId String   @map("plan_id")
+  plan   AmPmPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  key    String   @db.VarChar(80)
+  woId   String?  @map("wo_id")
+  /// Generated | Completed | Cancelled
+  status String   @db.VarChar(12)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([planId, key])
+  @@map("am_pm_instances")
+}
+
+model AmEvent {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  assetId        String   @map("asset_id")
+  /// Inspection | Maintenance | Repair | Calibration | Warranty Service | Condition Change | Transfer | Retirement | Replacement | Upgrade | Created
+  type           String   @db.VarChar(24)
+  occurredAt     DateTime @map("occurred_at")
+  summary        String   @db.Text
+  condBefore     String?  @map("cond_before") @db.VarChar(10)
+  condAfter      String?  @map("cond_after") @db.VarChar(10)
+  /// Pass | Fail | Resolved | Partially Resolved | Temporary Repair | —
+  result         String?  @db.VarChar(24)
+  score          Int?
+  findings       String?  @db.Text
+  checklistRef   String?  @map("checklist_ref") @db.VarChar(80)
+  critical       Boolean  @default(false)
+  woId           String?  @map("wo_id")
+  byUserId       String?  @map("by_user_id")
+  bySupplierId   String?  @map("by_supplier_id")
+  byTeamId       String?  @map("by_team_id")
+  fromLocationId String?  @map("from_location_id")
+  toLocationId   String?  @map("to_location_id")
+  extra          Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, occurredAt])
+  @@index([businessId, assetId])
+  @@map("am_events")
+}
+
+model AmDowntime {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  assetId     String    @map("asset_id")
+  startAt     DateTime  @map("start_at")
+  endAt       DateTime? @map("end_at")
+  /// Planned | Unplanned
+  kind        String    @db.VarChar(10)
+  reason      String    @db.VarChar(30)
+  cause       String    @db.VarChar(255)
+  woId        String?   @map("wo_id")
+  requestId   String?   @map("request_id")
+  impact      String?   @db.VarChar(255)
+  escalatedAt DateTime? @map("escalated_at")
+  byUserId    String    @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, assetId])
+  @@index([businessId, endAt])
+  @@map("am_downtime")
+}
+
+model AmAudit {
+  id          String @id @default(uuid())
+  businessId  String @map("business_id")
+  actorId     String @map("actor_id")
+  actorName   String @map("actor_name") @db.VarChar(160)
+  action      String @db.VarChar(80)
+  entityType  String @map("entity_type") @db.VarChar(20)
+  entityId    String @map("entity_id")
+  detail      String @db.Text
+  before      Json?
+  after       Json?
+  correlation String @db.VarChar(24)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([businessId, entityId])
+  @@map("am_audit")
+}
+
+model AmSavedView {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  userId     String @map("user_id")
+  name       String @db.VarChar(60)
+  filters    Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, userId, name])
+  @@map("am_saved_views")
+}
+
+model AmInsightDismissal {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  key        String @db.VarChar(80)
+  byUserId   String @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, key])
+  @@map("am_insight_dismissals")
+}
+
+// ───────────────────────── Field Service ─────────────────────────
+// Keyed by the group root business. Customers are CRM records, technicians are BusinessUsers,
+// equipment is Assets & Maintenance (AmAsset), parts are Inventory products. Statuses are the
+// design's strings; transitions are validated in the service (fs.constants.ts WT).
+
+model FsSettings {
+  id         String @id @default(uuid())
+  businessId String @unique @map("business_id")
+  config     Json
+  version    Int    @default(1)
+  nextWo     Int    @default(1) @map("next_wo")
+  nextSr     Int    @default(1) @map("next_sr")
+  nextAgr    Int    @default(1) @map("next_agr")
+  nextWrn    Int    @default(1) @map("next_wrn")
+  nextPm     Int    @default(1) @map("next_pm")
+  nextIns    Int    @default(1) @map("next_ins")
+  nextLab    Int    @default(1) @map("next_lab")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("fs_settings")
+}
+
+model FsSettingsVersion {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  version    Int
+  config     Json
+  changed    Json
+  reason     String? @db.VarChar(500)
+  byUserId   String  @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, version])
+  @@map("fs_settings_versions")
+}
+
+/// Service catalogue: skill, certification, duration, checklist, proof and default parts per job type.
+model FsServiceType {
+  id             String  @id @default(uuid())
+  businessId     String  @map("business_id")
+  code           String  @db.VarChar(16)
+  name           String  @db.VarChar(120)
+  skill          String  @db.VarChar(40)
+  cert           String? @db.VarChar(60)
+  durMin         Int     @map("dur_min")
+  templateId     String? @map("template_id")
+  /// Emergency | Urgent | High | Normal | Low
+  priority       String  @default("Normal") @db.VarChar(10)
+  proof          String  @default("Signature") @db.VarChar(60)
+  /// Inventory product ids planned by default.
+  partProductIds Json    @map("part_product_ids")
+  /// Optional service product (Products & Services) used for labor lines on quotes / invoices.
+  laborProductId String? @map("labor_product_id")
+  active         Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code])
+  @@map("fs_service_types")
+}
+
+/// Field profile of a staff member (skills, certifications, territories, default shift).
+model FsTechnician {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  userId       String    @map("user_id")
+  skills       Json
+  certs        Json
+  territories  Json
+  /// Default shift (decimal hours) when Staff has no shift for the day.
+  shiftStart   Decimal   @default(9) @map("shift_start") @db.Decimal(4, 2)
+  shiftEnd     Decimal   @default(18) @map("shift_end") @db.Decimal(4, 2)
+  /// Share last job check-in location with dispatchers during shift.
+  tracking     Boolean   @default(true)
+  /// Manual status override: Break | Off Duty (null = derived from jobs and shifts).
+  manualStatus String?   @map("manual_status") @db.VarChar(12)
+  lastZone     String?   @map("last_zone") @db.VarChar(60)
+  lastZoneAt   DateTime? @map("last_zone_at")
+  active       Boolean   @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, userId])
+  @@map("fs_technicians")
+}
+
+/// A customer service location (address, territory, access and safety notes).
+model FsSite {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  customerId String  @map("customer_id")
+  label      String  @db.VarChar(120)
+  address    String  @db.VarChar(255)
+  zone       String  @db.VarChar(60)
+  access     String? @db.Text
+  safety     String? @db.Text
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, customerId])
+  @@map("fs_sites")
+}
+
+/// Which customer site a piece of customer equipment (AmAsset) is installed at.
+model FsEquipmentSite {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  assetId    String @unique @map("asset_id")
+  siteId     String @map("site_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("fs_equipment_sites")
+}
+
+model FsRequest {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  number           String    @db.VarChar(20)
+  customerId       String    @map("customer_id")
+  siteId           String?   @map("site_id")
+  assetId          String?   @map("asset_id")
+  issue            String    @db.Text
+  serviceTypeId    String?   @map("service_type_id")
+  /// Phone | Unified Inbox | Customer Portal | Helpdesk | Website | API
+  channel          String    @db.VarChar(20)
+  sourceRef        String?   @map("source_ref") @db.VarChar(80)
+  priority         String    @db.VarChar(10)
+  window           String?   @db.VarChar(80)
+  /// New | Untriaged | Need More Information | Awaiting Customer | Ready for Work Order | Converted | Rejected | Duplicate | Sent to Helpdesk
+  status           String    @db.VarChar(24)
+  ownerId          String?   @map("owner_id")
+  triageResult     String?   @map("triage_result") @db.VarChar(40)
+  outcome          String?   @db.VarChar(255)
+  notes            Json
+  woId             String?   @map("wo_id")
+  helpdeskTicketId String?   @map("helpdesk_ticket_id")
+  triagedAt        DateTime? @map("triaged_at")
+  createdById      String    @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("fs_requests")
+}
+
+model FsWorkOrder {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  number          String    @db.VarChar(20)
+  requestId       String?   @map("request_id")
+  customerId      String    @map("customer_id")
+  siteId          String?   @map("site_id")
+  assetId         String?   @map("asset_id")
+  serviceTypeId   String    @map("service_type_id")
+  priority        String    @db.VarChar(10)
+  status          String    @db.VarChar(20)
+  techUserId      String?   @map("tech_user_id")
+  startAt         DateTime? @map("start_at")
+  durMin          Int       @map("dur_min")
+  slaDueAt        DateTime? @map("sla_due_at")
+  /// Accumulated SLA pause (ms) while Awaiting Customer, and when the current pause began.
+  slaPausedMs     BigInt    @default(0) @map("sla_paused_ms")
+  slaPausedAt     DateTime? @map("sla_paused_at")
+  scope           String    @db.Text
+  agreementId     String?   @map("agreement_id")
+  warrantyId      String?   @map("warranty_id")
+  planId          String?   @map("plan_id")
+  planKey         String?   @map("plan_key") @db.VarChar(80)
+  quoteOrderId    String?   @map("quote_order_id")
+  invoiceOrderId  String?   @map("invoice_order_id")
+  payRequestId    String?   @map("pay_request_id")
+  templateId      String?   @map("template_id")
+  templateVersion Int?      @map("template_version")
+  /// Checklist answers by item index: 1 pass/yes, 0 fail/no, "na", or null.
+  checklist       Json
+  checklistNotes  Json      @map("checklist_notes")
+  signedBy        String?   @map("signed_by") @db.VarChar(120)
+  signedAt        DateTime? @map("signed_at")
+  signNote        String?   @map("sign_note") @db.VarChar(255)
+  resolution      String?   @db.Text
+  note            String?   @db.Text
+  approvalReason  String?   @map("approval_reason") @db.VarChar(255)
+  /// Not resolved on this visit (counts against first-time fix).
+  unresolved      Boolean   @default(false)
+  dispatchedAt    DateTime? @map("dispatched_at")
+  arrivedAt       DateTime? @map("arrived_at")
+  completedAt     DateTime? @map("completed_at")
+  closedAt        DateTime? @map("closed_at")
+  version         Int       @default(1)
+  createdById     String    @map("created_by_id")
+
+  parts FsWoPart[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, techUserId])
+  @@map("fs_work_orders")
+}
+
+model FsWoPart {
+  id              String      @id @default(uuid())
+  woId            String      @map("wo_id")
+  wo              FsWorkOrder @relation(fields: [woId], references: [id], onDelete: Cascade)
+  productId       String      @map("product_id")
+  required        Int
+  reserved        Int         @default(0)
+  issued          Int         @default(0)
+  used            Int         @default(0)
+  returned        Int         @default(0)
+  /// Purchase order raised for a shortage.
+  purchaseOrderId String?     @map("purchase_order_id")
+
+  moves FsPartMove[]
+
+  @@map("fs_wo_parts")
+}
+
+/// One confirmed Inventory movement for a job part (issue qty < 0, return qty > 0).
+model FsPartMove {
+  id              String   @id @default(uuid())
+  partId          String   @map("part_id")
+  part            FsWoPart @relation(fields: [partId], references: [id], onDelete: Cascade)
+  stockMovementId String   @map("stock_movement_id")
+  qty             Int
+  unitCost        Decimal  @map("unit_cost") @db.Decimal(12, 2)
+  byUserId        String   @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("fs_part_moves")
+}
+
+model FsLabor {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  number      String    @db.VarChar(20)
+  woId        String    @map("wo_id")
+  techUserId  String    @map("tech_user_id")
+  /// Travel | Standard Labor | Diagnostic | Installation | Repair | Inspection | Waiting | Training | Other
+  type        String    @db.VarChar(20)
+  startAt     DateTime  @map("start_at")
+  endAt       DateTime? @map("end_at")
+  breakMin    Int       @default(0) @map("break_min")
+  billable    Boolean   @default(true)
+  /// Running | Draft | Submitted | Approved | Rejected
+  status      String    @db.VarChar(12)
+  reason      String?   @db.VarChar(255)
+  overtime    Boolean   @default(false)
+  /// BusinessUser.hourlyRate at the time (null when not set).
+  rate        Decimal?  @db.Decimal(10, 2)
+  decidedById String?   @map("decided_by_id")
+  createdById String    @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, woId])
+  @@index([businessId, techUserId])
+  @@map("fs_labor")
+}
+
+/// Work-order timeline (append-only).
+model FsEvent {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  woId       String  @map("wo_id")
+  text       String  @db.Text
+  byUserId   String? @map("by_user_id")
+  byName     String  @map("by_name") @db.VarChar(160)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, woId])
+  @@map("fs_events")
+}
+
+model FsFile {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  woId       String? @map("wo_id")
+  requestId  String? @map("request_id")
+  warrantyId String? @map("warranty_id")
+  /// before | during | after | evidence | attachment | report
+  stage      String  @db.VarChar(12)
+  name       String  @db.VarChar(255)
+  storageKey String  @map("storage_key") @db.VarChar(400)
+  mime       String  @db.VarChar(120)
+  size       Int
+  byUserId   String  @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, woId])
+  @@map("fs_files")
+}
+
+model FsTemplate {
+  id            String  @id @default(uuid())
+  businessId    String  @map("business_id")
+  code          String  @db.VarChar(24)
+  name          String  @db.VarChar(160)
+  serviceTypeId String? @map("service_type_id")
+  assetType     String  @default("Any") @map("asset_type") @db.VarChar(40)
+  version       Int
+  /// [{ t, type, req, ev }]
+  items         Json
+  /// Draft | Published | Superseded
+  status        String  @db.VarChar(12)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, code, version])
+  @@map("fs_templates")
+}
+
+model FsInspection {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(20)
+  woId         String    @unique @map("wo_id")
+  assetId      String?   @map("asset_id")
+  techUserId   String?   @map("tech_user_id")
+  templateId   String    @map("template_id")
+  startedAt    DateTime  @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  /// In Progress | Passed | Failed | Passed with exceptions
+  result       String    @db.VarChar(24)
+  exceptions   Int       @default(0)
+  approvedById String?   @map("approved_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("fs_inspections")
+}
+
+model FsPlan {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  number        String    @db.VarChar(20)
+  name          String    @db.VarChar(160)
+  customerId    String    @map("customer_id")
+  siteId        String?   @map("site_id")
+  assetId       String?   @map("asset_id")
+  serviceTypeId String    @map("service_type_id")
+  /// Every X days | Weekly | Monthly | Quarterly | Annually | Usage hours
+  trigger       String    @db.VarChar(16)
+  /// Days between visits, or meter units for Usage hours.
+  freq          Int
+  nextDueOn     DateTime? @map("next_due_on") @db.Date
+  nextDueMeter  Decimal?  @map("next_due_meter") @db.Decimal(14, 2)
+  window        String    @default("Any") @db.VarChar(60)
+  autoCreate    Boolean   @default(true) @map("auto_create")
+  approval      Boolean   @default(false)
+  /// Active | Paused
+  status        String    @db.VarChar(10)
+  lastWoId      String?   @map("last_wo_id")
+
+  instances FsPlanInstance[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("fs_plans")
+}
+
+model FsPlanInstance {
+  id     String  @id @default(uuid())
+  planId String  @map("plan_id")
+  plan   FsPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  key    String  @db.VarChar(80)
+  woId   String? @map("wo_id")
+  status String  @db.VarChar(12)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([planId, key])
+  @@map("fs_plan_instances")
+}
+
+/// Operational entitlement backed by a signed contract (Contracts module).
+model FsAgreement {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  number         String   @db.VarChar(20)
+  customerId     String   @map("customer_id")
+  contractId     String?  @map("contract_id")
+  startOn        DateTime @map("start_on") @db.Date
+  endOn          DateTime @map("end_on") @db.Date
+  assetIds       Json     @map("asset_ids")
+  serviceTypeIds Json     @map("service_type_ids")
+  visits         Int
+  freq           String   @db.VarChar(40)
+  respH          Int      @map("resp_h")
+  resH           Int      @map("res_h")
+  labor          String   @db.VarChar(60)
+  parts          String   @db.VarChar(60)
+  /// Auto-renew | Manual
+  renewal        String   @db.VarChar(16)
+  /// Active | Suspended | Expired
+  status         String   @db.VarChar(12)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("fs_agreements")
+}
+
+model FsWarranty {
+  id          String  @id @default(uuid())
+  businessId  String  @map("business_id")
+  number      String  @db.VarChar(20)
+  customerId  String  @map("customer_id")
+  assetId     String  @map("asset_id")
+  issue       String  @db.Text
+  /// Manufacturer | Dealer | Workmanship — free text label of the cover
+  source      String  @db.VarChar(80)
+  /// Pending Validation | Eligible | Not Eligible | Approval Required
+  eligibility String  @db.VarChar(20)
+  woId        String? @map("wo_id")
+  /// Validating | Eligible | Approval Required | WO Created | Repairing | Completed | Rejected | Closed
+  status      String  @db.VarChar(20)
+  evidence    Json
+  note        String? @db.Text
+  history     Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("fs_warranty")
+}
+
+/// Manager approvals (overtime dispatch, high-value parts, cancellations, reopen, warranty exception).
+model FsApproval {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  kind          String    @db.VarChar(40)
+  subjectType   String    @map("subject_type") @db.VarChar(12)
+  subjectId     String    @map("subject_id")
+  what          String    @db.VarChar(255)
+  payload       Json
+  requestedById String    @map("requested_by_id")
+  /// Pending | Approved | Rejected
+  status        String    @db.VarChar(10)
+  decidedById   String?   @map("decided_by_id")
+  decidedAt     DateTime? @map("decided_at")
+  reason        String?   @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, status])
+  @@map("fs_approvals")
+}
+
+model FsAudit {
+  id          String @id @default(uuid())
+  businessId  String @map("business_id")
+  actorId     String @map("actor_id")
+  actorName   String @map("actor_name") @db.VarChar(160)
+  action      String @db.VarChar(80)
+  entityType  String @map("entity_type") @db.VarChar(16)
+  entityId    String @map("entity_id")
+  detail      String @db.Text
+  correlation String @db.VarChar(24)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([businessId, entityId])
+  @@map("fs_audit")
+}
+
+/// Idempotency for handoffs and offline technician actions (client keys).
+model FsIdem {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  key        String @db.VarChar(120)
+  /// in_flight | done | failed
+  status     String @db.VarChar(10)
+  result     Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, key])
+  @@map("fs_idem")
 }

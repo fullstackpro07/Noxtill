@@ -7,11 +7,11 @@
   "license": "UNLICENSED",
   "scripts": {
     "postinstall": "npx prisma generate",
-    "build": "npx prisma generate && npx nest build",
+    "build": "node api.js && npx prisma generate && npx nest build",
     "build:backend": "npx prisma generate && npx nest build",
     "build:frontend": "npx prisma generate && npx nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
+    "start": "node api.js && nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",

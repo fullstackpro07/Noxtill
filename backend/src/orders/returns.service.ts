@@ -1,16 +1,18 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CLS_KEY_BUSINESS_ID, CLS_KEY_ROLE, CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
-import { BillingService } from '../billing/billing.service';
+import { ModuleRef } from '@nestjs/core';
+import { PayRefundsService } from '../payments/pay-refunds.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { RETURN_ERROR_CODES } from './returns.constants';
 import {
   Prisma,
   ProductKind,
+  Return,
   ReturnStatus,
   Role,
   StockMovementKind,
@@ -25,11 +27,12 @@ import {
  */
 @Injectable()
 export class ReturnsService {
+  private readonly logger = new Logger(ReturnsService.name);
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly cls: ClsService,
     private readonly cashRegister: CashRegisterService,
-    private readonly billing: BillingService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   async create(businessId: string, dto: CreateReturnDto) {
@@ -156,28 +159,6 @@ export class ReturnsService {
       );
     }
 
-    // Card/online refunds hit a real external gateway — done BEFORE any DB write below, so a
-    // failed gateway call (e.g. the disclosed Payment.providerRef gap) leaves this return
-    // untouched (still pending, no stock/ledger change) rather than half-applied.
-    let gatewayRefundRef: string | null = null;
-    if (ret.refundMethod === 'card' || ret.refundMethod === 'online') {
-      const payment = await this.tenantPrisma.client.payment.findFirst({
-        where: { orderId: ret.orderId, method: ret.refundMethod },
-      });
-      if (!payment?.providerRef) {
-        throw new AppException(
-          RETURN_ERROR_CODES.PROVIDER_REF_MISSING,
-          `The original ${ret.refundMethod} payment has no recorded gateway reference to refund against — checkout doesn't populate Payment.providerRef yet.`,
-          HttpStatus.CONFLICT,
-        );
-      }
-      const result = await this.billing.refund(
-        payment.providerRef,
-        Number(ret.refundAmount),
-      );
-      gatewayRefundRef = result.refundRef;
-    }
-
     const updated = await this.tenantPrisma.client.$transaction(async (tx) => {
       if (ret.restock) {
         for (const item of ret.items) {
@@ -233,13 +214,38 @@ export class ReturnsService {
           entityId: ret.id,
           after: {
             ...row,
-            gatewayRefundRef,
           } as unknown as Prisma.InputJsonValue,
         },
       });
 
       return row;
     });
+
+    // Card/online refunds are executed by Payments & Billing on the business's own connected
+    // provider account (never decided there): the approval hands it a refund execution, which is
+    // Ready, Approval Required (above the Owner threshold) or Manual Review when the sale wasn't
+    // taken through a connected provider. The return itself is approved either way.
+    if (ret.refundMethod === 'card' || ret.refundMethod === 'online') {
+      const pay = this.payRefunds();
+      if (pay) {
+        const biz = await this.tenantPrisma.client.business.findUnique({
+          where: { id: businessId },
+          select: { id: true, parentId: true },
+        });
+        try {
+          await pay.createFromReturn(
+            updated,
+            biz?.parentId ?? businessId,
+            actorUserId ?? null,
+          );
+        } catch (e) {
+          // The return is already approved; Payments' projector picks it up as Manual Review.
+          this.logger.warn(
+            `refund execution hand-off failed for ${ret.id}: ${(e as Error).message}`,
+          );
+        }
+      }
+    }
 
     // Best-effort, outside the transaction — same convention as OrdersService.createSale's
     // post-commit cash-register hook: not every business runs a cash register at all.
@@ -272,7 +278,10 @@ export class ReturnsService {
   private async policies(businessId: string) {
     const activeId = this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
     return resolvePolicies(
-      await this.tenantPrisma.client.business.findUnique({ where: { id: activeId }, select: { policies: true } }),
+      await this.tenantPrisma.client.business.findUnique({
+        where: { id: activeId },
+        select: { policies: true },
+      }),
     );
   }
 
@@ -292,5 +301,20 @@ export class ReturnsService {
       );
     }
     return ret;
+  }
+
+  /** Resolved lazily so Orders doesn't import the Payments module graph. */
+  private payRefunds(): {
+    createFromReturn: (
+      r: Return,
+      rootId: string,
+      by: string | null,
+    ) => Promise<unknown>;
+  } | null {
+    try {
+      return this.moduleRef.get(PayRefundsService, { strict: false });
+    } catch {
+      return null;
+    }
   }
 }
