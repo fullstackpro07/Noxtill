@@ -2968,8 +2968,8 @@ export class FinanceViewsService {
       notices: [
         notice(
           'info',
-          'Finance keeps the asset register',
-          'Noxtill has no separate physical-asset module, so the register lives here: cost, location, depreciation and disposal. Bills posted to Fixed Assets — Cost show up as pending capitalization.',
+          'Finance keeps the fixed-asset ledger',
+          'This is the accounting register: cost, depreciation and disposal. Physical assets, maintenance, downtime and condition live in Assets & Maintenance, where an asset can link to its fixed asset here (its book value shows on the asset). Bills posted to Fixed Assets — Cost show up as pending capitalization.',
         ),
       ],
       depr: {

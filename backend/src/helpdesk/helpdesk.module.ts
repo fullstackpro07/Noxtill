@@ -40,5 +40,6 @@ import { HelpdeskProcessor, HelpdeskScheduler } from './helpdesk.processor';
     HelpdeskScheduler,
     HelpdeskProcessor,
   ],
+  exports: [HelpdeskTicketsService, HelpdeskContextService],
 })
 export class HelpdeskModule {}

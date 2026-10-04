@@ -55,7 +55,7 @@ export class DepositsService {
     if (deposit.method !== 'cash') {
       throw new AppException(
         DEPOSIT_ERROR_CODES.ONLINE_CAPTURE_NOT_SUPPORTED,
-        `Capturing a "${deposit.method}" deposit isn't supported yet — there's no one-off-charge gateway primitive to reuse. Use "cash" for now.`,
+        `A "${deposit.method}" deposit is collected online with a payment request linked to this booking (Payments & Billing › New request). It is captured here automatically when the payment provider confirms it — or record cash now.`,
         HttpStatus.NOT_IMPLEMENTED,
       );
     }
