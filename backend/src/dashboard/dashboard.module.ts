@@ -23,12 +23,14 @@ import { TodayBusinessService } from './today-business.service';
 import { BusinessGoalService } from './business-goal.service';
 import { AutonomousCommerceDashboardService } from './autonomous-commerce-dashboard.service';
 import { AutonomousCommerceDashboardController } from './autonomous-commerce-dashboard.controller';
+import { ProcurementModule } from '../procurement/procurement.module';
 
 @Module({
   imports: [
     WidgetsModule,
     ProfitModule,
     AiModule,
+    ProcurementModule,
     BullModule.registerQueue(
       { name: HEALTH_SCORE_SNAPSHOT_QUEUE },
       { name: AI_INSIGHTS_QUEUE },

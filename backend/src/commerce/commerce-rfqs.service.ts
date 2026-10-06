@@ -3,6 +3,8 @@ import {
   CommerceRfqStatus,
   CommerceRfqSupplierStatus,
   CommerceSupplierQuoteStatus,
+  ProcurementRequestEventType,
+  ProcurementRequestStatus,
   Prisma,
   PurchaseOrderStatus,
 } from '@prisma/client';
@@ -48,6 +50,7 @@ const INCLUDE = {
   },
   awardedQuote: true,
   purchaseOrder: { select: { id: true, status: true, createdAt: true } },
+  sourceProcurementRequest: { select: { id: true, status: true } },
 } satisfies Prisma.CommerceRfqInclude;
 
 function cleanOptionalText(value?: string | null): string | null | undefined {
@@ -103,6 +106,160 @@ export class CommerceRfqsService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly activity: ActivityService,
   ) {}
+
+  async createFromProcurementRequest(
+    businessId: string,
+    actorUserId: string,
+    requestId: string,
+  ) {
+    const request = await this.tenantPrisma.client.procurementRequest.findFirst(
+      {
+        where: { id: requestId, businessId },
+        include: {
+          items: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            include: { product: { select: { id: true, name: true } } },
+          },
+        },
+      },
+    );
+    if (!request) {
+      throw this.error(
+        'PROCUREMENT_REQUEST_NOT_FOUND',
+        'Purchase request not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    if (request.status === ProcurementRequestStatus.sourcing) {
+      const active = await this.tenantPrisma.client.commerceRfq.findFirst({
+        where: {
+          businessId,
+          sourceProcurementRequestId: request.id,
+          status: { in: [CommerceRfqStatus.draft, CommerceRfqStatus.open] },
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        include: INCLUDE,
+      });
+      if (active) return serializeRfq(active);
+      throw this.error(
+        'PROCUREMENT_REQUEST_SOURCING_CONFLICT',
+        'This request is marked as sourcing but has no active linked RFQ. Refresh and ask an administrator to review the request history.',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    if (request.status !== ProcurementRequestStatus.approved) {
+      throw this.error(
+        'PROCUREMENT_REQUEST_SOURCING_UNAVAILABLE',
+        'Only an approved purchase request can be sent to sourcing.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (
+      request.items.length === 0 ||
+      request.items.some(
+        (item) =>
+          item.lineType !== 'stock' ||
+          !item.productId ||
+          !Number.isInteger(Number(item.quantity)),
+      )
+    ) {
+      throw this.error(
+        'PROCUREMENT_REQUEST_SOURCING_UNAVAILABLE',
+        'The shared RFQ flow currently supports stock lines linked to catalog products with whole-unit quantities. This request has a service, asset, expense, unlinked, or fractional line.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const business = await this.tenantPrisma.client.business.findUnique({
+      where: { id: businessId },
+      select: { currency: true },
+    });
+    if (
+      !business?.currency ||
+      business.currency.toUpperCase() !== request.currency.toUpperCase()
+    ) {
+      throw this.error(
+        'PROCUREMENT_REQUEST_SOURCING_CURRENCY_MISMATCH',
+        `This RFQ can only be awarded to an Inventory purchase order in the business currency (${business?.currency ?? 'not configured'}). The request is in ${request.currency}; no currency conversion is configured.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const rfq = await this.tenantPrisma.client.$transaction(async (tx) => {
+      const claimed = await tx.procurementRequest.updateMany({
+        where: {
+          id: request.id,
+          businessId,
+          status: ProcurementRequestStatus.approved,
+        },
+        data: { status: ProcurementRequestStatus.sourcing },
+      });
+      if (claimed.count !== 1) this.versionConflict();
+
+      const created = await tx.commerceRfq.create({
+        data: {
+          businessId,
+          ownerUserId: actorUserId,
+          requirement: `Procurement request ${request.id.slice(0, 8)}: ${request.reason}`,
+          currency: business.currency.toUpperCase(),
+          dueAt: request.neededBy,
+          terms:
+            'Supplier outreach is manual. No supplier message or external connector was sent.',
+          sourceProcurementRequestId: request.id,
+          suppliers: request.supplierId
+            ? { create: [{ supplierId: request.supplierId }] }
+            : undefined,
+          items: {
+            create: request.items.map((item) => ({
+              productId: item.productId!,
+              description: item.description,
+              qty: Number(item.quantity),
+              specifications: item.category
+                ? `Category: ${item.category}`
+                : undefined,
+            })),
+          },
+        },
+        include: INCLUDE,
+      });
+      await tx.procurementRequestEvent.create({
+        data: {
+          businessId,
+          requestId: request.id,
+          actorUserId,
+          eventType: ProcurementRequestEventType.sourcing_started,
+          fromStatus: ProcurementRequestStatus.approved,
+          toStatus: ProcurementRequestStatus.sourcing,
+          version: request.version,
+          reason: `Created linked RFQ ${created.id}. Supplier outreach remains manual.`,
+        },
+      });
+      await tx.commerceRfqAudit.create({
+        data: {
+          businessId,
+          rfqId: created.id,
+          action: 'created_from_procurement_request',
+          actorUserId,
+          after: {
+            ...this.snapshot(created),
+            sourceProcurementRequestId: request.id,
+          },
+        },
+      });
+      return created;
+    });
+
+    await this.activity.record(businessId, {
+      type: 'commerce_rfq_created',
+      description: 'Approved procurement request sent to supplier sourcing',
+      entityType: 'CommerceRfq',
+      entityId: rfq.id,
+      actorUserId,
+    });
+    return serializeRfq(rfq);
+  }
 
   async create(
     businessId: string,
@@ -475,6 +632,42 @@ export class CommerceRfqsService {
           },
         },
       });
+      if (current.sourceProcurementRequestId) {
+        const request = await tx.procurementRequest.findFirst({
+          where: {
+            id: current.sourceProcurementRequestId,
+            businessId,
+            status: ProcurementRequestStatus.sourcing,
+          },
+          select: { id: true, version: true },
+        });
+        if (!request) {
+          this.invalidState(
+            'The linked procurement request is no longer in sourcing. Refresh both records before closing this RFQ.',
+          );
+        }
+        const reset = await tx.procurementRequest.updateMany({
+          where: {
+            id: request.id,
+            businessId,
+            status: ProcurementRequestStatus.sourcing,
+          },
+          data: { status: ProcurementRequestStatus.approved },
+        });
+        if (reset.count !== 1) this.versionConflict();
+        await tx.procurementRequestEvent.create({
+          data: {
+            businessId,
+            requestId: request.id,
+            actorUserId,
+            eventType: ProcurementRequestEventType.sourcing_closed,
+            fromStatus: ProcurementRequestStatus.sourcing,
+            toStatus: ProcurementRequestStatus.approved,
+            version: request.version,
+            reason: `Linked RFQ ${id} was ${nextStatus}; approval remains valid for another sourcing attempt.`,
+          },
+        });
+      }
     });
     return this.getOne(businessId, id);
   }
@@ -992,6 +1185,48 @@ export class CommerceRfqsService {
           },
         },
       });
+      if (rfq.sourceProcurementRequestId) {
+        const request = await tx.procurementRequest.findFirst({
+          where: {
+            id: rfq.sourceProcurementRequestId,
+            businessId,
+            status: ProcurementRequestStatus.sourcing,
+            convertedPurchaseOrderId: null,
+          },
+          select: { id: true, version: true },
+        });
+        if (!request) {
+          this.invalidState(
+            'The linked procurement request is no longer in sourcing. The RFQ award was not completed.',
+          );
+        }
+        const converted = await tx.procurementRequest.updateMany({
+          where: {
+            id: request.id,
+            businessId,
+            status: ProcurementRequestStatus.sourcing,
+            convertedPurchaseOrderId: null,
+          },
+          data: {
+            status: ProcurementRequestStatus.converted,
+            convertedPurchaseOrderId: purchaseOrder.id,
+            supplierId: quote.supplierId,
+          },
+        });
+        if (converted.count !== 1) this.versionConflict();
+        await tx.procurementRequestEvent.create({
+          data: {
+            businessId,
+            requestId: request.id,
+            actorUserId,
+            eventType: ProcurementRequestEventType.converted,
+            fromStatus: ProcurementRequestStatus.sourcing,
+            toStatus: ProcurementRequestStatus.converted,
+            version: request.version,
+            reason: `Awarded RFQ ${id}; created draft purchase order ${purchaseOrder.id}.`,
+          },
+        });
+      }
     });
 
     await this.activity.record(businessId, {

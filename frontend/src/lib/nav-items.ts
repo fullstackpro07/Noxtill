@@ -495,6 +495,17 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    key: "procurement",
+    labelKey: "nav.procurement",
+    href: "/procurement",
+    icon: PackageCheck,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "procurement-overview", labelKey: "nav.procurementOverview", href: "/procurement", icon: LayoutDashboard },
+      { key: "purchase-requests", labelKey: "nav.purchaseRequests", href: "/procurement/requests", icon: ClipboardList },
+    ],
+  },
+  {
     key: "ai-assistant",
     labelKey: "nav.aiAssistant",
     href: "/assistant/chat",

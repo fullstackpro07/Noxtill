@@ -72,5 +72,6 @@ import { CommerceReconciliationService } from './commerce-reconciliation.service
     CommerceAgentToolsService,
     CommerceReconciliationService,
   ],
+  exports: [CommerceRfqsService],
 })
 export class CommerceModule {}

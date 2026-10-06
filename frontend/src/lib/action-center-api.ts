@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "commerce";
+export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "commerce" | "procurement_request";
 export type ActionItemPriority = "urgent" | "normal" | "low";
 export type SnoozeDuration = "1h" | "tomorrow" | "next_week";
 
@@ -30,6 +30,7 @@ export const ACTION_ITEM_TYPE_LABEL: Record<ActionItemType, string> = {
   overdue_credit: "Overdue credit",
   unreplied_review: "Unreplied review",
   commerce: "Commerce",
+  procurement_request: "Purchase approval",
 };
 
 /** GET /actions — staff see only complaints assigned to them (server-enforced); owners/managers see everything. */
@@ -53,5 +54,16 @@ export function snoozeAction(id: string, duration: SnoozeDuration): Promise<unkn
   return apiFetch(`/actions/${encodeURIComponent(id)}/snooze`, {
     method: "POST",
     body: JSON.stringify({ duration }),
+  });
+}
+
+export function approveProcurementAction(id: string): Promise<unknown> {
+  return apiFetch(`/actions/${encodeURIComponent(id)}/approve`, { method: "POST" });
+}
+
+export function rejectProcurementAction(id: string, reason: string): Promise<unknown> {
+  return apiFetch(`/actions/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
   });
 }

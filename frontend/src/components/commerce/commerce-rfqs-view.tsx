@@ -26,6 +26,7 @@ import {
   closeCommerceRfq,
   confirmManualSupplierSend,
   createCommerceRfq,
+  fetchCommerceRfq,
   fetchCommerceRfqAudit,
   fetchCommerceRfqs,
   openCommerceRfq,
@@ -230,8 +231,10 @@ function metricValue(value: string, loading: boolean, failed: boolean): string {
 
 export function CommerceRfqsView({
   sourceOpportunityId,
+  rfqId,
 }: {
   sourceOpportunityId?: string;
+  rfqId?: string;
 }) {
   const session = useSession();
   const queryClient = useQueryClient();
@@ -243,6 +246,14 @@ export function CommerceRfqsView({
   const [dialog, setDialog] = useState<DialogMode>(
     sourceOpportunityId ? { kind: "create" } : null,
   );
+  const linkedRfqQuery = useQuery({
+    queryKey: ["commerce-rfq", rfqId],
+    queryFn: () => fetchCommerceRfq(rfqId!),
+    enabled: !!rfqId,
+  });
+  const effectiveSelected = rfqId
+    ? linkedRfqQuery.data ?? selected
+    : selected;
 
   const listQuery = useQuery({
     queryKey: ["commerce-rfqs", status, search],
@@ -266,9 +277,9 @@ export function CommerceRfqsView({
     enabled: !!sourceOpportunityId && dialog?.kind === "create" && !dialog.rfq,
   });
   const auditQuery = useQuery({
-    queryKey: ["commerce-rfq-audit", selected?.id],
-    queryFn: () => fetchCommerceRfqAudit(selected!.id),
-    enabled: !!selected,
+    queryKey: ["commerce-rfq-audit", effectiveSelected?.id],
+    queryFn: () => fetchCommerceRfqAudit(effectiveSelected!.id),
+    enabled: !!effectiveSelected,
   });
   const rfqs = useMemo(() => listQuery.data ?? [], [listQuery.data]);
   const dataAsOf = listQuery.dataUpdatedAt || 0;
@@ -451,7 +462,7 @@ export function CommerceRfqsView({
       ),
   });
 
-  const current = selected;
+  const current = effectiveSelected;
   const errorText =
     listQuery.error instanceof ApiError
       ? listQuery.error.message
@@ -2050,6 +2061,22 @@ function RfqDetail({
               value={rfq.ownerUserId ? "Assigned" : "Unassigned"}
             />
           </section>
+          {rfq.sourceProcurementRequest && (
+            <Link
+              href="/procurement/requests"
+              className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"
+              style={{
+                borderColor: "var(--app-border)",
+                color: "var(--app-text)",
+              }}
+            >
+              From purchase request {rfq.sourceProcurementRequest.id.slice(0, 8)}
+              <span className="font-normal capitalize text-[var(--app-text-muted)]">
+                · {rfq.sourceProcurementRequest.status}
+              </span>
+              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          )}
           {rfq.purchaseOrder && (
             <div
               className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"

@@ -75,6 +75,8 @@ export interface CommerceRfq {
   dueAt: string | null;
   ownerUserId: string | null;
   sourceOpportunityId: string | null;
+  sourceProcurementRequestId: string | null;
+  sourceProcurementRequest: { id: string; status: string } | null;
   version: number;
   items: CommerceRfqItem[];
   suppliers: CommerceRfqInvitation[];

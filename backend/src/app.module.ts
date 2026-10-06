@@ -71,6 +71,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { CommerceModule } from './commerce/commerce.module';
 import { BusinessIntelligenceModule } from './business-intelligence/business-intelligence.module';
 import { CustomerPortalModule } from './customer-portal/customer-portal.module';
+import { ProcurementModule } from './procurement/procurement.module';
 
 @Module({
   imports: [
@@ -147,6 +148,7 @@ import { CustomerPortalModule } from './customer-portal/customer-portal.module';
     CommerceModule,
     BusinessIntelligenceModule,
     CustomerPortalModule,
+    ProcurementModule,
   ],
   controllers: [AppController],
   providers: [AppService],

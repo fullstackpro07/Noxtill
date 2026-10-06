@@ -585,13 +585,16 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 
 ## Progress log — goal #8
 
-- Customer Portal implementation checkpoint: admin/public views, backend APIs, two migrations and
-  Portal-specific shared-file hunks are ready as one module commit. Both TypeScript checks, Portal
-  eslint and full backend Jest passed (343 suites / 2,150 tests); Prisma reports 158 migrations
-  applied. The public Forgot password flow is now implemented with one-use SHA-256-hashed tokens,
-  a 60-minute expiry, generic responses, session revocation and a real-MySQL test. Its migration is
-  applied; current full backend Jest passes (343 suites / 2,151 tests), both TypeScript checks and
-  touched-file eslint pass. The reset-flow commit is pending; browser QA remains pending.
+- Customer Portal ✅ module/views and first two migrations (`79a4ab1`); Forgot password ✅
+  (`7781350`). Reset links are one-use SHA-256-hashed tokens with a 60-minute expiry and generic
+  responses; password changes revoke active sessions. The reset migration is applied and covered by
+  a real-MySQL spec. Backend/frontend `tsc`, touched-file eslint and full backend Jest pass (343
+  suites / 2,151 tests). Browser QA of the portal screens remains pending.
+- Procurement Overview (`/procurement`) and Purchase Requests (`/procurement/requests`): real
+  request/approval records, Action Center approval handoff, and shared Commerce RFQ handoff. The
+  three Procurement migrations are applied; Prisma reports the database schema up to date. Backend
+  and frontend `tsc`, touched-file eslint and full backend Jest pass (343 suites / 2,151 tests).
+  Finance bills and budgets remain honestly shown as unavailable, not estimated.
 - goal #8 / Claude ✅ Website & Commerce, 11 remaining screens (`3104c1c`): Overview, AI Website
   Builder, Pages, Navigation & Menus, Landing Pages, Blog & Content, Forms & Lead Capture,
   Storefront Configuration, Themes & Branding, Domains & Publishing, Website Settings (`/website/*`),

@@ -13,6 +13,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActionCenterService } from './action-center.service';
+import { ProcurementService } from '../procurement/procurement.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -36,8 +37,13 @@ describe('ActionCenterService — Autonomous Commerce items (MySQL)', () => {
     prisma = new PrismaService();
     await prisma.$connect();
     const cls = new FakeClsService();
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
     service = new ActionCenterService(
-      new TenantPrismaService(prisma, cls as unknown as ClsService),
+      tenantPrisma,
+      new ProcurementService(tenantPrisma),
     );
     businessId = (
       await prisma.business.create({

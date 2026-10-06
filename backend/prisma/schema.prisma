@@ -327,6 +327,8 @@ enum ActionItemType {
   unreplied_review
   /// Autonomous Commerce work waiting on a person (entityId = "<kind>:<record id>").
   commerce
+  /// Purchase requests awaiting owner or manager decision.
+  procurement_request
 }
 
 enum ActionItemPriority {
@@ -878,6 +880,9 @@ model Business {
   variantSets                  VariantSet[]
   bundles                      Bundle[]
   suppliers                    Supplier[]
+  procurementRequests          ProcurementRequest[]
+  procurementRequestsAtBranch  ProcurementRequest[]          @relation("ProcurementRequestBranch")
+  procurementRequestEvents     ProcurementRequestEvent[]
   priceHistory                 PriceHistory[]
   categories                   Category[]
   scheduledExports             ScheduledExport[]
@@ -1094,6 +1099,9 @@ model User {
   workflowDeadLetterDecisions   WorkflowDeadLetterDecision[] @relation("WorkflowDeadLetterDecisionActor")
   customerPortalLayouts         CustomerPortalLayoutVersion[] @relation("CustomerPortalLayoutAuthor")
   customerPortalInvites         CustomerPortalInvite[]        @relation("CustomerPortalInviteCreator")
+  procurementRequests           ProcurementRequest[]          @relation("ProcurementRequestRequester")
+  procurementRequestsReviewed   ProcurementRequest[]          @relation("ProcurementRequestReviewer")
+  procurementRequestEvents      ProcurementRequestEvent[]     @relation("ProcurementRequestEventActor")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1880,6 +1888,7 @@ model Product {
   preorderCampaigns       CommercePreorderCampaign[]
   storeOpportunities      CommerceStoreOpportunity[]
   commerceExperiments     CommerceExperiment[]
+  procurementRequestItems ProcurementRequestItem[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3363,6 +3372,8 @@ model CommerceRfq {
   ownerUserId         String?                 @map("owner_user_id")
   sourceOpportunityId String?                 @map("source_opportunity_id")
   sourceOpportunity   ProductOpportunity?     @relation(fields: [sourceOpportunityId], references: [id])
+  sourceProcurementRequestId String?          @map("source_procurement_request_id")
+  sourceProcurementRequest   ProcurementRequest? @relation(fields: [sourceProcurementRequestId], references: [id], onDelete: SetNull)
   awardedQuoteId      String?                 @unique @map("awarded_quote_id")
   awardedQuote        CommerceSupplierQuote?  @relation("CommerceRfqAwardedQuote", fields: [awardedQuoteId], references: [id])
   purchaseOrderId     String?                 @unique @map("purchase_order_id")
@@ -3377,6 +3388,7 @@ model CommerceRfq {
 
   @@index([businessId, status, updatedAt])
   @@index([businessId, dueAt])
+  @@index([sourceProcurementRequestId])
   @@map("commerce_rfqs")
 }
 
@@ -4914,6 +4926,7 @@ model Supplier {
   commerceQuotes         CommerceSupplierQuote[]
   commerceClaims         CommerceSupplierClaim[]
   fulfillmentNodes       CommerceFulfillmentNode[]
+  procurementRequests    ProcurementRequest[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4929,6 +4942,42 @@ enum PurchaseOrderStatus {
   partially_received
   received
   cancelled
+}
+
+enum ProcurementRequestStatus {
+  draft
+  submitted
+  approved
+  sourcing
+  rejected
+  converted
+  cancelled
+}
+
+enum ProcurementRequestUrgency {
+  low
+  normal
+  high
+  urgent
+}
+
+enum ProcurementRequestLineType {
+  stock
+  service
+  asset
+  expense
+}
+
+enum ProcurementRequestEventType {
+  created
+  updated
+  submitted
+  approved
+  rejected
+  sourcing_started
+  sourcing_closed
+  cancelled
+  converted
 }
 
 /// Purchase Orders, formal (UPD-BE-112) — replaces the two "always-immediate" write paths
@@ -4949,9 +4998,10 @@ model PurchaseOrder {
   confirmedAt DateTime? @map("confirmed_at")
   receivedAt  DateTime? @map("received_at")
 
-  items          PurchaseOrderItem[]
-  commerceRfq    CommerceRfq?
-  commerceClaims CommerceSupplierClaim[]
+  items              PurchaseOrderItem[]
+  commerceRfq        CommerceRfq?
+  commerceClaims     CommerceSupplierClaim[]
+  procurementRequest ProcurementRequest?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4974,6 +5024,85 @@ model PurchaseOrderItem {
   commerceClaimItems CommerceSupplierClaimItem[]
 
   @@map("purchase_order_items")
+}
+
+/// Procurement demand capture. This record is not inventory, a payable, or a supplier commitment;
+/// only an explicit conversion creates the canonical PurchaseOrder used by Inventory.
+model ProcurementRequest {
+  id                       String                    @id @default(uuid())
+  businessId               String                    @map("business_id")
+  business                 Business                  @relation(fields: [businessId], references: [id])
+  requesterUserId          String                    @map("requester_user_id")
+  requester                User                      @relation("ProcurementRequestRequester", fields: [requesterUserId], references: [id])
+  branchBusinessId         String?                   @map("branch_business_id")
+  branchBusiness           Business?                 @relation("ProcurementRequestBranch", fields: [branchBusinessId], references: [id], onDelete: SetNull)
+  department               String?
+  costCenter               String?                   @map("cost_center")
+  neededBy                 DateTime?                 @map("needed_by")
+  reason                   String                    @db.Text
+  urgency                  ProcurementRequestUrgency @default(normal)
+  budgetCode               String?                   @map("budget_code")
+  currency                 String
+  status                   ProcurementRequestStatus  @default(draft)
+  version                  Int                       @default(1)
+  submittedAt              DateTime?                 @map("submitted_at")
+  reviewedAt               DateTime?                 @map("reviewed_at")
+  reviewedByUserId         String?                   @map("reviewed_by_user_id")
+  reviewer                 User?                     @relation("ProcurementRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  decisionReason           String?                   @map("decision_reason") @db.Text
+  supplierId               String?                   @map("supplier_id")
+  supplier                 Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  attachmentUrls           Json                      @default("[]") @map("attachment_urls")
+  convertedPurchaseOrderId String?                   @unique @map("converted_purchase_order_id")
+  convertedPurchaseOrder   PurchaseOrder?            @relation(fields: [convertedPurchaseOrderId], references: [id], onDelete: SetNull)
+  sourceRfqs               CommerceRfq[]
+  items                    ProcurementRequestItem[]
+  events                   ProcurementRequestEvent[]
+  createdAt                DateTime                  @default(now()) @map("created_at")
+  updatedAt                DateTime                  @updatedAt @map("updated_at")
+
+  @@index([businessId, status, createdAt])
+  @@index([requesterUserId, createdAt])
+  @@index([branchBusinessId])
+  @@map("procurement_requests")
+}
+
+model ProcurementRequestItem {
+  id                String                     @id @default(uuid())
+  requestId         String                     @map("request_id")
+  request           ProcurementRequest         @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  lineType          ProcurementRequestLineType @default(stock) @map("line_type")
+  productId         String?                    @map("product_id")
+  product           Product?                   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  description       String                     @db.Text
+  category          String?
+  quantity          Decimal                    @db.Decimal(12, 3)
+  estimatedUnitCost Decimal                    @map("estimated_unit_cost") @db.Decimal(12, 2)
+  createdAt         DateTime                   @default(now()) @map("created_at")
+
+  @@index([requestId])
+  @@index([productId])
+  @@map("procurement_request_items")
+}
+
+/// Append-only decision/activity evidence for purchase-request changes.
+model ProcurementRequestEvent {
+  id          String                      @id @default(uuid())
+  businessId  String                      @map("business_id")
+  business    Business                    @relation(fields: [businessId], references: [id])
+  requestId   String                      @map("request_id")
+  request     ProcurementRequest          @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actorUserId String?                     @map("actor_user_id")
+  actor       User?                       @relation("ProcurementRequestEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  eventType   ProcurementRequestEventType @map("event_type")
+  fromStatus  ProcurementRequestStatus?   @map("from_status")
+  toStatus    ProcurementRequestStatus?   @map("to_status")
+  version     Int
+  reason      String?                     @db.Text
+  createdAt   DateTime                    @default(now()) @map("created_at")
+
+  @@index([businessId, requestId, createdAt])
+  @@map("procurement_request_events")
 }
 
 /// Back-in-stock notifications (UPD-BE-111) — no general "notify me" concept existed anywhere in

@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CREDIT_NOTABLE_OVERDUE_DAYS } from './dashboard.constants';
 import { SnoozeActionItemDto } from './dto/snooze-action-item.dto';
 import { parseDisabled } from '../business-modules/business-modules.service';
+import { AppException } from '../common/filters/app.exception';
+import { ProcurementService } from '../procurement/procurement.service';
 import {
   ActionItemPriority,
   ActionItemStatus,
@@ -79,7 +81,10 @@ const SNOOZE_DURATIONS_MS: Record<
  */
 @Injectable()
 export class ActionCenterService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly procurement: ProcurementService,
+  ) {}
 
   async list(
     businessId: string,
@@ -174,6 +179,44 @@ export class ActionCenterService {
     );
   }
 
+  approveProcurementRequestAction(
+    businessId: string,
+    actorUserId: string,
+    actionId: string,
+  ) {
+    const { type, entityId } = decodeId(actionId);
+    if (type !== ActionItemType.procurement_request || !entityId) {
+      throw new AppException(
+        'PROCUREMENT_ACTION_NOT_FOUND',
+        'Purchase approval action not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.procurement.decideRequest(businessId, actorUserId, entityId, {
+      decision: 'approve',
+    });
+  }
+
+  rejectProcurementRequestAction(
+    businessId: string,
+    actorUserId: string,
+    actionId: string,
+    reason: string,
+  ) {
+    const { type, entityId } = decodeId(actionId);
+    if (type !== ActionItemType.procurement_request || !entityId) {
+      throw new AppException(
+        'PROCUREMENT_ACTION_NOT_FOUND',
+        'Purchase approval action not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.procurement.decideRequest(businessId, actorUserId, entityId, {
+      decision: 'reject',
+      reason,
+    });
+  }
+
   private async setStatus(
     businessId: string,
     id: string,
@@ -183,6 +226,13 @@ export class ActionCenterService {
     const { type, entityId } = decodeId(id);
     if (!Object.values(ActionItemType).includes(type)) {
       throw new NotFoundException('Action item not found');
+    }
+    if (type === ActionItemType.procurement_request) {
+      throw new AppException(
+        'PROCUREMENT_ACTION_REQUIRES_DECISION',
+        'Purchase requests must be approved or rejected; they cannot be dismissed or snoozed.',
+        HttpStatus.CONFLICT,
+      );
     }
 
     return this.tenantPrisma.client.actionItemState.upsert({
@@ -197,27 +247,95 @@ export class ActionCenterService {
     role: Role,
     businessUserId: string | null,
   ): Promise<RawActionItem[]> {
-    // Staff only see items assigned to them — of the 4 real types, only complaints carry an
+    // Staff only see items assigned to them — of the current types, only complaints carry an
     // assignee at all, so a staff caller sees complaints-assigned-to-them and nothing else.
     if (role === Role.staff) {
       return this.complaintItems(businessId, businessUserId);
     }
 
-    const [complaints, lowStock, overdueCredit, unrepliedReviews, commerce] =
-      await Promise.all([
-        this.complaintItems(businessId, null),
-        this.lowStockItems(businessId),
-        this.overdueCreditItems(businessId),
-        this.unrepliedReviewItems(businessId),
-        this.commerceItems(businessId),
-      ]);
+    const [
+      complaints,
+      lowStock,
+      overdueCredit,
+      unrepliedReviews,
+      commerce,
+      procurementRequests,
+    ] = await Promise.all([
+      this.complaintItems(businessId, null),
+      this.lowStockItems(businessId),
+      this.overdueCreditItems(businessId),
+      this.unrepliedReviewItems(businessId),
+      this.commerceItems(businessId),
+      this.procurementRequestItems(businessId),
+    ]);
     return [
       ...complaints,
       ...lowStock,
       ...overdueCredit,
       ...unrepliedReviews,
       ...commerce,
+      ...procurementRequests,
     ];
+  }
+
+  private async procurementRequestItems(
+    businessId: string,
+  ): Promise<RawActionItem[]> {
+    const db = this.tenantPrisma.client;
+    const business = await db.business.findUnique({
+      where: { id: businessId },
+      select: {
+        parentId: true,
+        disabledModules: true,
+        parent: { select: { disabledModules: true } },
+      },
+    });
+    const disabled = parseDisabled(
+      business?.parentId
+        ? business.parent?.disabledModules
+        : business?.disabledModules,
+    );
+    if (disabled.includes('procurement')) return [];
+
+    const requests = await db.procurementRequest.findMany({
+      where: { businessId, status: 'submitted' },
+      orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+      take: 100,
+      select: {
+        id: true,
+        reason: true,
+        urgency: true,
+        currency: true,
+        createdAt: true,
+        submittedAt: true,
+        requester: { select: { name: true } },
+        items: {
+          select: { quantity: true, estimatedUnitCost: true },
+        },
+      },
+    });
+
+    return requests.map((request) => {
+      const estimate = request.items.reduce(
+        (sum, item) =>
+          sum + Number(item.quantity) * Number(item.estimatedUnitCost),
+        0,
+      );
+      return {
+        type: ActionItemType.procurement_request,
+        entityId: request.id,
+        priority:
+          request.urgency === 'urgent'
+            ? ActionItemPriority.urgent
+            : request.urgency === 'low'
+              ? ActionItemPriority.low
+              : ActionItemPriority.normal,
+        title: `Purchase request from ${request.requester.name}`,
+        reason: `${request.items.length} line(s) · ${estimate.toFixed(2)} ${request.currency} · ${request.reason}`,
+        occurredAt: request.submittedAt ?? request.createdAt,
+        deepLink: '/procurement/requests',
+      };
+    });
   }
 
   private async complaintItems(
