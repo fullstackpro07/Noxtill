@@ -22,6 +22,8 @@ export const CAPABILITIES = {
   AUTOMATIONS_MANAGE: 'automations.manage',
   /// SEO Autopilot can initiate site crawls and manage search visibility settings.
   SEO_MANAGE: 'seo.manage',
+  /** Website & Commerce: edit, publish and configure the owned website and storefront. */
+  WEBSITE_MANAGE: 'website.manage',
   /// Product Radar candidates are commercial research records. They are not Products, but
   /// creating, dismissing or moving one into validation is still an operational change.
   COMMERCE_MANAGE: 'commerce.manage',
@@ -107,6 +109,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.INTEGRATIONS_MANAGE,
   CAPABILITIES.AUTOMATIONS_MANAGE,
   CAPABILITIES.SEO_MANAGE,
+  CAPABILITIES.WEBSITE_MANAGE,
   CAPABILITIES.COMMERCE_MANAGE,
   CAPABILITIES.COUPONS_MANAGE,
   CAPABILITIES.VOUCHERS_MANAGE,

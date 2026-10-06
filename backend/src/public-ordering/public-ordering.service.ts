@@ -13,6 +13,7 @@ import { createHash, randomBytes } from 'crypto';
 import { computeDeliveryPricing } from '../delivery/delivery-pricing.util';
 import { DELIVERY_ERROR_CODES } from '../delivery/delivery.constants';
 import { ActivityService } from '../activity/activity.service';
+import { readStorefront } from '../website/website-content.util';
 
 /**
  * Public online-ordering / dine-in endpoints (BE-029). No auth — the
@@ -51,6 +52,18 @@ export class PublicOrderingService {
         stockQty: true,
       },
     });
+
+    const [site, productSettings] = await Promise.all([
+      this.prisma.websiteSite.findUnique({
+        where: { businessId: business.id },
+        select: { settings: true },
+      }),
+      this.prisma.websiteProductSetting.findMany({
+        where: { businessId: business.id },
+      }),
+    ]);
+    const storefront = readStorefront(site?.settings);
+    const presentation = new Map(productSettings.map((s) => [s.productId, s]));
 
     // Zone rules the owner switched on: the storefront lists the zones a customer can pick, and
     // shows each fee only when "fee shown before checkout" is on.
@@ -104,18 +117,41 @@ export class PublicOrderingService {
             'Online payment processing is not connected. Orders submitted here are unpaid until the business confirms payment.',
         },
       },
+      // Website & Commerce storefront presentation: hidden products are left out, the owner's
+      // out-of-stock rule applies, and web-only wording replaces the display name only.
+      storefront: {
+        showPrices: storefront.showPrices,
+        checkoutEnabled: storefront.checkoutEnabled,
+      },
       // Return only fields the storefront needs; never expose cost, SKU, stock counts or internal thresholds.
-      products: products.map((product) => ({
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        sellingPrice: Number(product.sellingPrice),
-        kind: product.kind,
-        available:
-          product.kind === ProductKind.service ||
-          product.stockQty > 0 ||
-          allowNegativeStock,
-      })),
+      products: products
+        .map((product) => ({
+          product,
+          setting: presentation.get(product.id),
+          available:
+            product.kind === ProductKind.service ||
+            product.stockQty > 0 ||
+            allowNegativeStock,
+        }))
+        .filter(
+          ({ setting, available }) =>
+            setting?.visible !== false &&
+            (available || storefront.outOfStockBehavior === 'show_unavailable'),
+        )
+        .sort(
+          (a, b) =>
+            (b.setting?.sortPriority ?? 0) - (a.setting?.sortPriority ?? 0),
+        )
+        .map(({ product, setting, available }) => ({
+          id: product.id,
+          name: setting?.webTitle || product.name,
+          category: product.category,
+          sellingPrice: Number(product.sellingPrice),
+          kind: product.kind,
+          available,
+          badge: setting?.badge ?? null,
+          summary: setting?.webSummary ?? null,
+        })),
     };
   }
 
@@ -165,6 +201,39 @@ export class PublicOrderingService {
       requestHash,
     );
     if (priorResponse) return priorResponse;
+
+    // Website & Commerce storefront: honour the owner's checkout switch and hidden products.
+    const [site, hiddenSettings] = await Promise.all([
+      this.prisma.websiteSite.findUnique({
+        where: { businessId: business.id },
+        select: { settings: true },
+      }),
+      this.prisma.websiteProductSetting.findMany({
+        where: {
+          businessId: business.id,
+          visible: false,
+          productId: { in: dto.items.map((item) => item.productId) },
+        },
+        select: { productId: true },
+      }),
+    ]);
+    if (
+      !readStorefront(site?.settings).checkoutEnabled &&
+      dto.orderType !== 'dine_in'
+    ) {
+      throw new AppException(
+        'PUBLIC_ORDER_CHECKOUT_DISABLED',
+        'Online ordering is turned off for this store right now.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (hiddenSettings.length > 0) {
+      throw new AppException(
+        ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
+        'One of these items is no longer available online.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     if (dto.items.length === 0) {
       throw new AppException(

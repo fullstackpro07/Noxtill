@@ -1051,6 +1051,16 @@ model Business {
   notificationPreferences      NotificationPreference[]
   dataSubjectRequests          DataSubjectRequest[]
   taxRules                     TaxRule[]
+  websiteSite                  WebsiteSite?
+  websitePages                 WebsitePage[]
+  websitePageVersions          WebsitePageVersion[]
+  websiteDeployments           WebsiteDeployment[]
+  websiteForms                 WebsiteForm[]
+  websiteFormSubmissions       WebsiteFormSubmission[]
+  websiteDomains               WebsiteDomain[]
+  websiteRedirects             WebsiteRedirect[]
+  websiteProductSettings       WebsiteProductSetting[]
+  websiteCollections           WebsiteCollection[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1844,6 +1854,7 @@ model Product {
   bomComponentOf          CommerceBomItem[]
   workOrders              CommerceWorkOrder[]
   workOrderMaterials      CommerceWorkOrderMaterial[]
+  websiteSetting          WebsiteProductSetting?
   complianceDocuments     CommerceComplianceDocument[]
   marketEligibility       CommerceMarketEligibility[]
   b2bPriceListItems       CommerceB2bPriceListItem[]
@@ -7950,4 +7961,276 @@ model WorkflowEndpointDelivery {
   @@index([businessId, endpointId, receivedAt], map: "workflow_endpoint_deliveries_biz_endpoint_received_idx")
   @@index([endpointId, dedupeKey], map: "workflow_endpoint_deliveries_endpoint_dedupe_idx")
   @@map("workflow_endpoint_deliveries")
+}
+
+/// Website & Commerce (module 40). One owned website per business. Draft theme/navigation/settings
+/// live here; what visitors see is always the immutable snapshot of `liveDeploymentId`.
+model WebsiteSite {
+  id               String   @id @default(uuid())
+  businessId       String   @unique @map("business_id")
+  business         Business @relation(fields: [businessId], references: [id])
+  draftTheme       Json     @default("{}") @map("draft_theme")
+  draftNavigation  Json     @default("{}") @map("draft_navigation")
+  settings         Json     @default("{}")
+  maintenanceMode  Boolean  @default(false) @map("maintenance_mode")
+  liveDeploymentId String?  @map("live_deployment_id")
+
+  pages       WebsitePage[]
+  deployments WebsiteDeployment[]
+  forms       WebsiteForm[]
+  domains     WebsiteDomain[]
+  redirects   WebsiteRedirect[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("website_sites")
+}
+
+enum WebsitePageKind {
+  page
+  landing
+  post
+}
+
+enum WebsitePageStatus {
+  draft
+  scheduled
+  published
+  unpublished
+}
+
+/// A standard page, campaign landing page or blog post. `blocks` is the editable draft; the
+/// published copy is captured in each deployment snapshot. Dynamic blocks (products, reviews,
+/// contact) store references only and render live canonical data.
+model WebsitePage {
+  id               String            @id @default(uuid())
+  businessId       String            @map("business_id")
+  business         Business          @relation(fields: [businessId], references: [id])
+  siteId           String            @map("site_id")
+  site             WebsiteSite       @relation(fields: [siteId], references: [id])
+  kind             WebsitePageKind   @default(page)
+  title            String            @db.VarChar(200)
+  slug             String            @db.VarChar(160)
+  status           WebsitePageStatus @default(draft)
+  blocks           Json              @default("[]")
+  metaTitle        String?           @map("meta_title") @db.VarChar(200)
+  metaDescription  String?           @map("meta_description") @db.VarChar(320)
+  excerpt          String?           @db.Text
+  heroImageUrl     String?           @map("hero_image_url") @db.VarChar(1000)
+  category         String?           @db.VarChar(80)
+  tags             Json              @default("[]")
+  showInHeader     Boolean           @default(true) @map("show_in_header")
+  /// Landing pages: the canonical marketing campaign (Marketing owns it) and conversion goal.
+  campaignId       String?           @map("campaign_id")
+  goal             String?           @db.VarChar(20)
+  goalTarget       String?           @map("goal_target") @db.VarChar(200)
+  utmSource        String?           @map("utm_source") @db.VarChar(80)
+  utmMedium        String?           @map("utm_medium") @db.VarChar(80)
+  utmCampaign      String?           @map("utm_campaign") @db.VarChar(120)
+  authorUserId     String?           @map("author_user_id")
+  aiDraft          Boolean           @default(false) @map("ai_draft")
+  version          Int               @default(1)
+  publishAt        DateTime?         @map("publish_at")
+  publishedAt      DateTime?         @map("published_at")
+  publishedVersion Int?              @map("published_version")
+
+  versions WebsitePageVersion[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([siteId, kind, slug])
+  @@index([businessId, kind, status])
+  @@map("website_pages")
+}
+
+/// Every saved revision of a page, so any earlier version can be restored.
+model WebsitePageVersion {
+  id              String      @id @default(uuid())
+  businessId      String      @map("business_id")
+  business        Business    @relation(fields: [businessId], references: [id])
+  pageId          String      @map("page_id")
+  page            WebsitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  version         Int
+  title           String      @db.VarChar(200)
+  blocks          Json
+  metaTitle       String?     @map("meta_title") @db.VarChar(200)
+  metaDescription String?     @map("meta_description") @db.VarChar(320)
+  actorUserId     String?     @map("actor_user_id")
+  note            String?     @db.VarChar(200)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([pageId, version])
+  @@index([businessId])
+  @@map("website_page_versions")
+}
+
+enum WebsiteDeploymentKind {
+  publish
+  rollback
+}
+
+/// Immutable publish artifact: the full published site (pages, navigation, theme, settings) at a
+/// point in time. Rolling back points the site at an older artifact; business data is untouched.
+model WebsiteDeployment {
+  id           String                @id @default(uuid())
+  businessId   String                @map("business_id")
+  business     Business              @relation(fields: [businessId], references: [id])
+  siteId       String                @map("site_id")
+  site         WebsiteSite           @relation(fields: [siteId], references: [id])
+  number       Int
+  kind         WebsiteDeploymentKind @default(publish)
+  snapshot     Json
+  summary      String                @db.VarChar(300)
+  actorUserId  String?               @map("actor_user_id")
+  /// For a rollback: the deployment number whose snapshot was restored.
+  restoredFrom Int?                  @map("restored_from")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([siteId, number])
+  @@index([businessId, createdAt])
+  @@map("website_deployments")
+}
+
+enum WebsiteFormStatus {
+  active
+  disabled
+}
+
+/// Website form presentation + field mapping. Submissions create/update the canonical CRM
+/// customer; Website never keeps its own contact store.
+model WebsiteForm {
+  id              String            @id @default(uuid())
+  businessId      String            @map("business_id")
+  business        Business          @relation(fields: [businessId], references: [id])
+  siteId          String            @map("site_id")
+  site            WebsiteSite       @relation(fields: [siteId], references: [id])
+  name            String            @db.VarChar(120)
+  fields          Json              @default("[]")
+  destination     String            @default("crm_customer") @db.VarChar(40)
+  customerTag     String?           @map("customer_tag") @db.VarChar(60)
+  consentText     String?           @map("consent_text") @db.Text
+  thankYouMessage String?           @map("thank_you_message") @db.Text
+  status          WebsiteFormStatus @default(active)
+  publicToken     String            @unique @map("public_token") @db.VarChar(64)
+
+  submissions WebsiteFormSubmission[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("website_forms")
+}
+
+/// Submission metadata only (the canonical record is the CRM customer it created or updated).
+model WebsiteFormSubmission {
+  id                 String      @id @default(uuid())
+  businessId         String      @map("business_id")
+  business           Business    @relation(fields: [businessId], references: [id])
+  formId             String      @map("form_id")
+  form               WebsiteForm @relation(fields: [formId], references: [id])
+  idempotencyKeyHash String      @map("idempotency_key_hash") @db.Char(64)
+  status             String      @db.VarChar(20)
+  customerId         String?     @map("customer_id")
+  createdCustomer    Boolean     @default(false) @map("created_customer")
+  marketingConsent   Boolean     @default(false) @map("marketing_consent")
+  consentTextShown   String?     @map("consent_text_shown") @db.Text
+  isTest             Boolean     @default(false) @map("is_test")
+  pageId             String?     @map("page_id")
+  utm                Json        @default("{}")
+  errorReason        String?     @map("error_reason") @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([formId, idempotencyKeyHash])
+  @@index([businessId, createdAt])
+  @@map("website_form_submissions")
+}
+
+enum WebsiteDomainStatus {
+  pending
+  verified
+  failed
+}
+
+/// A custom domain claimed for the site, verified by a real DNS TXT lookup.
+model WebsiteDomain {
+  id                String              @id @default(uuid())
+  businessId        String              @map("business_id")
+  business          Business            @relation(fields: [businessId], references: [id])
+  siteId            String              @map("site_id")
+  site              WebsiteSite         @relation(fields: [siteId], references: [id])
+  hostname          String              @unique @db.VarChar(253)
+  verificationToken String              @map("verification_token") @db.VarChar(64)
+  status            WebsiteDomainStatus @default(pending)
+  isPrimary         Boolean             @default(false) @map("is_primary")
+  lastCheckedAt     DateTime?           @map("last_checked_at")
+  lastError         String?             @map("last_error") @db.VarChar(300)
+  sslValidTo        DateTime?           @map("ssl_valid_to")
+  sslError          String?             @map("ssl_error") @db.VarChar(300)
+  sslCheckedAt      DateTime?           @map("ssl_checked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("website_domains")
+}
+
+model WebsiteRedirect {
+  id         String      @id @default(uuid())
+  businessId String      @map("business_id")
+  business   Business    @relation(fields: [businessId], references: [id])
+  siteId     String      @map("site_id")
+  site       WebsiteSite @relation(fields: [siteId], references: [id])
+  fromPath   String      @map("from_path") @db.VarChar(300)
+  toPath     String      @map("to_path") @db.VarChar(1000)
+  permanent  Boolean     @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([siteId, fromPath])
+  @@index([businessId])
+  @@map("website_redirects")
+}
+
+/// Storefront presentation for one canonical product. Price, stock and the product itself stay in
+/// Products/Inventory; only visibility, order and web-only wording live here.
+model WebsiteProductSetting {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  business     Business @relation(fields: [businessId], references: [id])
+  productId    String   @unique @map("product_id")
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  visible      Boolean  @default(true)
+  sortPriority Int      @default(0) @map("sort_priority")
+  badge        String?  @db.VarChar(40)
+  webTitle     String?  @map("web_title") @db.VarChar(200)
+  webSummary   String?  @map("web_summary") @db.VarChar(500)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("website_product_settings")
+}
+
+/// A storefront collection: an ordered list of canonical product ids (references, not copies).
+model WebsiteCollection {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id])
+  name       String   @db.VarChar(120)
+  slug       String   @db.VarChar(120)
+  productIds Json     @default("[]") @map("product_ids")
+  sortOrder  Int      @default(0) @map("sort_order")
+  visible    Boolean  @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, slug])
+  @@map("website_collections")
 }

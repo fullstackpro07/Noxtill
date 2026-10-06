@@ -59,6 +59,7 @@ import { VoiceModule } from './voice/voice.module';
 import { DigitizerModule } from './digitizer/digitizer.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { AdsModule } from './ads/ads.module';
+import { WebsiteModule } from './website/website.module';
 import { BookDemoModule } from './book-demo/book-demo.module';
 import { AccountingModule } from './integrations/accounting/accounting.module';
 import { EcommerceModule } from './integrations/ecommerce/ecommerce.module';
@@ -134,6 +135,7 @@ import { CustomerPortalModule } from './customer-portal/customer-portal.module';
     DigitizerModule,
     DeliveryModule,
     AdsModule,
+    WebsiteModule,
     BookDemoModule,
     AccountingModule,
     EcommerceModule,
