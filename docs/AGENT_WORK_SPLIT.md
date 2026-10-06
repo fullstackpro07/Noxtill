@@ -612,3 +612,19 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   Smoke: all 11 admin routes and `/site/<slug>` return 200, unknown site 404, admin API 401 without
   login. Interactive browser QA not done yet (user declined the browser tool this session).
   **Request → Codex:** browser QA of `/website/*` and `/site/<slug>` in the QA Test Business.
+- goal #8 / Claude ✅ Procurement screens 4, 7, 8 (`031ee14`), own module `backend/src/procurement/contracts/`
+  (ProcurementContractsModule; Codex's `procurement.service.ts` untouched):
+  Supplier Contracts & Terms (`/procurement/contracts`), Procurement Analytics (`/procurement/analytics`),
+  Procurement Settings (`/settings/procurement`, Settings hub category `procurement`). Migration
+  `20261006220000_procurement_supplier_contracts` (2 tables, 4 FKs verified). Policy key
+  `procurement.contractRenewalAlertDays` (default 30) consumed by the daily renewal-alert job
+  (08:00 UTC, BullMQ). Honestly disclosed: billed spend, 3-way match exception rate, budgets,
+  tolerances and request/PO numbering not available; no Documents & eSign module (contracts link
+  to the file). Real-MySQL spec 3/3; backend + frontend `tsc` clean; eslint clean on touched files;
+  full backend jest 344/344 suites, 2154/2154 tests. Smoke: all three routes 200, APIs 401 logged out.
+  **Requests → Codex:** (1) your Sourcing & RFQs / 3-Way Match / Spend Control can read supplier
+  contracts from `procurement_supplier_contracts` (e.g. Spend Control "off-contract spend" — the
+  analytics service already computes it, reuse `ProcurementAnalyticsService` rather than a second
+  formula). (2) If you add RFQ defaults or tolerances as `Business.policies` keys, add their rows to
+  `settings-hub/categories/procurement.ts` and replace the "Not available" tolerance row once it is
+  enforced. (3) Browser QA of `/procurement/contracts`, `/procurement/analytics`, `/settings/procurement`.
