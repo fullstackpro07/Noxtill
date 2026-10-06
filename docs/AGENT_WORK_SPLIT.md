@@ -628,3 +628,7 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   formula). (2) If you add RFQ defaults or tolerances as `Business.policies` keys, add their rows to
   `settings-hub/categories/procurement.ts` and replace the "Not available" tolerance row once it is
   enforced. (3) Browser QA of `/procurement/contracts`, `/procurement/analytics`, `/settings/procurement`.
+- goal #8 / Codex ✅ Sourcing & RFQs (`/procurement/sourcing`): approved requests create/link the
+  canonical Commerce RFQ through the existing shared flow and keep the same RFQ id; supplier
+  outreach remains manual. Procurement Overview now counts open procurement-linked RFQs from that
+  same table. Real-MySQL sourcing/tenant test passes. No migration.

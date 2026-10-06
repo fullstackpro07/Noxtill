@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  CommerceRfqStatus,
   ProcurementRequestEventType,
   ProcurementRequestStatus,
   PurchaseOrderStatus,
@@ -130,6 +131,7 @@ export class ProcurementService {
       business,
       openPurchaseOrderCount,
       openRequestCount,
+      openRfqCount,
       pendingRequests,
     ] = await Promise.all([
       this.tenantPrisma.client.business.findUnique({
@@ -148,6 +150,13 @@ export class ProcurementService {
               ProcurementRequestStatus.submitted,
             ],
           },
+        },
+      }),
+      this.tenantPrisma.client.commerceRfq.count({
+        where: {
+          businessId,
+          sourceProcurementRequestId: { not: null },
+          status: { in: [CommerceRfqStatus.draft, CommerceRfqStatus.open] },
         },
       }),
       this.tenantPrisma.client.procurementRequest.findMany({
@@ -196,10 +205,10 @@ export class ProcurementService {
               : `Submitted request estimates in ${business?.currency ?? 'the business currency'}.`,
         },
         openRfqs: {
-          value: null,
-          availability: 'not_tracked' as const,
+          value: openRfqCount,
+          availability: 'tracked' as const,
           detail:
-            'Generic procurement RFQs are not tracked. Commerce sourcing RFQs are separate.',
+            'Open RFQs linked to approved procurement requests in the shared Commerce sourcing engine.',
         },
         committedPoValue: {
           value: totalCommitted,
@@ -214,8 +223,9 @@ export class ProcurementService {
         },
         matchExceptions: {
           value: null,
-          availability: 'not_tracked' as const,
-          detail: 'Procurement 3-way matching is not available yet.',
+          availability: 'not_available' as const,
+          detail:
+            'Supplier bills are not recorded, so 3-way match exceptions cannot be computed.',
         },
         spendVsBudget: {
           value: null,
@@ -251,12 +261,204 @@ export class ProcurementService {
       dataCompleteness: {
         purchaseOrders: 'tracked',
         requests: 'tracked',
-        genericRfqs: 'not_tracked',
+        procurementLinkedRfqs: 'tracked',
+        genericCommerceRfqs: 'not_tracked',
         procurementBudgets: 'not_available',
         branchOnPurchaseOrders: 'not_tracked',
         perOrderCurrency: 'not_tracked',
-        financeMatch: 'not_tracked',
+        financeMatch: 'not_available',
       },
+    };
+  }
+
+  /**
+   * Procurement-linked RFQs are the same CommerceRfq rows used by Commerce. This view only
+   * surfaces sourcing requests and RFQs whose source request is recorded; it does not create a
+   * second RFQ record or send supplier communications.
+   */
+  async sourcing(businessId: string) {
+    const [requests, rfqs, business] = await Promise.all([
+      this.tenantPrisma.client.procurementRequest.findMany({
+        where: {
+          businessId,
+          status: {
+            in: [
+              ProcurementRequestStatus.approved,
+              ProcurementRequestStatus.sourcing,
+            ],
+          },
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          reason: true,
+          status: true,
+          urgency: true,
+          currency: true,
+          neededBy: true,
+          updatedAt: true,
+          supplier: { select: { id: true, name: true } },
+          items: {
+            select: {
+              id: true,
+              description: true,
+              lineType: true,
+              quantity: true,
+              productId: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          },
+          sourceRfqs: {
+            select: { id: true, status: true, updatedAt: true },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+          },
+        },
+      }),
+      this.tenantPrisma.client.commerceRfq.findMany({
+        where: { businessId, sourceProcurementRequestId: { not: null } },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          requirement: true,
+          status: true,
+          currency: true,
+          dueAt: true,
+          updatedAt: true,
+          sourceProcurementRequestId: true,
+          sourceProcurementRequest: {
+            select: { id: true, reason: true, status: true },
+          },
+          items: { select: { id: true } },
+          suppliers: {
+            select: { supplierId: true, status: true, respondedAt: true },
+          },
+          quotes: { select: { id: true, status: true } },
+          awardedQuoteId: true,
+          purchaseOrderId: true,
+        },
+      }),
+      this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { currency: true },
+      }),
+    ]);
+
+    return {
+      requests: requests.map((request) => ({
+        ...request,
+        items: request.items.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity),
+        })),
+        sourcingSupported:
+          request.items.length > 0 &&
+          request.currency.toUpperCase() ===
+            (business?.currency ?? '').toUpperCase() &&
+          request.items.every(
+            (item) =>
+              item.lineType === 'stock' &&
+              Boolean(item.productId) &&
+              Number.isInteger(Number(item.quantity)),
+          ),
+      })),
+      rfqs: rfqs.map((rfq) => ({
+        ...rfq,
+        supplierCount: rfq.suppliers.length,
+        supplierResponses: rfq.suppliers.filter((supplier) =>
+          Boolean(supplier.respondedAt),
+        ).length,
+        quoteCount: rfq.quotes.length,
+      })),
+      supplierOutreach: 'manual',
+      listLimit: 100,
+    };
+  }
+
+  /**
+   * The recorded PO and goods-receipt quantities are available here. Vendor bills are not
+   * recorded in this product, so no three-way match verdict or exception count is inferred.
+   */
+  async threeWayMatch(businessId: string) {
+    const purchaseOrders =
+      await this.tenantPrisma.client.purchaseOrder.findMany({
+        where: {
+          businessId,
+          status: { not: PurchaseOrderStatus.cancelled },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          receivedAt: true,
+          supplier: { select: { id: true, name: true } },
+          items: {
+            select: {
+              id: true,
+              qtyOrdered: true,
+              qtyReceived: true,
+              unitCost: true,
+              product: { select: { id: true, name: true, sku: true } },
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          },
+        },
+      });
+
+    const orders = purchaseOrders.map((order) => {
+      const receivedLines = order.items.filter(
+        (item) => item.qtyReceived >= item.qtyOrdered,
+      ).length;
+      const partiallyReceivedLines = order.items.filter(
+        (item) => item.qtyReceived > 0 && item.qtyReceived < item.qtyOrdered,
+      ).length;
+      const receiptStatus =
+        order.items.length > 0 && receivedLines === order.items.length
+          ? 'received'
+          : receivedLines > 0 || partiallyReceivedLines > 0
+            ? 'partially_received'
+            : 'not_received';
+
+      return {
+        id: order.id,
+        reference: `PO-${order.id.slice(0, 8).toUpperCase()}`,
+        status: order.status,
+        createdAt: order.createdAt,
+        receivedAt: order.receivedAt,
+        supplier: order.supplier,
+        receiptStatus,
+        items: order.items.map((item) => ({
+          id: item.id,
+          product: item.product,
+          qtyOrdered: item.qtyOrdered,
+          qtyReceived: item.qtyReceived,
+          outstanding: Math.max(0, item.qtyOrdered - item.qtyReceived),
+          unitCost: Number(item.unitCost),
+        })),
+      };
+    });
+
+    return {
+      purchaseOrders: orders,
+      summary: {
+        purchaseOrders: orders.length,
+        awaitingReceipt: orders.filter(
+          (order) =>
+            (order.status === PurchaseOrderStatus.confirmed ||
+              order.status === PurchaseOrderStatus.partially_received) &&
+            order.receiptStatus !== 'received',
+        ).length,
+        fullyReceived: orders.filter(
+          (order) => order.receiptStatus === 'received',
+        ).length,
+      },
+      listLimit: 100,
+      invoiceAvailability: 'not_available' as const,
+      invoiceDetail:
+        'Vendor bills are not recorded in this workspace, so invoice comparison and 3-way match results are not available.',
     };
   }
 

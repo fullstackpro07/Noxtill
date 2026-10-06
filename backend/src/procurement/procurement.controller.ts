@@ -31,6 +31,16 @@ export class ProcurementController {
     return this.procurement.overview(user.businessId);
   }
 
+  @Get('sourcing')
+  sourcing(@CurrentUser() user: AuthenticatedUser) {
+    return this.procurement.sourcing(user.businessId);
+  }
+
+  @Get('three-way-match')
+  threeWayMatch(@CurrentUser() user: AuthenticatedUser) {
+    return this.procurement.threeWayMatch(user.businessId);
+  }
+
   @Get('requests')
   listRequests(
     @CurrentUser() user: AuthenticatedUser,

@@ -124,8 +124,90 @@ export interface ProcurementRequestPage {
   hasMore: boolean;
 }
 
+export interface ProcurementSourcingResponse {
+  requests: Array<{
+    id: string;
+    reason: string;
+    status: "approved" | "sourcing";
+    urgency: "low" | "normal" | "high" | "urgent";
+    currency: string;
+    neededBy: string | null;
+    updatedAt: string;
+    supplier: { id: string; name: string } | null;
+    items: Array<{
+      id: string;
+      description: string;
+      lineType: ProcurementRequestItemInput["lineType"];
+      quantity: number;
+      productId: string | null;
+    }>;
+    sourceRfqs: Array<{
+      id: string;
+      status: "draft" | "open" | "awarded" | "closed" | "cancelled";
+      updatedAt: string;
+    }>;
+    sourcingSupported: boolean;
+  }>;
+  rfqs: Array<{
+    id: string;
+    requirement: string;
+    status: "draft" | "open" | "awarded" | "closed" | "cancelled";
+    currency: string;
+    dueAt: string | null;
+    updatedAt: string;
+    sourceProcurementRequestId: string | null;
+    sourceProcurementRequest: {
+      id: string;
+      reason: string;
+      status: ProcurementRequestStatus;
+    } | null;
+    items: Array<{ id: string }>;
+    suppliers: Array<{ supplierId: string; status: string; respondedAt: string | null }>;
+    quotes: Array<{ id: string; status: string }>;
+    awardedQuoteId: string | null;
+    purchaseOrderId: string | null;
+    supplierCount: number;
+    supplierResponses: number;
+    quoteCount: number;
+  }>;
+  supplierOutreach: "manual";
+  listLimit: number;
+}
+
+export interface ProcurementThreeWayMatchResponse {
+  purchaseOrders: Array<{
+    id: string;
+    reference: string;
+    status: string;
+    createdAt: string;
+    receivedAt: string | null;
+    supplier: { id: string; name: string };
+    receiptStatus: "not_received" | "partially_received" | "received";
+    items: Array<{
+      id: string;
+      product: { id: string; name: string; sku: string | null };
+      qtyOrdered: number;
+      qtyReceived: number;
+      outstanding: number;
+      unitCost: number;
+    }>;
+  }>;
+  summary: { purchaseOrders: number; awaitingReceipt: number; fullyReceived: number };
+  listLimit: number;
+  invoiceAvailability: "not_available";
+  invoiceDetail: string;
+}
+
 export function fetchProcurementOverview(): Promise<ProcurementOverview> {
   return apiFetch<ProcurementOverview>("/procurement/overview");
+}
+
+export function fetchProcurementSourcing(): Promise<ProcurementSourcingResponse> {
+  return apiFetch<ProcurementSourcingResponse>("/procurement/sourcing");
+}
+
+export function fetchProcurementThreeWayMatch(): Promise<ProcurementThreeWayMatchResponse> {
+  return apiFetch<ProcurementThreeWayMatchResponse>("/procurement/three-way-match");
 }
 
 export function fetchProcurementRequests(
