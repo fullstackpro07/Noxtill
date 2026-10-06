@@ -21,6 +21,8 @@ export const COMPANY = {
     country: "United States",
   },
   emails: { support: "support@noxtill.com", contact: "contact@noxtill.com", info: "info@noxtill.com" },
+  phone: "+1 808 998 5302",
+  phoneHref: "tel:+18089985302",
   statutoryAgent: "Registered Agents Inc",
 } as const;
 

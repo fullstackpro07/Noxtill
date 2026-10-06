@@ -9507,3 +9507,24 @@ model CtIdem {
   @@unique([businessId, key])
   @@map("ct_idem")
 }
+
+/// Public-website privacy choices (cookie preference center, Do Not Sell or Share opt-out) recorded
+/// server-side so a visitor's choice has evidence beyond their browser's localStorage. Anonymous —
+/// no business/tenant, no IP address; `consentId` is the browser-generated identifier shown back to
+/// the visitor's device so later records from the same browser can be correlated.
+model LegalConsentRecord {
+  id            String   @id @default(uuid())
+  consentId     String   @map("consent_id") @db.VarChar(64)
+  kind          String   @db.VarChar(40)
+  region        String?  @db.VarChar(40)
+  policyVersion String   @map("policy_version") @db.VarChar(20)
+  categories    Json?
+  optedOut      Boolean? @map("opted_out")
+  language      String?  @db.VarChar(35)
+  source        String   @db.VarChar(80)
+  gpc           Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([consentId, createdAt])
+  @@map("legal_consent_records")
+}

@@ -1,0 +1,99 @@
+/* Noxtill Legal & Trust — behaviour the design files express as style-hover / print / focus rules.
+   Base styles are inline (copied from docs/Legal pages/*.dc.html); hover rules need !important to
+   win over them. */
+
+.nl {
+  background: #ffffff;
+  color: #0b1822;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+/* The design files are authored against browser defaults (no CSS reset: content-box sizing, native
+   list bullets, underlined inline links, UA heading/table styles). Undo Tailwind's preflight and the
+   app's global heading font inside design-styled regions only — the shared app header is left alone.
+   Inline styles and the !important rules below still apply on top. */
+/* SVG is excluded: its presentation attributes (fill, stroke…) sit in the author cascade and would be reverted. */
+.nl main *:where(:not(svg, svg *)),
+.nl main *::before,
+.nl main *::after,
+.nl-footer *:where(:not(svg, svg *)),
+.nl-footer *::before,
+.nl-footer *::after {
+  all: revert;
+}
+.nl main,
+.nl-footer { line-height: normal; }
+
+.nl a { color: #064f3b; }
+.nl a:hover { color: #043f31; }
+.nl :focus-visible { outline: 3px solid #079a63; outline-offset: 2px; border-radius: 4px; }
+.nl [hidden] { display: none !important; }
+
+.nl-skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #064f3b;
+  color: #ffffff !important;
+  font: 700 15px 'Plus Jakarta Sans', system-ui, sans-serif;
+  text-decoration: none;
+}
+.nl-skip:focus { top: 12px; }
+
+.nl-sr {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+}
+
+/* style-hover equivalents */
+.h-ul:hover { text-decoration: underline !important; }
+.h-bd:hover { border-color: #079a63 !important; }
+.h-card:hover { border-color: #079a63 !important; box-shadow: 0 8px 24px rgba(6, 79, 59, 0.08) !important; }
+.h-card-sm:hover { border-color: #079a63 !important; box-shadow: 0 6px 20px rgba(6, 79, 59, 0.08) !important; }
+.h-mint:hover { background: #ecfbf4 !important; }
+.h-mint-ink:hover { background: #ecfbf4 !important; color: #064f3b !important; }
+.h-ink:hover { color: #043f31 !important; }
+.h-bd-ink:hover { border-color: #079a63 !important; color: #064f3b !important; }
+.h-ink-ul:hover { color: #064f3b !important; text-decoration: underline !important; }
+.h-white-ul:hover { color: #ffffff !important; text-decoration: underline !important; }
+.h-glow:hover { background: rgba(68, 240, 176, 0.14) !important; }
+.h-deep:hover { background: #043f31 !important; }
+.h-forest:hover { background: #064f3b !important; }
+.h-neon:hover { color: #44f0b0 !important; }
+.h-mint-btn:hover { background: #44f5c2 !important; }
+.h-social:hover { background: rgba(47, 227, 166, 0.18) !important; color: #ffffff !important; }
+
+/* Site footer (docs/Legal pages/SiteFooter.dc.html) — the design switches these on window width. */
+.nl-footer .nxf-cols { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 460px) { .nl-footer .nxf-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 720px) { .nl-footer .nxf-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .nl-footer .nxf-cols { grid-template-columns: 1fr 1.28fr 1.02fr 1.07fr 1.45fr; } }
+.nl-footer .nxf-field { border-radius: 10px 0 0 10px; }
+.nl-footer .nxf-btn { flex: 0 0 auto; margin-top: 0; border-radius: 0 10px 10px 0; }
+@media (max-width: 479px) {
+  .nl-footer .nxf-field { border-radius: 10px; }
+  .nl-footer .nxf-btn { flex: 1 1 100%; margin-top: 10px; border-radius: 10px; }
+}
+.nl-footer .nxf-email::placeholder { color: #9fb3aa; opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nl * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+.nl [data-printonly] { display: none; }
+@media print {
+  .nl [data-noprint], .nl-noprint, .nl > header { display: none !important; }
+  .nl [data-printonly] { display: block !important; }
+  .nl section, .nl li, .nl tr, .nl blockquote { break-inside: avoid-page; }
+  .nl [data-panel], .nl [hidden] { display: block !important; }
+  .nl h2, .nl h3 { break-after: avoid; }
+  body { font-size: 11pt; }
+}

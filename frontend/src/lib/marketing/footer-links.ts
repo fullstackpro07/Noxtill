@@ -1,9 +1,8 @@
 /**
- * Footer link data — SiteFooter's five columns plus the bottom-bar legal links.
- * `/features/[slug]/` and `/solutions/[slug]/` pages from the source design are out of
- * scope, so feature/business-type links point at anchors on /product and /solutions;
- * placeholder items with no source content (help centre, blog, compare pages, etc.)
- * point at /resources rather than a route that would 404.
+ * Footer link data — the five link columns and bottom legal shortcuts of
+ * docs/Legal pages/SiteFooter.dc.html. The design links to noxtill.com paths; each maps to the
+ * site's real route. Items with no page yet (API Docs, Community) point at /resources, the same
+ * convention the header nav uses; Careers and Partners route to the matching Contact form.
  */
 
 export interface FooterLink {
@@ -18,65 +17,92 @@ export interface FooterColumn {
 
 export const FOOTER_COLUMNS: FooterColumn[] = [
   {
-    title: "Features",
+    title: "Product",
     links: [
-      { label: "Nightly Close", href: "/product#nightly-close" },
-      { label: "Point of sale", href: "/product#fast-sale" },
-      { label: "Appointment bookings", href: "/product#bookings" },
-      { label: "Customer credit ledger", href: "/product#credit" },
-      { label: "Inventory management", href: "/product#inventory" },
-      { label: "Profit & loss", href: "/product#pnl" },
-      { label: "Reviews & reputation", href: "/product#reviews" },
-      { label: "Unified inbox", href: "/product#inbox" },
-      { label: "Voice-entry sales", href: "/product/voice-sales" },
-      { label: "Photo digitizer", href: "/product/photo-digitizer" },
-      { label: "AI phone receptionist", href: "/product/ai-receptionist" },
+      { label: "Product Overview", href: "/product" },
+      { label: "Explore Platform", href: "/product#nightly-close" },
+      { label: "Pricing", href: "/pricing" },
+      { label: "Integrations", href: "/integrations-directory" },
+      { label: "AI & Automation", href: "/ai" },
+      { label: "What's New", href: "/resources/product-updates" },
+      { label: "Roadmap", href: "/resources/roadmap" },
     ],
   },
   {
-    title: "Business types",
+    title: "Solutions",
     links: [
-      { label: "Salon software", href: "/solutions#salons" },
-      { label: "Restaurant software", href: "/solutions#restaurants" },
-      { label: "Clinic software", href: "/solutions#clinics" },
-      { label: "Gym software", href: "/solutions#gyms" },
-      { label: "Retail shop software", href: "/solutions#retail" },
-      { label: "Auto repair software", href: "/solutions#auto" },
-      { label: "Spa & beauty software", href: "/solutions#spas" },
-      { label: "Bakery software", href: "/solutions#bakeries" },
-      { label: "Pet grooming software", href: "/solutions#pet-grooming" },
-      { label: "Laundry software", href: "/solutions#laundry" },
-      { label: "See all 300+ types →", href: "/solutions" },
+      { label: "Small Business", href: "/solutions" },
+      { label: "Multi-Location", href: "/solutions/several-locations" },
+      { label: "Sales & Commerce", href: "/product/fast-sale" },
+      { label: "Customers & Communication", href: "/product/inbox" },
+      { label: "Marketing & Growth", href: "/product/marketing" },
+      { label: "Finance & Operations", href: "/product/pnl" },
+      { label: "Workforce Management", href: "/product/staff" },
+      { label: "By Industry", href: "/solutions#navigator" },
     ],
   },
   {
-    title: "Free tools",
+    title: "Resources",
     links: [
-      { label: "No-show cost calculator", href: "/resources" },
-      { label: "Profit margin calculator", href: "/resources" },
-      { label: "Review response generator", href: "/resources" },
-      { label: "QR code generator", href: "/resources" },
-      { label: "Business health check", href: "/resources" },
+      { label: "Help Center", href: "/resources/help-centre" },
+      { label: "Guides", href: "/resources/getting-started-guide" },
+      { label: "Blog", href: "/resources/blog" },
+      { label: "API Docs", href: "/resources" },
+      { label: "Product Updates", href: "/resources/product-updates" },
+      { label: "Status", href: "/status" },
+      { label: "Community", href: "/resources" },
+      { label: "Contact Support", href: "/contact#support" },
     ],
   },
   {
     title: "Company",
     links: [
-      { label: "Pricing", href: "/pricing" },
-      { label: "Integrations", href: "/integrations-directory" },
-      { label: "Help centre", href: "/resources" },
-      { label: "Blog", href: "/resources" },
-      { label: "Case studies", href: "/resources" },
-      { label: "Book a demo", href: "/book-a-demo" },
-      { label: "System status", href: "/resources" },
-      { label: "Contact support", href: "/resources" },
+      { label: "About", href: "/about" },
+      { label: "Contact", href: "/contact" },
+      { label: "Careers", href: "/contact#general" },
+      { label: "Partners & Referrals", href: "/contact#sales" },
+      { label: "Book a Demo", href: "/contact#sales" },
+      { label: "Company Information", href: "/legal/company" },
+    ],
+  },
+  {
+    title: "Legal & Trust",
+    links: [
+      { label: "Legal Center", href: "/legal" },
+      { label: "Trust Center", href: "/trust" },
+      { label: "Product & Service-Specific Terms", href: "/legal/product-terms" },
+      { label: "Privacy Policy", href: "/legal/privacy" },
+      { label: "Security", href: "/trust/security" },
+      { label: "AI Transparency", href: "/legal/ai-transparency" },
+      { label: "Messaging & Consent", href: "/legal/messaging-consent" },
+      { label: "DPA", href: "/legal/dpa" },
+      { label: "Subprocessors", href: "/trust/subprocessors" },
+      { label: "Accessibility", href: "/legal/accessibility" },
     ],
   },
 ];
 
-export const FOOTER_BOTTOM_LINKS: FooterLink[] = [
-  { label: "Privacy", href: "/privacy" },
-  { label: "Terms", href: "/terms" },
-  { label: "Security", href: "/resources" },
-  { label: "GDPR", href: "/resources" },
+export const FOOTER_BOTTOM: FooterLink[] = [
+  { label: "Privacy", href: "/legal/privacy" },
+  { label: "Terms of Service", href: "/legal/terms" },
+  { label: "Refunds", href: "/legal/refunds" },
+  { label: "Cookie Settings", href: "/legal/cookies#preferences" },
+  { label: "Privacy Choices", href: "/contact#privacy" },
+  { label: "Do Not Sell or Share My Personal Information", href: "/legal/do-not-sell" },
+  { label: "Security", href: "/trust/security" },
+  { label: "Accessibility", href: "/legal/accessibility" },
+  { label: "Legal & Trust Center", href: "/legal" },
+];
+
+/**
+ * Noxtill social profiles. No official profile URLs exist yet, so the footer renders these as
+ * non-link icons labelled "profile link not configured" (as the design specifies) — set a URL here
+ * to turn an icon into a real link.
+ */
+export const FOOTER_SOCIALS: { name: "LinkedIn" | "X" | "YouTube" | "Instagram" | "Facebook"; url: string }[] = [
+  { name: "LinkedIn", url: "" },
+  { name: "X", url: "" },
+  { name: "YouTube", url: "" },
+  { name: "Instagram", url: "" },
+  { name: "Facebook", url: "" },
 ];

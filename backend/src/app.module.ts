@@ -67,6 +67,7 @@ import { DigitizerModule } from './digitizer/digitizer.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { AdsModule } from './ads/ads.module';
 import { BookDemoModule } from './book-demo/book-demo.module';
+import { LegalPublicModule } from './legal-public/legal-public.module';
 import { AccountingModule } from './integrations/accounting/accounting.module';
 import { EcommerceModule } from './integrations/ecommerce/ecommerce.module';
 import { AutomationModule as OutboundWebhookAutomationModule } from './integrations/automation/automation.module';
@@ -148,6 +149,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     DeliveryModule,
     AdsModule,
     BookDemoModule,
+    LegalPublicModule,
     AccountingModule,
     EcommerceModule,
     OutboundWebhookAutomationModule,

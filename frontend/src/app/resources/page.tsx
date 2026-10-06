@@ -13,28 +13,28 @@ export const metadata: Metadata = {
 
 const POLICY_LINKS = [
   {
-    href: "/privacy",
+    href: "/legal/privacy",
     icon: Shield,
     title: "Privacy Policy",
-    description: "How we collect, use and protect your data and your customers' data.",
+    description: "How Noxtill collects, uses, shares, secures and retains personal data across its software, AI, messaging, integrations and websites.",
   },
   {
-    href: "/terms",
+    href: "/legal/terms",
     icon: FileText,
     title: "Terms of Service",
-    description: "The terms governing your use of Noxtill's business management platform.",
+    description: "Rules governing Noxtill accounts, subscriptions, AI, integrations, messaging, payments, business data and platform use.",
   },
   {
-    href: "/cookie-policy",
+    href: "/legal/cookies",
     icon: Cookie,
     title: "Cookie Policy",
-    description: "How we use cookies and similar technologies, and how to manage your choices.",
+    description: "How Noxtill uses cookies and similar technologies and how visitors manage analytics, advertising and privacy choices.",
   },
   {
-    href: "/refund-policy",
+    href: "/legal/refunds",
     icon: RotateCcw,
     title: "Refund & Cancellation Policy",
-    description: "Trials, billing, cancellation and refund terms.",
+    description: "Noxtill trial, cancellation, 7-day unused-service refund rules, Material Product Usage and mandatory buyer rights.",
   },
 ];
 
