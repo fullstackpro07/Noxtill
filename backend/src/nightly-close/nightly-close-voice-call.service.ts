@@ -31,8 +31,8 @@ export class NightlyCloseVoiceCallService {
   isConfigured(): boolean {
     return Boolean(
       this.config.get<string>('TWILIO_ACCOUNT_SID') &&
-        this.config.get<string>('TWILIO_AUTH_TOKEN') &&
-        this.config.get<string>('TWILIO_FROM_NUMBER'),
+      this.config.get<string>('TWILIO_AUTH_TOKEN') &&
+      this.config.get<string>('TWILIO_FROM_NUMBER'),
     );
   }
 
@@ -59,10 +59,16 @@ export class NightlyCloseVoiceCallService {
     try {
       const response = await axios.post<{ sid: string }>(
         `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`,
-        new URLSearchParams({ To: toPhone, From: fromNumber, Twiml: twimlBody }),
+        new URLSearchParams({
+          To: toPhone,
+          From: fromNumber,
+          Twiml: twimlBody,
+        }),
         { auth: { username: accountSid, password: authToken } },
       );
-      this.logger.debug(`Nightly Close voice call placed, sid=${response.data.sid}`);
+      this.logger.debug(
+        `Nightly Close voice call placed, sid=${response.data.sid}`,
+      );
       return { placed: true };
     } catch (error) {
       const message = (error as Error).message;

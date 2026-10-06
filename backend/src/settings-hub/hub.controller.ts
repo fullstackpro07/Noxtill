@@ -1,6 +1,15 @@
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { Allow, IsArray, IsBoolean, IsIn, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import {
+  Allow,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { SettingsHubService } from './hub.service';
@@ -51,17 +60,26 @@ export class SettingsHubController {
   }
 
   @Get('categories/:key')
-  async detail(@CurrentUser() user: AuthenticatedUser, @Param('key') key: string) {
+  async detail(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('key') key: string,
+  ) {
     return this.hub.detail(key, await this.hub.ctxFor(user));
   }
 
   @Get('categories/:key/history')
-  async categoryHistory(@CurrentUser() user: AuthenticatedUser, @Param('key') key: string) {
+  async categoryHistory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('key') key: string,
+  ) {
     return this.hub.categoryHistory(await this.hub.ctxFor(user), key);
   }
 
   @Post('categories/:key/reset')
-  async resetCategory(@CurrentUser() user: AuthenticatedUser, @Param('key') key: string) {
+  async resetCategory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('key') key: string,
+  ) {
     return this.hub.resetCategory(await this.hub.ctxFor(user), key);
   }
 
@@ -92,37 +110,69 @@ export class SettingsHubController {
   }
 
   @Put('changes')
-  async save(@CurrentUser() user: AuthenticatedUser, @Body() dto: SaveChangesDto) {
+  async save(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SaveChangesDto,
+  ) {
     return this.hub.saveChanges(await this.hub.ctxFor(user), dto.changes);
   }
 
   @Get('rows/:category/:row/history')
-  async rowHistory(@CurrentUser() user: AuthenticatedUser, @Param('category') category: string, @Param('row') row: string) {
+  async rowHistory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('category') category: string,
+    @Param('row') row: string,
+  ) {
     return this.hub.rowHistory(await this.hub.ctxFor(user), category, row);
   }
 
   @Post('rows/:category/:row/reset')
-  async resetRow(@CurrentUser() user: AuthenticatedUser, @Param('category') category: string, @Param('row') row: string) {
+  async resetRow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('category') category: string,
+    @Param('row') row: string,
+  ) {
     return this.hub.resetRow(await this.hub.ctxFor(user), category, row);
   }
 
   @Post('rows/:category/:row/restore/:entryId')
-  async restore(@CurrentUser() user: AuthenticatedUser, @Param('category') category: string, @Param('row') row: string, @Param('entryId') entryId: string) {
-    return this.hub.restore(await this.hub.ctxFor(user), category, row, entryId);
+  async restore(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('category') category: string,
+    @Param('row') row: string,
+    @Param('entryId') entryId: string,
+  ) {
+    return this.hub.restore(
+      await this.hub.ctxFor(user),
+      category,
+      row,
+      entryId,
+    );
   }
 
   @Post('rows/:category/:row/opened')
-  async opened(@CurrentUser() user: AuthenticatedUser, @Param('category') category: string, @Param('row') row: string) {
+  async opened(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('category') category: string,
+    @Param('row') row: string,
+  ) {
     return this.hub.opened(await this.hub.ctxFor(user), category, row);
   }
 
   @Put('pins/:category/:row')
-  async pin(@CurrentUser() user: AuthenticatedUser, @Param('category') category: string, @Param('row') row: string) {
+  async pin(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('category') category: string,
+    @Param('row') row: string,
+  ) {
     return this.hub.pin(await this.hub.ctxFor(user), category, row);
   }
 
   @Post('actions/:actionKey')
-  async action(@CurrentUser() user: AuthenticatedUser, @Param('actionKey') actionKey: string) {
+  async action(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('actionKey') actionKey: string,
+  ) {
     return this.hub.runAction(await this.hub.ctxFor(user), actionKey);
   }
 
@@ -133,6 +183,11 @@ export class SettingsHubController {
 
   @Put('notifications/matrix')
   async matrix(@CurrentUser() user: AuthenticatedUser, @Body() dto: MatrixDto) {
-    return this.hub.toggleMatrix(await this.hub.ctxFor(user), dto.event, dto.channel, dto.on);
+    return this.hub.toggleMatrix(
+      await this.hub.ctxFor(user),
+      dto.event,
+      dto.channel,
+      dto.on,
+    );
   }
 }

@@ -1,4 +1,13 @@
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class GenerateReportDto {
   /** YYYY-MM; defaults to the current calendar month when omitted. */

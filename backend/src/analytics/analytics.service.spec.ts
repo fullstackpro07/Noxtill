@@ -247,7 +247,7 @@ describe('AnalyticsService (BE-071)', () => {
     });
 
     describe('month scoping (Staff module v2, UPD-BE-STAFF-08)', () => {
-      it('an explicit past month with no real activity returns none of this month\'s real rows', async () => {
+      it("an explicit past month with no real activity returns none of this month's real rows", async () => {
         const rows = await service.staff(businessId, undefined, '2020-01');
         const staffRows = rows.filter(
           (r) => r.staffUserId === staffAId || r.staffUserId === staffBId,

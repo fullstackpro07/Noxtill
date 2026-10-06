@@ -19,11 +19,22 @@ export interface SalePolicyInput {
 }
 
 /** Owner-set sale rules that don't depend on stock or credit: customer, price override, discount. */
-export async function enforceSaleRules(policies: ResolvedPolicies, input: SalePolicyInput, actorCan: ActorCan): Promise<void> {
+export async function enforceSaleRules(
+  policies: ResolvedPolicies,
+  input: SalePolicyInput,
+  actorCan: ActorCan,
+): Promise<void> {
   if (policies.bool('sales.requireCustomer') && !input.hasCustomer) {
-    throw new AppException(ORDER_ERROR_CODES.CUSTOMER_REQUIRED, 'This business requires a customer on every sale', HttpStatus.BAD_REQUEST);
+    throw new AppException(
+      ORDER_ERROR_CODES.CUSTOMER_REQUIRED,
+      'This business requires a customer on every sale',
+      HttpStatus.BAD_REQUEST,
+    );
   }
-  if (policies.bool('sales.restrictPriceOverride') && input.overriddenPriceNames.length > 0) {
+  if (
+    policies.bool('sales.restrictPriceOverride') &&
+    input.overriddenPriceNames.length > 0
+  ) {
     if (!(await actorCan(CAPABILITIES.PRICE_OVERRIDE))) {
       throw new AppException(
         ORDER_ERROR_CODES.PRICE_OVERRIDE_RESTRICTED,
@@ -35,7 +46,10 @@ export async function enforceSaleRules(policies: ResolvedPolicies, input: SalePo
   const max = policies.num('sales.maxDiscountPercent');
   if (max !== null && input.rawSubtotal > 0 && input.manualDiscount > 0) {
     const percent = (input.manualDiscount / input.rawSubtotal) * 100;
-    if (percent > max + 1e-9 && !(await actorCan(CAPABILITIES.DISCOUNT_OVERRIDE))) {
+    if (
+      percent > max + 1e-9 &&
+      !(await actorCan(CAPABILITIES.DISCOUNT_OVERRIDE))
+    ) {
       throw new AppException(
         ORDER_ERROR_CODES.DISCOUNT_LIMIT_EXCEEDED,
         `Discounts are limited to ${max}% (this one is ${round2(percent)}%)`,
@@ -57,7 +71,10 @@ export async function enforceCreditLimit(
   const limit = input.customerLimit ?? policies.num('credit.defaultLimit');
   if (limit === null) return;
   const after = round2(input.balance + input.amountDue);
-  if (after > limit + 1e-9 && !(await actorCan(CAPABILITIES.CREDIT_LIMIT_OVERRIDE))) {
+  if (
+    after > limit + 1e-9 &&
+    !(await actorCan(CAPABILITIES.CREDIT_LIMIT_OVERRIDE))
+  ) {
     throw new AppException(
       ORDER_ERROR_CODES.CREDIT_LIMIT_EXCEEDED,
       `This sale would take the customer to ${after.toFixed(2)} owed, over their credit limit of ${limit.toFixed(2)}`,

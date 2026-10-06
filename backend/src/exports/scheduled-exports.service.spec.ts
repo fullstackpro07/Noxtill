@@ -407,7 +407,11 @@ describe('ScheduledExportsService (UPD-FE-071 recurring export)', () => {
 
       reportRuns.generate.mockClear();
       const result = await service.runNow(created.id);
-      expect(result).toMatchObject({ ok: true, lastResult: 'sent', lastReportRunId: 'run-1' });
+      expect(result).toMatchObject({
+        ok: true,
+        lastResult: 'sent',
+        lastReportRunId: 'run-1',
+      });
       expect(reportRuns.generate).toHaveBeenCalledWith(
         expect.objectContaining({ trigger: 'manual', month: listed.period }),
       );
@@ -422,7 +426,11 @@ describe('ScheduledExportsService (UPD-FE-071 recurring export)', () => {
       });
       reportRuns.generate.mockRejectedValueOnce(new Error('renderer crashed'));
       const result = await service.runNow(created.id);
-      expect(result).toMatchObject({ ok: false, lastResult: 'failed', lastError: 'renderer crashed' });
+      expect(result).toMatchObject({
+        ok: false,
+        lastResult: 'failed',
+        lastError: 'renderer crashed',
+      });
       await prisma.scheduledExport.delete({ where: { id: created.id } });
     });
 

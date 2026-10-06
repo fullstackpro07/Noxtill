@@ -92,32 +92,38 @@ export class ListingsRollupService {
     const ids = await this.branchScope.resolveIds(businessId, 'all');
     const providers = this.connectors.directoryProviders();
 
-    const [branches, masterListings, integrations, citations, photoCounts, syncLogs] =
-      await Promise.all([
-        this.prisma.business.findMany({
-          where: { id: { in: ids } },
-          orderBy: { createdAt: 'asc' },
-        }),
-        this.prisma.masterListing.findMany({
-          where: { businessId: { in: ids } },
-        }),
-        this.prisma.integration.findMany({
-          where: { businessId: { in: ids }, provider: { in: providers } },
-        }),
-        this.prisma.citation.findMany({
-          where: { businessId: { in: ids }, provider: { in: providers } },
-        }),
-        this.prisma.listingPhoto.groupBy({
-          by: ['businessId'],
-          where: { businessId: { in: ids } },
-          _count: { _all: true },
-        }),
-        // Most-recent-first; the first row seen per (businessId, provider) key below is the latest.
-        this.prisma.listingSyncLog.findMany({
-          where: { businessId: { in: ids }, provider: { in: providers } },
-          orderBy: { createdAt: 'desc' },
-        }),
-      ]);
+    const [
+      branches,
+      masterListings,
+      integrations,
+      citations,
+      photoCounts,
+      syncLogs,
+    ] = await Promise.all([
+      this.prisma.business.findMany({
+        where: { id: { in: ids } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.masterListing.findMany({
+        where: { businessId: { in: ids } },
+      }),
+      this.prisma.integration.findMany({
+        where: { businessId: { in: ids }, provider: { in: providers } },
+      }),
+      this.prisma.citation.findMany({
+        where: { businessId: { in: ids }, provider: { in: providers } },
+      }),
+      this.prisma.listingPhoto.groupBy({
+        by: ['businessId'],
+        where: { businessId: { in: ids } },
+        _count: { _all: true },
+      }),
+      // Most-recent-first; the first row seen per (businessId, provider) key below is the latest.
+      this.prisma.listingSyncLog.findMany({
+        where: { businessId: { in: ids }, provider: { in: providers } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
     const masterByBiz = new Map(masterListings.map((m) => [m.businessId, m]));
     const photoCountByBiz = new Map(
@@ -162,7 +168,9 @@ export class ListingsRollupService {
 
   async summary(businessId: string): Promise<ListingsRollupSummary> {
     const items = await this.overview(businessId);
-    const branchIds = new Set(items.filter((i) => !i.hasMasterListing).map((i) => i.branchId));
+    const branchIds = new Set(
+      items.filter((i) => !i.hasMasterListing).map((i) => i.branchId),
+    );
     const allBranchIds = new Set(items.map((i) => i.branchId));
     const completenessValues = items
       .filter((i) => i.completenessPercent != null)
@@ -173,10 +181,14 @@ export class ListingsRollupService {
       totalBranches: allBranchIds.size,
       totalProviders: this.connectors.directoryProviders().length,
       connected: items.filter((i) => i.status === 'Connected').length,
-      needsAttention: items.filter((i) => i.status === 'Needs attention').length,
+      needsAttention: items.filter((i) => i.status === 'Needs attention')
+        .length,
       disconnected: items.filter((i) => i.status === 'Disconnected').length,
       notConnected: items.filter((i) => i.status === 'Not connected').length,
-      mismatchCount: items.reduce((sum, i) => sum + i.mismatchedFields.length, 0),
+      mismatchCount: items.reduce(
+        (sum, i) => sum + i.mismatchedFields.length,
+        0,
+      ),
       averageCompleteness:
         completenessValues.length === 0
           ? null
@@ -203,7 +215,10 @@ export class ListingsRollupService {
       citation && listing ? this.diffFields(citation, listing) : [];
 
     let status: ListingRollupItem['status'];
-    if (!integration || integration.status === IntegrationStatus.not_connected) {
+    if (
+      !integration ||
+      integration.status === IntegrationStatus.not_connected
+    ) {
       status = 'Not connected';
     } else if (integration.status === IntegrationStatus.needs_attention) {
       status = 'Disconnected';
@@ -229,7 +244,8 @@ export class ListingsRollupService {
       businessName: listing?.name || null,
       phone: listing?.phone ?? null,
       address: listing
-        ? [listing.addressLine1, listing.city].filter(Boolean).join(', ') || null
+        ? [listing.addressLine1, listing.city].filter(Boolean).join(', ') ||
+          null
         : null,
       category:
         Array.isArray(listing?.categories) && listing.categories.length > 0
@@ -241,7 +257,9 @@ export class ListingsRollupService {
       status,
       verification: 'Not tracked',
       lastSyncedAt: lastSync ? lastSync.createdAt.toISOString() : null,
-      lastSyncStatus: lastSync ? (lastSync.status as 'success' | 'failed') : null,
+      lastSyncStatus: lastSync
+        ? (lastSync.status as 'success' | 'failed')
+        : null,
       lastSyncMessage: lastSync?.message ?? null,
       completenessPercent,
       photoCount,
@@ -314,9 +332,12 @@ export class ListingsRollupService {
       return value != null && String(value).trim() !== '';
     }).length;
     const categoriesFilled =
-      Array.isArray(listing.categories) && listing.categories.length > 0 ? 1 : 0;
+      Array.isArray(listing.categories) && listing.categories.length > 0
+        ? 1
+        : 0;
     const hoursFilled =
-      listing.hours && Object.keys(listing.hours as Record<string, unknown>).length > 0
+      listing.hours &&
+      Object.keys(listing.hours as Record<string, unknown>).length > 0
         ? 1
         : 0;
     const photosFilled = photoCount > 0 ? 1 : 0;
@@ -331,7 +352,9 @@ export class ListingsRollupService {
     const snapshot = citation.snapshot as Record<string, unknown>;
     const current = listing as unknown as Record<string, unknown>;
     return COMPLETENESS_TEXT_FIELDS.filter(
-      (field) => field !== 'description' && (snapshot[field] ?? null) !== (current[field] ?? null),
+      (field) =>
+        field !== 'description' &&
+        (snapshot[field] ?? null) !== (current[field] ?? null),
     );
   }
 }

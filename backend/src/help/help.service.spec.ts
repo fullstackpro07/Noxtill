@@ -58,19 +58,27 @@ describe('HelpService (BE-073)', () => {
   });
 
   it('logs every real ask (Chat History unification) — a found answer records the real question, answer and sources', async () => {
-    aiInfra.complete.mockResolvedValue('The frobnicator runs nightly (see [1]).');
+    aiInfra.complete.mockResolvedValue(
+      'The frobnicator runs nightly (see [1]).',
+    );
 
     await service.ask('biz-1', 'user-1', {
       question: 'When does the frobnicator run tonight?',
     });
 
     const logged = await prisma.helpQueryLog.findFirst({
-      where: { businessId: 'biz-1', userId: 'user-1', question: 'When does the frobnicator run tonight?' },
+      where: {
+        businessId: 'biz-1',
+        userId: 'user-1',
+        question: 'When does the frobnicator run tonight?',
+      },
       orderBy: { createdAt: 'desc' },
     });
     expect(logged).not.toBeNull();
     expect(logged?.answer).toBe('The frobnicator runs nightly (see [1]).');
-    expect(logged?.sources).toEqual([{ title: 'How the frobnicator widget works', url: `/help/${slug}` }]);
+    expect(logged?.sources).toEqual([
+      { title: 'How the frobnicator widget works', url: `/help/${slug}` },
+    ]);
   });
 
   it('returns an honest not-found answer without calling the model when nothing matches', async () => {
@@ -89,7 +97,11 @@ describe('HelpService (BE-073)', () => {
     });
 
     const logged = await prisma.helpQueryLog.findFirst({
-      where: { businessId: 'biz-1', userId: 'user-1', question: 'What is the airspeed velocity of a coconut-laden swallow?' },
+      where: {
+        businessId: 'biz-1',
+        userId: 'user-1',
+        question: 'What is the airspeed velocity of a coconut-laden swallow?',
+      },
     });
     expect(logged).not.toBeNull();
     expect(logged?.answer).toBe(HELP_NOT_FOUND_MESSAGE);
@@ -101,11 +113,19 @@ describe('HelpService (BE-073)', () => {
     const emptyBiz = `biz-suggest-empty-${Date.now()}`;
 
     afterAll(async () => {
-      await prisma.helpQueryLog.deleteMany({ where: { businessId: { in: [usageBiz, emptyBiz] } } });
+      await prisma.helpQueryLog.deleteMany({
+        where: { businessId: { in: [usageBiz, emptyBiz] } },
+      });
     });
 
     it('returns only questions this business really asked 2+ times and got answered, once there are 3+ of them', async () => {
-      const answered = (question: string) => ({ businessId: usageBiz, userId: 'u', question, answer: 'A real answer.', sources: [] });
+      const answered = (question: string) => ({
+        businessId: usageBiz,
+        userId: 'u',
+        question,
+        answer: 'A real answer.',
+        sources: [],
+      });
       await prisma.helpQueryLog.createMany({
         data: [
           answered('How do I take a sale on credit?'),
@@ -116,8 +136,20 @@ describe('HelpService (BE-073)', () => {
           answered('How is campaign quota calculated?'),
           answered('How is campaign quota calculated?'),
           // asked twice but never answered — must not count as popular
-          { businessId: usageBiz, userId: 'u', question: 'Something undocumented?', answer: HELP_NOT_FOUND_MESSAGE, sources: [] },
-          { businessId: usageBiz, userId: 'u', question: 'Something undocumented?', answer: HELP_NOT_FOUND_MESSAGE, sources: [] },
+          {
+            businessId: usageBiz,
+            userId: 'u',
+            question: 'Something undocumented?',
+            answer: HELP_NOT_FOUND_MESSAGE,
+            sources: [],
+          },
+          {
+            businessId: usageBiz,
+            userId: 'u',
+            question: 'Something undocumented?',
+            answer: HELP_NOT_FOUND_MESSAGE,
+            sources: [],
+          },
           // asked once — not popular
           answered('How do plans work?'),
         ],

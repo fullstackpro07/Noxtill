@@ -25,7 +25,15 @@ export interface UiPrefs {
 export const UI_PREF_DEFAULTS: UiPrefs = {
   motion: 'normal',
   fontSize: 'default',
-  sound: { enabled: true, style: 'chime', volume: 60, cooldownSec: 8, quietFrom: null, quietTo: null, quietAllowHigh: true },
+  sound: {
+    enabled: true,
+    style: 'chime',
+    volume: 60,
+    cooldownSec: 8,
+    quietFrom: null,
+    quietTo: null,
+    quietAllowHigh: true,
+  },
 };
 
 export const MOTION_OPTIONS: { value: MotionPref; label: string }[] = [
@@ -50,22 +58,40 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Reads stored preferences, falling back to the default for anything missing or malformed. */
 export function resolveUiPrefs(raw: unknown): UiPrefs {
-  const r = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
-  const s = (r.sound && typeof r.sound === 'object' ? r.sound : {}) as Record<string, unknown>;
+  const r = (
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  ) as Record<string, unknown>;
+  const s = (r.sound && typeof r.sound === 'object' ? r.sound : {}) as Record<
+    string,
+    unknown
+  >;
   const d = UI_PREF_DEFAULTS;
-  const num = (v: unknown, min: number, max: number, fallback: number) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : fallback);
-  const time = (v: unknown) => (typeof v === 'string' && TIME.test(v) ? v : null);
+  const num = (v: unknown, min: number, max: number, fallback: number) =>
+    typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
+      ? v
+      : fallback;
+  const time = (v: unknown) =>
+    typeof v === 'string' && TIME.test(v) ? v : null;
   return {
-    motion: MOTION_OPTIONS.some((o) => o.value === r.motion) ? (r.motion as MotionPref) : d.motion,
-    fontSize: FONT_OPTIONS.some((o) => o.value === r.fontSize) ? (r.fontSize as FontSizePref) : d.fontSize,
+    motion: MOTION_OPTIONS.some((o) => o.value === r.motion)
+      ? (r.motion as MotionPref)
+      : d.motion,
+    fontSize: FONT_OPTIONS.some((o) => o.value === r.fontSize)
+      ? (r.fontSize as FontSizePref)
+      : d.fontSize,
     sound: {
       enabled: typeof s.enabled === 'boolean' ? s.enabled : d.sound.enabled,
-      style: SOUND_STYLE_OPTIONS.some((o) => o.value === s.style) ? (s.style as SoundStyle) : d.sound.style,
+      style: SOUND_STYLE_OPTIONS.some((o) => o.value === s.style)
+        ? (s.style as SoundStyle)
+        : d.sound.style,
       volume: num(s.volume, 0, 100, d.sound.volume),
       cooldownSec: num(s.cooldownSec, 1, 300, d.sound.cooldownSec),
       quietFrom: time(s.quietFrom),
       quietTo: time(s.quietTo),
-      quietAllowHigh: typeof s.quietAllowHigh === 'boolean' ? s.quietAllowHigh : d.sound.quietAllowHigh,
+      quietAllowHigh:
+        typeof s.quietAllowHigh === 'boolean'
+          ? s.quietAllowHigh
+          : d.sound.quietAllowHigh,
     },
   };
 }

@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 import { PayrollLineItemsService } from './payroll-line-items.service';
 import { QueryPayrollDto } from './dto/query-payroll.dto';

@@ -46,7 +46,8 @@ export const REPORT_CATALOG: (ReportCatalogEntry & { kind: ReportKind })[] = [
   {
     kind: 'sales',
     name: REPORT_LABELS.sales,
-    description: 'Every completed order for the month with its customer and total',
+    description:
+      'Every completed order for the month with its customer and total',
     icon: 'shopping-cart',
     roles: ['owner', 'manager', 'staff'],
   },

@@ -56,8 +56,13 @@ export class AdLeadsService {
 
   /** Real lead status, set by a person — never inferred from anything. */
   async updateStatus(id: string, status: AdLeadStatus) {
-    const existing = await this.tenantPrisma.client.adLead.findUnique({ where: { id } });
+    const existing = await this.tenantPrisma.client.adLead.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException('Lead not found');
-    return this.tenantPrisma.client.adLead.update({ where: { id }, data: { status } });
+    return this.tenantPrisma.client.adLead.update({
+      where: { id },
+      data: { status },
+    });
   }
 }

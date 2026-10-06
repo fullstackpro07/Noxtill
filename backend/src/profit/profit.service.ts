@@ -97,7 +97,11 @@ export class ProfitService {
       const margin = revenue > 0 ? round2((profit / revenue) * 100) : 0;
       const priorRevenue = priorRevenueById.get(row.product_id) ?? 0;
       const trend: 'up' | 'down' | 'flat' =
-        revenue === priorRevenue ? 'flat' : revenue > priorRevenue ? 'up' : 'down';
+        revenue === priorRevenue
+          ? 'flat'
+          : revenue > priorRevenue
+            ? 'up'
+            : 'down';
       return {
         productId: row.product_id,
         name: row.name,
@@ -313,9 +317,7 @@ export class ProfitService {
     const ids = await this.branchScope.resolveIds(businessId, branchId);
     const monthComputed = await this.computeMonthPnl(ids, month);
     const range =
-      period === 'month'
-        ? this.monthRange(month)
-        : this.periodRange(period);
+      period === 'month' ? this.monthRange(month) : this.periodRange(period);
     const headline =
       period === 'month'
         ? monthComputed
@@ -388,7 +390,10 @@ export class ProfitService {
         }),
         this.prisma.expense.groupBy({
           by: ['category'],
-          where: { businessId: { in: ids }, incurredOn: { gte: start, lt: end } },
+          where: {
+            businessId: { in: ids },
+            incurredOn: { gte: start, lt: end },
+          },
           _sum: { amount: true },
         }),
         // Inventory depth fix (UPD-INT-013): wastage/theft was a real stock decrement that never
@@ -487,7 +492,11 @@ export class ProfitService {
         _sum: { amount: true },
       }),
       this.prisma.stockMovement.findMany({
-        where: { businessId: { in: ids }, kind: 'wastage', createdAt: { gte: start, lt: end } },
+        where: {
+          businessId: { in: ids },
+          kind: 'wastage',
+          createdAt: { gte: start, lt: end },
+        },
         select: { qty: true, unitCost: true },
       }),
     ]);
@@ -505,14 +514,11 @@ export class ProfitService {
     current: Awaited<ReturnType<ProfitService['computeMonthPnl']>>,
   ) {
     const [year, mon] = month.split('-').map(Number);
-    const priorMonths = Array.from(
-      { length: PNL_TREND_MONTHS - 1 },
-      (_, i) => {
-        const offset = PNL_TREND_MONTHS - 1 - i;
-        const d = new Date(Date.UTC(year, mon - 1 - offset, 1));
-        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-      },
-    );
+    const priorMonths = Array.from({ length: PNL_TREND_MONTHS - 1 }, (_, i) => {
+      const offset = PNL_TREND_MONTHS - 1 - i;
+      const d = new Date(Date.UTC(year, mon - 1 - offset, 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    });
     const priorResults = await Promise.all(
       priorMonths.map((m) => this.computeMonthPnl(ids, m)),
     );

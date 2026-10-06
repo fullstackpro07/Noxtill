@@ -1,4 +1,10 @@
-const CONTACT_KEYS = new Set(['phone', 'email', 'phoneNumber', 'customerPhone', 'customerEmail']);
+const CONTACT_KEYS = new Set([
+  'phone',
+  'email',
+  'phoneNumber',
+  'customerPhone',
+  'customerEmail',
+]);
 
 function mask(value: string): string {
   const digits = value.replace(/\D/g, '');
@@ -10,7 +16,11 @@ function mask(value: string): string {
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype;
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    Object.getPrototypeOf(v) === Object.prototype
+  );
 }
 
 /** Masks phone/email values anywhere in a tool result so the model never sees a real contact. */
@@ -19,7 +29,8 @@ export function maskContacts(value: unknown): unknown {
   if (!isPlainObject(value)) return value;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
-    out[k] = CONTACT_KEYS.has(k) && typeof v === 'string' ? mask(v) : maskContacts(v);
+    out[k] =
+      CONTACT_KEYS.has(k) && typeof v === 'string' ? mask(v) : maskContacts(v);
   }
   return out;
 }

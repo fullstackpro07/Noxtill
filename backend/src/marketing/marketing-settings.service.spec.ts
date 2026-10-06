@@ -7,7 +7,9 @@ describe('MarketingSettingsService', () => {
   it('derives the permissions matrix from the real capability tiers, not hand-typed booleans', () => {
     const { permissions } = service.get();
 
-    const sendCampaign = permissions.find((r) => r.action.startsWith('Send a campaign'));
+    const sendCampaign = permissions.find((r) =>
+      r.action.startsWith('Send a campaign'),
+    );
     expect(sendCampaign).toEqual({
       action: expect.any(String),
       owner: true,
@@ -16,10 +18,20 @@ describe('MarketingSettingsService', () => {
     });
 
     const automation = permissions.find((r) => r.action.includes('automation'));
-    expect(automation).toMatchObject({ owner: true, manager: true, staff: false });
+    expect(automation).toMatchObject({
+      owner: true,
+      manager: true,
+      staff: false,
+    });
 
-    const contentPlanner = permissions.find((r) => r.action.includes('content planner'));
-    expect(contentPlanner).toMatchObject({ owner: true, manager: true, staff: false });
+    const contentPlanner = permissions.find((r) =>
+      r.action.includes('content planner'),
+    );
+    expect(contentPlanner).toMatchObject({
+      owner: true,
+      manager: true,
+      staff: false,
+    });
 
     const view = permissions.find((r) => r.action.startsWith('View analytics'));
     expect(view).toMatchObject({ owner: true, manager: true, staff: true });
@@ -35,6 +47,11 @@ describe('MarketingSettingsService', () => {
   it('returns the real policy groups', () => {
     const { groups } = service.get();
     const groupNames = groups.map((g) => g.group);
-    expect(groupNames).toEqual(['Communication', 'AI', 'Attribution', 'Messaging']);
+    expect(groupNames).toEqual([
+      'Communication',
+      'AI',
+      'Attribution',
+      'Messaging',
+    ]);
   });
 });

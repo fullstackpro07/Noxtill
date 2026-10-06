@@ -13,6 +13,7 @@ export class BackupProcessor extends WorkerHost {
 
   async process(): Promise<void> {
     const { started, purged } = await this.backups.runDue();
-    if (started > 0 || purged > 0) this.logger.log(`Backups: started ${started}, purged ${purged}`);
+    if (started > 0 || purged > 0)
+      this.logger.log(`Backups: started ${started}, purged ${purged}`);
   }
 }

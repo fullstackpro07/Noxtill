@@ -29,9 +29,14 @@ describe('CommissionsService (BE-058)', () => {
     await prisma.$connect();
 
     const cls = new FakeClsService();
-    tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
     const audit = new AuditService(tenantPrisma, cls as unknown as ClsService);
-    const notifications = { create: jest.fn() } as unknown as NotificationsService;
+    const notifications = {
+      create: jest.fn(),
+    } as unknown as NotificationsService;
     service = new CommissionsService(tenantPrisma, audit, notifications);
 
     const business = await prisma.business.create({
@@ -167,7 +172,9 @@ describe('CommissionsService (BE-058)', () => {
     });
 
     const before = await service.report('2026-05');
-    const rowBefore = before.find((r) => r.businessUserId === staffBusinessUserId)!;
+    const rowBefore = before.find(
+      (r) => r.businessUserId === staffBusinessUserId,
+    )!;
     expect(rowBefore.ruleLabel).toBe('10% of sales');
     expect(rowBefore.advancesOutstanding).toBe(2000);
     expect(rowBefore.paid).toBe(false);
@@ -175,18 +182,32 @@ describe('CommissionsService (BE-058)', () => {
     await service.markPaid(businessId, staffBusinessUserId, '2026-05');
 
     const after = await service.report('2026-05');
-    const rowAfter = after.find((r) => r.businessUserId === staffBusinessUserId)!;
+    const rowAfter = after.find(
+      (r) => r.businessUserId === staffBusinessUserId,
+    )!;
     expect(rowAfter.paid).toBe(true);
     // A different month is unaffected by this month's payment.
     const juneReport = await service.report('2026-06');
-    expect(juneReport.find((r) => r.businessUserId === staffBusinessUserId)!.paid).toBe(false);
+    expect(
+      juneReport.find((r) => r.businessUserId === staffBusinessUserId)!.paid,
+    ).toBe(false);
 
     await prisma.staffAdvance.deleteMany({ where: { businessId } });
   });
 
   it('markPaid() is idempotent and writes a real audit log entry', async () => {
-    await service.markPaid(businessId, staffBusinessUserId, '2026-07', 'some-user-id');
-    await service.markPaid(businessId, staffBusinessUserId, '2026-07', 'some-user-id');
+    await service.markPaid(
+      businessId,
+      staffBusinessUserId,
+      '2026-07',
+      'some-user-id',
+    );
+    await service.markPaid(
+      businessId,
+      staffBusinessUserId,
+      '2026-07',
+      'some-user-id',
+    );
 
     const count = await prisma.commissionPayment.count({
       where: { businessId, staffUserId: staffBusinessUserId, month: '2026-07' },
@@ -194,12 +215,16 @@ describe('CommissionsService (BE-058)', () => {
     expect(count).toBe(1);
 
     const auditRow = await prisma.auditLog.findFirst({
-      where: { businessId, entity: 'commission_payment', action: 'commission.mark_paid' },
+      where: {
+        businessId,
+        entity: 'commission_payment',
+        action: 'commission.mark_paid',
+      },
     });
     expect(auditRow).not.toBeNull();
   });
 
-  it('sendStatement() sends a real notification with this month\'s real figures', async () => {
+  it("sendStatement() sends a real notification with this month's real figures", async () => {
     const create = jest.fn().mockResolvedValue({ id: 'notif-1' });
     const serviceWithSpy = new CommissionsService(
       tenantPrisma,
@@ -207,7 +232,11 @@ describe('CommissionsService (BE-058)', () => {
       { create } as unknown as NotificationsService,
     );
 
-    await serviceWithSpy.sendStatement(businessId, staffBusinessUserId, '2026-05');
+    await serviceWithSpy.sendStatement(
+      businessId,
+      staffBusinessUserId,
+      '2026-05',
+    );
 
     expect(create).toHaveBeenCalledTimes(1);
     const [calledBusinessId, calledUserId, input] = create.mock.calls[0];

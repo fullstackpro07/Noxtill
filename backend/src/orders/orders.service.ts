@@ -24,7 +24,13 @@ import {
   ORDER_STATUS_TRANSITIONS,
 } from './orders.constants';
 import { computeOrderTotals, resolveTaxRatePercent } from './order-totals.util';
-import { OrderStatus, OrderType, PaymentMethod, Prisma, ProductKind } from '@prisma/client';
+import {
+  OrderStatus,
+  OrderType,
+  PaymentMethod,
+  Prisma,
+  ProductKind,
+} from '@prisma/client';
 import { withDeadlockRetry } from '../common/utils/prisma-transaction-retry.util';
 import { PoliciesService } from '../common/policies/policies.service';
 import { enforceCreditLimit, enforceSaleRules } from './order-policy.util';
@@ -186,7 +192,9 @@ export class OrdersService {
             policies,
             {
               hasCustomer: !!customerId,
-              overriddenPriceNames: itemsData.filter((i) => i.overridden).map((i) => i.name),
+              overriddenPriceNames: itemsData
+                .filter((i) => i.overridden)
+                .map((i) => i.name),
               manualDiscount: dto.discount ?? 0,
               rawSubtotal,
             },
@@ -242,16 +250,22 @@ export class OrdersService {
           const orderNo = Number(orderNoRaw);
 
           if (dto.payment.method === 'credit' && customerId) {
-            const [customerRow] = await tx.$queryRaw<{ credit_limit: string | null; balance: string | null }[]>`
+            const [customerRow] = await tx.$queryRaw<
+              { credit_limit: string | null; balance: string | null }[]
+            >`
               SELECT c.credit_limit, (SELECT balance FROM v_credit_balances v WHERE v.business_id = c.business_id AND v.customer_id = c.id) AS balance
               FROM customers c WHERE c.id = ${customerId}
             `;
             await enforceCreditLimit(
               policies,
               {
-                customerLimit: customerRow?.credit_limit != null ? Number(customerRow.credit_limit) : null,
+                customerLimit:
+                  customerRow?.credit_limit != null
+                    ? Number(customerRow.credit_limit)
+                    : null,
                 balance: Number(customerRow?.balance ?? 0),
-                amountDue: Math.round((total - voucherAmountApplied) * 100) / 100,
+                amountDue:
+                  Math.round((total - voucherAmountApplied) * 100) / 100,
               },
               (c) => this.policies.actorCan(c),
             );
@@ -498,7 +512,9 @@ export class OrdersService {
         {
           // A draft is a saved cart, not a sale; a customer is required when it is converted.
           hasCustomer: true,
-          overriddenPriceNames: itemsData.filter((i) => i.overridden).map((i) => i.name),
+          overriddenPriceNames: itemsData
+            .filter((i) => i.overridden)
+            .map((i) => i.name),
           manualDiscount: discount,
           rawSubtotal: itemsData.reduce((sum, i) => sum + i.price * i.qty, 0),
         },
@@ -564,7 +580,8 @@ export class OrdersService {
    */
   async createOrder(businessId: string, dto: CreateOrderDto) {
     const actorUserId = this.cls.get<string>(CLS_KEY_USER_ID);
-    const activeBusinessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
+    const activeBusinessId =
+      this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
 
     const order = await this.tenantPrisma.client.$transaction(async (tx) => {
       const business = await tx.business.findUniqueOrThrow({
@@ -634,7 +651,9 @@ export class OrdersService {
         policies,
         {
           hasCustomer: !!customerId,
-          overriddenPriceNames: itemsData.filter((i) => i.overridden).map((i) => i.name),
+          overriddenPriceNames: itemsData
+            .filter((i) => i.overridden)
+            .map((i) => i.name),
           manualDiscount: discount,
           rawSubtotal: itemsData.reduce((sum, i) => sum + i.price * i.qty, 0),
         },
@@ -702,14 +721,19 @@ export class OrdersService {
       }
 
       if (dto.paymentMethod === 'credit' && customerId) {
-        const [customerRow] = await tx.$queryRaw<{ credit_limit: string | null; balance: string | null }[]>`
+        const [customerRow] = await tx.$queryRaw<
+          { credit_limit: string | null; balance: string | null }[]
+        >`
           SELECT c.credit_limit, (SELECT balance FROM v_credit_balances v WHERE v.business_id = c.business_id AND v.customer_id = c.id) AS balance
           FROM customers c WHERE c.id = ${customerId}
         `;
         await enforceCreditLimit(
           policies,
           {
-            customerLimit: customerRow?.credit_limit != null ? Number(customerRow.credit_limit) : null,
+            customerLimit:
+              customerRow?.credit_limit != null
+                ? Number(customerRow.credit_limit)
+                : null,
             balance: Number(customerRow?.balance ?? 0),
             amountDue: total,
           },
@@ -924,16 +948,18 @@ export class OrdersService {
     };
   }
 
-  findAll(filters: {
-    status?: OrderStatus;
-    orderType?: OrderType;
-    paymentMethod?: PaymentMethod;
-    paymentStatus?: 'paid' | 'unpaid' | 'partial' | 'refunded';
-    staffUserId?: string;
-    from?: Date;
-    to?: Date;
-    limit?: number;
-  } = {}) {
+  findAll(
+    filters: {
+      status?: OrderStatus;
+      orderType?: OrderType;
+      paymentMethod?: PaymentMethod;
+      paymentStatus?: 'paid' | 'unpaid' | 'partial' | 'refunded';
+      staffUserId?: string;
+      from?: Date;
+      to?: Date;
+      limit?: number;
+    } = {},
+  ) {
     const where = this.buildOrdersWhere(filters);
     return this.tenantPrisma.client.order
       .findMany({
@@ -979,12 +1005,19 @@ export class OrdersService {
     const start30Days = new Date(startOfToday);
     start30Days.setDate(start30Days.getDate() - 29);
 
-    const baseWhere = { isQuotation: false, status: { not: OrderStatus.draft } };
+    const baseWhere = {
+      isQuotation: false,
+      status: { not: OrderStatus.draft },
+    };
 
     const [todayOrders, last7Orders, last30ByType] = await Promise.all([
       this.tenantPrisma.client.order.findMany({
         where: { ...baseWhere, createdAt: { gte: startOfToday } },
-        include: { payments: true, creditEntries: true, returns: { select: { status: true } } },
+        include: {
+          payments: true,
+          creditEntries: true,
+          returns: { select: { status: true } },
+        },
       }),
       this.tenantPrisma.client.order.findMany({
         where: { ...baseWhere, createdAt: { gte: start7Days } },

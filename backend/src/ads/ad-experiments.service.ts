@@ -46,14 +46,21 @@ export class AdExperimentsService {
     }
 
     return [...groups.entries()].map(([key, items]) => {
-      const title = key.replace(/[-_]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+      const title = key
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, (l) => l.toUpperCase());
       const [a, b] = items;
       return {
         id: key,
         name: title,
         variantA: a?.headline || 'Variant A',
         variantB: b?.headline || 'Variant B',
-        createdAt: (items.reduce((oldest, i) => (i.createdAt < oldest ? i.createdAt : oldest), items[0].createdAt)).toISOString(),
+        createdAt: items
+          .reduce(
+            (oldest, i) => (i.createdAt < oldest ? i.createdAt : oldest),
+            items[0].createdAt,
+          )
+          .toISOString(),
         creatives: items.map((i) => ({
           id: i.id,
           headline: i.headline,

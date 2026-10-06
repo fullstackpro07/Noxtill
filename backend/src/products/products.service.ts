@@ -62,7 +62,9 @@ export class ProductsService {
           stockQty: dto.stockQty ?? 0,
           lowStockThreshold:
             dto.lowStockThreshold ??
-            (await this.policies.current()).num('catalog.defaultLowStockThreshold') ??
+            (await this.policies.current()).num(
+              'catalog.defaultLowStockThreshold',
+            ) ??
             5,
           durationMin: dto.kind === 'service' ? dto.durationMin : undefined,
           active: dto.active ?? true,

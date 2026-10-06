@@ -85,34 +85,58 @@ describe('ListingsRollupService', () => {
       },
     });
     await prisma.listingSyncLog.create({
-      data: { businessId: rootId, provider: IntegrationProvider.gmb, status: 'success' },
+      data: {
+        businessId: rootId,
+        provider: IntegrationProvider.gmb,
+        status: 'success',
+      },
     });
     await prisma.listingPhoto.create({
-      data: { businessId: rootId, url: 'https://cdn.example.com/a.jpg', category: 'exterior' },
+      data: {
+        businessId: rootId,
+        url: 'https://cdn.example.com/a.jpg',
+        category: 'exterior',
+      },
     });
 
     // Child branch: no Master Listing at all yet, no integrations — a real, honest "not set up" case.
   });
 
   afterAll(async () => {
-    await prisma.listingPhoto.deleteMany({ where: { businessId: { in: [rootId, childId] } } });
-    await prisma.citation.deleteMany({ where: { businessId: { in: [rootId, childId] } } });
-    await prisma.listingSyncLog.deleteMany({ where: { businessId: { in: [rootId, childId] } } });
-    await prisma.integration.deleteMany({ where: { businessId: { in: [rootId, childId] } } });
-    await prisma.masterListing.deleteMany({ where: { businessId: { in: [rootId, childId] } } });
-    await prisma.business.deleteMany({ where: { id: { in: [childId, rootId] } } });
+    await prisma.listingPhoto.deleteMany({
+      where: { businessId: { in: [rootId, childId] } },
+    });
+    await prisma.citation.deleteMany({
+      where: { businessId: { in: [rootId, childId] } },
+    });
+    await prisma.listingSyncLog.deleteMany({
+      where: { businessId: { in: [rootId, childId] } },
+    });
+    await prisma.integration.deleteMany({
+      where: { businessId: { in: [rootId, childId] } },
+    });
+    await prisma.masterListing.deleteMany({
+      where: { businessId: { in: [rootId, childId] } },
+    });
+    await prisma.business.deleteMany({
+      where: { id: { in: [childId, rootId] } },
+    });
     await prisma.$disconnect();
   });
 
   it('returns one row per branch x directory provider across the real branch group', async () => {
     const items = await service.overview(rootId);
     expect(items).toHaveLength(4); // 2 branches x 2 providers
-    expect(new Set(items.map((i) => i.branchId))).toEqual(new Set([rootId, childId]));
+    expect(new Set(items.map((i) => i.branchId))).toEqual(
+      new Set([rootId, childId]),
+    );
   });
 
   it('marks a connected, matching listing as Connected with full completeness', async () => {
     const items = await service.overview(rootId);
-    const rootGmb = items.find((i) => i.branchId === rootId && i.provider === 'gmb');
+    const rootGmb = items.find(
+      (i) => i.branchId === rootId && i.provider === 'gmb',
+    );
     expect(rootGmb?.status).toBe('Connected');
     expect(rootGmb?.mismatchedFields).toEqual([]);
     expect(rootGmb?.completenessPercent).toBe(100);
@@ -122,14 +146,18 @@ describe('ListingsRollupService', () => {
 
   it('marks the never-connected provider as Not connected, not fabricated', async () => {
     const items = await service.overview(rootId);
-    const rootBing = items.find((i) => i.branchId === rootId && i.provider === 'bing_places');
+    const rootBing = items.find(
+      (i) => i.branchId === rootId && i.provider === 'bing_places',
+    );
     expect(rootBing?.status).toBe('Not connected');
     expect(rootBing?.verification).toBe('Not tracked');
   });
 
   it('reports a branch with no Master Listing honestly, with no fabricated completeness', async () => {
     const items = await service.overview(rootId);
-    const childGmb = items.find((i) => i.branchId === childId && i.provider === 'gmb');
+    const childGmb = items.find(
+      (i) => i.branchId === childId && i.provider === 'gmb',
+    );
     expect(childGmb?.hasMasterListing).toBe(false);
     expect(childGmb?.completenessPercent).toBeNull();
     expect(childGmb?.status).toBe('Not connected');
@@ -142,7 +170,9 @@ describe('ListingsRollupService', () => {
       data: { phone: '+1 555 9999' },
     });
     const items = await service.overview(rootId);
-    const rootGmb = items.find((i) => i.branchId === rootId && i.provider === 'gmb');
+    const rootGmb = items.find(
+      (i) => i.branchId === rootId && i.provider === 'gmb',
+    );
     expect(rootGmb?.status).toBe('Needs attention');
     expect(rootGmb?.mismatchedFields).toContain('phone');
 

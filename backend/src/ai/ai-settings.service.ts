@@ -40,7 +40,11 @@ export class AiSettingsService {
     const now = new Date();
     const isoDow = (now.getUTCDay() + 6) % 7; // 0=Monday..6=Sunday
     const weekStart = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - isoDow),
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() - isoDow,
+      ),
     );
 
     const rows = await this.prisma.$queryRaw<{ dow: number; count: bigint }[]>`
@@ -50,8 +54,13 @@ export class AiSettingsService {
       GROUP BY dow
     `;
 
-    const countByDow = new Map(rows.map((r) => [Number(r.dow), Number(r.count)]));
-    return WEEKDAY_LABELS.map((day, i) => ({ day, count: countByDow.get(i) ?? 0 }));
+    const countByDow = new Map(
+      rows.map((r) => [Number(r.dow), Number(r.count)]),
+    );
+    return WEEKDAY_LABELS.map((day, i) => ({
+      day,
+      count: countByDow.get(i) ?? 0,
+    }));
   }
 
   async getSettings(businessId: string) {
@@ -118,7 +127,10 @@ export class AiSettingsService {
         totalCalls,
         queryQuotaUsedPercent:
           business.aiQueryQuota > 0
-            ? Math.min(100, Math.round((totalCalls / business.aiQueryQuota) * 100))
+            ? Math.min(
+                100,
+                Math.round((totalCalls / business.aiQueryQuota) * 100),
+              )
             : 0,
         limitResetsAt: limitResetsAt.toISOString(),
       },

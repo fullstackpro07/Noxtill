@@ -1,4 +1,8 @@
-import { POLICY_DEFS, PolicyDef, PolicyKey } from '../../common/policies/policies.constants';
+import {
+  POLICY_DEFS,
+  PolicyDef,
+  PolicyKey,
+} from '../../common/policies/policies.constants';
 import { resolvePolicies } from '../../common/policies/policies.service';
 import { HubTone, HubValue, row, RowDef } from '../hub.core';
 import { HubDeps, business } from './hub.deps';
@@ -46,13 +50,20 @@ export type PolicyRowSpec = TogglePolicyRow | NumberPolicyRow | TimePolicyRow;
  */
 export function policyRow(d: HubDeps, spec: PolicyRowSpec): RowDef {
   const def = POLICY_DEFS[spec.policy] as PolicyDef;
-  const read = async (ctx: Parameters<RowDef['state']>[0]) => resolvePolicies(await business(d, ctx));
+  const read = async (ctx: Parameters<RowDef['state']>[0]) =>
+    resolvePolicies(await business(d, ctx));
 
   const resetOf = (): RowDef['reset'] => {
-    if (spec.kind === 'toggle') return { label: def.default ? spec.on.text : spec.off.text, value: def.default === true };
+    if (spec.kind === 'toggle')
+      return {
+        label: def.default ? spec.on.text : spec.off.text,
+        value: def.default === true,
+      };
     if (spec.kind === 'time') return { label: spec.emptyLabel, value: null };
     const n = def.default as number | null;
-    return n === null ? { label: spec.emptyLabel ?? 'No limit', value: null } : { label: spec.format(n), value: n };
+    return n === null
+      ? { label: spec.emptyLabel ?? 'No limit', value: null }
+      : { label: spec.format(n), value: n };
   };
 
   return row({
@@ -73,13 +84,26 @@ export function policyRow(d: HubDeps, spec: PolicyRowSpec): RowDef {
       }
       if (spec.kind === 'time') {
         const t = p.time(spec.policy);
-        return { value: t ?? spec.emptyLabel, tone: t ? 'blue' : 'neutral', control: { type: 'time', current: t, nullable: true } };
+        return {
+          value: t ?? spec.emptyLabel,
+          tone: t ? 'blue' : 'neutral',
+          control: { type: 'time', current: t, nullable: true },
+        };
       }
       const n = p.num(spec.policy);
       return {
         value: n === null ? (spec.emptyLabel ?? 'No limit') : spec.format(n),
         tone: spec.tone ? spec.tone(n) : n === null ? 'neutral' : 'blue',
-        control: { type: 'number', current: n, min: def.min, max: def.max, step: spec.step ?? 1, unit: spec.unit, nullable: def.kind === 'nullableNumber', emptyLabel: spec.emptyLabel ?? 'No limit' },
+        control: {
+          type: 'number',
+          current: n,
+          min: def.min,
+          max: def.max,
+          step: spec.step ?? 1,
+          unit: spec.unit,
+          nullable: def.kind === 'nullableNumber',
+          emptyLabel: spec.emptyLabel ?? 'No limit',
+        },
       };
     },
     write: async (ctx, v: HubValue) => {
@@ -87,4 +111,3 @@ export function policyRow(d: HubDeps, spec: PolicyRowSpec): RowDef {
     },
   });
 }
-

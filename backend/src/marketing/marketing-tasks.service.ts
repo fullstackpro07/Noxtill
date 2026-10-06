@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 
-export type MarketingTaskKind = 'automation_failing' | 'offer_expiring' | 'quota_low';
+export type MarketingTaskKind =
+  'automation_failing' | 'offer_expiring' | 'quota_low';
 
 export interface MarketingTask {
   kind: MarketingTaskKind;
@@ -100,9 +101,14 @@ export class MarketingTasksService {
   }
 
   private async findExpiringCoupons(): Promise<MarketingTask[]> {
-    const soon = new Date(Date.now() + EXPIRY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const soon = new Date(
+      Date.now() + EXPIRY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
     const coupons = await this.tenantPrisma.client.coupon.findMany({
-      where: { active: true, expiresAt: { not: null, lte: soon, gt: new Date() } },
+      where: {
+        active: true,
+        expiresAt: { not: null, lte: soon, gt: new Date() },
+      },
     });
     return coupons.map((c) => ({
       kind: 'offer_expiring' as const,
@@ -117,7 +123,9 @@ export class MarketingTasksService {
   }
 
   private async findExpiringVouchers(): Promise<MarketingTask[]> {
-    const soon = new Date(Date.now() + EXPIRY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const soon = new Date(
+      Date.now() + EXPIRY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
     const vouchers = await this.tenantPrisma.client.voucher.findMany({
       where: {
         status: 'active',

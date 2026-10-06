@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { QueueService } from './queue.service';
 import { JoinQueueDto } from './dto/join-queue.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -15,7 +23,10 @@ export class QueueController {
 
   @Get()
   list(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.queueService.list(from ? new Date(from) : undefined, to ? new Date(to) : undefined);
+    return this.queueService.list(
+      from ? new Date(from) : undefined,
+      to ? new Date(to) : undefined,
+    );
   }
 
   @Patch(':id/call')

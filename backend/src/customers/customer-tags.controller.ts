@@ -14,7 +14,10 @@ export class CustomerTagsController {
   }
 
   @Post()
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCustomerTagDto) {
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateCustomerTagDto,
+  ) {
     return this.service.create(user.businessId, dto);
   }
 }

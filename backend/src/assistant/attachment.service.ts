@@ -88,7 +88,8 @@ export class AssistantAttachmentService {
   private kindFor(mimeType: string, filename: string): AttachmentKind {
     if (mimeType === PDF_MIME_TYPE) return 'pdf';
     if (mimeType === DOCX_MIME_TYPE) return 'docx';
-    if ((TEXT_MIME_TYPES as readonly string[]).includes(mimeType)) return 'text';
+    if ((TEXT_MIME_TYPES as readonly string[]).includes(mimeType))
+      return 'text';
     if ((IMAGE_MIME_TYPES as readonly string[]).includes(mimeType))
       return 'image';
 
@@ -110,8 +111,11 @@ export class AssistantAttachmentService {
     try {
       // Required lazily: pdf-parse's index reads a sample file from disk at import time in some
       // versions, which breaks under Jest module collection — the library entry point itself is fine.
-      const pdfParse = (await import('pdf-parse')).default;
-      const parsed = await pdfParse(buffer);
+      // pdf-parse ships no type declarations, so give its default export the one shape used here.
+      const pdfModule = (await import('pdf-parse')) as {
+        default: (data: Buffer) => Promise<{ text?: string }>;
+      };
+      const parsed = await pdfModule.default(buffer);
       return parsed.text ?? '';
     } catch (error) {
       this.logger.warn(`PDF extraction failed: ${(error as Error).message}`);

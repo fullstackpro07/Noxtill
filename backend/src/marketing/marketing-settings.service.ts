@@ -24,12 +24,18 @@ export interface PermissionRow {
  */
 const ACTION_ROWS: { action: string; capabilities: Capability[] }[] = [
   { action: 'Send a campaign (WhatsApp or Email)', capabilities: [] },
-  { action: 'Create or change an automation', capabilities: [CAPABILITIES.AUTOMATIONS_MANAGE] },
+  {
+    action: 'Create or change an automation',
+    capabilities: [CAPABILITIES.AUTOMATIONS_MANAGE],
+  },
   {
     action: 'Create or change a coupon/voucher',
     capabilities: [CAPABILITIES.COUPONS_MANAGE, CAPABILITIES.VOUCHERS_MANAGE],
   },
-  { action: 'Create or edit content planner items', capabilities: [CAPABILITIES.CONTENT_PLANNER_MANAGE] },
+  {
+    action: 'Create or edit content planner items',
+    capabilities: [CAPABILITIES.CONTENT_PLANNER_MANAGE],
+  },
   { action: 'View analytics, audiences and channels', capabilities: [] },
 ];
 
@@ -39,7 +45,10 @@ const ACTION_ROWS: { action: string; capabilities: Capability[] }[] = [
  * (in the backend, next to the modules it describes) rather than duplicated in the frontend, so a
  * change to that behavior and a change to its description live in the same file.
  */
-const POLICY_GROUPS: { group: string; rows: { label: string; value: string }[] }[] = [
+const POLICY_GROUPS: {
+  group: string;
+  rows: { label: string; value: string }[];
+}[] = [
   {
     group: 'Communication',
     rows: [
@@ -55,12 +64,21 @@ const POLICY_GROUPS: { group: string; rows: { label: string; value: string }[] }
   {
     group: 'AI',
     rows: [
-      { label: 'AI may draft content', value: 'Yes — content ideas & AI reallocation suggestions' },
-      { label: 'AI may suggest audiences', value: 'Yes — AI persona naming for audiences' },
+      {
+        label: 'AI may draft content',
+        value: 'Yes — content ideas & AI reallocation suggestions',
+      },
+      {
+        label: 'AI may suggest audiences',
+        value: 'Yes — AI persona naming for audiences',
+      },
       // Real guarantee: no AI-authored text is ever passed straight to a send-gate call anywhere
       // in this codebase — every AI output lands in a form field a person must submit.
       { label: 'AI may send without approval', value: 'Never' },
-      { label: 'AI must show its evidence', value: 'Always — grounded in your real sales, reviews and channel data' },
+      {
+        label: 'AI must show its evidence',
+        value: 'Always — grounded in your real sales, reviews and channel data',
+      },
     ],
   },
   {
@@ -68,9 +86,16 @@ const POLICY_GROUPS: { group: string; rows: { label: string; value: string }[] }
     rows: [
       // Matches MarketingOverviewService.overview(): redemptions/revenue are scoped to
       // Order.couponId/voucherId, nothing else.
-      { label: 'Attribution scope', value: 'Orders/bookings that used a real coupon or voucher' },
+      {
+        label: 'Attribution scope',
+        value: 'Orders/bookings that used a real coupon or voucher',
+      },
       { label: 'Conversion counts when', value: 'Payment confirms' },
-      { label: 'Model', value: 'Not multi-touch — no per-campaign click tracking joined to orders' },
+      {
+        label: 'Model',
+        value:
+          'Not multi-touch — no per-campaign click tracking joined to orders',
+      },
     ],
   },
   {
@@ -79,7 +104,10 @@ const POLICY_GROUPS: { group: string; rows: { label: string; value: string }[] }
       // Matches CampaignsService.create(): blocked by `business.msgQuota - business.msgUsed`.
       { label: 'WhatsApp sends', value: 'Gated by your monthly message quota' },
       // Matches EmailCampaignsService.create(): filtered by `isSuppressed`, no quota involved.
-      { label: 'Email sends', value: 'Gated by your real unsubscribe/suppression list, not quota' },
+      {
+        label: 'Email sends',
+        value: 'Gated by your real unsubscribe/suppression list, not quota',
+      },
     ],
   },
 ];

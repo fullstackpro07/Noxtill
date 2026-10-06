@@ -265,8 +265,13 @@ export class AssistantService {
         input,
       );
       // Owner policy: customer phone/email never reach the model.
-      const business = await this.prisma.business.findUnique({ where: { id: businessId }, select: { policies: true } });
-      return resolvePolicies(business).bool('ai.redactContacts') ? maskContacts(output) : output;
+      const business = await this.prisma.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      return resolvePolicies(business).bool('ai.redactContacts')
+        ? maskContacts(output)
+        : output;
     } catch (error) {
       this.logger.error(`Tool "${name}" failed: ${(error as Error).message}`);
       return { error: 'Tool execution failed' };

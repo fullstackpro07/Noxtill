@@ -31,7 +31,10 @@ describe('AssistantHistoryService (unified Chat History)', () => {
     await prisma.$connect();
 
     const cls = new FakeClsService();
-    tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
 
     const business = await prisma.business.create({
       data: { name: 'History Test Biz', slug: `history-test-${Date.now()}` },
@@ -63,13 +66,19 @@ describe('AssistantHistoryService (unified Chat History)', () => {
       {} as unknown as ClaudeClient,
       {} as unknown as AiInfraService,
     );
-    service = new AssistantHistoryService(tenantPrisma, prisma, assistantService);
+    service = new AssistantHistoryService(
+      tenantPrisma,
+      prisma,
+      assistantService,
+    );
   });
 
   afterAll(async () => {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
-      await tx.assistantMessage.deleteMany({ where: { conversation: { businessId } } });
+      await tx.assistantMessage.deleteMany({
+        where: { conversation: { businessId } },
+      });
       await tx.assistantConversation.deleteMany({ where: { businessId } });
       await tx.helpQueryLog.deleteMany({ where: { businessId } });
       await tx.voiceCommandDraft.deleteMany({ where: { businessId } });
@@ -86,14 +95,20 @@ describe('AssistantHistoryService (unified Chat History)', () => {
       data: { businessId, userId, title: 'How much did we sell today?' },
     });
     await tenantPrisma.client.assistantMessage.create({
-      data: { conversationId: convo.id, role: 'user', content: 'How much did we sell today?' },
+      data: {
+        conversationId: convo.id,
+        role: 'user',
+        content: 'How much did we sell today?',
+      },
     });
     await tenantPrisma.client.assistantMessage.create({
       data: {
         conversationId: convo.id,
         role: 'assistant',
         content: 'Rs. 12,000 across 4 sales.',
-        toolCalls: [{ name: 'get_revenue_today', input: {}, output: { revenue: 12000 } }],
+        toolCalls: [
+          { name: 'get_revenue_today', input: {}, output: { revenue: 12000 } },
+        ],
       },
     });
 
@@ -105,7 +120,12 @@ describe('AssistantHistoryService (unified Chat History)', () => {
         userId,
         question: 'How do I take a sale on credit?',
         answer: 'Attach a customer, then choose Credit as the payment method.',
-        sources: [{ title: 'Taking a sale on credit', url: '/help/credit-ledger-basics' }],
+        sources: [
+          {
+            title: 'Taking a sale on credit',
+            url: '/help/credit-ledger-basics',
+          },
+        ],
         createdAt: new Date(Date.now() + 2000),
       },
     });
@@ -157,7 +177,12 @@ describe('AssistantHistoryService (unified Chat History)', () => {
       },
     });
 
-    const detail = await service.getDetail(businessId, userId, 'help', helpQuery.id);
+    const detail = await service.getDetail(
+      businessId,
+      userId,
+      'help',
+      helpQuery.id,
+    );
     expect(detail).toMatchObject({ question: 'How do I run a stocktake?' });
 
     await expect(
@@ -169,7 +194,7 @@ describe('AssistantHistoryService (unified Chat History)', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('delete removes only the real record for that kind, never another user\'s', async () => {
+  it("delete removes only the real record for that kind, never another user's", async () => {
     const voiceDraft = await tenantPrisma.client.voiceCommandDraft.create({
       data: {
         businessId,

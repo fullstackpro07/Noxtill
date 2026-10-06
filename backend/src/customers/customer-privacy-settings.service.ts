@@ -18,9 +18,10 @@ export class CustomerPrivacySettingsService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
   async get(businessId: string) {
-    const existing = await this.tenantPrisma.client.customerPrivacySettings.findUnique({
-      where: { businessId },
-    });
+    const existing =
+      await this.tenantPrisma.client.customerPrivacySettings.findUnique({
+        where: { businessId },
+      });
     return existing ?? { businessId, ...DEFAULTS };
   }
 

@@ -4,7 +4,13 @@ import { PrismaService } from '../prisma/prisma.service';
 /** Idempotent baseline help content (BE-073) so the RAG pipeline has real passages to retrieve from.
  * `steps` breaks each article's own `body` into a scannable, numbered list for the Help Assistant
  * drawer — every step restates something the body already says, never a new claim. */
-const ARTICLES: { slug: string; title: string; body: string; url: string; steps: string[] }[] = [
+const ARTICLES: {
+  slug: string;
+  title: string;
+  body: string;
+  url: string;
+  steps: string[];
+}[] = [
   {
     slug: 'bookings-availability',
     title: 'How booking availability is calculated',
@@ -36,7 +42,7 @@ const ARTICLES: { slug: string; title: string; body: string; url: string; steps:
       'with the customer at any time.',
     url: '/help/credit-ledger-basics',
     steps: [
-      "Every credit sale and payment recorded against a customer updates their running balance",
+      'Every credit sale and payment recorded against a customer updates their running balance',
       'Recording a payment immediately reduces that balance',
       'Send a reminder to one customer, or to every debtor at once, from the Credit screen',
       'A customer who has opted out of messages never receives a reminder',

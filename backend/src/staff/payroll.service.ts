@@ -156,7 +156,8 @@ export class PayrollService {
         hourlyRate,
         overtimeRateMultiplier,
       );
-      const otherAdjustments = lineItemTotalByStaffId.get(c.businessUserId) ?? 0;
+      const otherAdjustments =
+        lineItemTotalByStaffId.get(c.businessUserId) ?? 0;
 
       rows.push({
         businessUserId: c.businessUserId,

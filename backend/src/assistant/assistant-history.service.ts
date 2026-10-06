@@ -2,7 +2,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssistantService } from './assistant.service';
-import { HISTORY_KINDS, HistoryKind, TOOL_TOPIC, VOICE_TOPIC } from './assistant-history.constants';
+import {
+  HISTORY_KINDS,
+  HistoryKind,
+  TOOL_TOPIC,
+  VOICE_TOPIC,
+} from './assistant-history.constants';
 
 export interface HistoryRow {
   id: string;
@@ -70,7 +75,9 @@ export class AssistantHistoryService {
       const firstToolCall = c.messages
         .filter((m) => m.role === 'assistant' && m.toolCalls)
         .flatMap((m) => (m.toolCalls as unknown as ToolCallShape[]) ?? [])[0];
-      const topic = firstToolCall ? (TOOL_TOPIC[firstToolCall.name] ?? 'General') : 'General';
+      const topic = firstToolCall
+        ? (TOOL_TOPIC[firstToolCall.name] ?? 'General')
+        : 'General';
       return {
         id: c.id,
         kind: 'business',
@@ -83,7 +90,8 @@ export class AssistantHistoryService {
     });
 
     const helpRows: HistoryRow[] = helpQueries.map((h) => {
-      const sources = (h.sources as unknown as { title: string; url: string }[]) ?? [];
+      const sources =
+        (h.sources as unknown as { title: string; url: string }[]) ?? [];
       return {
         id: h.id,
         kind: 'help',
@@ -110,7 +118,12 @@ export class AssistantHistoryService {
     );
   }
 
-  async getDetail(businessId: string, userId: string, kind: string, id: string) {
+  async getDetail(
+    businessId: string,
+    userId: string,
+    kind: string,
+    id: string,
+  ) {
     if (!isHistoryKind(kind)) {
       throw new NotFoundException('Unknown history entry type');
     }
@@ -127,7 +140,11 @@ export class AssistantHistoryService {
     const draft = await this.tenantPrisma.client.voiceCommandDraft.findUnique({
       where: { id },
     });
-    if (!draft || draft.businessId !== businessId || draft.createdByUserId !== userId) {
+    if (
+      !draft ||
+      draft.businessId !== businessId ||
+      draft.createdByUserId !== userId
+    ) {
       throw new NotFoundException('History entry not found');
     }
     return draft;
@@ -151,7 +168,11 @@ export class AssistantHistoryService {
     const draft = await this.tenantPrisma.client.voiceCommandDraft.findUnique({
       where: { id },
     });
-    if (!draft || draft.businessId !== businessId || draft.createdByUserId !== userId) {
+    if (
+      !draft ||
+      draft.businessId !== businessId ||
+      draft.createdByUserId !== userId
+    ) {
       throw new NotFoundException('History entry not found');
     }
     await this.tenantPrisma.client.voiceCommandDraft.delete({ where: { id } });

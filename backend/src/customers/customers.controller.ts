@@ -58,7 +58,9 @@ export class CustomersController {
     if (user.role === 'staff' && dto.status && dto.status !== 'active') {
       const settings = await this.privacySettings.get(user.businessId);
       if (!settings.staffCanArchive) {
-        throw new ForbiddenException('Changing customer status is not enabled for your role');
+        throw new ForbiddenException(
+          'Changing customer status is not enabled for your role',
+        );
       }
     }
     return this.customersService.update(user.businessId, id, dto);
@@ -81,7 +83,9 @@ export class CustomersController {
     if (user.role === 'staff') {
       const settings = await this.privacySettings.get(user.businessId);
       if (!settings.staffCanMerge) {
-        throw new ForbiddenException('Merging customers is not enabled for your role');
+        throw new ForbiddenException(
+          'Merging customers is not enabled for your role',
+        );
       }
     }
     return this.customersService.merge(id, dto.duplicateCustomerId);

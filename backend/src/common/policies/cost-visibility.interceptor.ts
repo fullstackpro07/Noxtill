@@ -1,4 +1,9 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import {
+  CallHandler,
+  ExecutionContext,
+  Injectable,
+  NestInterceptor,
+} from '@nestjs/common';
 import { Observable, mergeMap } from 'rxjs';
 import { PoliciesService } from './policies.service';
 
@@ -6,7 +11,11 @@ import { PoliciesService } from './policies.service';
 const COST_KEYS = new Set(['costPrice', 'unitCost', 'stockValue', 'cost']);
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype;
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    Object.getPrototypeOf(v) === Object.prototype
+  );
 }
 
 export function stripCost(value: unknown): unknown {
@@ -28,7 +37,16 @@ export function stripCost(value: unknown): unknown {
 export class CostVisibilityInterceptor implements NestInterceptor {
   constructor(private readonly policies: PoliciesService) {}
 
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    return next.handle().pipe(mergeMap(async (data: unknown) => ((await this.policies.costHidden()) ? stripCost(data) : data)));
+  intercept(
+    _context: ExecutionContext,
+    next: CallHandler,
+  ): Observable<unknown> {
+    return next
+      .handle()
+      .pipe(
+        mergeMap(async (data: unknown) =>
+          (await this.policies.costHidden()) ? stripCost(data) : data,
+        ),
+      );
   }
 }

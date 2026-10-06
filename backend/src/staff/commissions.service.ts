@@ -2,7 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AppointmentStatus, OrderStatus, StaffAdvanceStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  OrderStatus,
+  StaffAdvanceStatus,
+} from '@prisma/client';
 
 interface PercentRule {
   type: 'percent';
@@ -69,9 +73,9 @@ export class CommissionsService {
       include: { user: true },
     });
 
-    const payments = await this.tenantPrisma.client.commissionPayment.findMany(
-      { where: { month } },
-    );
+    const payments = await this.tenantPrisma.client.commissionPayment.findMany({
+      where: { month },
+    });
     const paidStaffIds = new Set(payments.map((p) => p.staffUserId));
 
     return Promise.all(

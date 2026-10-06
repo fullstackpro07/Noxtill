@@ -267,7 +267,10 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
     async execute({ tenantPrisma }, input) {
       const date = typeof input.date === 'string' ? input.date : '';
       const dayStart = new Date(`${date}T00:00:00`);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(dayStart.getTime())) {
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        Number.isNaN(dayStart.getTime())
+      ) {
         return { error: 'date must be a valid YYYY-MM-DD day' };
       }
       const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);

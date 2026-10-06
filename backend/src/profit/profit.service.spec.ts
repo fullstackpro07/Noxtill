@@ -173,7 +173,11 @@ describe('ProfitService (BE-036/BE-037)', () => {
   });
 
   it('computes per-product profit and margin, flagging low-margin/top performers', async () => {
-    const { products } = await profitService.byProduct(businessId, undefined, 90);
+    const { products } = await profitService.byProduct(
+      businessId,
+      undefined,
+      90,
+    );
     const row = products.find((p) => p.productId === productId);
 
     expect(row).toBeDefined();

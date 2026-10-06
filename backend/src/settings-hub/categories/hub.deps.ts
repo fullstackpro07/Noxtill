@@ -10,7 +10,14 @@ import { HubCtx } from '../hub.core';
 export interface QueueSnapshot {
   configured: boolean;
   reachable: boolean;
-  queues: { name: string; waiting: number; active: number; completed: number; failed: number; delayed: number }[];
+  queues: {
+    name: string;
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+  }[];
 }
 
 export interface HubDeps {
@@ -26,7 +33,9 @@ export interface HubDeps {
 export const asJson = (v: unknown) => v as Prisma.InputJsonValue;
 
 export async function business(deps: HubDeps, ctx: HubCtx) {
-  return deps.prisma.business.findUniqueOrThrow({ where: { id: ctx.businessId } });
+  return deps.prisma.business.findUniqueOrThrow({
+    where: { id: ctx.businessId },
+  });
 }
 
 export async function updateBusiness(
@@ -37,15 +46,20 @@ export async function updateBusiness(
   await deps.prisma.business.update({ where: { id: ctx.businessId }, data });
 }
 
-export const monthStart = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+export const monthStart = (now: Date) =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
 export function timezones(): string[] {
-  const fn = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
+  const fn = (
+    Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
+  ).supportedValuesOf;
   return fn ? fn('timeZone') : ['UTC'];
 }
 
 export function currencies(): string[] {
-  const fn = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
+  const fn = (
+    Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
+  ).supportedValuesOf;
   return fn ? fn('currency') : ['USD'];
 }
 
@@ -58,4 +72,12 @@ export const LANGUAGES = [
   { value: 'hi', label: 'Hindi' },
 ];
 
-export const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+export const WEEKDAY_KEYS = [
+  'mon',
+  'tue',
+  'wed',
+  'thu',
+  'fri',
+  'sat',
+  'sun',
+] as const;

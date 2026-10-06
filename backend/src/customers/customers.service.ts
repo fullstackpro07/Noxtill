@@ -60,7 +60,9 @@ export class CustomersService {
     }
 
     if (dto.tags?.length) {
-      await Promise.all(dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)));
+      await Promise.all(
+        dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)),
+      );
     }
 
     return customer;
@@ -112,12 +114,15 @@ export class CustomersService {
         name: dto.name,
         address: dto.address,
         status: dto.status,
-        customFieldValues: dto.customFieldValues as Prisma.InputJsonValue | undefined,
+        customFieldValues: dto.customFieldValues as
+          Prisma.InputJsonValue | undefined,
       },
     });
 
     if (dto.tags?.length) {
-      await Promise.all(dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)));
+      await Promise.all(
+        dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)),
+      );
     }
 
     return updated;

@@ -168,11 +168,16 @@ describe('AttendanceService (BE-057)', () => {
       expect(corrected.checkOut?.toISOString()).toBe(correctedCheckOut);
 
       const auditRow = await prisma.auditLog.findFirst({
-        where: { businessId, entity: 'attendance', entityId: original.id, action: 'attendance.correct' },
+        where: {
+          businessId,
+          entity: 'attendance',
+          entityId: original.id,
+          action: 'attendance.correct',
+        },
       });
-      expect(
-        (auditRow?.before as { checkOut: string } | null)?.checkOut,
-      ).toBe('2026-08-21T17:00:00.000Z');
+      expect((auditRow?.before as { checkOut: string } | null)?.checkOut).toBe(
+        '2026-08-21T17:00:00.000Z',
+      );
     });
 
     it('correct() 404s for an entry that does not exist', async () => {

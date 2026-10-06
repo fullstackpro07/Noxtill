@@ -58,12 +58,16 @@ export class SocialAnalyticsService {
     since.setUTCHours(0, 0, 0, 0);
     since.setUTCDate(since.getUTCDate() - (days - 1));
 
-    const snapshots = await this.tenantPrisma.client.socialAnalyticsSnapshot.findMany({
-      where: { businessId, date: { gte: since } },
-      orderBy: { date: 'asc' },
-    });
+    const snapshots =
+      await this.tenantPrisma.client.socialAnalyticsSnapshot.findMany({
+        where: { businessId, date: { gte: since } },
+        orderBy: { date: 'asc' },
+      });
 
-    const byDay = new Map<string, { reach: number; engagement: number; followers: number }>();
+    const byDay = new Map<
+      string,
+      { reach: number; engagement: number; followers: number }
+    >();
     for (const s of snapshots) {
       const key = s.date.toISOString().slice(0, 10);
       const row = byDay.get(key) ?? { reach: 0, engagement: 0, followers: 0 };
@@ -73,13 +77,23 @@ export class SocialAnalyticsService {
       byDay.set(key, row);
     }
 
-    const points: { date: string; reach: number; engagement: number; followers: number }[] = [];
+    const points: {
+      date: string;
+      reach: number;
+      engagement: number;
+      followers: number;
+    }[] = [];
     for (let i = 0; i < days; i++) {
       const d = new Date(since);
       d.setUTCDate(since.getUTCDate() + i);
       const key = d.toISOString().slice(0, 10);
       const row = byDay.get(key);
-      points.push({ date: key, reach: row?.reach ?? 0, engagement: row?.engagement ?? 0, followers: row?.followers ?? 0 });
+      points.push({
+        date: key,
+        reach: row?.reach ?? 0,
+        engagement: row?.engagement ?? 0,
+        followers: row?.followers ?? 0,
+      });
     }
     return points;
   }

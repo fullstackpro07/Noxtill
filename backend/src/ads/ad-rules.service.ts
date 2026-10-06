@@ -31,7 +31,10 @@ export class AdRulesService {
 
   private async autoPauseRule(businessId: string): Promise<AdRuleDto> {
     const s = await this.settings.get(businessId);
-    const threshold = s.autoPauseCostPerResult != null ? Number(s.autoPauseCostPerResult) : null;
+    const threshold =
+      s.autoPauseCostPerResult != null
+        ? Number(s.autoPauseCostPerResult)
+        : null;
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const fired = await this.tenantPrisma.client.auditLog.count({
       where: { businessId, action: 'ad.auto_pause', createdAt: { gte: since } },
@@ -40,7 +43,10 @@ export class AdRulesService {
     return {
       id: 'auto-pause-cost-per-result',
       name: 'Pause on runaway cost per result',
-      when: threshold != null ? `Cost per result above Rs. ${threshold.toLocaleString('en-US')}` : 'Set a threshold to turn this on',
+      when:
+        threshold != null
+          ? `Cost per result above Rs. ${threshold.toLocaleString('en-US')}`
+          : 'Set a threshold to turn this on',
       then: 'Pause the campaign',
       guard: 'Checked hourly against each campaign’s own real stats',
       fired,
@@ -53,7 +59,11 @@ export class AdRulesService {
     return {
       kpis: [
         { label: 'Active rules', value: rule.on ? '1' : '0', color: '#0F172A' },
-        { label: 'Fired this week', value: String(rule.fired), color: '#0F172A' },
+        {
+          label: 'Fired this week',
+          value: String(rule.fired),
+          color: '#0F172A',
+        },
       ],
       rules: [rule],
       // No real suggestion/anomaly-detection engine exists — never fabricated.
@@ -68,8 +78,12 @@ export class AdRulesService {
     }
     const current = await this.settings.get(businessId);
     const turningOn = current.autoPauseCostPerResult == null;
-    const nextThreshold = turningOn ? (Number(current.defaultDailyBudgetCap) || 3000) : null;
-    await this.settings.update(businessId, { autoPauseCostPerResult: nextThreshold });
+    const nextThreshold = turningOn
+      ? Number(current.defaultDailyBudgetCap) || 3000
+      : null;
+    await this.settings.update(businessId, {
+      autoPauseCostPerResult: nextThreshold,
+    });
     return { success: true, rule: await this.autoPauseRule(businessId) };
   }
 }

@@ -65,7 +65,10 @@ export class AdAutoPauseProcessor extends WorkerHost {
             action: 'ad.auto_pause',
             entity: 'AdCampaign',
             entityId: campaign.id,
-            after: { costPerResult: Math.round(costPerResult * 100) / 100, threshold } as never,
+            after: {
+              costPerResult: Math.round(costPerResult * 100) / 100,
+              threshold,
+            } as never,
           },
         });
         this.logger.log(

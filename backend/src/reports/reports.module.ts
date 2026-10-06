@@ -12,9 +12,21 @@ import { AiModule } from '../ai/ai.module';
 import { StorageModule } from '../common/storage/storage.module';
 
 @Module({
-  imports: [MessagingModule, StaffModule, CreditModule, NotificationsModule, AiModule, StorageModule],
+  imports: [
+    MessagingModule,
+    StaffModule,
+    CreditModule,
+    NotificationsModule,
+    AiModule,
+    StorageModule,
+  ],
   controllers: [ReportsController],
-  providers: [ReportsService, ReportBuildersService, ReportRunsService, TaxReportsService],
+  providers: [
+    ReportsService,
+    ReportBuildersService,
+    ReportRunsService,
+    TaxReportsService,
+  ],
   exports: [ReportsService, ReportRunsService, TaxReportsService],
 })
 export class ReportsModule {}

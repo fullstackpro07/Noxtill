@@ -27,7 +27,9 @@ describe('ASSISTANT_TOOLS registry', () => {
 
 describe('assistant tools that query the tenant DB directly', () => {
   let prisma: PrismaService;
-  let ctx: Parameters<NonNullable<ReturnType<typeof findAssistantTool>>['execute']>[0];
+  let ctx: Parameters<
+    NonNullable<ReturnType<typeof findAssistantTool>>['execute']
+  >[0];
   let businessId: string;
   let otherBusinessId: string;
 
@@ -35,7 +37,10 @@ describe('assistant tools that query the tenant DB directly', () => {
     prisma = new PrismaService();
     await prisma.$connect();
     const cls = new FakeClsService();
-    const tenantPrisma = new TenantPrismaService(prisma, cls as unknown as ClsService);
+    const tenantPrisma = new TenantPrismaService(
+      prisma,
+      cls as unknown as ClsService,
+    );
 
     const business = await prisma.business.create({
       data: { name: 'Tools Test Biz', slug: `tools-test-${Date.now()}` },
@@ -47,16 +52,27 @@ describe('assistant tools that query the tenant DB directly', () => {
     });
     otherBusinessId = other.id;
 
-    ctx = { businessId, tenantPrisma, prisma } as typeof ctx;
+    ctx = { businessId, tenantPrisma, prisma };
 
     const spends = [500, 100, 900, 300, 700, 50];
     for (const [i, spend] of spends.entries()) {
       await prisma.customer.create({
-        data: { businessId, phone: `+1555${Date.now()}${i}`, name: `Customer ${spend}`, lifetimeSpend: spend, visitCount: i + 1 },
+        data: {
+          businessId,
+          phone: `+1555${Date.now()}${i}`,
+          name: `Customer ${spend}`,
+          lifetimeSpend: spend,
+          visitCount: i + 1,
+        },
       });
     }
     await prisma.customer.create({
-      data: { businessId: otherBusinessId, phone: `+1666${Date.now()}`, name: 'Other Tenant Whale', lifetimeSpend: 99999 },
+      data: {
+        businessId: otherBusinessId,
+        phone: `+1666${Date.now()}`,
+        name: 'Other Tenant Whale',
+        lifetimeSpend: 99999,
+      },
     });
 
     const service = await prisma.product.create({
@@ -67,14 +83,47 @@ describe('assistant tools that query the tenant DB directly', () => {
         { businessId, name: 'Bread', stockQty: 2, lowStockThreshold: 5 },
         { businessId, name: 'Milk', stockQty: 0, lowStockThreshold: 5 },
         { businessId, name: 'Rice', stockQty: 50, lowStockThreshold: 5 },
-        { businessId, name: 'Retired', stockQty: 0, lowStockThreshold: 5, active: false },
+        {
+          businessId,
+          name: 'Retired',
+          stockQty: 0,
+          lowStockThreshold: 5,
+          active: false,
+        },
       ],
     });
-    const debtors = await prisma.customer.findMany({ where: { businessId }, take: 2, orderBy: { name: 'asc' } });
-    await prisma.creditEntry.create({ data: { businessId, customerId: debtors[0].id, kind: 'credit', amount: 80 } });
-    await prisma.creditEntry.create({ data: { businessId, customerId: debtors[1].id, kind: 'credit', amount: 200 } });
-    await prisma.creditEntry.create({ data: { businessId, customerId: debtors[1].id, kind: 'payment', amount: 50 } });
-    const customer = await prisma.customer.findFirstOrThrow({ where: { businessId } });
+    const debtors = await prisma.customer.findMany({
+      where: { businessId },
+      take: 2,
+      orderBy: { name: 'asc' },
+    });
+    await prisma.creditEntry.create({
+      data: {
+        businessId,
+        customerId: debtors[0].id,
+        kind: 'credit',
+        amount: 80,
+      },
+    });
+    await prisma.creditEntry.create({
+      data: {
+        businessId,
+        customerId: debtors[1].id,
+        kind: 'credit',
+        amount: 200,
+      },
+    });
+    await prisma.creditEntry.create({
+      data: {
+        businessId,
+        customerId: debtors[1].id,
+        kind: 'payment',
+        amount: 50,
+      },
+    });
+    const customer = await prisma.customer.findFirstOrThrow({
+      where: { businessId },
+    });
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -111,19 +160,29 @@ describe('assistant tools that query the tenant DB directly', () => {
     await prisma.$disconnect();
   });
 
-  it('get_top_customers returns this tenant\'s five biggest spenders, highest first, never another tenant\'s', async () => {
-    const result = (await findAssistantTool('get_top_customers')!.execute(ctx, {})) as {
+  it("get_top_customers returns this tenant's five biggest spenders, highest first, never another tenant's", async () => {
+    const result = (await findAssistantTool('get_top_customers')!.execute(
+      ctx,
+      {},
+    )) as {
       name: string;
       lifetimeSpend: number;
       visitCount: number;
     }[];
-    expect(result.map((c) => c.lifetimeSpend)).toEqual([900, 700, 500, 300, 100]);
+    expect(result.map((c) => c.lifetimeSpend)).toEqual([
+      900, 700, 500, 300, 100,
+    ]);
     expect(result.some((c) => c.name === 'Other Tenant Whale')).toBe(false);
   });
 
   it('get_low_stock_products lists only active products at/below threshold, emptiest first', async () => {
-    const result = (await findAssistantTool('get_low_stock_products')!.execute(ctx, {})) as { name: string; stockQty: number }[];
-    expect(result.map((p) => p.name)).toEqual(expect.arrayContaining(['Milk', 'Bread']));
+    const result = (await findAssistantTool('get_low_stock_products')!.execute(
+      ctx,
+      {},
+    )) as { name: string; stockQty: number }[];
+    expect(result.map((p) => p.name)).toEqual(
+      expect.arrayContaining(['Milk', 'Bread']),
+    );
     expect(result.find((p) => p.name === 'Milk')).toBeDefined();
     expect(result.map((p) => p.name)).not.toContain('Rice');
     expect(result.map((p) => p.name)).not.toContain('Retired');
@@ -132,7 +191,10 @@ describe('assistant tools that query the tenant DB directly', () => {
   });
 
   it('get_top_debtors returns real net balances (credit minus payments), largest first, this tenant only', async () => {
-    const result = (await findAssistantTool('get_top_debtors')!.execute(ctx, {})) as { name: string; balance: number }[];
+    const result = (await findAssistantTool('get_top_debtors')!.execute(
+      ctx,
+      {},
+    )) as { name: string; balance: number }[];
     expect(result.map((d) => d.balance)).toEqual([150, 80]);
   });
 
@@ -143,12 +205,18 @@ describe('assistant tools that query the tenant DB directly', () => {
     const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
     const d = String(tomorrow.getDate()).padStart(2, '0');
 
-    const result = await findAssistantTool('get_bookings_on_date')!.execute(ctx, { date: `${y}-${m}-${d}` });
+    const result = await findAssistantTool('get_bookings_on_date')!.execute(
+      ctx,
+      { date: `${y}-${m}-${d}` },
+    );
     expect(result).toEqual({ date: `${y}-${m}-${d}`, count: 2 });
   });
 
   it('get_bookings_on_date rejects a malformed date instead of guessing', async () => {
-    const result = await findAssistantTool('get_bookings_on_date')!.execute(ctx, { date: 'tomorrow' });
+    const result = await findAssistantTool('get_bookings_on_date')!.execute(
+      ctx,
+      { date: 'tomorrow' },
+    );
     expect(result).toEqual({ error: 'date must be a valid YYYY-MM-DD day' });
   });
 });

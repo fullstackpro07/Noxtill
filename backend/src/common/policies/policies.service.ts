@@ -4,9 +4,19 @@ import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppException } from '../filters/app.exception';
 import { CapabilitiesService } from '../capabilities/capabilities.service';
-import { CLS_KEY_BUSINESS_ID, CLS_KEY_ROLE, CLS_KEY_USER_ID } from '../tenancy/tenant.constants';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_ROLE,
+  CLS_KEY_USER_ID,
+} from '../tenancy/tenant.constants';
 import { CAPABILITIES } from '../capabilities/capabilities.constants';
-import { POLICY_DEFS, PolicyDef, PolicyKey, PolicyValue, isPolicyKey } from './policies.constants';
+import {
+  POLICY_DEFS,
+  PolicyDef,
+  PolicyKey,
+  PolicyValue,
+  isPolicyKey,
+} from './policies.constants';
 
 /** A business's policies with every default filled in. */
 export class ResolvedPolicies {
@@ -35,9 +45,15 @@ export class ResolvedPolicies {
 }
 
 /** Resolves a business row's policies without needing the injectable service. */
-export function resolvePolicies(business: { policies?: unknown } | null | undefined): ResolvedPolicies {
+export function resolvePolicies(
+  business: { policies?: unknown } | null | undefined,
+): ResolvedPolicies {
   const raw = business?.policies;
-  return new ResolvedPolicies(raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {});
+  return new ResolvedPolicies(
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {},
+  );
 }
 
 @Injectable()
@@ -48,12 +64,17 @@ export class PoliciesService {
     private readonly capabilities: CapabilitiesService,
   ) {}
 
-  resolve(business: { policies?: unknown } | null | undefined): ResolvedPolicies {
+  resolve(
+    business: { policies?: unknown } | null | undefined,
+  ): ResolvedPolicies {
     return resolvePolicies(business);
   }
 
   async forBusiness(businessId: string): Promise<ResolvedPolicies> {
-    const b = await this.prisma.business.findUnique({ where: { id: businessId }, select: { policies: true } });
+    const b = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { policies: true },
+    });
     return this.resolve(b);
   }
 
@@ -71,9 +92,15 @@ export class PoliciesService {
 
   /** Validates and returns the canonical value for `key`, or throws a 400 saying why not. */
   normalize(key: string, value: unknown): PolicyValue {
-    if (!isPolicyKey(key)) throw new AppException('POLICY_UNKNOWN', `Unknown policy: ${key}`, HttpStatus.BAD_REQUEST);
+    if (!isPolicyKey(key))
+      throw new AppException(
+        'POLICY_UNKNOWN',
+        `Unknown policy: ${key}`,
+        HttpStatus.BAD_REQUEST,
+      );
     const def = POLICY_DEFS[key] as PolicyDef;
-    const bad = (m: string) => new AppException('SETTING_INVALID', m, HttpStatus.BAD_REQUEST);
+    const bad = (m: string) =>
+      new AppException('SETTING_INVALID', m, HttpStatus.BAD_REQUEST);
     if (def.kind === 'boolean') {
       if (typeof value === 'boolean') return value;
       if (value === 'true' || value === 'false') return value === 'true';
@@ -81,7 +108,8 @@ export class PoliciesService {
     }
     if (def.kind === 'time') {
       if (value === null || value === '') return null;
-      if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw bad('Enter a time like 21:00.');
+      if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
+        throw bad('Enter a time like 21:00.');
       return value;
     }
     if (value === null || value === '') {
@@ -91,17 +119,33 @@ export class PoliciesService {
     const n = Number(value);
     if (!Number.isFinite(n)) throw bad('Enter a number.');
     if (def.integer && !Number.isInteger(n)) throw bad('Enter a whole number.');
-    if (def.min !== undefined && n < def.min) throw bad(`The minimum is ${def.min}.`);
-    if (def.max !== undefined && n > def.max) throw bad(`The maximum is ${def.max}.`);
+    if (def.min !== undefined && n < def.min)
+      throw bad(`The minimum is ${def.min}.`);
+    if (def.max !== undefined && n > def.max)
+      throw bad(`The maximum is ${def.max}.`);
     return n;
   }
 
-  async set(businessId: string, key: string, value: unknown): Promise<PolicyValue> {
+  async set(
+    businessId: string,
+    key: string,
+    value: unknown,
+  ): Promise<PolicyValue> {
     const canonical = this.normalize(key, value);
-    const b = await this.prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { policies: true } });
-    const current = (b.policies && typeof b.policies === 'object' && !Array.isArray(b.policies) ? b.policies : {}) as Record<string, unknown>;
+    const b = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { policies: true },
+    });
+    const current = (
+      b.policies && typeof b.policies === 'object' && !Array.isArray(b.policies)
+        ? b.policies
+        : {}
+    ) as Record<string, unknown>;
     const next = { ...current, [key]: canonical };
-    await this.prisma.business.update({ where: { id: businessId }, data: { policies: next as Prisma.InputJsonValue } });
+    await this.prisma.business.update({
+      where: { id: businessId },
+      data: { policies: next as Prisma.InputJsonValue },
+    });
     return canonical;
   }
 
@@ -112,12 +156,25 @@ export class PoliciesService {
     const userId = this.cls.get<string | undefined>(CLS_KEY_USER_ID);
     const activeId = this.cls.get<string | undefined>(CLS_KEY_BUSINESS_ID);
     if (!userId || !activeId) return false;
-    const active = await this.prisma.business.findUnique({ where: { id: activeId }, select: { parentId: true } });
+    const active = await this.prisma.business.findUnique({
+      where: { id: activeId },
+      select: { parentId: true },
+    });
     const membership = await this.prisma.businessUser.findFirst({
-      where: { userId, active: true, businessId: { in: [activeId, ...(active?.parentId ? [active.parentId] : [])] } },
+      where: {
+        userId,
+        active: true,
+        businessId: {
+          in: [activeId, ...(active?.parentId ? [active.parentId] : [])],
+        },
+      },
     });
     if (!membership) return false;
-    const caps = await this.capabilities.resolve({ businessId: membership.businessId, role: membership.role, customRoleId: membership.customRoleId });
+    const caps = await this.capabilities.resolve({
+      businessId: membership.businessId,
+      role: membership.role,
+      customRoleId: membership.customRoleId,
+    });
     return (caps as string[]).includes(capability);
   }
 

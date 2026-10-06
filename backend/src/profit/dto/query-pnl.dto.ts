@@ -1,6 +1,12 @@
 import { IsIn, IsOptional, IsString, Matches } from 'class-validator';
 
-export const PNL_PERIODS = ['today', 'week', 'month', 'quarter', 'year'] as const;
+export const PNL_PERIODS = [
+  'today',
+  'week',
+  'month',
+  'quarter',
+  'year',
+] as const;
 export type PnlPeriod = (typeof PNL_PERIODS)[number];
 
 export class QueryPnlDto {

@@ -39,7 +39,11 @@ describe('ProductsService (BE-023 + UPD-BE-087/088)', () => {
     service = new ProductsService(
       tenantPrisma,
       s3 as unknown as S3Service,
-      new PoliciesService(prisma, cls as unknown as ClsService, {} as unknown as CapabilitiesService),
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        {} as unknown as CapabilitiesService,
+      ),
     );
 
     const business = await prisma.business.create({

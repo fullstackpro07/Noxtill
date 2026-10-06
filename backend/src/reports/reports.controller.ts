@@ -41,7 +41,10 @@ export class ReportsController {
 
   /** The Reports library: every report with its latest run for the period, plus the KPI strip. */
   @Get('library')
-  library(@CurrentUser() user: AuthenticatedUser, @Query('period') period?: string) {
+  library(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('period') period?: string,
+  ) {
     if (period !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
       throw new BadRequestException('period must be in YYYY-MM format');
     }
@@ -49,7 +52,10 @@ export class ReportsController {
   }
 
   @Put('favorites/:kind')
-  toggleFavorite(@CurrentUser() user: AuthenticatedUser, @Param('kind') kind: string) {
+  toggleFavorite(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('kind') kind: string,
+  ) {
     return this.runs.toggleFavorite(this.active(user), user.sub, kind);
   }
 
@@ -63,27 +69,43 @@ export class ReportsController {
   /** UPD-BE-117 — the real structured summary behind the Tax Reports screen. */
   @RequireCapability(CAPABILITIES.PROFIT_VIEW)
   @Get('tax')
-  taxSummary(@CurrentUser() user: AuthenticatedUser, @Query('period') period?: string) {
+  taxSummary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('period') period?: string,
+  ) {
     return this.tax.summary(this.active(user), period);
   }
 
   @RequireCapability(CAPABILITIES.PROFIT_VIEW)
   @Get('tax/excel')
-  taxExcel(@CurrentUser() user: AuthenticatedUser, @Query('period') period?: string) {
+  taxExcel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('period') period?: string,
+  ) {
     return this.tax.excel(this.active(user), period);
   }
 
   @RequireCapability(CAPABILITIES.PROFIT_VIEW)
   @Put('tax/settings')
-  taxSettings(@CurrentUser() user: AuthenticatedUser, @Body() dto: TaxSettingsDto) {
-    if (user.role !== Role.owner) throw new ForbiddenException('Only the owner can change the filing day.');
+  taxSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: TaxSettingsDto,
+  ) {
+    if (user.role !== Role.owner)
+      throw new ForbiddenException('Only the owner can change the filing day.');
     return this.tax.setFilingDay(this.active(user), dto.filingDay);
   }
 
   @RequireCapability(CAPABILITIES.PROFIT_VIEW)
   @Post('tax/filings')
-  recordFiling(@CurrentUser() user: AuthenticatedUser, @Body() dto: RecordFilingDto) {
-    if (user.role !== Role.owner) throw new ForbiddenException('Only the owner can record a return as filed.');
+  recordFiling(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RecordFilingDto,
+  ) {
+    if (user.role !== Role.owner)
+      throw new ForbiddenException(
+        'Only the owner can record a return as filed.',
+      );
     return this.tax.recordFiling(this.active(user), user.sub, dto);
   }
 
@@ -116,23 +138,51 @@ export class ReportsController {
   }
 
   @Post('runs/:id/send')
-  sendRun(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: SendReportDto) {
-    return this.runs.send(this.active(user), { userId: user.sub, role: user.role }, id, dto);
+  sendRun(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SendReportDto,
+  ) {
+    return this.runs.send(
+      this.active(user),
+      { userId: user.sub, role: user.role },
+      id,
+      dto,
+    );
   }
 
   // ---- Generate ---------------------------------------------------------------------
 
   @Post(':kind')
-  generate(@CurrentUser() user: AuthenticatedUser, @Param('kind') kind: string, @Body() dto: GenerateReportDto) {
-    if (!isReportKind(kind)) throw new BadRequestException(`Unknown report kind: ${kind}`);
+  generate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('kind') kind: string,
+    @Body() dto: GenerateReportDto,
+  ) {
+    if (!isReportKind(kind))
+      throw new BadRequestException(`Unknown report kind: ${kind}`);
     return this.reports.generate(kind, dto.month, user, dto.trigger);
   }
 
   /** Generate, then send the link to the caller's own contact (the original one-click "Send"). */
   @Post(':kind/send')
-  async send(@CurrentUser() user: AuthenticatedUser, @Param('kind') kind: string, @Body() dto: GenerateReportDto) {
-    if (!isReportKind(kind)) throw new BadRequestException(`Unknown report kind: ${kind}`);
-    const { run } = await this.reports.generate(kind, dto.month, user, dto.trigger);
-    return this.runs.send(this.active(user), { userId: user.sub, role: user.role }, run.id);
+  async send(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('kind') kind: string,
+    @Body() dto: GenerateReportDto,
+  ) {
+    if (!isReportKind(kind))
+      throw new BadRequestException(`Unknown report kind: ${kind}`);
+    const { run } = await this.reports.generate(
+      kind,
+      dto.month,
+      user,
+      dto.trigger,
+    );
+    return this.runs.send(
+      this.active(user),
+      { userId: user.sub, role: user.role },
+      run.id,
+    );
   }
 }

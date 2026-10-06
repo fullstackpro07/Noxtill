@@ -35,14 +35,19 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   inbox_flagged: 'Inbox: a conversation is past its reply target',
   inbox_reassigned: 'Inbox: a conversation was handed to or from you',
   brain_watch_triggered: 'Business Brain: something you are watching moved',
-  project_update: 'Projects & Tasks: assignments, mentions, approvals and deadlines',
-  helpdesk_update: 'Helpdesk: new tickets, assignments, customer replies, SLA and escalations',
+  project_update:
+    'Projects & Tasks: assignments, mentions, approvals and deadlines',
+  helpdesk_update:
+    'Helpdesk: new tickets, assignments, customer replies, SLA and escalations',
 };
 
 export type NotificationPriority = 'low' | 'normal' | 'high';
 
 /** Fixed per event — set on the notification when it is created, and shown in the bell and Settings. */
-export const NOTIFICATION_EVENT_PRIORITY: Record<NotificationEvent, NotificationPriority> = {
+export const NOTIFICATION_EVENT_PRIORITY: Record<
+  NotificationEvent,
+  NotificationPriority
+> = {
   export_ready: 'normal',
   scheduled_delivery_ready: 'normal',
   schedule_updated: 'high',

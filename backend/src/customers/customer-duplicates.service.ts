@@ -49,15 +49,22 @@ export class CustomerDuplicatesService {
     const dismissedKeys = new Set(
       dismissals.map((d) => `${d.customerIdLow}:${d.customerIdHigh}`),
     );
-    const pairs = this.findPairs(customers, settings.matchOn as CustomerMatchOn);
+    const pairs = this.findPairs(customers, settings.matchOn);
     return pairs.filter((p) => {
       const [low, high] = sortedPair(p.a.id, p.b.id);
       return !dismissedKeys.has(`${low}:${high}`);
     });
   }
 
-  async dismiss(businessId: string, userId: string, dto: DismissCustomerDuplicateDto) {
-    const [customerIdLow, customerIdHigh] = sortedPair(dto.customerIdA, dto.customerIdB);
+  async dismiss(
+    businessId: string,
+    userId: string,
+    dto: DismissCustomerDuplicateDto,
+  ) {
+    const [customerIdLow, customerIdHigh] = sortedPair(
+      dto.customerIdA,
+      dto.customerIdB,
+    );
     return this.tenantPrisma.client.customerDuplicateDismissal.upsert({
       where: {
         businessId_customerIdLow_customerIdHigh: {
@@ -77,11 +84,20 @@ export class CustomerDuplicatesService {
   }
 
   private findPairs(
-    customers: { id: string; name: string; phone: string; email: string | null }[],
+    customers: {
+      id: string;
+      name: string;
+      phone: string;
+      email: string | null;
+    }[],
     matchOn: CustomerMatchOn,
   ): DuplicatePair[] {
     const pairs: DuplicatePair[] = [];
-    const toCandidate = (c: { id: string; name: string; phone: string }): DuplicateCandidate => ({
+    const toCandidate = (c: {
+      id: string;
+      name: string;
+      phone: string;
+    }): DuplicateCandidate => ({
       id: c.id,
       name: c.name,
       phone: c.phone,
@@ -96,7 +112,11 @@ export class CustomerDuplicatesService {
       }
       for (const group of byEmail.values()) {
         for (let i = 1; i < group.length; i++) {
-          pairs.push({ a: toCandidate(group[0]), b: toCandidate(group[i]), reason: 'Same email address' });
+          pairs.push({
+            a: toCandidate(group[0]),
+            b: toCandidate(group[i]),
+            reason: 'Same email address',
+          });
         }
       }
     }
@@ -113,9 +133,14 @@ export class CustomerDuplicatesService {
     for (const group of byPhone.values()) {
       for (let i = 1; i < group.length; i++) {
         const nameMatches =
-          group[0].name.trim().toLowerCase() === group[i].name.trim().toLowerCase();
+          group[0].name.trim().toLowerCase() ===
+          group[i].name.trim().toLowerCase();
         if (matchOn === 'name_and_phone' && !nameMatches) continue;
-        pairs.push({ a: toCandidate(group[0]), b: toCandidate(group[i]), reason: 'Same phone number' });
+        pairs.push({
+          a: toCandidate(group[0]),
+          b: toCandidate(group[i]),
+          reason: 'Same phone number',
+        });
       }
     }
 

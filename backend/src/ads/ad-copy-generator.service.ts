@@ -14,11 +14,19 @@ import { GenerateAdCopyDto } from './dto/generate-ad-copy.dto';
 export class AdCopyGeneratorService {
   constructor(private readonly aiInfra: AiInfraService) {}
 
-  async generate(businessId: string, dto: GenerateAdCopyDto): Promise<{ headline: string; body: string }> {
+  async generate(
+    businessId: string,
+    dto: GenerateAdCopyDto,
+  ): Promise<{ headline: string; body: string }> {
     const prompt = `Write ad copy for a paid social/search ad promoting this product or service: "${dto.productName}". Campaign goal: ${dto.goal ?? 'Sales'}. Reply with exactly two lines: the first line is the headline (under 40 characters), the second line is the body text (under 150 characters). No labels, no quote marks, no extra commentary.`;
     let raw: string;
     try {
-      raw = await this.aiInfra.complete(businessId, prompt, 0.4, 'campaign_copy');
+      raw = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0.4,
+        'campaign_copy',
+      );
     } catch (error) {
       if (error instanceof AppException) throw error;
       throw new AppException(
@@ -28,7 +36,11 @@ export class AdCopyGeneratorService {
       );
     }
 
-    const lines = raw.trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const lines = raw
+      .trim()
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
     return {
       headline: lines[0] || dto.productName,
       body: lines.slice(1).join(' ') || '',

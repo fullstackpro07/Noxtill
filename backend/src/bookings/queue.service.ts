@@ -46,7 +46,9 @@ export class QueueService {
    * `from`/`to` let the Walk-ins screen pull a wider real history for its date filter/hourly chart. */
   list(from?: Date, to?: Date) {
     return this.tenantPrisma.client.queueToken.findMany({
-      where: { createdAt: { gte: from ?? todayStart(), ...(to ? { lte: to } : {}) } },
+      where: {
+        createdAt: { gte: from ?? todayStart(), ...(to ? { lte: to } : {}) },
+      },
       orderBy: { number: 'asc' },
       include: { customer: true, service: true },
     });

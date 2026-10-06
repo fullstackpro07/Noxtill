@@ -1,4 +1,10 @@
-import { IsBoolean, IsIn, IsISO8601, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsISO8601,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import {
   ContentItemChannel,
   ContentItemStatus,

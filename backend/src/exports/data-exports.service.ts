@@ -34,11 +34,7 @@ export const DATA_EXPORT_MODULES: {
 ];
 
 export type DataExportState =
-  | 'queued'
-  | 'preparing'
-  | 'ready'
-  | 'failed'
-  | 'expired';
+  'queued' | 'preparing' | 'ready' | 'failed' | 'expired';
 
 export interface DataExportRequest {
   scope: DataExportScope;
@@ -46,7 +42,9 @@ export interface DataExportRequest {
   format: DataExportFormat;
 }
 
-function buildZip(entries: { name: string; buffer: Buffer }[]): Promise<Buffer> {
+function buildZip(
+  entries: { name: string; buffer: Buffer }[],
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const archive = new ZipArchive({ zlib: { level: 9 } });
     const chunks: Buffer[] = [];
@@ -212,11 +210,7 @@ export class DataExportsService {
     };
   }
 
-  private toRow(
-    job: DataExportJob,
-    names: Map<string, string>,
-    now: Date,
-  ) {
+  private toRow(job: DataExportJob, names: Map<string, string>, now: Date) {
     const modules = (job.modules as unknown as string[]) ?? [];
     const state = this.state(job, now);
     const expiresAt =
@@ -268,7 +262,9 @@ export class DataExportsService {
       audit: audit.map((a) => ({
         action: a.action,
         at: a.createdAt.toISOString(),
-        actorName: a.actorUserId ? (actorNames.get(a.actorUserId) ?? null) : null,
+        actorName: a.actorUserId
+          ? (actorNames.get(a.actorUserId) ?? null)
+          : null,
       })),
     };
   }
@@ -407,22 +403,29 @@ export class DataExportsService {
           errorMessage: null,
         },
       });
-      await this.audit(job.businessId, job.requestedByUserId, 'data_export.ready', jobId, {
-        records,
-        sizeBytes: buffer.length,
-      });
+      await this.audit(
+        job.businessId,
+        job.requestedByUserId,
+        'data_export.ready',
+        jobId,
+        {
+          records,
+          sizeBytes: buffer.length,
+        },
+      );
       try {
         // A scheduled backup is not something anyone is waiting on, so it does not ring the bell.
-        if (job.trigger === 'manual') await this.notifications.create(
-          job.businessId,
-          job.requestedByUserId,
-          {
-            title: 'Export ready',
-            body: `${exportId(job.id)} is ready. The download link works for 24 hours.`,
-            link: '/reports/export',
-          },
-          'export_ready',
-        );
+        if (job.trigger === 'manual')
+          await this.notifications.create(
+            job.businessId,
+            job.requestedByUserId,
+            {
+              title: 'Export ready',
+              body: `${exportId(job.id)} is ready. The download link works for 24 hours.`,
+              link: '/reports/export',
+            },
+            'export_ready',
+          );
       } catch (error) {
         this.logger.warn(
           `Export ${job.id} ready but notification failed: ${(error as Error).message}`,
@@ -435,9 +438,15 @@ export class DataExportsService {
         where: { id: jobId },
         data: { status: 'failed', errorMessage: message.slice(0, 1000) },
       });
-      await this.audit(job.businessId, job.requestedByUserId, 'data_export.failed', jobId, {
-        error: message,
-      });
+      await this.audit(
+        job.businessId,
+        job.requestedByUserId,
+        'data_export.failed',
+        jobId,
+        {
+          error: message,
+        },
+      );
     }
   }
 

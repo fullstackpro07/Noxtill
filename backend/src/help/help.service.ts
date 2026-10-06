@@ -85,7 +85,13 @@ export class HelpService {
     const passages = await retrieveHelpPassages(this.prisma, dto.question);
 
     if (passages.length === 0) {
-      await this.logQuery(businessId, userId, dto.question, HELP_NOT_FOUND_MESSAGE, []);
+      await this.logQuery(
+        businessId,
+        userId,
+        dto.question,
+        HELP_NOT_FOUND_MESSAGE,
+        [],
+      );
       return { answer: HELP_NOT_FOUND_MESSAGE, sources: [] };
     }
 

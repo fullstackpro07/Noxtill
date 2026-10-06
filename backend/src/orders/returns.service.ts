@@ -1,8 +1,17 @@
-import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { CLS_KEY_BUSINESS_ID, CLS_KEY_ROLE, CLS_KEY_USER_ID } from '../common/tenancy/tenant.constants';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_ROLE,
+  CLS_KEY_USER_ID,
+} from '../common/tenancy/tenant.constants';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { ModuleRef } from '@nestjs/core';
@@ -55,9 +64,12 @@ export class ReturnsService {
 
     // Owner policy: refund the way the customer paid. An order with no recorded payment
     // (e.g. still unpaid) has no "original method" to hold the refund to.
-    if ((await this.policies(businessId)).bool('returns.refundToOriginalMethod')) {
+    if (
+      (await this.policies(businessId)).bool('returns.refundToOriginalMethod')
+    ) {
       const original = new Set<string>(order.payments.map((p) => p.method));
-      if (order.creditEntries.some((e) => e.kind === 'credit')) original.add('credit');
+      if (order.creditEntries.some((e) => e.kind === 'credit'))
+        original.add('credit');
       if (original.size > 0 && !original.has(dto.refundMethod)) {
         throw new AppException(
           RETURN_ERROR_CODES.METHOD_NOT_ORIGINAL,
@@ -146,7 +158,9 @@ export class ReturnsService {
     const ret = await this.findPending(businessId, id);
 
     // Owner policy: a refund above the limit is the owner's call, whoever holds returns.approve.
-    const refundLimit = (await this.policies(businessId)).num('returns.refundLimit');
+    const refundLimit = (await this.policies(businessId)).num(
+      'returns.refundLimit',
+    );
     if (
       refundLimit !== null &&
       Number(ret.refundAmount) > refundLimit &&

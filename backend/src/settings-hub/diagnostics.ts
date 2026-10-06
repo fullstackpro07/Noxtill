@@ -4,7 +4,10 @@
  */
 export const DIAGNOSTIC_FIELDS: { key: string; label: string }[] = [
   { key: 'generatedAt', label: 'Time generated' },
-  { key: 'business', label: 'Business identifier, name, plan reference, timezone and currency' },
+  {
+    key: 'business',
+    label: 'Business identifier, name, plan reference, timezone and currency',
+  },
   { key: 'runtime', label: 'Server runtime and environment' },
   { key: 'database', label: 'Database status' },
   { key: 'storage', label: 'File storage type' },

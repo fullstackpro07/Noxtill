@@ -38,18 +38,22 @@ export class SystemRoleOverridesService {
   }
 
   async list(businessId: string) {
-    const overrides = await this.tenantPrisma.client.roleCapabilityOverride.findMany({
-      where: { businessId, role: { in: OVERRIDABLE_ROLES as unknown as Role[] } },
-    });
+    const overrides =
+      await this.tenantPrisma.client.roleCapabilityOverride.findMany({
+        where: {
+          businessId,
+          role: { in: OVERRIDABLE_ROLES as unknown as Role[] },
+        },
+      });
     const overrideByRole = new Map(overrides.map((o) => [o.role, o]));
 
     return OVERRIDABLE_ROLES.map((role) => {
       const override = overrideByRole.get(role);
       return {
         role,
-        capabilities: (override
+        capabilities: override
           ? (override.capabilities as unknown as Capability[])
-          : SYSTEM_ROLE_CAPABILITIES[role]),
+          : SYSTEM_ROLE_CAPABILITIES[role],
         isOverridden: !!override,
       };
     });
@@ -73,14 +77,19 @@ export class SystemRoleOverridesService {
       after: { role, capabilities },
     });
 
-    return { role, capabilities: saved.capabilities as unknown as Capability[], isOverridden: true };
+    return {
+      role,
+      capabilities: saved.capabilities as unknown as Capability[],
+      isOverridden: true,
+    };
   }
 
   async reset(businessId: string, roleParam: string) {
     const role = SystemRoleOverridesService.parseOverridableRole(roleParam);
-    const existing = await this.tenantPrisma.client.roleCapabilityOverride.findUnique({
-      where: { businessId_role: { businessId, role } },
-    });
+    const existing =
+      await this.tenantPrisma.client.roleCapabilityOverride.findUnique({
+        where: { businessId_role: { businessId, role } },
+      });
     if (existing) {
       const before = existing.capabilities as unknown as Capability[];
       await this.tenantPrisma.client.roleCapabilityOverride.delete({
@@ -94,16 +103,21 @@ export class SystemRoleOverridesService {
         after: { role, capabilities: SYSTEM_ROLE_CAPABILITIES[role] },
       });
     }
-    return { role, capabilities: SYSTEM_ROLE_CAPABILITIES[role], isOverridden: false };
+    return {
+      role,
+      capabilities: SYSTEM_ROLE_CAPABILITIES[role],
+      isOverridden: false,
+    };
   }
 
   private async effectiveFor(
     businessId: string,
     role: OverridableRole,
   ): Promise<Capability[]> {
-    const existing = await this.tenantPrisma.client.roleCapabilityOverride.findUnique({
-      where: { businessId_role: { businessId, role } },
-    });
+    const existing =
+      await this.tenantPrisma.client.roleCapabilityOverride.findUnique({
+        where: { businessId_role: { businessId, role } },
+      });
     return existing
       ? (existing.capabilities as unknown as Capability[])
       : SYSTEM_ROLE_CAPABILITIES[role];

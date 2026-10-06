@@ -28,11 +28,7 @@ import {
   isScheduleDue,
   SCHEDULE_RUN_HOUR,
 } from './schedule-timing';
-import {
-  Prisma,
-  Role,
-  ScheduledExport,
-} from '@prisma/client';
+import { Prisma, Role, ScheduledExport } from '@prisma/client';
 
 /** Schedule recurring export (UPD-FE-071), generalized (UPD-BE-116) to also schedule real
  * reports via the same infrastructure — one CRUD, one daily cron, one delivery path — rather
@@ -200,7 +196,9 @@ export class ScheduledExportsService {
     } catch (error) {
       const message = (error as Error).message;
       if (error instanceof SkipSchedule) {
-        this.logger.warn(`Skipping scheduled export ${schedule.id}: ${message}`);
+        this.logger.warn(
+          `Skipping scheduled export ${schedule.id}: ${message}`,
+        );
       } else {
         this.logger.error(`Scheduled export ${schedule.id} failed: ${message}`);
       }

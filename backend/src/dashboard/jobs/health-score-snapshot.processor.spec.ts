@@ -29,9 +29,15 @@ describe('HealthScoreSnapshotProcessor (UPD-BE-001)', () => {
 
     const cls = new FakeClsService() as unknown as ClsService;
     const tenantPrisma = new TenantPrismaService(prisma, cls);
-    const profitService = new ProfitService(tenantPrisma, prisma, new BranchScopeService(prisma), cls, {
-      complete: jest.fn(),
-    } as unknown as AiInfraService);
+    const profitService = new ProfitService(
+      tenantPrisma,
+      prisma,
+      new BranchScopeService(prisma),
+      cls,
+      {
+        complete: jest.fn(),
+      } as unknown as AiInfraService,
+    );
     const healthScoreService = new HealthScoreService(
       tenantPrisma,
       profitService,

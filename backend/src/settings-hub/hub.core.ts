@@ -137,9 +137,15 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
 }
 
-export function relativeTime(date: Date | null | undefined, now = new Date()): string {
+export function relativeTime(
+  date: Date | null | undefined,
+  now = new Date(),
+): string {
   if (!date) return 'Never';
-  const mins = Math.max(0, Math.round((now.getTime() - date.getTime()) / 60_000));
+  const mins = Math.max(
+    0,
+    Math.round((now.getTime() - date.getTime()) / 60_000),
+  );
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins} min ago`;
   const hours = Math.round(mins / 60);

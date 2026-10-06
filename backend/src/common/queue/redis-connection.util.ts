@@ -24,7 +24,8 @@ export function buildRedisConnection(config: ConfigService): object {
     maxRetriesPerRequest: null, // required by BullMQ
     enableReadyCheck: false,
     connectTimeout: 5000,
-    reconnectOnError: (error: Error) => (isQuotaExceededError(error) ? 1 : false),
+    reconnectOnError: (error: Error) =>
+      isQuotaExceededError(error) ? 1 : false,
     retryStrategy: (times: number) => Math.min(times * 1000, 30000),
   };
 

@@ -20,10 +20,15 @@ export const CUSTOMER_EXPORT_FIELDS = [
   { key: 'lastVisit', label: 'Last visit' },
   { key: 'credit', label: 'Credit balance' },
 ] as const;
-export type CustomerExportField = (typeof CUSTOMER_EXPORT_FIELDS)[number]['key'];
+export type CustomerExportField =
+  (typeof CUSTOMER_EXPORT_FIELDS)[number]['key'];
 
 function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
@@ -51,7 +56,11 @@ export class CustomersExportService {
     allowCreditField: boolean,
   ): Promise<{ url: string; rowCount: number }> {
     const fields = dto.fields.filter(
-      (f) => (CUSTOMER_EXPORT_FIELDS as readonly { key: string }[]).some((cf) => cf.key === f) && (f !== 'credit' || allowCreditField),
+      (f) =>
+        (CUSTOMER_EXPORT_FIELDS as readonly { key: string }[]).some(
+          (cf) => cf.key === f,
+        ) &&
+        (f !== 'credit' || allowCreditField),
     ) as CustomerExportField[];
 
     const customers = await this.tenantPrisma.client.customer.findMany({
@@ -66,10 +75,14 @@ export class CustomersExportService {
         FROM v_credit_balances v
         WHERE v.business_id = ${businessId}
       `;
-      balanceByCustomer = new Map(rows.map((r) => [r.customer_id, Number(r.balance)]));
+      balanceByCustomer = new Map(
+        rows.map((r) => [r.customer_id, Number(r.balance)]),
+      );
     }
 
-    const columns = CUSTOMER_EXPORT_FIELDS.filter((f) => fields.includes(f.key));
+    const columns = CUSTOMER_EXPORT_FIELDS.filter((f) =>
+      fields.includes(f.key),
+    );
     const rows = customers.map((c) => {
       const values: Record<CustomerExportField, string> = {
         name: c.name,
@@ -78,7 +91,9 @@ export class CustomersExportService {
         tags: ((c.tags as string[] | null) ?? []).join('; '),
         spend: Number(c.lifetimeSpend).toString(),
         visits: String(c.visitCount),
-        lastVisit: c.lastVisitAt ? c.lastVisitAt.toISOString().slice(0, 10) : '',
+        lastVisit: c.lastVisitAt
+          ? c.lastVisitAt.toISOString().slice(0, 10)
+          : '',
         credit: String(balanceByCustomer.get(c.id) ?? 0),
       };
       return columns.map((col) => values[col.key]);
@@ -89,11 +104,23 @@ export class CustomersExportService {
     if (dto.format === 'csv') {
       const header = columns.map((c) => csvCell(c.label)).join(',');
       const body = rows.map((r) => r.map(csvCell).join(',')).join('\n');
-      url = await this.s3.uploadAndSign(key, Buffer.from(`${header}\n${body}`), 'text/csv');
+      url = await this.s3.uploadAndSign(
+        key,
+        Buffer.from(`${header}\n${body}`),
+        'text/csv',
+      );
     } else if (dto.format === 'pdf') {
-      const headerHtml = columns.map((c) => `<th style="text-align:left;padding:6px 10px;">${escapeHtml(c.label)}</th>`).join('');
+      const headerHtml = columns
+        .map(
+          (c) =>
+            `<th style="text-align:left;padding:6px 10px;">${escapeHtml(c.label)}</th>`,
+        )
+        .join('');
       const bodyHtml = rows
-        .map((r) => `<tr>${r.map((cell) => `<td style="padding:6px 10px;border-top:1px solid #E6EAF0;">${escapeHtml(cell)}</td>`).join('')}</tr>`)
+        .map(
+          (r) =>
+            `<tr>${r.map((cell) => `<td style="padding:6px 10px;border-top:1px solid #E6EAF0;">${escapeHtml(cell)}</td>`).join('')}</tr>`,
+        )
         .join('');
       const html = `<html><head><meta charset="utf-8"/></head><body style="font-family:sans-serif;color:#101828;">
         <h1 style="margin:0 0 16px;">Customers</h1>
@@ -107,10 +134,25 @@ export class CustomersExportService {
     } else {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('Customers');
-      sheet.columns = columns.map((c) => ({ header: c.label, key: c.key, width: 20 }));
-      sheet.addRows(rows.map((r) => columns.reduce((acc, col, i) => ({ ...acc, [col.key]: r[i] }), {} as Record<string, string>)));
+      sheet.columns = columns.map((c) => ({
+        header: c.label,
+        key: c.key,
+        width: 20,
+      }));
+      sheet.addRows(
+        rows.map((r) =>
+          columns.reduce(
+            (acc, col, i) => ({ ...acc, [col.key]: r[i] }),
+            {} as Record<string, string>,
+          ),
+        ),
+      );
       const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
-      url = await this.s3.uploadAndSign(key, buffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      url = await this.s3.uploadAndSign(
+        key,
+        buffer,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
     }
 
     await this.tenantPrisma.client.customerExportLog.create({

@@ -136,8 +136,12 @@ describe('StaffService (BE-056)', () => {
       expect(stillThere?.active).toBe(false);
 
       // Excluded by default (booking/schedule pickers), but visible with includeInactive.
-      expect((await service.list()).find((m) => m.id === created.id)).toBeUndefined();
-      expect((await service.list(true)).find((m) => m.id === created.id)?.id).toBe(created.id);
+      expect(
+        (await service.list()).find((m) => m.id === created.id),
+      ).toBeUndefined();
+      expect(
+        (await service.list(true)).find((m) => m.id === created.id)?.id,
+      ).toBe(created.id);
     });
 
     it('reactivate() restores access without creating a new record', async () => {
@@ -151,7 +155,9 @@ describe('StaffService (BE-056)', () => {
       const reactivated = await service.reactivate(created.id);
       expect(reactivated.id).toBe(created.id);
       expect(reactivated.active).toBe(true);
-      expect((await service.list()).find((m) => m.id === created.id)?.id).toBe(created.id);
+      expect((await service.list()).find((m) => m.id === created.id)?.id).toBe(
+        created.id,
+      );
     });
 
     it('re-inviting a deactivated person by the same email reactivates them instead of erroring or duplicating', async () => {

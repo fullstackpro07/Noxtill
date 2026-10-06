@@ -76,10 +76,14 @@ describe('AssistantReportService', () => {
     };
 
     const result = await service.generate(user, {
-      question: "How much did we sell today?",
+      question: 'How much did we sell today?',
       answer: 'Rs. 12,000 across 4 sales.',
       toolCalls: [
-        { name: 'get_revenue_today', input: {}, output: { revenue: 12000, count: 4 } },
+        {
+          name: 'get_revenue_today',
+          input: {},
+          output: { revenue: 12000, count: 4 },
+        },
       ],
       helpSources: [],
     });

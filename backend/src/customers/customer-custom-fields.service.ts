@@ -51,10 +51,14 @@ export class CustomerCustomFieldsService {
   }
 
   async remove(businessId: string, id: string) {
-    const field = await this.tenantPrisma.client.customerCustomField.findUnique({ where: { id } });
+    const field = await this.tenantPrisma.client.customerCustomField.findUnique(
+      { where: { id } },
+    );
     if (!field || field.businessId !== businessId) {
       throw new NotFoundException('Custom field not found');
     }
-    await this.tenantPrisma.client.customerCustomField.delete({ where: { id } });
+    await this.tenantPrisma.client.customerCustomField.delete({
+      where: { id },
+    });
   }
 }

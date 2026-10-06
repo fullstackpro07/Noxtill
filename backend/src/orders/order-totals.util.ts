@@ -65,10 +65,17 @@ export function computeOrderTotals(
       const lineAmount = item.price * item.qty;
       const rate = item.taxRatePercent ?? defaultTaxRatePercent;
       const afterDiscount = lineAmount * (1 - discountRatio);
-      return sum + (taxInclusive ? (afterDiscount * rate) / (100 + rate) : afterDiscount * (rate / 100));
+      return (
+        sum +
+        (taxInclusive
+          ? (afterDiscount * rate) / (100 + rate)
+          : afterDiscount * (rate / 100))
+      );
     }, 0),
   );
-  const total = round2(taxInclusive ? subtotal - discount : subtotal - discount + tax);
+  const total = round2(
+    taxInclusive ? subtotal - discount : subtotal - discount + tax,
+  );
 
   return { subtotal: round2(subtotal), tax, total, cogs: round2(cogs) };
 }

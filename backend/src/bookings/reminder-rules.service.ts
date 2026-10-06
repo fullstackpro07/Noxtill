@@ -95,7 +95,10 @@ export class ReminderRulesService {
       select: { templateKey: true },
     });
     const templateKeys = [
-      ...new Set([...REMINDER_TEMPLATE_KEYS, ...rules.map((r) => r.templateKey)]),
+      ...new Set([
+        ...REMINDER_TEMPLATE_KEYS,
+        ...rules.map((r) => r.templateKey),
+      ]),
     ];
 
     const [sent, delivered] = await Promise.all([

@@ -44,14 +44,13 @@ interface QuotationBuildTxClient {
     }): Promise<{ id: string }>;
   };
   business: {
-    findUniqueOrThrow(args: {
-      where: { id: string };
-    }): Promise<{ taxRate: Prisma.Decimal | number; policies?: Prisma.JsonValue }>;
+    findUniqueOrThrow(args: { where: { id: string } }): Promise<{
+      taxRate: Prisma.Decimal | number;
+      policies?: Prisma.JsonValue;
+    }>;
   };
   product: {
-    findMany(args: {
-      where: { id: { in: string[] } };
-    }): Promise<
+    findMany(args: { where: { id: { in: string[] } } }): Promise<
       {
         id: string;
         name: string;
@@ -64,7 +63,9 @@ interface QuotationBuildTxClient {
   taxRule: {
     findMany(args: {
       where: { businessId: string };
-    }): Promise<{ category: string | null; rate: Prisma.Decimal; active: boolean }[]>;
+    }): Promise<
+      { category: string | null; rate: Prisma.Decimal; active: boolean }[]
+    >;
   };
 }
 
@@ -152,8 +153,15 @@ export class QuotationsService {
     });
 
     const discount = dto.discount ?? 0;
-    const taxInclusive = resolvePolicies(business).bool('sales.pricesIncludeTax');
-    const totals = computeOrderTotals(itemsData, discount, Number(business.taxRate), taxInclusive);
+    const taxInclusive = resolvePolicies(business).bool(
+      'sales.pricesIncludeTax',
+    );
+    const totals = computeOrderTotals(
+      itemsData,
+      discount,
+      Number(business.taxRate),
+      taxInclusive,
+    );
 
     return { customerId, itemsData, discount, totals, taxInclusive };
   }
@@ -177,7 +185,9 @@ export class QuotationsService {
           status: OrderStatus.pending,
           isQuotation: true,
           quotationStatus: QuotationStatus.draft,
-          quotationValidUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
+          quotationValidUntil: dto.validUntil
+            ? new Date(dto.validUntil)
+            : undefined,
           quotationTerms: dto.terms,
           subtotal: totals.subtotal,
           tax: totals.tax,
@@ -215,7 +225,10 @@ export class QuotationsService {
     }
     await this.tenantPrisma.client.order.update({
       where: { id },
-      data: { quotationStatus: QuotationStatus.sent, quotationSentAt: new Date() },
+      data: {
+        quotationStatus: QuotationStatus.sent,
+        quotationSentAt: new Date(),
+      },
     });
     return this.invoiceService.generate(businessId, id, true);
   }
@@ -229,7 +242,10 @@ export class QuotationsService {
     }
     return this.tenantPrisma.client.order.update({
       where: { id },
-      data: { quotationStatus: QuotationStatus.declined, declineReason: reason },
+      data: {
+        quotationStatus: QuotationStatus.declined,
+        declineReason: reason,
+      },
     });
   }
 
@@ -339,7 +355,9 @@ export class QuotationsService {
     }));
 
     const open = withStatus.filter(
-      (q) => q.effective === QuotationStatus.draft || q.effective === QuotationStatus.sent,
+      (q) =>
+        q.effective === QuotationStatus.draft ||
+        q.effective === QuotationStatus.sent,
     );
     const valueOpen = open.reduce((sum, q) => sum + Number(q.total), 0);
 
@@ -347,7 +365,8 @@ export class QuotationsService {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
     const acceptedThisMonth = withStatus.filter(
-      (q) => q.effective === QuotationStatus.accepted && q.updatedAt >= startOfMonth,
+      (q) =>
+        q.effective === QuotationStatus.accepted && q.updatedAt >= startOfMonth,
     ).length;
 
     const everSent = withStatus.filter((q) => q.quotationSentAt != null);

@@ -215,7 +215,11 @@ export class NightlyCloseService {
   private async logDelivery(
     businessId: string,
     closeDate: Date,
-    results: { channel: MessageChannel; status: 'sent' | 'failed'; error?: string }[],
+    results: {
+      channel: MessageChannel;
+      status: 'sent' | 'failed';
+      error?: string;
+    }[],
   ): Promise<void> {
     // Primary channel/status/error columns stay single-valued for full backward compatibility with
     // existing history rows and the Close-history table; `channelResults` carries the real
@@ -299,7 +303,11 @@ export class NightlyCloseService {
           deliveryError: log.error,
           channel: log.channel,
           channelResults: log.channelResults as
-            | { channel: MessageChannel; status: 'sent' | 'failed'; error?: string }[]
+            | {
+                channel: MessageChannel;
+                status: 'sent' | 'failed';
+                error?: string;
+              }[]
             | null,
         };
       }),

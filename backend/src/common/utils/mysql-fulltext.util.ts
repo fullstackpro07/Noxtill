@@ -125,7 +125,9 @@ export function buildFulltextBooleanQuery(
     .split(/\s+/)
     .filter(Boolean)
     .filter((word) => !STOPWORDS.has(word.toLowerCase()))
-    .filter((word) => requireAll || !QUESTION_FILLER_WORDS.has(word.toLowerCase()));
+    .filter(
+      (word) => requireAll || !QUESTION_FILLER_WORDS.has(word.toLowerCase()),
+    );
   if (words.length === 0) return null;
   return words.map((word) => (requireAll ? `+${word}*` : `${word}*`)).join(' ');
 }

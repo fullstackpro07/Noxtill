@@ -17,7 +17,10 @@ export class AdCampaignsController {
   ) {}
 
   @Post('generate-copy')
-  generateCopy(@CurrentUser() user: AuthenticatedUser, @Body() dto: GenerateAdCopyDto) {
+  generateCopy(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: GenerateAdCopyDto,
+  ) {
     return this.copyGenerator.generate(user.businessId, dto);
   }
 

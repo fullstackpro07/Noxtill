@@ -12,7 +12,15 @@ export class BackupScheduler implements OnModuleInit {
 
   onModuleInit() {
     this.queue
-      .add('check', {}, { repeat: { pattern: '0 * * * *' }, jobId: 'backup-hourly-check' })
-      .catch((error: Error) => this.logger.error(`Failed to register the backup check job: ${error.message}`));
+      .add(
+        'check',
+        {},
+        { repeat: { pattern: '0 * * * *' }, jobId: 'backup-hourly-check' },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register the backup check job: ${error.message}`,
+        ),
+      );
   }
 }

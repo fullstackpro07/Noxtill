@@ -8,7 +8,11 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { CreateInstallmentPlanDto } from './dto/create-installment-plan.dto';
 import { WriteOffCreditDto } from './dto/write-off-credit.dto';
-import { DebtorRow, buildLedgerRows, allocateFifoForCustomer } from './credit.types';
+import {
+  DebtorRow,
+  buildLedgerRows,
+  allocateFifoForCustomer,
+} from './credit.types';
 import {
   CREDIT_ERROR_CODES,
   OVERDUE_BUCKETS,
@@ -207,7 +211,11 @@ export class CreditService {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const [sent, delivered] = await Promise.all([
       this.tenantPrisma.client.message.count({
-        where: { businessId, templateKey: 'credit_statement_ready', createdAt: { gte: since } },
+        where: {
+          businessId,
+          templateKey: 'credit_statement_ready',
+          createdAt: { gte: since },
+        },
       }),
       this.tenantPrisma.client.message.count({
         where: {
@@ -240,12 +248,10 @@ export class CreditService {
   async balanceHistory(days = 8): Promise<{ date: string; balance: number }[]> {
     const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = await this.tenantPrisma.client.creditBalanceSnapshot.findMany(
-      {
-        where: { businessId, snapshotDate: { gte: since } },
-        orderBy: { snapshotDate: 'asc' },
-      },
-    );
+    const rows = await this.tenantPrisma.client.creditBalanceSnapshot.findMany({
+      where: { businessId, snapshotDate: { gte: since } },
+      orderBy: { snapshotDate: 'asc' },
+    });
     return rows.map((r) => ({
       date: r.snapshotDate.toISOString().slice(0, 10),
       balance: round2(Number(r.balance)),

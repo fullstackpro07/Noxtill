@@ -19,6 +19,7 @@ export class ScheduledExportsProcessor extends WorkerHost {
     const ran = await this.scheduledExports.runDueSchedules();
     this.logger.debug(`Ran ${ran} due scheduled export(s)`);
     const reminded = await this.taxReports.processDueReminders();
-    if (reminded > 0) this.logger.debug(`Sent ${reminded} tax filing reminder(s)`);
+    if (reminded > 0)
+      this.logger.debug(`Sent ${reminded} tax filing reminder(s)`);
   }
 }

@@ -12,12 +12,21 @@ export interface ConfigConflict {
  * Settings that contradict each other, found by comparing the live records — never guessed.
  * Each is a case where Noxtill would have to pick one of two equally valid rules.
  */
-export async function configConflicts(d: HubDeps, ctx: HubCtx): Promise<ConfigConflict[]> {
+export async function configConflicts(
+  d: HubDeps,
+  ctx: HubCtx,
+): Promise<ConfigConflict[]> {
   const out: ConfigConflict[] = [];
   const [taxRules, bookingRules, creditRules] = await Promise.all([
-    d.prisma.taxRule.findMany({ where: { businessId: ctx.businessId, active: true } }),
-    d.prisma.reminderRule.findMany({ where: { businessId: ctx.businessId, active: true } }),
-    d.prisma.creditReminderRule.findMany({ where: { businessId: ctx.businessId, active: true } }),
+    d.prisma.taxRule.findMany({
+      where: { businessId: ctx.businessId, active: true },
+    }),
+    d.prisma.reminderRule.findMany({
+      where: { businessId: ctx.businessId, active: true },
+    }),
+    d.prisma.creditReminderRule.findMany({
+      where: { businessId: ctx.businessId, active: true },
+    }),
   ]);
 
   const tally = <T>(rows: T[], keyOf: (r: T) => string) => {
@@ -37,7 +46,10 @@ export async function configConflicts(d: HubDeps, ctx: HubCtx): Promise<ConfigCo
     });
   }
 
-  const bookingDupes = tally(bookingRules, (r) => `${r.offsetHours}|${r.channel ?? ''}`);
+  const bookingDupes = tally(
+    bookingRules,
+    (r) => `${r.offsetHours}|${r.channel ?? ''}`,
+  );
   if (bookingDupes.length > 0) {
     out.push({
       key: 'conflict-reminders',
@@ -47,7 +59,10 @@ export async function configConflicts(d: HubDeps, ctx: HubCtx): Promise<ConfigCo
     });
   }
 
-  const creditDupes = tally(creditRules, (r) => `${r.daysOverdueTrigger}|${r.channel ?? ''}`);
+  const creditDupes = tally(
+    creditRules,
+    (r) => `${r.daysOverdueTrigger}|${r.channel ?? ''}`,
+  );
   if (creditDupes.length > 0) {
     out.push({
       key: 'conflict-credit',
@@ -62,20 +77,44 @@ export async function configConflicts(d: HubDeps, ctx: HubCtx): Promise<ConfigCo
 const HOUR = 3_600_000;
 
 export interface BackupSummary {
-  last: { status: string; createdAt: Date; readyAt: Date | null; sizeBytes: number; recordsCount: number; errorMessage: string | null } | null;
-  lastReady: { createdAt: Date; readyAt: Date | null; sizeBytes: number; recordsCount: number } | null;
+  last: {
+    status: string;
+    createdAt: Date;
+    readyAt: Date | null;
+    sizeBytes: number;
+    recordsCount: number;
+    errorMessage: string | null;
+  } | null;
+  lastReady: {
+    createdAt: Date;
+    readyAt: Date | null;
+    sizeBytes: number;
+    recordsCount: number;
+  } | null;
   keptCount: number;
   failed30: number;
 }
 
-export async function backupSummary(d: HubDeps, businessId: string, now: Date): Promise<BackupSummary> {
-  const jobs = await d.prisma.dataExportJob.findMany({ where: { businessId, trigger: 'backup' }, orderBy: { createdAt: 'desc' }, take: 400 });
+export async function backupSummary(
+  d: HubDeps,
+  businessId: string,
+  now: Date,
+): Promise<BackupSummary> {
+  const jobs = await d.prisma.dataExportJob.findMany({
+    where: { businessId, trigger: 'backup' },
+    orderBy: { createdAt: 'desc' },
+    take: 400,
+  });
   const ready = jobs.filter((j) => j.status === 'ready');
   return {
     last: jobs[0] ?? null,
     lastReady: ready[0] ?? null,
     keptCount: ready.length,
-    failed30: jobs.filter((j) => j.status === 'failed' && now.getTime() - j.createdAt.getTime() < 30 * 24 * HOUR).length,
+    failed30: jobs.filter(
+      (j) =>
+        j.status === 'failed' &&
+        now.getTime() - j.createdAt.getTime() < 30 * 24 * HOUR,
+    ).length,
   };
 }
 

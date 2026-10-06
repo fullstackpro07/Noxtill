@@ -179,7 +179,10 @@ export class AnalyticsService {
           ),
         );
         const cohortCustomers = await client.customer.findMany({
-          where: { businessId: { in: ids }, createdAt: { gte: cohortStart, lt: cohortEnd } },
+          where: {
+            businessId: { in: ids },
+            createdAt: { gte: cohortStart, lt: cohortEnd },
+          },
           select: { id: true, lifetimeSpend: true },
         });
         const customerIds = cohortCustomers.map((c) => c.id);
@@ -281,7 +284,9 @@ export class AnalyticsService {
     );
 
     return monthStarts.map((start) => {
-      const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+      const end = new Date(
+        Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1),
+      );
       const activeCustomerIds = new Set(
         ordersInRange
           .filter((o) => o.createdAt >= start && o.createdAt < end)
@@ -291,10 +296,15 @@ export class AnalyticsService {
       let returningCount = 0;
       for (const customerId of activeCustomerIds) {
         const firstOrder = firstOrderByCustomer.get(customerId);
-        if (firstOrder && firstOrder >= start && firstOrder < end) newCount += 1;
+        if (firstOrder && firstOrder >= start && firstOrder < end)
+          newCount += 1;
         else returningCount += 1;
       }
-      return { month: start.toISOString().slice(0, 7), newCount, returningCount };
+      return {
+        month: start.toISOString().slice(0, 7),
+        newCount,
+        returningCount,
+      };
     });
   }
 
@@ -442,8 +452,12 @@ export class AnalyticsService {
   async customerSummary(businessId: string, branchId?: string) {
     const ids = await this.branchScope.resolveIds(businessId, branchId);
     const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const monthEnd = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
 
     // `atRiskCount` deliberately stays scoped to the caller's own business only, not the resolved
     // branch group: `SegmentsService` (shared with Marketing's Audiences feature) has no
@@ -460,7 +474,10 @@ export class AnalyticsService {
       // (signed up in the trailing 30 days), which didn't line up with the "New vs returning"
       // chart's current-month bar directly below it on the same screen.
       this.prisma.customer.count({
-        where: { businessId: { in: ids }, createdAt: { gte: monthStart, lt: monthEnd } },
+        where: {
+          businessId: { in: ids },
+          createdAt: { gte: monthStart, lt: monthEnd },
+        },
       }),
     ]);
 

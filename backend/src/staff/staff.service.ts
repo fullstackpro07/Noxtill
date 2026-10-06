@@ -160,18 +160,16 @@ export class StaffService {
       // a new BusinessUser row would collide with the `[businessId, userId]` unique constraint,
       // and re-creating a new "person" would orphan their real attendance/commission/order history.
       if (existingLink) {
-        const reactivated = await this.tenantPrisma.client.businessUser.update(
-          {
-            where: { id: existingLink.id },
-            data: {
-              active: true,
-              role: dto.role,
-              commissionRule: (dto.commissionRule ?? {}) as Prisma.InputJsonValue,
-              hourlyRate: dto.hourlyRate,
-            },
-            include: { user: true },
+        const reactivated = await this.tenantPrisma.client.businessUser.update({
+          where: { id: existingLink.id },
+          data: {
+            active: true,
+            role: dto.role,
+            commissionRule: (dto.commissionRule ?? {}) as Prisma.InputJsonValue,
+            hourlyRate: dto.hourlyRate,
           },
-        );
+          include: { user: true },
+        });
         return { ...reactivated, tempPassword };
       }
     } else {

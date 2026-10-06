@@ -122,14 +122,25 @@ export class AdAnalyticsService {
       clicks += stats.clicks ?? 0;
     }
     const leads = await this.tenantPrisma.client.adLead.count();
-    const orders = await this.tenantPrisma.client.order.count({ where: { status: 'completed' } });
+    const orders = await this.tenantPrisma.client.order.count({
+      where: { status: 'completed' },
+    });
 
-    const widthOf = (n: number) => (impressions > 0 ? Math.min(100, Math.round((n / impressions) * 100)) : 0);
+    const widthOf = (n: number) =>
+      impressions > 0 ? Math.min(100, Math.round((n / impressions) * 100)) : 0;
     return [
-      { label: 'Impressions', value: impressions, widthPercent: impressions > 0 ? 100 : 0 },
+      {
+        label: 'Impressions',
+        value: impressions,
+        widthPercent: impressions > 0 ? 100 : 0,
+      },
       { label: 'Clicks', value: clicks, widthPercent: widthOf(clicks) },
       { label: 'Leads', value: leads, widthPercent: widthOf(leads) },
-      { label: 'Completed orders', value: orders, widthPercent: widthOf(orders) },
+      {
+        label: 'Completed orders',
+        value: orders,
+        widthPercent: widthOf(orders),
+      },
     ];
   }
 
@@ -144,10 +155,11 @@ export class AdAnalyticsService {
     since.setUTCHours(0, 0, 0, 0);
     since.setUTCDate(since.getUTCDate() - (days - 1));
 
-    const snapshots = await this.tenantPrisma.client.adCampaignStatsSnapshot.findMany({
-      where: { capturedAt: { gte: since } },
-      orderBy: { capturedAt: 'asc' },
-    });
+    const snapshots =
+      await this.tenantPrisma.client.adCampaignStatsSnapshot.findMany({
+        where: { capturedAt: { gte: since } },
+        orderBy: { capturedAt: 'asc' },
+      });
 
     const byDay = new Map<string, { spend: number; results: number }>();
     for (const s of snapshots) {
@@ -164,7 +176,11 @@ export class AdAnalyticsService {
       d.setUTCDate(since.getUTCDate() + i);
       const key = d.toISOString().slice(0, 10);
       const row = byDay.get(key);
-      points.push({ date: key, spend: round2(row?.spend ?? 0), results: row?.results ?? 0 });
+      points.push({
+        date: key,
+        spend: round2(row?.spend ?? 0),
+        results: row?.results ?? 0,
+      });
     }
     return points;
   }

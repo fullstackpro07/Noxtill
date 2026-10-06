@@ -83,8 +83,19 @@ export class SendGateService {
 
     // Owner policy: at most N marketing messages per customer in a rolling window.
     const capMax = policies.num('marketing.frequencyCapMax');
-    if (definition.category === 'marketing' && capMax !== null && params.customerId) {
-      const since = new Date(Date.now() - (policies.num('marketing.frequencyCapDays') ?? 30) * 24 * 60 * 60 * 1000);
+    if (
+      definition.category === 'marketing' &&
+      capMax !== null &&
+      params.customerId
+    ) {
+      const since = new Date(
+        Date.now() -
+          (policies.num('marketing.frequencyCapDays') ?? 30) *
+            24 *
+            60 *
+            60 *
+            1000,
+      );
       const recent = await this.tenantPrisma.client.message.count({
         where: {
           businessId: params.businessId,
@@ -123,14 +134,27 @@ export class SendGateService {
       ? { phone: customer.phone, email: customer.email }
       : { phone: params.to?.phone, email: params.to?.email };
 
-    const priority = (business.channelPriority as Message['channel'][] | null) ?? undefined;
-    let channel = resolveChannel(params.channel ?? business.channelPref, contact, priority);
+    const priority =
+      (business.channelPriority as Message['channel'][] | null) ?? undefined;
+    let channel = resolveChannel(
+      params.channel ?? business.channelPref,
+      contact,
+      priority,
+    );
 
     // A WhatsApp template the owner marked pending/rejected must not go out over WhatsApp; use
     // the next channel the customer can be reached on instead, or refuse if there is none.
-    const approval = (business.templateApprovals as Record<string, { status?: string }> | null)?.[params.templateKey];
-    if (channel === 'whatsapp' && approval?.status && approval.status !== 'approved') {
-      const alternatives = [...(priority ?? []), 'sms', 'email'].filter((c) => c !== 'whatsapp') as Message['channel'][];
+    const approval = (
+      business.templateApprovals as Record<string, { status?: string }> | null
+    )?.[params.templateKey];
+    if (
+      channel === 'whatsapp' &&
+      approval?.status &&
+      approval.status !== 'approved'
+    ) {
+      const alternatives = [...(priority ?? []), 'sms', 'email'].filter(
+        (c) => c !== 'whatsapp',
+      ) as Message['channel'][];
       channel = alternatives.find((c) => resolveChannel(c, contact, [c]) === c);
       if (!channel) {
         throw new AppException(
@@ -160,7 +184,12 @@ export class SendGateService {
     const quietTo = policies.time('marketing.quietTo');
     if (definition.category === 'marketing' && quietFrom && quietTo) {
       const intended = scheduledFor ?? new Date();
-      const allowed = deferOutOfQuietHours(intended, quietFrom, quietTo, business.timezone);
+      const allowed = deferOutOfQuietHours(
+        intended,
+        quietFrom,
+        quietTo,
+        business.timezone,
+      );
       if (allowed.getTime() !== intended.getTime()) scheduledFor = allowed;
     }
 

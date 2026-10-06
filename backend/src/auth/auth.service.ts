@@ -369,7 +369,11 @@ export class AuthService {
 
     const anyMembership = await this.prisma.businessUser.findFirst({
       where: { userId },
-      select: { id: true, active: true, business: { select: { active: true } } },
+      select: {
+        id: true,
+        active: true,
+        business: { select: { active: true } },
+      },
     });
     if (anyMembership?.active === false) {
       throw new AppException(

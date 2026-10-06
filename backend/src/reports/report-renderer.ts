@@ -37,7 +37,9 @@ export function renderReportHtml(
     timeStyle: 'short',
     timeZone: business.timezone,
   });
-  const contact = [business.address, business.phone].filter(Boolean).join(' · ');
+  const contact = [business.address, business.phone]
+    .filter(Boolean)
+    .join(' · ');
 
   const kpis = data.kpis
     .map(
@@ -101,7 +103,14 @@ export function renderReportHtml(
     ['Generated', when],
     ['Version', `v${meta.version}`],
     ['Records', data.recordsCount.toLocaleString('en-US')],
-    ['Validation', data.validation.status === 'reconciled' ? 'Reconciled' : data.validation.status === 'warning' ? 'Warning' : 'Critical'],
+    [
+      'Validation',
+      data.validation.status === 'reconciled'
+        ? 'Reconciled'
+        : data.validation.status === 'warning'
+          ? 'Warning'
+          : 'Critical',
+    ],
   ];
 
   return `<!DOCTYPE html>

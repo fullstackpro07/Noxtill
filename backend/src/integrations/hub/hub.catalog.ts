@@ -200,7 +200,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Sync listing details, hours and photos',
     direction: 'Two-way',
     modules: ['Business Listings'],
-    permissions: 'Manage your Business Profile — read and write (business.manage)',
+    permissions:
+      'Manage your Business Profile — read and write (business.manage)',
     source: integ(IntegrationProvider.gmb),
     connectKind: 'oauth',
     envKeys: GOOGLE_ENV,
@@ -215,7 +216,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Create campaigns and import spend and results',
     direction: 'Two-way',
     modules: ADS_MODULES,
-    permissions: 'Manage Google Ads campaigns and read their performance (adwords)',
+    permissions:
+      'Manage Google Ads campaigns and read their performance (adwords)',
     source: integ(IntegrationProvider.google_ads),
     connectKind: 'oauth',
     envKeys: [...GOOGLE_ENV, 'GOOGLE_ADS_DEVELOPER_TOKEN'],
@@ -299,7 +301,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Publish page posts and read comments on them',
     direction: 'Two-way',
     modules: SOCIAL_MODULES,
-    permissions: 'Publish page posts · read page engagement and comments (pages_manage_posts, pages_read_engagement, pages_show_list)',
+    permissions:
+      'Publish page posts · read page engagement and comments (pages_manage_posts, pages_read_engagement, pages_show_list)',
     source: social(SocialPlatform.facebook),
     connectKind: 'social',
     workspaceHref: '/social',
@@ -313,7 +316,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Publish posts and read comments on them',
     direction: 'Two-way',
     modules: SOCIAL_MODULES,
-    permissions: 'Publish content · read basic profile and comments (instagram_basic, instagram_content_publish, pages_show_list)',
+    permissions:
+      'Publish content · read basic profile and comments (instagram_basic, instagram_content_publish, pages_show_list)',
     source: social(SocialPlatform.instagram),
     connectKind: 'social',
     workspaceHref: '/social',
@@ -327,7 +331,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Create campaigns and import spend and results',
     direction: 'Two-way',
     modules: ADS_MODULES,
-    permissions: 'Manage ads and business assets (ads_management, business_management)',
+    permissions:
+      'Manage ads and business assets (ads_management, business_management)',
     source: integ(IntegrationProvider.meta_ads),
     connectKind: 'oauth',
     envKeys: ['META_ADS_APP_ID', 'META_ADS_APP_SECRET'],
@@ -373,7 +378,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Mirror bookings to your Outlook calendar',
     direction: 'Outbound',
     modules: ['Bookings'],
-    permissions: 'Read and write your calendars (Calendars.ReadWrite) — Noxtill only creates, updates and removes its own booking events',
+    permissions:
+      'Read and write your calendars (Calendars.ReadWrite) — Noxtill only creates, updates and removes its own booking events',
     source: integ(IntegrationProvider.outlook),
     connectKind: 'oauth',
     envKeys: ['MICROSOFT_GRAPH_CLIENT_ID', 'MICROSOFT_GRAPH_CLIENT_SECRET'],
@@ -384,36 +390,128 @@ export const HUB_CATALOG: HubProviderDef[] = [
   // posts (or bot messages), never a direct-message inbox unless the platform says so.
   ...(
     [
-      ['linkedin', 'LinkedIn', 'LI', 'Publish posts and read comments on them', 'Publish as a member · read organisation social activity (w_member_social, r_organization_social)', 'Two-way'],
-      ['tiktok', 'TikTok', 'TT', 'Publish videos and read their comments', 'Publish videos · list videos and comments (video.publish, video.list, user.info.basic)', 'Two-way'],
-      ['pinterest', 'Pinterest', 'PI', 'Publish pins and read their comments', 'Read boards and pins · write pins (boards:read, pins:read, pins:write)', 'Two-way'],
-      ['twitter', 'X', 'X', 'Publish posts and read mentions', 'Read and write posts (tweet.read, tweet.write, users.read)', 'Two-way'],
-      ['youtube', 'YouTube', 'YT', 'Publish videos and read comments on them', 'Manage your YouTube account, including comments (youtube.force-ssl)', 'Two-way'],
-      ['snapchat', 'Snapchat', 'SC', 'Create Snapchat ad creatives — Snapchat has no comment or message API to read', 'Snapchat Marketing API (snapchat-marketing-api)', 'Outbound'],
-      ['threads', 'Threads', 'TH', 'Publish posts and read replies', 'Publish posts · read and manage replies (threads_basic, threads_content_publish, threads_manage_replies)', 'Two-way'],
-      ['reddit', 'Reddit', 'RD', 'Submit posts and read comments and private messages', 'Submit posts · read comments and private messages (identity, submit, read, privatemessages)', 'Two-way'],
-      ['tumblr', 'Tumblr', 'TB', 'Publish posts and read notes on them', 'Write posts (write, offline_access)', 'Two-way'],
+      [
+        'linkedin',
+        'LinkedIn',
+        'LI',
+        'Publish posts and read comments on them',
+        'Publish as a member · read organisation social activity (w_member_social, r_organization_social)',
+        'Two-way',
+      ],
+      [
+        'tiktok',
+        'TikTok',
+        'TT',
+        'Publish videos and read their comments',
+        'Publish videos · list videos and comments (video.publish, video.list, user.info.basic)',
+        'Two-way',
+      ],
+      [
+        'pinterest',
+        'Pinterest',
+        'PI',
+        'Publish pins and read their comments',
+        'Read boards and pins · write pins (boards:read, pins:read, pins:write)',
+        'Two-way',
+      ],
+      [
+        'twitter',
+        'X',
+        'X',
+        'Publish posts and read mentions',
+        'Read and write posts (tweet.read, tweet.write, users.read)',
+        'Two-way',
+      ],
+      [
+        'youtube',
+        'YouTube',
+        'YT',
+        'Publish videos and read comments on them',
+        'Manage your YouTube account, including comments (youtube.force-ssl)',
+        'Two-way',
+      ],
+      [
+        'snapchat',
+        'Snapchat',
+        'SC',
+        'Create Snapchat ad creatives — Snapchat has no comment or message API to read',
+        'Snapchat Marketing API (snapchat-marketing-api)',
+        'Outbound',
+      ],
+      [
+        'threads',
+        'Threads',
+        'TH',
+        'Publish posts and read replies',
+        'Publish posts · read and manage replies (threads_basic, threads_content_publish, threads_manage_replies)',
+        'Two-way',
+      ],
+      [
+        'reddit',
+        'Reddit',
+        'RD',
+        'Submit posts and read comments and private messages',
+        'Submit posts · read comments and private messages (identity, submit, read, privatemessages)',
+        'Two-way',
+      ],
+      [
+        'tumblr',
+        'Tumblr',
+        'TB',
+        'Publish posts and read notes on them',
+        'Write posts (write, offline_access)',
+        'Two-way',
+      ],
     ] as Array<[SocialPlatform, string, string, string, string, HubDirection]>
-  ).map(([platform, name, initials, benefit, permissions, direction]): HubProviderDef => ({
-    key: platform,
-    name,
-    initials,
-    category: 'Social',
-    benefit,
-    direction,
-    modules: platform === 'snapchat' ? ['Social Media'] : SOCIAL_MODULES,
-    permissions,
-    source: social(platform),
-    connectKind: 'social',
-    workspaceHref: '/social',
-    recordsUnit: 'inbox items',
-  })),
+  ).map(
+    ([
+      platform,
+      name,
+      initials,
+      benefit,
+      permissions,
+      direction,
+    ]): HubProviderDef => ({
+      key: platform,
+      name,
+      initials,
+      category: 'Social',
+      benefit,
+      direction,
+      modules: platform === 'snapchat' ? ['Social Media'] : SOCIAL_MODULES,
+      permissions,
+      source: social(platform),
+      connectKind: 'social',
+      workspaceHref: '/social',
+      recordsUnit: 'inbox items',
+    }),
+  ),
   ...(
     [
-      ['telegram', 'Telegram', 'TG', 'Send and receive messages through your bot'],
-      ['discord', 'Discord', 'DC', 'Send and receive messages through your bot'],
-      ['wechat', 'WeChat', 'WX', 'Send messages and reply from your official account; incoming messages arrive by webhook'],
-      ['line', 'LINE', 'LN', 'Send and receive messages through your official account'],
+      [
+        'telegram',
+        'Telegram',
+        'TG',
+        'Send and receive messages through your bot',
+      ],
+      [
+        'discord',
+        'Discord',
+        'DC',
+        'Send and receive messages through your bot',
+      ],
+      [
+        'wechat',
+        'WeChat',
+        'WX',
+        'Send messages and reply from your official account; incoming messages arrive by webhook',
+      ],
+      [
+        'line',
+        'LINE',
+        'LN',
+        'Send and receive messages through your official account',
+      ],
     ] as Array<[SocialPlatform, string, string, string]>
   ).map(([platform, name, initials, benefit]): HubProviderDef => ({
     key: platform,
@@ -478,7 +576,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Keep your Apple Maps listing current',
     direction: 'Two-way',
     modules: ['Business Listings'],
-    permissions: 'Read and write your Apple Maps business details (server-to-server API key)',
+    permissions:
+      'Read and write your Apple Maps business details (server-to-server API key)',
     source: integ(IntegrationProvider.apple_business_connect),
     connectKind: 'channel',
     envKeys: ['APPLE_BUSINESS_CONNECT_API_KEY'],
@@ -494,7 +593,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Two-way stock, plus online orders into Noxtill',
     direction: 'Two-way',
     modules: ['Orders', 'Products', 'Inventory', 'Reports'],
-    permissions: 'Read and write products, read orders, write inventory (read_products, write_products, read_orders, write_inventory) — Noxtill only reads them and updates inventory levels',
+    permissions:
+      'Read and write products, read orders, write inventory (read_products, write_products, read_orders, write_inventory) — Noxtill only reads them and updates inventory levels',
     source: integ(IntegrationProvider.shopify),
     connectKind: 'oauth',
     credentialFields: [
@@ -602,7 +702,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Post completed sales as invoices',
     direction: 'Outbound',
     modules: ['Orders'],
-    permissions: 'Access your QuickBooks accounting data (com.intuit.quickbooks.accounting) — Noxtill only creates invoices',
+    permissions:
+      'Access your QuickBooks accounting data (com.intuit.quickbooks.accounting) — Noxtill only creates invoices',
     source: integ(IntegrationProvider.quickbooks),
     connectKind: 'oauth',
     envKeys: ['QUICKBOOKS_CLIENT_ID', 'QUICKBOOKS_CLIENT_SECRET'],
@@ -616,7 +717,8 @@ export const HUB_CATALOG: HubProviderDef[] = [
     benefit: 'Post completed sales as invoices',
     direction: 'Outbound',
     modules: ['Orders'],
-    permissions: 'Read and write transactions and contacts (accounting.transactions, accounting.contacts) — Noxtill only creates invoices and contacts',
+    permissions:
+      'Read and write transactions and contacts (accounting.transactions, accounting.contacts) — Noxtill only creates invoices and contacts',
     source: integ(IntegrationProvider.xero),
     connectKind: 'oauth',
     envKeys: ['XERO_CLIENT_ID', 'XERO_CLIENT_SECRET'],
@@ -761,35 +863,74 @@ export function catalogByKey(key: string): HubProviderDef | undefined {
   return HUB_CATALOG.find((p) => p.key === key);
 }
 
-const LISTING_SYNC = 'Runs on your Business Listings auto-sync schedule, and on Sync now.';
-const ADS_SYNC = 'Campaign stats refresh hourly for campaigns created in Noxtill, and on Sync now.';
-const BOOKING_SYNC = 'New and changed bookings are mirrored every 5 minutes, and on Sync now.';
+const LISTING_SYNC =
+  'Runs on your Business Listings auto-sync schedule, and on Sync now.';
+const ADS_SYNC =
+  'Campaign stats refresh hourly for campaigns created in Noxtill, and on Sync now.';
+const BOOKING_SYNC =
+  'New and changed bookings are mirrored every 5 minutes, and on Sync now.';
 
 /** When a provider's data moves — one honest sentence per provider, matching the code that runs it. */
-export function syncInfoOf(def: HubProviderDef): { mode: HubSyncMode; note: string } {
+export function syncInfoOf(def: HubProviderDef): {
+  mode: HubSyncMode;
+  note: string;
+} {
   switch (def.key) {
     case 'google_calendar':
     case 'outlook':
       return { mode: 'scheduled', note: BOOKING_SYNC };
     case 'zoom':
-      return { mode: 'scheduled', note: 'Meeting links are created for new bookings every 5 minutes, and on Sync now.' };
+      return {
+        mode: 'scheduled',
+        note: 'Meeting links are created for new bookings every 5 minutes, and on Sync now.',
+      };
     case 'whatsapp':
-      return { mode: 'event', note: 'Sends messages as they are triggered - nothing is sent until then.' };
+      return {
+        mode: 'event',
+        note: 'Sends messages as they are triggered - nothing is sent until then.',
+      };
     case 'slack':
-      return { mode: 'event', note: 'Posts real events to your channel as they happen - nothing is sent until then.' };
+      return {
+        mode: 'event',
+        note: 'Posts real events to your channel as they happen - nothing is sent until then.',
+      };
     case 'email':
-      return { mode: 'event', note: 'Sends the campaigns you create - nothing is sent until then.' };
+      return {
+        mode: 'event',
+        note: 'Sends the campaigns you create - nothing is sent until then.',
+      };
     case 'rest_api':
-      return { mode: 'event', note: 'Answers requests made with your API keys.' };
+      return {
+        mode: 'event',
+        note: 'Answers requests made with your API keys.',
+      };
     case 'webhooks':
-      return { mode: 'event', note: 'Delivers events to your endpoints as they fire.' };
+      return {
+        mode: 'event',
+        note: 'Delivers events to your endpoints as they fire.',
+      };
     default:
   }
-  if (def.category === 'Listings' || ['gmb', 'bing_places'].includes(def.key)) return { mode: 'scheduled', note: LISTING_SYNC };
-  if (def.category === 'Advertising' || ['google_ads', 'meta_ads', 'microsoft_ads'].includes(def.key)) return { mode: 'scheduled', note: ADS_SYNC };
-  if (def.connectKind === 'automation') return { mode: 'event', note: 'Delivers events to your automation as they fire.' };
+  if (def.category === 'Listings' || ['gmb', 'bing_places'].includes(def.key))
+    return { mode: 'scheduled', note: LISTING_SYNC };
+  if (
+    def.category === 'Advertising' ||
+    ['google_ads', 'meta_ads', 'microsoft_ads'].includes(def.key)
+  )
+    return { mode: 'scheduled', note: ADS_SYNC };
+  if (def.connectKind === 'automation')
+    return {
+      mode: 'event',
+      note: 'Delivers events to your automation as they fire.',
+    };
   if (def.connectKind === 'social' || def.connectKind === 'social-token') {
-    return { mode: 'event', note: 'Receives messages as they arrive and sends replies when you reply.' };
+    return {
+      mode: 'event',
+      note: 'Receives messages as they arrive and sends replies when you reply.',
+    };
   }
-  return { mode: 'manual', note: 'Runs only when you start a sync - the first sync does not run automatically.' };
+  return {
+    mode: 'manual',
+    note: 'Runs only when you start a sync - the first sync does not run automatically.',
+  };
 }

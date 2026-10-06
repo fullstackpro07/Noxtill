@@ -8,7 +8,13 @@ import { StorageModule } from '../common/storage/storage.module';
 import { ExportsModule } from '../exports/exports.module';
 
 @Module({
-  imports: [AuthModule, RolesModule, NotificationsModule, StorageModule, ExportsModule],
+  imports: [
+    AuthModule,
+    RolesModule,
+    NotificationsModule,
+    StorageModule,
+    ExportsModule,
+  ],
   controllers: [SettingsHubController],
   providers: [SettingsHubService],
 })
