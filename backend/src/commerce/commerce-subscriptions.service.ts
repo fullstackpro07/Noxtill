@@ -89,7 +89,7 @@ export class CommerceSubscriptionsService {
     entityType: string,
     entityId: string,
     action: string,
-    actorUserId: string,
+    actorUserId: string | null,
     extra: { reason?: string | null; before?: unknown; after?: unknown } = {},
   ) {
     return this.tenantPrisma.client.commerceSubscriptionAudit.create({
@@ -561,7 +561,7 @@ export class CommerceSubscriptionsService {
 
   async setSubscriptionStatus(
     businessId: string,
-    actorUserId: string,
+    actorUserId: string | null,
     id: string,
     status: CommerceSubscriptionStatus,
     reason?: string,
@@ -592,9 +592,28 @@ export class CommerceSubscriptionsService {
     return updated;
   }
 
+  /** Customer-portal wrapper: prove ownership before reusing the staff transition rules. */
+  async setCustomerSubscriptionStatus(
+    businessId: string,
+    customerId: string,
+    id: string,
+    status: CommerceSubscriptionStatus,
+    reason?: string,
+  ) {
+    const subscription = await this.findSubscription(businessId, id);
+    if (subscription.customerId !== customerId) {
+      throw new AppException(
+        CODES.SUBSCRIPTION_NOT_FOUND,
+        'Subscription was not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.setSubscriptionStatus(businessId, null, id, status, reason);
+  }
+
   async toggleSkip(
     businessId: string,
-    actorUserId: string,
+    actorUserId: string | null,
     id: string,
     skip: boolean,
   ) {
@@ -618,6 +637,24 @@ export class CommerceSubscriptionsService {
       actorUserId,
     );
     return updated;
+  }
+
+  /** Customer-portal wrapper: the same allowSkip rule as the staff action, scoped to its owner. */
+  async toggleCustomerSubscriptionSkip(
+    businessId: string,
+    customerId: string,
+    id: string,
+    skip: boolean,
+  ) {
+    const subscription = await this.findSubscription(businessId, id);
+    if (subscription.customerId !== customerId) {
+      throw new AppException(
+        CODES.SUBSCRIPTION_NOT_FOUND,
+        'Subscription was not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.toggleSkip(businessId, null, id, skip);
   }
 
   // ---- Pre-orders ------------------------------------------------------------------------------

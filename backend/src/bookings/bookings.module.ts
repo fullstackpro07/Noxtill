@@ -56,6 +56,11 @@ import { StorageModule } from '../common/storage/storage.module';
     BookingRemindersScheduler,
     BookingRemindersProcessor,
   ],
-  exports: [PublicBookingService, AppointmentsService],
+  exports: [
+    PublicBookingService,
+    AppointmentsService,
+    WaitlistService,
+    QueueService,
+  ],
 })
 export class BookingsModule {}

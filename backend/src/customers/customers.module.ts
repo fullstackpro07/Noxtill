@@ -71,6 +71,11 @@ import { AiModule } from '../ai/ai.module';
     MembershipsService,
     MemoryNotesService,
   ],
-  exports: [CustomersService, SegmentsService, LoyaltyService],
+  exports: [
+    CustomersService,
+    SegmentsService,
+    LoyaltyService,
+    MembershipsService,
+  ],
 })
 export class CustomersModule {}

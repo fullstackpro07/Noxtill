@@ -73,6 +73,66 @@ export class WaitlistService {
     });
   }
 
+  /** Portal waitlist entries are attached to the authenticated customer, never resolved by phone. */
+  async joinForCustomer(
+    businessId: string,
+    customerId: string,
+    input: {
+      serviceId: string;
+      preferredFrom?: string;
+      preferredTo?: string;
+    },
+  ) {
+    const [service, customer, settings] = await Promise.all([
+      this.tenantPrisma.client.product.findFirst({
+        where: {
+          id: input.serviceId,
+          businessId,
+          kind: 'service',
+          active: true,
+        },
+        select: { id: true },
+      }),
+      this.tenantPrisma.client.customer.findFirst({
+        where: { id: customerId, businessId },
+        select: { id: true },
+      }),
+      this.tenantPrisma.client.bookingLinkSettings.findUnique({
+        where: { businessId },
+        select: { visibleServiceIds: true },
+      }),
+    ]);
+    if (!service || !customer) {
+      throw new AppException(
+        WAITLIST_ERROR_CODES.ENTRY_NOT_FOUND,
+        'Customer or bookable service not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const visibleIds = (settings?.visibleServiceIds as string[] | null) ?? [];
+    if (visibleIds.length > 0 && !visibleIds.includes(service.id)) {
+      throw new AppException(
+        WAITLIST_ERROR_CODES.ENTRY_NOT_FOUND,
+        'Bookable service not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.tenantPrisma.client.waitlistEntry.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        serviceId: service.id,
+        preferredFrom: input.preferredFrom
+          ? new Date(input.preferredFrom)
+          : undefined,
+        preferredTo: input.preferredTo
+          ? new Date(input.preferredTo)
+          : undefined,
+      },
+      include: { customer: true, service: true },
+    });
+  }
+
   list(status?: WaitlistStatus) {
     return this.tenantPrisma.client.waitlistEntry.findMany({
       where: { status },
