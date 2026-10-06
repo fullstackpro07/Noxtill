@@ -292,6 +292,20 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    key: "customer-portal",
+    labelKey: "nav.customerPortal",
+    href: "/customer-portal",
+    icon: UserCircle,
+    roles: ["owner", "manager"],
+    isNew: true,
+    children: [
+      { key: "customer-portal-overview", labelKey: "nav.customerPortalOverview", href: "/customer-portal", icon: LayoutDashboard },
+      { key: "customer-portal-builder", labelKey: "nav.customerPortalBuilder", href: "/customer-portal/home-builder", icon: Layers },
+      { key: "customer-portal-accounts", labelKey: "nav.customerPortalAccounts", href: "/customer-portal/accounts", icon: Users },
+      { key: "customer-portal-settings", labelKey: "nav.customerPortalSettings", href: "/customer-portal/settings", icon: Settings },
+    ],
+  },
+  {
     key: "reviews",
     labelKey: "nav.reviews",
     href: "/reviews",

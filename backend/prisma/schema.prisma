@@ -824,6 +824,13 @@ model Business {
 
   businessUsers                BusinessUser[]
   customers                    Customer[]
+  customerPortalSettings       CustomerPortalSettings?
+  customerPortalLayouts        CustomerPortalLayoutVersion[]
+  customerPortalAccounts       CustomerPortalAccount[]
+  customerPortalInvites        CustomerPortalInvite[]
+  customerPortalSessions       CustomerPortalSession[]
+  customerPortalActivities     CustomerPortalActivity[]
+  customerPortalIdempotency    CustomerPortalIdempotency[]
   products                     Product[]
   orders                       Order[]
   creditEntries                CreditEntry[]
@@ -1074,6 +1081,8 @@ model User {
   workflowApprovalDecisions     WorkflowApproval[]           @relation("WorkflowApprovalDecider")
   workflowDeadLetterAssignments WorkflowDeadLetter[]         @relation("WorkflowDeadLetterOwner")
   workflowDeadLetterDecisions   WorkflowDeadLetterDecision[] @relation("WorkflowDeadLetterDecisionActor")
+  customerPortalLayouts         CustomerPortalLayoutVersion[] @relation("CustomerPortalLayoutAuthor")
+  customerPortalInvites         CustomerPortalInvite[]        @relation("CustomerPortalInviteCreator")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1320,6 +1329,9 @@ model Customer {
   videoTestimonials      VideoTestimonial[]
   dataSubjectRequests    DataSubjectRequest[]
   vouchers               Voucher[]
+  portalAccount          CustomerPortalAccount?
+  portalInvites          CustomerPortalInvite[]
+  portalActivities       CustomerPortalActivity[]
 
   b2bAccount            CommerceB2bAccount?
   commerceSubscriptions CommerceSubscription[]
@@ -1331,6 +1343,140 @@ model Customer {
   @@index([businessId, name])
   @@fulltext([name])
   @@map("customers")
+}
+
+/// Customer Portal configuration. The business's existing `branding` JSON remains canonical;
+/// this row contains only portal access, feature visibility, and links to the business's own
+/// legal pages. A missing row (and `enabled = false`) never changes current customer access.
+model CustomerPortalSettings {
+  id                String   @id @default(uuid())
+  businessId        String   @unique @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id])
+  enabled           Boolean  @default(false)
+  enabledFeatures   Json     @default("[]") @map("enabled_features")
+  inviteExpiryHours Int      @default(72) @map("invite_expiry_hours")
+  termsUrl          String?  @map("terms_url")
+  privacyUrl        String?  @map("privacy_url")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("customer_portal_settings")
+}
+
+/// A customer-facing login identity, deliberately separate from staff `User` and `BusinessUser`.
+model CustomerPortalAccount {
+  id                  String    @id @default(uuid())
+  businessId          String    @map("business_id")
+  business            Business  @relation(fields: [businessId], references: [id])
+  customerId          String    @unique @map("customer_id")
+  customer            Customer  @relation(fields: [customerId], references: [id])
+  passwordHash        String    @map("password_hash")
+  active              Boolean   @default(true)
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  lastSignedInAt      DateTime? @map("last_signed_in_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  sessions   CustomerPortalSession[]
+  activities CustomerPortalActivity[] @relation("CustomerPortalAccountActivity")
+
+  @@index([businessId, active])
+  @@map("customer_portal_accounts")
+}
+
+/// One-use invitation. Only a SHA-256 hash of the random bearer token is persisted.
+model CustomerPortalInvite {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  business        Business  @relation(fields: [businessId], references: [id])
+  customerId      String    @map("customer_id")
+  customer        Customer  @relation(fields: [customerId], references: [id])
+  createdByUserId String    @map("created_by_user_id")
+  createdBy       User      @relation("CustomerPortalInviteCreator", fields: [createdByUserId], references: [id])
+  tokenHash       String    @unique @map("token_hash") @db.Char(64)
+  expiresAt       DateTime  @map("expires_at")
+  acceptedAt      DateTime? @map("accepted_at")
+  revokedAt       DateTime? @map("revoked_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([businessId, customerId, expiresAt])
+  @@map("customer_portal_invites")
+}
+
+/// Opaque, revocable customer session. Persisted bearer tokens are hashes, never raw credentials.
+model CustomerPortalSession {
+  id         String                @id @default(uuid())
+  businessId String                @map("business_id")
+  business   Business              @relation(fields: [businessId], references: [id])
+  accountId  String                @map("account_id")
+  account    CustomerPortalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash  String                @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime              @map("expires_at")
+  revokedAt  DateTime?             @map("revoked_at")
+  lastUsedAt DateTime              @default(now()) @map("last_used_at")
+  createdAt  DateTime              @default(now()) @map("created_at")
+
+  @@index([businessId, accountId, expiresAt])
+  @@map("customer_portal_sessions")
+}
+
+/// Versioned home-builder configuration. Publishing a new version archives the previous one;
+/// restoring old content creates a new version rather than rewriting history.
+model CustomerPortalLayoutVersion {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  business        Business  @relation(fields: [businessId], references: [id])
+  version         Int
+  layout          Json
+  status          String    @default("draft")
+  createdByUserId String    @map("created_by_user_id")
+  createdBy       User      @relation("CustomerPortalLayoutAuthor", fields: [createdByUserId], references: [id])
+  publishedAt     DateTime? @map("published_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@unique([businessId, version])
+  @@index([businessId, status, version])
+  @@map("customer_portal_layout_versions")
+}
+
+/// Append-only audit of customer-visible account activity; references canonical entities without
+/// duplicating their business data or including private staff notes.
+model CustomerPortalActivity {
+  id         String                 @id @default(uuid())
+  businessId String                 @map("business_id")
+  business   Business               @relation(fields: [businessId], references: [id])
+  customerId String                 @map("customer_id")
+  customer   Customer               @relation(fields: [customerId], references: [id])
+  accountId  String?                @map("account_id")
+  account    CustomerPortalAccount? @relation("CustomerPortalAccountActivity", fields: [accountId], references: [id], onDelete: SetNull)
+  event      String
+  entityType String?                @map("entity_type")
+  entityId   String?                @map("entity_id")
+  createdAt  DateTime               @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([businessId, customerId, createdAt], map: "cp_activities_business_customer_created_idx")
+  @@map("customer_portal_activities")
+}
+
+/// Short-lived request replay ledger for customer/admin portal mutations. Only response payloads
+/// from non-credential mutations are stored; invite/session bearer secrets are never cached here.
+model CustomerPortalIdempotency {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  business    Business @relation(fields: [businessId], references: [id])
+  principalId String   @map("principal_id") @db.VarChar(191)
+  keyHash     String   @map("key_hash") @db.Char(64)
+  requestHash String   @map("request_hash") @db.Char(64)
+  status      String   @default("processing") @db.VarChar(16)
+  response    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, principalId, keyHash], map: "cp_idempotency_business_principal_key")
+  @@index([businessId, createdAt], map: "cp_idempotency_business_created_idx")
+  @@map("customer_portal_idempotency")
 }
 
 /// Segments, real rule builder (UPD-BE-098) — replaces the compute-on-the-fly vip/new/lapsed

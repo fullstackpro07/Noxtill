@@ -582,3 +582,10 @@ settings-hub files. These currently hold Codex's uncommitted portal/procurement 
 commits **only its own hunks** (stage a patch of your hunks, e.g. `git diff <file>` → edit →
 `git apply --cached`); never commit the other agent's unfinished hunk. Commit with explicit paths,
 never `git add -A`, never push. Report bugs for the other agent under Requests.
+
+## Progress log — goal #8
+
+- Customer Portal implementation checkpoint: admin/public views, backend APIs, two migrations and
+  Portal-specific shared-file hunks are ready as one module commit. Both TypeScript checks, Portal
+  eslint and full backend Jest passed (343 suites / 2,150 tests); Prisma reports 158 migrations
+  applied. Browser QA is still pending, and the customer Forgot password flow is not built yet.

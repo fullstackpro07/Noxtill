@@ -9,6 +9,13 @@
 export const TENANT_SCOPED_MODELS = new Set<string>([
   'BusinessUser',
   'Customer',
+  'CustomerPortalSettings',
+  'CustomerPortalAccount',
+  'CustomerPortalInvite',
+  'CustomerPortalSession',
+  'CustomerPortalLayoutVersion',
+  'CustomerPortalActivity',
+  'CustomerPortalIdempotency',
   'Product',
   'Order',
   'CreditEntry',

@@ -299,6 +299,11 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.diagnosisCenter": "Diagnosis Center",
     "nav.digitalTwin": "Digital Twin",
     "nav.intelligenceSettings": "Intelligence Settings",
+    "nav.customerPortal": "Customer Portal",
+    "nav.customerPortalOverview": "Overview",
+    "nav.customerPortalBuilder": "Home Builder",
+    "nav.customerPortalAccounts": "Customer Accounts",
+    "nav.customerPortalSettings": "Portal Settings",
 
     "topbar.searchPlaceholder": "Search customers, orders…",
     "topbar.openMenu": "Open menu",
