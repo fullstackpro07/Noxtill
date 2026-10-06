@@ -9,6 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CustomerPortalService } from './customer-portal.service';
 import {
   CustomerPortalAcceptInviteDto,
@@ -19,6 +20,8 @@ import {
   CustomerPortalLoginDto,
   CustomerPortalMembershipCancelDto,
   CustomerPortalPaginationDto,
+  CustomerPortalPasswordResetDto,
+  CustomerPortalPasswordResetRequestDto,
   CustomerPortalProfileDto,
   CustomerPortalQueueDto,
   CustomerPortalQuoteResponseDto,
@@ -57,6 +60,26 @@ export class CustomerPortalController {
     @Body() dto: CustomerPortalAcceptInviteDto,
   ) {
     return this.portal.acceptInvite(slug, dto);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('business/:slug/password-reset')
+  requestPasswordReset(
+    @Param('slug') slug: string,
+    @Body() dto: CustomerPortalPasswordResetRequestDto,
+  ) {
+    return this.portal.requestPasswordReset(slug, dto);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('business/:slug/reset-password')
+  resetPassword(
+    @Param('slug') slug: string,
+    @Body() dto: CustomerPortalPasswordResetDto,
+  ) {
+    return this.portal.resetPassword(slug, dto);
   }
 
   @Public()

@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
@@ -27,12 +27,14 @@ import { derivePaymentStatus } from '../orders/orders.service';
 import { CommerceSubscriptionsService } from '../commerce/commerce-subscriptions.service';
 import { LoyaltyService } from '../customers/loyalty.service';
 import { MembershipsService } from '../customers/memberships.service';
+import { EmailService } from '../messaging/channels/email.service';
 import { CreateReturnDto } from '../orders/dto/create-return.dto';
 import {
   CUSTOMER_PORTAL_FEATURES,
   CUSTOMER_PORTAL_HOME_CARDS,
   CUSTOMER_PORTAL_LOCK_MINUTES,
   CUSTOMER_PORTAL_MAX_LOGIN_ATTEMPTS,
+  CUSTOMER_PORTAL_PASSWORD_RESET_MINUTES,
   CUSTOMER_PORTAL_SESSION_DAYS,
   CustomerPortalCard,
   CustomerPortalFeature,
@@ -45,6 +47,8 @@ import {
   CustomerPortalLoginDto,
   CustomerPortalMembershipCancelDto,
   CustomerPortalPaginationDto,
+  CustomerPortalPasswordResetDto,
+  CustomerPortalPasswordResetRequestDto,
   CustomerPortalProfileDto,
   CustomerPortalQuoteResponseDto,
   CustomerPortalSettingsDto,
@@ -77,6 +81,8 @@ export interface PortalIdentity {
 
 @Injectable()
 export class CustomerPortalService {
+  private readonly logger = new Logger(CustomerPortalService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantPrisma: TenantPrismaService,
@@ -91,6 +97,7 @@ export class CustomerPortalService {
     private readonly commerceSubscriptions: CommerceSubscriptionsService,
     private readonly loyalty: LoyaltyService,
     private readonly memberships: MembershipsService,
+    private readonly email: EmailService,
   ) {}
 
   async executeCustomerMutation<T>(
@@ -926,6 +933,163 @@ export class CustomerPortalService {
       'account_created',
     );
     return this.createSession(account.id, invite.businessId);
+  }
+
+  async requestPasswordReset(
+    slug: string,
+    dto: CustomerPortalPasswordResetRequestDto,
+  ) {
+    const genericResponse = {
+      message:
+        'If an active portal account matches that email, a password reset link will be sent.',
+    };
+    const business = await this.prisma.business.findUnique({
+      where: { slug },
+      select: {
+        id: true,
+        customerPortalSettings: { select: { enabled: true } },
+      },
+    });
+    if (!business?.customerPortalSettings?.enabled) return genericResponse;
+
+    const account = await this.prisma.customerPortalAccount.findFirst({
+      where: {
+        businessId: business.id,
+        active: true,
+        customer: {
+          is: {
+            email: dto.email.trim(),
+            status: CustomerStatus.active,
+          },
+        },
+      },
+      select: {
+        id: true,
+        businessId: true,
+        customerId: true,
+        customer: { select: { email: true } },
+      },
+    });
+    if (!account?.customer.email) return genericResponse;
+
+    const now = new Date();
+    const token = randomBytes(HASHED_TOKEN_BYTES).toString('base64url');
+    const expiresAt = new Date(
+      now.getTime() + CUSTOMER_PORTAL_PASSWORD_RESET_MINUTES * 60_000,
+    );
+    const reset = await this.prisma.$transaction(async (tx) => {
+      await tx.customerPortalPasswordReset.updateMany({
+        where: {
+          businessId: account.businessId,
+          accountId: account.id,
+          usedAt: null,
+        },
+        data: { usedAt: now },
+      });
+      return tx.customerPortalPasswordReset.create({
+        data: {
+          businessId: account.businessId,
+          accountId: account.id,
+          tokenHash: this.hashToken(token),
+          expiresAt,
+        },
+        select: { id: true },
+      });
+    });
+
+    const frontendUrl = (
+      process.env.FRONTEND_URL ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
+    const resetUrl = new URL(
+      `/portal/${encodeURIComponent(slug)}/reset-password`,
+      frontendUrl,
+    );
+    resetUrl.searchParams.set('token', token);
+    try {
+      await this.email.send({
+        to: account.customer.email,
+        templateKey: 'customer_portal_password_reset',
+        text: [
+          'We received a request to reset the password for your customer portal account.',
+          `Use this one-time link within ${CUSTOMER_PORTAL_PASSWORD_RESET_MINUTES} minutes:`,
+          resetUrl.toString(),
+          'If you did not request this, you can ignore this email.',
+        ].join('\n\n'),
+        locale: 'en',
+        businessId: account.businessId,
+        customerId: account.customerId,
+      });
+    } catch {
+      await this.prisma.customerPortalPasswordReset.updateMany({
+        where: { id: reset.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      this.logger.warn(
+        `Customer portal password reset email delivery failed for account ${account.id}`,
+      );
+    }
+    return genericResponse;
+  }
+
+  async resetPassword(slug: string, dto: CustomerPortalPasswordResetDto) {
+    const now = new Date();
+    const reset = await this.prisma.customerPortalPasswordReset.findUnique({
+      where: { tokenHash: this.hashToken(dto.token) },
+      include: {
+        business: {
+          select: {
+            slug: true,
+            customerPortalSettings: { select: { enabled: true } },
+          },
+        },
+        account: {
+          select: {
+            id: true,
+            businessId: true,
+            customerId: true,
+            active: true,
+          },
+        },
+      },
+    });
+    if (
+      !reset ||
+      reset.business.slug !== slug ||
+      !reset.business.customerPortalSettings?.enabled ||
+      !reset.account.active ||
+      reset.usedAt ||
+      reset.expiresAt <= now
+    ) {
+      throw this.invalidPasswordReset();
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.customerPortalPasswordReset.updateMany({
+        where: { id: reset.id, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (!consumed.count) throw this.invalidPasswordReset();
+      await tx.customerPortalAccount.update({
+        where: { id: reset.accountId },
+        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null },
+      });
+      await tx.customerPortalSession.updateMany({
+        where: {
+          businessId: reset.businessId,
+          accountId: reset.accountId,
+          revokedAt: null,
+        },
+        data: { revokedAt: now },
+      });
+    });
+    await this.recordActivity(
+      reset.businessId,
+      reset.account.customerId,
+      reset.accountId,
+      'password_reset',
+    );
+    return { passwordReset: true };
   }
 
   async login(dto: CustomerPortalLoginDto) {
@@ -2749,6 +2913,14 @@ export class CustomerPortalService {
       'PORTAL_SESSION_INVALID',
       'Your portal session is expired or invalid. Please sign in again.',
       HttpStatus.UNAUTHORIZED,
+    );
+  }
+
+  private invalidPasswordReset() {
+    return new AppException(
+      'PORTAL_PASSWORD_RESET_INVALID',
+      'This password reset link is invalid, expired, or already used. Request a new link.',
+      HttpStatus.BAD_REQUEST,
     );
   }
 

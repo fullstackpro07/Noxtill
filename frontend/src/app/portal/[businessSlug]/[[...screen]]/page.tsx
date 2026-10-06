@@ -16,6 +16,7 @@ export default async function CustomerPortalPage({
       businessSlug={businessSlug}
       screen={screen?.[0] ?? "home"}
       inviteToken={query.token}
+      resetToken={query.token}
     />
   );
 }

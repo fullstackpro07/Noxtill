@@ -117,6 +117,24 @@ export class CustomerPortalAcceptInviteDto {
   password!: string;
 }
 
+export class CustomerPortalPasswordResetRequestDto {
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+}
+
+export class CustomerPortalPasswordResetDto {
+  @IsString()
+  @MinLength(32)
+  @MaxLength(128)
+  token!: string;
+
+  @IsString()
+  @MinLength(12)
+  @MaxLength(128)
+  password!: string;
+}
+
 export class CustomerPortalSettingsDto {
   @IsBoolean()
   enabled!: boolean;

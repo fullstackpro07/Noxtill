@@ -43,6 +43,8 @@ import {
   joinPortalWaitlist,
   portalAcceptInvite,
   portalLogin,
+  portalRequestPasswordReset,
+  portalResetPassword,
   portalLogout,
   redeemPortalLoyaltyReward,
   cancelPortalMembership,
@@ -68,7 +70,8 @@ type PortalScreen =
   | "support"
   | "loyalty"
   | "login"
-  | "accept";
+  | "accept"
+  | "reset-password";
 
 function uniquePortalRows<T extends { id: string }>(rows: T[]) {
   return Array.from(new Map(rows.map((row) => [row.id, row])).values());
@@ -85,7 +88,7 @@ function nextPortalCursors(pagination: Record<string, CustomerPortalPageInfo>) {
 }
 
 const screenInfo: Record<
-  Exclude<PortalScreen, "login" | "accept">,
+  Exclude<PortalScreen, "login" | "accept" | "reset-password">,
   { title: string; feature?: CustomerPortalFeature; icon: typeof Package }
 > = {
   home: { title: "Overview", icon: ShieldCheck },
@@ -159,6 +162,8 @@ function LoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
+  const [requestingReset, setRequestingReset] = useState(false);
+  const [resetRequested, setResetRequested] = useState(false);
   const accepting = Boolean(initialInviteToken);
   const login = useMutation({
     mutationFn: () => portalLogin(slug, email, password),
@@ -171,9 +176,15 @@ function LoginForm({
     onSuccess: (result) => onSession(result.accessToken),
     onError: (error) => toast.error(error.message),
   });
+  const requestReset = useMutation({
+    mutationFn: () => portalRequestPasswordReset(slug, email),
+    onSuccess: () => setResetRequested(true),
+    onError: (error) => toast.error(error.message),
+  });
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (accepting) accept.mutate();
+    if (requestingReset) requestReset.mutate();
+    else if (accepting) accept.mutate();
     else login.mutate();
   }
   return (
@@ -183,14 +194,27 @@ function LoginForm({
           Customer Portal
         </p>
         <h1 className="mt-2 text-2xl font-bold text-[var(--app-text)]">
-          {accepting ? "Set up your account" : "Sign in"}
+          {accepting
+            ? "Set up your account"
+            : requestingReset
+              ? "Forgot password"
+              : "Sign in"}
         </h1>
         <p className="mt-2 text-sm text-[var(--app-text-muted)]">
           {accepting
             ? "Choose a password to activate the one-time invitation."
-            : `Secure access to your records at ${slug}.`}
+            : requestingReset
+              ? "Enter your account email and we’ll send a one-time reset link if it matches an active portal account."
+              : `Secure access to your records at ${slug}.`}
         </p>
-        {accepting && !initialInviteToken ? (
+        {resetRequested ? (
+          <p
+            role="status"
+            className="mt-6 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-muted)] p-4 text-sm text-[var(--app-text-muted)]"
+          >
+            If an active portal account matches that email, a password reset link will be sent.
+          </p>
+        ) : accepting && !initialInviteToken ? (
           <ErrorBox message="Invite token missing. Ask the business for a new invite." />
         ) : (
           <>
@@ -207,41 +231,162 @@ function LoginForm({
                 />
               </label>
             )}
-            <label className="mt-5 block text-sm font-medium text-[var(--app-text)]">
-              {accepting ? "Create password" : "Password"}
+            {!requestingReset && (
+              <label className="mt-5 block text-sm font-medium text-[var(--app-text)]">
+                {accepting ? "Create password" : "Password"}
+                <input
+                  className={`${input} mt-2`}
+                  autoComplete={accepting ? "new-password" : "current-password"}
+                  type="password"
+                  minLength={12}
+                  maxLength={128}
+                  required
+                  value={accepting ? invitePassword : password}
+                  onChange={(event) =>
+                    accepting
+                      ? setInvitePassword(event.target.value)
+                      : setPassword(event.target.value)
+                  }
+                />
+                <span className="mt-1 block text-xs text-[var(--app-text-muted)]">
+                  Use at least 12 characters.
+                </span>
+              </label>
+            )}
+            <button
+              className={`${button} mt-6 w-full`}
+              type="submit"
+              disabled={login.isPending || accept.isPending || requestReset.isPending}
+            >
+              {login.isPending || accept.isPending || requestReset.isPending
+                ? "Please wait…"
+                : accepting
+                  ? "Activate account"
+                  : requestingReset
+                    ? "Send reset link"
+                    : "Sign in"}
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </button>
+            {!accepting && !requestingReset && (
+              <button
+                type="button"
+                className="mt-4 w-full text-sm font-medium text-[var(--app-primary)] hover:underline"
+                onClick={() => setRequestingReset(true)}
+              >
+                Forgot password?
+              </button>
+            )}
+            {requestingReset && (
+              <button
+                type="button"
+                className="mt-4 w-full text-sm font-medium text-[var(--app-primary)] hover:underline"
+                onClick={() => setRequestingReset(false)}
+              >
+                Back to sign in
+              </button>
+            )}
+          </>
+        )}
+      </form>
+    </main>
+  );
+}
+
+function PasswordResetForm({
+  slug,
+  token,
+}: {
+  slug: string;
+  token?: string;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [complete, setComplete] = useState(false);
+  const reset = useMutation({
+    mutationFn: () => portalResetPassword(slug, token ?? "", password),
+    onSuccess: () => setComplete(true),
+    onError: (error) => toast.error(error.message),
+  });
+
+  return (
+    <main className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-md items-center p-5">
+      <section className={`${card} w-full p-7`}>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--app-primary)]">
+          Customer Portal
+        </p>
+        <h1 className="mt-2 text-2xl font-bold text-[var(--app-text)]">
+          {complete ? "Password updated" : "Choose a new password"}
+        </h1>
+        {complete ? (
+          <>
+            <p className="mt-2 text-sm text-[var(--app-text-muted)]">
+              Your password has been changed. Sign in with the new password.
+            </p>
+            <Link className={`${button} mt-6 w-full`} href={`/portal/${slug}/login`}>
+              Return to sign in
+            </Link>
+          </>
+        ) : !token ? (
+          <div className="mt-5">
+            <ErrorBox message="This reset link is invalid or expired. Request a new link from sign in." />
+            <Link className="mt-4 inline-block text-sm font-medium text-[var(--app-primary)] hover:underline" href={`/portal/${slug}/login`}>
+              Return to sign in
+            </Link>
+          </div>
+        ) : (
+          <form
+            className="mt-5 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (password !== confirmation) return;
+              reset.mutate();
+            }}
+          >
+            <label className="block text-sm font-medium text-[var(--app-text)]">
+              New password
               <input
                 className={`${input} mt-2`}
-                autoComplete={accepting ? "new-password" : "current-password"}
                 type="password"
+                autoComplete="new-password"
                 minLength={12}
                 maxLength={128}
                 required
-                value={accepting ? invitePassword : password}
-                onChange={(event) =>
-                  accepting
-                    ? setInvitePassword(event.target.value)
-                    : setPassword(event.target.value)
-                }
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
               />
               <span className="mt-1 block text-xs text-[var(--app-text-muted)]">
                 Use at least 12 characters.
               </span>
             </label>
+            <label className="block text-sm font-medium text-[var(--app-text)]">
+              Confirm new password
+              <input
+                className={`${input} mt-2`}
+                type="password"
+                autoComplete="new-password"
+                minLength={12}
+                maxLength={128}
+                required
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+              />
+            </label>
+            {confirmation && password !== confirmation && (
+              <p role="alert" className="text-sm text-[var(--app-danger)]">
+                Passwords do not match.
+              </p>
+            )}
             <button
-              className={`${button} mt-6 w-full`}
+              className={`${button} w-full`}
               type="submit"
-              disabled={login.isPending || accept.isPending}
+              disabled={reset.isPending || password !== confirmation}
             >
-              {login.isPending || accept.isPending
-                ? "Please wait…"
-                : accepting
-                  ? "Activate account"
-                  : "Sign in"}
+              {reset.isPending ? "Updating…" : "Update password"}
               <ArrowRight className="h-4 w-4" aria-hidden />
             </button>
-          </>
+          </form>
         )}
-      </form>
+      </section>
     </main>
   );
 }
@@ -2013,17 +2158,20 @@ export function CustomerPortalPublicView({
   businessSlug,
   screen: screenParam,
   inviteToken,
+  resetToken,
 }: {
   businessSlug: string;
   screen: string;
   inviteToken?: string;
+  resetToken?: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const screen = (
     screenParam in screenInfo ||
     screenParam === "login" ||
-    screenParam === "accept"
+    screenParam === "accept" ||
+    screenParam === "reset-password"
       ? screenParam
       : "home"
   ) as PortalScreen;
@@ -2054,7 +2202,9 @@ export function CustomerPortalPublicView({
     },
   });
   const activeScreen =
-    screen === "login" || screen === "accept" ? "home" : screen;
+    screen === "login" || screen === "accept" || screen === "reset-password"
+      ? "home"
+      : screen;
   const info = screenInfo[activeScreen];
   const allowed = useMemo(
     () => bootstrap.data?.enabledFeatures ?? [],
@@ -2073,6 +2223,8 @@ export function CustomerPortalPublicView({
       </main>
     );
   if (!bootstrap.data) return null;
+  if (screen === "reset-password")
+    return <PasswordResetForm slug={businessSlug} token={resetToken} />;
   if (!token || screen === "login" || screen === "accept")
     return (
       <LoginForm
@@ -2092,7 +2244,7 @@ export function CustomerPortalPublicView({
         <ErrorBox message="This section is not enabled by the business." />
       </main>
     );
-  const screenPaths: Exclude<PortalScreen, "login" | "accept">[] = [
+  const screenPaths: Exclude<PortalScreen, "login" | "accept" | "reset-password">[] = [
     "home",
     "account",
     "orders",

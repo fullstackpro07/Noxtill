@@ -24,3 +24,4 @@ export type CustomerPortalCard = (typeof CUSTOMER_PORTAL_HOME_CARDS)[number];
 export const CUSTOMER_PORTAL_SESSION_DAYS = 30;
 export const CUSTOMER_PORTAL_MAX_LOGIN_ATTEMPTS = 6;
 export const CUSTOMER_PORTAL_LOCK_MINUTES = 15;
+export const CUSTOMER_PORTAL_PASSWORD_RESET_MINUTES = 60;

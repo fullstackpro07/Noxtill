@@ -2,6 +2,8 @@ jest.mock('../orders/invoice.service', () => ({
   InvoiceService: class InvoiceService {},
 }));
 
+import { createHash } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { ClsService } from 'nestjs-cls';
 import {
   DeliveryStatus,
@@ -23,6 +25,7 @@ import { PublicBookingService } from '../bookings/public-booking.service';
 import { WaitlistService } from '../bookings/waitlist.service';
 import { QueueService } from '../bookings/queue.service';
 import { SendGateService } from '../messaging/send-gate.service';
+import { EmailService } from '../messaging/channels/email.service';
 import { ReturnsService } from '../orders/returns.service';
 import { OrdersService } from '../orders/orders.service';
 import { InvoiceService } from '../orders/invoice.service';
@@ -66,6 +69,8 @@ describe('CustomerPortalService (real MySQL)', () => {
   let otherQuoteId: string;
   let portalAuthorization: string;
   let billingCancelSubscription: jest.Mock;
+  let emailSend: jest.MockedFunction<EmailService['send']>;
+  let resetCustomerId: string | undefined;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -75,6 +80,9 @@ describe('CustomerPortalService (real MySQL)', () => {
     const sendGate = {
       send: jest.fn().mockResolvedValue({ ok: true }),
     } as unknown as SendGateService;
+    emailSend = jest
+      .fn<ReturnType<EmailService['send']>, Parameters<EmailService['send']>>()
+      .mockResolvedValue({ providerRef: 'portal-reset-test' });
     const waitlistService = new WaitlistService(tenant, sendGate);
     const returns = new ReturnsService(
       tenant,
@@ -120,6 +128,7 @@ describe('CustomerPortalService (real MySQL)', () => {
       new MembershipsService(tenant, {
         cancelSubscription: billingCancelSubscription,
       } as unknown as BillingService),
+      { send: emailSend } as unknown as EmailService,
     );
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -275,6 +284,9 @@ describe('CustomerPortalService (real MySQL)', () => {
 
   afterAll(async () => {
     if (businessId) {
+      await prisma.customerPortalPasswordReset.deleteMany({
+        where: { businessId },
+      });
       await prisma.customerPortalActivity.deleteMany({ where: { businessId } });
       await prisma.customerPortalIdempotency.deleteMany({
         where: { businessId },
@@ -319,7 +331,13 @@ describe('CustomerPortalService (real MySQL)', () => {
       });
       if (customerId || otherCustomerId) {
         await prisma.customer.deleteMany({
-          where: { id: { in: [customerId, otherCustomerId].filter(Boolean) } },
+          where: {
+            id: {
+              in: [customerId, otherCustomerId, resetCustomerId].filter(
+                (id): id is string => Boolean(id),
+              ),
+            },
+          },
         });
       }
       if (userId) await prisma.user.deleteMany({ where: { id: userId } });
@@ -981,6 +999,104 @@ describe('CustomerPortalService (real MySQL)', () => {
       ),
     ).rejects.toMatchObject({
       response: { code: 'PORTAL_IDEMPOTENCY_KEY_REQUIRED' },
+    });
+  });
+
+  it('sends one-use hashed reset links without revealing whether a portal email exists', async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const resetEmail = `portal-reset-${suffix}@example.test`;
+    const resetCustomer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: 'Portal Reset Customer',
+        phone: `+1777${suffix.replace(/\D/g, '').slice(-7)}`,
+        email: resetEmail,
+      },
+    });
+    resetCustomerId = resetCustomer.id;
+    const resetAccount = await prisma.customerPortalAccount.create({
+      data: {
+        businessId,
+        customerId: resetCustomer.id,
+        passwordHash: await bcrypt.hash('old-portal-password-001', 10),
+      },
+    });
+    const emailBefore = emailSend.mock.calls.length;
+    const knownResponse = await service.requestPasswordReset(businessSlug, {
+      email: resetEmail,
+    });
+    const unknownResponse = await service.requestPasswordReset(businessSlug, {
+      email: `nobody-${suffix}@example.test`,
+    });
+    expect(knownResponse).toEqual(unknownResponse);
+    expect(emailSend).toHaveBeenCalledTimes(emailBefore + 1);
+
+    const sent = emailSend.mock.calls[emailSend.mock.calls.length - 1][0];
+    expect(sent.text).toContain('one-time link');
+    const resetUrl = sent.text.match(/https?:\/\/\S+/)?.[0];
+    expect(resetUrl).toBeTruthy();
+    const token = new URL(resetUrl!).searchParams.get('token');
+    expect(token).toBeTruthy();
+    const tokenHash = createHash('sha256').update(token!).digest('hex');
+    const storedReset = await prisma.customerPortalPasswordReset.findUnique({
+      where: { tokenHash },
+    });
+    expect(storedReset).toMatchObject({
+      businessId,
+      accountId: resetAccount.id,
+      usedAt: null,
+    });
+    expect(storedReset?.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+    const updated = await service.resetPassword(businessSlug, {
+      token: token!,
+      password: 'new-portal-password-002',
+    });
+    expect(updated).toEqual({ passwordReset: true });
+    await expect(
+      service.resetPassword(businessSlug, {
+        token: token!,
+        password: 'another-portal-password-003',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'PORTAL_PASSWORD_RESET_INVALID' },
+    });
+    await expect(
+      service.login({
+        businessSlug,
+        email: resetEmail,
+        password: 'old-portal-password-001',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'PORTAL_INVALID_CREDENTIALS' },
+    });
+    await expect(
+      service.login({
+        businessSlug,
+        email: resetEmail,
+        password: 'new-portal-password-002',
+      }),
+    ).resolves.toMatchObject({ tokenType: 'Bearer' });
+
+    emailSend.mockClear();
+    await service.requestPasswordReset(businessSlug, { email: resetEmail });
+    const expiring = emailSend.mock.calls[0][0];
+    const expiringUrl = expiring.text.match(/https?:\/\/\S+/)?.[0];
+    const expiringToken = new URL(expiringUrl!).searchParams.get('token')!;
+    const expiringHash = createHash('sha256')
+      .update(expiringToken)
+      .digest('hex');
+    await prisma.customerPortalPasswordReset.update({
+      where: { tokenHash: expiringHash },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    await expect(
+      service.resetPassword(businessSlug, {
+        token: expiringToken,
+        password: 'expired-reset-password-004',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'PORTAL_PASSWORD_RESET_INVALID' },
     });
   });
 });

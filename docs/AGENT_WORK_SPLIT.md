@@ -588,7 +588,10 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Customer Portal implementation checkpoint: admin/public views, backend APIs, two migrations and
   Portal-specific shared-file hunks are ready as one module commit. Both TypeScript checks, Portal
   eslint and full backend Jest passed (343 suites / 2,150 tests); Prisma reports 158 migrations
-  applied. Browser QA is still pending, and the customer Forgot password flow is not built yet.
+  applied. The public Forgot password flow is now implemented with one-use SHA-256-hashed tokens,
+  a 60-minute expiry, generic responses, session revocation and a real-MySQL test. Its migration is
+  applied; current full backend Jest passes (343 suites / 2,151 tests), both TypeScript checks and
+  touched-file eslint pass. The reset-flow commit is pending; browser QA remains pending.
 - goal #8 / Claude ✅ Website & Commerce, 11 remaining screens (`3104c1c`): Overview, AI Website
   Builder, Pages, Navigation & Menus, Landing Pages, Blog & Content, Forms & Lead Capture,
   Storefront Configuration, Themes & Branding, Domains & Publishing, Website Settings (`/website/*`),

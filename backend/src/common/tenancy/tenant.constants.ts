@@ -16,6 +16,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'CustomerPortalLayoutVersion',
   'CustomerPortalActivity',
   'CustomerPortalIdempotency',
+  'CustomerPortalPasswordReset',
   'Product',
   'Order',
   'CreditEntry',

@@ -831,6 +831,7 @@ model Business {
   customerPortalSessions       CustomerPortalSession[]
   customerPortalActivities     CustomerPortalActivity[]
   customerPortalIdempotency    CustomerPortalIdempotency[]
+  customerPortalPasswordResets CustomerPortalPasswordReset[]
   products                     Product[]
   orders                       Order[]
   creditEntries                CreditEntry[]
@@ -1390,6 +1391,7 @@ model CustomerPortalAccount {
 
   sessions   CustomerPortalSession[]
   activities CustomerPortalActivity[] @relation("CustomerPortalAccountActivity")
+  passwordResets CustomerPortalPasswordReset[]
 
   @@index([businessId, active])
   @@map("customer_portal_accounts")
@@ -1487,6 +1489,22 @@ model CustomerPortalIdempotency {
   @@unique([businessId, principalId, keyHash], map: "cp_idempotency_business_principal_key")
   @@index([businessId, createdAt], map: "cp_idempotency_business_created_idx")
   @@map("customer_portal_idempotency")
+}
+
+/// One-use customer password reset. The raw emailed token is never persisted.
+model CustomerPortalPasswordReset {
+  id         String                @id @default(uuid())
+  businessId String                @map("business_id")
+  business   Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  accountId  String                @map("account_id")
+  account    CustomerPortalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash  String                @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime              @map("expires_at")
+  usedAt     DateTime?             @map("used_at")
+  createdAt  DateTime              @default(now()) @map("created_at")
+
+  @@index([businessId, accountId, expiresAt], map: "cp_password_resets_business_account_exp_idx")
+  @@map("customer_portal_password_resets")
 }
 
 /// Segments, real rule builder (UPD-BE-098) — replaces the compute-on-the-fly vip/new/lapsed

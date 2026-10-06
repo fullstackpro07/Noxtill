@@ -300,6 +300,22 @@ export function portalAcceptInvite(
   });
 }
 
+export function portalRequestPasswordReset(slug: string, email: string) {
+  return customerRequest<{ message: string }>(
+    `/business/${encodeURIComponent(slug)}/password-reset`,
+    undefined,
+    { method: "POST", body: { email } },
+  );
+}
+
+export function portalResetPassword(slug: string, token: string, password: string) {
+  return customerRequest<{ passwordReset: boolean }>(
+    `/business/${encodeURIComponent(slug)}/reset-password`,
+    undefined,
+    { method: "POST", body: { token, password } },
+  );
+}
+
 export function portalLogout(token: string) {
   return customerRequest<{ signedOut: boolean }>("/logout", token, {
     method: "POST",
