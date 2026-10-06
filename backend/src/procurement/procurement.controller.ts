@@ -31,11 +31,13 @@ export class ProcurementController {
     return this.procurement.overview(user.businessId);
   }
 
+  @RequireCapability(CAPABILITIES.PURCHASES_MANAGE)
   @Get('sourcing')
   sourcing(@CurrentUser() user: AuthenticatedUser) {
     return this.procurement.sourcing(user.businessId);
   }
 
+  @RequireCapability(CAPABILITIES.PURCHASES_MANAGE)
   @Get('three-way-match')
   threeWayMatch(@CurrentUser() user: AuthenticatedUser) {
     return this.procurement.threeWayMatch(user.businessId);
