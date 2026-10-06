@@ -1067,6 +1067,8 @@ model Business {
   websiteRedirects             WebsiteRedirect[]
   websiteProductSettings       WebsiteProductSetting[]
   websiteCollections           WebsiteCollection[]
+  procurementContracts         ProcurementSupplierContract[]
+  procurementContractVersions  ProcurementSupplierContractVersion[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1094,9 +1096,9 @@ model User {
   sessions                      Session[]
   twoFactorCodes                TwoFactorCode[]
   assistantConversations        AssistantConversation[]
-  workflowApprovalDecisions     WorkflowApproval[]           @relation("WorkflowApprovalDecider")
-  workflowDeadLetterAssignments WorkflowDeadLetter[]         @relation("WorkflowDeadLetterOwner")
-  workflowDeadLetterDecisions   WorkflowDeadLetterDecision[] @relation("WorkflowDeadLetterDecisionActor")
+  workflowApprovalDecisions     WorkflowApproval[]            @relation("WorkflowApprovalDecider")
+  workflowDeadLetterAssignments WorkflowDeadLetter[]          @relation("WorkflowDeadLetterOwner")
+  workflowDeadLetterDecisions   WorkflowDeadLetterDecision[]  @relation("WorkflowDeadLetterDecisionActor")
   customerPortalLayouts         CustomerPortalLayoutVersion[] @relation("CustomerPortalLayoutAuthor")
   customerPortalInvites         CustomerPortalInvite[]        @relation("CustomerPortalInviteCreator")
   procurementRequests           ProcurementRequest[]          @relation("ProcurementRequestRequester")
@@ -4927,6 +4929,7 @@ model Supplier {
   commerceClaims         CommerceSupplierClaim[]
   fulfillmentNodes       CommerceFulfillmentNode[]
   procurementRequests    ProcurementRequest[]
+  procurementContracts   ProcurementSupplierContract[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -5860,19 +5863,19 @@ model AiInsight {
 /// Merchant-entered hypothesis attached to an existing canonical AI Insight. It records a question
 /// to investigate, not an asserted cause, and never duplicates or changes the source insight.
 model BiDiagnosisHypothesis {
-  id               String                     @id @default(uuid())
-  businessId       String                     @map("business_id")
-  business         Business                   @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  insightId        String                     @map("insight_id")
-  insight          AiInsight                  @relation(fields: [insightId], references: [id], onDelete: Cascade)
-  hypothesis       String                     @db.Text
+  id               String                      @id @default(uuid())
+  businessId       String                      @map("business_id")
+  business         Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  insightId        String                      @map("insight_id")
+  insight          AiInsight                   @relation(fields: [insightId], references: [id], onDelete: Cascade)
+  hypothesis       String                      @db.Text
   status           BiDiagnosisHypothesisStatus @default(open)
-  resolutionNote   String?                    @map("resolution_note") @db.VarChar(500)
-  createdByUserId  String                     @map("created_by_user_id")
-  resolvedByUserId String?                    @map("resolved_by_user_id")
-  resolvedAt       DateTime?                  @map("resolved_at")
-  createdAt        DateTime                   @default(now()) @map("created_at")
-  updatedAt        DateTime                   @updatedAt @map("updated_at")
+  resolutionNote   String?                     @map("resolution_note") @db.VarChar(500)
+  createdByUserId  String                      @map("created_by_user_id")
+  resolvedByUserId String?                     @map("resolved_by_user_id")
+  resolvedAt       DateTime?                   @map("resolved_at")
+  createdAt        DateTime                    @default(now()) @map("created_at")
+  updatedAt        DateTime                    @updatedAt @map("updated_at")
 
   @@index([businessId, status, createdAt], map: "bi_diagnosis_hypotheses_business_status_created_idx")
   @@index([businessId, insightId], map: "bi_diagnosis_hypotheses_business_insight_idx")
@@ -5924,18 +5927,18 @@ model BiScenarioVersion {
 /// Immutable model assumptions only. Operational entities and measures remain canonical in their
 /// owning modules and are resolved live by BusinessIntelligenceService.digitalTwinContext().
 model BiTwinAssumptionVersion {
-  id             String              @id @default(uuid())
-  businessId     String              @map("business_id")
-  business       Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  seriesId       String              @map("series_id") @db.Char(36)
-  version        Int
-  entityType     BiTwinEntityType    @map("entity_type")
-  entityId       String              @map("entity_id")
-  assumptionKey  BiTwinAssumptionKey @map("assumption_key")
-  value          Decimal             @db.Decimal(14, 4)
-  rationale      String              @db.Text
-  createdByUserId String             @map("created_by_user_id")
-  createdAt      DateTime            @default(now()) @map("created_at")
+  id              String              @id @default(uuid())
+  businessId      String              @map("business_id")
+  business        Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  seriesId        String              @map("series_id") @db.Char(36)
+  version         Int
+  entityType      BiTwinEntityType    @map("entity_type")
+  entityId        String              @map("entity_id")
+  assumptionKey   BiTwinAssumptionKey @map("assumption_key")
+  value           Decimal             @db.Decimal(14, 4)
+  rationale       String              @db.Text
+  createdByUserId String              @map("created_by_user_id")
+  createdAt       DateTime            @default(now()) @map("created_at")
 
   @@unique([businessId, seriesId, version], map: "bi_twin_assumption_versions_business_series_version_key")
   @@index([businessId, entityType, entityId], map: "bi_twin_assumption_versions_business_entity_idx")
@@ -8380,4 +8383,76 @@ model WebsiteCollection {
 
   @@unique([businessId, slug])
   @@map("website_collections")
+}
+
+enum ProcurementContractStatus {
+  draft
+  active
+  terminated
+}
+
+/// Procurement metadata for a supplier agreement (module 38.4). The signed file itself is not stored
+/// here: there is no Documents & eSign module, so a contract links to wherever the file lives.
+/// Terms are versioned; operational use requires an explicit "terms confirmed" step.
+model ProcurementSupplierContract {
+  id                     String                    @id @default(uuid())
+  businessId             String                    @map("business_id")
+  business               Business                  @relation(fields: [businessId], references: [id])
+  supplierId             String                    @map("supplier_id")
+  supplier               Supplier                  @relation(fields: [supplierId], references: [id])
+  reference              String                    @db.VarChar(80)
+  title                  String                    @db.VarChar(200)
+  status                 ProcurementContractStatus @default(draft)
+  documentUrl            String?                   @map("document_url") @db.VarChar(1000)
+  effectiveFrom          DateTime                  @map("effective_from") @db.Date
+  expiresAt              DateTime?                 @map("expires_at") @db.Date
+  autoRenew              Boolean                   @default(false) @map("auto_renew")
+  noticeDays             Int?                      @map("notice_days")
+  currency               String                    @db.Char(3)
+  paymentTerms           String?                   @map("payment_terms") @db.VarChar(200)
+  discountTiers          Json                      @default("[]") @map("discount_tiers")
+  priceValidUntil        DateTime?                 @map("price_valid_until") @db.Date
+  minimumOrderQty        Int?                      @map("minimum_order_qty")
+  sla                    String?                   @db.Text
+  deliveryTerms          String?                   @map("delivery_terms") @db.VarChar(300)
+  incoterms              String?                   @db.VarChar(20)
+  warranty               String?                   @db.VarChar(300)
+  complianceRequirements Json                      @default("[]") @map("compliance_requirements")
+  categories             Json                      @default("[]")
+  ownerUserId            String?                   @map("owner_user_id")
+  version                Int                       @default(1)
+  termsConfirmedAt       DateTime?                 @map("terms_confirmed_at")
+  termsConfirmedByUserId String?                   @map("terms_confirmed_by_user_id")
+  /// Expiry date the last renewal alert was sent for, so each term is alerted once.
+  renewalAlertedFor      DateTime?                 @map("renewal_alerted_for") @db.Date
+  createdByUserId        String?                   @map("created_by_user_id")
+
+  versions ProcurementSupplierContractVersion[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, reference])
+  @@index([businessId, supplierId])
+  @@index([businessId, status, expiresAt])
+  @@map("procurement_supplier_contracts")
+}
+
+/// Immutable snapshot of a contract's terms each time they change.
+model ProcurementSupplierContractVersion {
+  id          String                      @id @default(uuid())
+  businessId  String                      @map("business_id")
+  business    Business                    @relation(fields: [businessId], references: [id])
+  contractId  String                      @map("contract_id")
+  contract    ProcurementSupplierContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  version     Int
+  terms       Json
+  reason      String?                     @db.VarChar(300)
+  actorUserId String?                     @map("actor_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([contractId, version])
+  @@index([businessId])
+  @@map("procurement_supplier_contract_versions")
 }

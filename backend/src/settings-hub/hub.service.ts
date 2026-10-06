@@ -49,6 +49,7 @@ import { HubDeps, QueueSnapshot } from './categories/hub.deps';
 import { platformCategories } from './categories/platform';
 import { modulesCategories } from './categories/modules';
 import { seoCategories } from './categories/seo';
+import { procurementCategories } from './categories/procurement';
 import {
   accessCategories,
   SENSITIVE_CAPS,
@@ -231,6 +232,7 @@ export class SettingsHubService {
         ...platformCategories(this.deps),
         ...modulesCategories(this.deps),
         ...seoCategories(this.deps),
+        ...procurementCategories(this.deps),
         ...accessCategories(this.deps),
         ...moneyCategories(this.deps),
         ...operationsCategories(this.deps),

@@ -503,6 +503,9 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { key: "procurement-overview", labelKey: "nav.procurementOverview", href: "/procurement", icon: LayoutDashboard },
       { key: "purchase-requests", labelKey: "nav.purchaseRequests", href: "/procurement/requests", icon: ClipboardList },
+      { key: "procurement-contracts", labelKey: "nav.supplierContracts", href: "/procurement/contracts", icon: FileText },
+      { key: "procurement-analytics", labelKey: "nav.procurementAnalytics", href: "/procurement/analytics", icon: TrendingUp },
+      { key: "procurement-settings", labelKey: "nav.procurementSettings", href: "/settings/procurement", icon: Settings },
     ],
   },
   {

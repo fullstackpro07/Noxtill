@@ -60,6 +60,7 @@ import { DigitizerModule } from './digitizer/digitizer.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { AdsModule } from './ads/ads.module';
 import { WebsiteModule } from './website/website.module';
+import { ProcurementContractsModule } from './procurement/contracts/procurement-contracts.module';
 import { BookDemoModule } from './book-demo/book-demo.module';
 import { AccountingModule } from './integrations/accounting/accounting.module';
 import { EcommerceModule } from './integrations/ecommerce/ecommerce.module';
@@ -137,6 +138,7 @@ import { ProcurementModule } from './procurement/procurement.module';
     DeliveryModule,
     AdsModule,
     WebsiteModule,
+    ProcurementContractsModule,
     BookDemoModule,
     AccountingModule,
     EcommerceModule,

@@ -213,6 +213,8 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'WebsiteRedirect',
   'WebsiteProductSetting',
   'WebsiteCollection',
+  'ProcurementSupplierContract',
+  'ProcurementSupplierContractVersion',
 ]);
 
 export const CLS_KEY_BUSINESS_ID = 'businessId';

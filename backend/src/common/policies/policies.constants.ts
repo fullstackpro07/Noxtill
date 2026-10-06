@@ -222,6 +222,14 @@ export const POLICY_DEFS = {
     kind: 'boolean',
     default: false,
   },
+  // procurement/contracts (renewal alert job + Supplier Contracts screen)
+  'procurement.contractRenewalAlertDays': {
+    kind: 'number',
+    default: 30,
+    min: 1,
+    max: 365,
+    integer: true,
+  },
   // backups (exports/backup.service.ts)
   'backup.enabled': { kind: 'boolean', default: false },
   'backup.retentionDays': {
