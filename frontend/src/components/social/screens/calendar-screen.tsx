@@ -34,6 +34,7 @@ export function CalendarScreen() {
   // off the grid rather than assigned an arbitrary slot.
   const weekStart = new Date(monday);
   weekStart.setHours(0, 0, 0, 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const calItemsByDay: Record<number, { t: string; pf: string; time: string; st: string; rawPost?: any }[]> = {};
   posts.forEach((p) => {
     const scheduledFor = (p.raw as { scheduledFor?: string | null } | undefined)?.scheduledFor;

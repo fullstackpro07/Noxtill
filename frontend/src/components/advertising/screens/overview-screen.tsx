@@ -186,6 +186,7 @@ export function OverviewScreen() {
 
   // Actionable Alerts
   const outOfStockProducts = products.filter((p) => p.stockOnHand !== undefined && p.stockOnHand <= 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const uncontactedLeads = leads.filter((l) => l.formData?.status === "New" || (l as any).st === "New");
 
   const alerts = [

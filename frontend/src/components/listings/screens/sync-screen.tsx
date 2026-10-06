@@ -146,7 +146,7 @@ export function SyncScreen() {
                     }
                     className="ml-auto flex h-8 items-center rounded-[8px] bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]"
                   >
-                    Use Noxtill's value
+                    Use Noxtill&apos;s value
                   </button>
                 </div>
               </div>
@@ -154,7 +154,7 @@ export function SyncScreen() {
           </div>
 
           <div className="mt-3 text-[11.5px] leading-relaxed text-[#45505F]">
-            To make the directory's value win instead, switch conflict resolution to "Directory wins" in Listings Settings and sync again —
+            To make the directory&apos;s value win instead, switch conflict resolution to &quot;Directory wins&quot; in Listings Settings and sync again —
             {" "}
             <button
               onClick={async () => {

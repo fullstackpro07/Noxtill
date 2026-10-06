@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, MessageSquare, Mail, Check } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -23,10 +23,11 @@ export function NightlyCloseChannelDrawer({ open, onClose, current }: { open: bo
     current?.config.channels && current.config.channels.length > 0 ? current.config.channels : current ? [current.channel] : ["whatsapp"],
   );
 
-  useEffect(() => {
-    if (!current) return;
-    setSelected(current.config.channels.length > 0 ? current.config.channels : [current.channel]);
-  }, [current]);
+  const [syncedFrom, setSyncedFrom] = useState(current);
+  if (current !== syncedFrom) {
+    setSyncedFrom(current);
+    if (current) setSelected(current.config.channels.length > 0 ? current.config.channels : [current.channel]);
+  }
 
   function toggle(key: NightlyCloseChannel) {
     setSelected((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));

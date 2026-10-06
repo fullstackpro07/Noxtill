@@ -1,6 +1,7 @@
 "use client";
 
 import { useSocial, getChip } from "../social-context";
+import type { SocialPlatform } from "@/lib/social-accounts-api";
 import { connectSocialAccount } from "@/lib/social-accounts-api";
 
 export function AccountsScreen() {
@@ -8,10 +9,10 @@ export function AccountsScreen() {
 
   const handleConnect = async (platformName: string) => {
     try {
-      const pfKey = platformName.toLowerCase().replace(/[^a-z]/g, "") as any;
+      const pfKey = platformName.toLowerCase().replace(/[^a-z]/g, "") as SocialPlatform;
       const res = await connectSocialAccount(pfKey);
       if (res.authUrl) {
-        window.location.href = res.authUrl;
+        window.location.assign(res.authUrl);
       } else {
         flash(`Connected ${platformName}.`);
       }

@@ -145,6 +145,7 @@ export function CampaignsScreen() {
                 {filtered.map((c) => {
                   const statusFormatted = c.status.charAt(0).toUpperCase() + c.status.slice(1);
                   const chip = getChip(statusFormatted);
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
                   const pMeta = (c.providerMeta || {}) as Record<string, any>;
                   const campName = (pMeta.name as string) || `Campaign (${c.goal})`;
                   const prodName = (pMeta.productName as string) || (pMeta.target as string) || "General promotion";

@@ -63,7 +63,7 @@ export function NightlyCloseTimeModal({ open, onClose, current }: { open: boolea
           <option key={t} value={t}>{label12h(t)}</option>
         ))}
       </select>
-      <p className="mt-2.5 text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>Times are shown in your business's configured timezone.</p>
+      <p className="mt-2.5 text-[11.5px]" style={{ color: "var(--app-text-disabled)" }}>Times are shown in your business&apos;s configured timezone.</p>
     </Dialog>
   );
 }

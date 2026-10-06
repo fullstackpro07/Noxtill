@@ -7,6 +7,7 @@ export function CreativesScreen() {
   const { creatives, openDrawer, goToScreen, flash } = useAdvertising();
 
   const ads = creatives.map((c, i) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
     const isFatigued = c.status === "paused" || (c as any).fatigue;
     return {
       id: c.id,

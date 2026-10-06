@@ -102,7 +102,7 @@ export function NeedsAttentionCard({ currency }: { currency: string }) {
         <div className="mb-1.5 flex items-center justify-between gap-2">
           <span className="flex items-center gap-2">
             <Target className="h-3.5 w-3.5" style={{ color: "var(--app-text-faintest)" }} aria-hidden />
-            <h3 className="text-[13px] font-bold" style={{ color: "var(--app-text)" }}>Today's Goals</h3>
+            <h3 className="text-[13px] font-bold" style={{ color: "var(--app-text)" }}>Today&apos;s Goals</h3>
           </span>
           {canManageGoal && !editing && (
             <button type="button" onClick={openEditor} className="flex items-center gap-1 text-[11px] font-bold" style={{ color: "var(--app-primary)" }}>

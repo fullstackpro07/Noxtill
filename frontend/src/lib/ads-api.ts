@@ -267,6 +267,7 @@ export function createAdExperiment(input: {
   variantABody: string;
   variantBHeadline: string;
   variantBBody: string;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per call site
 }): Promise<any> {
   return apiFetch("/ads/experiments", { method: "POST", body: JSON.stringify(input) });
 }

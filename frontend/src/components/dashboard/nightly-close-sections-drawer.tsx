@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronUp, ChevronDown, DollarSign, AlertTriangle, CalendarDays, Star, MessageSquareWarning, Wallet } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -30,14 +30,16 @@ export function NightlyCloseSectionsDrawer({ open, onClose, current }: { open: b
   const [order, setOrder] = useState<NightlyCloseSection[]>(current?.config.sections ?? [...NIGHTLY_CLOSE_SECTIONS]);
   const [enabled, setEnabled] = useState<Set<NightlyCloseSection>>(new Set(current?.config.sections ?? NIGHTLY_CLOSE_SECTIONS));
 
-  useEffect(() => {
+  const [syncedFrom, setSyncedFrom] = useState(current);
+  if (current !== syncedFrom) {
+    setSyncedFrom(current);
     if (current) {
       const on = current.config.sections;
       const off = NIGHTLY_CLOSE_SECTIONS.filter((s) => !on.includes(s));
       setOrder([...on, ...off]);
       setEnabled(new Set(on));
     }
-  }, [current]);
+  }
 
   function move(section: NightlyCloseSection, dir: -1 | 1) {
     setOrder((list) => {
@@ -72,7 +74,7 @@ export function NightlyCloseSectionsDrawer({ open, onClose, current }: { open: b
   return (
     <SlideDrawer open={open} onClose={onClose} title="Nightly Close Sections">
       <div className="flex flex-col gap-2.5">
-        <p className="mb-1 text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>Reorder with the arrows, or switch a section off to leave it out of tonight's close.</p>
+        <p className="mb-1 text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>Reorder with the arrows, or switch a section off to leave it out of tonight&apos;s close.</p>
         {order.map((section, i) => {
           const Icon = SECTION_ICON[section];
           const on = enabled.has(section);

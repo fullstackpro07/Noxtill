@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Mic } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -18,12 +18,14 @@ export function NightlyCloseVoiceDrawer({ open, onClose, current }: { open: bool
   const [enabled, setEnabled] = useState(current?.config.voiceNoteEnabled ?? false);
   const [voiceId, setVoiceId] = useState<string | null>(current?.config.voiceId ?? null);
 
-  useEffect(() => {
+  const [syncedFrom, setSyncedFrom] = useState(current);
+  if (current !== syncedFrom) {
+    setSyncedFrom(current);
     if (current) {
       setEnabled(current.config.voiceNoteEnabled);
       setVoiceId(current.config.voiceId);
     }
-  }, [current]);
+  }
 
   const mutation = useMutation({
     mutationFn: () => updateNightlyCloseSettings({ voiceNoteEnabled: enabled, voiceId }),

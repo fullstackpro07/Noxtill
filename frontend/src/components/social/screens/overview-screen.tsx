@@ -2,8 +2,10 @@
 
 import React from "react";
 import { useSocial, formatNum } from "../social-context";
+import { useNow } from "@/hooks/use-now";
 
 export function OverviewScreen() {
+  const now = useNow();
   const {
     range,
     setRange,
@@ -251,7 +253,7 @@ export function OverviewScreen() {
       : []),
   ];
 
-  const dateSpanLabel = `${new Date(Date.now() - 30 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  const dateSpanLabel = `${new Date(now - 30 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(now).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
@@ -372,7 +374,7 @@ export function OverviewScreen() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0E8442" strokeWidth="2" strokeLinecap="round">
               <path d="m11 3 1.7 5L17.7 9.7 12.7 11.4 11 16.4 9.3 11.4 4.3 9.7 9.3 8Z" />
             </svg>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "#101828" }}>Today's social intelligence</h3>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "#101828" }}>Today&apos;s social intelligence</h3>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
             {intelItems.map((x) => (

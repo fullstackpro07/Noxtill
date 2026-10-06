@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useRef, useEffect } from "react";
+import React, { createContext, useContext, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
@@ -121,11 +121,15 @@ interface AdvertisingContextType {
 
   // Modals & Drawers
   drawer: DrawerType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   drawerItem: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   openDrawer: (t: DrawerType, item?: any) => void;
   closeDrawer: () => void;
   modal: ModalType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   modalData: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   openModal: (t: ModalType, data?: any) => void;
   closeModal: () => void;
   closeAll: () => void;
@@ -167,10 +171,11 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
 
-  const [screen, setScreen] = useState<ScreenType>("overview");
   const [drawer, setDrawer] = useState<DrawerType>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const [drawerItem, setDrawerItem] = useState<any>(null);
   const [modal, setModal] = useState<ModalType>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const [modalData, setModalData] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -185,6 +190,7 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
     toastTimerRef.current = setTimeout(() => setToast(null), 2800);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const openDrawer = (t: DrawerType, item?: any) => {
     setDrawer(t);
     setDrawerItem(item ?? null);
@@ -195,6 +201,7 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
     setDrawerItem(null);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const openModal = (t: ModalType, data?: any) => {
     setModal(t);
     setModalData(data ?? null);
@@ -215,11 +222,14 @@ export function AdvertisingProvider({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => {
-    if (!pathname) return;
-    const seg = pathname.replace("/advertising", "").replace(/^\//, "") || "overview";
-    setScreen(seg as ScreenType);
-  }, [pathname]);
+  const screenFromPath = (path: string | null): ScreenType =>
+    ((path ?? "").replace("/advertising", "").replace(/^\//, "") || "overview") as ScreenType;
+  const [screen, setScreen] = useState<ScreenType>(() => screenFromPath(pathname));
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    if (pathname) setScreen(screenFromPath(pathname));
+  }
 
   const goToScreen = (s: ScreenType) => {
     setScreen(s);

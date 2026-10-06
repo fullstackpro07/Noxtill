@@ -290,17 +290,17 @@ function PaymentSplitDonut({ data, currency }: { data: { method: string; amount:
   }
   const total = data.reduce((sum, d) => sum + d.amount, 0) || 1;
   const C = 2 * Math.PI * 46;
-  let acc = 0;
+  const offsets = data.map((_, i) => data.slice(0, i).reduce((sum, x) => sum + (x.amount / total) * C, 0));
   return (
     <div className="flex items-center gap-3">
       <svg viewBox="0 0 130 130" className="h-28 w-28 shrink-0">
         <g transform="rotate(-90 65 65)">
-          {data.map((d) => {
+          {data.map((d, i) => {
+            const acc = offsets[i];
             const len = (d.amount / total) * C;
             const el = (
               <circle key={d.method} cx={65} cy={65} r={46} fill="none" stroke={METHOD_COLOR[d.method] ?? "#98A2B3"} strokeWidth={26} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-acc} />
             );
-            acc += len;
             return el;
           })}
         </g>

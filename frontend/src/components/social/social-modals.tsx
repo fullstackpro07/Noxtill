@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import type { SocialPlatform } from "@/lib/social-accounts-api";
 import { useSocial } from "./social-context";
 
 export function SocialModals() {
@@ -125,7 +126,7 @@ function AutoplanModalContent() {
     for (const r of planRows) {
       await createPostAction({
         caption: `${r.t}\n\n${r.why}`,
-        platforms: [r.pf.toLowerCase() as any],
+        platforms: [r.pf.toLowerCase() as SocialPlatform],
       });
     }
     setIsDrafting(false);
@@ -168,6 +169,7 @@ function AutoplanModalContent() {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per call site
 function RepurposeModalContent({ post }: { post?: any }) {
   const { closeModal, flash, createPostAction } = useSocial();
   const [selectedPfs, setSelectedPfs] = useState<Record<string, boolean>>({
@@ -196,7 +198,7 @@ function RepurposeModalContent({ post }: { post?: any }) {
     for (const p of chosen) {
       await createPostAction({
         caption: `${post?.t || "Draft post"} (${p} variant)`,
-        platforms: [p.toLowerCase() as any],
+        platforms: [p.toLowerCase() as SocialPlatform],
       });
     }
     setIsSubmitting(false);
@@ -276,6 +278,7 @@ function BulkApproveModalContent() {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per call site
 function FailureModalContent({ post }: { post?: any }) {
   const { closeModal, goToScreen, flash } = useSocial();
   const platformName = post?.pf || "Platform";
@@ -321,6 +324,7 @@ function FailureModalContent({ post }: { post?: any }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per call site
 function DisconnectModalContent({ account }: { account?: any }) {
   const { closeModal, disconnectAccount, posts } = useSocial();
   const scheduledCount = posts.filter((p) => p.pf === account?.pf && p.st === "Scheduled").length;

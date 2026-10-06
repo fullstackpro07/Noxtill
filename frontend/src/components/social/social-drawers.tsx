@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import type { SocialPlatform } from "@/lib/social-accounts-api";
+import { useNow } from "@/hooks/use-now";
 import { useSocial, getChip, formatNum, getInitials, type PostItem, type CommentItem, type LeadItem, type AccountItem, type MediaItem, type CompItem } from "./social-context";
 
 export function SocialDrawers() {
@@ -115,7 +117,7 @@ function ComposerDrawerContent() {
     setIsSubmitting(true);
     await createPostAction({
       caption: caption + (hashtags ? `\n\n${hashtags}` : ""),
-      platforms: [platform.toLowerCase() as any],
+      platforms: [platform.toLowerCase() as SocialPlatform],
     });
     setIsSubmitting(false);
   };
@@ -125,7 +127,7 @@ function ComposerDrawerContent() {
     setIsSubmitting(true);
     await createPostAction({
       caption: caption + (hashtags ? `\n\n${hashtags}` : ""),
-      platforms: [platform.toLowerCase() as any],
+      platforms: [platform.toLowerCase() as SocialPlatform],
       scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : new Date(Date.now() + 86400000).toISOString(),
     });
     setIsSubmitting(false);
@@ -388,10 +390,11 @@ function PostDrawerContent({ post }: { post?: PostItem }) {
 
 function KpiDrawerContent({ kpiKey }: { kpiKey?: string }) {
   const { goToScreen, accounts } = useSocial();
+  const now = useNow();
   const connected = accounts.filter((a) => a.st === "Connected").map((a) => a.pf);
   const unlinked = accounts.filter((a) => a.st !== "Connected").map((a) => a.pf);
 
-  const startD = new Date(Date.now() - 30 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const startD = new Date(now - 30 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const endD = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   const rows = [
@@ -426,6 +429,7 @@ function KpiDrawerContent({ kpiKey }: { kpiKey?: string }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per call site
 function IntelDrawerContent({ intel, intelIndex }: { intel?: any; intelIndex?: number }) {
   const { goToScreen, posts, accounts, comments, comps } = useSocial();
   const failedPost = posts.find((p) => p.st === "Failed");

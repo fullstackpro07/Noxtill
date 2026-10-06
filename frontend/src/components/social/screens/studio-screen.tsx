@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import type { SocialPlatform } from "@/lib/social-accounts-api";
 import { useSocial } from "../social-context";
 
 export function StudioScreen() {
@@ -329,7 +330,7 @@ export function StudioScreen() {
                           `${activeProduct?.name || "Product"} is in stock at Noxtill — priced at Rs. ${activeProduct?.price.toLocaleString() || "0"}. Message us to reserve.`;
                         await createPostAction({
                           caption: text,
-                          platforms: ["instagram" as any, "facebook" as any],
+                          platforms: ["instagram", "facebook"],
                           scheduledFor: new Date(Date.now() + 86400000).toISOString(),
                         });
                         flash(`AI package for ${activeProduct?.name || "product"} scheduled across connected platforms.`);

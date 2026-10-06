@@ -115,7 +115,7 @@ export function KpiRow({ currency, extraWidgetKeys }: { currency: string; extraW
   const [drawer, setDrawer] = useState<KpiKey | null>(null);
   const now = useNow();
   const today = new Date();
-  const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const yesterdayDate = new Date(now - 24 * 60 * 60 * 1000);
 
   const revenueToday = useWidgetData("revenue_today");
   const ordersToday = useWidgetData("orders_today");

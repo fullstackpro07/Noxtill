@@ -25,6 +25,7 @@ export function AdvertisingTabsNav() {
   const { leads } = useAdvertising();
 
   const newLeadsCount = leads.filter(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
     (l) => l.formData?.status === "New" || (l as any).st === "New"
   ).length;
 

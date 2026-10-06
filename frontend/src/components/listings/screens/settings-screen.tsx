@@ -201,7 +201,7 @@ export function SettingsScreen() {
           </div>
         </div>
         <div className="mt-3 border-t border-[#EEF0F3] pt-3 text-[10.5px] leading-relaxed text-[#94A3B8]">
-          Disclosed as unavailable rather than shown as a configured toggle you can't actually change.
+          Disclosed as unavailable rather than shown as a configured toggle you can&apos;t actually change.
         </div>
       </div>
 

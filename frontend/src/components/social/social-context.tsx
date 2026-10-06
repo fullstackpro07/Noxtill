@@ -253,12 +253,16 @@ interface SocialContextType {
   flash: (msg: string) => void;
 
   drawer: DrawerType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   drawerItem: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   openDrawer: (type: DrawerType, item?: any) => void;
   closeDrawer: () => void;
 
   modal: ModalType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   modalData: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   openModal: (type: ModalType, data?: any) => void;
   closeModal: () => void;
   closeAll: () => void;
@@ -304,6 +308,7 @@ interface SocialContextType {
   // Accounts
   accounts: AccountItem[];
   disconnectAccountAction: (platform: string) => Promise<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   disconnectAccount: (val: any) => Promise<void>;
 
   // Media
@@ -313,6 +318,7 @@ interface SocialContextType {
   // Competitors
   comps: CompItem[];
   addCompetitor: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   addCompetitorItem: (comp: any) => Promise<void>;
   deleteCompetitorItem: (id: string) => Promise<void>;
   mentions: MentionItem[];
@@ -363,9 +369,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [drawer, setDrawer] = useState<DrawerType>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const [drawerItem, setDrawerItem] = useState<any>(null);
 
   const [modal, setModal] = useState<ModalType>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const [modalData, setModalData] = useState<any>(null);
 
   // Filters
@@ -652,6 +660,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     toastTimerRef.current = setTimeout(() => setToast(null), 2600);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const openDrawer = (type: DrawerType, item?: any) => {
     setDrawer(type);
     setDrawerItem(item ?? null);
@@ -662,6 +671,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     setDrawerItem(null);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const openModal = (type: ModalType, data?: any) => {
     setModal(type);
     setModalData(data ?? null);
@@ -844,6 +854,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     openModal("addcomp");
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const addCompetitorItem = async (input: any) => {
     const compName = typeof input === "string" ? input : input?.n || "Competitor";
     try {
@@ -1005,6 +1016,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
     accounts,
     disconnectAccountAction,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
     disconnectAccount: (val: any) => disconnectAccountAction(typeof val === "string" ? val : val?.pf || "Instagram"),
 
     media,

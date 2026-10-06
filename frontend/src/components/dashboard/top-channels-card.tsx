@@ -30,7 +30,6 @@ export function TopChannelsCard() {
   }, [data]);
 
   const C = 2 * Math.PI * 46;
-  let acc = 0;
 
   return (
     <section className="rounded-[14px] p-[18px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
@@ -43,12 +42,12 @@ export function TopChannelsCard() {
         <div className="flex items-center gap-3">
           <svg viewBox="0 0 130 130" className="h-28 w-28 shrink-0">
             <g transform="rotate(-90 65 65)">
-              {breakdown.map((b) => {
+              {breakdown.map((b, i) => {
+                const acc = breakdown.slice(0, i).reduce((sum, x) => sum + (x.pct / 100) * C, 0);
                 const len = (b.pct / 100) * C;
                 const el = (
                   <circle key={b.type} cx={65} cy={65} r={46} fill="none" stroke={b.color} strokeWidth={26} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-acc} />
                 );
-                acc += len;
                 return el;
               })}
             </g>

@@ -107,6 +107,7 @@ export function AdvertisingShell() {
   const autoPauseOn = settings?.autoPauseCostPerResult != null;
   const apColors = autoPauseOn ? { bg: "#F7FCF9", bd: "#D5EFE0", fg: "#0E8442" } : { bg: "#F2F4F7", bd: "#E6EAF0", fg: "#475467" };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose payload bag, shape varies per drawer/modal/call site
   const newLeadsCount = leads.filter((l) => l.formData?.status === "New" || (l as any).st === "New").length;
   const isRestricted = !isOwner && (screen === "rules" || screen === "settings");
   const info = HEADER_INFO[screen] || HEADER_INFO.overview;

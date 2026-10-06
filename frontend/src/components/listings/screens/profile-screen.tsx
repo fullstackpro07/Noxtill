@@ -201,7 +201,7 @@ export function ProfileScreen() {
       <div className="overflow-hidden rounded-[13px] border border-[#E6E8EC] bg-white shadow-sm">
         <div className="flex flex-wrap items-center gap-2.5 border-b border-[#EEF0F3] p-4">
           <div className="text-[13.5px] font-extrabold text-[#0F172A]">NAP consistency</div>
-          <div className="text-[11px] text-[#94A3B8]">Your Master Record is the reference; compared against each directory's last-synced snapshot</div>
+          <div className="text-[11px] text-[#94A3B8]">Your Master Record is the reference; compared against each directory&apos;s last-synced snapshot</div>
         </div>
 
         {napByProvider.length === 0 ? (
