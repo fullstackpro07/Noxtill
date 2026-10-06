@@ -1766,6 +1766,11 @@ model Order {
   /// Fast Sale) — e.g. "leave at the gate". Null for every other order.
   notes        String? @db.Text
 
+  /// Idempotency for public storefront checkout submissions. Only SHA-256 digests are retained;
+  /// raw client keys and checkout PII are never stored in these fields.
+  publicIdempotencyKeyHash     String? @map("public_idempotency_key_hash") @db.Char(64)
+  publicIdempotencyRequestHash String? @map("public_idempotency_request_hash") @db.Char(64)
+
   /// Quotations (only meaningful when `isQuotation` is true) — a quotation's own lifecycle is
   /// independent of `status` (which still tracks fulfilment once/if it's converted to a real
   /// order). Null on every non-quotation row and on quotations created before this field existed.
@@ -1796,6 +1801,7 @@ model Order {
 
   @@unique([businessId, orderNo])
   @@unique([businessId, externalProvider, externalId])
+  @@unique([businessId, publicIdempotencyKeyHash], map: "orders_business_public_idempotency_key_key")
   @@index([businessId, status])
   @@map("orders")
 }

@@ -1,6 +1,7 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicOrderingService } from './public-ordering.service';
 import { ActivityService } from '../activity/activity.service';
+import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 
 describe('PublicOrderingService — delivery zone rules', () => {
   let prisma: PrismaService;
@@ -8,8 +9,11 @@ describe('PublicOrderingService — delivery zone rules', () => {
   let businessId: string;
   let slug: string;
   let productId: string;
+  let outOfStockProductId: string;
+  let inactiveProductId: string;
   let activeZoneId: string;
   let pausedZoneId: string;
+  let idempotencySequence = 0;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -36,10 +40,31 @@ describe('PublicOrderingService — delivery zone rules', () => {
         name: 'Widget',
         sellingPrice: 100,
         costPrice: 40,
+        stockQty: 10,
         active: true,
       },
     });
     productId = product.id;
+    const outOfStockProduct = await prisma.product.create({
+      data: {
+        businessId,
+        name: 'Out of Stock Widget',
+        sellingPrice: 50,
+        stockQty: 0,
+        active: true,
+      },
+    });
+    outOfStockProductId = outOfStockProduct.id;
+    const inactiveProduct = await prisma.product.create({
+      data: {
+        businessId,
+        name: 'Inactive Widget',
+        sellingPrice: 60,
+        stockQty: 5,
+        active: false,
+      },
+    });
+    inactiveProductId = inactiveProduct.id;
     const active = await prisma.deliveryZone.create({
       data: {
         businessId,
@@ -70,16 +95,21 @@ describe('PublicOrderingService — delivery zone rules', () => {
     await prisma.deliverySettings.deleteMany({ where: { businessId } });
     await prisma.deliveryZone.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
 
   const order = (extra: Record<string, unknown>) =>
-    service.createOrder(slug, {
-      items: [{ productId, qty: 1 }],
-      orderType: 'delivery',
-      ...extra,
-    } as never);
+    service.createOrder(
+      slug,
+      {
+        items: [{ productId, qty: 1 }],
+        orderType: 'delivery',
+        ...extra,
+      } as never,
+      `public-order-test-${++idempotencySequence}`,
+    );
 
   it('a delivery order needs an address', async () => {
     await expect(order({})).rejects.toMatchObject({
@@ -152,5 +182,107 @@ describe('PublicOrderingService — delivery zone rules', () => {
     const menu = await service.getMenu(slug);
     expect(menu.deliveryZones).toHaveLength(1);
     expect(menu.deliveryZones[0].fee?.flatAmount).toBe(200);
+  });
+
+  it('returns only public catalog fields and reports real availability', async () => {
+    const menu = await service.getMenu(slug);
+    const widget = menu.products.find((item) => item.id === productId);
+    expect(widget).toMatchObject({
+      id: productId,
+      name: 'Widget',
+      sellingPrice: 100,
+      available: true,
+    });
+    expect(widget).not.toHaveProperty('costPrice');
+    expect(widget).not.toHaveProperty('stockQty');
+    expect(menu.products.map((item) => item.id)).not.toContain(
+      inactiveProductId,
+    );
+    expect(
+      menu.products.find((item) => item.id === outOfStockProductId),
+    ).toMatchObject({ available: false });
+    expect(menu.business.onlinePayment.availability).toBe('not_configured');
+  });
+
+  it('revalidates active status and stock when a public order is submitted', async () => {
+    await expect(
+      service.createOrder(
+        slug,
+        {
+          items: [{ productId: inactiveProductId, qty: 1 }],
+        },
+        `public-order-test-${++idempotencySequence}`,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: ORDER_ERROR_CODES.PRODUCT_NOT_FOUND },
+    });
+    await expect(
+      service.createOrder(
+        slug,
+        {
+          items: [{ productId: outOfStockProductId, qty: 1 }],
+        },
+        `public-order-test-${++idempotencySequence}`,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: ORDER_ERROR_CODES.INSUFFICIENT_STOCK },
+    });
+  });
+
+  it('returns a public-safe order confirmation that says payment is still unpaid', async () => {
+    const result = await service.createOrder(
+      slug,
+      {
+        items: [{ productId, qty: 1 }],
+        orderType: 'takeaway',
+        customerName: 'Checkout Guest',
+        customerPhone: `+1${Date.now()}`,
+      },
+      `public-order-test-${++idempotencySequence}`,
+    );
+    expect(result).toMatchObject({
+      status: 'pending',
+      total: 100,
+      currency: 'USD',
+      paymentStatus: 'unpaid',
+    });
+    expect(result).not.toHaveProperty('businessId');
+    expect(result).not.toHaveProperty('cogs');
+  });
+
+  it('replays the same public order for concurrent retries and rejects key reuse with changed input', async () => {
+    const input = {
+      items: [{ productId, qty: 1 }],
+      orderType: 'takeaway' as const,
+      customerName: 'Idempotent Guest',
+      customerPhone: `+1555${Date.now()}`,
+    };
+    const key = `public-order-test-${++idempotencySequence}`;
+    const [first, retry] = await Promise.all([
+      service.createOrder(slug, input, key),
+      service.createOrder(slug, input, key),
+    ]);
+
+    expect(retry).toEqual(first);
+    expect(
+      await prisma.order.count({
+        where: { businessId, id: first.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.activityEvent.count({
+        where: { businessId, entityType: 'Order', entityId: first.id },
+      }),
+    ).toBe(1);
+
+    await expect(
+      service.createOrder(
+        slug,
+        { ...input, items: [{ productId, qty: 2 }] },
+        key,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'PUBLIC_ORDER_IDEMPOTENCY_CONFLICT' },
+    });
   });
 });
