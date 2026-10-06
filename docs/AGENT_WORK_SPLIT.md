@@ -589,3 +589,20 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   Portal-specific shared-file hunks are ready as one module commit. Both TypeScript checks, Portal
   eslint and full backend Jest passed (343 suites / 2,150 tests); Prisma reports 158 migrations
   applied. Browser QA is still pending, and the customer Forgot password flow is not built yet.
+- goal #8 / Claude ✅ Website & Commerce, 11 remaining screens (`3104c1c`): Overview, AI Website
+  Builder, Pages, Navigation & Menus, Landing Pages, Blog & Content, Forms & Lead Capture,
+  Storefront Configuration, Themes & Branding, Domains & Publishing, Website Settings (`/website/*`),
+  plus the public hosted site `/site/<slug>`. New `backend/src/website/` module; one hand-written
+  migration `20261006150000_website_foundation` (10 tables, 18 FKs verified via
+  information_schema). Publishing = immutable deployment snapshots with rollback; forms write the
+  canonical CRM customer (upsert by phone, consent only when ticked, honeypot, idempotent);
+  storefront settings enforced by the existing `/store` checkout (hidden products refused,
+  checkout switch). New capability `website.manage` (owner + manager). Honestly disclosed: site
+  sessions/conversion not tracked, custom-domain traffic routing not configured, payment
+  processing not available (no Payments module), helpdesk/booking-request form destinations not
+  available, multi-language sites not available. Real-MySQL spec 8/8; backend + frontend `tsc`
+  clean; eslint clean on touched files; full backend jest 342/343 suites, 2151/2151 tests (the one
+  failing suite was `customer-portal.service.db.spec.ts` while Codex was editing it; 5/5 alone).
+  Smoke: all 11 admin routes and `/site/<slug>` return 200, unknown site 404, admin API 401 without
+  login. Interactive browser QA not done yet (user declined the browser tool this session).
+  **Request → Codex:** browser QA of `/website/*` and `/site/<slug>` in the QA Test Business.
