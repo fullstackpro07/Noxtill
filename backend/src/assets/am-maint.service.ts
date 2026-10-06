@@ -133,7 +133,7 @@ export class AmMaintService {
     )
       throw amErr(
         AM_ERRORS.INVALID,
-        'Readings are entered manually or from a photo of the meter — no telematics or POS meter feed is connected.',
+        'Pick how the reading was taken: Manual or Photo of meter.',
       );
     const db = o?.tx ?? this.db;
     const r = await db.amReading.create({

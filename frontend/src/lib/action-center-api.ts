@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "finance_approval" | "payment_approval" | "payment_dispute_due" | "payment_failed" | "asset_pm_overdue" | "asset_down_critical" | "asset_wo_approval" | "field_approval" | "field_sla_breach" | "field_unassigned_urgent";
+export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "finance_approval" | "payment_approval" | "payment_dispute_due" | "payment_failed" | "asset_pm_overdue" | "asset_down_critical" | "asset_wo_approval" | "field_approval" | "field_sla_breach" | "field_unassigned_urgent" | "contract_approval" | "contract_expiring" | "contract_obligation_overdue" | "contract_signature_issue";
 export type ActionItemPriority = "urgent" | "normal" | "low";
 export type SnoozeDuration = "1h" | "tomorrow" | "next_week";
 
@@ -39,6 +39,10 @@ export const ACTION_ITEM_TYPE_LABEL: Record<ActionItemType, string> = {
   field_approval: "Field approval",
   field_sla_breach: "Field SLA breached",
   field_unassigned_urgent: "Unassigned urgent job",
+  contract_approval: "Contract approval",
+  contract_expiring: "Contract expiring",
+  contract_obligation_overdue: "Obligation overdue",
+  contract_signature_issue: "Signature issue",
 };
 
 /** GET /actions — staff see only complaints assigned to them (server-enforced); owners/managers see everything. */

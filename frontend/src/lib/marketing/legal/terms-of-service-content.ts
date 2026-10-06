@@ -2,16 +2,16 @@ import type { LegalBlock } from "@/components/site/legal-page-layout";
 
 /**
  * Transcribed from d:\Noxtil\docs\Noxtill_Terms_of_Service.docx (extracted via
- * frontend/scripts/extract-legal-docs.mjs). Bracketed placeholders such as
- * {COMPANY_NUMBER}, {REGISTERED_ADDRESS}, {LEGAL_EMAIL} etc. are unfilled
- * fields in the source document itself, not omissions introduced here —
- * preserved verbatim. Three parts (General / Module-Specific / Regional
- * Terms) plus four Schedules, matching the source's own structure.
+ * frontend/scripts/extract-legal-docs.mjs). Source placeholders have since been
+ * filled with Noxtill LLC details (entity, address, emails, dates, retention).
+ *
+ * Three parts (General / Module-Specific /
+ * Regional Terms) plus four Schedules, matching the source structure.
  */
 export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   {
     kind: "callout",
-    text: "Noxtill Ltd · Incorporated in England and Wales · Company No. {COMPANY_NUMBER}. Version 1.0 · Effective {DATE}. Prepared for legal review — not legal advice.",
+    text: "Noxtill LLC · Arizona Domestic Limited Liability Company · ACC Business ID 25117457. Version 1.0 · Effective September 4, 2026. Prepared for legal review — not legal advice.",
   },
   {
     kind: "callout",
@@ -27,7 +27,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "1.1 Who we are" },
   {
     kind: "p",
-    text: "These Terms of Service (**Terms**) form a legal agreement between you and **Noxtill Ltd**, a company incorporated in England and Wales under company number {COMPANY_NUMBER}, whose registered office is at {REGISTERED_ADDRESS} (**Noxtill**, **we**, **us**, **our**).",
+    text: "These Terms of Service (**Terms**) form a legal agreement between you and **Noxtill LLC**, a domestic limited liability company registered in the State of Arizona, United States (ACC Business ID 25117457), whose principal address is 4539 N 22nd St Ste R, Phoenix, AZ 85016, United States (**Noxtill**, **we**, **us**, **our**).",
   },
   { kind: "h3", text: "1.2 What these Terms cover" },
   {
@@ -73,7 +73,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "1.6 Interpretation" },
   {
     kind: "p",
-    text: "Headings are for convenience only. **Including** and **includes** mean without limitation. References to a statute include it as amended or replaced. Singular includes plural. **Writing** includes email. A **day** means a calendar day; a **working day** means a day other than a Saturday, Sunday or public holiday in England.",
+    text: "Headings are for convenience only. **Including** and **includes** mean without limitation. References to a statute include it as amended or replaced. Singular includes plural. **Writing** includes email. A **day** means a calendar day; a **working day** means a day other than a Saturday, Sunday or public holiday in the State of Arizona.",
   },
 
   { kind: "h2", text: "2. Definitions" },
@@ -145,7 +145,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "3.8 Account security" },
   {
     kind: "p",
-    text: "You are responsible for keeping your credentials confidential and for all activity under your Account. Notify us immediately at {SECURITY_EMAIL} of any suspected unauthorised access. We strongly recommend enabling two-factor authentication.",
+    text: "You are responsible for keeping your credentials confidential and for all activity under your Account. Notify us immediately at support@noxtill.com of any suspected unauthorised access. We strongly recommend enabling two-factor authentication.",
   },
   { kind: "h3", text: "3.9 Users" },
   {
@@ -225,7 +225,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "5.8 Late payment" },
   {
     kind: "p",
-    text: "We may charge interest on overdue amounts at 4% above the Bank of England base rate, accruing daily, and may recover reasonable costs of collection. Where the Late Payment of Commercial Debts (Interest) Act 1998 applies, statutory interest and compensation may apply instead.",
+    text: "We may charge interest on overdue amounts at the lesser of 1.5% per month and the maximum rate permitted by applicable law, accruing daily, and may recover reasonable costs of collection.",
   },
   { kind: "h3", text: "5.9 Price changes" },
   {
@@ -280,7 +280,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "6.5 Backups" },
   {
     kind: "p",
-    text: "We take automated backups and test restoration periodically. Backups are retained for {BACKUP_RETENTION} on a rolling cycle and exist for disaster recovery. **They are not a substitute for your own exports**, and we do not undertake to restore individual records deleted by you or a User.",
+    text: "We take automated backups and test restoration periodically. Backups are retained for 30 days on a rolling cycle and exist for disaster recovery. **They are not a substitute for your own exports**, and we do not undertake to restore individual records deleted by you or a User.",
   },
   { kind: "h3", text: "6.6 Accuracy" },
   {
@@ -523,7 +523,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "13.5 Notice of infringement" },
   {
     kind: "p",
-    text: "If you believe content on the Service infringes your rights, contact {LEGAL_EMAIL} with details sufficient to identify the content and your right. We operate a notice and takedown procedure and will act on valid notices.",
+    text: "If you believe content on the Service infringes your rights, contact contact@noxtill.com with details sufficient to identify the content and your right. We operate a notice and takedown procedure and will act on valid notices.",
   },
 
   { kind: "h2", text: "14. Confidentiality" },
@@ -560,7 +560,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "15.4 Sub-processors" },
   {
     kind: "p",
-    text: "You authorise our use of the sub-processors published at {SUBPROCESSOR_URL}. **We will notify you at least 30 days before adding a new sub-processor** and you may object on reasonable data protection grounds; if we cannot accommodate a reasonable objection you may terminate the affected part of the Service without penalty.",
+    text: "You authorise our use of the sub-processors published at https://noxtill.com. **We will notify you at least 30 days before adding a new sub-processor** and you may object on reasonable data protection grounds; if we cannot accommodate a reasonable objection you may terminate the affected part of the Service without penalty.",
   },
   { kind: "h3", text: "15.5 International transfers" },
   {
@@ -698,7 +698,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "20.5 Your data after termination" },
   {
     kind: "p",
-    text: "**Business Data remains available for export for {DATA_RETENTION_DAYS} days after termination.** After that we delete it from active systems, and from backups within the backup rotation cycle, except where retention is required by law. Financial and accounting records are retained for the statutory period.",
+    text: "**Business Data remains available for export for 15 days after termination.** After that we delete it from active systems, and from backups within the backup rotation cycle, except where retention is required by law. Financial and accounting records are retained for the statutory period.",
   },
   { kind: "h3", text: "20.6 Survival" },
   { kind: "p", text: "Clauses 6.1, 6.2, 13, 14, 15, 17.4, 18, 19, 20.4, 20.5, 21, 22 and 23, and any provision which by its nature should survive, continue after termination." },
@@ -715,11 +715,11 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
 
   { kind: "h2", text: "22. Governing law, jurisdiction and disputes" },
   { kind: "h3", text: "22.1 Governing law" },
-  { kind: "p", text: "This agreement, and any dispute or claim arising out of or in connection with it including non-contractual disputes, is governed by **the law of England and Wales**." },
+  { kind: "p", text: "This agreement, and any dispute or claim arising out of or in connection with it including non-contractual disputes, is governed by **the laws of the State of Arizona, United States**, without regard to its conflict-of-laws rules." },
   { kind: "h3", text: "22.2 Jurisdiction" },
   {
     kind: "p",
-    text: "The courts of England and Wales have exclusive jurisdiction. **This does not deprive you of the protection of any mandatory provision of the law of your country of establishment, nor of the right to bring proceedings in your local courts where applicable law confers that right and it cannot be excluded by agreement.**",
+    text: "The state and federal courts located in Maricopa County, Arizona, United States have exclusive jurisdiction. **This does not deprive you of the protection of any mandatory provision of the law of your country of establishment, nor of the right to bring proceedings in your local courts where applicable law confers that right and it cannot be excluded by agreement.**",
   },
   { kind: "h3", text: "22.3 Escalation before proceedings" },
   {
@@ -755,7 +755,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "23.8 Third-party rights" },
   { kind: "p", text: "Except for our Affiliates under clause 18, a person who is not a party has no right under the Contracts (Rights of Third Parties) Act 1999 to enforce any term. The parties may vary or rescind this agreement without any third party's consent." },
   { kind: "h3", text: "23.9 Notices" },
-  { kind: "p", text: "Notices to us: {LEGAL_EMAIL}, copied to {REGISTERED_ADDRESS}. Notices to you: the email address on your Account, and in-product where material. Notice is deemed given on the next working day after sending, unless a delivery failure is received." },
+  { kind: "p", text: "Notices to us: contact@noxtill.com, copied to 4539 N 22nd St Ste R, Phoenix, AZ 85016, United States. Notices to you: the email address on your Account, and in-product where material. Notice is deemed given on the next working day after sending, unless a delivery failure is received." },
   { kind: "h3", text: "23.10 Anti-bribery and modern slavery" },
   { kind: "p", text: "Each party will comply with the Bribery Act 2010 and all applicable anti-bribery and anti-corruption law, and will not engage in any activity that would constitute an offence under sections 1, 2 or 6. Each party will comply with the Modern Slavery Act 2015 and maintain policies to ensure no slavery or human trafficking occurs in its business or supply chain." },
   { kind: "h3", text: "23.11 Insurance" },
@@ -770,9 +770,9 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h2", text: "24. Contact" },
   {
     kind: "p",
-    text: "**Noxtill Ltd** · Incorporated in England and Wales · Company number {COMPANY_NUMBER} · Registered office: {REGISTERED_ADDRESS}",
+    text: "**Noxtill LLC** · Arizona Domestic Limited Liability Company · ACC Business ID 25117457 · Principal address: 4539 N 22nd St Ste R, Phoenix, AZ 85016, United States",
   },
-  { kind: "p", text: "General and billing: {SUPPORT_EMAIL}. Legal notices: {LEGAL_EMAIL}. Data protection: {DPO_EMAIL}. Security and vulnerability reports: {SECURITY_EMAIL}." },
+  { kind: "p", text: "General and billing: support@noxtill.com. Legal notices: contact@noxtill.com. Data protection: contact@noxtill.com. Security and vulnerability reports: support@noxtill.com." },
 
   { kind: "h2", text: "Part II — Module-Specific Terms" },
 
@@ -1062,7 +1062,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "7. Security research" },
   {
     kind: "p",
-    text: "We welcome responsible disclosure. Report vulnerabilities to {SECURITY_EMAIL}. **Do not access data belonging to others, do not degrade the Service, and do not publish before we have had a reasonable opportunity to remediate.** We will not pursue action against researchers who follow this process in good faith.",
+    text: "We welcome responsible disclosure. Report vulnerabilities to support@noxtill.com. **Do not access data belonging to others, do not degrade the Service, and do not publish before we have had a reasonable opportunity to remediate.** We will not pursue action against researchers who follow this process in good faith.",
   },
   { kind: "h3", text: "8. Enforcement" },
   {
@@ -1096,7 +1096,7 @@ export const TERMS_OF_SERVICE_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "4. Claiming a service credit" },
   {
     kind: "p",
-    text: "Submit a claim to {SUPPORT_EMAIL} **within 30 days** of the end of the affected month, with the dates and times affected. Credits are applied to your next invoice, are the **sole and exclusive remedy** for failure to meet the availability target, and do not exceed 30% of the monthly Fee in any month.",
+    text: "Submit a claim to support@noxtill.com **within 30 days** of the end of the affected month, with the dates and times affected. Credits are applied to your next invoice, are the **sole and exclusive remedy** for failure to meet the availability target, and do not exceed 30% of the monthly Fee in any month.",
   },
   { kind: "h3", text: "5. Chronic failure" },
   {

@@ -213,6 +213,7 @@ export class ActionCenterService {
       payments,
       assets,
       field,
+      contracts,
     ] = await Promise.all([
       this.complaintItems(businessId, null),
       this.lowStockItems(businessId),
@@ -222,6 +223,7 @@ export class ActionCenterService {
       this.paymentItems(businessId, role),
       this.assetItems(businessId, role),
       this.fieldItems(businessId, role),
+      this.contractItems(businessId, role),
     ]);
     return [
       ...complaints,
@@ -232,6 +234,136 @@ export class ActionCenterService {
       ...payments,
       ...assets,
       ...field,
+      ...contracts,
+    ];
+  }
+
+  /**
+   * Contracts: open approval steps (Owner / Manager), live contracts expiring inside the
+   * configured window with no renewal decision, overdue obligations, and signature requests that
+   * were declined, expired or couldn't be delivered. Keyed by the group root.
+   */
+  private async contractItems(
+    businessId: string,
+    role: Role,
+  ): Promise<RawActionItem[]> {
+    if (role !== Role.owner && role !== Role.manager) return [];
+    const biz = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, parentId: true },
+    });
+    if (!biz) return [];
+    const root = biz.parentId ?? biz.id;
+    const settings = await this.prisma.ctSettings.findUnique({
+      where: { businessId: root },
+    });
+    if (!settings) return [];
+    const days =
+      (settings.config as { contract?: { expiringDays?: number } })?.contract
+        ?.expiringDays ?? 30;
+    const today = new Date(
+      new Date().toISOString().slice(0, 10) + 'T00:00:00Z',
+    );
+    const [approvals, expiring, obls, sigs] = await Promise.all([
+      this.prisma.ctApproval.findMany({
+        where: { businessId: root, status: { in: ['Pending', 'Escalated'] } },
+        orderBy: { dueOn: 'asc' },
+        take: 50,
+      }),
+      this.prisma.ctContract.findMany({
+        where: {
+          businessId: root,
+          status: { in: ['Active', 'Expiring', 'Renewal Review'] },
+          endOn: {
+            not: null,
+            lte: new Date(today.getTime() + days * 86400000),
+          },
+          OR: [
+            { renewState: null },
+            {
+              renewState: {
+                notIn: ['Renewed', 'Will Not Renew', 'Renewal Draft'],
+              },
+            },
+          ],
+        },
+        orderBy: { endOn: 'asc' },
+        take: 50,
+      }),
+      this.prisma.ctObligation.findMany({
+        where: {
+          status: 'Upcoming',
+          dueOn: { lt: today },
+          contract: {
+            businessId: root,
+            status: { in: ['Active', 'Expiring', 'Renewal Review'] },
+          },
+        },
+        include: { contract: { select: { number: true } } },
+        orderBy: { dueOn: 'asc' },
+        take: 50,
+      }),
+      this.prisma.ctSignRequest.findMany({
+        where: {
+          businessId: root,
+          OR: [
+            {
+              status: { in: ['Declined', 'Expired'] },
+              updatedAt: { gte: new Date(Date.now() - 14 * 86400000) },
+            },
+            {
+              status: { in: ['Sent', 'Partially Signed'] },
+              signers: { some: { status: 'Delivery Failed' } },
+            },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+    return [
+      ...approvals.map((a) => ({
+        type: ActionItemType.contract_approval,
+        entityId: a.id,
+        priority:
+          a.dueOn < today
+            ? ActionItemPriority.urgent
+            : ActionItemPriority.normal,
+        title: `Contract approval · ${a.number}`,
+        reason: `${a.type} · due ${a.dueOn.toISOString().slice(0, 10)}`,
+        occurredAt: a.createdAt,
+        deepLink: '/contracts/approvals',
+      })),
+      ...expiring.map((c) => ({
+        type: ActionItemType.contract_expiring,
+        entityId: c.id,
+        priority:
+          c.endOn! < today
+            ? ActionItemPriority.urgent
+            : ActionItemPriority.normal,
+        title: `Contract expiring · ${c.number}`,
+        reason: `${c.title} · ends ${c.endOn!.toISOString().slice(0, 10)}${c.autoRenew ? ' · auto-renews' : ''}`,
+        occurredAt: c.endOn!,
+        deepLink: `/contracts/${c.number}`,
+      })),
+      ...obls.map((o) => ({
+        type: ActionItemType.contract_obligation_overdue,
+        entityId: o.id,
+        priority: ActionItemPriority.normal,
+        title: `Obligation overdue · ${o.contract.number}`,
+        reason: `${o.title} · due ${o.dueOn.toISOString().slice(0, 10)}`,
+        occurredAt: o.dueOn,
+        deepLink: `/contracts/${o.contract.number}`,
+      })),
+      ...sigs.map((s) => ({
+        type: ActionItemType.contract_signature_issue,
+        entityId: s.id,
+        priority: ActionItemPriority.normal,
+        title: `Signature ${s.status === 'Declined' ? 'declined' : s.status === 'Expired' ? 'expired' : 'delivery failed'} · ${s.number}`,
+        reason: s.note ?? 'Open the request to resend or void it.',
+        occurredAt: s.updatedAt,
+        deepLink: '/contracts/signatures',
+      })),
     ];
   }
 

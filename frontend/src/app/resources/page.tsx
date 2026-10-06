@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, FileText, Shield, Cookie, RotateCcw } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
+import { CompanyDetails } from "@/components/site/company-details";
 import { SiteFooter } from "@/components/site/site-footer";
 import { RESOURCES_LEARN, RESOURCES_READ, RESOURCES_TOOLS, RESOURCES_SUPPORT } from "@/lib/marketing/nav-links";
 
@@ -98,6 +99,9 @@ export default function ResourcesPage() {
               ))}
             </div>
           </section>
+        </div>
+        <div className="pt-16">
+          <CompanyDetails />
         </div>
       </main>
 

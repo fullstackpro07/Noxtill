@@ -616,7 +616,7 @@ export function DetailScreen({ number }: { number: string }) {
                 </button>
               </div>
             ))}
-            {!d.links.length ? <div style={{ fontSize: "12px", color: "#667085" }}>No linked records. Existing Orders, Bookings, Projects and fixed assets (FA-…) can be linked; Invoices, Payments, Contracts and Field Service jobs have no module in Noxtill yet.</div> : null}
+            {!d.links.length ? <div style={{ fontSize: "12px", color: "#667085" }}>No linked records. Existing Orders, Bookings, Projects, fixed assets (FA-…), Field Service jobs (FS-…) and Contracts (CTR-…) can be linked; Invoices and Payments have no linkable records yet.</div> : null}
             {t.conversationId ? (
               <button
                 type="button"

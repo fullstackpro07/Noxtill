@@ -6,7 +6,9 @@ import type { AmScope } from "@/lib/assets-api";
 export type AField = {
   name: string;
   label: string;
-  type: "text" | "number" | "date" | "time" | "select" | "area" | "read" | "checks" | "file" | "qr";
+  type: "text" | "number" | "date" | "time" | "select" | "area" | "read" | "checks" | "file" | "qr" | "camera";
+  /** For "camera": the text field the scanned code is written into before submitting. */
+  target?: string;
   value?: string;
   options?: { v: string; t: string; on?: boolean }[];
   req?: boolean;
@@ -27,6 +29,8 @@ export interface AModal {
   primaryT: string;
   pBg?: string;
   cancel?: string;
+  /** Replaces the cancel action (wizard "Back"). */
+  back?: () => void;
   wide?: boolean;
   /** Return a string to show as the modal error, "keep" to stay open; resolve to close. */
   onSubmit: (v: AValues) => Promise<string | void | "keep">;

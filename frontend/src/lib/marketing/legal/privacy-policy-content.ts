@@ -2,16 +2,16 @@ import type { LegalBlock } from "@/components/site/legal-page-layout";
 
 /**
  * Transcribed from d:\Noxtil\docs\Noxtill_Privacy_Policy.docx (extracted via
- * frontend/scripts/extract-legal-docs.mjs). Bracketed placeholders such as
- * {DPO_EMAIL}, {COMPANY_NUMBER} and {REGISTERED_ADDRESS} are unfilled fields
- * in the source document itself, not omissions introduced here — preserved
- * verbatim. The jurisdiction-by-jurisdiction Annex (J1–J19) is transcribed in
+ * frontend/scripts/extract-legal-docs.mjs). Source placeholders have since been
+ * filled with Noxtill LLC details. The source document's text is otherwise
+ * preserved verbatim.
+ * The jurisdiction-by-jurisdiction Annex (J1–J19) is transcribed in
  * full below the numbered policy body, matching the source's structure.
  */
 export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   {
     kind: "callout",
-    text: "Noxtill Ltd · Incorporated in England and Wales · Company No. {COMPANY_NUMBER}. Version 1.0 · Effective {DATE}. Prepared for legal review — not legal advice.",
+    text: "Noxtill LLC · Arizona Domestic Limited Liability Company · ACC Business ID 25117457. Version 1.0 · Effective September 4, 2026. Prepared for legal review — not legal advice.",
   },
   {
     kind: "p",
@@ -53,7 +53,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   },
   {
     kind: "p",
-    text: "**To exercise your rights, contact that business directly** — they control your data. We will assist them. If they do not respond within a reasonable period, contact {DPO_EMAIL} and we will do what we lawfully can, including prompting them and, where legally required, acting ourselves.",
+    text: "**To exercise your rights, contact that business directly** — they control your data. We will assist them. If they do not respond within a reasonable period, contact contact@noxtill.com and we will do what we lawfully can, including prompting them and, where legally required, acting ourselves.",
   },
   { kind: "h3", text: "2.3 If you visit our website" },
   {
@@ -168,7 +168,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   },
   {
     kind: "p",
-    text: "**Legitimate interests balancing.** Where we rely on legitimate interests we have assessed whether our interest is overridden by your rights. A summary of each assessment is available on request at {DPO_EMAIL}. **You may object to processing based on legitimate interests at any time** — see section 10.",
+    text: "**Legitimate interests balancing.** Where we rely on legitimate interests we have assessed whether our interest is overridden by your rights. A summary of each assessment is available on request at contact@noxtill.com. **You may object to processing based on legitimate interests at any time** — see section 10.",
   },
 
   { kind: "h2", text: "6. Who we share information with" },
@@ -195,7 +195,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   },
   {
     kind: "p",
-    text: "The current list is published at {SUBPROCESSOR_URL}. **We will notify you at least 30 days before adding a new sub-processor**, and you may object on reasonable data protection grounds.",
+    text: "The current list is published at https://noxtill.com. **We will notify you at least 30 days before adding a new sub-processor**, and you may object on reasonable data protection grounds.",
   },
   { kind: "h3", text: "6.2 Other recipients" },
   {
@@ -237,7 +237,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "7.3 UK and EU position" },
   {
     kind: "p",
-    text: "Noxtill Ltd is established in the United Kingdom with infrastructure in the European Union. The European Commission has adopted an adequacy decision in respect of the United Kingdom, permitting transfers from the EEA to the UK without additional safeguards for so long as that decision remains in force. {EU_REPRESENTATIVE_STATEMENT}",
+    text: "Noxtill LLC is established in the United States (Arizona) with infrastructure in the European Union. Transfers of personal data from the EEA and UK to us rely on the safeguards described in section 7.2.",
   },
   { kind: "h3", text: "7.4 Government access requests" },
   {
@@ -251,7 +251,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
     headers: ["Data", "Retention period", "Reason"],
     rows: [
       ["Active account data", "Life of the account", "Providing the Service"],
-      ["Business Data after termination", "{DATA_RETENTION_DAYS} days, exportable throughout, then deleted", "Allowing you to retrieve your records"],
+      ["Business Data after termination", "15 days, exportable throughout, then deleted", "Allowing you to retrieve your records"],
       ["Financial and invoicing records", "6 years from end of accounting period", "UK statutory requirement"],
       ["Audit logs of financial actions", "6 years", "Legal defensibility and dispute resolution"],
       ["Message content and delivery logs", "24 months", "Dispute resolution and platform compliance"],
@@ -260,7 +260,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
       ["Support correspondence", "3 years", "Service history and dispute resolution"],
       ["Security and access logs", "12 months", "Security investigation"],
       ["Website analytics", "26 months maximum", "Analytics"],
-      ["Backups", "{BACKUP_RETENTION} rolling", "Disaster recovery"],
+      ["Backups", "30 days rolling", "Disaster recovery"],
       ["Suppression list (unsubscribed)", "Indefinitely", "To ensure we never contact you again"],
       ["Sanctions screening records", "6 years", "Regulatory record-keeping"],
     ],
@@ -351,7 +351,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "10.1 How to exercise a right" },
   {
     kind: "p",
-    text: "Email **{DPO_EMAIL}**, or use Settings → Data & Privacy in the Service. We may ask for information to verify your identity, and will not use it for any other purpose.",
+    text: "Email **contact@noxtill.com**, or use Settings → Data & Privacy in the Service. We may ask for information to verify your identity, and will not use it for any other purpose.",
   },
   { kind: "h3", text: "10.2 Timing" },
   {
@@ -403,7 +403,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
     kind: "p",
     text: "**Where a business using Noxtill serves customers who are minors** — a tutoring centre, a paediatric clinic, a children's activity provider — that business is the controller and is responsible for the lawful basis, including any parental consent required. The age of consent for information society services varies: 13 in the United Kingdom, 13 to 16 across EEA member states, 13 in the United States under COPPA with parental consent requirements, and varying elsewhere.",
   },
-  { kind: "p", text: "If you believe we hold data about a child in error, contact {DPO_EMAIL} and we will investigate and delete it where appropriate." },
+  { kind: "p", text: "If you believe we hold data about a child in error, contact contact@noxtill.com and we will investigate and delete it where appropriate." },
 
   { kind: "h2", text: "14. Automated decision-making and artificial intelligence" },
   {
@@ -456,11 +456,11 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   { kind: "h2", text: "16. Contact" },
   {
     kind: "p",
-    text: "**Noxtill Ltd** · Incorporated in England and Wales · Company number {COMPANY_NUMBER} · Registered office: {REGISTERED_ADDRESS}",
+    text: "**Noxtill LLC** · Arizona Domestic Limited Liability Company · ACC Business ID 25117457 · Principal address: 4539 N 22nd St Ste R, Phoenix, AZ 85016, United States",
   },
   {
     kind: "p",
-    text: "**Data protection enquiries and rights requests: {DPO_EMAIL}**. General support: {SUPPORT_EMAIL}. Security and vulnerability disclosure: {SECURITY_EMAIL}. Legal notices: {LEGAL_EMAIL}.",
+    text: "**Data protection enquiries and rights requests: contact@noxtill.com**. General support: support@noxtill.com. Security and vulnerability disclosure: support@noxtill.com. Legal notices: contact@noxtill.com.",
   },
   { kind: "p", text: "UK supervisory authority: Information Commissioner's Office · ico.org.uk · 0303 123 1113" },
 
@@ -477,7 +477,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   { kind: "h2", text: "J1. United Kingdom" },
   { kind: "p", text: "**Applicable law** — UK GDPR · Data Protection Act 2018 · Privacy and Electronic Communications Regulations 2003" },
   { kind: "p", text: "**Supervisory authority** — Information Commissioner's Office · ico.org.uk · Wycliffe House, Water Lane, Wilmslow, Cheshire SK9 5AF" },
-  { kind: "p", text: "**Our status** — Noxtill Ltd is established in the United Kingdom. We are registered with the ICO under registration number {ICO_NUMBER}." },
+  { kind: "p", text: "**Our status** — Noxtill LLC is established in the United States (Arizona) and is not established in the United Kingdom." },
   {
     kind: "p",
     text: "**Additional rights** — The rights in section 10 apply. You may also complain to the ICO without first contacting us, though we would prefer the opportunity to resolve your concern.",
@@ -494,7 +494,6 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
     kind: "p",
     text: "**Supervisory authority** — The authority in your member state of residence, place of work, or where the alleged infringement occurred. A list is published by the European Data Protection Board.",
   },
-  { kind: "p", text: "**EU representative** — {EU_REPRESENTATIVE_STATEMENT}" },
   { kind: "p", text: "**Data location** — Your data is hosted in Germany, within the European Union." },
   {
     kind: "p",
@@ -575,7 +574,7 @@ export const PRIVACY_POLICY_BLOCKS: LegalBlock[] = [
   },
   {
     kind: "p",
-    text: "**How to exercise** — Email {DPO_EMAIL}. We respond within 45 days, extendable once by a further 45 days with notice. You may use an authorised agent, and we may require verification.",
+    text: "**How to exercise** — Email contact@noxtill.com. We respond within 45 days, extendable once by a further 45 days with notice. You may use an authorised agent, and we may require verification.",
   },
   { kind: "p", text: "**Sensitive personal information** — We do not use or disclose sensitive personal information for purposes requiring a limitation right." },
   {

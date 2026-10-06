@@ -422,3 +422,31 @@ export class Fmt {
     return b ? `${((a / b) * 100).toFixed(1)}%` : '—';
   }
 }
+
+/**
+ * The design's renderer only draws card buttons inside a titled card header — an untitled card
+ * with view tabs shows none. Moves those buttons into the header "More…" menu (skipping ones the
+ * header already has, and ones disabled for this role) so they stay reachable without drawing
+ * anything the design doesn't.
+ */
+export function hoistSegActs(
+  rows: unknown[],
+  head: { more: { v: string; t: string }[]; hdrActs: Btn[] },
+) {
+  const have = new Set([
+    ...head.more.map((m) => m.v),
+    ...head.hdrActs.map((b) => b.k),
+  ]);
+  for (const r of rows as { blocks?: Record<string, unknown>[] }[])
+    for (const b of r.blocks ?? []) {
+      if (!b.card || b.title || !b.seg) continue;
+      const acts = (b.acts as Btn[] | undefined) ?? [];
+      for (const a of acts)
+        if (!a.dis && !have.has(a.k)) {
+          head.more.unshift({ v: a.k, t: a.t });
+          have.add(a.k);
+        }
+      b.acts = [];
+    }
+  return rows;
+}

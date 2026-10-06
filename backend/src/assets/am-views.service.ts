@@ -1744,7 +1744,7 @@ export class AmViewsService {
               d: '',
               acts: [],
             },
-        info: 'Append-only. A correction adds a new record that references the original — the original value, reason, actor and time are all kept. Readings are entered manually or from a photo of the meter; no telematics or POS meter feed is connected.',
+        info: 'Append-only. A correction adds a new record that references the original — the original value, reason, actor and time are all kept. Readings are entered by hand — typed in, read from a photo of the meter, or recorded when a work order is completed.',
         acts:
           x.meterType && !fin
             ? [btn('d-read', 'Record reading', 'ghost', !a.reading)]
@@ -1910,6 +1910,62 @@ export class AmViewsService {
       };
     }
     if (tab === 'rel') {
+      const [fsJobs, fsAgr, ctDocs, ctAll] = await Promise.all([
+        this.ctx.db.fsWorkOrder.findMany({
+          where: { businessId: d.a.rootId, assetId: x.id },
+          select: { number: true, status: true },
+          orderBy: { createdAt: 'desc' },
+          take: 6,
+        }),
+        this.ctx.db.fsAgreement.findMany({
+          where: { businessId: d.a.rootId, status: 'Active' },
+          select: {
+            number: true,
+            assetIds: true,
+            endOn: true,
+            contractId: true,
+          },
+        }),
+        this.ctx.db.ctDocument.findMany({
+          where: {
+            businessId: d.a.rootId,
+            linkModule: 'Assets & Maintenance',
+            linkId: x.id,
+          },
+          select: { id: true },
+        }),
+        this.ctx.db.ctContract.findMany({
+          where: {
+            businessId: d.a.rootId,
+            status: { notIn: ['Archived'] },
+          },
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            endOn: true,
+            docId: true,
+            related: true,
+          },
+        }),
+      ]);
+      const docIds = new Set(ctDocs.map((z) => z.id));
+      const agr = fsAgr.filter(
+        (g) =>
+          Array.isArray(g.assetIds) && (g.assetIds as string[]).includes(x.id),
+      );
+      const agrCt = new Set(agr.map((g) => g.contractId).filter(Boolean));
+      const contracts = ctAll.filter(
+        (c) =>
+          agrCt.has(c.id) ||
+          (c.docId && docIds.has(c.docId)) ||
+          (Array.isArray(c.related) &&
+            (c.related as { module?: string; id?: string }[]).some(
+              (r) => r.module === 'Assets & Maintenance' && r.id === x.id,
+            )),
+      );
+      const ctLabel = (id: string | null) =>
+        id ? (ctAll.find((c) => c.id === id)?.number ?? null) : null;
       const par = this.data.A(d, x.parentId);
       const kids = d.all.filter((z) => z.parentId === x.id);
       const prod = x.productId ? d.products.get(x.productId) : null;
@@ -1940,14 +1996,36 @@ export class AmViewsService {
             x.customerId ? (d.customers.get(x.customerId) ?? '—') : '—',
           ],
           [
-            'Service contract',
-            x.warrantyType === 'Service'
-              ? `${x.warrantyProvider ?? '—'} service agreement (warranty record) · Contracts module not available`
-              : '—',
+            'Service agreement',
+            agr.length
+              ? agr
+                  .map(
+                    (g) =>
+                      `${g.number} (Field Service, until ${g.endOn.toISOString().slice(0, 10)}${ctLabel(g.contractId) ? ` · signed contract ${ctLabel(g.contractId)}` : ' · no signed contract linked'})`,
+                  )
+                  .join(' · ')
+              : x.warrantyType === 'Service'
+                ? `${x.warrantyProvider ?? '—'} service agreement (warranty record only — no Field Service agreement covers this asset)`
+                : '—',
+          ],
+          [
+            'Contracts',
+            contracts.length
+              ? contracts
+                  .map(
+                    (c) =>
+                      `${c.number} ${c.status}${c.endOn ? ` · ends ${c.endOn.toISOString().slice(0, 10)}` : ''}`,
+                  )
+                  .join(' · ')
+              : 'None — link this asset from a contract’s references or a document in Contracts',
           ],
           [
             'Field Service history',
-            'Not available — Noxtill has no Field Service module',
+            fsJobs.length
+              ? fsJobs.map((j) => `${j.number} ${j.status}`).join(' · ')
+              : x.customerId
+                ? 'No field jobs yet'
+                : 'Internal asset — field jobs are for customer-owned equipment',
           ],
           [
             'Catalog product',
@@ -2550,7 +2628,7 @@ export class AmViewsService {
         kpiRow(kpis),
         ...emptyRows(
           'No maintenance requests yet.',
-          'Staff can report issues with any asset. Customer-site visits would belong to Field Service, which Noxtill doesn’t have.',
+          'Staff can report issues with any asset. Customer-site visits for customer-owned equipment are handled in Field Service.',
           [btn('newreq', 'Create Request', 'primary', !a.request)],
         ),
       ];

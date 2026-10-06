@@ -60,6 +60,7 @@ import { FinanceModule } from './finance/finance.module';
 import { PaymentsModule } from './payments/payments.module';
 import { AssetsModule } from './assets/assets.module';
 import { FieldServiceModule } from './field-service/field-service.module';
+import { ContractsModule } from './contracts/contracts.module';
 import { CompetitiveModule } from './competitive/competitive.module';
 import { VoiceModule } from './voice/voice.module';
 import { DigitizerModule } from './digitizer/digitizer.module';
@@ -140,6 +141,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     PaymentsModule,
     AssetsModule,
     FieldServiceModule,
+    ContractsModule,
     CompetitiveModule,
     VoiceModule,
     DigitizerModule,

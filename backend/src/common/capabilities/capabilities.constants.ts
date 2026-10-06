@@ -145,6 +145,46 @@ export const CAPABILITIES = {
   ASSETS_EXPORT: 'assets.export',
   ASSETS_READING: 'assets.reading',
   ASSETS_SETTINGS: 'assets.settings',
+  /// Field Service: open the module (view), log and triage service requests and send customer
+  /// notices (request), create/edit/cancel work orders and ask Orders for quotes / invoices
+  /// (workorder), assign, schedule and dispatch jobs and see technician locations (dispatch),
+  /// carry out jobs — status, checklist, photos, signature, own labor, part use/return (execute),
+  /// reserve and issue parts from Inventory (parts), approve jobs, labor, overtime, warranty
+  /// exceptions and close/reopen (approve), manage preventive plans and checklist templates (plan),
+  /// service agreements and warranty cases (agreement), see costs, rates and invoice totals
+  /// (money), see customer phone/email (pii), export (export) and change settings (settings).
+  FIELD_VIEW: 'field.view',
+  FIELD_REQUEST: 'field.request',
+  FIELD_WORKORDER: 'field.workorder',
+  FIELD_DISPATCH: 'field.dispatch',
+  FIELD_EXECUTE: 'field.execute',
+  FIELD_PARTS: 'field.parts',
+  FIELD_APPROVE: 'field.approve',
+  FIELD_PLAN: 'field.plan',
+  FIELD_AGREEMENT: 'field.agreement',
+  FIELD_MONEY: 'field.money',
+  FIELD_PII: 'field.pii',
+  FIELD_EXPORT: 'field.export',
+  FIELD_SETTINGS: 'field.settings',
+  /// Contracts: open the module (view), upload documents (upload), edit / move / tag / share /
+  /// archive documents (documents), delete documents within retention rules (delete), create and
+  /// edit contracts, templates, amendments, renewals and signature requests (manage), decide approval
+  /// steps (approve), terminate contracts (terminate), see signature evidence (evidence), manage
+  /// compliance documents (compliance), see contract values (value — field-level), see restricted
+  /// documents and contracts (restricted), export (export) and change settings (settings).
+  CONTRACTS_VIEW: 'contracts.view',
+  CONTRACTS_UPLOAD: 'contracts.upload',
+  CONTRACTS_DOCUMENTS: 'contracts.documents',
+  CONTRACTS_DELETE: 'contracts.delete',
+  CONTRACTS_MANAGE: 'contracts.manage',
+  CONTRACTS_APPROVE: 'contracts.approve',
+  CONTRACTS_TERMINATE: 'contracts.terminate',
+  CONTRACTS_EVIDENCE: 'contracts.evidence',
+  CONTRACTS_COMPLIANCE: 'contracts.compliance',
+  CONTRACTS_VALUE: 'contracts.value',
+  CONTRACTS_RESTRICTED: 'contracts.restricted',
+  CONTRACTS_EXPORT: 'contracts.export',
+  CONTRACTS_SETTINGS: 'contracts.settings',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -213,6 +253,27 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.ASSETS_COST,
   CAPABILITIES.ASSETS_EXPORT,
   CAPABILITIES.ASSETS_READING,
+  CAPABILITIES.FIELD_VIEW,
+  CAPABILITIES.FIELD_REQUEST,
+  CAPABILITIES.FIELD_WORKORDER,
+  CAPABILITIES.FIELD_DISPATCH,
+  CAPABILITIES.FIELD_EXECUTE,
+  CAPABILITIES.FIELD_PARTS,
+  CAPABILITIES.FIELD_APPROVE,
+  CAPABILITIES.FIELD_PLAN,
+  CAPABILITIES.FIELD_AGREEMENT,
+  CAPABILITIES.FIELD_MONEY,
+  CAPABILITIES.FIELD_PII,
+  CAPABILITIES.FIELD_EXPORT,
+  CAPABILITIES.CONTRACTS_VIEW,
+  CAPABILITIES.CONTRACTS_UPLOAD,
+  CAPABILITIES.CONTRACTS_DOCUMENTS,
+  CAPABILITIES.CONTRACTS_MANAGE,
+  CAPABILITIES.CONTRACTS_APPROVE,
+  CAPABILITIES.CONTRACTS_EVIDENCE,
+  CAPABILITIES.CONTRACTS_COMPLIANCE,
+  CAPABILITIES.CONTRACTS_VALUE,
+  CAPABILITIES.CONTRACTS_EXPORT,
 ];
 
 /**
@@ -233,5 +294,10 @@ export const SYSTEM_ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     CAPABILITIES.ASSETS_VIEW,
     CAPABILITIES.ASSETS_REQUEST,
     CAPABILITIES.ASSETS_READING,
+    CAPABILITIES.FIELD_VIEW,
+    CAPABILITIES.FIELD_REQUEST,
+    CAPABILITIES.FIELD_EXECUTE,
+    CAPABILITIES.CONTRACTS_VIEW,
+    CAPABILITIES.CONTRACTS_UPLOAD,
   ],
 };

@@ -414,12 +414,7 @@ export const LINK_TYPES: Record<
     available: false,
     why: 'Payments have no standalone number in Noxtill — link the order they were taken on.',
   },
-  Contract: {
-    prefix: 'CT-',
-    module: 'Contracts',
-    available: false,
-    why: 'Noxtill has no contracts module yet.',
-  },
+  Contract: { prefix: 'CTR-', module: 'Contracts', available: true },
   Asset: {
     prefix: 'FA-',
     module: 'Finance & Accounting › Fixed Assets',
@@ -428,8 +423,7 @@ export const LINK_TYPES: Record<
   'Field Service job': {
     prefix: 'FS-',
     module: 'Field Service',
-    available: false,
-    why: 'Noxtill has no field service module yet.',
+    available: true,
   },
 };
 

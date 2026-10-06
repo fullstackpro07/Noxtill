@@ -59,5 +59,6 @@ import {
     ProjectsDailyScheduler,
     ProjectsDailyProcessor,
   ],
+  exports: [ProjectTasksService],
 })
 export class ProjectsModule {}

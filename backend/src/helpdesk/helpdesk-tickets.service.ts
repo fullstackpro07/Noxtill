@@ -1337,6 +1337,22 @@ export class HelpdeskTicketsService implements OnModuleInit {
             select: { id: true },
           })
         )?.id ?? null;
+    } else if (dto.type === 'Contract') {
+      refId =
+        (
+          await this.prisma.ctContract.findFirst({
+            where: { businessId: actor.rootId, number: rid },
+            select: { id: true },
+          })
+        )?.id ?? null;
+    } else if (dto.type === 'Field Service job') {
+      refId =
+        (
+          await this.prisma.fsWorkOrder.findFirst({
+            where: { businessId: actor.rootId, number: rid },
+            select: { id: true },
+          })
+        )?.id ?? null;
     } else if (dto.type === 'Project') {
       refId =
         (

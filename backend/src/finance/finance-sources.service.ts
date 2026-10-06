@@ -743,6 +743,24 @@ export class FinanceSourcesService {
                     this.cr(c.key('repairs').id, value, label),
                   ];
             break;
+          case 'field_service':
+            // Parts used on (qty < 0) or returned from (qty > 0) a customer field-service job. The
+            // job's invoice is an order with cogs 0, so the cost is recognised here exactly once.
+            label =
+              m.qty < 0
+                ? `Field service parts · ${what}`
+                : `Field service parts returned · ${what}`;
+            lines =
+              m.qty < 0
+                ? [
+                    this.dr(c.key('cogs').id, value, label),
+                    this.cr(inv, value, label),
+                  ]
+                : [
+                    this.dr(inv, value, label),
+                    this.cr(c.key('cogs').id, value, label),
+                  ];
+            break;
         }
         return {
           type: 'stock',

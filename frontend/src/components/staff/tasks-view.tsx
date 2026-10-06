@@ -25,6 +25,10 @@ const SOURCE_LABEL: Record<ActionItemType, string> = {
   field_approval: "Field Service",
   field_sla_breach: "Field Service",
   field_unassigned_urgent: "Field Service",
+  contract_approval: "Contracts",
+  contract_expiring: "Contracts",
+  contract_obligation_overdue: "Contracts",
+  contract_signature_issue: "Contracts",
 };
 const PRIORITY_LABEL: Record<LiveActionItem["priority"], string> = { urgent: "High", normal: "Normal", low: "Low" };
 

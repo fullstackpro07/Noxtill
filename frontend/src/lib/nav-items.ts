@@ -367,6 +367,22 @@ export const NAV_ITEMS: NavItem[] = [
     isNew: true,
   },
   {
+    key: "field-service",
+    labelKey: "nav.fieldService",
+    href: "/field-service",
+    icon: Wrench,
+    roles: ["owner", "manager", "staff"],
+    isNew: true,
+  },
+  {
+    key: "contracts",
+    labelKey: "nav.contracts",
+    href: "/contracts",
+    icon: FileText,
+    roles: ["owner", "manager", "staff"],
+    isNew: true,
+  },
+  {
     key: "finance",
     labelKey: "nav.finance",
     href: "/finance",

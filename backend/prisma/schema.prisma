@@ -191,6 +191,10 @@ enum ActionItemType {
   field_approval
   field_sla_breach
   field_unassigned_urgent
+  contract_approval
+  contract_expiring
+  contract_obligation_overdue
+  contract_signature_issue
 }
 
 enum ActionItemPriority {
@@ -9053,4 +9057,453 @@ model FsIdem {
 
   @@unique([businessId, key])
   @@map("fs_idem")
+}
+
+// ───────────────────────── Contracts (documents, contracts, eSign) ─────────────────────────
+// Keyed by the group root business. Counterparties are canonical references (CRM customer,
+// supplier, staff member); files live in private object storage; signatures are captured by the
+// built-in Noxtill eSign flow (tokenised public signing page + evidence trail).
+
+model CtSettings {
+  id         String @id @default(uuid())
+  businessId String @unique @map("business_id")
+  config     Json
+  version    Int    @default(1)
+  nextDoc    Int    @default(1) @map("next_doc")
+  nextCtr    Int    @default(1) @map("next_ctr")
+  /// Year the contract sequence belongs to (yearly reset).
+  ctrYear    Int    @default(0) @map("ctr_year")
+  nextTpl    Int    @default(1) @map("next_tpl")
+  nextSig    Int    @default(1) @map("next_sig")
+  nextApr    Int    @default(1) @map("next_apr")
+  nextCmp    Int    @default(1) @map("next_cmp")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ct_settings")
+}
+
+model CtSettingsVersion {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  version    Int
+  config     Json
+  changed    Json
+  byUserId   String @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, version])
+  @@map("ct_settings_versions")
+}
+
+model CtDocument {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  number      String    @db.VarChar(30)
+  title       String    @db.VarChar(255)
+  type        String    @db.VarChar(40)
+  folder      String    @db.VarChar(60)
+  description String?   @db.Text
+  ownerId     String    @map("owner_id")
+  branchId    String?   @map("branch_id")
+  /// Customers CRM | Suppliers | People & Payroll | Assets & Maintenance | Projects & Tasks | Branches | Finance & Accounting | Field Service
+  linkModule  String?   @map("link_module") @db.VarChar(40)
+  linkId      String?   @map("link_id")
+  /// Draft | Processing | Ready | Approval Pending | Signature Pending | Signed | Active | Expired | Failed | Partial
+  status      String    @db.VarChar(20)
+  /// Public | Internal | Confidential | Restricted
+  sensitivity String    @db.VarChar(14)
+  expiresOn   DateTime? @map("expires_on") @db.Date
+  retention   String    @db.VarChar(40)
+  tags        Json
+  /// User ids the document is shared with internally.
+  shares      Json
+  legalHold   String?   @map("legal_hold") @db.VarChar(255)
+  processing  String?   @db.VarChar(255)
+  archivedAt  DateTime? @map("archived_at")
+  createdById String    @map("created_by_id")
+
+  versions CtDocVersion[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, folder])
+  @@map("ct_documents")
+}
+
+model CtDocVersion {
+  id         String     @id @default(uuid())
+  docId      String     @map("doc_id")
+  doc        CtDocument @relation(fields: [docId], references: [id], onDelete: Cascade)
+  version    Int
+  storageKey String?    @map("storage_key") @db.VarChar(400)
+  fileName   String?    @map("file_name") @db.VarChar(255)
+  mime       String?    @db.VarChar(120)
+  size       Int        @default(0)
+  /// SHA-256 of the stored bytes (hex).
+  sha256     String?    @db.VarChar(64)
+  /// Plain text (extracted from PDF / DOCX, or the generated contract body) used for comparison.
+  text       String?    @db.LongText
+  note       String     @db.VarChar(255)
+  /// Draft | Ready | Approved | Signed | Active | Superseded | Processing | Failed
+  state      String     @db.VarChar(14)
+  immutable  Boolean    @default(false)
+  byUserId   String     @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([docId, version])
+  @@map("ct_doc_versions")
+}
+
+model CtTemplate {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  number     String @db.VarChar(20)
+  name       String @db.VarChar(160)
+  type       String @db.VarChar(40)
+  ownerId    String @map("owner_id")
+  /// Signer roles, e.g. ["Business Signatory","Customer"].
+  roles      Json
+  approval   String @db.VarChar(80)
+  /// Draft | Published | Archived — status of the latest version.
+  status     String @db.VarChar(12)
+  version    Int    @default(1)
+
+  versions CtTemplateVersion[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("ct_templates")
+}
+
+model CtTemplateVersion {
+  id         String     @id @default(uuid())
+  templateId String     @map("template_id")
+  template   CtTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version    Int
+  content    String     @db.LongText
+  vars       Json
+  /// Draft | Published | Superseded
+  status     String     @db.VarChar(12)
+  byUserId   String     @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([templateId, version])
+  @@map("ct_template_versions")
+}
+
+model CtContract {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(30)
+  title        String    @db.VarChar(255)
+  type         String    @db.VarChar(40)
+  /// customer | supplier | staff
+  cpKind       String    @map("cp_kind") @db.VarChar(10)
+  cpId         String    @map("cp_id")
+  ownerId      String    @map("owner_id")
+  branchId     String?   @map("branch_id")
+  startOn      DateTime  @map("start_on") @db.Date
+  endOn        DateTime? @map("end_on") @db.Date
+  noticeDays   Int       @default(30) @map("notice_days")
+  autoRenew    Boolean   @default(false) @map("auto_renew")
+  value        Decimal?  @db.Decimal(14, 2)
+  currency     String    @db.VarChar(3)
+  status       String    @db.VarChar(20)
+  /// Not sent | Prepared | Sent | Partially Signed | Completed | Declined | Voided | Expired
+  sigState     String    @default("Not sent") @map("sig_state") @db.VarChar(20)
+  /// Not requested | Pending | Approved | Rejected | Changes Requested
+  aprState     String    @default("Not requested") @map("apr_state") @db.VarChar(20)
+  docId        String?   @map("doc_id")
+  templateId   String?   @map("template_id")
+  templateVer  Int?      @map("template_ver")
+  /// Restricted contracts (e.g. employment) need contracts.restricted to view.
+  restricted   Boolean   @default(false)
+  renewalOf    String?   @map("renewal_of")
+  /// Not Due | Upcoming | Review Required | Renewal Draft | Renewed | Will Not Renew | Snoozed — manual decision state.
+  renewState   String?   @map("renew_state") @db.VarChar(20)
+  renewNote    String?   @map("renew_note") @db.VarChar(500)
+  snoozedUntil DateTime? @map("snoozed_until") @db.Date
+  terminatedOn DateTime? @map("terminated_on") @db.Date
+  /// Counterparty signer captured in the wizard: { name, email, order, auth }.
+  signerDraft  Json?     @map("signer_draft")
+  /// Canonical cross-module links: [{ module, ref }].
+  related      Json
+  version      Int       @default(1)
+  createdById  String    @map("created_by_id")
+
+  terms  CtTerm[]
+  obls   CtObligation[]
+  amends CtAmendment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("ct_contracts")
+}
+
+model CtTerm {
+  id         String     @id @default(uuid())
+  contractId String     @map("contract_id")
+  contract   CtContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  term       String     @db.VarChar(120)
+  value      String     @db.VarChar(500)
+  source     String     @db.VarChar(120)
+  /// null = entered by a person; 0..1 = extracted suggestion.
+  confidence Decimal?   @db.Decimal(4, 3)
+  /// Confirmed | Needs Review
+  status     String     @db.VarChar(14)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("ct_terms")
+}
+
+model CtObligation {
+  id            String     @id @default(uuid())
+  contractId    String     @map("contract_id")
+  contract      CtContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  title         String     @db.VarChar(255)
+  responsible   String     @db.VarChar(14)
+  ownerId       String     @map("owner_id")
+  dueOn         DateTime   @map("due_on") @db.Date
+  frequency     String     @db.VarChar(12)
+  /// Upcoming | Completed | Waived | Cancelled (Due Soon / Overdue are derived)
+  status        String     @db.VarChar(12)
+  evidenceDocId String?    @map("evidence_doc_id")
+  taskId        String?    @map("task_id")
+  note          String?    @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ct_obligations")
+}
+
+model CtAmendment {
+  id          String     @id @default(uuid())
+  contractId  String     @map("contract_id")
+  contract    CtContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  number      String     @db.VarChar(12)
+  reason      String     @db.VarChar(500)
+  effectiveOn DateTime   @map("effective_on") @db.Date
+  sections    Json
+  aprState    String     @default("Not requested") @map("apr_state") @db.VarChar(20)
+  sigState    String     @default("Not sent") @map("sig_state") @db.VarChar(20)
+  /// Draft | Approval Required | Approved | Signature Pending | Active | Cancelled
+  status      String     @db.VarChar(20)
+  docId       String?    @map("doc_id")
+  byUserId    String     @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ct_amendments")
+}
+
+model CtSignRequest {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  number      String    @db.VarChar(20)
+  docId       String    @map("doc_id")
+  docVersion  Int       @map("doc_version")
+  contractId  String?   @map("contract_id")
+  amendmentId String?   @map("amendment_id")
+  senderId    String    @map("sender_id")
+  /// Sequential | Parallel
+  ordering    String    @db.VarChar(10)
+  fields      Json
+  reminders   String    @db.VarChar(16)
+  deadline    DateTime
+  /// Prepared | Sent | Partially Signed | Completed | Declined | Voided | Expired
+  status      String    @db.VarChar(18)
+  sentAt      DateTime? @map("sent_at")
+  completedAt DateTime? @map("completed_at")
+  note        String?   @db.VarChar(500)
+  /// SHA-256 of the exact version bytes that were sent for signature.
+  docSha256   String?   @map("doc_sha256") @db.VarChar(64)
+
+  signers CtSigner[]
+  events  CtSignEvent[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("ct_sign_requests")
+}
+
+model CtSigner {
+  id            String        @id @default(uuid())
+  requestId     String        @map("request_id")
+  request       CtSignRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  name          String        @db.VarChar(160)
+  email         String        @db.VarChar(190)
+  role          String        @db.VarChar(40)
+  seq           Int
+  /// Email | Email + OTP
+  auth          String        @db.VarChar(16)
+  /// Pending | Sent | Viewed | Signed | Declined | Delivery Failed
+  status        String        @db.VarChar(16)
+  /// SHA-256 of the signing token (the token itself is only ever in the emailed link).
+  tokenHash     String        @unique @map("token_hash") @db.VarChar(64)
+  otpHash       String?       @map("otp_hash") @db.VarChar(64)
+  otpExpires    DateTime?     @map("otp_expires")
+  otpAttempts   Int           @default(0) @map("otp_attempts")
+  sentAt        DateTime?     @map("sent_at")
+  viewedAt      DateTime?     @map("viewed_at")
+  signedAt      DateTime?     @map("signed_at")
+  declinedAt    DateTime?     @map("declined_at")
+  declineReason String?       @map("decline_reason") @db.VarChar(500)
+  /// Typed | Drawn
+  sigType       String?       @map("sig_type") @db.VarChar(8)
+  /// Typed name or a PNG data URL of the drawn signature.
+  sigData       String?       @map("sig_data") @db.MediumText
+  ip            String?       @db.VarChar(64)
+  userAgent     String?       @map("user_agent") @db.VarChar(255)
+  lastReminded  DateTime?     @map("last_reminded")
+
+  @@index([requestId])
+  @@map("ct_signers")
+}
+
+model CtSignEvent {
+  id        String        @id @default(uuid())
+  requestId String        @map("request_id")
+  request   CtSignRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  signerId  String?       @map("signer_id")
+  type      String        @db.VarChar(40)
+  detail    String        @db.VarChar(500)
+  ip        String?       @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([requestId])
+  @@map("ct_sign_events")
+}
+
+model CtApproval {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  number        String   @db.VarChar(20)
+  /// Contract | Document | Template | Renewal | Amendment
+  kind          String   @db.VarChar(12)
+  entityId      String   @map("entity_id")
+  type          String   @db.VarChar(40)
+  /// [{ role, userId, status, at, comment }]
+  steps         Json
+  requestedById String   @map("requested_by_id")
+  dueOn         DateTime @map("due_on") @db.Date
+  /// Pending | Approved | Rejected | Changes Requested | Escalated | Cancelled
+  status        String   @db.VarChar(18)
+  reason        String   @db.VarChar(500)
+  changes       String   @db.VarChar(255)
+  comments      Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("ct_approvals")
+}
+
+model CtCompliance {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(12)
+  docId        String?   @map("doc_id")
+  title        String    @db.VarChar(255)
+  type         String    @db.VarChar(40)
+  jurisdiction String    @db.VarChar(80)
+  ownerId      String    @map("owner_id")
+  version      Int       @default(0)
+  effectiveOn  DateTime? @map("effective_on") @db.Date
+  expiresOn    DateTime? @map("expires_on") @db.Date
+  mandatoryAck Boolean   @default(false) @map("mandatory_ack")
+  /// All staff | Branch:<id> | Customers | Suppliers
+  audience     String    @db.VarChar(80)
+  archivedAt   DateTime? @map("archived_at")
+
+  acks CtAck[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("ct_compliance")
+}
+
+model CtAck {
+  id           String       @id @default(uuid())
+  complianceId String       @map("compliance_id")
+  compliance   CtCompliance @relation(fields: [complianceId], references: [id], onDelete: Cascade)
+  userId       String       @map("user_id")
+  version      Int
+  /// Requested | Acknowledged
+  status       String       @db.VarChar(14)
+  requestedAt  DateTime     @default(now()) @map("requested_at")
+  ackedAt      DateTime?    @map("acked_at")
+
+  @@unique([complianceId, userId, version])
+  @@map("ct_acks")
+}
+
+/// Renewal / replacement decisions on documents and compliance records (contracts keep theirs inline).
+model CtExpiryState {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  /// d:<docId> | k:<complianceId>
+  key          String    @db.VarChar(60)
+  state        String    @db.VarChar(20)
+  note         String?   @db.VarChar(500)
+  snoozedUntil DateTime? @map("snoozed_until") @db.Date
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, key])
+  @@map("ct_expiry_states")
+}
+
+model CtAudit {
+  id          String @id @default(uuid())
+  businessId  String @map("business_id")
+  actorId     String @map("actor_id")
+  actorName   String @map("actor_name") @db.VarChar(160)
+  action      String @db.VarChar(80)
+  entityType  String @map("entity_type") @db.VarChar(16)
+  entityId    String @map("entity_id")
+  detail      String @db.Text
+  correlation String @db.VarChar(24)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([businessId, entityId])
+  @@map("ct_audit")
+}
+
+model CtIdem {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  key        String @db.VarChar(120)
+  status     String @db.VarChar(10)
+  result     Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, key])
+  @@map("ct_idem")
 }

@@ -2,21 +2,20 @@ import type { LegalBlock } from "@/components/site/legal-page-layout";
 
 /**
  * Transcribed from d:\Noxtil\docs\Noxtill_Cookie_Policy.docx (extracted via
- * frontend/scripts/extract-legal-docs.mjs). Bracketed placeholders such as
- * {DPO_EMAIL} and {REGISTERED_ADDRESS} are unfilled fields in the source
- * document itself, not omissions introduced here — preserved verbatim.
+ * frontend/scripts/extract-legal-docs.mjs). Source placeholders have since been
+ * filled with Noxtill LLC details (entity, address, emails, dates, retention).
  */
 export const COOKIE_POLICY_BLOCKS: LegalBlock[] = [
   {
     kind: "callout",
-    text: "Noxtill Ltd · Incorporated in England and Wales · Company No. {COMPANY_NUMBER}. Version 1.0 · Effective {DATE}.",
+    text: "Noxtill LLC · Arizona Domestic Limited Liability Company · ACC Business ID 25117457. Version 1.0 · Effective September 4, 2026.",
   },
   { kind: "p", text: "Cookies and similar technologies — worldwide. Read together with our **Privacy Policy**." },
 
   { kind: "h2", text: "1. Scope" },
   {
     kind: "p",
-    text: "This policy explains how Noxtill Ltd uses cookies and similar technologies on: our marketing website; our web application; our mobile applications; and the public pages we host on behalf of businesses using the Service.",
+    text: "This policy explains how Noxtill LLC uses cookies and similar technologies on: our marketing website; our web application; our mobile applications; and the public pages we host on behalf of businesses using the Service.",
   },
 
   { kind: "h2", text: "2. What these technologies are" },
@@ -192,6 +191,6 @@ export const COOKIE_POLICY_BLOCKS: LegalBlock[] = [
   },
   {
     kind: "p",
-    text: "Questions: {DPO_EMAIL} · Noxtill Ltd, {REGISTERED_ADDRESS}, company number {COMPANY_NUMBER}",
+    text: "Questions: contact@noxtill.com · Noxtill LLC, 4539 N 22nd St Ste R, Phoenix, AZ 85016, United States, ACC Business ID 25117457",
   },
 ];

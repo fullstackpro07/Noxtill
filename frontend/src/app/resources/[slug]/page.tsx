@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/site/site-header";
+import { CompanyDetails } from "@/components/site/company-details";
 import { SiteFooter } from "@/components/site/site-footer";
 import { DetailHero, DetailComparison, DetailRelated } from "@/components/site/detail-page-sections";
 import { RESOURCES_DETAIL_PAGES, findResourceDetailPage } from "@/lib/marketing/resources-detail-content";
@@ -102,6 +103,12 @@ export default async function ResourceDetailRoute({ params }: { params: Promise<
         />
 
         <DetailRelated heading="Related resources" links={page.related} />
+
+        {page.slug === "contact-support" ? (
+          <div className="pt-14">
+            <CompanyDetails />
+          </div>
+        ) : null}
 
         <section className="px-5 pb-16 pt-14 text-center sm:px-7">
           <p className="text-sm text-fg-faint">

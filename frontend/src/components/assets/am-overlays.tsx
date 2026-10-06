@@ -1,12 +1,13 @@
 "use client";
 
-import { type FormEvent } from "react";
+import { useRef, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { useShallow } from "zustand/react/shallow";
 import { amApi, type AmDrawer, type AmItem } from "@/lib/assets-api";
 import { BtnV } from "@/components/payments/pay-render";
 import { amScopeOf, useAm, type AValues } from "./am-store";
+import { CameraScanner } from "./am-scanner";
 
 /** Record drawer (assets-ui.js vDrawer). Work orders get tabs; checklist/parts/cost rows are actionable. */
 export function AmDrawerView({ onAct, onItem }: { onAct: (k: string, kind: string, id: string, v?: AmDrawer) => void; onItem: (kind: string, item: AmItem, mode: "check" | "return" | "bill") => void }) {
@@ -107,6 +108,7 @@ export function AmModalView() {
   const busy = useAm((s) => s.busy);
   const set = useAm((s) => s.set);
   const close = useAm((s) => s.closeModal);
+  const formRef = useRef<HTMLFormElement>(null);
   if (!m) return null;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -118,8 +120,8 @@ export function AmModalView() {
         const file = fd.get(f.name);
         v[f.name] = file instanceof File && file.size ? file : null;
         if (f.req && !v[f.name]) return set({ modalErr: `${f.label} is required.` });
-      } else if (f.type !== "read" && f.type !== "qr") v[f.name] = String(fd.get(f.name) ?? "").trim();
-      if (f.req && f.type !== "checks" && f.type !== "file" && f.type !== "read" && !v[f.name]) return set({ modalErr: `${f.label} is required.` });
+      } else if (f.type !== "read" && f.type !== "qr" && f.type !== "camera") v[f.name] = String(fd.get(f.name) ?? "").trim();
+      if (f.req && f.type !== "checks" && f.type !== "file" && f.type !== "read" && f.type !== "camera" && !v[f.name]) return set({ modalErr: `${f.label} is required.` });
     }
     set({ busy: true, modalErr: null });
     try {
@@ -134,7 +136,7 @@ export function AmModalView() {
   const inp = { border: "1px solid #E6EAF0", borderRadius: 10, padding: 10, fontSize: 12.5, minHeight: 42 } as const;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(10,27,42,.45)", zIndex: 180, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <form key={`${m.title}|${m.sub ?? ""}|${m.primaryT}|${m.fields.map((f) => f.name + (f.value ?? "")).join(",")}`} onSubmit={submit} role="dialog" aria-modal="true" aria-label={m.title} style={{ width: m.wide ? 680 : 540, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: 18, padding: 20, display: "flex", flexDirection: "column", gap: 13, boxShadow: "0 30px 80px rgba(10,27,42,.3)" }}>
+      <form ref={formRef} key={`${m.title}|${m.sub ?? ""}|${m.primaryT}|${m.fields.map((f) => f.name + (f.value ?? "")).join(",")}`} onSubmit={submit} role="dialog" aria-modal="true" aria-label={m.title} style={{ width: m.wide ? 680 : 540, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: 18, padding: 20, display: "flex", flexDirection: "column", gap: 13, boxShadow: "0 30px 80px rgba(10,27,42,.3)" }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#0F172A", letterSpacing: "-.3px" }}>{m.title}</h2>
           {m.sub ? <p style={{ margin: "5px 0 0", fontSize: 12.5, color: "#475467", lineHeight: 1.55, overflowWrap: "anywhere" }}>{m.sub}</p> : null}
@@ -161,6 +163,14 @@ export function AmModalView() {
                 <div id={id} style={{ display: "flex", justifyContent: "center", padding: 12, background: "#fff", border: "1px solid #F2F4F7", borderRadius: 10 }}>
                   <QRCodeSVG id="am-qr" value={f.value ?? ""} size={200} level="M" marginSize={1} />
                 </div>
+              ) : f.type === "camera" ? (
+                <CameraScanner
+                  onCode={(code) => {
+                    const el = formRef.current?.querySelector<HTMLInputElement>(`#amf_${f.target ?? "code"}`);
+                    if (el) el.value = code;
+                    formRef.current?.requestSubmit();
+                  }}
+                />
               ) : f.type === "file" ? (
                 <input id={id} name={f.name} type="file" accept={f.accept} style={{ fontSize: 12 }} />
               ) : f.type === "checks" ? (

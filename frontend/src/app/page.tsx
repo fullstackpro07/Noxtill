@@ -38,7 +38,18 @@ const JSON_LD = {
       "@type": "Organization",
       "@id": "https://noxtill.com/#organization",
       name: "Noxtill",
+      legalName: "Noxtill LLC",
       url: "https://noxtill.com/",
+      foundingDate: "2026-09-04",
+      identifier: { "@type": "PropertyValue", propertyID: "Arizona Corporation Commission Business ID", value: "25117457" },
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "4539 N 22nd St Ste R",
+        addressLocality: "Phoenix",
+        addressRegion: "AZ",
+        postalCode: "85016",
+        addressCountry: "US",
+      },
       description:
         "Business management software combining point of sale, appointment booking, customer credit tracking, reviews and reporting for small businesses.",
       sameAs: ["https://www.linkedin.com/company/noxtill", "https://www.crunchbase.com/organization/noxtill"],

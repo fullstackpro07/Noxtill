@@ -306,6 +306,13 @@ function Card({ b, h }: { b: PCard; h: RenderHandlers }) {
           </div>
         </div>
       ) : null}
+      {b.fields?.length ? (
+        <div style={{ padding: "4px 16px 10px" }}>
+          {b.fields.map((f, i) => (
+            <FieldRow key={`${f.key}|${i}`} f={f} value={f.isToggle ? f.on : f.v} onSet={() => undefined} onBtn={(k) => h.blockAct(k, bid)} />
+          ))}
+        </div>
+      ) : null}
       {b.empty ? <Empty e={b.empty} onAct={(k) => h.blockAct(k, bid)} /> : null}
       {b.pager ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderTop: "1px solid #F2F4F7", flexWrap: "wrap" }}>
@@ -400,7 +407,7 @@ export function FieldRow({ f, value, onSet, onBtn }: { f: PField; value: unknown
             })}
           </div>
         ) : null}
-        {f.isRead ? <div style={{ fontSize: 12.5, color: f.fg, background: "#FAFBFC", borderRadius: 9, padding: "8px 10px", lineHeight: 1.45, overflowWrap: "break-word" }}>{f.v}</div> : null}
+        {f.isRead ? <div style={{ fontSize: 12.5, color: f.fg, background: "#FAFBFC", borderRadius: 9, padding: "8px 10px", lineHeight: 1.45, overflowWrap: "break-word", whiteSpace: "pre-line" }}>{f.v}</div> : null}
         {f.btns ? (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {f.btns.map((b2) => (

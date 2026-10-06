@@ -268,6 +268,8 @@ export const TRANSLATIONS: Record<LocaleCode, Dict> = {
     "nav.helpdesk": "Helpdesk",
     "nav.payments": "Payments & Billing",
     "nav.assetsMaintenance": "Assets & Maintenance",
+    "nav.fieldService": "Field Service",
+    "nav.contracts": "Contracts",
     "nav.finance": "Finance & Accounting",
     "nav.businessBrain": "Business Brain",
     "nav.opportunityRadar": "Opportunity Radar",

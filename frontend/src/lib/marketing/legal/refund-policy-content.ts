@@ -2,14 +2,14 @@ import type { LegalBlock } from "@/components/site/legal-page-layout";
 
 /**
  * Transcribed from d:\Noxtil\docs\Noxtill_Refund_Policy.docx (extracted via
- * frontend/scripts/extract-legal-docs.mjs). Bracketed placeholders such as
- * {SUPPORT_EMAIL} and {DATA_RETENTION_DAYS} are unfilled fields in the source
- * document itself, not omissions introduced here — preserved verbatim.
+ * frontend/scripts/extract-legal-docs.mjs). Source placeholders have since been
+ * filled with Noxtill LLC details (entity, address, emails, dates, retention).
+ *
  */
 export const REFUND_POLICY_BLOCKS: LegalBlock[] = [
   {
     kind: "callout",
-    text: "Noxtill Ltd · Incorporated in England and Wales · Company No. {COMPANY_NUMBER}. Version 1.0 · Effective {DATE}.",
+    text: "Noxtill LLC · Arizona Domestic Limited Liability Company · ACC Business ID 25117457. Version 1.0 · Effective September 4, 2026.",
   },
   { kind: "p", text: "Trials, billing, refunds, plan changes and your data." },
 
@@ -20,7 +20,7 @@ export const REFUND_POLICY_BLOCKS: LegalBlock[] = [
       "**Free trial** — 14 days, no card required, nothing to cancel.",
       "**Cancel any time** — from Settings, in a few clicks. Your plan runs to the end of the period you have paid for.",
       "**Annual plans** — full refund if you cancel within 30 days of first purchase.",
-      "**Your data** — exportable at any time, and for {DATA_RETENTION_DAYS} days after you leave.",
+      "**Your data** — exportable at any time, and for 15 days after you leave.",
       "**We will never hold your data hostage.**",
     ],
   },
@@ -62,7 +62,7 @@ export const REFUND_POLICY_BLOCKS: LegalBlock[] = [
   },
   {
     kind: "p",
-    text: "You may also cancel by emailing {SUPPORT_EMAIL} from the address on the account. We action cancellations within one working day and confirm by email.",
+    text: "You may also cancel by emailing support@noxtill.com from the address on the account. We action cancellations within one working day and confirm by email.",
   },
 
   { kind: "h2", text: "5. Refunds" },
@@ -74,7 +74,7 @@ export const REFUND_POLICY_BLOCKS: LegalBlock[] = [
   { kind: "h3", text: "5.2 Annual plans — 30-day refund" },
   {
     kind: "callout",
-    text: "If you cancel an annual plan within 30 days of your first annual payment, we refund it in full. No conditions, no questions asked. Email {SUPPORT_EMAIL} within 30 days.",
+    text: "If you cancel an annual plan within 30 days of your first annual payment, we refund it in full. No conditions, no questions asked. Email support@noxtill.com within 30 days.",
   },
   { kind: "p", text: "After 30 days, annual Fees are not refunded for the unused portion except under 5.3, 5.4 or 5.5." },
   { kind: "h3", text: "5.3 Where we are at fault" },
@@ -151,7 +151,7 @@ export const REFUND_POLICY_BLOCKS: LegalBlock[] = [
   },
   {
     kind: "p",
-    text: "**Business Data remains available for export for {DATA_RETENTION_DAYS} days after cancellation.** After that it is deleted from active systems, and from backups within the backup rotation cycle.",
+    text: "**Business Data remains available for export for 15 days after cancellation.** After that it is deleted from active systems, and from backups within the backup rotation cycle.",
   },
   {
     kind: "p",
@@ -186,7 +186,7 @@ export const REFUND_POLICY_BLOCKS: LegalBlock[] = [
   { kind: "h2", text: "11. Disputes and chargebacks" },
   {
     kind: "p",
-    text: "If you disagree with a charge, **email {SUPPORT_EMAIL} before raising a chargeback**. We resolve billing disputes quickly and give you the benefit of genuine doubt.",
+    text: "If you disagree with a charge, **email support@noxtill.com before raising a chargeback**. We resolve billing disputes quickly and give you the benefit of genuine doubt.",
   },
   {
     kind: "p",
@@ -197,6 +197,6 @@ export const REFUND_POLICY_BLOCKS: LegalBlock[] = [
   { kind: "h2", text: "12. Contact" },
   {
     kind: "p",
-    text: "Billing and refunds: **{SUPPORT_EMAIL}**. Noxtill Ltd · {REGISTERED_ADDRESS} · Company number {COMPANY_NUMBER}",
+    text: "Billing and refunds: **support@noxtill.com**. Noxtill LLC · 4539 N 22nd St Ste R, Phoenix, AZ 85016, United States · ACC Business ID 25117457",
   },
 ];

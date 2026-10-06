@@ -277,6 +277,23 @@ export class AmDrawersService {
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
+    // Field jobs on the same asset, and the Field Service request raised from this work order.
+    const [fsJobs, fsReq] = await Promise.all([
+      this.ctx.db.fsWorkOrder.findMany({
+        where: { businessId: d.a.rootId, assetId: w.assetId },
+        select: { number: true, status: true },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      this.ctx.db.fsRequest.findFirst({
+        where: {
+          businessId: d.a.rootId,
+          channel: 'Assets & Maintenance',
+          sourceRef: w.number,
+        },
+        select: { number: true, status: true },
+      }),
+    ]);
     const tabs: Record<string, unknown[]> = {
       overview: [
         {
@@ -312,7 +329,14 @@ export class AmDrawersService {
         },
         {
           h: 'Field Service',
-          text: 'Not available — Noxtill has no Field Service module, so customer-site dispatch isn’t linked.',
+          text: [
+            fsReq
+              ? `Handed to Field Service as ${fsReq.number} (${fsReq.status}).`
+              : 'Not linked. Customer-owned equipment can be dispatched as a field job with “Link to Field Service”.',
+            fsJobs.length
+              ? `Field jobs on this asset: ${fsJobs.map((j) => `${j.number} ${j.status}`).join(' · ')}`
+              : 'No field jobs on this asset yet.',
+          ].join('\n'),
         },
       ],
       checklist: [
@@ -816,10 +840,10 @@ export class AmDrawersService {
               d: '',
             },
             {
-              a: 'Telematics / POS meter feeds',
-              c: 'Not connected',
-              b: 'Not available',
-              d: 'Readings are entered manually or from a photo of the meter',
+              a: 'Meter readings',
+              c: 'Manual entry',
+              b: 'Recorded by your team',
+              d: 'Typed in, read from a photo of the meter, or captured when a work order is completed',
             },
           ],
         },

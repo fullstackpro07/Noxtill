@@ -45,9 +45,9 @@ export const LINK_TYPES: Record<string, { prefix: string; available: boolean; wh
   Project: { prefix: "PRJ-", available: true },
   Invoice: { prefix: "INV-", available: false, why: "no invoicing module yet" },
   Payment: { prefix: "PAY-", available: false, why: "link the order instead" },
-  Contract: { prefix: "CT-", available: false, why: "no contracts module yet" },
+  Contract: { prefix: "CTR-", available: true },
   Asset: { prefix: "FA-", available: true },
-  "Field Service job": { prefix: "FS-", available: false, why: "no field service module yet" },
+  "Field Service job": { prefix: "FS-", available: true },
 };
 export const FILE_OK = ["jpg", "jpeg", "png", "gif", "webp", "pdf", "txt", "csv", "doc", "docx", "xls", "xlsx"];
 export const ESC_REASONS = ["SLA at risk", "Customer complaint", "VIP customer", "Technical blocker", "Needs manager approval", "Other"];

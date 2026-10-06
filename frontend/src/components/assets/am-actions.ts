@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { amApi, amDownload, type AmDrawer, type AmItem, type AmOptions } from "@/lib/assets-api";
+import { fsApi } from "@/lib/field-service-api";
 import type { RenderHandlers } from "@/components/payments/pay-render";
 import { amScopeOf, getPath, setPath, useAm, type AField, type AModal, type AValues } from "./am-store";
 
@@ -187,7 +188,7 @@ export function useAmActions(opt: AmOptions | undefined) {
       const a = opt?.assets.find((x) => x.id === id);
       modal({
         title: "Record meter reading",
-        sub: "Readings are append-only observations. No telematics or POS meter feed is connected — enter the reading or read it from a photo of the meter.",
+        sub: "Readings are append-only. Enter the value shown on the meter (or read it from a photo of the meter).",
         primaryT: "Record reading",
         fields: [
           F("assetId", "Asset", "select", { value: id ?? "", req: true, options: [{ v: "", t: "Pick an asset" }, ...assetOpts((x) => !!x.meterType)] }),
@@ -336,7 +337,7 @@ export function useAmActions(opt: AmOptions | undefined) {
     const requestModal = (p: { assetId?: string; title?: string; desc?: string; type?: string } = {}) =>
       modal({
         title: "Create maintenance request",
-        sub: "Internal asset issue. Customer-site visits would belong to Field Service, which Noxtill doesn’t have.",
+        sub: "Asset issue. For customer-owned equipment, use “Link to Field Service” afterwards to dispatch a technician to the customer site.",
         primaryT: "Submit request",
         fields: [
           F("assetId", "Asset", "select", { value: p.assetId ?? "", req: true, options: [{ v: "", t: "Pick an asset" }, ...assetOpts()] }),
@@ -397,7 +398,7 @@ export function useAmActions(opt: AmOptions | undefined) {
       if (v === "Reject") return confirm("Reject request", "", "Reject", async (r) => (await amApi.reqAction(id, { act: v, reason: r }), "Request rejected."), { danger: true, reason: true });
       if (v === "Close") return confirm("Close request?", "The request and its links are kept.", "Close request", async (r) => (await amApi.reqAction(id, { act: v, reason: r }), "Request closed."), { reason: true });
       if (v === "Convert to work order") return convertModal(id);
-      if (v === "Link to Field Service") return flash("Not available — Noxtill has no Field Service module.");
+      if (v === "Link to Field Service") return run(async () => (await fsApi.fromAssets("req", id)).msg);
       return act({ act: v }, `${v} — done.`);
     };
 
@@ -478,7 +479,7 @@ export function useAmActions(opt: AmOptions | undefined) {
         return modal({ title: "Add cost", primaryT: "Add", fields: [F("type", "Type", "select", { options: O(["Vendor", "Other"]) }), F("amount", "Amount", "number", { req: true, af: true }), F("bill", "Finance bill", "select", { options: [{ v: "", t: "Not billed yet — don’t post" }, ...(opt?.finBills ?? []).map((x) => ({ v: x.id, t: x.label }))] }), F("note", "Note", "text")], onSubmit: async (x) => { await amApi.cost(id, { type: sv(x, "type"), amount: Number(sv(x, "amount")), finBillId: sv(x, "bill") || undefined, note: sv(x, "note") }); await after("Cost added."); } });
       if (v === "Change priority")
         return modal({ title: "Change priority", primaryT: "Save", fields: [F("priority", "Priority", "select", { options: O(cfg?.priorities ?? LEVELS) }), F("reason", "Reason", "text")], onSubmit: async (x) => { await amApi.priority(id, sv(x, "priority"), sv(x, "reason")); await after("Priority changed."); } });
-      if (v === "Link to Field Service") return flash("Not available — Noxtill has no Field Service module.");
+      if (v === "Link to Field Service") return run(async () => (await fsApi.fromAssets("wo", id)).msg);
       return run(async () => {
         const r = await amApi.move(id, v);
         return `${r.number}: → ${r.status}.`;
@@ -813,9 +814,9 @@ export function useAmActions(opt: AmOptions | undefined) {
     const scanModal = () =>
       modal({
         title: "Scan QR / barcode",
-        sub: "Type or paste the code — an asset QR label, barcode, tag, serial or asset number. (Noxtill doesn’t open the camera here.)",
+        sub: "Point the camera at an asset QR label or barcode — or type the tag, serial, barcode or asset number.",
         primaryT: "Find asset",
-        fields: [F("code", "Scanned value", "text", { af: true, req: true, ph: "Asset QR link, barcode, tag, serial or number" })],
+        fields: [F("cam", "Camera", "camera", { target: "code" }), F("code", "Code", "text", { req: true, ph: "Asset QR link, barcode, tag, serial or number" })],
         onSubmit: async (v) => {
           const a = await amApi.lookup(sv(v, "code"));
           st.getState().closeModal();

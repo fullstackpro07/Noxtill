@@ -38,6 +38,7 @@ export type PCard = {
   info: string | null;
   cal: { aria: string; head: string[]; days: { d: string; bd: string; bg: string; fw: number; fg: string; items: { id: string; t: string; bg: string; fg: string }[] }[] } | null;
   kpis: null;
+  fields?: PField[] | null;
 };
 export type PBlock = PCard | { kpis: PKpi[]; card: false };
 export type PRowGroup = { cols: string; blocks: PBlock[]; collapse: string };

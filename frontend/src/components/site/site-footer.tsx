@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { FOOTER_COLUMNS, FOOTER_BOTTOM_LINKS } from "@/lib/marketing/footer-links";
+import { COMPANY, COMPANY_ADDRESS_ONE_LINE } from "@/lib/marketing/company-info";
 import { ChatWidget } from "@/components/site/chat-widget";
 
 function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
@@ -45,7 +46,9 @@ export function SiteFooter() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-border-on-deep pt-5 text-[12.5px] text-fg-on-deep">
-          <span>© 2026 Noxtill. Business management software for small businesses.</span>
+          <span>
+            © 2026 {COMPANY.legalName}, an {COMPANY.state} limited liability company (ACC Business ID {COMPANY.businessId}) · {COMPANY_ADDRESS_ONE_LINE} · {COMPANY.emails.info}
+          </span>
           <span className="flex flex-wrap gap-x-4.5 gap-y-2.5">
             {FOOTER_BOTTOM_LINKS.map((link) => (
               <Link key={link.label} href={link.href} className="text-fg-on-deep hover:text-fg-on-deep-faint">
