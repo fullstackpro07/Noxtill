@@ -144,7 +144,7 @@ export class ContentItemsService {
       const end = raw.lastIndexOf(']');
       const parsed = JSON.parse(raw.slice(start, end + 1)) as unknown;
       if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
-        return { ideas: parsed as string[] };
+        return { ideas: parsed };
       }
     } catch {
       // Fall through to the honest fallback below.

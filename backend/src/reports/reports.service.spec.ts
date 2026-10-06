@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest asymmetric matchers (`expect.objectContaining`/`expect.any`) are typed `any`. */
 import { ClsService } from 'nestjs-cls';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';

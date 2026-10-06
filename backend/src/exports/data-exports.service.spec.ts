@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest asymmetric matchers (`expect.objectContaining`/`expect.any`) are typed `any`. */
 jest.mock('../common/pdf/pdf-renderer.service', () => ({
   PdfRendererService: jest.fn(),
 }));

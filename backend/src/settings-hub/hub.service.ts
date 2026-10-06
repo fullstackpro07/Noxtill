@@ -754,7 +754,7 @@ export class SettingsHubService {
 
   // ------------------------------------------------------------------ search
 
-  async search(ctx: HubCtx, q: string) {
+  search(ctx: HubCtx, q: string) {
     if (q.trim().length < 2) return [];
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const out: {

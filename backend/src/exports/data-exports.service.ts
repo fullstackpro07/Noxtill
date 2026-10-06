@@ -307,7 +307,7 @@ export class DataExportsService {
         businessId,
         requestedByUserId: userId,
         scope: request.scope,
-        modules: modules as unknown as Prisma.InputJsonValue,
+        modules,
         format: request.format,
         sensitive: this.isSensitive(modules),
         trigger,

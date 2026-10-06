@@ -32,6 +32,12 @@ const COMPLETENESS_TEXT_FIELDS = [
   'description',
 ] as const;
 
+/** `MasterListing.categories` is a JSON array — entries are normally strings, but stringify
+ * anything else instead of rendering "[object Object]". */
+function categoryLabel(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
 export interface ListingRollupItem {
   branchId: string;
   branchName: string;
@@ -249,7 +255,7 @@ export class ListingsRollupService {
         : null,
       category:
         Array.isArray(listing?.categories) && listing.categories.length > 0
-          ? String(listing.categories[0])
+          ? categoryLabel(listing.categories[0])
           : null,
       provider,
       providerLabel,
@@ -329,7 +335,9 @@ export class ListingsRollupService {
     const record = listing as unknown as Record<string, unknown>;
     const filledTextFields = COMPLETENESS_TEXT_FIELDS.filter((field) => {
       const value = record[field];
-      return value != null && String(value).trim() !== '';
+      return (
+        value != null && (typeof value !== 'string' || value.trim() !== '')
+      );
     }).length;
     const categoriesFilled =
       Array.isArray(listing.categories) && listing.categories.length > 0

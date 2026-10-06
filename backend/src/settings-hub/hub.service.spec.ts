@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- Jest asymmetric matchers and untyped `jest.fn()` mock call args are typed `any`. */
 jest.mock('../common/pdf/pdf-renderer.service', () => ({
   PdfRendererService: jest.fn(),
 }));
@@ -330,17 +331,18 @@ describe('SettingsHubService', () => {
   });
 
   it('search returns only settings the caller could open, never rows locked to a higher role', async () => {
-    const owner = await hub.search(
+    const owner = hub.search(
       await ctxOf(ownerId, Role.owner),
       'filing reminder',
     );
-    const manager = await hub.search(
+    const manager = hub.search(
       await ctxOf(managerId, Role.manager),
       'filing reminder',
     );
     expect(owner.map((r) => r.rowKey)).toContain('tax-filing-day');
     expect(manager.map((r) => r.rowKey)).not.toContain('tax-filing-day');
-    expect(await hub.search(await ctxOf(ownerId, Role.owner), 'x')).toEqual([]);
+    const ownerCtx = await ctxOf(ownerId, Role.owner);
+    expect(hub.search(ownerCtx, 'x')).toEqual([]);
   });
 
   it('health reflects a real permission override, and clears when it is undone', async () => {

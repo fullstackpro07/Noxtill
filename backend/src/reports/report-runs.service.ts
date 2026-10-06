@@ -421,7 +421,7 @@ export class ReportRunsService {
         name: c.name,
         description: c.description,
         icon: c.icon,
-        allowed: c.roles.includes(role as 'owner' | 'manager' | 'staff'),
+        allowed: c.roles.includes(role),
         favorite: favSet.has(c.kind),
         latest: latest ? this.toSummary(latest, names) : null,
         runsInPeriod: countByKind.get(c.kind) ?? 0,
@@ -721,7 +721,7 @@ export class ReportRunsService {
       where: { id: actor.userId },
     });
     const to = external
-      ? recipient!
+      ? recipient
       : { phone: self.phone ?? undefined, email: self.email ?? undefined };
     if (!to.phone && !to.email) {
       throw new AppException(
@@ -957,7 +957,7 @@ export class ReportRunsService {
       const start = raw.indexOf('{');
       const end = raw.lastIndexOf('}');
       if (start !== -1 && end !== -1)
-        parsed = JSON.parse(raw.slice(start, end + 1));
+        parsed = JSON.parse(raw.slice(start, end + 1)) as typeof parsed;
     } catch (error) {
       if (error instanceof AppException) throw error;
       throw new AppException(
@@ -982,7 +982,7 @@ export class ReportRunsService {
       };
     }
     const entry = REPORT_CATALOG.find((c) => c.kind === kind)!;
-    const allowed = entry.roles.includes(role as 'owner' | 'manager' | 'staff');
+    const allowed = entry.roles.includes(role);
     return {
       supported: true as const,
       request,

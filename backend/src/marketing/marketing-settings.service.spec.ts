@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest asymmetric matchers (`expect.objectContaining`/`expect.any`) are typed `any`. */
 import { MarketingSettingsService } from './marketing-settings.service';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
