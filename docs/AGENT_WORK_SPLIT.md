@@ -635,3 +635,13 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - goal #8 / Codex ✅ 3-Way Match (`/procurement/three-way-match`): displays real PO lines and
   recorded goods-receipt quantities from Inventory, with deep links back to receiving. Vendor bills
   are not recorded here, so invoice comparison and match results remain "Not available". No migration.
+- goal #8 / Codex ✅ Spend Control (`/procurement/spend-control`): off-contract spend, committed
+  spend and contract coverage are displayed directly from `ProcurementAnalyticsService`; this page
+  does not duplicate its calculation. Procurement budgets, vendor bills and paid spend remain
+  honestly unavailable. Real-MySQL analytics test passes. No migration.
+- goal #8 / Codex done-check: backend and frontend `tsc --noEmit` clean; touched-file ESLint clean;
+  full backend Jest 346/346 suites, 2,157/2,157 tests. Browser QA in isolated QA Test Business:
+  all 7 Procurement screens + Procurement Settings and all 11 Website screens returned 200, rendered
+  empty states where applicable, and had no console, page or API errors. Sourcing and Website
+  Overview were visually inspected. No procurement or website business records were created during
+  route-load QA.
