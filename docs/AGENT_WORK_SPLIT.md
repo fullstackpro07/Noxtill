@@ -632,3 +632,6 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   canonical Commerce RFQ through the existing shared flow and keep the same RFQ id; supplier
   outreach remains manual. Procurement Overview now counts open procurement-linked RFQs from that
   same table. Real-MySQL sourcing/tenant test passes. No migration.
+- goal #8 / Codex ✅ 3-Way Match (`/procurement/three-way-match`): displays real PO lines and
+  recorded goods-receipt quantities from Inventory, with deep links back to receiving. Vendor bills
+  are not recorded here, so invoice comparison and match results remain "Not available". No migration.
