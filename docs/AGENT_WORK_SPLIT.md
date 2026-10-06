@@ -565,3 +565,20 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   Hub test files, plus a pre-existing `require-await` finding in `hub.service.ts`. Browser QA saved a
   confidence threshold and a 5% scenario
   default, verified the Simulator prefill, then reset the test settings.
+
+## Split — goal #8: finish the client modules (both agents, from 2026-10-06)
+
+Status at split: Commerce, SEO, Automations, BI and Website Cart & Checkout (`3fa7e1f`) are committed.
+Customer Portal (10 screens) and Procurement Overview + Purchase Requests are built but uncommitted.
+
+| Owner | Work | Files the owner may edit |
+|---|---|---|
+| **Codex** | (1) **First, today:** commit Customer Portal (its 2 migrations + module + views), one commit per screen where the files allow, otherwise one module commit. (2) Add a customer **Forgot password** flow (emailed single-use, hashed, expiring reset token; reuse the invite-token pattern; no account enumeration). (3) Browser QA of all 10 portal screens. (4) Commit Procurement Overview + Purchase Requests, then build the remaining 6 Procurement screens: Sourcing & RFQs (shared engine with Commerce RFQs, same RFQ id), Supplier Contracts & Terms, 3-Way Match, Spend Control, Procurement Analytics, Procurement Settings. Finance AP / budgets don't exist: show "Not available", never invented bills or budgets. | `backend/src/customer-portal/**`, `backend/src/procurement/**`, their migrations, `commerce-rfqs*` (shared RFQ engine), `frontend/src/components/{customer-portal,procurement}/**`, `frontend/src/lib/{customer-portal,procurement}-api.ts`, `app/(app)/{customer-portal,procurement}/**`, `app/portal/**` |
+| **Claude Code** | Website & Commerce, the 11 screens not built yet: Website Overview, AI Website Builder, Pages, Navigation & Menus, Landing Pages, Blog & Content, Forms & Lead Capture, Storefront Configuration, Themes & Branding, Domains & Publishing, Website Settings. Products, orders, SEO, CRO and campaigns stay in their owner modules (deep links only). | new `backend/src/website/**`, its `*_website_*` migrations, `frontend/src/components/website/**`, `frontend/src/lib/website-*-api.ts`, `app/(app)/website/**`, public site route `app/site/**`; may extend `app/store/**` + `public-ordering*` for storefront config (Codex is done with checkout) |
+
+Shared files (re-read right before editing, smallest possible edit, never reformat): `schema.prisma`,
+`app.module.ts`, `nav-items.ts`, `i18n.ts`, `tenant.constants.ts`, `policies.constants.ts`,
+settings-hub files. These currently hold Codex's uncommitted portal/procurement hunks, so each agent
+commits **only its own hunks** (stage a patch of your hunks, e.g. `git diff <file>` → edit →
+`git apply --cached`); never commit the other agent's unfinished hunk. Commit with explicit paths,
+never `git add -A`, never push. Report bugs for the other agent under Requests.
