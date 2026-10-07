@@ -46,7 +46,7 @@ export function SiteFooter() {
       <footer
         className={`${legalFontVars} nl-noprint nl-footer`}
         style={s(
-          "position: relative; overflow: hidden; isolation: isolate; background: radial-gradient(120% 90% at 18% 0%, #0A5A44 0%, #063F31 38%, #04291F 75%, #032019 100%); color: #E6F2EC; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;",
+          "zoom: 0.75; position: relative; overflow: hidden; isolation: isolate; background: radial-gradient(120% 90% at 18% 0%, #0A5A44 0%, #063F31 38%, #04291F 75%, #032019 100%); color: #E6F2EC; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;",
         )}
       >
         <svg aria-hidden="true" focusable="false" viewBox="0 0 1672 941" preserveAspectRatio="xMidYMid slice" style={s("position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none;")}>
