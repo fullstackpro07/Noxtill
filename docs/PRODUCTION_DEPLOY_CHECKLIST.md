@@ -221,3 +221,37 @@ Status here is this dev machine's `backend/.env` (names checked, values never pr
 - External data still not connected (screens say so): storefront traffic/conversion, supplier sourcing provider, payment fraud/chargeback feed, marketplace publishing beyond Shopify/WooCommerce.
 - Local QA data lives in the "QA Test Business" in the dev DB only; nothing to clean up in production.
 - Verified 2026-10-03: backend + frontend `tsc --noEmit` clean, `prisma migrate status` up to date, backend Jest 335 suites / 2114 tests passing.
+
+## 8. Update — 2026-10-07 handover review (after Business Intelligence, Customer Portal, Procurement, Website & Commerce)
+
+Verified for this update: `tsc --noEmit` clean for backend and frontend on a clean checkout of HEAD,
+`next build` succeeds, full backend Jest green, every GET route in the new/changed modules answers
+200 for an owner on an empty business, and the write flows were exercised over real HTTP. **Not**
+verified: a from-scratch `prisma migrate deploy` on an empty MySQL (the dev DB user has no
+CREATE DATABASE right), live AI answers (Anthropic key had no credit), and click-through browser QA of
+the Business Intelligence, Customer Portal, Website and Procurement screens with real data.
+
+### 8.1 Must be set up for the new modules
+| Item | Why |
+|---|---|
+| `INTERNAL_BACKEND_URL` on the **frontend server** (e.g. `http://backend:5000/api/v1`) | The hosted site `/site/<slug>` is rendered on the Next server, which fetches the live deployment from the backend. Without it the page falls back to `http://127.0.0.1:5000` and every hosted site shows "not found". |
+| `FRONTEND_URL` on the backend | Shown as the hosted-site address in Domains & Publishing; also used in portal/Website links. |
+| Redis + a running backend worker | New BullMQ queues: `website-scheduled-publish` (every 5 min), `procurement-contract-alerts` (daily 08:00 UTC), plus the earlier workflow retention queue. Without Redis, scheduled pages never publish and contract renewal alerts never send. |
+| Email provider (Resend) | Customer Portal invites and password-reset emails. |
+| Express `trust proxy` behind the load balancer | Throttling keys on the client IP. Without it every visitor shares the balancer's IP, so the public-form limit (10/min) and portal-login limit (5/min) would lock out real users together. |
+| Real `prisma migrate deploy` on an empty database in CI/staging | 160 migrations; ordering was checked statically only. |
+
+### 8.2 Behaviour to know before go-live
+- **Custom domains are verified (real DNS TXT lookup + TLS certificate check) but traffic is not routed
+  to them.** Visitors use `/site/<slug>` until the hosting proxy is configured to map a domain to a
+  site. The UI says this plainly.
+- **Online payment is not available.** Storefront and portal orders are created unpaid; there is no
+  Payments & Billing module in this workspace.
+- **No analytics source:** website sessions and conversion are shown as "Not tracked".
+- **No Finance & Accounting module:** vendor bills, budgets, billed/paid spend and 3-way-match invoice
+  comparison are shown as "Not available" in Procurement.
+- **No Documents & eSign module:** supplier contracts and website media link to files hosted elsewhere.
+- Public form submissions: 10 per minute per IP; spam trap + idempotency keys; marketing consent only
+  when the visitor ticks the box.
+- New capability `website.manage` (owner + manager). Procurement sourcing, 3-way match, contracts and
+  analytics require `purchases.manage`.

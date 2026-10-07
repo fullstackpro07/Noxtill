@@ -7,6 +7,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
 import { WebsiteFormsService } from './website-forms.service';
 import { WebsitePublicService } from './website-public.service';
@@ -34,6 +35,8 @@ export class WebsitePublicController {
     return form;
   }
 
+  // Each accepted submission writes a CRM customer, so allow far fewer than the global 120/min.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Public()
   @Post('forms/:token/submit')
   submit(@Param('token') token: string, @Body() dto: PublicFormSubmitDto) {
