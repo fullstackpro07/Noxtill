@@ -1,0 +1,27 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "feature/seven-client-modules",
+    "fix/patch-vulnerabilities-96a6cec9-1791305074",
+    "fullcode",
+    "main",
+    "new-Test-branch",
+    "updatedCode"
+  ],
+  "parent": {
+    "feature/seven-client-modules": "main",
+    "fix/patch-vulnerabilities-96a6cec9-1791305074": "main",
+    "fullcode": "main",
+    "main": null,
+    "new-Test-branch": "main",
+    "updatedCode": "main"
+  },
+  "order": [
+    "main",
+    "feature/seven-client-modules",
+    "fix/patch-vulnerabilities-96a6cec9-1791305074",
+    "fullcode",
+    "new-Test-branch",
+    "updatedCode"
+  ]
+}
