@@ -77,7 +77,8 @@ const moduleHref = (module: string, id: string) => {
   if (module === "Orders") return "/orders";
   if (module === "Finance & Accounting") return "/finance";
   if (module === "Suppliers" || kind === "supplier") return "/inventory";
-  if (module === "People & Payroll" || kind === "staff") return "/staff";
+  if (module === "People & Payroll") return "/people";
+  if (kind === "staff") return "/staff";
   if (module === "Branches") return "/branches";
   return null;
 };
@@ -380,6 +381,8 @@ export function useCtActions(opt: CtOptions | undefined) {
 
     // ── contract actions ──────────────────────────────────────────────────
     const ctRef = (id: string) => ref<CtRef>("ct", id);
+    /** Opens a contract by its number (the design's URL), resolving a row id when needed. */
+    const openContract = async (id: string) => go("detail", /^[A-Z]+-/.test(id) ? id : (await ctRef(id)).number);
     const editModal = (c: CtRef, mine?: Record<string, string>) =>
       modal({
         title: `Edit draft · ${c.number} (v${c.version})`,
@@ -478,9 +481,9 @@ export function useCtActions(opt: CtOptions | undefined) {
         },
       });
     const ctAction = async (id: string, v: string) => {
-      if (v === "Open") return go("detail", id);
+      if (v === "Open") return openContract(id);
       if (v === "Audit") {
-        go("detail", id);
+        await openContract(id);
         return st.getState().set((s) => ({ view: { ...s.view, dTab: "audit" } }));
       }
       const c = await ctRef(id);
@@ -726,13 +729,16 @@ export function useCtActions(opt: CtOptions | undefined) {
     const rowAction = async (b: string, id: string, v: string) => {
       const s = st.getState();
       if (b === "ov-att") {
-        const [kind, refId] = id.split(":");
+        // id = `${kind}:${refId}:${index}` — an expiry refId itself contains a colon (`d:<uuid>`).
+        const parts = id.split(":");
+        const kind = parts[0];
+        const refId = parts.slice(1, -1).join(":");
         if (kind === "sig") return v === "Remind" ? sigAction(refId, "Remind") : v === "Resend" ? sigAction(refId, "Resend") : open("sig", refId);
         if (kind === "apr") return v === "Review" ? decideModal(refId).catch((e) => flash(errText(e))) : open("apr", refId);
         if (kind === "exp") return open("exp", refId);
         if (kind === "cmp") return v === "Upload" ? cmpUpload(await ref<CmpRef>("cmp", refId)) : open("cmp", refId);
         if (kind === "doc") return open("doc", refId);
-        if (kind === "ctr") return go("detail", refId);
+        if (kind === "ctr") return openContract(refId);
       }
       if (b === "ov-exp" || b === "exp") return expAction(id, v);
       if (b === "doc") return docAction(id, v);

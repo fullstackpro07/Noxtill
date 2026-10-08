@@ -3305,6 +3305,18 @@ model TimeOff {
   reason           String?
   approved         Boolean      @default(false)
   reviewedByUserId String?      @map("reviewed_by_user_id")
+  /// People & Payroll leave fields. `approved` stays in sync (true only when status = Approved) so
+  /// Staff schedules, Field Service and Helpdesk keep reading the same absence source.
+  number           String?      @db.VarChar(20)
+  /// Leave type key from People & Payroll settings (null for requests made before leave types).
+  leaveType        String?      @map("leave_type") @db.VarChar(20)
+  /// Submitted | Approved | Rejected | Cancelled
+  status           String       @default("Submitted") @db.VarChar(12)
+  days             Decimal?     @db.Decimal(5, 1)
+  partial          Boolean      @default(false)
+  emergency        Boolean      @default(false)
+  rejectReason     String?      @map("reject_reason") @db.VarChar(500)
+  attachmentKey    String?      @map("attachment_key") @db.VarChar(400)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -9527,4 +9539,477 @@ model LegalConsentRecord {
 
   @@index([consentId, createdAt])
   @@map("legal_consent_records")
+}
+
+// ───────────────────────── People & Payroll ─────────────────────────
+// Keyed by the group root business. Employees are Staff records (BusinessUser) — PpEmployee is the
+// People-owned employment/payroll profile linked to exactly one BusinessUser, never a second master.
+// Money is stored in the business currency (major units, 2 dp). Bank/tax identifiers are encrypted.
+
+model PpSettings {
+  id         String @id @default(uuid())
+  businessId String @unique @map("business_id")
+  config     Json
+  version    Int    @default(1)
+  nextJob    Int    @default(1) @map("next_job")
+  nextCand   Int    @default(1) @map("next_cand")
+  nextInt    Int    @default(1) @map("next_int")
+  nextOffer  Int    @default(1) @map("next_offer")
+  nextOnb    Int    @default(1) @map("next_onb")
+  nextLeave  Int    @default(1) @map("next_leave")
+  nextRule   Int    @default(1) @map("next_rule")
+  nextCycle  Int    @default(1) @map("next_cycle")
+  nextReview Int    @default(1) @map("next_review")
+  nextCourse Int    @default(1) @map("next_course")
+  nextTa     Int    @default(1) @map("next_ta")
+  nextOfb    Int    @default(1) @map("next_ofb")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("pp_settings")
+}
+
+model PpSettingsVersion {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  version    Int
+  config     Json
+  changed    Json
+  byUserId   String @map("by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, version])
+  @@map("pp_settings_versions")
+}
+
+/// Employment & payroll profile of one Staff member (BusinessUser).
+model PpEmployee {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  businessUserId  String    @unique @map("business_user_id")
+  department      String?   @db.VarChar(60)
+  title           String?   @db.VarChar(120)
+  /// Full-time | Part-time | Contract | Internship
+  employmentType  String    @default("Full-time") @map("employment_type") @db.VarChar(20)
+  /// Staff User.id of the line manager.
+  managerUserId   String?   @map("manager_user_id")
+  /// Salaried | Hourly | Commission only
+  payBasis        String    @default("Salaried") @map("pay_basis") @db.VarChar(20)
+  /// Monthly salary (Salaried). Hourly staff use BusinessUser.hourlyRate (Staff owns it).
+  monthlySalary   Decimal?  @map("monthly_salary") @db.Decimal(14, 2)
+  startDate       DateTime? @map("start_date") @db.Date
+  probationEnd    DateTime? @map("probation_end") @db.Date
+  contractEnd     DateTime? @map("contract_end") @db.Date
+  /// Active | Probation | Notice | Exited (On Leave is derived from approved leave)
+  status          String    @default("Active") @db.VarChar(12)
+  inPayroll       Boolean   @default(true) @map("in_payroll")
+  bankName        String?   @map("bank_name") @db.VarChar(80)
+  bankAccountEnc  String?   @map("bank_account_enc") @db.Text
+  bankAccountMask String?   @map("bank_account_mask") @db.VarChar(40)
+  bankTitle       String?   @map("bank_title") @db.VarChar(120)
+  /// Filer | Non-filer — selects the tax table multiplier; null = missing tax profile.
+  taxStatus       String?   @map("tax_status") @db.VarChar(12)
+  taxIdEnc        String?   @map("tax_id_enc") @db.Text
+  taxIdMask       String?   @map("tax_id_mask") @db.VarChar(40)
+  version         Int       @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId])
+  @@map("pp_employees")
+}
+
+model PpJob {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  number          String    @db.VarChar(20)
+  title           String    @db.VarChar(160)
+  department      String    @db.VarChar(60)
+  branchId        String?   @map("branch_id")
+  workMode        String    @default("On-site") @map("work_mode") @db.VarChar(12)
+  employmentType  String    @default("Full-time") @map("employment_type") @db.VarChar(20)
+  target          Int       @default(1)
+  managerUserId   String?   @map("manager_user_id")
+  recruiterUserId String?   @map("recruiter_user_id")
+  compMin         Decimal?  @map("comp_min") @db.Decimal(14, 2)
+  compMax         Decimal?  @map("comp_max") @db.Decimal(14, 2)
+  compPublic      Boolean   @default(false) @map("comp_public")
+  reason          String?   @db.VarChar(255)
+  budgetRef       String?   @map("budget_ref") @db.VarChar(80)
+  description     String?   @db.Text
+  targetDays      Int       @default(30) @map("target_days")
+  /// Draft | Awaiting Approval | Open | Published | On Hold | Filled | Closed | Cancelled
+  status          String    @db.VarChar(20)
+  slug            String    @db.VarChar(160)
+  openedAt        DateTime? @map("opened_at")
+  publishedAt     DateTime? @map("published_at")
+  closedAt        DateTime? @map("closed_at")
+  version         Int       @default(1)
+  createdById     String    @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@map("pp_jobs")
+}
+
+/// Employment candidate — never a CRM lead.
+model PpCandidate {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(20)
+  jobId        String    @map("job_id")
+  name         String    @db.VarChar(160)
+  email        String    @db.VarChar(190)
+  phone        String?   @db.VarChar(40)
+  source       String    @db.VarChar(40)
+  referredBy   String?   @map("referred_by") @db.VarChar(160)
+  /// New | Screening | Shortlisted | Interview | Final Interview | Offer | Hired | Rejected | Withdrawn
+  stage        String    @db.VarChar(20)
+  ownerUserId  String?   @map("owner_user_id")
+  expectedComp Decimal?  @map("expected_comp") @db.Decimal(14, 2)
+  availability String?   @db.VarChar(80)
+  /// Given | Pending
+  consent      String    @db.VarChar(10)
+  resumeKey    String?   @map("resume_key") @db.VarChar(400)
+  resumeName   String?   @map("resume_name") @db.VarChar(255)
+  rejectReason String?   @map("reject_reason") @db.VarChar(500)
+  hiredUserId  String?   @map("hired_user_id")
+  history      Json
+  version      Int       @default(1)
+  appliedAt    DateTime  @default(now()) @map("applied_at")
+  decidedAt    DateTime? @map("decided_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, jobId])
+  @@map("pp_candidates")
+}
+
+model PpInterview {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(20)
+  candidateId  String    @map("candidate_id")
+  jobId        String    @map("job_id")
+  round        String    @db.VarChar(40)
+  startsAt     DateTime  @map("starts_at")
+  durationMin  Int       @default(45) @map("duration_min")
+  timezone     String    @db.VarChar(60)
+  location     String    @db.VarChar(160)
+  /// Staff User.ids
+  interviewers Json
+  /// Scheduled | Completed | No-show | Rescheduled | Cancelled
+  status       String    @db.VarChar(14)
+  feedbackDue  DateTime? @map("feedback_due")
+  /// { [userId]: { r: number[], rec, note, ver, at } }
+  scorecards   Json
+  message      String?   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, candidateId])
+  @@map("pp_interviews")
+}
+
+model PpOffer {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  number         String   @db.VarChar(20)
+  candidateId    String   @map("candidate_id")
+  jobId          String   @map("job_id")
+  branchId       String?  @map("branch_id")
+  employmentType String   @map("employment_type") @db.VarChar(20)
+  startDate      DateTime @map("start_date") @db.Date
+  comp           Decimal  @db.Decimal(14, 2)
+  /// Monthly | Hourly
+  frequency      String   @db.VarChar(10)
+  probation      String   @db.VarChar(20)
+  benefits       String?  @db.VarChar(255)
+  conditions     String?  @db.VarChar(255)
+  expiresOn      DateTime @map("expires_on") @db.Date
+  /// Draft | Approval Required | Approved | Document Generated | Signature Requested | Sent | Viewed | Accepted | Declined | Expired | Withdrawn | Revised
+  status         String   @db.VarChar(20)
+  version        Int      @default(1)
+  approvedComp   Decimal? @map("approved_comp") @db.Decimal(14, 2)
+  approvedById   String?  @map("approved_by_id")
+  templateId     String?  @map("template_id")
+  docId          String?  @map("doc_id")
+  signRequestId  String?  @map("sign_request_id")
+  declineReason  String?  @map("decline_reason") @db.VarChar(500)
+  versions       Json
+  createdById    String   @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, candidateId])
+  @@map("pp_offers")
+}
+
+model PpOnboarding {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  number        String   @db.VarChar(20)
+  /// The hired Staff member (User.id); null while still a candidate.
+  userId        String?  @map("user_id")
+  candidateId   String?  @map("candidate_id")
+  startDate     DateTime @map("start_date") @db.Date
+  template      String   @db.VarChar(80)
+  managerUserId String?  @map("manager_user_id")
+  buddyUserId   String?  @map("buddy_user_id")
+  /// Not Started | In Progress | Completed
+  status        String   @db.VarChar(12)
+  /// [{ ms, t, owner, off, done, mand, kind, ref, task, ovr, doneAt }]
+  items         Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("pp_onboarding")
+}
+
+/// Benefit / deduction rule (effective-dated; history keeps the version a run used).
+model PpRule {
+  id             String  @id @default(uuid())
+  businessId     String  @map("business_id")
+  number         String  @db.VarChar(20)
+  name           String  @db.VarChar(120)
+  /// Benefit (employer-paid) | Deduction | Benefit (taxable) | Statutory contribution | Deduction + employer contribution
+  type           String  @db.VarChar(40)
+  classification String  @db.VarChar(80)
+  /// Pre-tax | Post-tax | Taxable earning | N/A
+  taxTreatment   String  @map("tax_treatment") @db.VarChar(20)
+  /// Fixed | Percentage of base
+  method         String  @db.VarChar(24)
+  eligibility    String  @db.VarChar(120)
+  financeAccount String? @map("finance_account") @db.VarChar(80)
+  provider       String? @db.VarChar(120)
+  /// [{ ver, from, to, ee, er, by, at, why }] — ee/er are % for Percentage, currency for Fixed
+  versions       Json
+  /// Staff User.ids the rule applies to
+  assigned       Json
+  /// Active | Scheduled | Inactive (derived from versions/dates, stored for listing)
+  status         String  @db.VarChar(12)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("pp_rules")
+}
+
+model PpRun {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(30)
+  /// YYYY-MM
+  period       String    @db.VarChar(7)
+  payDate      DateTime  @map("pay_date") @db.Date
+  /// Draft | Inputs Locked | Calculating | Exceptions | Calculated | Approval Required | Approved | Finalized | Finance Posting Pending | Finance Posted | Payout Submitted | Partially Paid | Paid | Cancelled
+  status       String    @db.VarChar(26)
+  correctionOf String?   @map("correction_of")
+  preparedById String?   @map("prepared_by_id")
+  approvedById String?   @map("approved_by_id")
+  snapshot     Json?
+  exceptions   Json
+  excluded     Json
+  journalRef   String?   @map("journal_ref") @db.VarChar(40)
+  batchRef     String?   @map("batch_ref") @db.VarChar(40)
+  history      Json
+  version      Int       @default(1)
+  finalizedAt  DateTime? @map("finalized_at")
+
+  lines PpRunLine[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, period])
+  @@map("pp_runs")
+}
+
+model PpRunLine {
+  id              String    @id @default(uuid())
+  runId           String    @map("run_id")
+  run             PpRun     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  userId          String    @map("user_id")
+  /// Full calculation result (earnings, deductions, employer, formulas, warnings, versions).
+  calc            Json
+  gross           Decimal   @db.Decimal(14, 2)
+  net             Decimal?  @db.Decimal(14, 2)
+  tax             Decimal?  @db.Decimal(14, 2)
+  employer        Decimal   @db.Decimal(14, 2)
+  /// Pending | Paid | Failed
+  payout          String    @default("Pending") @db.VarChar(10)
+  payoutRef       String?   @map("payout_ref") @db.VarChar(80)
+  paidAt          DateTime? @map("paid_at")
+  /// Payslip: Generated | Delivered | Delivery Failed
+  slipStatus      String?   @map("slip_status") @db.VarChar(16)
+  slipDeliveredAt DateTime? @map("slip_delivered_at")
+  slipViewedAt    DateTime? @map("slip_viewed_at")
+  slipKey         String?   @map("slip_key") @db.VarChar(400)
+
+  @@unique([runId, userId])
+  @@map("pp_run_lines")
+}
+
+model PpCycle {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  number     String   @db.VarChar(20)
+  name       String   @db.VarChar(120)
+  startOn    DateTime @map("start_on") @db.Date
+  endOn      DateTime @map("end_on") @db.Date
+  scale      Int      @default(4)
+  /// Planned | Active | Closed
+  status     String   @db.VarChar(10)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, number])
+  @@map("pp_cycles")
+}
+
+model PpReview {
+  id             String  @id @default(uuid())
+  businessId     String  @map("business_id")
+  number         String  @db.VarChar(20)
+  cycleId        String  @map("cycle_id")
+  userId         String  @map("user_id")
+  reviewerUserId String  @map("reviewer_user_id")
+  /// Not Started | Self Review | Manager Review | Completed
+  status         String  @db.VarChar(16)
+  /// [{ t, w, p }]
+  goals          Json
+  selfText       String? @map("self_text") @db.Text
+  managerText    String? @map("manager_text") @db.Text
+  rating         String? @db.VarChar(20)
+  acknowledged   Boolean @default(false)
+  /// [string] — development actions (linked task numbers)
+  dev            Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@unique([cycleId, userId])
+  @@map("pp_reviews")
+}
+
+model PpCourse {
+  id         String  @id @default(uuid())
+  businessId String  @map("business_id")
+  number     String  @db.VarChar(20)
+  name       String  @db.VarChar(160)
+  provider   String  @db.VarChar(120)
+  /// Mandatory | Optional | Certification
+  type       String  @db.VarChar(16)
+  /// Departments it's required for
+  roles      Json
+  hours      Decimal @db.Decimal(6, 1)
+  mode       String  @db.VarChar(20)
+  assessment Boolean @default(false)
+  skill      String  @db.VarChar(80)
+  /// Certificate validity in days (null = no expiry)
+  validDays  Int?    @map("valid_days")
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, number])
+  @@map("pp_courses")
+}
+
+model PpTraining {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  number       String    @db.VarChar(20)
+  courseId     String    @map("course_id")
+  userId       String    @map("user_id")
+  dueOn        DateTime  @map("due_on") @db.Date
+  /// Assigned | In Progress | Completed | Verified (Overdue is derived)
+  status       String    @db.VarChar(12)
+  score        Decimal?  @db.Decimal(5, 1)
+  certDocId    String?   @map("cert_doc_id")
+  certExpires  DateTime? @map("cert_expires") @db.Date
+  completedAt  DateTime? @map("completed_at")
+  verifiedById String?   @map("verified_by_id")
+  note         String?   @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@index([businessId, userId])
+  @@map("pp_training")
+}
+
+model PpOffboarding {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  number         String    @db.VarChar(20)
+  userId         String    @map("user_id")
+  /// Resignation | Termination | Contract end | Retirement
+  exitType       String    @map("exit_type") @db.VarChar(20)
+  reason         String    @db.VarChar(500)
+  noticeDate     DateTime  @map("notice_date") @db.Date
+  lastDay        DateTime  @map("last_day") @db.Date
+  handoverUserId String?   @map("handover_user_id")
+  /// In Progress | Completed
+  status         String    @db.VarChar(12)
+  /// [{ t, kind, ref, done, mand, owner, verified, ovr, doneAt }]
+  items          Json
+  finalRunId     String?   @map("final_run_id")
+  completedAt    DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, number])
+  @@map("pp_offboarding")
+}
+
+model PpAudit {
+  id          String @id @default(uuid())
+  businessId  String @map("business_id")
+  actorId     String @map("actor_id")
+  actorName   String @map("actor_name") @db.VarChar(160)
+  action      String @db.VarChar(80)
+  entityType  String @map("entity_type") @db.VarChar(16)
+  entityId    String @map("entity_id")
+  detail      String @db.Text
+  correlation String @db.VarChar(24)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@index([businessId, entityId])
+  @@map("pp_audit")
+}
+
+model PpIdem {
+  id         String @id @default(uuid())
+  businessId String @map("business_id")
+  key        String @db.VarChar(120)
+  status     String @db.VarChar(10)
+  result     Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, key])
+  @@map("pp_idem")
 }

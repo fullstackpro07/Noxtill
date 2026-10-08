@@ -383,6 +383,14 @@ export const NAV_ITEMS: NavItem[] = [
     isNew: true,
   },
   {
+    key: "people",
+    labelKey: "nav.people",
+    href: "/people",
+    icon: Users,
+    roles: ["owner", "manager", "staff"],
+    isNew: true,
+  },
+  {
     key: "finance",
     labelKey: "nav.finance",
     href: "/finance",

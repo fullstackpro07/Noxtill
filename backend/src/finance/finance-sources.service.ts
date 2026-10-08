@@ -66,7 +66,18 @@ export const SOURCE_MODULE: Record<string, string> = {
   bankline: 'Bank feeds',
   fx: 'FX revaluation',
   payprovider: 'Payments & Billing',
+  payroll: 'People & Payroll',
 };
+
+/** Payroll runs whose posting People & Payroll has requested, and every later step. */
+const PAYROLL_POSTED = [
+  'Finance Posting Pending',
+  'Finance Posted',
+  'Payout Submitted',
+  'Partially Paid',
+  'Payout Failed',
+  'Paid',
+];
 
 /**
  * Turns what already happened in Noxtill into the ledger. Nothing in the source modules changes:
@@ -144,6 +155,7 @@ export class FinanceSourcesService {
         ['cash', () => this.cash(c, ids, since)],
         ['deposits', () => this.deposits(c, ids, since)],
         ['payprovider', () => this.providerCosts(c, since)],
+        ['payroll', () => this.payroll(c)],
       ];
       for (const [name, fn] of steps) {
         try {
@@ -884,6 +896,98 @@ export class FinanceSourcesService {
       ).map((e) => e.id),
     );
     await this.reverseMissing(c, 'expense', present);
+  }
+
+  // ── payroll (People & Payroll runs) ────────────────────────────────────────
+
+  /**
+   * A finalized payroll run accrues wages: Dr Salaries (gross + employer contributions), Cr Income
+   * Tax Payable (withholding), Cr Payroll Liabilities (net pay, employee deductions and employer
+   * contributions) and Cr Suspense for Staff advances recovered — advances aren't carried on the
+   * ledger as a receivable, so recoveries land in Suspense for the accountant to clear. Recorded
+   * bank payouts then settle the liability: Dr Payroll Liabilities, Cr the account People &
+   * Payroll says wages are paid from.
+   */
+  private async payroll(c: SweepCtx) {
+    const runs = await this.prisma.ppRun.findMany({
+      where: { businessId: c.rootId, status: { in: PAYROLL_POSTED } },
+      include: { lines: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const pp = await this.prisma.ppSettings.findUnique({
+      where: { businessId: c.rootId },
+      select: { config: true },
+    });
+    const ppCfg = (pp?.config ?? {}) as { payroll?: { paidFromCode?: string } };
+    const paidFrom =
+      c.byCode.get(ppCfg.payroll?.paidFromCode ?? '') ??
+      c.byCode.get(c.cfg.expensePaidFrom) ??
+      c.key('cash_drawer');
+    const items: Implied[] = [];
+    for (const r of runs) {
+      const sum = (k: string) =>
+        r2(
+          r.lines.reduce(
+            (a, l) => a + num((l.calc as Record<string, number>)[k] ?? 0),
+            0,
+          ),
+        );
+      const gross = sum('gross');
+      const er = sum('er');
+      const tax = sum('tax');
+      const adv = sum('adv');
+      const net = sum('net');
+      const ded = r2(gross - tax - adv - net);
+      const label = `Payroll ${r.number} · ${r.period}`;
+      items.push({
+        type: 'payroll',
+        id: r.id,
+        event: 'accrual',
+        label,
+        reference: r.number,
+        date: r.payDate,
+        branchId: c.rootId,
+        memo: `${label} · ${r.lines.length} employee(s)`,
+        lines: [
+          this.dr(c.key('salaries').id, gross, 'Gross pay'),
+          this.dr(c.key('salaries').id, er, 'Employer contributions'),
+          this.cr(c.key('income_tax_payable').id, tax, 'Income tax withheld'),
+          this.cr(
+            c.key('payroll_liab').id,
+            r2(net + ded + er),
+            'Net pay, employee deductions and employer contributions payable',
+          ),
+          this.cr(
+            c.key('suspense').id,
+            adv,
+            'Staff advances recovered (not on the ledger as a receivable)',
+          ),
+        ],
+      });
+      const paid = r.lines.filter((l) => l.payout === 'Paid');
+      const paidNet = r2(paid.reduce((a, l) => a + num(l.net), 0));
+      const last = paid
+        .map((l) => l.paidAt)
+        .filter((d): d is Date => !!d)
+        .sort((a, b) => b.getTime() - a.getTime())[0];
+      items.push({
+        type: 'payroll',
+        id: r.id,
+        event: 'payout',
+        label: `${label} · payout`,
+        reference: r.batchRef ?? r.number,
+        date: last ?? r.payDate,
+        branchId: c.rootId,
+        memo: `${label} · ${paid.length} transfer(s) confirmed paid`,
+        lines: paidNet
+          ? [
+              this.dr(c.key('payroll_liab').id, paidNet, 'Net pay settled'),
+              this.cr(paidFrom.id, paidNet, `Paid from ${paidFrom.code}`),
+            ]
+          : [],
+      });
+    }
+    await this.apply(c, 'payroll', items);
   }
 
   private async cash(c: SweepCtx, ids: string[], since: Date | null) {

@@ -185,6 +185,29 @@ export const CAPABILITIES = {
   CONTRACTS_RESTRICTED: 'contracts.restricted',
   CONTRACTS_EXPORT: 'contracts.export',
   CONTRACTS_SETTINGS: 'contracts.settings',
+  PEOPLE_VIEW: 'people.view',
+  PEOPLE_RECRUIT: 'people.recruit',
+  PEOPLE_JOB_APPROVE: 'people.job_approve',
+  PEOPLE_INTERVIEW: 'people.interview',
+  PEOPLE_OFFER_APPROVE: 'people.offer_approve',
+  PEOPLE_COMP: 'people.comp',
+  PEOPLE_SALARY: 'people.salary',
+  PEOPLE_ONBOARD: 'people.onboard',
+  PEOPLE_LEAVE_APPROVE: 'people.leave_approve',
+  PEOPLE_LEAVE_REASON: 'people.leave_reason',
+  PEOPLE_PAYROLL: 'people.payroll',
+  PEOPLE_PAY_APPROVE: 'people.pay_approve',
+  PEOPLE_PAYOUT: 'people.payout',
+  PEOPLE_BENEFITS: 'people.benefits',
+  PEOPLE_PERF: 'people.perf',
+  PEOPLE_PERF_PRIVATE: 'people.perf_private',
+  PEOPLE_TRAINING: 'people.training',
+  PEOPLE_OFFBOARD: 'people.offboard',
+  PEOPLE_EXIT_REASON: 'people.exit_reason',
+  PEOPLE_EXPORT: 'people.export',
+  PEOPLE_PII: 'people.pii',
+  PEOPLE_AUDIT: 'people.audit',
+  PEOPLE_SETTINGS: 'people.settings',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -274,6 +297,10 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.CONTRACTS_COMPLIANCE,
   CAPABILITIES.CONTRACTS_VALUE,
   CAPABILITIES.CONTRACTS_EXPORT,
+  CAPABILITIES.PEOPLE_VIEW,
+  CAPABILITIES.PEOPLE_INTERVIEW,
+  CAPABILITIES.PEOPLE_LEAVE_APPROVE,
+  CAPABILITIES.PEOPLE_PERF,
 ];
 
 /**
@@ -298,6 +325,7 @@ export const SYSTEM_ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     CAPABILITIES.FIELD_REQUEST,
     CAPABILITIES.FIELD_EXECUTE,
     CAPABILITIES.CONTRACTS_VIEW,
+    CAPABILITIES.PEOPLE_VIEW,
     CAPABILITIES.CONTRACTS_UPLOAD,
   ],
 };

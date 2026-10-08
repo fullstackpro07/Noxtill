@@ -105,7 +105,7 @@ export function PayrollView() {
         <select
           onChange={(e) => {
             if (handleFakeOption(e.target.value)) return;
-            if (e.target.value !== "All branches") toast.info("Cross-branch payroll isn't available yet — switch business context to run another branch's payroll.");
+            if (e.target.value !== "All branches") toast.info("This Staff export covers the current branch only — group-wide payroll runs (all branches) are in People & Payroll › Payroll Runs.");
           }}
           aria-label="Branch"
           defaultValue="All branches"

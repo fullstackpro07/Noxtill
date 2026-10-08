@@ -44,6 +44,6 @@ import { CT_QUEUE } from './ct.constants';
     ContractsScheduler,
     ContractsProcessor,
   ],
-  exports: [CtContextService],
+  exports: [CtContextService, CtDocsService, CtEsignService, CtFilesService],
 })
 export class ContractsModule {}
