@@ -265,7 +265,7 @@ export const RESOURCES_DETAIL_PAGES: ResourceDetailPage[] = [
       { icon: Target, label: "Works for any trade" },
     ],
     related: [
-      { label: "Blog", href: "/resources/blog" },
+      { label: "Blog", href: "/blog" },
       { label: "Business Health Check", href: "/resources/business-health-check" },
       { label: "Profit Margin Calculator", href: "/resources/profit-margin-calculator" },
     ],
@@ -297,7 +297,7 @@ export const RESOURCES_DETAIL_PAGES: ResourceDetailPage[] = [
     related: [
       { label: "Solutions by business type", href: "/solutions" },
       { label: "Small Business Playbook", href: "/resources/small-business-playbook" },
-      { label: "Blog", href: "/resources/blog" },
+      { label: "Blog", href: "/blog" },
     ],
   },
   {
@@ -326,7 +326,7 @@ export const RESOURCES_DETAIL_PAGES: ResourceDetailPage[] = [
     ],
     related: [
       { label: "Roadmap", href: "/resources/roadmap" },
-      { label: "Blog", href: "/resources/blog" },
+      { label: "Blog", href: "/blog" },
     ],
   },
   {

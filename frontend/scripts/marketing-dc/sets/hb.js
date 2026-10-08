@@ -1,0 +1,26 @@
+// docs/Noxtill Header Build — site header, Home, Blog, /platform and /ai landing pages.
+module.exports = {
+  src: "docs/Noxtill Header Build",
+  stripChrome: false,
+  pages: {
+    "NoxtillHeader.dc.html": "header",
+    "Noxtill Home.dc.html": "home",
+    "Blog.dc.html": "blog",
+    "Blog - AI Receptionist.dc.html": "blog--ai-receptionist-for-small-business",
+    "Blog - All-in-One Software.dc.html": "blog--all-in-one-business-software-small-business",
+    "Blog - Automation Ideas.dc.html": "blog--small-business-automation-ideas",
+    "Assets - Maintenance.dc.html": "platform--assets-maintenance",
+    "Customer Portal.dc.html": "platform--customer-portal",
+    "Documents - eSign.dc.html": "platform--documents-esign",
+    "Field Service.dc.html": "platform--field-service",
+    "Finance - Accounting.dc.html": "platform--finance-accounting",
+    "Helpdesk.dc.html": "platform--helpdesk",
+    "Payments - Billing.dc.html": "platform--payments-billing",
+    "People - Payroll.dc.html": "platform--people-payroll",
+    "Procurement.dc.html": "platform--procurement",
+    "Website - Commerce.dc.html": "platform--website-commerce",
+    "Autonomous Commerce.dc.html": "ai--autonomous-commerce",
+    "Business Intelligence.dc.html": "ai--business-intelligence",
+    "SEO Autopilot.dc.html": "ai--seo-autopilot",
+  },
+};

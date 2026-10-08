@@ -1,0 +1,19 @@
+/* Marketing pages rendered from docs/Noxtill Header Build/*.dc.html.
+   The designs are authored against browser defaults (no CSS reset). Inside `.dcx` (page body) and
+   `.dcxh` (site header), undo Tailwind's preflight and the app's global element rules; each design's
+   own CSS (scoped to that class by the converter) and the inline styles then apply exactly as in the
+   design file. SVG is excluded: its presentation attributes sit in the author cascade and would be
+   reverted. */
+.dcx *:where(:not(svg, svg *)),
+.dcx *::before,
+.dcx *::after,
+.dcxh *:where(:not(svg, svg *)),
+.dcxh *::before,
+.dcxh *::after {
+  all: revert;
+}
+
+.dcx,
+.dcxh {
+  line-height: normal;
+}

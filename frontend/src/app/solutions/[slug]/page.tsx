@@ -5,13 +5,16 @@ import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { DetailHero, DetailComparison, DetailRelated } from "@/components/site/detail-page-sections";
 import { SOLUTIONS_DETAIL_PAGES, findSolutionsDetailPage } from "@/lib/marketing/solutions-detail-content";
+import { NpPage, npMetadata, npSlugs } from "@/components/site/dc/np-page";
 
 export function generateStaticParams() {
-  return SOLUTIONS_DETAIL_PAGES.map((p) => ({ slug: p.slug }));
+  return [...SOLUTIONS_DETAIL_PAGES.map((p) => p.slug), ...npSlugs("solutions")].map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  // Business-need pages imported from the design project (docs/Noxtill Pages).
+  if (npSlugs("solutions").includes(slug)) return npMetadata("solutions--" + slug);
   const page = findSolutionsDetailPage(slug);
   if (!page) return {};
 
@@ -27,6 +30,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function SolutionsDetailRoute({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  if (npSlugs("solutions").includes(slug)) return <NpPage pageKey={"solutions--" + slug} />;
   const page = findSolutionsDetailPage(slug);
   if (!page) notFound();
 

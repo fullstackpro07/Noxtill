@@ -1,14 +1,11 @@
-import { LegalShell } from "@/components/site/legal/legal-shell";
-import { legalMetadata } from "@/lib/marketing/legal/nox";
-import { ContactView } from "./contact-view";
+import type { Metadata } from "next";
+import { NpPage, npMetadata } from "@/components/site/dc/np-page";
 
-const ROUTE = "/contact";
-export const metadata = legalMetadata(ROUTE);
+export function generateMetadata(): Promise<Metadata> {
+  return npMetadata("contact");
+}
 
-export default function ContactPage() {
-  return (
-    <LegalShell route={ROUTE} pageType="ContactPage">
-      <ContactView />
-    </LegalShell>
-  );
+/** /contact — docs/Noxtill Pages (imported from Claude Design). */
+export default function Page() {
+  return <NpPage pageKey="contact" />;
 }

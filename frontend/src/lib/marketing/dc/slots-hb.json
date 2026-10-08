@@ -1,0 +1,146 @@
+{
+  "stack-img-1": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/stack-img-1.webp"
+  },
+  "stack-img-2": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/stack-img-2.webp"
+  },
+  "outcome-screen-sell": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-sell.webp"
+  },
+  "outcome-screen-grow": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-grow.webp"
+  },
+  "outcome-screen-noshow": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-noshow.webp"
+  },
+  "outcome-screen-profit": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-profit.webp"
+  },
+  "outcome-screen-auto": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-auto.webp"
+  },
+  "outcome-screen-multi": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-multi.webp"
+  },
+  "ai-card-ai-assistant": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-ai-assistant.webp"
+  },
+  "ai-card-ai-phone-receptionist": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-ai-phone-receptionist.webp"
+  },
+  "ai-card-ai-powered-insights": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-ai-powered-insights.webp"
+  },
+  "ai-card-ai-agents-workflows": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-ai-agents-workflows.webp"
+  },
+  "ai-card-ai-reply-drafting": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-ai-reply-drafting.webp"
+  },
+  "ai-card-ai-photo-digitizer": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-ai-photo-digitizer.webp"
+  },
+  "ai-card-business-intelligence": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-business-intelligence.webp"
+  },
+  "ai-card-seo-autopilot": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-seo-autopilot.webp"
+  },
+  "ai-card-autonomous-commerce": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/ai-card-autonomous-commerce.webp"
+  },
+  "rec-photo-1": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/rec-photo-1.webp"
+  },
+  "rec-photo-2": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/rec-photo-2.webp"
+  },
+  "stack-img-4": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/stack-img-4.webp"
+  },
+  "stack-img-3": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/stack-img-3.webp"
+  },
+  "stack-img-5": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/stack-img-5.webp"
+  },
+  "stack-img-6": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/stack-img-6.webp"
+  },
+  "stack-img-7": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/stack-img-7.webp"
+  }
+}

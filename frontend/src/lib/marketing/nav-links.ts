@@ -109,7 +109,7 @@ export const RESOURCES_LEARN: NavLinkItem[] = [
 ];
 
 export const RESOURCES_READ: NavLinkItem[] = [
-  { label: "Blog", href: "/resources/blog" },
+  { label: "Blog", href: "/blog" },
   { label: "Small Business Playbook", href: "/resources/small-business-playbook" },
   { label: "Case Studies", href: "/resources/case-studies" },
   { label: "Product Updates", href: "/resources/product-updates" },
@@ -162,7 +162,7 @@ export const SOLUTIONS_DRAWER_LINKS: NavLinkItem[] = [
 export const RESOURCES_DRAWER_LINKS: NavLinkItem[] = [
   { label: "Help Centre", href: "/resources/help-centre" },
   { label: "Video Tutorials", href: "/resources/video-tutorials" },
-  { label: "Blog", href: "/resources/blog" },
+  { label: "Blog", href: "/blog" },
   { label: "No-Show Cost Calculator", href: "/resources/no-show-cost-calculator" },
   { label: "Business Health Check", href: "/resources/business-health-check" },
   { label: "Contact Support", href: "/resources/contact-support" },

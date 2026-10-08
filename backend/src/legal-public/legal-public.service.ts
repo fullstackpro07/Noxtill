@@ -30,6 +30,13 @@ const FIELD_LABELS: Record<string, string> = {
   task: 'What they were trying to do',
   at: 'Assistive technology and browser',
   details: 'Details',
+  // Demo requests from the marketing pages (Contact, Book a Demo) — sent on the `sales` route.
+  businessType: 'Business type',
+  teamSize: 'Team size',
+  locations: 'Locations',
+  focus: 'Wants to see',
+  preferredTime: 'Preferred demo time',
+  message: 'Message',
 };
 
 const MAX_VALUE = 2000;
@@ -78,7 +85,7 @@ export class LegalPublicService {
     }
 
     const lines = Object.entries(fields).map(([k, v]) =>
-      k === 'details' || k === 'task'
+      k === 'details' || k === 'task' || k === 'message'
         ? `${FIELD_LABELS[k]}:\n${v}`
         : `${FIELD_LABELS[k]}: ${v}`,
     );

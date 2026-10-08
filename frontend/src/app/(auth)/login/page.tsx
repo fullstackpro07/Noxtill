@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { use, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type FieldPath, type UseFormSetError } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -329,8 +329,10 @@ function SignupForm() {
   );
 }
 
-export default function LoginPage() {
-  const [tab, setTab] = useState<"login" | "signup">("login");
+export default function LoginPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
+  // Marketing "Start Free Trial" links land here via /signup → /login?tab=signup.
+  const initialTab = use(searchParams).tab === "signup" ? "signup" : "login";
+  const [tab, setTab] = useState<"login" | "signup">(initialTab);
   const tabItems = useMemo(
     () => [
       { key: "login", label: "Log in" },
