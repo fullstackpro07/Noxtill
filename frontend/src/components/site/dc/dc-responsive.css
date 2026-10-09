@@ -1,0 +1,144 @@
+/* Responsive layer for the marketing pages rendered from Claude Design files (.dcx).
+   The designs are drawn at 1440px with inline styles; scripts/marketing-dc/convert.js tags each node
+   from its own inline style (r-* classes, --r-* custom properties) and these rules adapt them.
+   Inline styles need !important to be overridden. A design's own media queries are emitted later in
+   the page and win over these on equal specificity. Product mock-ups are never rearranged. */
+
+/* ── ≤1100px: small laptops / tablets landscape ─────────────────────────── */
+@media (max-width: 1100px) {
+  .dcx .r-w { max-width: 100% !important; }
+  .dcx .r-mw { min-width: 0 !important; }
+  .dcx .r-nml { margin-left: 0 !important; }
+  .dcx .r-nmr { margin-right: 0 !important; }
+  .dcx .r-g5, .dcx .r-g6 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .dcx .r-fsxl { font-size: clamp(36px, 5.4vw, 56px) !important; }
+  /* Fixed heights on text blocks and stretched picture frames: let content size them. */
+  .dcx .r-h { height: auto !important; }
+  .dcx .r-ar { height: auto !important; }
+  /* Items absolutely placed in a collapsed container: back into the flow as soon as space tightens. */
+  .dcx .r-absz {
+    position: relative !important;
+    inset: auto !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 12px 0 0 !important;
+  }
+  .dcx .r-fb { min-width: 0 !important; }
+  /* Light hero whose product picture is the section background: text first, the whole picture below
+     it (once columns stack, the picture would otherwise be zoomed in behind the text). */
+  .dcx .r-bgl {
+    height: auto !important;
+    /* dark-text hero: what the picture no longer covers must stay light (the parent may be dark) */
+    background-color: #fff !important;
+    background-size: 100% auto !important;
+    background-position: center bottom !important;
+    padding-bottom: calc(100% * var(--r-ratio) + 12px) !important;
+  }
+  /* …and its columns / floating cards (placed for the desktop picture) follow the text instead. */
+  .dcx .r-bgl.r-g2, .dcx .r-bgl.r-g3, .dcx .r-bgl > .r-g2, .dcx .r-bgl > .r-g3 { grid-template-columns: minmax(0, 1fr) !important; }
+  .dcx .r-bgl .r-abs {
+    position: relative !important;
+    inset: auto !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: min(100%, 420px) !important;
+    margin: 20px 0 0 !important;
+  }
+  /* Nothing may push the viewport sideways. */
+  .dcx img, .dcx video { max-width: 100%; }
+}
+
+/* ── ≤860px: tablets portrait ───────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .dcx .r-g2 { grid-template-columns: minmax(0, 1fr) !important; }
+  .dcx .r-g3, .dcx .r-g4, .dcx .r-g5, .dcx .r-g6 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .dcx .r-g3s, .dcx .r-g5s, .dcx .r-g6s { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .dcx .r-fst { flex-wrap: wrap !important; }
+  .dcx .r-fst > * { flex: 1 1 100% !important; max-width: 100% !important; min-width: 0 !important; }
+  .dcx .r-fw { flex-wrap: wrap !important; }
+  /* A row's stretchy text item keeps a readable width; trailing badges/actions drop below it. */
+  .dcx .r-fw > [style*="flex:1"], .dcx .r-fw > [style*="flex: 1"] { flex: 1 1 160px !important; min-width: 0 !important; }
+  .dcx .r-gap { gap: 28px !important; }
+  .dcx .r-empty { display: none !important; }
+  .dcx .r-wp { width: 100% !important; }
+  .dcx .r-top { position: relative !important; top: 0 !important; }
+  /* Grids with no column template (one implicit auto column) would grow to their widest content. */
+  .dcx [style*="display:grid"]:not([style*="grid-template"]):not([style*="grid-auto-flow"]):not([style*="grid-auto-columns"]) { grid-template-columns: minmax(0, 1fr); }
+  /* Content wrappers drawn as inline-block shrink-to-fit their content instead of the screen. */
+  .dcx .r-ib { display: block !important; max-width: 100% !important; }
+  .dcx .r-pml { margin-left: 0 !important; }
+  .dcx .r-pmr { margin-right: 0 !important; }
+  /* Floating content cards re-enter the flow once columns stack. */
+  .dcx .r-abs {
+    position: relative !important;
+    inset: auto !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 12px 0 0 !important;
+  }
+  .dcx .r-px { padding-left: 28px !important; padding-right: 28px !important; }
+  .dcx .r-pt { padding-top: 64px !important; }
+  .dcx .r-pb { padding-bottom: 64px !important; }
+  .dcx .r-fsl { font-size: clamp(30px, 4.6vw, 40px) !important; }
+}
+
+/* ── ≤640px: phones ─────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .dcx .r-g2, .dcx .r-g3, .dcx .r-g4, .dcx .r-g5, .dcx .r-g6 { grid-template-columns: minmax(0, 1fr) !important; }
+  .dcx .r-g2s, .dcx .r-g3s, .dcx .r-g4s, .dcx .r-g5s, .dcx .r-g6s { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .dcx .r-gap { gap: 20px !important; }
+  .dcx .r-px { padding-left: 20px !important; padding-right: 20px !important; }
+  .dcx .r-pt { padding-top: 48px !important; }
+  .dcx .r-pb { padding-bottom: 48px !important; }
+  .dcx .r-fsxl { font-size: clamp(30px, 9vw, 40px) !important; line-height: 1.08 !important; }
+  .dcx .r-fsl { font-size: clamp(27px, 8vw, 34px) !important; line-height: 1.12 !important; }
+  .dcx .r-fsm { font-size: clamp(24px, 7vw, 30px) !important; line-height: 1.15 !important; }
+
+  .dcx .r-vert { display: none !important; }
+  .dcx .r-sbw { flex-wrap: wrap !important; row-gap: 6px; }
+  .dcx .r-g3row { grid-template-columns: auto minmax(0, 1fr) !important; }
+  .dcx .r-g3row > :nth-child(3) { grid-column: 2; }
+  .dcx .r-gcta { grid-template-columns: auto minmax(0, 1fr) !important; }
+  .dcx .r-gcta > :last-child { grid-column: 1 / -1; justify-self: start; }
+  .dcx .r-vhimg { height: auto !important; aspect-ratio: 3 / 2; }
+  /* Form fields in a row with their button may shrink below their built-in default width. */
+  .dcx input, .dcx select { min-width: 0; }
+  .dcx .r-ws { max-width: 100% !important; }
+  .dcx .r-g2cta { grid-template-columns: minmax(0, 1fr) !important; }
+  .dcx .r-g2cta > :last-child { justify-self: start; }
+
+  .dcx .r-btn {
+    white-space: normal !important;
+    height: auto !important;
+    min-height: var(--r-bh, 0);
+    max-width: 100% !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    text-align: center;
+  }
+
+  /* Data tables (real or grid-built) scroll sideways instead of wrapping every word. */
+  .dcx .r-tbl { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .dcx .r-tbl .r-trow { min-width: 600px; }
+  .dcx table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dcx th, .dcx td { white-space: nowrap; }
+  .dcx tr > :first-child { white-space: normal; min-width: 160px; }
+
+  /* Photo hero with light text over it: keep the photo, darken it so the text stays readable. */
+  .dcx .r-bgd {
+    background: linear-gradient(rgba(5, 22, 15, 0.9), rgba(5, 22, 15, 0.9)), var(--r-bg) center / cover no-repeat !important;
+  }
+}
+
+/* ── ≥641px: hero pictures shown whole ──────────────────────────────────────
+   A hero whose picture is a cover background takes the picture's proportions, so the whole picture
+   shows instead of a zoomed crop. `min-height: auto` lets the box grow when its text needs more room
+   (then the picture is cropped only by what that extra height requires). */
+@media (min-width: 641px) {
+  .dcx .r-hfull.r-bgd { height: auto !important; min-height: auto !important; aspect-ratio: var(--r-iar); }
+}
+@media (min-width: 1101px) {
+  .dcx .r-hfull { height: auto !important; min-height: auto !important; aspect-ratio: var(--r-iar); }
+}

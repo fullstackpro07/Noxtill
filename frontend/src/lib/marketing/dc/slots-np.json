@@ -215,7 +215,7 @@
     "s": 1,
     "x": 0,
     "y": 0,
-    "u": "/marketing/np/slots/bl-testimonial.webp"
+    "u": "/marketing/np/avatars/bl.jpg"
   },
   "bl-devices": {
     "s": 1,
@@ -786,5 +786,101 @@
     "x": 0,
     "y": 0,
     "u": "/marketing/np/slots/bt2-card-121.webp"
+  },
+  "ad-25": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/ad.jpg"
+  },
+  "au-quote-av": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/au.jpg"
+  },
+  "ec-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/ec.jpg"
+  },
+  "ed-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/ed.jpg"
+  },
+  "ev-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/ev.jpg"
+  },
+  "hvac-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/hv.jpg"
+  },
+  "lc-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/lc.jpg"
+  },
+  "pc-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/pc.jpg"
+  },
+  "ps-quote-av": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/ps.jpg"
+  },
+  "plumb-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/pl.jpg"
+  },
+  "pm-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/pm.jpg"
+  },
+  "pp-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/pp.jpg"
+  },
+  "rv-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/rv.jpg"
+  },
+  "pf-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/pf.jpg"
+  },
+  "ns-avatar": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/ns.jpg"
+  },
+  "cc2-testimonial": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/avatars/cc.jpg"
   }
 }

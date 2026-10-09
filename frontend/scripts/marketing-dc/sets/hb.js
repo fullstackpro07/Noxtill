@@ -2,6 +2,43 @@
 module.exports = {
   src: "docs/Noxtill Header Build",
   stripChrome: false,
+  /** Page-specific small-screen fixes, appended after the design's CSS (scoped to .dcx). */
+  mobileCss: {
+    // Home hero: once its columns stack (≤1100px) the text column loses the background picture and the visual "stage"
+    // (with its floating status cards) shows the devices part of it, as the design composes it.
+    home: `@media (max-width: 1100px) {
+      section[aria-labelledby="hero-h"] .r-bgl { background-image: none !important; padding-bottom: 0 !important; }
+      section[aria-labelledby="hero-h"] [style*="container-type:inline-size"] {
+        background: url("/marketing/hb/run-your-entire-business-in-one-connecte-muxgs6oj-w72n.png") 100% 55% / 149% auto no-repeat;
+      }
+    }
+    @media (max-width: 640px) {
+      /* Integrations benefits: one left-aligned list instead of centred items with column dividers. */
+      section[aria-labelledby="int2-h"] > div:nth-of-type(2) { padding: 0 24px !important; row-gap: 14px !important; }
+      section[aria-labelledby="int2-h"] > div:nth-of-type(2) > div { flex: 1 1 100% !important; justify-content: flex-start !important; border-left: 0 !important; }
+      section[aria-labelledby="int2-h"] > div:nth-of-type(2) > div > div { padding: 0 !important; }
+      /* Module stack calls-to-action: a compact label so long module names fit inside the pill. */
+      section[aria-labelledby="stack-h"] article a[style*="height:52px"] {
+        font-size: 14px !important; letter-spacing: .01em !important; line-height: 1.3 !important;
+        gap: 14px !important; padding: 12px 22px !important; text-align: left !important;
+      }
+      /* AI carousel cards: the product name and its badge share the narrow header. */
+      section[aria-labelledby="ai-h"] article h3 { font-size: 17px !important; line-height: 1.25 !important; }
+      section[aria-labelledby="ai-h"] article { padding: 20px !important; }
+      section[aria-labelledby="ai-h"] [aria-roledescription="carousel"] > div:last-child { flex-wrap: nowrap !important; gap: 10px !important; }
+    }
+    @media (max-width: 860px) {
+      /* AI Receptionist phone sits centred under its photos once the columns stack. */
+      section[aria-labelledby="rec-h"] [aria-live] { margin: 0 auto !important; }
+      /* Outcome screenshot: the screenshot (always laid over the coded demo panels) becomes the frame's
+         only content, so the image slot can size the frame to the whole picture. */
+      section[aria-labelledby="o-h"] [role="img"] > div:nth-child(2) { padding: 0 !important; min-height: 0 !important; }
+      section[aria-labelledby="o-h"] [role="img"] > div:nth-child(2) > div[style*="position:absolute"] { position: relative !important; inset: auto !important; height: 100% !important; }
+      section[aria-labelledby="o-h"] [role="img"] > div:nth-child(2) > div:not([style*="position:absolute"]) { display: none !important; }
+      /* AI cards keep their two short "understands / can do" columns. */
+      section[aria-labelledby="ai-h"] article .r-g2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+    }`,
+  },
   pages: {
     "NoxtillHeader.dc.html": "header",
     "Noxtill Home.dc.html": "home",

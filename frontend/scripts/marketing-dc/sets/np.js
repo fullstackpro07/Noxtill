@@ -6,6 +6,41 @@ module.exports = {
   stripChrome: true,
   nxIcons: true,
   logic: true,
+  // Per-page phone CSS appended after the design's own (scoped to .dcx by the converter).
+  mobileCss: {
+    // The design keeps three stat columns at every phone width; below 480px they collide.
+    "platform--products-services": `@media (max-width: 480px) { [data-stats] { grid-template-columns: minmax(0, 1fr) !important; } }`,
+    // The hero picture sits on a wrapper holding the whole page; show it whole, full width, at the top.
+    "developers--api": `@media (min-width: 641px) { .r-hfull { background-size: 100% auto !important; background-position: center top !important; } }`,
+    // Two insight cards per row (the design's phone rule) do not fit below ~420px.
+    "platform--inventory": `@media (max-width: 420px) { [data-inscards] { grid-template-columns: minmax(0, 1fr) !important; } }`,
+    // The donut + legend row is a fixed 361px wide; the legend drops under the donut on narrow phones.
+    "platform--credit": `@media (max-width: 420px) { [style*="width:361px"] { flex-wrap: wrap !important; row-gap: 14px; } }`,
+  },
+  // Review-card portraits: the designs' avatars were blurry 46–200px crops (one a logo, one empty), so
+  // they are replaced with AI-generated portraits of people who do not exist
+  // (thispersondoesnotexist.com), stored in public/marketing/np/avatars/. Keyed by image-slot id, or by
+  // the published picture path for a plain <img>.
+  imageOverrides: {
+    "ad-25": "avatars/ad.jpg",
+    "au-quote-av": "avatars/au.jpg",
+    "ec-avatar": "avatars/ec.jpg",
+    "ed-avatar": "avatars/ed.jpg",
+    "ev-avatar": "avatars/ev.jpg",
+    "hvac-avatar": "avatars/hv.jpg",
+    "lc-avatar": "avatars/lc.jpg",
+    "pc-avatar": "avatars/pc.jpg",
+    "ps-quote-av": "avatars/ps.jpg",
+    "plumb-avatar": "avatars/pl.jpg",
+    "pm-avatar": "avatars/pm.jpg",
+    "pp-avatar": "avatars/pp.jpg",
+    "rv-avatar": "avatars/rv.jpg",
+    "pf-avatar": "avatars/pf.jpg",
+    "ns-avatar": "avatars/ns.jpg",
+    "bl-testimonial": "avatars/bl.jpg",
+    "cc2-testimonial": "avatars/cc.jpg",
+    "/marketing/np/noxtill-is-an-ai-powered-business-manage-mu4dg0f6-adnd.jpg": "avatars/so.jpg",
+  },
   pages: {
     // Industries — the 22 slugs the site header links to (/industries/<slug>)
     "Automotive-end.dc.html": "industries--automotive",

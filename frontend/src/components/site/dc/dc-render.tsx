@@ -179,7 +179,9 @@ function ImageSlot({ attrs }: { attrs: Record<string, unknown> }) {
   const n = parseFloat(String(attrs.radius));
   const radius = shape === "circle" ? "50%" : shape === "pill" ? "9999px" : shape === "rounded" ? (Number.isFinite(n) ? n : 12) + "px" : undefined;
   const own = typeof attrs.style === "string" ? cssToObj(attrs.style) : (attrs.style as CSSProperties | undefined);
-  const style: CSSProperties = { display: "block", position: "relative", width: "100%", height: "100%", aspectRatio: "3/2", ...own };
+  // The slot's own box takes the shape too (as image-slot.js does), so a ring drawn with box-shadow
+  // around an avatar follows the circle instead of a square.
+  const style: CSSProperties = { display: "block", position: "relative", width: "100%", height: "100%", aspectRatio: "3/2", borderRadius: radius, ...own };
   const fit = String(attrs.fit || "cover").toLowerCase() === "contain" ? "contain" : "cover";
   return (
     <DcImageSlot

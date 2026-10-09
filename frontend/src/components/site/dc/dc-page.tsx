@@ -6,6 +6,7 @@ import { jakarta } from "@/components/site/legal/fonts";
 import { DcEffects } from "./dc-effects";
 import { renderDc, type DcContext, type DcNode, type DcPageData } from "./dc-render";
 import "./dc.css";
+import "./dc-responsive.css";
 
 /** Next metadata from a design's <helmet> (title, description, canonical, robots, Open Graph, Twitter). */
 export function dcMetadata(page: DcPageData): Metadata {

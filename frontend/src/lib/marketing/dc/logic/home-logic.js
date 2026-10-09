@@ -3,7 +3,9 @@
 // design: icons come from dcIcon (same lucide@0.460.0 geometry) instead of window.lucide; the initial
 // width is the design default (1440) on server and client, with the real width read on mount; the
 // nx-js class, reveal markers and Escape handler are reset on unmount so a remount works; the tab
-// screenshot path points at /marketing/hb.
+// screenshot path points at /marketing/hb; the Nightly Close chat also starts when its phone is on
+// screen (the stacked mobile section is taller than 30% of any phone screen can show); the AI carousel
+// re-centres its card when the width changes.
 import { createElement } from "react";
 import { DcLogic } from "@/components/site/dc/dc-host";
 import { dcIcon } from "@/components/site/dc/dc-icon";
@@ -17,7 +19,8 @@ export class HomeLogic extends DcLogic {
     this.recT = setInterval(() => { this.recTick = (this.recTick + 1) % 10; this.setState({ rec: Math.min(this.recTick, 7) }); }, 2300);
     try { const q = new URLSearchParams(location.search).get('industry'); const qi = q ? this.IND.findIndex(r => r[1] === q) : -1; if (qi >= 0) setTimeout(() => this.openInd(qi), 400); } catch (err) {}
     this.rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.onResize = () => this.setState({ w: window.innerWidth });
+    // The AI carousel's card width follows the window width; keep the current card centred after it changes.
+    this.onResize = () => { const w = window.innerWidth; if (w === this.state.w) return; this.setState({ w }, () => this.aiTo(this.state.ai, false)); };
     window.addEventListener('resize', this.onResize);
     this.onResize();
     document.documentElement.classList.add('nx-js');
@@ -33,7 +36,7 @@ export class HomeLogic extends DcLogic {
     }
     if ('IntersectionObserver' in window) {
       this.io = new IntersectionObserver(es => es.forEach(e => {
-        if (e.target === this.ncEl && e.isIntersecting && !this.ncStarted) {
+        if ((e.target === this.ncEl || e.target === this.ncPhone) && e.isIntersecting && !this.ncStarted) {
           this.ncStarted = true;
           if (this.rm) this.setState({ nc: 14 });
           else { let k = 0; this.tNc = setInterval(() => { k = Math.min(k + 1, 14); this.setState({ nc: k }); if (k >= 14) clearInterval(this.tNc); }, 800); }
@@ -41,7 +44,13 @@ export class HomeLogic extends DcLogic {
         if (e.target === this.jEl) this.jIn = e.isIntersecting;
       }), { threshold: 0.3 });
       this.ioRec = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) this.setState({ rec: +e.target.dataset.step }); }), { rootMargin: '-45% 0px -45% 0px' });
-      setTimeout(() => { this.ncEl && this.io.observe(this.ncEl); this.jEl && this.io.observe(this.jEl);  }, 300);
+      setTimeout(() => {
+        this.ncEl && this.io.observe(this.ncEl); this.jEl && this.io.observe(this.jEl);
+        // Stacked (one-column) layout: the section is taller than the screen, so 30% of it may never be
+        // visible at once; start the chat when the phone itself is on screen instead.
+        this.ncPhone = this.ncEl && this.ncEl.querySelector('[aria-live]');
+        if (this.ncPhone) this.io.observe(this.ncPhone);
+      }, 300);
     } else this.setState({ nc: 4 });
   }
   componentDidUpdate() { this.scanReveal(); }
