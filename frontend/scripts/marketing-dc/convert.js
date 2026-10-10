@@ -126,7 +126,8 @@ function rewriteUrls(v) {
     const u = assetUrl(ref);
     return u ? `url(${q}${u}${q})` : m;
   });
-  return v;
+  // lucide-static mask icons (unpkg) → the copies published under /marketing/<set>/lucide
+  return v.split(LUCIDE_STATIC).join(PUBLIC_BASE + "lucide/");
 }
 function rewriteRef(v) {
   if (typeof v !== "string" || v.includes("{{")) return v;
@@ -134,7 +135,8 @@ function rewriteRef(v) {
   const dc = /^(?:\.\/)?([^#?/]+)\.dc\.html(#.*)?$/.exec(v);
   if (dc) {
     const name = decodeURIComponent(dc[1]);
-    const route = (CONF.linkMap || {})[name];
+    // explicit linkMap first, then the set's own pages (file "X-end.dc.html" → that page's route)
+    const route = (CONF.linkMap || {})[name] || (CONF.autoLinks && PAGES[name + ".dc.html"] ? "/" + PAGES[name + ".dc.html"].replace(/--/g, "/") : undefined);
     if (!route) throw new Error("No route for design link " + JSON.stringify(v) + " — add it to sets/" + SET + ".js linkMap");
     return route + (dc[2] || "");
   }
@@ -220,7 +222,7 @@ function importantify(css) {
 
 // ── post-process the tree in node: classes, urls, slots ───────────────────
 const SVG_ATTR = /^(stroke-|fill-|clip-|font-|text-anchor|dominant-baseline|stop-|marker-|color-interpolation|shape-rendering|vector-effect|paint-order)/;
-const HTML_ATTR = { itemscope: "itemScope", itemtype: "itemType", itemprop: "itemProp", tabindex: "tabIndex", readonly: "readOnly", maxlength: "maxLength", colspan: "colSpan", rowspan: "rowSpan", crossorigin: "crossOrigin", srcset: "srcSet", autocomplete: "autoComplete", enterkeyhint: "enterKeyHint", inputmode: "inputMode", datetime: "dateTime", fetchpriority: "fetchPriority", referrerpolicy: "referrerPolicy", "xlink:href": "xlinkHref", "xmlns:xlink": "xmlnsXlink", "xml:space": "xmlSpace", "clip-path": "clipPath", "fill-rule": "fillRule", "clip-rule": "clipRule" };
+const HTML_ATTR = { novalidate: "noValidate", itemscope: "itemScope", itemtype: "itemType", itemprop: "itemProp", tabindex: "tabIndex", readonly: "readOnly", maxlength: "maxLength", colspan: "colSpan", rowspan: "rowSpan", crossorigin: "crossOrigin", srcset: "srcSet", autocomplete: "autoComplete", enterkeyhint: "enterKeyHint", inputmode: "inputMode", datetime: "dateTime", fetchpriority: "fetchPriority", referrerpolicy: "referrerPolicy", "xlink:href": "xlinkHref", "xmlns:xlink": "xmlnsXlink", "xml:space": "xmlSpace", "clip-path": "clipPath", "fill-rule": "fillRule", "clip-rule": "clipRule" };
 
 // ── responsive pass ────────────────────────────────────────────────────────
 // The designs are drawn at 1440px with inline styles. This tags each node, from its own inline style,
@@ -454,7 +456,7 @@ const HINT_TAGS = new Set(["img", "video", "canvas", "iframe", "embed", "object"
 const TABLE_TAGS = new Set(["table", "thead", "tbody", "tfoot", "tr", "colgroup", "select", "optgroup"]);
 
 function post(tree, rules, responsive = true) {
-  const fix = (n, inMock = false, parentStyle = "") => {
+  const fix = (n, inMock = false, parentStyle = "", inTable = false) => {
     if (typeof n === "string") return n;
     const [tag, attrs, kids, pseudo] = n;
     const a = {};
@@ -498,8 +500,10 @@ function post(tree, rules, responsive = true) {
       if (vars.length) a.style = (a.style ? a.style.replace(/;?\s*$/, ";") : "") + vars.join(";");
     }
     // Whitespace between table rows/cells is not rendered by browsers and is invalid in React's DOM.
-    const k = TABLE_TAGS.has(tag) ? kids.filter((c) => typeof c !== "string" || c.trim()) : kids;
-    return [tag, a, k.map((c) => fix(c, mock || tag === "svg", (tag === "sc-for" || tag === "sc-if") ? parentStyle : attrs.style || ""))];
+    // (sc-for / sc-if directly inside a table element render no element of their own — same rule.)
+    const tableKids = TABLE_TAGS.has(tag) || ((tag === "sc-for" || tag === "sc-if") && inTable);
+    const k = tableKids ? kids.filter((c) => typeof c !== "string" || c.trim()) : kids;
+    return [tag, a, k.map((c) => fix(c, mock || tag === "svg", (tag === "sc-for" || tag === "sc-if") ? parentStyle : attrs.style || "", tableKids))];
   };
   return tree.map((n) => fix(n));
 }
@@ -546,6 +550,20 @@ function rewriteLogicAssets(code) {
 }
 
 /**
+ * Links between designs inside component-logic strings ('legal-refunds.dc.html#x') → real routes, and
+ * lucide-static mask icons (unpkg) → the copies the converter publishes under /marketing/<set>/lucide.
+ */
+function rewriteLogicLinks(code) {
+  code = code.replace(/(['"`])((?:\.\/)?([^'"`#?/]+)\.dc\.html)(#[^'"`]*)?\1/g, (_m, q, ref, name, hash) => {
+    const route = (CONF.linkMap || {})[decodeURIComponent(name)];
+    if (!route) throw new Error("No route for design link " + JSON.stringify(ref) + " in component logic — add it to sets/" + SET + ".js linkMap");
+    return q + route + (hash || "") + q;
+  });
+  return code.split(LUCIDE_STATIC).join(PUBLIC_BASE + "lucide/");
+}
+const LUCIDE_STATIC = "https://unpkg.com/lucide-static@0.460.0/icons/";
+
+/**
  * Generated registry for a set: route key → page JSON loader (+ client body bound to the page's
  * logic). One tiny "use client" module per logic page keeps each page's logic in its own chunk.
  */
@@ -557,7 +575,7 @@ function writeIndex(keys, logicKeys) {
   for (const k of logicKeys) {
     fs.writeFileSync(
       path.join(bodiesDir, k + ".tsx"),
-      `"use client";\n\n// GENERATED by scripts/marketing-dc/convert.js — do not edit.\nimport { DcHost } from "../../dc-host";\nimport type { DcNode } from "../../dc-render";\nimport { Logic } from "@/lib/marketing/dc/logic/${SET}/${k}";\n\nexport function ${pascal(k)}({ tree }: { tree: DcNode[] }) {\n  return <DcHost tree={tree} logic={Logic} />;\n}\n`,
+      `"use client";\n\n// GENERATED by scripts/marketing-dc/convert.js — do not edit.\nimport { DcHost } from "../../dc-host";\nimport type { DcNode } from "../../dc-render";\nimport { Logic } from "@/lib/marketing/dc/logic/${SET}/${k}";\n\nexport function ${pascal(k)}({ tree, props }: { tree: DcNode[]; props?: Record<string, unknown> }) {\n  return <DcHost tree={tree} logic={Logic} props={props} />;\n}\n`,
     );
   }
   const lines = [
@@ -566,7 +584,7 @@ function writeIndex(keys, logicKeys) {
     'import type { DcNode } from "@/components/site/dc/dc-render";',
     ...logicKeys.map((k) => `import { ${pascal(k)} } from "@/components/site/dc/bodies/${SET}/${k}";`),
     "",
-    "export type DcSetPage = { load: () => Promise<{ default: unknown }>; Body?: ComponentType<{ tree: DcNode[] }> };",
+    "export type DcSetPage = { load: () => Promise<{ default: unknown }>; Body?: ComponentType<{ tree: DcNode[]; props?: Record<string, unknown> }> };",
     "",
     `/** Pages of the "${SET}" design set (${CONF.src}), by route key ("a--b" = /a/b). */`,
     `export const ${SET.toUpperCase()}_PAGES: Record<string, DcSetPage> = {`,
@@ -589,6 +607,7 @@ function emitLogic(key, src) {
     body = body.split(from).join(to);
   }
   body = rewriteLogicAssets(body);
+  body = rewriteLogicLinks(body);
   const imports = ['import { createElement } from "react";', 'import { DcLogic } from "@/components/site/dc/dc-host";', ...((CONF.logicImports || {})[key] || [])];
   const dir = path.join(FRONT, "src/lib/marketing/dc/logic", SET);
   fs.mkdirSync(dir, { recursive: true });
@@ -637,6 +656,77 @@ function emitLogic(key, src) {
   console.log("icons:", Object.keys(icons).length);
   }
 
+  // Data registries the designs load with <script src> (e.g. legal/content.js → window.NOX_LEGAL):
+  // evaluated, design-file links → routes, internal-only keys dropped, written as JSON the logic imports.
+  for (const reg of CONF.registries || []) {
+    const w = {};
+    new Function("window", fs.readFileSync(path.join(SRC, reg.src), "utf8"))(w);
+    const toRoute = (s) => {
+      const m = /^(?:\.\/)?([^#?/]+)\.dc\.html(#.*)?$/.exec(s);
+      if (!m) return s;
+      const route = (CONF.linkMap || {})[decodeURIComponent(m[1])];
+      if (!route) throw new Error("No route for design link " + JSON.stringify(s) + " in " + reg.src + " — add it to sets/" + SET + ".js linkMap");
+      return route + (m[2] || "");
+    };
+    const walk = (v) => {
+      if (typeof v === "string") return toRoute(v);
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, (reg.empty || []).includes(k) ? (Array.isArray(x) ? [] : null) : walk(x)]));
+      return v;
+    };
+    // reg.patch(data): set-specific edits to the published copy (the design file stays as delivered).
+    const data = walk(w[reg.global]);
+    if (reg.patch) reg.patch(data);
+    fs.writeFileSync(path.join(FRONT, "src/lib/marketing/dc", reg.out), JSON.stringify(data));
+    console.log("registry:", reg.src, "→", reg.out);
+  }
+
+  // Lucide icons the designs fill at runtime: `<span data-icon="name">` (rendered server-side from
+  // lucide-data-icons.json) and lucide-static CSS-mask URLs (published as SVG files). Names are every
+  // kebab-case string in the designs that lucide@0.460.0 knows (with the designs' own aliases).
+  if (CONF.dataIcons) {
+    const lucideSrc = await (await fetch("https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js")).text();
+    await page.addScriptTag({ content: lucideSrc });
+    const names = new Set();
+    for (const file of Object.keys(PAGES)) {
+      const t = fs.readFileSync(path.join(SRC, file), "utf8");
+      for (const m of t.matchAll(/['"]([a-z][a-z0-9]*(?:-[a-z0-9]+)*)['"]/g)) names.add(m[1]);
+      for (const m of t.matchAll(/icons\/([a-z0-9-]+)\.svg/g)) names.add(m[1]);
+    }
+    const found = await page.evaluate(
+      (list, alt) => {
+        const out = {};
+        for (const n of list) {
+          const pascal = n.split("-").map((s) => s[0].toUpperCase() + s.slice(1)).join("");
+          for (const k of [pascal, ...(alt[n] || [])]) {
+            let node = window.lucide.icons[k];
+            if (!node) continue;
+            if (node[0] === "svg") node = node[2];
+            out[n] = node;
+            break;
+          }
+        }
+        return out;
+      },
+      [...names],
+      CONF.iconAlt || {},
+    );
+    const camel = (a) => Object.fromEntries(Object.entries(a).map(([k, v]) => [k.replace(/-([a-z])/g, (_, c) => c.toUpperCase()), v]));
+    const merged = fs.existsSync(path.join(FRONT, "src/lib/marketing/dc/lucide-data-icons.json")) ? JSON.parse(fs.readFileSync(path.join(FRONT, "src/lib/marketing/dc/lucide-data-icons.json"), "utf8")) : {};
+    for (const [n, node] of Object.entries(found)) merged[n] = node.map(([t, a]) => [t, camel(a)]);
+    fs.writeFileSync(path.join(FRONT, "src/lib/marketing/dc/lucide-data-icons.json"), JSON.stringify(merged));
+    fs.mkdirSync(path.join(OUT_PUBLIC, "lucide"), { recursive: true });
+    const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    for (const [n, node] of Object.entries(found)) {
+      const kids = node.map(([t, a]) => "<" + t + Object.entries(a).map(([k, v]) => " " + k + '="' + esc(v) + '"').join("") + "/>").join("");
+      fs.writeFileSync(
+        path.join(OUT_PUBLIC, "lucide", n + ".svg"),
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + kids + "</svg>\n",
+      );
+    }
+    console.log("lucide icons:", Object.keys(found).length);
+  }
+
   // nx-icon.js (design-local icon element): expose its path maps so icons render server-side.
   if (CONF.nxIcons) {
     const nx = fs.readFileSync(path.join(SRC, "nx-icon.js"), "utf8").replace("window.NX_ICON_NAMES = Object.keys(S);", "window.__NX = { S, B, GREEN }; window.NX_ICON_NAMES = Object.keys(S);");
@@ -655,15 +745,20 @@ function emitLogic(key, src) {
     // images the component logic references (ported by hand) still need to be published
     for (const m of src.slice(close).matchAll(/['"](\.\/[\w.-]+\.(?:png|jpe?g|webp))['"]/g)) assetUrl(m[1]);
     const { tree, helmet } = await page.evaluate(browserWalk, template);
-    const { head, css, effects } = parseHead(helmet.join("\n"));
+    let { head, css, effects } = parseHead(helmet.join("\n"));
     const rules = new Map();
     let raw = dropTrailingStray(tree);
     let stripped = [];
+    // Set-specific tree edits before the chrome goes (sets/<set>.js transform[key](tree) → tree).
+    if ((CONF.transform || {})[key]) raw = CONF.transform[key](raw);
     if (CONF.stripChrome) ({ tree: raw, stripped } = stripChrome(raw));
-    const outTree = post(raw, rules, key !== "header");
+    // (sets whose designs are responsive on their own — CONF.responsive === false — get no r-* classes)
+    const outTree = post(raw, rules, key !== "header" && CONF.responsive !== false);
     const logic = CONF.logic ? emitLogic(key, src) : null;
     // Page-specific small-screen fixes (sets/<set>.js mobileCss), emitted after the design's own CSS.
     const extra = (CONF.mobileCss || {})[key] || "";
+    // CONF.noZoom: drop a design's `body { zoom: … }` rule (it shrinks the whole page on desktop).
+    if (CONF.noZoom) css = css.replace(/@media[^{]*\{\s*body\s*\{\s*zoom:[^}]*\}\s*\}/g, "");
     const pageCss = scopeCss(rewriteUrls(css), key === "header" ? ".dcxh" : ".dcx") + [...rules.values()].join("\n") + (extra ? "\n" + scopeCss(extra, ".dcx") : "");
     fs.writeFileSync(path.join(OUT_PAGES, (SET === "hb" ? "" : SET + "--") + key + ".json"), JSON.stringify({ tree: outTree, css: pageCss, head, effects, logic: logic || undefined }));
     logicKeys.push(...(logic ? [logic] : []));
@@ -672,7 +767,8 @@ function emitLogic(key, src) {
   await browser.close();
 
   // image-slot contents saved in the design's slot state -> real files, plus each slot's crop view
-  const state = JSON.parse(fs.readFileSync(path.join(SRC, ".image-slots.state.json"), "utf8"));
+  const statePath = path.join(SRC, ".image-slots.state.json");
+  const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, "utf8")) : {};
   const slots = {};
   fs.mkdirSync(path.join(OUT_PUBLIC, "slots"), { recursive: true });
   for (const [id, v] of Object.entries(state)) {
@@ -689,7 +785,8 @@ function emitLogic(key, src) {
   }
   // Pictures replaced outside the design (CONF.imageOverrides: slot id -> file under public/marketing/<set>/).
   for (const [id, file] of Object.entries(CONF.imageOverrides || {})) {
-    if (!id.startsWith("/")) slots[id] = { s: 1, x: 0, y: 0, u: PUBLIC_BASE + file };
+    // (a value starting with "/" is an absolute public path, e.g. a picture from another set)
+    if (!id.startsWith("/")) slots[id] = { s: 1, x: 0, y: 0, u: file.startsWith("/") ? file : PUBLIC_BASE + file };
   }
   fs.writeFileSync(path.join(FRONT, "src/lib/marketing/dc/slots-" + SET + ".json"), JSON.stringify(slots, null, 2) + "\n");
   if (SET !== "hb") writeIndex(Object.values(PAGES), logicKeys);

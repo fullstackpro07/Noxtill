@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
       { source: "/privacy", destination: "/legal/privacy", permanent: true },
       { source: "/cookie-policy", destination: "/legal/cookies", permanent: true },
       { source: "/refund-policy", destination: "/legal/refunds", permanent: true },
+      // Legal & Trust Center v2 (docs/Noxtill pricing page built): the hub is /trust and /legal (same page); the pages the
+      // earlier Legal & Trust build had under these URLs now live at the registry's routes.
+      { source: "/legal/do-not-sell", destination: "/privacy/do-not-sell-or-share", permanent: true },
+      { source: "/legal/regional-addenda", destination: "/legal/regional-privacy", permanent: true },
+      { source: "/privacy-choices", destination: "/privacy/choices", permanent: true },
       // The real blog (docs/Noxtill Header Build/Blog*.dc.html) replaced the placeholder resources page.
       { source: "/resources/blog", destination: "/blog", permanent: true },
       // The marketing header/pages (docs/Noxtill Header Build) link to their own URL scheme. Where an
@@ -25,10 +30,7 @@ const nextConfig: NextConfig = {
           ["/security", "/trust/security"],
           ["/ai-transparency", "/legal/ai-transparency"],
           ["/platform/modules", "/platform"],
-          ["/platform/unified-inbox", "/product/inbox"],
-          ["/platform/social-media", "/product/social"],
-          ["/platform/staff", "/product/staff"],
-          ["/platform/branches", "/product/multi-location"],
+          ["/platform/branches", "/solutions/run-several-locations"],
           ["/nightly-close/sample-report", "/nightly-close"],
           ["/business-health-check", "/tools/business-health-check"],
           ["/solutions/fast-sale", "/platform/fast-sale"],

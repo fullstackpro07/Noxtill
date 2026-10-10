@@ -39,6 +39,22 @@ module.exports = {
       section[aria-labelledby="ai-h"] article .r-g2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
     }`,
   },
+  // Image slots the designs left empty (they rendered as blank grey frames): filled with fitting
+  // pictures that already exist under public/marketing.
+  imageOverrides: {
+    "blog-card-ai-receptionist-for-small-business": "/marketing/np/ai-phone-receptionist-for-businesses-24--muiymuyy-79tq.png",
+    "b1-hero": "/marketing/np/ai-phone-receptionist-for-businesses-24--muiymuyy-79tq.png",
+    "b1-compliance": "/marketing/np/3a69923f-05cf-4f11-8277-9cac4fba205a-mulq83zq-81kw.png",
+    "blog-card-small-business-automation-ideas": "/marketing/hb/slots/outcome-screen-auto.webp",
+    "b2-hero": "/marketing/hb/slots/outcome-screen-auto.webp",
+    "b2-split": "/marketing/np/assets/noshows/flow.jpg",
+    "blog-card-all-in-one-business-software-small-business": "/marketing/np/business-software-integrations-mu5yrgs8-5hgf.png",
+    "b3-hero": "/marketing/np/business-software-integrations-mu5yrgs8-5hgf.png",
+    "b3-retail": "/marketing/np/pasted-1789728784649-0-mu6ub4ew-7rxo.png",
+    "b3-hvac": "/marketing/np/pasted-1789098582413-0-mtwf3p9z-hk8t.png",
+    "b3-salon": "/marketing/np/pasted-1790457847416-0-muiwdguo-pmeo.png",
+    "b3-auto": "/marketing/np/smarter-auto-business-operations--mu3rc8nr-ytaq.png",
+  },
   pages: {
     "NoxtillHeader.dc.html": "header",
     "Noxtill Home.dc.html": "home",

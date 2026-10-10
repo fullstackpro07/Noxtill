@@ -103,44 +103,64 @@ tracking customer credit, knowing real profit (not just sales), digitising paper
 running several locations from one account.
 
 ## 5. PRICING
-Five plans, billed monthly or annually (annual billing works out to about 20% cheaper than monthly,
-charged once for the year). All plans include a 14-day free trial with no credit card required —
-set up the real business, connect real tools, and choose a plan at the end of the trial (the account
-becomes read-only if no plan is chosen, nothing is charged automatically and nothing is deleted).
+Four plans plus Enterprise, billed monthly or yearly (yearly is paid upfront for 12 months and is
+about 25% cheaper than monthly). No per-user fees: each plan includes a set number of users. Every
+plan starts with a 14-day free trial with no credit card required (trials include 200 AI credits;
+AI Receptionist calls and paid SMS or marketing campaigns unlock after a payment method is added).
+When a trial ends there is a 72-hour grace period to activate a plan and a 30-day window to export
+data.
 
-- Starter — $49/mo ($39/mo billed annually). 1 location, 3 users. Core features, basic reports, AI
-  Assistant (200 actions/month), Unified Inbox, core integrations.
-- Growth — $79/mo ($63/mo annually). Most popular. Everything in Starter, plus: 2 locations, 10
-  users, advanced bookings, marketing & campaigns, advanced reports, AI Assistant (1,000/month),
-  more integrations, automations.
-- Business — $129/mo ($103/mo annually). Everything in Growth, plus: 5 locations, 25 users, AI Phone
-  Receptionist, advanced analytics, reputation management, advanced automations, API access,
-  AI Assistant (3,000/month).
-- Scale — $199/mo ($159/mo annually). Everything in Business, plus: 10 locations, unlimited users,
-  advanced permissions, branch performance, centralized dashboard, priority support,
-  AI Assistant (10,000/month), advanced integrations.
-- Enterprise — custom pricing. Everything in Scale, plus: unlimited locations, custom users, custom
-  integrations, a dedicated account manager, custom workflows, advanced security, SLA & priority
-  support, custom AI limits. Enterprise customers can also arrange invoiced billing.
+- Starter — $39/mo, or $29/mo billed yearly ($348/year). For single-location businesses getting
+  organized. 2 users, 1 location, 500 AI credits/month, 2,000 emails/month. Includes Dashboard &
+  Nightly Close, Fast Sale (POS), orders/quotes/invoices, Products & Services, Inventory, Customer
+  Credit, Bookings, Customers (CRM), Staff, AI Assistant, AI Photo Digitizer, WhatsApp alerts and
+  receipts, Reports, integrations.
+- Growth — $79/mo, or $59/mo billed yearly ($708/year). Most popular. For growing businesses that
+  market and message customers. 5 users, 1 location, 1,500 AI credits, 10,000 emails, 2,000
+  automation runs. Everything in Starter, plus Unified Inbox, Marketing & Campaigns, Reviews &
+  Reputation, Social Media Management, Business Listings, Website & Commerce, Automations &
+  Workflows, Projects & Tasks, Delivery & Riders, Profit & Analytics, sales pipeline, the AI
+  Receptionist agent and calling tools, live chat support.
+- Professional — $159/mo, or $119/mo billed yearly ($1,428/year). For established businesses
+  running finance, field teams and support. 15 users, 3 locations, 4,000 AI credits, 25,000 emails,
+  10,000 automation runs. Everything in Growth, plus Finance & Accounting, People & Payroll,
+  Payments & Billing, Field Service, Helpdesk, Customer Portal, Contracts & eSign, more AI voice
+  agents, AI agents in workflows, AI Copilot, custom roles, full audit trail, guided onboarding call.
+- Business — $319/mo, or $239/mo billed yearly ($2,868/year). The complete 40-module Business OS
+  for multi-location teams. 40 users, 10 locations, 8,000 AI credits, 75,000 emails, 50,000
+  automation runs. Everything in Professional, plus Branches, Business Intelligence, SEO Autopilot,
+  Autonomous Commerce, Procurement, Assets & Maintenance, Advertising, Competitive Insights, all 8
+  AI voice agents, sandbox environments, priority support.
+- Enterprise — custom pricing, typically from $799/month billed yearly. For franchises, multi-brand
+  groups and large teams: custom limits, custom AI agents, SSO, uptime and support SLA, a dedicated
+  success manager, data migration, security review and DPA, yearly invoice billing. Contact sales.
 
-Billing/usage policy facts:
-- No long-term contract — cancel anytime from account settings; the plan runs to the end of the
-  already-paid period.
-- Upgrades apply immediately with a prorated charge for the rest of the cycle; downgrades take
-  effect at the next billing cycle. Switching monthly→annual is immediate; annual→monthly takes
-  effect at renewal.
-- Each plan includes a monthly WhatsApp Business API message allowance and a click-to-call minute
-  allowance; AI Assistant usage (one action per question asked) and AI Receptionist minutes are
-  separate monthly allowances that reset each cycle and do not roll over. You're notified before
-  hitting a limit; add-ons (extra AI usage, receptionist minutes, messages, storage) can top up
-  without changing plan.
-- API access is included from the Business plan up (rate-limited on Business, higher limits on
-  Scale, custom on Enterprise).
-- Accepted payment: major credit/debit cards; Enterprise can arrange invoiced billing.
-- Data stays exportable for 60 days after cancelling (sales, customers, credit ledger, bookings, in
-  standard formats). Noxtill never sells customer data.
+Founding Member Offer: customers who choose yearly Professional or Business before January 1, 2027
+get 14 months for the price of 12 on their first term (then renews at the standard yearly price;
+cannot be combined with other offers).
+
+Usage-based add-ons (not included in plan prices):
+- AI Receptionist: $0.35 per AI minute, no monthly fee (Growth and above). Human agent seat
+  $19/month per agent who takes or makes calls; human call minutes $0.03/min in the U.S.; phone
+  numbers $3/month local, $5/month toll-free; Speech & Quality Intelligence $0.05 per analyzed
+  minute (Professional and above).
+- Extra user $10/month; extra location $39/month; extra website $15/month.
+- AI credits $10 per 1,000; extra emails $1 per 1,000; AI Photo Digitizer pages $5 per 100; extra
+  SEO keywords $10 per 100; extra eSign envelopes $1 each. SMS rates vary by country and are shown
+  before sending. People & Payroll is $29 + $6 per employee (Professional and Business).
+
+Billing facts:
+- Cancel anytime. Upgrades apply immediately and are prorated; downgrades take effect at the next
+  renewal.
+- All prices are in USD; sales tax, VAT or GST may apply by location.
+- WhatsApp: the business connects its own WhatsApp Business account; Meta bills its message fees
+  directly and Noxtill adds no markup.
+- Noxtill never takes a percentage of sales; card processing fees are charged by the business's own
+  payment provider.
+- Data can be exported anytime, and for 30 days after cancelling.
+- Refunds: see the Refund & Cancellation Policy at /legal/refunds (it has an eligibility checker).
 Exact, current pricing is always shown at /pricing — point users there for the final word if they
-need to double-check a number.
+need to double-check a number. Legal documents live in the Legal & Trust Center at /trust.
 
 ## 6. INTEGRATIONS
 Noxtill connects with the tools a business already uses rather than requiring a full switch:
@@ -181,7 +201,7 @@ A: Yes — photograph the paper register or ledger and the Photo Digitizer reads
 records for review and confirmation.
 
 Q: What happens to my data if I leave?
-A: Data stays exportable for 60 days after cancelling, in standard formats. Noxtill never sells
+A: Data stays exportable for 30 days after cancelling, in standard formats. Noxtill never sells
 customer data or holds it hostage.
 
 Q: Can Noxtill replace my point of sale and booking software?

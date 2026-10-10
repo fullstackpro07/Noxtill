@@ -87,7 +87,7 @@ function BreadcrumbItem({ crumb, last, linkStyle, currentStyle }: { crumb: Crumb
 }
 
 export const HOME: Crumb = { label: "Home", href: "/" };
-export const LEGAL: Crumb = { label: "Legal", href: "/legal" };
+export const LEGAL: Crumb = { label: "Legal", href: "/trust" };
 export const TRUST: Crumb = { label: "Trust Center", href: "/trust" };
 
 export interface CrossLink {

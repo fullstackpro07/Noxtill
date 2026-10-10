@@ -5,6 +5,6 @@ import { DcHost } from "../../dc-host";
 import type { DcNode } from "../../dc-render";
 import { Logic } from "@/lib/marketing/dc/logic/np/platform--marketing-campaigns";
 
-export function Body_platform_marketing_campaigns({ tree }: { tree: DcNode[] }) {
-  return <DcHost tree={tree} logic={Logic} />;
+export function Body_platform_marketing_campaigns({ tree, props }: { tree: DcNode[]; props?: Record<string, unknown> }) {
+  return <DcHost tree={tree} logic={Logic} props={props} />;
 }

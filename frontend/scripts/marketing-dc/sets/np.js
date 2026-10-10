@@ -1,11 +1,48 @@
 // docs/Noxtill Pages — pages imported from the Claude Design project "Waiting on asset details".
 // Key = route with "/" → "--" (top-level pages have no prefix). Each design carries its own older nav
 // bar and footer; `stripChrome` removes them so every page uses the site-wide SiteHeader/SiteFooter.
+// Pages with no Claude Design file: authored in the sibling pages' layout by
+// scripts/marketing-dc/authored (build.js → pages/<key>.dc.html), converted like the rest.
+/* eslint-disable @typescript-eslint/no-require-imports */
+const authored = Object.fromEntries(
+  require("fs")
+    .readdirSync(require("path").join(__dirname, "../authored/pages"))
+    .filter((f) => f.endsWith(".dc.html"))
+    .map((f) => ["../../frontend/scripts/marketing-dc/authored/pages/" + f, f.replace(".dc.html", "")]),
+);
+
+// Striped boxes the designs left as labelled placeholders ("article image", "team / office photo"):
+// each becomes a real picture that already exists under public/marketing, in the same box.
+const txt = (n) => (typeof n === "string" ? n : n[2].map(txt).join(""));
+function fillPlaceholders(tree, pictures) {
+  let i = 0;
+  const walk = (nodes) =>
+    nodes.map((n) => {
+      if (typeof n === "string") return n;
+      const s = n[1].style || "";
+      if (/repeating-linear-gradient/.test(s) && /monospace/.test(s)) {
+        const pic = pictures[i++];
+        if (!pic) throw new Error("no picture for placeholder: " + txt(n).trim());
+        const size = (/(?:min-)?height:s*[^;]+/.exec(s) || ["height: 100%"])[0];
+        return ["img", { src: "/marketing/" + pic[0], alt: pic[1], loading: "lazy", decoding: "async", style: "display: block; width: 100%; " + (size.startsWith("min-") ? "height: 100%; " : "") + size + "; object-fit: cover; object-position: " + (pic[2] || "center") + ";" }, []];
+      }
+      return [n[0], n[1], walk(n[2]), n[3]];
+    });
+  const out = walk(tree);
+  if (i !== pictures.length) throw new Error("placeholders found: " + i + ", pictures given: " + pictures.length);
+  return out;
+}
+
 module.exports = {
   src: "docs/Noxtill Pages",
   stripChrome: true,
   nxIcons: true,
   logic: true,
+  // links to another design of this set resolve to that page's route without a linkMap entry
+  autoLinks: true,
+  // Five designs (Staff, Social, Unified Inbox, Run Several Locations, Track Customer Credit) set
+  // `body { zoom: 0.75 }` on desktop; the owner wants pages at full size (2026-10-10).
+  noZoom: true,
   // Per-page phone CSS appended after the design's own (scoped to .dcx by the converter).
   mobileCss: {
     // The design keeps three stat columns at every phone width; below 480px they collide.
@@ -16,12 +53,28 @@ module.exports = {
     "platform--inventory": `@media (max-width: 420px) { [data-inscards] { grid-template-columns: minmax(0, 1fr) !important; } }`,
     // The donut + legend row is a fixed 361px wide; the legend drops under the donut on narrow phones.
     "platform--credit": `@media (max-width: 420px) { [style*="width:361px"] { flex-wrap: wrap !important; row-gap: 14px; } }`,
+    // This design shrinks itself to 75% on desktop (body zoom), which left its hero narrower than the
+    // sibling Solutions pages and short of the screen edge; render it at full size like them. The hero
+    // picture is shown whole (the design frame cropped the top pin label). Stacked: gutters on both
+    // sides, picture centred; on phones the third hero stat wraps to its own row without the divider.
+    "solutions--run-several-locations": `@media (min-width: 1101px) { body { zoom: 1; } }
+#rl-hero { aspect-ratio: 1312 / 1199 !important; height: auto !important; }
+@media (max-width: 1100px) { main > section:first-child > [data-two] { padding: 0 28px 40px !important; gap: 12px !important; } #rl-hero { width: min(100%, 640px) !important; justify-self: center; border-radius: 22px; overflow: hidden; } }
+@media (max-width: 640px) { main > section:first-child > [data-two] { padding: 0 20px 32px !important; } #rl-hero { border-radius: 16px; } [data-herostats] { row-gap: 20px !important; } [data-herostats] > li:nth-child(3) { padding-left: 0 !important; border-left: 0 !important; } }`,
   },
   // Review-card portraits: the designs' avatars were blurry 46–200px crops (one a logo, one empty), so
   // they are replaced with AI-generated portraits of people who do not exist
   // (thispersondoesnotexist.com), stored in public/marketing/np/avatars/. Keyed by image-slot id, or by
   // the published picture path for a plain <img>.
   imageOverrides: {
+// slots the designs left empty (blank grey frames) — existing pictures
+    "bk-qr-stand": "416e5d70-33d2-4b95-bdde-b92a819d8f14-mulr3qyb-2qes.png",
+    "bk-reminder-photo": "pasted-1788939737334-0-mttsj3lw-866g.png",
+    "beauty-appt-1": "avatars/ns.jpg",
+    "beauty-appt-2": "avatars/rv.jpg",
+    "beauty-appt-3": "avatars/ps.jpg",
+    "beauty-appt-4": "avatars/so.jpg",
+    "sc-badge-ayesha": "avatars/rv.jpg",
     "ad-25": "avatars/ad.jpg",
     "au-quote-av": "avatars/au.jpg",
     "ec-avatar": "avatars/ec.jpg",
@@ -70,6 +123,8 @@ module.exports = {
     "Collect More Reviews-end.dc.html": "solutions--collect-more-reviews",
     "Know Your Real Profit-end.dc.html": "solutions--know-your-real-profit",
     "Bring Paper Records In-end.dc.html": "solutions--bring-paper-records-in",
+    "Run Several Locations-end.dc.html": "solutions--run-several-locations",
+    "Track Customer Credit-done.dc.html": "solutions--track-customer-credit",
     // Platform modules
     "Platform.dc.html": "platform",
     "Fast Sale-end.dc.html": "platform--fast-sale",
@@ -82,6 +137,10 @@ module.exports = {
     "Marketing and Campaigns-end.dc.html": "platform--marketing-campaigns",
     "Business Listings-End.dc.html": "platform--business-listings",
     "Customer Credit v2-End.dc.html": "platform--credit",
+    ...authored,
+    "Unified Inbox-done.dc.html": "platform--unified-inbox",
+    "Staff and Commissions-Done.dc.html": "platform--staff",
+    "Social and Advertising-DONE.dc.html": "platform--social-media",
     "Profit and Loss-end.dc.html": "platform--profit-analytics",
     "Reports-End.dc.html": "platform--reports",
     "Integrations.dc.html": "platform--integrations",
@@ -109,7 +168,7 @@ module.exports = {
     "API Reference-end.dc.html": "developers--api",
     "Developer Docs-end.dc.html": "developers--docs",
     // Company & product pages
-    "Pricing.dc.html": "pricing",
+    // "Pricing.dc.html" is superseded by docs/Noxtill pricing page built (set "pp") at /pricing.
     "Contact.dc.html": "contact",
     "Book a Demo-end.dc.html": "book-a-demo",
     "Features.dc.html": "features",
@@ -163,8 +222,31 @@ module.exports = {
     "API Reference": "/developers/api",
     "Developer Docs": "/developers/docs",
     "Case Studies": "/resources/case-studies",
+    // older file names of pages rebuilt from newer designs
+    "Social and Advertising-end": "/platform/social-media",
+    "Staff and Commissions-End": "/platform/staff",
+    "Track Customer Credit-end": "/solutions/track-customer-credit",
+    "Unified Inbox-end": "/platform/unified-inbox",
+    "See All 300 Business Types": "/solutions",
+    About: "/about",
+    "Noxtill Homepage": "/",
     Pricing: "/pricing",
     Contact: "/contact",
+  },
+  transform: {
+    resources: (tree) =>
+      fillPlaceholders(tree, [
+        ["np/pasted-1788938876908-0-mtts0npb-403t.png", "Paper records beside a laptop showing the same records in Noxtill"],
+        ["np/pasted-1789717781326-0-mu6nra83-25b2.png", "Checking stock on a phone in a storeroom"],
+        ["np/slots/cc2-khata.webp", "A handwritten customer credit ledger"],
+        ["np/ai-powered-business-health-checker-muloy4wo-ed0o.png", "A business health score on a laptop", "left center"],
+        ["np/assets/noshows/flow.jpg", "Booking, reminder and confirmation steps"],
+        ["hb/slots/ai-card-ai-agents-workflows.webp", "An automation workflow with an approval step", "top"],
+        ["hb/slots/stack-img-2.webp", "The Unified Inbox with conversations from several channels", "top"],
+        ["np/pasted-1788936227392-0-mttqfvbe-r059.png", "A profit overview with margin by product", "top"],
+        ["np/pasted-1788931483207-0-mttnm6op-ksii.png", "Four branches of the same business"],
+      ]),
+    contact: (tree) => fillPlaceholders(tree, [["np/pasted-1789583610843-0-mu4fvjmo-ij65.png", "A small team working together in a shared office"]]),
   },
   logicImports: {
     contact: ['import { submitDemoRequest } from "@/components/site/dc/dc-forms";'],

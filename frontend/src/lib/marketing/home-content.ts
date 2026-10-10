@@ -272,7 +272,7 @@ export const HOME_FAQ_ITEMS: FaqItem[] = [
   {
     question: "How much does Noxtill cost?",
     answer:
-      "Plans start at $49 a month for Starter, $99 for Growth, $199 for Business and $349+ for Enterprise, with two months free on annual billing. Every plan includes the Nightly Close and a 14-day free trial with no card required.",
+      "Plans are $39 a month for Starter, $79 for Growth, $159 for Professional and $319 for Business, or about 25% less billed yearly; Enterprise is custom. Every plan includes the Nightly Close and a 14-day free trial with no card required. See /pricing for current prices.",
   },
   {
     question: "What happens to my data if I leave?",

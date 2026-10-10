@@ -68,8 +68,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   {
     title: "Legal & Trust",
     links: [
-      { label: "Legal Center", href: "/legal" },
-      { label: "Trust Center", href: "/trust" },
+      { label: "Legal & Trust Center", href: "/trust" },
       { label: "Product & Service-Specific Terms", href: "/legal/product-terms" },
       { label: "Privacy Policy", href: "/legal/privacy" },
       { label: "Security", href: "/trust/security" },
@@ -86,12 +85,12 @@ export const FOOTER_BOTTOM: FooterLink[] = [
   { label: "Privacy", href: "/legal/privacy" },
   { label: "Terms of Service", href: "/legal/terms" },
   { label: "Refunds", href: "/legal/refunds" },
-  { label: "Cookie Settings", href: "/legal/cookies#preferences" },
-  { label: "Privacy Choices", href: "/contact#privacy" },
-  { label: "Do Not Sell or Share My Personal Information", href: "/legal/do-not-sell" },
+  { label: "Cookie Settings", href: "/legal/cookies#pc-h" },
+  { label: "Privacy Choices", href: "/privacy/choices" },
+  { label: "Do Not Sell or Share My Personal Information", href: "/privacy/do-not-sell-or-share" },
   { label: "Security", href: "/trust/security" },
   { label: "Accessibility", href: "/legal/accessibility" },
-  { label: "Legal & Trust Center", href: "/legal" },
+  { label: "Legal & Trust Center", href: "/trust" },
 ];
 
 /**

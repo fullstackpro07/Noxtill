@@ -2,7 +2,20 @@ import { Fragment, createElement, isValidElement, type CSSProperties, type React
 import slotsHb from "@/lib/marketing/dc/slots-hb.json";
 import slotsNp from "@/lib/marketing/dc/slots-np.json";
 import nxIcons from "@/lib/marketing/dc/nx-icons.json";
+import dataIcons from "@/lib/marketing/dc/lucide-data-icons.json";
 import { DcImageSlot } from "./dc-image-slot";
+
+type LucideNode = [tag: string, attrs: Record<string, string | number>];
+const DATA_ICONS = dataIcons as unknown as Record<string, LucideNode[]>;
+
+/** A lucide icon as the design's fillIcons() builds it: 24-unit box, 1.75 stroke, fills its host. */
+function lucideSvg(nodes: LucideNode[]): ReactNode {
+  return createElement(
+    "svg",
+    { viewBox: "0 0 24 24", width: "100%", height: "100%", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, focusable: "false" },
+    ...nodes.map(([t, a], i) => createElement(t, { key: i, ...a })),
+  );
+}
 
 /**
  * Renderer for the marketing designs in `docs/Noxtill Header Build/*.dc.html`.
@@ -336,6 +349,18 @@ function renderNode(node: DcNode, vals: DcVals, ctx: DcContext, key: string | nu
 
   if (tag === "image-slot") return <ImageSlot key={key} attrs={props} />;
   if (tag === "nx-icon") return <NxIcon key={key} attrs={props} />;
+  // `<span data-icon="check-circle-2">`: the design fills these with lucide@0.460.0 SVGs at runtime;
+  // rendered here from the same geometry (lucide-data-icons.json, written by the converter).
+  const dataIcon = typeof props["data-icon"] === "string" ? DATA_ICONS[props["data-icon"] as string] : undefined;
+  if (dataIcon && !kids.length) return createElement(tag, { ...props, "aria-hidden": "true" }, lucideSvg(dataIcon));
+
+  // <option> / <title> hold text only: bindings resolve to a plain string (no wrapper span).
+  if (tag === "option" || tag === "title") {
+    const txt = kids
+      .map((c) => (typeof c !== "string" ? "" : c.split(SPLIT_RE).map((p, i) => (i & 1 ? String(resolve(vals, p) ?? "") : p)).join("")))
+      .join("");
+    return createElement(tag, props, txt);
+  }
 
   return createElement(tag, props, ...kids.map((c, j) => renderNode(c, vals, ctx, j)));
 }

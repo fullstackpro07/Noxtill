@@ -5,6 +5,6 @@ import { DcHost } from "../../dc-host";
 import type { DcNode } from "../../dc-render";
 import { Logic } from "@/lib/marketing/dc/logic/np/resources";
 
-export function Body_resources({ tree }: { tree: DcNode[] }) {
-  return <DcHost tree={tree} logic={Logic} />;
+export function Body_resources({ tree, props }: { tree: DcNode[]; props?: Record<string, unknown> }) {
+  return <DcHost tree={tree} logic={Logic} props={props} />;
 }

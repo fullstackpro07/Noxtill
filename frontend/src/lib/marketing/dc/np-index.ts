@@ -13,13 +13,12 @@ import { Body_ai_assistant } from "@/components/site/dc/bodies/np/ai--assistant"
 import { Body_tools_profit_margin_calculator } from "@/components/site/dc/bodies/np/tools--profit-margin-calculator";
 import { Body_resources } from "@/components/site/dc/bodies/np/resources";
 import { Body_help } from "@/components/site/dc/bodies/np/help";
-import { Body_pricing } from "@/components/site/dc/bodies/np/pricing";
 import { Body_contact } from "@/components/site/dc/bodies/np/contact";
 import { Body_features } from "@/components/site/dc/bodies/np/features";
 import { Body_email } from "@/components/site/dc/bodies/np/email";
 import { Body_files } from "@/components/site/dc/bodies/np/files";
 
-export type DcSetPage = { load: () => Promise<{ default: unknown }>; Body?: ComponentType<{ tree: DcNode[] }> };
+export type DcSetPage = { load: () => Promise<{ default: unknown }>; Body?: ComponentType<{ tree: DcNode[]; props?: Record<string, unknown> }> };
 
 /** Pages of the "np" design set (docs/Noxtill Pages), by route key ("a--b" = /a/b). */
 export const NP_PAGES: Record<string, DcSetPage> = {
@@ -49,6 +48,8 @@ export const NP_PAGES: Record<string, DcSetPage> = {
   "solutions--collect-more-reviews": { load: () => import("./pages/np--solutions--collect-more-reviews.json") },
   "solutions--know-your-real-profit": { load: () => import("./pages/np--solutions--know-your-real-profit.json") },
   "solutions--bring-paper-records-in": { load: () => import("./pages/np--solutions--bring-paper-records-in.json") },
+  "solutions--run-several-locations": { load: () => import("./pages/np--solutions--run-several-locations.json") },
+  "solutions--track-customer-credit": { load: () => import("./pages/np--solutions--track-customer-credit.json") },
   "platform": { load: () => import("./pages/np--platform.json"), Body: Body_platform },
   "platform--fast-sale": { load: () => import("./pages/np--platform--fast-sale.json") },
   "platform--orders": { load: () => import("./pages/np--platform--orders.json") },
@@ -60,6 +61,17 @@ export const NP_PAGES: Record<string, DcSetPage> = {
   "platform--marketing-campaigns": { load: () => import("./pages/np--platform--marketing-campaigns.json"), Body: Body_platform_marketing_campaigns },
   "platform--business-listings": { load: () => import("./pages/np--platform--business-listings.json") },
   "platform--credit": { load: () => import("./pages/np--platform--credit.json") },
+  "ai--agents-workflows": { load: () => import("./pages/np--ai--agents-workflows.json") },
+  "ai--reply-drafting": { load: () => import("./pages/np--ai--reply-drafting.json") },
+  "platform--advertising": { load: () => import("./pages/np--platform--advertising.json") },
+  "platform--competitive-insights": { load: () => import("./pages/np--platform--competitive-insights.json") },
+  "platform--dashboard": { load: () => import("./pages/np--platform--dashboard.json") },
+  "platform--delivery-riders": { load: () => import("./pages/np--platform--delivery-riders.json") },
+  "platform--projects-tasks": { load: () => import("./pages/np--platform--projects-tasks.json") },
+  "platform--settings": { load: () => import("./pages/np--platform--settings.json") },
+  "platform--unified-inbox": { load: () => import("./pages/np--platform--unified-inbox.json") },
+  "platform--staff": { load: () => import("./pages/np--platform--staff.json") },
+  "platform--social-media": { load: () => import("./pages/np--platform--social-media.json") },
   "platform--profit-analytics": { load: () => import("./pages/np--platform--profit-analytics.json") },
   "platform--reports": { load: () => import("./pages/np--platform--reports.json"), Body: Body_platform_reports },
   "platform--integrations": { load: () => import("./pages/np--platform--integrations.json"), Body: Body_platform_integrations },
@@ -83,7 +95,6 @@ export const NP_PAGES: Record<string, DcSetPage> = {
   "roadmap": { load: () => import("./pages/np--roadmap.json") },
   "developers--api": { load: () => import("./pages/np--developers--api.json") },
   "developers--docs": { load: () => import("./pages/np--developers--docs.json") },
-  "pricing": { load: () => import("./pages/np--pricing.json"), Body: Body_pricing },
   "contact": { load: () => import("./pages/np--contact.json"), Body: Body_contact },
   "book-a-demo": { load: () => import("./pages/np--book-a-demo.json") },
   "features": { load: () => import("./pages/np--features.json"), Body: Body_features },

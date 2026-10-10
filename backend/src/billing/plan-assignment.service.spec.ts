@@ -28,13 +28,13 @@ describe('PlanAssignmentService (BE-065)', () => {
 
     proPriceId = `price_pro_${Date.now()}`;
     const pro = await prisma.plan.upsert({
-      where: { key: 'pro' },
+      where: { key: 'growth' },
       create: {
-        key: 'pro',
-        name: 'Pro',
-        price: 49,
+        key: 'growth',
+        name: 'Growth',
+        price: 79,
         msgQuota: 5000,
-        userLimit: 15,
+        userLimit: 5,
         stripePriceId: proPriceId,
       },
       update: { stripePriceId: proPriceId, msgQuota: 5000 },

@@ -142,5 +142,77 @@
     "x": 0,
     "y": 0,
     "u": "/marketing/hb/slots/stack-img-7.webp"
+  },
+  "blog-card-ai-receptionist-for-small-business": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/ai-phone-receptionist-for-businesses-24--muiymuyy-79tq.png"
+  },
+  "b1-hero": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/ai-phone-receptionist-for-businesses-24--muiymuyy-79tq.png"
+  },
+  "b1-compliance": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/3a69923f-05cf-4f11-8277-9cac4fba205a-mulq83zq-81kw.png"
+  },
+  "blog-card-small-business-automation-ideas": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-auto.webp"
+  },
+  "b2-hero": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/hb/slots/outcome-screen-auto.webp"
+  },
+  "b2-split": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/assets/noshows/flow.jpg"
+  },
+  "blog-card-all-in-one-business-software-small-business": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/business-software-integrations-mu5yrgs8-5hgf.png"
+  },
+  "b3-hero": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/business-software-integrations-mu5yrgs8-5hgf.png"
+  },
+  "b3-retail": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/pasted-1789728784649-0-mu6ub4ew-7rxo.png"
+  },
+  "b3-hvac": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/pasted-1789098582413-0-mtwf3p9z-hk8t.png"
+  },
+  "b3-salon": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/pasted-1790457847416-0-muiwdguo-pmeo.png"
+  },
+  "b3-auto": {
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "u": "/marketing/np/smarter-auto-business-operations--mu3rc8nr-ytaq.png"
   }
 }

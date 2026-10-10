@@ -29,16 +29,38 @@ export const QUOTA_RESET_QUEUE = 'quota-reset';
 /** Every new signup gets 14 trial days with no card required (auth.service.ts). Falls back to this plan on expiry. */
 export const BASIC_PLAN_KEY = 'basic';
 
-/** Seeded once at boot if missing — key/name/price/msgQuota/userLimit for the 4 canonical plans (spec §10). */
+/**
+ * The plans sold on the pricing page (frontend `/pricing`, docs/Noxtill pricing page built) plus the
+ * free `basic` fallback an expired trial drops to. Seeded at boot (upsert by `key`). `price` is the
+ * month-to-month USD price shown on the pricing page; `userLimit` is that plan's included users.
+ * `msgQuota` is the internal WhatsApp send allowance (the pricing page publishes no figure for it —
+ * Meta bills messages to the business directly), carried over from the tier each plan replaced.
+ */
 export const DEFAULT_PLANS = [
   { key: 'basic', name: 'Basic', price: 0, msgQuota: 200, userLimit: 2 },
-  { key: 'starter', name: 'Starter', price: 19, msgQuota: 1000, userLimit: 5 },
-  { key: 'pro', name: 'Pro', price: 49, msgQuota: 5000, userLimit: 15 },
+  { key: 'starter', name: 'Starter', price: 39, msgQuota: 1000, userLimit: 2 },
+  { key: 'growth', name: 'Growth', price: 79, msgQuota: 5000, userLimit: 5 },
   {
-    key: 'premium',
-    name: 'Premium',
-    price: 99,
+    key: 'professional',
+    name: 'Professional',
+    price: 159,
     msgQuota: 20000,
-    userLimit: 50,
+    userLimit: 15,
+  },
+  {
+    key: 'business',
+    name: 'Business',
+    price: 319,
+    msgQuota: 20000,
+    userLimit: 40,
   },
 ] as const;
+
+/**
+ * Plan keys from the previous lineup (Starter $19 / Pro $49 / Premium $99) → the plan that replaced
+ * each. The seed renames the existing row so businesses already on it stay attached.
+ */
+export const LEGACY_PLAN_KEYS: Record<string, string> = {
+  pro: 'growth',
+  premium: 'professional',
+};

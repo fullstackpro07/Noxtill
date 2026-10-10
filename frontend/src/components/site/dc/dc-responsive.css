@@ -65,6 +65,8 @@
   .dcx .r-top { position: relative !important; top: 0 !important; }
   /* Grids with no column template (one implicit auto column) would grow to their widest content. */
   .dcx [style*="display:grid"]:not([style*="grid-template"]):not([style*="grid-auto-flow"]):not([style*="grid-auto-columns"]) { grid-template-columns: minmax(0, 1fr); }
+  /* Long unbreakable tokens in document text (create/update/delete/…, URLs) wrap instead of widening the page. */
+  .dcx.dcx-own article { overflow-wrap: anywhere; }
   /* Content wrappers drawn as inline-block shrink-to-fit their content instead of the screen. */
   .dcx .r-ib { display: block !important; max-width: 100% !important; }
   .dcx .r-pml { margin-left: 0 !important; }
@@ -122,9 +124,9 @@
   /* Data tables (real or grid-built) scroll sideways instead of wrapping every word. */
   .dcx .r-tbl { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
   .dcx .r-tbl .r-trow { min-width: 600px; }
-  .dcx table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .dcx th, .dcx td { white-space: nowrap; }
-  .dcx tr > :first-child { white-space: normal; min-width: 160px; }
+  .dcx:not(.dcx-own) table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dcx:not(.dcx-own) th, .dcx:not(.dcx-own) td { white-space: nowrap; }
+  .dcx:not(.dcx-own) tr > :first-child { white-space: normal; min-width: 160px; }
 
   /* Photo hero with light text over it: keep the photo, darken it so the text stays readable. */
   .dcx .r-bgd {

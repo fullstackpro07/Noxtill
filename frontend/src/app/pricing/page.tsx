@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { NpPage, npMetadata } from "@/components/site/dc/np-page";
+import { PpPage, ppMetadata } from "@/components/site/dc/pp-page";
 
 export function generateMetadata(): Promise<Metadata> {
-  return npMetadata("pricing");
+  return ppMetadata("pricing", "/pricing");
 }
 
-/** /pricing — docs/Noxtill Pages (imported from Claude Design). */
+/** /pricing — docs/Noxtill pricing page built/Noxtill Pricing.dc.html. */
 export default function Page() {
-  return <NpPage pageKey="pricing" />;
+  return <PpPage pageKey="pricing" />;
 }

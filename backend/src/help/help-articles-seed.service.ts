@@ -92,14 +92,14 @@ const ARTICLES: {
       'Every new business gets a 14-day free trial with no card required. During the trial you have full ' +
       "access at the Basic plan's limits. If the trial ends without upgrading, the account automatically " +
       "drops to Basic-level limits, which in practice means messaging stops once you hit that plan's " +
-      'quota. You can upgrade to Starter, Pro, or Premium at any time from Settings > Billing & Plan, which ' +
+      'quota. You can upgrade to Starter, Growth, Professional, or Business at any time from Settings > Billing & Plan, which ' +
       'starts a secure checkout; your plan and quota update automatically as soon as checkout completes.',
     url: '/help/plans-and-billing',
     steps: [
       'Every new business gets a 14-day free trial with no card required',
       "During the trial you have full access at the Basic plan's limits",
       'If the trial ends without upgrading, the account drops to Basic-level limits automatically',
-      'Upgrade to Starter, Pro, or Premium at any time from Settings > Billing & Plan',
+      'Upgrade to Starter, Growth, Professional, or Business at any time from Settings > Billing & Plan',
       'Your plan and quota update automatically as soon as checkout completes',
     ],
   },

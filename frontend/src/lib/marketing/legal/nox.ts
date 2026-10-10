@@ -295,7 +295,7 @@ const ORGANIZATION = {
   ],
 };
 
-const CRUMB_URLS: Record<string, string> = { Home: "/", Legal: "/legal", "Trust Center": "/trust" };
+const CRUMB_URLS: Record<string, string> = { Home: "/", Legal: "/trust", "Trust Center": "/trust" };
 
 /** JSON-LD graph: page type + BreadcrumbList + Organization, as each design file's <helmet> declares. */
 export function legalJsonLd(route: string, pageType: string = "WebPage"): string {
