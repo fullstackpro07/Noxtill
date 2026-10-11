@@ -67,6 +67,7 @@ export function DcPage({
   ctx,
   withHeader,
   fontClass,
+  fitDesign,
 }: {
   page: DcPageData;
   body?: ReactNode;
@@ -77,6 +78,8 @@ export function DcPage({
   withHeader?: boolean;
   /** Extra font-variable classes for the body wrapper (fonts the design loads). */
   fontClass?: string;
+  /** Scale the 1500px-wide design down to the window on screens narrower than it (dc-responsive.css). */
+  fitDesign?: boolean;
 }) {
   const imports = page.tree.filter(isImport) as [string, Record<string, string>, DcNode[]][];
   const header = withHeader ?? imports.some((n) => n[1].name === "NoxtillHeader");
@@ -86,7 +89,7 @@ export function DcPage({
         <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: ld }} />
       ))}
       {header ? DC_IMPORTS.NoxtillHeader : null}
-      <div className={`dcx ${jakarta.variable}${fontClass ? " " + fontClass : ""}`}>
+      <div className={`dcx ${jakarta.variable}${fontClass ? " " + fontClass : ""}${fitDesign ? " dcx-fit" : ""}`}>
         <style dangerouslySetInnerHTML={{ __html: page.css }} />
         {body ?? renderDc(dcBody(page), {}, ctx)}
       </div>

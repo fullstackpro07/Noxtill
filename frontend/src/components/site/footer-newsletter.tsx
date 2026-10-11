@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { s } from "@/components/site/legal/s";
 import { EMAIL_RE } from "@/components/site/legal/use-legal";
 import { submitLegalForm } from "@/lib/legal-public-api";
+import { FOOTER_SOCIALS } from "@/lib/marketing/footer-links";
 
-/** "Get Noxtill updates" signup — delivered to info@noxtill.com via the public forms endpoint. */
+/** "Get Noxtill updates" card matching the reference footer design. */
 export function FooterNewsletter() {
   const [email, setEmail] = useState("");
   const [hp, setHp] = useState("");
@@ -38,29 +38,22 @@ export function FooterNewsletter() {
       .catch(() => {
         setBusy(false);
         setErr(true);
-        setMsg("We couldn’t sign you up just now — nothing was saved. Please try again.");
+        setMsg("We couldn’t sign you up just now. Please try again.");
       });
   };
 
   return (
-    <>
-      <form onSubmit={subscribe} noValidate style={s("display: flex; flex-wrap: wrap; gap: 0; align-items: stretch;")}>
+    <div className="nxf-newsletter-box">
+      <h3 className="nxf-newsletter-title">Get Noxtill updates</h3>
+      <p className="nxf-newsletter-sub">Product updates, new capabilities and business insights.</p>
+
+      <form onSubmit={subscribe} noValidate className="nxf-newsletter-form">
         <label htmlFor="nxf-email" className="nl-sr">
           Email address
         </label>
-        <div
-          className="nxf-field"
-          style={s(
-            `flex: 1 1 200px; min-width: 0; display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 14px 0 clamp(14px, 2vw, 26px); box-sizing: border-box; border: 1px solid ${tried && !valid ? "#F2A79C" : "rgba(255,255,255,0.16)"}; background: rgba(3,32,25,0.72);`,
-          )}
-        >
-          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9D9D1" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="M3.5 6.5 12 13l8.5-6.5" />
-          </svg>
+        <div className={`nxf-input-wrap ${tried && !valid ? "nxf-input-err" : ""}`}>
           <input
             id="nxf-email"
-            className="nxf-email"
             type="email"
             autoComplete="email"
             placeholder="Enter your email address"
@@ -68,8 +61,11 @@ export function FooterNewsletter() {
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={tried && !valid}
             aria-describedby="nxf-msg"
-            style={s("flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; color: #FFFFFF; font: 400 17px 'Plus Jakarta Sans', sans-serif; padding: 0;")}
+            className="nxf-email-input"
           />
+          <button type="submit" disabled={busy} className="nxf-subscribe-btn">
+            {busy ? "Submitting…" : "Subscribe →"}
+          </button>
         </div>
         <input
           type="text"
@@ -79,22 +75,31 @@ export function FooterNewsletter() {
           aria-hidden="true"
           value={hp}
           onChange={(e) => setHp(e.target.value)}
-          style={s("position: absolute; left: -9999px; width: 1px; height: 1px;")}
+          style={{ position: "absolute", left: "-9999px", width: "1px", height: "1px" }}
         />
-        <button
-          type="submit"
-          disabled={busy}
-          className="nxf-btn h-mint-btn"
-          style={s(
-            "justify-content: center; height: 54px; padding: 0 28px; border: 0; background: linear-gradient(180deg, #2BF0B6 0%, #17D9A0 100%); color: #032019; font: 700 18px 'Plus Jakarta Sans', sans-serif; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;",
-          )}
-        >
-          {busy ? "Submitting…" : "Subscribe →"}
-        </button>
       </form>
-      <p id="nxf-msg" role="status" aria-live="polite" style={s(`margin: 8px 0 0; min-height: 0; font-size: 14px; line-height: 1.5; color: ${err ? "#FFC9C0" : "#B9F5DE"};`)}>
-        {msg}
-      </p>
-    </>
+
+      {msg ? (
+        <p id="nxf-msg" role="status" aria-live="polite" className={`nxf-msg ${err ? "nxf-msg-err" : "nxf-msg-ok"}`}>
+          {msg}
+        </p>
+      ) : null}
+
+      <p className="nxf-privacy-note">No spam. Unsubscribe anytime. We respect your privacy.</p>
+
+      <div className="nxf-socials-row" aria-label="Noxtill on social media">
+        {FOOTER_SOCIALS.map((so) => (
+          <a
+            key={so.name}
+            href={so.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="nxf-social-link"
+          >
+            {so.name}
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }

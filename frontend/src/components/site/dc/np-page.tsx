@@ -38,7 +38,9 @@ export async function NpPage({ pageKey }: { pageKey: string }) {
   const page = await load(pageKey);
   if (!page) notFound();
   const Body = NP_PAGES[pageKey].Body;
-  return <DcPage page={page} withHeader fontClass={npFontVars} body={Body ? <Body tree={dcBody(page)} /> : undefined} ctx={CTX[pageKey]} />;
+  // Industry pages are drawn at a fixed 1500px width with pixel-placed content.
+  const fitDesign = pageKey.startsWith("industries--");
+  return <DcPage page={page} withHeader fontClass={npFontVars} fitDesign={fitDesign} body={Body ? <Body tree={dcBody(page)} /> : undefined} ctx={CTX[pageKey]} />;
 }
 
 /** Route keys under a prefix ("industries" → ["automotive", …]) for generateStaticParams. */
