@@ -78,6 +78,7 @@ import { IntegrationHubModule } from './integrations/hub/hub.module';
 import { IntegrationSyncModule } from './integrations/sync/integration-sync.module';
 import { DeveloperModule } from './developer/developer.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { ToolsModule } from './tools/tools.module';
 
 @Module({
   imports: [
@@ -161,6 +162,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     IntegrationHubModule,
     DeveloperModule,
     AuditLogModule,
+    ToolsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
