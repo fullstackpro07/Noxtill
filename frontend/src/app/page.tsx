@@ -6,7 +6,24 @@ import home from "@/lib/marketing/dc/pages/home.json";
 
 const PAGE = home as unknown as DcPageData;
 
-export const metadata: Metadata = dcMetadata(PAGE);
+export const metadata: Metadata = {
+  ...dcMetadata(PAGE),
+  openGraph: {
+    ...dcMetadata(PAGE).openGraph,
+    images: [
+      {
+        url: "https://noxtill.com/brand/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Noxtill — AI-Powered Business Operating System",
+      },
+    ],
+  },
+  twitter: {
+    ...dcMetadata(PAGE).twitter,
+    images: ["https://noxtill.com/brand/og-image.png"],
+  },
+};
 
 /** Home — docs/Noxtill Header Build/Noxtill Home.dc.html, with the site-wide footer. */
 export default function HomePage() {

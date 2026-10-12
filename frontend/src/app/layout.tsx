@@ -25,8 +25,39 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://noxtill.com"),
   title: "Noxtill",
   description: "The WhatsApp-first business platform for local businesses.",
+  openGraph: {
+    type: "website",
+    siteName: "Noxtill",
+    locale: "en_US",
+    url: "https://noxtill.com",
+    title: "Noxtill — AI-Powered Business Operating System",
+    description: "Run sales, customers, bookings, inventory, payments, marketing, staff and AI workflows in one connected business management platform with Noxtill.",
+    images: [
+      {
+        url: "https://noxtill.com/brand/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Noxtill — AI-Powered Business Operating System",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Noxtill — AI-Powered Business Operating System",
+    description: "Run sales, customers, bookings, inventory, payments, marketing, staff and AI workflows in one connected business management platform with Noxtill.",
+    images: ["https://noxtill.com/brand/og-image.png"],
+  },
+  icons: {
+    icon: [
+      { url: "/brand/favicon.jpeg" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    shortcut: "/brand/favicon.jpeg",
+    apple: "/apple-icon.png",
+  },
 };
 
 // Runs before paint to avoid a flash of the wrong theme/text-direction —

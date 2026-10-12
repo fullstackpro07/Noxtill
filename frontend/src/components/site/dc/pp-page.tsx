@@ -41,14 +41,34 @@ export async function ppMetadata(key: string, route: string): Promise<Metadata> 
   return { ...md, alternates: { canonical: url }, openGraph: { ...md.openGraph, url } };
 }
 
-/** A document page: the same title / description / canonical its design wrapper file declares. */
 export function legalMetadata(doc: LegalDoc): Metadata {
   const url = "https://noxtill.com" + doc.route;
   return {
     title: `${doc.title} | Noxtill Legal & Trust Center`,
     description: doc.desc,
     alternates: { canonical: url },
-    openGraph: { title: `${doc.title} | Noxtill`, description: doc.desc, url },
+    openGraph: {
+      type: "article",
+      siteName: "Noxtill",
+      locale: "en_US",
+      title: `${doc.title} | Noxtill`,
+      description: doc.desc,
+      url,
+      images: [
+        {
+          url: "https://noxtill.com/brand/og-image.png",
+          width: 1200,
+          height: 630,
+          alt: `${doc.title} | Noxtill Legal & Trust Center`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${doc.title} | Noxtill`,
+      description: doc.desc,
+      images: ["https://noxtill.com/brand/og-image.png"],
+    },
   };
 }
 

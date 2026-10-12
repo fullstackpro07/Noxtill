@@ -8,30 +8,65 @@ import { renderDc, type DcContext, type DcNode, type DcPageData } from "./dc-ren
 import "./dc.css";
 import "./dc-responsive.css";
 
+const DEFAULT_OG_IMAGE = "https://noxtill.com/brand/og-image.png";
+
+function resolveOgImageUrl(rawUrl?: string): string {
+  if (!rawUrl) return DEFAULT_OG_IMAGE;
+  if (rawUrl.startsWith("http://localhost:") || rawUrl.startsWith("https://localhost:")) {
+    try {
+      const u = new URL(rawUrl);
+      return `https://noxtill.com${u.pathname}${u.search}`;
+    } catch {
+      return DEFAULT_OG_IMAGE;
+    }
+  }
+  if (rawUrl.startsWith("/")) {
+    return `https://noxtill.com${rawUrl}`;
+  }
+  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+    return rawUrl;
+  }
+  return DEFAULT_OG_IMAGE;
+}
+
 /** Next metadata from a design's <helmet> (title, description, canonical, robots, Open Graph, Twitter). */
 export function dcMetadata(page: DcPageData): Metadata {
   const meta = new Map((page.head.meta ?? []).map(([, k, v]) => [k, v]));
   const robots = meta.get("robots");
+  const description =
+    meta.get("description") ||
+    (page.head.title?.includes("Pricing")
+      ? "Simple, transparent pricing for Noxtill's all-in-one business software. 14-day free trial, no credit card required."
+      : undefined);
+  const ogImgUrl = resolveOgImageUrl(meta.get("og:image"));
+
   return {
     title: { absolute: page.head.title ?? "Noxtill" },
-    description: meta.get("description"),
+    description,
     alternates: page.head.canonical ? { canonical: page.head.canonical } : undefined,
     robots: robots ?? undefined,
     openGraph: {
       type: (meta.get("og:type") as "website" | "article" | undefined) ?? "website",
-      siteName: meta.get("og:site_name"),
-      locale: meta.get("og:locale"),
+      siteName: meta.get("og:site_name") ?? "Noxtill",
+      locale: meta.get("og:locale") ?? "en_US",
       url: meta.get("og:url"),
-      title: meta.get("og:title"),
-      description: meta.get("og:description"),
-      images: meta.get("og:image") ? [{ url: meta.get("og:image")!, alt: meta.get("og:image:alt") }] : undefined,
+      title: meta.get("og:title") ?? page.head.title,
+      description: meta.get("og:description") ?? description,
+      images: [
+        {
+          url: ogImgUrl,
+          width: 1200,
+          height: 630,
+          alt: meta.get("og:image:alt") ?? meta.get("og:title") ?? page.head.title ?? "Noxtill",
+        },
+      ],
       ...(meta.get("article:published_time") ? { publishedTime: meta.get("article:published_time"), modifiedTime: meta.get("article:modified_time") } : {}),
     },
     twitter: {
       card: (meta.get("twitter:card") as "summary_large_image" | undefined) ?? "summary_large_image",
-      title: meta.get("twitter:title"),
-      description: meta.get("twitter:description"),
-      images: meta.get("twitter:image") ? [meta.get("twitter:image")!] : undefined,
+      title: meta.get("twitter:title") ?? meta.get("og:title") ?? page.head.title,
+      description: meta.get("twitter:description") ?? meta.get("og:description") ?? description,
+      images: [ogImgUrl],
     },
   };
 }
