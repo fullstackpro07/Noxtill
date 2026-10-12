@@ -1,7 +1,12 @@
 import { Fmt } from '../payments/pay-vm';
 import { PpDataService, Inp, Data } from './pp-data.service';
 import { PpContextService } from './pp-context.service';
-import { defaultPpConfig, mergePpConfig, monthlyTax, TaxTable } from './pp.constants';
+import {
+  defaultPpConfig,
+  mergePpConfig,
+  monthlyTax,
+  TaxTable,
+} from './pp.constants';
 
 const table: TaxTable = {
   key: 'Test',
@@ -40,7 +45,10 @@ const inp = (o: Partial<Inp> = {}): Inp => ({
 
 describe('People & Payroll engine', () => {
   const X = new PpDataService({} as PpContextService);
-  const d = { cfg: defaultPpConfig(), fmt: new Fmt('PKR', 'UTC') } as unknown as Data;
+  const d = {
+    cfg: defaultPpConfig(),
+    fmt: new Fmt('PKR', 'UTC'),
+  } as unknown as Data;
 
   it('applies the configured progressive table per month', () => {
     expect(monthlyTax(table, 40000, false)).toBe(0);
@@ -49,7 +57,25 @@ describe('People & Payroll engine', () => {
   });
 
   it('calculates gross, pre-tax rules, tax and net from inputs only', () => {
-    const c = X.calc(d, inp({ rules: [{ id: 'r', name: 'PF', type: 'Deduction + employer contribution', pp: 'Pre-tax', method: 'Percentage of base', ver: 1, ee: 5, er: 5, fin: null }] }), table);
+    const c = X.calc(
+      d,
+      inp({
+        rules: [
+          {
+            id: 'r',
+            name: 'PF',
+            type: 'Deduction + employer contribution',
+            pp: 'Pre-tax',
+            method: 'Percentage of base',
+            ver: 1,
+            ee: 5,
+            er: 5,
+            fin: null,
+          },
+        ],
+      }),
+      table,
+    );
     expect(c.gross).toBe(150000);
     expect(c.pre).toBe(7500);
     expect(c.tax).toBe(8875);
@@ -59,14 +85,28 @@ describe('People & Payroll engine', () => {
   });
 
   it('deducts unpaid leave and recovers only advances that fit', () => {
-    const c = X.calc(d, inp({ unpaid: 2, advances: [{ id: 'a1', amount: 10000 }, { id: 'a2', amount: 999999 }] }), table);
+    const c = X.calc(
+      d,
+      inp({
+        unpaid: 2,
+        advances: [
+          { id: 'a1', amount: 10000 },
+          { id: 'a2', amount: 999999 },
+        ],
+      }),
+      table,
+    );
     expect(c.leaveImp).toBeCloseTo(-11538.46, 2);
     expect(c.advIds).toEqual(['a1']);
     expect(c.adv).toBe(10000);
   });
 
   it('pays hourly staff regular + overtime at the branch multiplier', () => {
-    const c = X.calc(d, inp({ basis: 'Hourly', rate: 500, hours: 170, ot: 10, taxp: 'Exempt' }), table);
+    const c = X.calc(
+      d,
+      inp({ basis: 'Hourly', rate: 500, hours: 170, ot: 10, taxp: 'Exempt' }),
+      table,
+    );
     expect(c.regular).toBe(80000);
     expect(c.ot).toBe(7500);
     expect(c.tax).toBe(0);
