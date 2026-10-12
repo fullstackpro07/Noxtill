@@ -13,7 +13,7 @@ import {
   TAG_RULES_LOCAL_HOUR,
   VIP_LIFETIME_SPEND_THRESHOLD,
 } from './crm-jobs.constants';
-import { ActivityEventType } from '@prisma/client';
+import { ActivityEventType, Prisma } from '@prisma/client';
 
 interface CrmTickJobData {
   /** ISO timestamp override, used only by tests to make "current local hour" deterministic. */
@@ -111,46 +111,67 @@ export class CrmJobsProcessor extends WorkerHost {
           tags.length !== currentTags.length ||
           tags.some((t, i) => t !== currentTags[i])
         ) {
-          await this.prisma.customer.update({
-            where: { id: customer.id },
-            data: { tags },
-          });
+          try {
+            await this.prisma.customer.update({
+              where: { id: customer.id },
+              data: { tags },
+            });
+          } catch (error: unknown) {
+            // Customer record may have been deleted concurrently
+            if (
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === 'P2025'
+            ) {
+              continue;
+            }
+            throw error;
+          }
         }
 
         // Automations engine (UPD-BE-028) lapsed_customer trigger — only on the transition into
         // Lapsed, not every hourly tick a customer remains lapsed.
         if (newlyLapsed) {
-          const event = await this.prisma.activityEvent.create({
-            data: {
-              businessId: business.id,
-              type: ActivityEventType.customer_lapsed,
-              description: `${customer.name} hasn't visited in ${LAPSED_DAYS}+ days`,
-              entityType: 'Customer',
-              entityId: customer.id,
-            },
-          });
-          void this.workflowTrigger
-            .dispatch(business.id, event.type, {
-              description: event.description,
-              entityType: event.entityType,
-              entityId: event.entityId,
-            })
-            .catch((error: Error) =>
-              this.logger.warn(
-                `Workflow dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
-              ),
-            );
-          void this.outboundWebhookDispatch
-            .dispatch(business.id, event.type, {
-              description: event.description,
-              entityType: event.entityType,
-              entityId: event.entityId,
-            })
-            .catch((error: Error) =>
-              this.logger.warn(
-                `Outbound webhook dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
-              ),
-            );
+          try {
+            const event = await this.prisma.activityEvent.create({
+              data: {
+                businessId: business.id,
+                type: ActivityEventType.customer_lapsed,
+                description: `${customer.name} hasn't visited in ${LAPSED_DAYS}+ days`,
+                entityType: 'Customer',
+                entityId: customer.id,
+              },
+            });
+            void this.workflowTrigger
+              .dispatch(business.id, event.type, {
+                description: event.description,
+                entityType: event.entityType,
+                entityId: event.entityId,
+              })
+              .catch((error: Error) =>
+                this.logger.warn(
+                  `Workflow dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
+                ),
+              );
+            void this.outboundWebhookDispatch
+              .dispatch(business.id, event.type, {
+                description: event.description,
+                entityType: event.entityType,
+                entityId: event.entityId,
+              })
+              .catch((error: Error) =>
+                this.logger.warn(
+                  `Outbound webhook dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
+                ),
+              );
+          } catch (error: unknown) {
+            if (
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              (error.code === 'P2025' || error.code === 'P2003')
+            ) {
+              continue;
+            }
+            throw error;
+          }
         }
       }
     }
@@ -204,37 +225,47 @@ export class CrmJobsProcessor extends WorkerHost {
 
         // Automations engine (UPD-BE-028) birthday trigger — recorded regardless of whether the
         // built-in greeting send above succeeded, since it's a real fact about the customer.
-        const event = await this.prisma.activityEvent.create({
-          data: {
-            businessId: business.id,
-            type: ActivityEventType.birthday,
-            description: `${customer.name}'s birthday`,
-            entityType: 'Customer',
-            entityId: customer.id,
-          },
-        });
-        void this.workflowTrigger
-          .dispatch(business.id, event.type, {
-            description: event.description,
-            entityType: event.entityType,
-            entityId: event.entityId,
-          })
-          .catch((error: Error) =>
-            this.logger.warn(
-              `Workflow dispatch failed for birthday event ${event.id}: ${error.message}`,
-            ),
-          );
-        void this.outboundWebhookDispatch
-          .dispatch(business.id, event.type, {
-            description: event.description,
-            entityType: event.entityType,
-            entityId: event.entityId,
-          })
-          .catch((error: Error) =>
-            this.logger.warn(
-              `Outbound webhook dispatch failed for birthday event ${event.id}: ${error.message}`,
-            ),
-          );
+        try {
+          const event = await this.prisma.activityEvent.create({
+            data: {
+              businessId: business.id,
+              type: ActivityEventType.birthday,
+              description: `${customer.name}'s birthday`,
+              entityType: 'Customer',
+              entityId: customer.id,
+            },
+          });
+          void this.workflowTrigger
+            .dispatch(business.id, event.type, {
+              description: event.description,
+              entityType: event.entityType,
+              entityId: event.entityId,
+            })
+            .catch((error: Error) =>
+              this.logger.warn(
+                `Workflow dispatch failed for birthday event ${event.id}: ${error.message}`,
+              ),
+            );
+          void this.outboundWebhookDispatch
+            .dispatch(business.id, event.type, {
+              description: event.description,
+              entityType: event.entityType,
+              entityId: event.entityId,
+            })
+            .catch((error: Error) =>
+              this.logger.warn(
+                `Outbound webhook dispatch failed for birthday event ${event.id}: ${error.message}`,
+              ),
+            );
+        } catch (error: unknown) {
+          if (
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            (error.code === 'P2025' || error.code === 'P2003')
+          ) {
+            continue;
+          }
+          throw error;
+        }
       }
     }
 
