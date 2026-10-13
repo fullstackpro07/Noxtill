@@ -186,6 +186,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'CompetitiveSettings',
   'PhoneNumber',
   'PhoneCall',
+  'VoiceCallTransfer',
   'VoiceHumanAgentProfile',
   'VoiceHumanAgentAssignment',
   'VoiceAiAgent',

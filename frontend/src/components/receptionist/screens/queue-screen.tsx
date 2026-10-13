@@ -142,6 +142,10 @@ function Queue() {
   const maxTurns = rx.insights?.limits.maxCallTurns ?? 8;
 
   const followUps = rx.followUps;
+  const queueItemsById = useMemo(
+    () => new Map((rx.queue?.items ?? []).map((item) => [item.id, item])),
+    [rx.queue?.items],
+  );
   const oldest = followUps[0];
   const unassigned = followUps.filter((c) => !c.assignedToUserId);
   const offered = followUps.filter((c) => c.callbackRequestedAt);
@@ -347,6 +351,9 @@ function Queue() {
             </button>
           ))}
         </div>
+        <div className="mt-3 rounded-[10px] border border-[#E6E8EC] bg-[#FCFCFD] px-3 py-2.5 text-[11.5px] leading-5 text-[#667085]">
+          Inbound calls use the configured AI or IVR path. When a caller needs a person, routing tries an available human; if nobody can take it, the call becomes a human follow-up. This queue is for follow-up work, not callers waiting live on hold.
+        </div>
       </Card>
 
       <Card overflow>
@@ -404,26 +411,40 @@ function Queue() {
           title="Awaiting follow-up"
           sub={est != null ? `Calls like these have typically been handled in about ${est} min` : "No estimate yet — it needs a few handled calls to average"}
           right={
-            followUps.length > 0 ? (
-              <button
-                type="button"
-                onClick={() =>
-                  openConfirm({
-                    title: `Mark all ${followUps.length} as handled?`,
-                    tone: "amber",
-                    icon: "circle-check",
-                    body: "Every waiting call leaves the queue and is marked handled. The calls, transcripts and recordings stay in Call History.",
-                    rows: [{ label: "Calls affected", value: String(followUps.length) }],
-                    primary: "Mark all handled",
-                    cancel: "Keep them",
-                    onConfirm: () => rx.actions.clearQueue(),
-                  })
-                }
-                className="flex h-[30px] cursor-pointer items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold hover:bg-[#F1F3F6]"
-              >
-                Clear queue
-              </button>
-            ) : undefined
+            <div className="flex items-center gap-2">
+              {rx.queue?.queueId ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const callId = await rx.actions.takeNext(rx.queue!.queueId!);
+                    if (callId) openCall(callId);
+                  }}
+                  className="flex h-[30px] cursor-pointer items-center rounded-[8px] border-0 bg-[#16A34A] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]"
+                >
+                  Take next
+                </button>
+              ) : null}
+              {followUps.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openConfirm({
+                      title: `Mark all ${followUps.length} as handled?`,
+                      tone: "amber",
+                      icon: "circle-check",
+                      body: "Every waiting call leaves the queue and is marked handled. The calls, transcripts and recordings stay in Call History.",
+                      rows: [{ label: "Calls affected", value: String(followUps.length) }],
+                      primary: "Mark all handled",
+                      cancel: "Keep them",
+                      onConfirm: () => rx.actions.clearQueue(),
+                    })
+                  }
+                  className="flex h-[30px] cursor-pointer items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold hover:bg-[#F1F3F6]"
+                >
+                  Clear queue
+                </button>
+              ) : null}
+            </div>
           }
         />
         {followUps.length === 0 ? (
@@ -431,6 +452,7 @@ function Queue() {
         ) : (
           followUps.map((c, i) => {
             const said = firstCallerLine(c);
+            const queueItem = queueItemsById.get(c.id);
             return (
               <div key={c.id} onClick={() => openCall(c.id)} className="flex cursor-pointer flex-wrap items-center gap-3 px-[18px] py-3.5 hover:bg-[#FAFBFC]" style={{ borderTop: i === 0 ? "none" : "1px solid #F3F4F7" }}>
                 <div className="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-[#FEF3C7] text-[12.5px] font-extrabold text-[#B45309]">{i + 1}</div>
@@ -438,6 +460,9 @@ function Queue() {
                   <div className="text-[12.5px] font-bold">{callerName(c)}</div>
                   <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
                     {c.fromNumber} · {fmtWhen(c.startedAt, rx.timezone, rx.today, c.localDay)} · {c.assignedToName ? `owner ${c.assignedToName}` : "unassigned"}
+                  </div>
+                  <div className="mt-1 text-[10px] text-[#7A8798]">
+                    Priority {queueItem?.priority === "high" ? "High · missed call" : "Normal"} · Skill {queueItem?.requiredSkill ?? "Not classified"} · Language {queueItem?.language ?? "Not captured"}
                   </div>
                 </div>
                 <div className="min-w-[140px] flex-[1_1_160px] text-[11.5px] text-[#45505F]">

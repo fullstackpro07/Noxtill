@@ -16,8 +16,29 @@ export function useCallActions() {
   const rx = useRx();
   const openConfirm = useRxStore((s) => s.openConfirm);
   const openPanel = useRxStore((s) => s.openPanel);
+  const closeOverlays = useRxStore((s) => s.closeOverlays);
   const router = useRouter();
   const transferConfigured = !!rx.insights?.transferConfigured;
+
+  const confirmTransfer = (c: EnrichedCall, mode: "cold" | "warm") => {
+    const warm = mode === "warm";
+    openConfirm({
+      title: `${warm ? "Warm" : "Cold"} transfer this call?`,
+      tone: "amber",
+      icon: "phone-forwarded",
+      body: warm
+        ? "The person you call will hear a private caller-context briefing before Twilio connects them. The caller stays on the line during that briefing."
+        : "Twilio will call the destination and connect it to the caller without a private context briefing.",
+      rows: [
+        { label: "Caller", value: `${callerName(c)} · ${c.fromNumber}` },
+        { label: "Rings", value: rx.settings?.transferNumber ?? "Your server's transfer number" },
+        { label: "State after request", value: "Pending provider confirmation" },
+      ],
+      primary: `Start ${mode} transfer`,
+      cancel: "Keep the call",
+      onConfirm: () => rx.actions.transfer(c.id, mode),
+    });
+  };
 
   /** Put a LIVE call through to a person — a real telephony-provider action. */
   const transfer = (c: EnrichedCall) => {
@@ -37,18 +58,32 @@ export function useCallActions() {
       });
       return;
     }
-    openConfirm({
-      title: "Transfer this call to a person?",
-      tone: "amber",
-      icon: "phone-forwarded",
-      body: "The telephony provider is asked to put the caller through to your transfer number. The AI stops handling the call, and the call outcome is logged as a transfer.",
+    openPanel({
+      kicker: "Transfer mode",
+      title: `Choose how to transfer ${callerName(c)}`,
+      badge: "Live call",
+      badgeTone: "blue",
       rows: [
-        { label: "Caller", value: `${callerName(c)} · ${c.fromNumber}` },
-        { label: "Rings", value: rx.settings?.transferNumber ?? "Your server's transfer number" },
+        { label: "Caller", value: c.fromNumber },
+        { label: "Destination", value: rx.settings?.transferNumber ?? "Your server's transfer number" },
       ],
-      primary: "Transfer now",
-      cancel: "Keep with the AI",
-      onConfirm: () => rx.actions.transfer(c.id),
+      body: (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => { closeOverlays(); confirmTransfer(c, "cold"); }} className="h-9 rounded-[9px] border border-[#D5DAE2] bg-white px-3 text-[12px] font-bold hover:bg-[#F1F3F6]">
+            Cold transfer
+          </button>
+          <button type="button" onClick={() => { closeOverlays(); confirmTransfer(c, "warm"); }} className="h-9 rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]">
+            Warm transfer with briefing
+          </button>
+        </div>
+      ),
+      bulletsTitle: "What happens",
+      bullets: [
+        "Both options use the configured transfer number and are executed by Twilio.",
+        "Warm transfer plays the latest saved caller context privately to the called party before connection.",
+        "The live-call legs show Pending until Twilio's final transfer callback confirms the result.",
+      ],
+      secondary: "Close",
     });
   };
 

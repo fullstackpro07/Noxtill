@@ -362,8 +362,25 @@ export function summariseCall(callId: string): Promise<{ id: string; summary: st
 /* ───────────── AI Phone, full: live-call controls, notes, recordings ───────────── */
 
 /** Requests a live-call transfer; the provider callback records the outcome once the callee answers. */
-export function transferLiveCall(callId: string, toNumber?: string): Promise<{ id: string; transferRequested: boolean }> {
-  return apiFetch(`/voice/calls/${callId}/transfer`, { method: "POST", body: JSON.stringify(toNumber ? { toNumber } : {}) });
+export function transferLiveCall(callId: string, mode: "cold" | "warm" = "cold"): Promise<{ id: string; transferRequested: boolean; transferId: string; attemptNumber: number; mode: "cold" | "warm"; status: "pending" }> {
+  return apiFetch(`/voice/calls/${callId}/transfer`, { method: "POST", body: JSON.stringify({ mode }) });
+}
+
+export interface VoiceCallLeg {
+  id: string;
+  role: "caller" | "human-agent" | "transfer-destination";
+  label: string;
+  providerCallSid: string | null;
+  status: string;
+  providerStatus: string | null;
+  confirmation: "pending" | "provider-confirmed" | "failed";
+  attemptNumber?: number;
+  mode?: string;
+  startedAt: string;
+}
+
+export function fetchCallLegs(callId: string): Promise<{ callId: string; legs: VoiceCallLeg[] }> {
+  return apiFetch(`/voice/calls/${callId}/legs`);
 }
 
 /** Ends a call that is genuinely still live (a real telephony-provider action, not a local flag). */

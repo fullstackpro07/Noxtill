@@ -1042,7 +1042,12 @@ export class VoiceController {
     @Param('id') id: string,
     @Body() dto: TransferLiveCallDto,
   ) {
-    return this.voiceWorkspace.transfer(user.businessId, id, dto);
+    return this.voiceWorkspace.transfer(user.businessId, user.sub, id, dto);
+  }
+
+  @Get('voice/calls/:id/legs')
+  callLegs(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.voiceWorkspace.listLegs(user.businessId, id);
   }
 
   /** AI Phone, full — ends a call that is genuinely still live. */
@@ -1207,8 +1212,17 @@ export class VoiceController {
 
   /** Call Queue (UPD-BE-129) — registered before nothing dynamic collides; every segment here is static. */
   @Get('voice/queue')
-  listQueue() {
-    return this.voiceQueue.list();
+  listQueue(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceQueue.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/queues/:id/take-next')
+  takeNextQueueItem(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') queueId: string,
+  ) {
+    return this.voiceQueue.takeNext(user.businessId, queueId, user.sub);
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -1322,18 +1336,81 @@ export class VoiceController {
     @Headers('x-twilio-signature') signature?: string,
   ) {
     this.verifySignature(req, signature);
-    const body = req.body as { CallSid: string; DialCallStatus: string };
+    const body = req.body as {
+      CallSid: string;
+      DialCallSid?: string;
+      DialCallStatus: string;
+    };
     const rawAttemptNumber = req.query.attemptNumber;
     const attemptNumber =
       typeof rawAttemptNumber === 'string' && /^\d+$/.test(rawAttemptNumber)
         ? Number(rawAttemptNumber)
         : undefined;
+    const rawTransferAttemptNumber = req.query.transferAttemptNumber;
+    const transferAttemptNumber =
+      typeof rawTransferAttemptNumber === 'string' &&
+      /^\d+$/.test(rawTransferAttemptNumber)
+        ? Number(rawTransferAttemptNumber)
+        : undefined;
     const xml = await this.voiceCall.handleTransferResult(
       body.CallSid,
       body.DialCallStatus,
       attemptNumber,
+      transferAttemptNumber,
+      body.DialCallSid,
     );
     res.type('text/xml').send(xml);
+  }
+
+  /** Called by Twilio on the called party leg before a warm transfer is bridged. */
+  @Public()
+  @Post('voice/webhook/transfer-screening')
+  @HttpCode(200)
+  async transferScreening(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const rawAttempt =
+      typeof req.query.attemptNumber === 'string'
+        ? req.query.attemptNumber
+        : '';
+    const attemptNumber = /^\d+$/.test(rawAttempt) ? Number(rawAttempt) : 0;
+    const body = req.body as { CallSid?: string };
+    const xml = await this.voiceCall.transferScreening(
+      callId,
+      attemptNumber,
+      body.CallSid,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** Stores Twilio progress for the transfer destination leg. */
+  @Public()
+  @Post('voice/webhook/transfer-status')
+  @HttpCode(200)
+  async transferStatus(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const rawAttempt =
+      typeof req.query.attemptNumber === 'string'
+        ? req.query.attemptNumber
+        : '';
+    const attemptNumber = /^\d+$/.test(rawAttempt) ? Number(rawAttempt) : 0;
+    const body = req.body as { CallStatus?: string; CallSid?: string };
+    await this.voiceCall.recordTransferProviderStatus(
+      callId,
+      attemptNumber,
+      body.CallStatus ?? '',
+      body.CallSid,
+    );
+    res.status(200).send('received');
   }
 
   /** Capacity signal from the human callee leg; parentCallSid is bound into the signed callback URL. */

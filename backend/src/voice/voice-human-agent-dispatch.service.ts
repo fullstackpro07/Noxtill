@@ -139,8 +139,22 @@ export class VoiceHumanAgentDispatchService {
             },
             _count: { _all: true },
           });
+          const outboundLoads = await tx.voiceOutboundDialAttempt.groupBy({
+            by: ['agentProfileId'],
+            where: {
+              businessId,
+              status: { in: ['agent_ringing', 'customer_ringing'] },
+            },
+            _count: { _all: true },
+          });
           const loadByProfile = new Map(
             loads.map((load) => [load.profileId, load._count._all]),
+          );
+          const outboundLoadByProfile = new Map(
+            outboundLoads.map((load) => [
+              load.agentProfileId,
+              load._count._all,
+            ]),
           );
           const ordered = [...candidates].sort((a, b) => {
             const aMatchesTopic = this.hasTopicSkill(
@@ -153,8 +167,12 @@ export class VoiceHumanAgentDispatchService {
             );
             if (aMatchesTopic !== bMatchesTopic) return aMatchesTopic ? -1 : 1;
 
-            const aLoad = loadByProfile.get(a.id) ?? 0;
-            const bLoad = loadByProfile.get(b.id) ?? 0;
+            const aLoad =
+              (loadByProfile.get(a.id) ?? 0) +
+              (outboundLoadByProfile.get(a.id) ?? 0);
+            const bLoad =
+              (loadByProfile.get(b.id) ?? 0) +
+              (outboundLoadByProfile.get(b.id) ?? 0);
             const utilization =
               aLoad / a.maxConcurrentCalls - bLoad / b.maxConcurrentCalls;
             return (
@@ -206,7 +224,20 @@ export class VoiceHumanAgentDispatchService {
                 OR: [{ status: 'connected' }, { expiresAt: { gt: now } }],
               },
             });
-            if (activeAssignments >= profile.maxConcurrentCalls) continue;
+            const activeOutboundAttempts =
+              await tx.voiceOutboundDialAttempt.count({
+                where: {
+                  businessId,
+                  agentProfileId: profile.id,
+                  status: { in: ['agent_ringing', 'customer_ringing'] },
+                },
+              });
+            if (
+              activeAssignments + activeOutboundAttempts >=
+              profile.maxConcurrentCalls
+            ) {
+              continue;
+            }
 
             const assignment = await tx.voiceHumanAgentAssignment.create({
               data: {

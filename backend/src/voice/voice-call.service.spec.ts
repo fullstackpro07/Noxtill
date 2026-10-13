@@ -14,7 +14,9 @@ import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.ser
 import { AUTOMATED_ASSISTANT_DISCLOSURE_TEXT } from './voice.constants';
 import {
   AppointmentSource,
+  PhoneCallStatus,
   PhoneCallOutcome,
+  Prisma,
   Role,
   VoiceAgentPresenceStatus,
 } from '@prisma/client';
@@ -164,6 +166,68 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
   });
 
   describe('handleIncoming()', () => {
+    it('screens a warm transfer on the called leg and confirms it only from the provider callback', async () => {
+      const call = await prisma.phoneCall.create({
+        data: {
+          businessId,
+          callSid: `CA-warm-transfer-${randomUUID()}`,
+          fromNumber: '+14155550111',
+          status: PhoneCallStatus.in_progress,
+          callerName: 'Taylor Customer',
+          transcript: [
+            {
+              speaker: 'caller',
+              text: 'I need to move my appointment to Friday',
+              at: new Date().toISOString(),
+            },
+          ] as Prisma.InputJsonValue,
+        },
+      });
+      const transfer = await prisma.voiceCallTransfer.create({
+        data: {
+          businessId,
+          callId: call.id,
+          attemptNumber: 1,
+          mode: 'warm',
+          destination: '+14155550222',
+          status: 'pending',
+        },
+      });
+
+      const screeningXml = await service.transferScreening(
+        call.id,
+        transfer.attemptNumber,
+        'CA-destination-leg',
+      );
+      expect(screeningXml).toContain('Warm transfer from Noxtill.');
+      expect(screeningXml).toContain('Caller name: Taylor Customer.');
+      expect(screeningXml).toContain(
+        'Caller context: I need to move my appointment to Friday',
+      );
+
+      const screened = await prisma.voiceCallTransfer.findUniqueOrThrow({
+        where: { id: transfer.id },
+      });
+      expect(screened).toMatchObject({
+        status: 'pending',
+        providerStatus: 'warm_screening',
+        providerCallSid: 'CA-destination-leg',
+      });
+
+      await service.handleTransferResult(
+        call.callSid,
+        'completed',
+        undefined,
+        transfer.attemptNumber,
+        'CA-destination-leg',
+      );
+      const confirmed = await prisma.voiceCallTransfer.findUniqueOrThrow({
+        where: { id: transfer.id },
+      });
+      expect(confirmed.status).toBe('provider_confirmed');
+      expect(confirmed.confirmedAt).not.toBeNull();
+    });
+
     it('rejects a call to an unrecognized number without creating a PhoneCall row', async () => {
       const xml = await service.handleIncoming(
         'CA-unknown-number',

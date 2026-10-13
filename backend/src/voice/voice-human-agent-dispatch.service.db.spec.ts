@@ -2,11 +2,15 @@ import {
   PhoneCallStatus,
   Role,
   VoiceAgentPresenceStatus,
+  VoiceOutboundDialAttemptStatus,
+  VoicePolicyCallerType,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.service';
 import { PrismaService as AppPrismaService } from '../prisma/prisma.service';
 import { VOICE_HUMAN_AGENT_MAX_ATTEMPTS } from './voice.constants';
+
+jest.setTimeout(30_000);
 
 describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
   let prisma: AppPrismaService;
@@ -54,6 +58,8 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
   });
 
   afterAll(async () => {
+    await prisma.voiceOutboundCampaign.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.phoneCall.deleteMany({ where: { businessId } });
     await prisma.voiceHumanAgentProfile.deleteMany({ where: { businessId } });
     await prisma.businessUser.deleteMany({ where: { businessId } });
@@ -68,6 +74,8 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
   });
 
   afterEach(async () => {
+    await prisma.voiceOutboundCampaign.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.phoneCall.deleteMany({ where: { businessId } });
     await prisma.voiceHumanAgentProfile.deleteMany({
       where: { businessId, id: { not: profileId } },
@@ -160,6 +168,61 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
         },
       }),
     ).toBe(1);
+  });
+
+  it.each([
+    VoiceOutboundDialAttemptStatus.agent_ringing,
+    VoiceOutboundDialAttemptStatus.customer_ringing,
+  ])('treats an agent on a power-dialer %s attempt as busy', async (status) => {
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: 'Dialer Busy Test Contact',
+        phone: `+1555${Date.now().toString().slice(-7)}`,
+      },
+    });
+    const campaign = await prisma.voiceOutboundCampaign.create({
+      data: {
+        businessId,
+        name: `Busy state ${status}`,
+        purpose: 'service_reminder',
+        callerType: VoicePolicyCallerType.live_agent,
+        countryCode: 'US',
+        timeZone: 'America/New_York',
+        openingScript: 'A test-only script.',
+        createdByUserId: userId,
+      },
+    });
+    const member = await prisma.voiceOutboundCampaignMember.create({
+      data: {
+        businessId,
+        campaignId: campaign.id,
+        customerId: customer.id,
+      },
+    });
+    await prisma.voiceOutboundDialAttempt.create({
+      data: {
+        businessId,
+        campaignId: campaign.id,
+        memberId: member.id,
+        agentProfileId: profileId,
+        status,
+        createdByUserId: userId,
+      },
+    });
+
+    expect(
+      await service.reserve(businessId, (await createLiveCall()).id),
+    ).toBeNull();
+    expect(
+      await prisma.voiceHumanAgentAssignment.count({
+        where: {
+          businessId,
+          profileId,
+          status: { in: ['offered', 'connected'] },
+        },
+      }),
+    ).toBe(0);
   });
 
   it('tries another free agent after no-answer and stops at the configured attempt limit', async () => {

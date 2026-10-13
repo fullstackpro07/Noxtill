@@ -748,17 +748,54 @@ export class VoiceCallService {
     callSid: string,
     dialCallStatus: string,
     attemptNumber?: number,
+    transferAttemptNumber?: number,
+    dialCallSid?: string,
   ): Promise<string> {
     const call = await this.prisma.phoneCall.findUnique({ where: { callSid } });
     if (!call) {
       this.logger.warn(`Transfer callback for unknown call ${callSid}`);
       return twiml('<Hangup/>');
     }
-    await this.humanAgentDispatch.observeDialStatus(
-      call.id,
-      dialCallStatus,
-      attemptNumber,
-    );
+    if (transferAttemptNumber && transferAttemptNumber > 0) {
+      const transfer = await this.prisma.voiceCallTransfer.findFirst({
+        where: {
+          businessId: call.businessId,
+          callId: call.id,
+          attemptNumber: transferAttemptNumber,
+        },
+      });
+      if (
+        transfer &&
+        (!transfer.providerCallSid ||
+          !dialCallSid ||
+          transfer.providerCallSid === dialCallSid)
+      ) {
+        const normalizedStatus = dialCallStatus.trim().toLowerCase();
+        const connected = normalizedStatus === 'completed';
+        const failed = ['busy', 'no-answer', 'failed', 'canceled'].includes(
+          normalizedStatus,
+        );
+        await this.prisma.voiceCallTransfer.update({
+          where: { id: transfer.id },
+          data: {
+            ...(dialCallSid ? { providerCallSid: dialCallSid } : {}),
+            providerStatus: normalizedStatus,
+            ...(connected
+              ? { status: 'provider_confirmed', confirmedAt: new Date() }
+              : failed
+                ? { status: 'failed' }
+                : {}),
+          },
+        });
+      }
+    }
+    if (attemptNumber) {
+      await this.humanAgentDispatch.observeDialStatus(
+        call.id,
+        dialCallStatus,
+        attemptNumber,
+      );
+    }
 
     // Twilio can retry webhooks. Keep outcomes idempotent and don't let a late duplicate
     // callback overwrite the message path after a failed transfer.
@@ -904,6 +941,91 @@ export class VoiceCallService {
       say(fallback, settings.voiceId) +
         `<Record action="${escapeXml(messageAction)}" method="POST" maxLength="30" timeout="${settings.responseTimeoutSeconds}" playBeep="true" trim="trim-silence" />`,
     );
+  }
+
+  /** Private context played only to the called party before Twilio bridges a warm transfer. */
+  async transferScreening(
+    callId: string,
+    attemptNumber: number,
+    providerCallSid?: string,
+  ): Promise<string> {
+    if (!callId || attemptNumber < 1 || !providerCallSid) {
+      return twiml('<Hangup/>');
+    }
+    const transfer = await this.prisma.voiceCallTransfer.findFirst({
+      where: { callId, attemptNumber, status: 'pending' },
+      include: {
+        call: {
+          select: {
+            businessId: true,
+            status: true,
+            callerName: true,
+            transcript: true,
+          },
+        },
+      },
+    });
+    if (!transfer || transfer.call.status !== PhoneCallStatus.in_progress) {
+      return twiml('<Hangup/>');
+    }
+    if (
+      transfer.providerCallSid &&
+      transfer.providerCallSid !== providerCallSid
+    ) {
+      return twiml('<Hangup/>');
+    }
+    await this.prisma.voiceCallTransfer.update({
+      where: { id: transfer.id },
+      data: {
+        providerCallSid,
+        providerStatus: 'warm_screening',
+      },
+    });
+    const turns = (transfer.call.transcript as unknown as CallTurn[]) ?? [];
+    const lastCallerLine = [...turns]
+      .reverse()
+      .find((turn) => turn.speaker === 'caller')?.text;
+    const briefing = [
+      'Warm transfer from Noxtill.',
+      transfer.call.callerName
+        ? `Caller name: ${transfer.call.callerName}.`
+        : null,
+      lastCallerLine
+        ? `Caller context: ${lastCallerLine.slice(0, 320)}`
+        : 'No caller transcript is available for a briefing.',
+      'You will now be connected to the caller.',
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join(' ');
+    return twiml(say(briefing));
+  }
+
+  /** Stores provider progress for the destination leg; Dial action decides final confirmation. */
+  async recordTransferProviderStatus(
+    callId: string,
+    attemptNumber: number,
+    providerStatus: string,
+    providerCallSid?: string,
+  ) {
+    if (!callId || attemptNumber < 1 || !providerStatus) return;
+    const transfer = await this.prisma.voiceCallTransfer.findFirst({
+      where: { callId, attemptNumber },
+    });
+    if (
+      !transfer ||
+      (transfer.providerCallSid &&
+        providerCallSid &&
+        transfer.providerCallSid !== providerCallSid)
+    ) {
+      return;
+    }
+    await this.prisma.voiceCallTransfer.update({
+      where: { id: transfer.id },
+      data: {
+        providerStatus: providerStatus.trim().toLowerCase(),
+        ...(providerCallSid ? { providerCallSid } : {}),
+      },
+    });
   }
 
   /** Status callback from Twilio's outbound human leg, used to hold/release agent capacity. */

@@ -202,10 +202,15 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
   it('requests a live Twilio transfer and waits for the provider callback before recording the outcome', async () => {
     mockedAxios.post.mockResolvedValue({ data: {} });
     const call = await createCall({ status: PhoneCallStatus.in_progress });
-    const result = await service.transfer(businessId, call.id, {
+    const result = await service.transfer(businessId, userId, call.id, {
       toNumber: '+15551234567',
     });
-    expect(result.transferRequested).toBe(true);
+    expect(result).toMatchObject({
+      transferRequested: true,
+      attemptNumber: 1,
+      mode: 'cold',
+      status: 'pending',
+    });
 
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
@@ -216,7 +221,11 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
     expect(url).toContain(`Calls/${call.callSid}.json`);
     expect(body.get('Twiml')).toContain('+15551234567');
     expect(body.get('Twiml')).toContain(
-      '<Dial action="https://voice-test.example/api/v1/voice/webhook/transfer-result" method="POST" answerOnBridge="true">',
+      '<Dial action="https://voice-test.example/api/v1/voice/webhook/transfer-result?transferAttemptNumber=1" method="POST" answerOnBridge="true">',
+    );
+    expect(body.get('Twiml')).toContain('<Number statusCallback=');
+    expect(body.get('Twiml')).toContain(
+      'statusCallbackEvent="initiated ringing answered completed"',
     );
 
     const updated = await prisma.phoneCall.findUniqueOrThrow({
@@ -231,13 +240,62 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
         action: 'call.transfer_requested_by_staff',
       },
     });
-    expect(audit.after).toMatchObject({ providerConfirmationPending: true });
+    expect(audit.after).toMatchObject({
+      transferId: result.transferId,
+      attemptNumber: 1,
+      toNumber: '+15551234567',
+      mode: 'cold',
+      status: 'pending',
+    });
+    const legs = await service.listLegs(businessId, call.id);
+    expect(legs.legs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'transfer-destination',
+          confirmation: 'pending',
+          mode: 'cold',
+          attemptNumber: 1,
+        }),
+      ]),
+    );
+  });
+
+  it('uses Twilio called-party screening for a warm transfer and records it as pending', async () => {
+    mockedAxios.post.mockResolvedValue({ data: {} });
+    const call = await createCall({
+      status: PhoneCallStatus.in_progress,
+      transcript: [
+        {
+          speaker: 'caller',
+          text: 'I need help with my booking',
+          at: '2026-10-14T00:00:00.000Z',
+        },
+      ],
+    });
+    const result = await service.transfer(businessId, userId, call.id, {
+      mode: 'warm',
+      toNumber: '+15551234567',
+    });
+    expect(result.mode).toBe('warm');
+
+    const [, body] = mockedAxios.post.mock.calls[0] as [
+      string,
+      URLSearchParams,
+    ];
+    const xml = body.get('Twiml') ?? '';
+    expect(xml).toContain('/voice/webhook/transfer-screening?callId=');
+    expect(xml).toContain('/voice/webhook/transfer-status?callId=');
+
+    const transfer = await prisma.voiceCallTransfer.findFirstOrThrow({
+      where: { businessId, callId: call.id, attemptNumber: 1 },
+    });
+    expect(transfer).toMatchObject({ mode: 'warm', status: 'pending' });
   });
 
   it('refuses to transfer or end a call that is no longer live', async () => {
     const call = await createCall({ status: PhoneCallStatus.completed });
     await expect(
-      service.transfer(businessId, call.id, {}),
+      service.transfer(businessId, userId, call.id, {}),
     ).rejects.toBeInstanceOf(AppException);
     await expect(service.endCall(businessId, call.id)).rejects.toBeInstanceOf(
       AppException,
@@ -249,7 +307,7 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
   it('refuses to transfer with no transfer number configured anywhere', async () => {
     const call = await createCall({ status: PhoneCallStatus.in_progress });
     await expect(
-      service.transfer(businessId, call.id, {}),
+      service.transfer(businessId, userId, call.id, {}),
     ).rejects.toBeInstanceOf(AppException);
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockedAxios.post).not.toHaveBeenCalled();

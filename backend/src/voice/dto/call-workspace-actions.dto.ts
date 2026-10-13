@@ -1,5 +1,6 @@
 import {
   IsOptional,
+  IsIn,
   IsString,
   Matches,
   MaxLength,
@@ -14,6 +15,10 @@ export class AddCallNoteDto {
 }
 
 export class TransferLiveCallDto {
+  @IsOptional()
+  @IsIn(['cold', 'warm'])
+  mode?: 'cold' | 'warm';
+
   /** Overrides the business's own configured transfer number for this one transfer. */
   @IsOptional()
   @IsString()

@@ -1049,6 +1049,7 @@ model Business {
   voiceTrackingAssignments      VoiceTrackingNumberAssignment[]
   voiceCallbacks                VoiceCallback[]
   voiceCallbackAttempts         VoiceCallbackAttempt[]
+  voiceCallTransfers            VoiceCallTransfer[]
   voiceVideoMeetings            VoiceVideoMeeting[]
   voiceMeetingInvites           VoiceMeetingInvite[]
   voiceIvrFlows                 VoiceIvrFlow[]
@@ -3024,6 +3025,7 @@ model PhoneCall {
   notes                 PhoneCallNote[]
   wrapUp                VoiceCallWrapUp?
   humanAgentAssignments VoiceHumanAgentAssignment[]
+  transfers             VoiceCallTransfer[]
   qualityReviews        VoiceQualityReview[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -9275,4 +9277,29 @@ model ProcurementSupplierContractVersion {
   @@unique([contractId, version])
   @@index([businessId])
   @@map("procurement_supplier_contract_versions")
+}
+
+/// Provider-reported transfer attempts for a live call. A request remains pending until
+/// Twilio's Dial action callback confirms that the called leg connected.
+model VoiceCallTransfer {
+  id                String    @id @default(uuid())
+  businessId        String    @map("business_id")
+  business          Business  @relation(fields: [businessId], references: [id])
+  callId            String    @map("call_id")
+  call              PhoneCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  attemptNumber     Int       @default(1) @map("attempt_number")
+  mode              String    @default("cold") @db.VarChar(10)
+  destination       String    @db.VarChar(32)
+  status            String    @default("pending") @db.VarChar(24)
+  providerStatus    String?   @map("provider_status") @db.VarChar(40)
+  providerCallSid   String?   @map("provider_call_sid") @db.VarChar(34)
+  requestedByUserId String?   @map("requested_by_user_id")
+  requestedAt       DateTime  @default(now()) @map("requested_at")
+  confirmedAt       DateTime? @map("confirmed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, callId, attemptNumber], map: "voice_call_transfer_attempt_key")
+  @@index([businessId, callId, status], map: "voice_call_transfer_call_status_idx")
+  @@map("voice_call_transfers")
 }

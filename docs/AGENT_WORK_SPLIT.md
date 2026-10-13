@@ -716,3 +716,32 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   power-dialer attempt as busy (the dialer does check inbound assignments). Please add
   `voiceOutboundDialAttempt` with status `agent_ringing|customer_ringing` to the dispatch
   capacity check.
+
+## Module 21 progress — original screens (Codex, 2026-10-14)
+
+- Incoming Live: added real cold/warm Twilio transfer requests, a persisted per-call transfer
+  attempt with provider callbacks, `GET /voice/calls/:id/legs`, and visible Pending versus
+  Provider-confirmed/Failed states. Warm transfers use Twilio's called-party screening callback
+  to play the saved caller context privately before connection. Transfers remain pending until the
+  final provider callback; live Twilio audio was not exercised.
+  Migration `20261014120000_voice_call_transfers` is applied locally.
+- Call Queue: pending missed/message/custom follow-ups now sort missed calls first and show
+  evidence-derived priority and required skill. Available staff can claim the next matching item
+  with `POST /voice/queues/:id/take-next`; the claim is row-locked, tenant-scoped and audited.
+  Call language is not stored, so the screen says Not captured. This is a follow-up queue, not a
+  caller-on-hold queue: calls enter the existing AI/IVR path, escalate to an available human when
+  requested, and fall back to team follow-up if no person can take them.
+- Inbound human-agent capacity now counts power-dialer attempts in `agent_ringing` and
+  `customer_ringing` as busy.
+- Focused real-MySQL voice tests: all 64 test cases passed; one suite hit its 5-second `afterAll`
+  timeout under parallel load. The dispatch suite then passed independently (8/8) after raising its
+  real-DB hook timeout. Backend and frontend
+  `tsc --noEmit` and touched-file ESLint pass. A full backend Jest rerun reported 360/362 suites and
+  2,231/2,233 tests; two unrelated review tests timed out under parallel load. Both passed alone
+  (`qr-poster` 5/5; `review-reminders` 3/3). The earlier unrelated CRM workflow-trigger assertion
+  also passed alone (29/29). These results point to cross-suite DB/load interference rather than a
+  voice regression. `prisma migrate status` reports all 181 migrations applied. Browser empty-state
+  QA passed on `/receptionist/live` (no active calls) and `/receptionist/queue` (no follow-ups;
+  routing disclosure visible). No safe live call or queued record was available to exercise transfer
+  or take-next in the browser, and console/network diagnostics were not collected; live Twilio
+  behavior remains unverified.
