@@ -7,7 +7,14 @@ on:
     branches: [main]
 
 jobs:
+  malware-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/malware-guard.mjs
+
   backend:
+    needs: malware-guard
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -88,6 +95,7 @@ jobs:
           MYSQL_DATABASE: noxtill_test
 
   frontend:
+    needs: malware-guard
     runs-on: ubuntu-latest
     defaults:
       run:

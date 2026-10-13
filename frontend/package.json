@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node api.js && next dev",
-    "build": "node api.js && next build --webpack",
+    "predev": "node ../scripts/malware-guard.mjs",
+    "dev": "next dev",
+    "prebuild": "node ../scripts/malware-guard.mjs",
+    "build": "next build --webpack",
     "build:frontend": "next build",
     "build:backend": "next build",
-    "start": "node api.js && next start",
+    "prestart": "node ../scripts/malware-guard.mjs",
+    "start": "next start",
     "start:frontend": "next start",
     "start:backend": "next start",
     "lint": "eslint"
