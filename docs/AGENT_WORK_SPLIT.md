@@ -680,6 +680,6 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   Twilio call was placed: the business shows no configured number and no calls in progress. Thus
   provider callbacks and live call audio are not end-to-end verified.
 - Local commits: `b180a37` contains human-agent retry and published IVR routing with their two
-  migrations. The AI agent guardrail screen and its migration are being committed separately.
+  migrations. `763c82b` contains the AI agent guardrail screen and its migration.
   Claude's uncommitted outbound-campaign files and their schema/module/constants/controller hunks
   must not be committed with Codex's changes.
