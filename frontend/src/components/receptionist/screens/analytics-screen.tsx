@@ -15,6 +15,7 @@ import { Card, EmptyState, Footnote, KpiCard, BarRow, TableWrap, Th, kpiGrid } f
 import { useRx } from "../rx-data";
 import { useRxStore } from "../rx-store";
 import { RxGate } from "../rx-gate";
+import { AnalyticsExportCard } from "../rx-analytics-export";
 
 export function AnalyticsScreen() {
   return (
@@ -170,6 +171,7 @@ function Analytics() {
         )}
         <Footnote>A long average on calls a person joined is expected — people are brought in for the hard ones. The context is shown so no number is read as performance on its own.</Footnote>
       </Card>
+      <AnalyticsExportCard />
     </div>
   );
 }

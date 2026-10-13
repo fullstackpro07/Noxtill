@@ -2996,8 +2996,8 @@ model PhoneCall {
   /// still explains itself after the rule is edited or deleted. NULL when no custom rule fired.
   routedRuleId             String?                       @map("routed_rule_id")
   routedRuleName           String?                       @map("routed_rule_name")
-  /// Merchant-entered attribution only. This is never provider-verified; the evidence and reason
-  /// for each correction are also preserved in the append-only AuditLog.
+  /// Call attribution: stamped from the dialed tracking number on arrival (see trackingNumberId),
+  /// or a merchant-entered correction whose evidence and reason are also kept in the AuditLog.
   attributionSource        String?                       @map("attribution_source")
   attributionChannel       String?                       @map("attribution_channel")
   attributionCampaignId    String?                       @map("attribution_campaign_id")

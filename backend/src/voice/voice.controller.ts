@@ -88,6 +88,7 @@ import {
 import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import { VoiceCallbacksService } from './voice-callbacks.service';
 import { VoiceLegalHoldService } from './voice-legal-hold.service';
+import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
 import { VoiceLegalHoldDto } from './dto/voice-callback.dto';
 import {
   CompleteVoiceCallbackDto,
@@ -155,6 +156,7 @@ export class VoiceController {
     private readonly voiceTrackingNumbers: VoiceTrackingNumbersService,
     private readonly voiceCallbacks: VoiceCallbacksService,
     private readonly voiceLegalHold: VoiceLegalHoldService,
+    private readonly voiceAnalyticsExport: VoiceAnalyticsExportService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -963,6 +965,17 @@ export class VoiceController {
   @Get('voice/analytics')
   analytics() {
     return this.voiceQuery.analytics();
+  }
+
+  /** CSV of saved call facts for a date range (max 92 days); caller numbers masked. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/analytics/export')
+  exportVoiceAnalytics(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.voiceAnalyticsExport.exportCalls(user.businessId, from, to);
   }
 
   /** Registered before nothing dynamic collides — `:id` here is scoped under `voice/calls/`, distinct from the other top-level `voice/*` static routes. */
