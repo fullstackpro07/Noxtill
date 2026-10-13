@@ -2,7 +2,47 @@ import { apiFetch } from "@/lib/api-client";
 
 export type OutboundPurpose = "service" | "callback" | "marketing";
 export type OutboundCallerType = "ai_voice" | "live_agent";
-export type OutboundMemberStatus = "selected" | "eligible" | "blocked";
+export type OutboundMemberStatus =
+  | "selected"
+  | "eligible"
+  | "blocked"
+  | "queued"
+  | "calling"
+  | "answered"
+  | "busy"
+  | "no_answer"
+  | "voicemail"
+  | "retry"
+  | "opted_out"
+  | "skipped"
+  | "completed";
+export type OutboundCampaignStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "scheduled"
+  | "running"
+  | "paused"
+  | "stop_requested"
+  | "stopped"
+  | "completed";
+export type DialAttemptStatus =
+  | "blocked"
+  | "agent_ringing"
+  | "agent_no_answer"
+  | "customer_ringing"
+  | "answered"
+  | "busy"
+  | "no_answer"
+  | "failed"
+  | "canceled";
+export type DialDisposition =
+  | "interested"
+  | "not_interested"
+  | "callback_requested"
+  | "wrong_number"
+  | "do_not_call"
+  | "completed";
 
 export interface OutboundAudienceCustomer {
   id: string;
@@ -36,7 +76,7 @@ export interface OutboundCampaign {
   countryCode: string;
   timeZone: string;
   openingScript: string;
-  status: string;
+  status: OutboundCampaignStatus;
   aiAgentId: string | null;
   humanAgentProfileId: string | null;
   scheduledAt: string | null;
@@ -47,8 +87,9 @@ export interface OutboundCampaign {
   eligibleCount: number;
   blockedCount: number;
   members: OutboundCampaignMember[];
-  callsPlaced: false;
-  callExecution: "not_configured";
+  callsPlaced: boolean;
+  /** Human campaigns run on the power dialer; AI outbound is not executed yet. */
+  callExecution: "human_power_dialer" | "not_available";
   aiAgent: { id: string; name: string; status: string } | null;
   humanAgent: { id: string; name: string } | null;
 }
@@ -88,7 +129,7 @@ export interface OutboundEligibilityPreview {
   message: string;
   limitations: {
     externalDoNotCallRegistry: "not_configured";
-    callProviderExecution: "not_configured";
+    callProviderExecution: "human_power_dialer" | "not_available";
     providerCostEstimate: "not_available";
   };
 }
@@ -129,5 +170,97 @@ export function previewOutboundCampaign(
 ): Promise<OutboundEligibilityPreview> {
   return apiFetch(`/voice/campaigns/${id}/eligibility-preview`, {
     method: "POST",
+  });
+}
+
+export interface DialAttempt {
+  id: string;
+  memberId: string;
+  contactName: string;
+  phone: string;
+  status: DialAttemptStatus;
+  blockReasonCode: string | null;
+  customerDialed: boolean;
+  durationSec: number | null;
+  disposition: DialDisposition | null;
+  createdAt: string;
+  answeredAt: string | null;
+  endedAt: string | null;
+}
+
+export interface CampaignRunStatus {
+  campaignId: string;
+  status: OutboundCampaignStatus;
+  startedAt: string | null;
+  pausedAt: string | null;
+  stoppedAt: string | null;
+  attemptCounts: Partial<Record<DialAttemptStatus, number>>;
+  attempts: DialAttempt[];
+}
+
+export interface DialerNext {
+  campaignId: string;
+  campaignStatus: OutboundCampaignStatus;
+  openingScript: string;
+  agentAvailable: boolean;
+  inFlight: DialAttempt | null;
+  awaitingDisposition: DialAttempt | null;
+  contact: {
+    memberId: string;
+    customerId: string;
+    name: string;
+    phone: string;
+    status: OutboundMemberStatus;
+    attemptCount: number;
+    maxAttempts: number;
+    lastAttemptAt: string | null;
+    priorAttempts: Array<{ id: string; status: DialAttemptStatus; disposition: DialDisposition | null; createdAt: string }>;
+  } | null;
+}
+
+export interface DialAttemptResult {
+  attemptId: string;
+  placed: boolean;
+  status: DialAttemptStatus;
+  reasonCode: string | null;
+}
+
+export function controlOutboundCampaign(
+  id: string,
+  action: "start" | "pause" | "stop",
+): Promise<CampaignRunStatus> {
+  return apiFetch(`/voice/campaigns/${id}/${action}`, { method: "POST" });
+}
+
+export function fetchCampaignAttempts(id: string): Promise<CampaignRunStatus> {
+  return apiFetch(`/voice/campaigns/${id}/attempts`);
+}
+
+export function fetchDialerNext(id: string): Promise<DialerNext> {
+  return apiFetch(`/voice/campaigns/${id}/dialer/next`);
+}
+
+export function placeDialAttempt(id: string, memberId: string): Promise<DialAttemptResult> {
+  return apiFetch(`/voice/campaigns/${id}/dialer/attempt`, {
+    method: "POST",
+    body: JSON.stringify({ memberId }),
+  });
+}
+
+export function skipDialContact(id: string, memberId: string): Promise<{ memberId: string; status: OutboundMemberStatus }> {
+  return apiFetch(`/voice/campaigns/${id}/dialer/skip`, {
+    method: "POST",
+    body: JSON.stringify({ memberId }),
+  });
+}
+
+export function saveDialDisposition(
+  attemptId: string,
+  disposition: DialDisposition,
+  notes?: string,
+): Promise<{ attemptId: string; disposition: DialDisposition }> {
+  return apiFetch(`/voice/dialer/attempts/${attemptId}/disposition`, {
+    method: "POST",
+    body: JSON.stringify({ disposition, notes: notes || undefined }),
   });
 }

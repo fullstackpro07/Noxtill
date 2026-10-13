@@ -88,3 +88,31 @@ export class UpdateVoiceOutboundCampaignDto extends PartialType(
   @IsUUID('4', { each: true })
   customerIds?: string[];
 }
+
+export class VoiceDialerAttemptDto {
+  @IsUUID()
+  memberId!: string;
+}
+
+export class VoiceDialerDispositionDto {
+  @IsIn([
+    'interested',
+    'not_interested',
+    'callback_requested',
+    'wrong_number',
+    'do_not_call',
+    'completed',
+  ])
+  disposition!:
+    | 'interested'
+    | 'not_interested'
+    | 'callback_requested'
+    | 'wrong_number'
+    | 'do_not_call'
+    | 'completed';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+}

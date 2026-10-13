@@ -1044,6 +1044,7 @@ model Business {
   voiceEligibilityDecisions     VoiceOutboundEligibilityDecision[]
   voiceOutboundCampaigns        VoiceOutboundCampaign[]
   voiceOutboundCampaignMembers  VoiceOutboundCampaignMember[]
+  voiceOutboundDialAttempts     VoiceOutboundDialAttempt[]
   voiceVideoMeetings            VoiceVideoMeeting[]
   voiceMeetingInvites           VoiceMeetingInvite[]
   voiceIvrFlows                 VoiceIvrFlow[]
@@ -2804,19 +2805,20 @@ model PhoneNumber {
 /// Voice Agent screen foundation: voice-specific configuration for an existing Staff/BusinessUser
 /// record. This intentionally does not duplicate staff identity or employment data.
 model VoiceHumanAgentProfile {
-  id                 String                      @id @default(uuid())
-  businessId         String                      @map("business_id")
-  business           Business                    @relation(fields: [businessId], references: [id])
-  staffUserId        String                      @unique @map("staff_user_id")
-  staffUser          BusinessUser                @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
-  skillTags          Json                        @default("[]") @map("skill_tags")
-  languages          Json                        @default("[]")
-  maxConcurrentCalls Int                         @default(1) @map("max_concurrent_calls")
-  active             Boolean                     @default(true)
-  presenceStatus     VoiceAgentPresenceStatus    @default(offline) @map("presence_status")
-  lastHeartbeatAt    DateTime?                   @map("last_heartbeat_at")
-  assignments        VoiceHumanAgentAssignment[]
-  outboundCampaigns  VoiceOutboundCampaign[]
+  id                   String                      @id @default(uuid())
+  businessId           String                      @map("business_id")
+  business             Business                    @relation(fields: [businessId], references: [id])
+  staffUserId          String                      @unique @map("staff_user_id")
+  staffUser            BusinessUser                @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  skillTags            Json                        @default("[]") @map("skill_tags")
+  languages            Json                        @default("[]")
+  maxConcurrentCalls   Int                         @default(1) @map("max_concurrent_calls")
+  active               Boolean                     @default(true)
+  presenceStatus       VoiceAgentPresenceStatus    @default(offline) @map("presence_status")
+  lastHeartbeatAt      DateTime?                   @map("last_heartbeat_at")
+  assignments          VoiceHumanAgentAssignment[]
+  outboundCampaigns    VoiceOutboundCampaign[]
+  outboundDialAttempts VoiceOutboundDialAttempt[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3280,7 +3282,12 @@ model VoiceOutboundCampaign {
   retryCooldownHours    Int                           @default(24) @map("retry_cooldown_hours")
   createdByUserId       String                        @map("created_by_user_id")
   eligibilityCheckedAt  DateTime?                     @map("eligibility_checked_at")
+  startedAt             DateTime?                     @map("started_at")
+  startedByUserId       String?                       @map("started_by_user_id")
+  pausedAt              DateTime?                     @map("paused_at")
+  stoppedAt             DateTime?                     @map("stopped_at")
   members               VoiceOutboundCampaignMember[]
+  dialAttempts          VoiceOutboundDialAttempt[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3303,6 +3310,11 @@ model VoiceOutboundCampaignMember {
   eligibilityDecisionId String?                           @map("eligibility_decision_id")
   eligibilityDecision   VoiceOutboundEligibilityDecision? @relation("OutboundMemberDecision", fields: [eligibilityDecisionId], references: [id], onDelete: SetNull)
   eligibilityCheckedAt  DateTime?                         @map("eligibility_checked_at")
+  /// Customer-leg dials only; an agent leg that was never answered does not consume an attempt.
+  attemptCount          Int                               @default(0) @map("attempt_count")
+  lastAttemptAt         DateTime?                         @map("last_attempt_at")
+  disposition           String?                           @db.VarChar(40)
+  dialAttempts          VoiceOutboundDialAttempt[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3310,6 +3322,40 @@ model VoiceOutboundCampaignMember {
   @@unique([campaignId, customerId], map: "voice_outbound_campaign_member_key")
   @@index([businessId, campaignId, status], map: "voice_outbound_member_status_idx")
   @@map("voice_outbound_campaign_members")
+}
+
+/// One power-dialer attempt: Twilio rings the agent's own phone first, and only after the agent
+/// answers is the customer dialed. Eligibility is re-checked for every attempt (decision id kept);
+/// statuses move only on signed provider callbacks, never on the originate request alone.
+model VoiceOutboundDialAttempt {
+  id                    String                         @id @default(uuid())
+  businessId            String                         @map("business_id")
+  business              Business                       @relation(fields: [businessId], references: [id])
+  campaignId            String                         @map("campaign_id")
+  campaign              VoiceOutboundCampaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  memberId              String                         @map("member_id")
+  member                VoiceOutboundCampaignMember    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  agentProfileId        String                         @map("agent_profile_id")
+  agentProfile          VoiceHumanAgentProfile         @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  eligibilityDecisionId String?                        @map("eligibility_decision_id")
+  status                VoiceOutboundDialAttemptStatus
+  blockReasonCode       String?                        @map("block_reason_code") @db.VarChar(40)
+  agentCallSid          String?                        @unique @map("agent_call_sid") @db.VarChar(64)
+  customerDialed        Boolean                        @default(false) @map("customer_dialed")
+  durationSec           Int?                           @map("duration_sec")
+  disposition           String?                        @db.VarChar(40)
+  dispositionNotes      String?                        @map("disposition_notes") @db.VarChar(1000)
+  createdByUserId       String                         @map("created_by_user_id")
+  answeredAt            DateTime?                      @map("answered_at")
+  endedAt               DateTime?                      @map("ended_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, campaignId, createdAt], map: "voice_dial_attempt_campaign_idx")
+  @@index([businessId, agentProfileId, status], map: "voice_dial_attempt_agent_idx")
+  @@index([memberId, createdAt], map: "voice_dial_attempt_member_idx")
+  @@map("voice_outbound_dial_attempts")
 }
 
 /// Scheduling/control-plane record for the Video Meetings screen. Media state is intentionally
@@ -3460,6 +3506,18 @@ enum VoiceOutboundCampaignStatus {
   stop_requested
   stopped
   completed
+}
+
+enum VoiceOutboundDialAttemptStatus {
+  blocked
+  agent_ringing
+  agent_no_answer
+  customer_ringing
+  answered
+  busy
+  no_answer
+  failed
+  canceled
 }
 
 enum VoiceOutboundCampaignMemberStatus {

@@ -144,7 +144,7 @@ describe('VoiceOutboundCampaignService (real MySQL)', () => {
       eligibleCount: 0,
       blockedCount: 0,
       callsPlaced: false,
-      callExecution: 'not_configured',
+      callExecution: 'human_power_dialer',
       humanAgent: { id: profileId },
     });
     expect(campaign.members.map((member) => member.phone)).toEqual(
@@ -168,7 +168,7 @@ describe('VoiceOutboundCampaignService (real MySQL)', () => {
     });
     expect(preview.limitations).toEqual({
       externalDoNotCallRegistry: 'not_configured',
-      callProviderExecution: 'not_configured',
+      callProviderExecution: 'human_power_dialer',
       providerCostEstimate: 'not_available',
     });
     expect(await service.list(businessId)).toHaveLength(1);

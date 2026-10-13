@@ -90,7 +90,10 @@ import {
 import {
   CreateVoiceOutboundCampaignDto,
   UpdateVoiceOutboundCampaignDto,
+  VoiceDialerAttemptDto,
+  VoiceDialerDispositionDto,
 } from './dto/voice-outbound.dto';
+import { VoiceOutboundDialerService } from './voice-outbound-dialer.service';
 import {
   CreateVoiceMeetingDto,
   CreateVoiceMeetingInviteDto,
@@ -132,6 +135,7 @@ export class VoiceController {
     private readonly voiceCompliance: VoiceComplianceService,
     private readonly voiceMeetings: VoiceMeetingsService,
     private readonly voiceOutboundCampaigns: VoiceOutboundCampaignService,
+    private readonly voiceDialer: VoiceOutboundDialerService,
     private readonly voiceIvr: VoiceIvrService,
     private readonly voiceSupervisor: VoiceSupervisorService,
     private readonly voiceTracking: VoiceTrackingService,
@@ -403,6 +407,83 @@ export class VoiceController {
       user.sub,
       id,
     );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/start')
+  startVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.start(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/pause')
+  pauseVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.pause(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/stop')
+  stopVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.stop(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/campaigns/:id/attempts')
+  voiceOutboundCampaignAttempts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.status(user.businessId, id);
+  }
+
+  /** Power dialer: ungated like presence, but every call is scoped to the campaign's assigned agent. */
+  @Get('voice/campaigns/:id/dialer/next')
+  voiceDialerNext(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.next(user.businessId, user.sub, id);
+  }
+
+  @Post('voice/campaigns/:id/dialer/attempt')
+  voiceDialerAttempt(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceDialerAttemptDto,
+  ) {
+    return this.voiceDialer.attempt(
+      user.businessId,
+      user.sub,
+      id,
+      dto.memberId,
+    );
+  }
+
+  @Post('voice/campaigns/:id/dialer/skip')
+  voiceDialerSkip(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceDialerAttemptDto,
+  ) {
+    return this.voiceDialer.skip(user.businessId, user.sub, id, dto.memberId);
+  }
+
+  @Post('voice/dialer/attempts/:id/disposition')
+  voiceDialerDisposition(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceDialerDispositionDto,
+  ) {
+    return this.voiceDialer.disposition(user.businessId, user.sub, id, dto);
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -1212,6 +1293,57 @@ export class VoiceController {
     const body = req.body as { CallSid: string; CallStatus: string };
     await this.voiceCall.handleStatus(body.CallSid, body.CallStatus);
     return { received: true };
+  }
+
+  /** Power dialer: the agent answered their own phone; TwiML bridges to the customer if still allowed. */
+  @Public()
+  @Post('voice/webhook/outbound/agent-answered')
+  @HttpCode(200)
+  async outboundAgentAnswered(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const xml = await this.voiceDialer.agentAnsweredTwiml(attemptId);
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/outbound/agent-status')
+  @HttpCode(200)
+  async outboundAgentStatus(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallStatus?: string };
+    await this.voiceDialer.agentStatus(attemptId, body.CallStatus ?? '');
+    return { received: true };
+  }
+
+  @Public()
+  @Post('voice/webhook/outbound/customer-result')
+  @HttpCode(200)
+  async outboundCustomerResult(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      DialCallStatus?: string;
+      DialCallDuration?: string;
+    };
+    const xml = await this.voiceDialer.customerResult(
+      attemptId,
+      body.DialCallStatus ?? '',
+      body.DialCallDuration ? Number(body.DialCallDuration) : undefined,
+    );
+    res.type('text/xml').send(xml);
   }
 
   private verifySignature(req: Request, signature: string | undefined) {

@@ -17,6 +17,7 @@ import {
   type OutboundPurpose,
 } from "@/lib/voice-outbound-api";
 import { Card, CardHead, Chip, EmptyState, SmallBtn } from "../rx-ui";
+import { OutboundCampaignRun } from "./outbound-campaign-run";
 
 const fieldClass =
   "h-[36px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] outline-none focus:border-[#16A34A]";
@@ -198,13 +199,14 @@ export function OutboundDialersScreen() {
             Outbound Dialers
           </h1>
           <p className="mt-1 max-w-[790px] text-[12px] leading-[1.6] text-[#697586]">
-            Prepare a callback or service campaign, then check each selected
-            customer against this business&apos;s saved consent, policy, opt-out
-            and suppression evidence. This screen never starts calls.
+            Prepare a callback or service campaign, check each selected customer
+            against this business&apos;s saved consent, policy, opt-out and
+            suppression evidence, then let the assigned human agent work the list
+            with the power dialer. Every call is re-checked right before dialing.
           </p>
         </div>
         <Chip tone="amber" h={24} fontSize={11}>
-          Call execution not configured
+          Human power dialer · AI outbound not available
         </Chip>
       </div>
 
@@ -231,7 +233,7 @@ export function OutboundDialersScreen() {
             title={
               selectedCampaign ? "Edit campaign draft" : "Create campaign draft"
             }
-            sub="Real CRM customers · no calls placed"
+            sub="Real CRM customers · saving a draft places no calls"
           />
           <form className="grid gap-3 p-[18px]" onSubmit={submit}>
             <label className="grid gap-1.5 text-[11px] font-bold text-[#5B6675]">
@@ -406,7 +408,7 @@ export function OutboundDialersScreen() {
                   }
                 />
                 <span className="font-normal text-[#7A8798]">
-                  Saving a time does not queue or place a call.
+                  Informational only: campaigns start when a manager presses Start.
                 </span>
               </label>
               <label className="grid gap-1.5 text-[11px] font-bold text-[#5B6675]">
@@ -610,6 +612,10 @@ export function OutboundDialersScreen() {
             </div>
           </Card>
 
+          {selectedCampaign ? (
+            <OutboundCampaignRun campaign={selectedCampaign} />
+          ) : null}
+
           <Card overflow>
             <CardHead
               title="Eligibility preview"
@@ -675,12 +681,13 @@ export function OutboundDialersScreen() {
 
           <Card pad={15}>
             <h2 className="text-[12px] font-extrabold text-[#334155]">
-              Not connected to live dialing
+              What the dialer does not do
             </h2>
             <p className="mt-1.5 text-[11px] leading-[1.6] text-[#64748B]">
-              This phase saves drafts and previews first-party evidence only. It
-              does not place calls, send marketing, connect to an external Do
-              Not Call registry, estimate provider charges, or confirm that
+              Only human agents dial, one call at a time; there is no predictive
+              or AI auto-dialing, no browser softphone (your own phone rings),
+              no voicemail detection, no external Do Not Call registry, and no
+              provider cost estimate. Passing these checks does not confirm that
               consent is legally sufficient.
             </p>
           </Card>

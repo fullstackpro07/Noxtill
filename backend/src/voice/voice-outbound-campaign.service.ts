@@ -304,36 +304,12 @@ export class VoiceOutboundCampaignService {
     }[] = [];
     for (const member of campaign.members) {
       const rawPhone = member.customer.phone;
-      const parsed = parsePhoneNumberFromString(rawPhone);
-      let eligible = false;
-      let reasonCode = 'phone_invalid';
-      let decisionId: string | null = null;
-      if (!parsed || !parsed.isValid() || parsed.number !== rawPhone) {
-        reasonCode = 'phone_invalid';
-      } else if (!parsed.country) {
-        reasonCode = 'destination_country_unresolved';
-      } else if (
-        campaign.purpose === 'marketing' &&
-        !member.customer.consentMarketing
-      ) {
-        reasonCode = 'marketing_consent_missing';
-      } else if (parsed.country !== campaign.countryCode) {
-        reasonCode = 'country_mismatch';
-      } else {
-        const decision = await this.compliance.checkEligibility(
-          businessId,
-          actorUserId,
-          {
-            phoneE164: parsed.number,
-            countryCode: campaign.countryCode,
-            purpose: campaign.purpose,
-            callerType: campaign.callerType,
-          },
-        );
-        eligible = decision.allowed;
-        reasonCode = decision.reasonCode;
-        decisionId = decision.id;
-      }
+      const { eligible, reasonCode, decisionId } = await this.evaluateMember(
+        businessId,
+        actorUserId,
+        campaign,
+        member.customer,
+      );
       await this.tenantPrisma.client.voiceOutboundCampaignMember.update({
         where: { id: member.id },
         data: {
@@ -389,12 +365,76 @@ export class VoiceOutboundCampaignService {
       members: rows,
       callsPlaced: false,
       message:
-        'Preview only. No calls were placed. Eligibility must be checked again immediately before any future call attempt.',
+        'Preview only. No calls were placed. Eligibility is checked again immediately before every dial attempt.',
       limitations: {
         externalDoNotCallRegistry: 'not_configured',
-        callProviderExecution: 'not_configured',
+        callProviderExecution:
+          campaign.callerType === VoicePolicyCallerType.live_agent
+            ? 'human_power_dialer'
+            : 'not_available',
         providerCostEstimate: 'not_available',
       },
+    };
+  }
+
+  /**
+   * Fail-closed per-contact check shared by the preview and by every live dial attempt: the
+   * stored phone must already be canonical E.164 in the campaign country, marketing needs
+   * consent, and the compliance engine must allow it (a decision row is written each time).
+   */
+  async evaluateMember(
+    businessId: string,
+    actorUserId: string,
+    campaign: Pick<
+      OutboundCampaignRecord,
+      'purpose' | 'countryCode' | 'callerType'
+    >,
+    customer: { phone: string; consentMarketing: boolean },
+  ): Promise<{
+    eligible: boolean;
+    reasonCode: string;
+    decisionId: string | null;
+  }> {
+    const rawPhone = customer.phone;
+    const parsed = parsePhoneNumberFromString(rawPhone);
+    if (!parsed || !parsed.isValid() || parsed.number !== rawPhone) {
+      return { eligible: false, reasonCode: 'phone_invalid', decisionId: null };
+    }
+    if (!parsed.country) {
+      return {
+        eligible: false,
+        reasonCode: 'destination_country_unresolved',
+        decisionId: null,
+      };
+    }
+    if (campaign.purpose === 'marketing' && !customer.consentMarketing) {
+      return {
+        eligible: false,
+        reasonCode: 'marketing_consent_missing',
+        decisionId: null,
+      };
+    }
+    if (parsed.country !== campaign.countryCode) {
+      return {
+        eligible: false,
+        reasonCode: 'country_mismatch',
+        decisionId: null,
+      };
+    }
+    const decision = await this.compliance.checkEligibility(
+      businessId,
+      actorUserId,
+      {
+        phoneE164: parsed.number,
+        countryCode: campaign.countryCode,
+        purpose: campaign.purpose,
+        callerType: campaign.callerType,
+      },
+    );
+    return {
+      eligible: decision.allowed,
+      reasonCode: decision.reasonCode,
+      decisionId: decision.id,
     };
   }
 
@@ -428,8 +468,12 @@ export class VoiceOutboundCampaignService {
         eligibilityCheckedAt:
           member.eligibilityCheckedAt?.toISOString() ?? null,
       })),
-      callsPlaced: false,
-      callExecution: 'not_configured' as const,
+      callsPlaced: members.some((member) => member.attemptCount > 0),
+      /** Human campaigns run on the power dialer; AI outbound is not executed yet. */
+      callExecution:
+        campaign.callerType === VoicePolicyCallerType.live_agent
+          ? ('human_power_dialer' as const)
+          : ('not_available' as const),
     };
   }
 
