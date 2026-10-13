@@ -662,24 +662,27 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   token ceiling to AI infra. Publishing now requires a successful latest sandbox test followed by
   explicit owner approval. Migration `20261013231000_voice_ai_agent_guardrails` is applied locally;
   real-MySQL config/approval/runtime tests pass.
-- Supervisor whisper/barge remains honestly unavailable. Existing human transfers are direct
-  Twilio `<Dial><Number>` legs, not agent participants in a shared conference; there is no agent
-  `CallSid` in a conference to target via `callSidToCoach`. The supervisor API continues to return
-  the limitation and the UI displays it. Existing listen-in is a separate bridged join, not a silent
-  tap.
-- Verification: backend and frontend `tsc --noEmit` pass. Focused MySQL checks pass (5 suites / 51
-  tests). Full backend Jest is 358 suites passed and 1 failed (2,219 passed / 1 failed / 2,220
-  total); the sole failure reproduces in Claude's untracked
-  `voice-outbound-dialer.service.db.spec.ts` because its test Twilio provider rejects the call.
-  That file and implementation remain untouched. Frontend ESLint passes; backend ESLint has one
-  formatting-only error in Claude's shared outbound-dialer hunk at `voice.controller.ts:459`, also
-  left untouched. Fake-data grep found no invented metrics or sample values in these screens.
+- Supervisor coaching: internal human-agent transfers now use a shared Twilio conference; the
+  assignment records the agent Call SID and conference SID. Listen joins muted, whisper uses
+  `Coaching=true` / `CallSidToCoach`, and barge joins unmuted. The UI offers Whisper/Barge only for
+  a connected internal agent. External-number transfers cannot be coached. Supervisor actions
+  still ring the supervisor's saved phone; they are not silent taps. Migration
+  `20261013233000_voice_conference_coaching` is applied locally.
+- Verification: backend and frontend `tsc --noEmit` pass. Focused real-MySQL checks pass (4 suites /
+  52 tests). Full backend Jest: 358 suites passed and 1 failed (2,220 passed / 1 failed / 2,221
+  total); the sole failure is Claude's uncommitted `voice-outbound-dialer.service.db.spec.ts`,
+  where its test Twilio provider rejects the call. That implementation remains untouched.
+  Frontend ESLint passes; backend ESLint passes on Codex-owned files, while the shared controller
+  retains one formatting-only error in Claude's outbound-dialer hunk. Fake-data checks found no
+  invented call metrics or sample call records.
 - Browser QA in the logged-in Contact Center QA business: `/phone/agents`, `/phone/routing`, and
-  `/phone/supervisor` load with their saved business data and no visible page errors. The published
-  IVR flow appears in Routing Studio and the AI guardrail controls appear in Agents. No live
-  Twilio call was placed: the business shows no configured number and no calls in progress. Thus
-  provider callbacks and live call audio are not end-to-end verified.
+  `/phone/supervisor` load with saved business data; Supervisor currently shows the real empty-call
+  state and no sample calls. The published IVR flow appears in Routing Studio and AI guardrail
+  controls appear in Agents. No live Twilio call was placed: the business has no configured
+  number and there are no calls in progress. Provider callbacks, actual audio, and live
+  listen/whisper/barge therefore remain unverified end to end.
 - Local commits: `b180a37` contains human-agent retry and published IVR routing with their two
-  migrations. `763c82b` contains the AI agent guardrail screen and its migration.
+  migrations. `763c82b` contains the AI agent guardrail screen and its migration. `d391d9c`
+  contains internal shared-conference coaching and its migration.
   Claude's uncommitted outbound-campaign files and their schema/module/constants/controller hunks
   must not be committed with Codex's changes.
