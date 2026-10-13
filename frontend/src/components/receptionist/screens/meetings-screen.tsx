@@ -106,17 +106,24 @@ export function VoiceMeetingsScreen() {
   });
   const invite = useMutation({
     mutationFn: ({ meetingId, email, name }: { meetingId: string; email: string; name: string }) => createVoiceMeetingInvite(meetingId, email, name),
-    onSuccess: async (result) => {
+    onSuccess: async (result, variables) => {
       const link = `${window.location.origin}${result.sharePath}`;
       setCreatedLink(link);
       setInviteFor(null);
       setInviteEmail("");
       setInviteName("");
-      setNotice("Guest invite created. Copy the link and send it to the guest; email delivery is not configured.");
+      const delivery =
+        result.emailDelivery === "sent"
+          ? `Invite emailed to ${variables.email}.`
+          : result.emailDelivery === "failed"
+            ? "The invite email could not be delivered. Copy the link and send it to the guest."
+            : "Email delivery is not configured. Copy the link and send it to the guest.";
+      setNotice(`Guest invite created. ${delivery}`);
       await refresh();
+      if (result.emailDelivery === "sent") return;
       try {
         await navigator.clipboard.writeText(link);
-        setNotice("Guest invite created and copied. Send the link to the guest; email delivery is not configured.");
+        setNotice(`Guest invite created and link copied. ${delivery}`);
       } catch {
         // The link remains visible for manual copy when clipboard permission is unavailable.
       }
@@ -167,7 +174,7 @@ export function VoiceMeetingsScreen() {
         <div>
           <h1 className="text-[21px] font-extrabold tracking-[-.02em]">Video Meetings</h1>
           <p className="mt-1 max-w-[760px] text-[12px] leading-[1.6] text-[#697586]">
-            Schedule a meeting and share a time-limited guest link. Meetings are separate from phone calls; live video, screen sharing, recording and AI summaries are not configured here.
+            Schedule a meeting and email the guest a time-limited link. Meetings are separate from phone calls; live video, screen sharing, recording and AI summaries are not configured here.
           </p>
         </div>
         <Chip tone="amber" h={24} fontSize={11}>Live video not configured</Chip>
@@ -248,7 +255,7 @@ export function VoiceMeetingsScreen() {
                     <form ref={inviteFormRef} className="mt-3 grid gap-2 rounded-[9px] bg-[#F7F9FB] p-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); invite.mutate({ meetingId: meeting.id, email: inviteEmail.trim(), name: inviteName.trim() }); }}>
                       <input className={inputClass} type="email" required maxLength={191} value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Guest email" aria-label="Guest email" />
                       <input className={inputClass} maxLength={120} value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Guest name (optional)" aria-label="Guest name optional" />
-                      <PrimaryBtn onClick={() => inviteFormRef.current?.requestSubmit()} disabled={invite.isPending}>{invite.isPending ? "Creating…" : "Create link"}</PrimaryBtn>
+                      <PrimaryBtn onClick={() => inviteFormRef.current?.requestSubmit()} disabled={invite.isPending}>{invite.isPending ? "Sending…" : "Send invite"}</PrimaryBtn>
                       <p className="text-[11px] leading-[1.5] text-[#7A8798] sm:col-span-3">The link is shown once and copied if browser permission allows. No email is sent; the link currently opens meeting details only, not video.</p>
                     </form>
                   ) : null}
@@ -269,7 +276,10 @@ export function VoiceMeetingsScreen() {
                       <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-[#7A8798]">Guest links</p>
                       {meeting.invites.map((guest) => (
                         <div key={guest.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-[11px]">
-                          <span>{guest.guestName || guest.email} · expires {formatMeetingTime(guest.expiresAt, meeting.timeZone)}</span>
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            {guest.guestName || guest.email} · expires {formatMeetingTime(guest.expiresAt, meeting.timeZone)}
+                            {guest.emailSentAt ? <Chip tone="green" h={20} fontSize={10}>Emailed</Chip> : <Chip tone="neutral" h={20} fontSize={10}>Link shared manually</Chip>}
+                          </span>
                           <SmallBtn onClick={() => void revokeInvite(meeting, guest.id)}>Revoke</SmallBtn>
                         </div>
                       ))}

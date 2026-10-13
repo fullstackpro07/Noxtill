@@ -13,6 +13,8 @@ export interface VoiceMeetingInviteSummary {
   email: string;
   guestName: string | null;
   expiresAt: string;
+  /** Set only after the email provider accepted the invite email. */
+  emailSentAt: string | null;
 }
 
 export interface VoiceVideoMeeting {
@@ -45,6 +47,7 @@ export interface VoiceMeetingInviteCreated {
   token: string;
   sharePath: string;
   expiresAt: string;
+  emailDelivery: "sent" | "failed" | "not_configured";
 }
 
 export interface PublicVoiceMeetingInvite {

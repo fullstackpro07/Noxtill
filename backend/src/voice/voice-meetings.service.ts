@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { VoiceVideoMeetingStatus } from '@prisma/client';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { EmailService } from '../messaging/channels/email.service';
 import {
   CreateVoiceMeetingDto,
   CreateVoiceMeetingInviteDto,
@@ -16,12 +18,20 @@ import { VOICE_ERROR_CODES } from './voice.constants';
 const hashInvite = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 
+/** `sent` only after the email provider accepted the message; otherwise the organizer shares the link. */
+export type VoiceMeetingInviteEmailDelivery =
+  'sent' | 'failed' | 'not_configured';
+
 @Injectable()
 export class VoiceMeetingsService {
+  private readonly logger = new Logger(VoiceMeetingsService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly email: EmailService,
+    private readonly config: ConfigService,
   ) {}
 
   async listHosts(businessId: string) {
@@ -47,7 +57,13 @@ export class VoiceMeetingsService {
         _count: { select: { invites: { where: { revokedAt: null } } } },
         invites: {
           where: { revokedAt: null },
-          select: { id: true, email: true, guestName: true, expiresAt: true },
+          select: {
+            id: true,
+            email: true,
+            guestName: true,
+            expiresAt: true,
+            emailSentAt: true,
+          },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -73,6 +89,7 @@ export class VoiceMeetingsService {
         email: invite.email,
         guestName: invite.guestName,
         expiresAt: invite.expiresAt.toISOString(),
+        emailSentAt: invite.emailSentAt?.toISOString() ?? null,
       })),
       media: 'not_configured' as const,
       recording: 'not_available' as const,
@@ -100,11 +117,10 @@ export class VoiceMeetingsService {
 
     let customerId = dto.customerId || null;
     if (dto.appointmentId) {
-      const appointment =
-        await this.tenantPrisma.client.appointment.findFirst({
-          where: { id: dto.appointmentId, businessId },
-          select: { id: true, customerId: true },
-        });
+      const appointment = await this.tenantPrisma.client.appointment.findFirst({
+        where: { id: dto.appointmentId, businessId },
+        select: { id: true, customerId: true },
+      });
       if (!appointment) throw this.invalid('The linked booking was not found.');
       if (customerId && customerId !== appointment.customerId) {
         throw this.invalid(
@@ -168,7 +184,10 @@ export class VoiceMeetingsService {
       entity: 'VoiceVideoMeeting',
       entityId: meeting.id,
       action: 'voice.meeting.rescheduled',
-      before: { scheduledAt: meeting.scheduledAt, durationMin: meeting.durationMin },
+      before: {
+        scheduledAt: meeting.scheduledAt,
+        durationMin: meeting.durationMin,
+      },
       after: {
         scheduledAt: updated.scheduledAt,
         durationMin: updated.durationMin,
@@ -228,7 +247,9 @@ export class VoiceMeetingsService {
     }
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(
-      meeting.scheduledAt.getTime() + meeting.durationMin * 60_000 + 60 * 60_000,
+      meeting.scheduledAt.getTime() +
+        meeting.durationMin * 60_000 +
+        60 * 60_000,
     );
     const invite = await this.tenantPrisma.client.voiceMeetingInvite.create({
       data: {
@@ -241,6 +262,16 @@ export class VoiceMeetingsService {
         createdByUserId: actorUserId,
       },
     });
+    const sharePath = `/meeting/${token}`;
+    const emailDelivery = await this.emailInvite(
+      businessId,
+      meeting,
+      invite.id,
+      invite.email,
+      invite.guestName,
+      sharePath,
+      expiresAt,
+    );
     await this.audit.log({
       entity: 'VoiceMeetingInvite',
       entityId: invite.id,
@@ -250,14 +281,79 @@ export class VoiceMeetingsService {
         emailDomain: dto.email.split('@').pop()?.toLowerCase() ?? null,
         expiresAt,
         tokenReturnedOnce: true,
+        emailDelivery,
       },
     });
     return {
       id: invite.id,
       token,
-      sharePath: `/meeting/${token}`,
+      sharePath,
       expiresAt: expiresAt.toISOString(),
+      emailDelivery,
     };
+  }
+
+  /**
+   * Emails the guest link through the shared EmailService. A provider failure never fails the
+   * invite itself — the organizer still gets the one-time link to share manually.
+   */
+  private async emailInvite(
+    businessId: string,
+    meeting: {
+      title: string;
+      scheduledAt: Date;
+      durationMin: number;
+      timeZone: string;
+    },
+    inviteId: string,
+    to: string,
+    guestName: string | null,
+    sharePath: string,
+    expiresAt: Date,
+  ): Promise<VoiceMeetingInviteEmailDelivery> {
+    if (
+      !this.config.get<string>('EMAIL_PROVIDER_KEY') ||
+      !this.config.get<string>('EMAIL_FROM_ADDRESS')
+    ) {
+      return 'not_configured';
+    }
+    const business = await this.tenantPrisma.client.business.findUnique({
+      where: { id: businessId },
+      select: { name: true },
+    });
+    const frontendUrl = (
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
+    const format = new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: meeting.timeZone,
+    });
+    const when = `${format.format(meeting.scheduledAt)} (${meeting.timeZone})`;
+    try {
+      const result = await this.email.send({
+        to,
+        templateKey: 'video_meeting_invite',
+        text: [
+          `Hi ${guestName ?? 'there'},`,
+          `${business?.name ?? 'A business'} invited you to "${meeting.title}" on ${when} (${meeting.durationMin} minutes).`,
+          `Meeting details: ${frontendUrl}${sharePath}`,
+          `This link is personal to you and expires on ${format.format(expiresAt)} (${meeting.timeZone}).`,
+        ].join('\n\n'),
+        locale: 'en',
+        businessId,
+      });
+      await this.tenantPrisma.client.voiceMeetingInvite.update({
+        where: { id: inviteId },
+        data: { emailSentAt: new Date(), emailProviderRef: result.providerRef },
+      });
+      return 'sent';
+    } catch {
+      this.logger.warn(
+        `Meeting invite email delivery failed for invite ${inviteId}`,
+      );
+      return 'failed';
+    }
   }
 
   async revokeInvite(
@@ -334,7 +430,11 @@ export class VoiceMeetingsService {
     if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt <= new Date()) {
       throw this.invalid('Meeting start time must be in the future.');
     }
-    if (!Number.isInteger(durationMin) || durationMin < 15 || durationMin > 240) {
+    if (
+      !Number.isInteger(durationMin) ||
+      durationMin < 15 ||
+      durationMin > 240
+    ) {
       throw this.invalid('Meeting duration must be from 15 to 240 minutes.');
     }
     return scheduledAt;

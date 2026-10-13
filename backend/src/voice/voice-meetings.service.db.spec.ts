@@ -8,6 +8,8 @@ import {
   CLS_KEY_BUSINESS_ID,
   CLS_KEY_USER_ID,
 } from '../common/tenancy/tenant.constants';
+import { ConfigService } from '@nestjs/config';
+import { EmailService } from '../messaging/channels/email.service';
 import { VoiceMeetingsService } from './voice-meetings.service';
 
 class FakeClsService {
@@ -32,17 +34,42 @@ describe('VoiceMeetingsService (real MySQL)', () => {
   let otherBusinessId: string;
   let otherUserId: string;
   let otherHostId: string;
+  let tenantPrisma: TenantPrismaService;
+  let audit: AuditService;
+  const sentEmails: { to: string; text: string; templateKey: string }[] = [];
+  const emailConfig: Record<string, string | undefined> = {
+    EMAIL_PROVIDER_KEY: 'test-key',
+    EMAIL_FROM_ADDRESS: 'meetings@example.com',
+    FRONTEND_URL: 'https://app.example.com/',
+  };
+  let emailFails = false;
+  const fakeEmail = {
+    send: (params: { to: string; text: string; templateKey: string }) => {
+      if (emailFails) return Promise.reject(new Error('provider down'));
+      sentEmails.push(params);
+      return Promise.resolve({ providerRef: `re_${sentEmails.length}` });
+    },
+  } as unknown as EmailService;
+  const fakeConfig = {
+    get: (key: string) => emailConfig[key],
+  } as unknown as ConfigService;
 
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
     cls = new FakeClsService();
-    const tenantPrisma = new TenantPrismaService(
+    tenantPrisma = new TenantPrismaService(
       prisma,
       cls as unknown as ClsService,
     );
-    const audit = new AuditService(tenantPrisma, cls as unknown as ClsService);
-    service = new VoiceMeetingsService(tenantPrisma, prisma, audit);
+    audit = new AuditService(tenantPrisma, cls as unknown as ClsService);
+    service = new VoiceMeetingsService(
+      tenantPrisma,
+      prisma,
+      audit,
+      fakeEmail,
+      fakeConfig,
+    );
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const business = await prisma.business.create({
@@ -115,13 +142,11 @@ describe('VoiceMeetingsService (real MySQL)', () => {
     if (prisma) {
       await prisma.$transaction(async (tx) => {
         await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
-        if (businessId)
-          await tx.business.delete({ where: { id: businessId } });
+        if (businessId) await tx.business.delete({ where: { id: businessId } });
         if (otherBusinessId)
           await tx.business.delete({ where: { id: otherBusinessId } });
         if (userId) await tx.user.delete({ where: { id: userId } });
-        if (otherUserId)
-          await tx.user.delete({ where: { id: otherUserId } });
+        if (otherUserId) await tx.user.delete({ where: { id: otherUserId } });
         await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
       });
       await prisma.$disconnect();
@@ -261,7 +286,71 @@ describe('VoiceMeetingsService (real MySQL)', () => {
       orderBy: { createdAt: 'asc' },
       select: { action: true },
     });
-    expect(auditRows.map((row) => row.action)).toContain('voice.meeting.created');
-    expect(auditRows.map((row) => row.action)).toContain('voice.meeting.cancelled');
+    expect(auditRows.map((row) => row.action)).toContain(
+      'voice.meeting.created',
+    );
+    expect(auditRows.map((row) => row.action)).toContain(
+      'voice.meeting.cancelled',
+    );
+  });
+
+  it('emails the guest link only when the provider accepts it, and records the evidence', async () => {
+    const meeting = await service.create(
+      businessId,
+      userId,
+      meetingInput('Emailed guest meeting'),
+    );
+    const sent = await service.createInvite(businessId, userId, meeting.id, {
+      email: 'Emailed.Guest@example.com',
+      guestName: 'Emailed guest',
+    });
+    expect(sent.emailDelivery).toBe('sent');
+    const email = sentEmails[sentEmails.length - 1];
+    expect(email.to).toBe('emailed.guest@example.com');
+    expect(email.templateKey).toBe('video_meeting_invite');
+    expect(email.text).toContain(
+      `https://app.example.com/meeting/${sent.token}`,
+    );
+    expect(email.text).toContain('Voice Meeting Test');
+    const stored = await prisma.voiceMeetingInvite.findUniqueOrThrow({
+      where: { id: sent.id },
+    });
+    expect(stored.emailSentAt).not.toBeNull();
+    expect(stored.emailProviderRef).toBe(`re_${sentEmails.length}`);
+
+    emailFails = true;
+    const failed = await service.createInvite(businessId, userId, meeting.id, {
+      email: 'bounced@example.com',
+    });
+    emailFails = false;
+    expect(failed.emailDelivery).toBe('failed');
+    expect(failed.token).toHaveLength(43);
+    expect(
+      (
+        await prisma.voiceMeetingInvite.findUniqueOrThrow({
+          where: { id: failed.id },
+        })
+      ).emailSentAt,
+    ).toBeNull();
+
+    const key = emailConfig.EMAIL_PROVIDER_KEY;
+    emailConfig.EMAIL_PROVIDER_KEY = undefined;
+    const sentBefore = sentEmails.length;
+    const manual = await service.createInvite(businessId, userId, meeting.id, {
+      email: 'manual@example.com',
+    });
+    emailConfig.EMAIL_PROVIDER_KEY = key;
+    expect(manual.emailDelivery).toBe('not_configured');
+    expect(sentEmails).toHaveLength(sentBefore);
+
+    const listed = (await service.list(businessId)).find(
+      (row) => row.id === meeting.id,
+    );
+    const byEmail = Object.fromEntries(
+      (listed?.invites ?? []).map((row) => [row.email, row.emailSentAt]),
+    );
+    expect(byEmail['emailed.guest@example.com']).not.toBeNull();
+    expect(byEmail['bounced@example.com']).toBeNull();
+    expect(byEmail['manual@example.com']).toBeNull();
   });
 });
