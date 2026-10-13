@@ -1047,6 +1047,8 @@ model Business {
   voiceOutboundDialAttempts     VoiceOutboundDialAttempt[]
   voiceTrackingNumbers          VoiceTrackingNumber[]
   voiceTrackingAssignments      VoiceTrackingNumberAssignment[]
+  voiceCallbacks                VoiceCallback[]
+  voiceCallbackAttempts         VoiceCallbackAttempt[]
   voiceVideoMeetings            VoiceVideoMeeting[]
   voiceMeetingInvites           VoiceMeetingInvite[]
   voiceIvrFlows                 VoiceIvrFlow[]
@@ -2821,6 +2823,7 @@ model VoiceHumanAgentProfile {
   assignments          VoiceHumanAgentAssignment[]
   outboundCampaigns    VoiceOutboundCampaign[]
   outboundDialAttempts VoiceOutboundDialAttempt[]
+  callbackAttempts     VoiceCallbackAttempt[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3005,6 +3008,7 @@ model PhoneCall {
   /// Tracking number the caller dialed (null = the shared business line).
   trackingNumberId         String?                       @map("tracking_number_id")
   trackingNumber           VoiceTrackingNumber?          @relation(fields: [trackingNumberId], references: [id], onDelete: SetNull)
+  callback                 VoiceCallback?
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
   providerCost             Decimal?                      @map("provider_cost") @db.Decimal(10, 4)
@@ -3411,6 +3415,60 @@ model VoiceTrackingNumberAssignment {
 
   @@index([businessId, numberId, validFrom], map: "voice_tracking_assignment_window_idx")
   @@map("voice_tracking_number_assignments")
+}
+
+/// Missed-call recovery: one call-back per missed/callback-requested call. Each attempt re-runs the
+/// outbound eligibility check (callback purpose, live agent) and rings the staff member first.
+model VoiceCallback {
+  id                String                 @id @default(uuid())
+  businessId        String                 @map("business_id")
+  business          Business               @relation(fields: [businessId], references: [id])
+  phoneCallId       String                 @unique @map("phone_call_id")
+  phoneCall         PhoneCall              @relation(fields: [phoneCallId], references: [id], onDelete: Cascade)
+  phoneE164         String                 @map("phone_e164") @db.VarChar(16)
+  status            String                 @default("open") @db.VarChar(20)
+  attemptCount      Int                    @default(0) @map("attempt_count")
+  lastAttemptAt     DateTime?              @map("last_attempt_at")
+  lastBlockReason   String?                @map("last_block_reason") @db.VarChar(40)
+  outcome           String?                @db.VarChar(40)
+  outcomeNotes      String?                @map("outcome_notes") @db.VarChar(1000)
+  completedAt       DateTime?              @map("completed_at")
+  completedByUserId String?                @map("completed_by_user_id")
+  attempts          VoiceCallbackAttempt[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status, updatedAt], map: "voice_callback_status_idx")
+  @@map("voice_callbacks")
+}
+
+/// One call-back try. Statuses reuse the power-dialer lifecycle and move only on signed callbacks.
+model VoiceCallbackAttempt {
+  id                    String                         @id @default(uuid())
+  businessId            String                         @map("business_id")
+  business              Business                       @relation(fields: [businessId], references: [id])
+  callbackId            String                         @map("callback_id")
+  callback              VoiceCallback                  @relation(fields: [callbackId], references: [id], onDelete: Cascade)
+  /// Null when the check passed but staff dialed from their own phone (no provider leg).
+  agentProfileId        String?                        @map("agent_profile_id")
+  agentProfile          VoiceHumanAgentProfile?        @relation(fields: [agentProfileId], references: [id], onDelete: SetNull)
+  eligibilityDecisionId String?                        @map("eligibility_decision_id")
+  status                VoiceOutboundDialAttemptStatus
+  blockReasonCode       String?                        @map("block_reason_code") @db.VarChar(40)
+  agentCallSid          String?                        @unique @map("agent_call_sid") @db.VarChar(64)
+  customerDialed        Boolean                        @default(false) @map("customer_dialed")
+  durationSec           Int?                           @map("duration_sec")
+  placedByUserId        String                         @map("placed_by_user_id")
+  answeredAt            DateTime?                      @map("answered_at")
+  endedAt               DateTime?                      @map("ended_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, callbackId, createdAt], map: "voice_callback_attempt_idx")
+  @@index([businessId, agentProfileId, status], map: "voice_callback_attempt_agent_idx")
+  @@map("voice_callback_attempts")
 }
 
 /// Scheduling/control-plane record for the Video Meetings screen. Media state is intentionally

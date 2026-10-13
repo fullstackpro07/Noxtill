@@ -357,7 +357,14 @@ export class VoiceOutboundDialerService {
           ],
         },
       });
-      if (busy > 0 || liveInbound > 0) {
+      const callbackBusy = await tx.voiceCallbackAttempt.count({
+        where: {
+          businessId,
+          agentProfileId: profile.id,
+          status: { in: IN_FLIGHT },
+        },
+      });
+      if (busy > 0 || liveInbound > 0 || callbackBusy > 0) {
         throw new AppException(
           VOICE_ERROR_CODES.DIALER_AGENT_UNAVAILABLE,
           'You already have a call in progress.',

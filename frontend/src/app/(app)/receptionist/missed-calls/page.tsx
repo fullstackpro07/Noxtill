@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { MissedCallsScreen } from "@/components/receptionist/screens/missed-calls-screen";
 
-export default function MissedCallsRedirect() {
-  redirect("/receptionist/queue");
+export default function MissedCallsPage() {
+  return <MissedCallsScreen />;
 }

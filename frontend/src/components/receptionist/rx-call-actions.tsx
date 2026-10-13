@@ -105,7 +105,7 @@ export function useCallActions() {
       title: "Call back this number?",
       tone: "green",
       icon: "phone-outgoing",
-      body: `Your phone's dialler opens with this number, and Noxtill records that a callback was offered. ${
+      body: `Noxtill records that a callback was offered and opens Missed Calls, where the number is checked against consent, opt-out, suppression and calling hours before anything is dialed. ${
         hasTranscript ? "The transcript is in the call workspace if you want the context first." : "There is no transcript for this call, so you are starting without context — that is genuinely all that is known."
       }`,
       rows: [
@@ -114,11 +114,11 @@ export function useCallActions() {
         { label: "Customer match", value: c.customer ? c.customer.name : "None found", tone: c.customer ? undefined : "muted" },
         { label: "Known intent", value: missed ? "None — not inferred" : intentLabel(c), tone: missed ? "muted" : undefined },
       ],
-      primary: "Open dialler",
+      primary: "Go to call-back",
       cancel: "Cancel",
       onConfirm: async () => {
         if (!c.resolvedAt && !c.callbackRequestedAt) await rx.actions.offerCallback(c.id);
-        window.location.href = `tel:${c.fromNumber}`;
+        router.push("/receptionist/missed-calls");
       },
     });
   };

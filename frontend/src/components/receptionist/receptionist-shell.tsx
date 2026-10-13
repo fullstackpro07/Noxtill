@@ -83,6 +83,13 @@ const TABS: TabDef[] = [
     title: "Call Queue & Routing",
   },
   {
+    key: "missed",
+    label: "Missed Calls",
+    href: "/receptionist/missed-calls",
+    icon: "phone-missed",
+    title: "Missed Calls & Call-backs",
+  },
+  {
     key: "assistant",
     label: "AI Call Assistant",
     href: "/receptionist/assistant",

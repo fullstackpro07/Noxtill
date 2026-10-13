@@ -86,6 +86,11 @@ import {
   OverrideVoiceCallAttributionDto,
 } from './dto/voice-tracking.dto';
 import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
+import { VoiceCallbacksService } from './voice-callbacks.service';
+import {
+  CompleteVoiceCallbackDto,
+  PlaceVoiceCallbackDto,
+} from './dto/voice-callback.dto';
 import {
   CreateVoiceIvrFlowDto,
   PublishVoiceIvrFlowDto,
@@ -146,6 +151,7 @@ export class VoiceController {
     private readonly voiceSupervisor: VoiceSupervisorService,
     private readonly voiceTracking: VoiceTrackingService,
     private readonly voiceTrackingNumbers: VoiceTrackingNumbersService,
+    private readonly voiceCallbacks: VoiceCallbacksService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -927,6 +933,30 @@ export class VoiceController {
     return this.voiceQuery.listMissedCalls();
   }
 
+  /** Missed Calls recovery: same audience as the call log; each try is compliance-checked. */
+  @Get('voice/callbacks')
+  listVoiceCallbacks(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceCallbacks.list(user.businessId);
+  }
+
+  @Post('voice/calls/:id/callback')
+  placeVoiceCallback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PlaceVoiceCallbackDto,
+  ) {
+    return this.voiceCallbacks.place(user.businessId, user.sub, id, dto);
+  }
+
+  @Post('voice/callbacks/:id/complete')
+  completeVoiceCallback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: CompleteVoiceCallbackDto,
+  ) {
+    return this.voiceCallbacks.complete(user.businessId, user.sub, id, dto);
+  }
+
   @Get('voice/analytics')
   analytics() {
     return this.voiceQuery.analytics();
@@ -1340,6 +1370,56 @@ export class VoiceController {
     const body = req.body as { CallSid: string; CallStatus: string };
     await this.voiceCall.handleStatus(body.CallSid, body.CallStatus);
     return { received: true };
+  }
+
+  @Public()
+  @Post('voice/webhook/callback/agent-answered')
+  @HttpCode(200)
+  async callbackAgentAnswered(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const xml = await this.voiceCallbacks.agentAnsweredTwiml(attemptId);
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/callback/agent-status')
+  @HttpCode(200)
+  async callbackAgentStatus(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallStatus?: string };
+    await this.voiceCallbacks.agentStatus(attemptId, body.CallStatus ?? '');
+    return { received: true };
+  }
+
+  @Public()
+  @Post('voice/webhook/callback/customer-result')
+  @HttpCode(200)
+  async callbackCustomerResult(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      DialCallStatus?: string;
+      DialCallDuration?: string;
+    };
+    const xml = await this.voiceCallbacks.customerResult(
+      attemptId,
+      body.DialCallStatus ?? '',
+      body.DialCallDuration ? Number(body.DialCallDuration) : undefined,
+    );
+    res.type('text/xml').send(xml);
   }
 
   /** Power dialer: the agent answered their own phone; TwiML bridges to the customer if still allowed. */
