@@ -178,7 +178,7 @@ function Queue() {
             bullets: [
               "Rules are checked top to bottom on every thing the caller says; the first one that matches decides the call",
               "A rule overrides what the AI itself would have done that turn",
-              r.action === "transfer" ? (needsNumber ? "There is no number to ring yet — add one to this rule or set your transfer number in Settings, otherwise the call is recorded as a message" : "The caller is put through to the number shown") : "The call ends and joins the follow-up queue",
+              r.action === "transfer" ? (needsNumber ? "There is no number to ring yet — add one to this rule or set your transfer number in Settings; otherwise follow-up is queued and audio is saved only with consent" : "The caller is put through to the number shown") : "The call ends and joins the follow-up queue",
               "The call is recorded against this rule's name, so you can always see which rule fired",
             ],
             note: r.triggerKind === "sentiment" || r.triggerKind === "topic" || r.triggerKind === "low_confidence" ? "This trigger uses the AI's own reading of the call, which is an estimate — not a certainty." : "Changes apply from the very next call.",
@@ -188,7 +188,7 @@ function Queue() {
       // 3. Built-in handling — fixed.
       {
         when: "Caller asks for a person, or the AI can't help",
-        then: transferOk ? "Dial the transfer number" : "Tell the caller a message is noted, and record it as a message",
+        then: transferOk ? "Dial the transfer number" : "Queue a follow-up; record audio only if the caller consented",
         scope: "All calls",
         status: transferOk ? "Built-in" : "Needs a transfer number",
         tone: transferOk ? "neutral" : "amber",
@@ -196,7 +196,7 @@ function Queue() {
         source: "builtin",
         panel: {
           canAi: "Yes — the AI decides",
-          bullets: ["The AI chooses “transfer” when the caller asks for a person or it cannot help", transferOk ? "It then rings your transfer number" : "No transfer number is set, so the AI tells the caller their message is noted and the call is recorded as a message in the follow-up queue — set one in Settings to enable real transfers", "The transfer is recorded on the call as the outcome"],
+          bullets: ["The AI chooses “transfer” when the caller asks for a person or it cannot help", transferOk ? "It then rings your transfer number" : "No transfer number is set, so a follow-up is queued; caller audio is not kept unless recording consent was granted", "The transfer is recorded on the call as the outcome"],
           note: "Routing decisions are recorded per call, so you can see which rule fired.",
         },
       },
@@ -218,7 +218,7 @@ function Queue() {
         tone: "neutral",
         calls: t.calls.filter((c) => c.outcome === "message" && !c.routedRuleId).length,
         source: "builtin",
-        panel: { canAi: "Yes", bullets: ["The call joins the follow-up queue until someone marks it handled", "If you've set a hold message, the AI phrases its reply around it", "The transcript is kept so whoever calls back has the context"], note: "Nothing is promised to the caller beyond a callback." },
+        panel: { canAi: "Yes", bullets: ["The call joins the follow-up queue until someone marks it handled", "If you've set a hold message, the AI phrases its reply around it", "Caller audio and transcript are retained only if recording consent was granted; otherwise the call log has no caller transcript"], note: "Nothing is promised to the caller beyond a callback." },
       },
       {
         when: "Conversation ends naturally",
@@ -232,13 +232,13 @@ function Queue() {
       },
       {
         when: "Anything else",
-        then: `Keep talking — after ${maxTurns} spoken lines, arrange a callback and record a message`,
+        then: `Keep talking — after ${maxTurns} consented conversation lines, arrange a callback`,
         scope: "All calls",
         status: "Built-in",
         tone: "neutral",
         calls: t.calls.filter((c) => c.transcript.length >= maxTurns).length,
         source: "builtin",
-        panel: { canAi: "Yes", bullets: [`A conversation is capped at ${maxTurns} spoken lines (caller and AI combined) so a runaway call still ends`, "At the cap the AI says someone will call back, and the call is recorded as a message so it reaches the follow-up queue"], note: "The count is calls today that reached the cap." },
+        panel: { canAi: "Yes", bullets: [`A consented conversation is capped at ${maxTurns} spoken lines (caller and AI combined) so a runaway call still ends`, "At the cap the AI arranges a callback; caller audio is retained only when consent was granted"], note: "The count is calls today that reached the cap." },
       },
     ];
     return list.map((r, i) => ({ ...r, order: i + 1 }));
