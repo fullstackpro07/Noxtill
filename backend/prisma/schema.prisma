@@ -1045,6 +1045,8 @@ model Business {
   voiceOutboundCampaigns        VoiceOutboundCampaign[]
   voiceOutboundCampaignMembers  VoiceOutboundCampaignMember[]
   voiceOutboundDialAttempts     VoiceOutboundDialAttempt[]
+  voiceTrackingNumbers          VoiceTrackingNumber[]
+  voiceTrackingAssignments      VoiceTrackingNumberAssignment[]
   voiceVideoMeetings            VoiceVideoMeeting[]
   voiceMeetingInvites           VoiceMeetingInvite[]
   voiceIvrFlows                 VoiceIvrFlow[]
@@ -2832,24 +2834,24 @@ model VoiceHumanAgentProfile {
 /// Provider-directed human handoffs reserve one available staff profile until Twilio confirms
 /// the dial result. Staff identity remains canonical in BusinessUser; this is only call routing evidence.
 model VoiceHumanAgentAssignment {
-  id             String                 @id @default(uuid())
-  businessId     String                 @map("business_id")
-  business       Business               @relation(fields: [businessId], references: [id])
-  callId         String                 @map("call_id")
-  call           PhoneCall              @relation(fields: [callId], references: [id], onDelete: Cascade)
-  attemptNumber  Int                    @default(1) @map("attempt_number")
-  staffUserId    String                 @map("staff_user_id")
-  profileId      String                 @map("profile_id")
-  profile        VoiceHumanAgentProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
-  status         String                 @default("offered") @db.VarChar(20)
-  providerStatus String?                @map("provider_status") @db.VarChar(40)
+  id              String                 @id @default(uuid())
+  businessId      String                 @map("business_id")
+  business        Business               @relation(fields: [businessId], references: [id])
+  callId          String                 @map("call_id")
+  call            PhoneCall              @relation(fields: [callId], references: [id], onDelete: Cascade)
+  attemptNumber   Int                    @default(1) @map("attempt_number")
+  staffUserId     String                 @map("staff_user_id")
+  profileId       String                 @map("profile_id")
+  profile         VoiceHumanAgentProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  status          String                 @default("offered") @db.VarChar(20)
+  providerStatus  String?                @map("provider_status") @db.VarChar(40)
   /// Twilio leg SID and conference SID once an internal transfer is placed into a shared room.
   providerCallSid String?                @map("provider_call_sid") @db.VarChar(34)
   conferenceSid   String?                @map("conference_sid") @db.VarChar(34)
-  connected      Boolean                @default(false)
-  expiresAt      DateTime?              @map("expires_at")
-  releasedAt     DateTime?              @map("released_at")
-  createdAt      DateTime               @default(now()) @map("created_at")
+  connected       Boolean                @default(false)
+  expiresAt       DateTime?              @map("expires_at")
+  releasedAt      DateTime?              @map("released_at")
+  createdAt       DateTime               @default(now()) @map("created_at")
 
   @@unique([businessId, callId, attemptNumber], map: "voice_agent_assignments_business_call_attempt_key")
   @@index([callId], map: "voice_agent_assignments_call_id_idx")
@@ -2882,20 +2884,20 @@ model VoiceAiAgent {
 
 /// Immutable JSON snapshot for one AI agent revision. `checksum` covers the canonical config JSON.
 model VoiceAiAgentVersion {
-  id              String                @id @default(uuid())
-  businessId      String                @map("business_id")
-  business        Business              @relation(fields: [businessId], references: [id])
-  agentId         String                @map("agent_id")
-  agent           VoiceAiAgent          @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  version         Int
-  config          Json
-  checksum        String                @db.VarChar(64)
-  createdByUserId String?               @map("created_by_user_id")
-  publishedAt     DateTime?             @map("published_at")
-  approvedAt      DateTime?             @map("approved_at")
-  approvedByUserId String?              @map("approved_by_user_id")
-  phoneCalls      PhoneCall[]
-  testRuns        VoiceAiAgentTestRun[]
+  id               String                @id @default(uuid())
+  businessId       String                @map("business_id")
+  business         Business              @relation(fields: [businessId], references: [id])
+  agentId          String                @map("agent_id")
+  agent            VoiceAiAgent          @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  version          Int
+  config           Json
+  checksum         String                @db.VarChar(64)
+  createdByUserId  String?               @map("created_by_user_id")
+  publishedAt      DateTime?             @map("published_at")
+  approvedAt       DateTime?             @map("approved_at")
+  approvedByUserId String?               @map("approved_by_user_id")
+  phoneCalls       PhoneCall[]
+  testRuns         VoiceAiAgentTestRun[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2941,7 +2943,7 @@ model PhoneCall {
   /// Immutable published IVR graph selected at call arrival; edits affect only later calls.
   ivrFlowVersionId         String?                       @map("ivr_flow_version_id")
   ivrFlowVersion           VoiceIvrFlowVersion?          @relation(fields: [ivrFlowVersionId], references: [id], onDelete: Restrict)
-  ivrCurrentNodeId          String?                       @map("ivr_current_node_id") @db.VarChar(80)
+  ivrCurrentNodeId         String?                       @map("ivr_current_node_id") @db.VarChar(80)
   callSid                  String                        @unique @map("call_sid")
   fromNumber               String                        @map("from_number")
   status                   PhoneCallStatus               @default(in_progress)
@@ -3000,6 +3002,9 @@ model PhoneCall {
   attributionEvidence      String?                       @map("attribution_evidence") @db.Text
   attributionReason        String?                       @map("attribution_reason") @db.Text
   attributionUpdatedAt     DateTime?                     @map("attribution_updated_at")
+  /// Tracking number the caller dialed (null = the shared business line).
+  trackingNumberId         String?                       @map("tracking_number_id")
+  trackingNumber           VoiceTrackingNumber?          @relation(fields: [trackingNumberId], references: [id], onDelete: SetNull)
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
   providerCost             Decimal?                      @map("provider_cost") @db.Decimal(10, 4)
@@ -3008,10 +3013,10 @@ model PhoneCall {
   /// Set when staff deleted the recording and transcript (the call log itself is kept).
   recordingDeletedAt       DateTime?                     @map("recording_deleted_at")
 
-  notes                PhoneCallNote[]
-  wrapUp               VoiceCallWrapUp?
+  notes                 PhoneCallNote[]
+  wrapUp                VoiceCallWrapUp?
   humanAgentAssignments VoiceHumanAgentAssignment[]
-  qualityReviews       VoiceQualityReview[]
+  qualityReviews        VoiceQualityReview[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -3022,6 +3027,7 @@ model PhoneCall {
   @@index([businessId, attributionSource, startedAt], map: "phone_calls_business_attribution_idx")
   @@index([recordingExpiresAt], map: "phone_calls_recording_expires_idx")
   @@index([recordingPolicyVersionId], map: "phone_calls_recording_policy_idx")
+  @@index([trackingNumberId], map: "phone_calls_tracking_number_id_idx")
   @@map("phone_calls")
 }
 
@@ -3356,6 +3362,55 @@ model VoiceOutboundDialAttempt {
   @@index([businessId, agentProfileId, status], map: "voice_dial_attempt_agent_idx")
   @@index([memberId, createdAt], map: "voice_dial_attempt_member_idx")
   @@map("voice_outbound_dial_attempts")
+}
+
+/// Campaign tracking number: bought from, or ownership-verified in, the connected Twilio account
+/// and routed to the normal inbound webhook. While active, inbound calls are stamped with the
+/// current source; deactivating stops attribution but does not release the number at Twilio.
+model VoiceTrackingNumber {
+  id              String                          @id @default(uuid())
+  businessId      String                          @map("business_id")
+  business        Business                        @relation(fields: [businessId], references: [id])
+  phoneNumber     String                          @unique @map("phone_number") @db.VarChar(16)
+  twilioSid       String                          @map("twilio_sid") @db.VarChar(64)
+  label           String                          @db.VarChar(120)
+  source          String                          @db.VarChar(191)
+  channel         String                          @db.VarChar(191)
+  campaignId      String?                         @map("campaign_id")
+  campaign        AdCampaign?                     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  provisionedVia  String                          @map("provisioned_via") @db.VarChar(20)
+  active          Boolean                         @default(true)
+  deactivatedAt   DateTime?                       @map("deactivated_at")
+  createdByUserId String                          @map("created_by_user_id")
+  assignments     VoiceTrackingNumberAssignment[]
+  calls           PhoneCall[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, active], map: "voice_tracking_number_business_idx")
+  @@map("voice_tracking_numbers")
+}
+
+/// Append-only assignment windows; reassigning closes the old window instead of editing it.
+model VoiceTrackingNumberAssignment {
+  id              String              @id @default(uuid())
+  businessId      String              @map("business_id")
+  business        Business            @relation(fields: [businessId], references: [id])
+  numberId        String              @map("number_id")
+  number          VoiceTrackingNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  source          String              @db.VarChar(191)
+  channel         String              @db.VarChar(191)
+  campaignId      String?             @map("campaign_id")
+  validFrom       DateTime            @map("valid_from")
+  validTo         DateTime?           @map("valid_to")
+  reason          String              @db.VarChar(500)
+  createdByUserId String              @map("created_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, numberId, validFrom], map: "voice_tracking_assignment_window_idx")
+  @@map("voice_tracking_number_assignments")
 }
 
 /// Scheduling/control-plane record for the Video Meetings screen. Media state is intentionally
@@ -7236,6 +7291,7 @@ model AdCampaign {
   leads                AdLead[]
   statsSnapshots       AdCampaignStatsSnapshot[]
   attributedPhoneCalls PhoneCall[]               @relation("PhoneCallAttributionCampaign")
+  voiceTrackingNumbers VoiceTrackingNumber[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

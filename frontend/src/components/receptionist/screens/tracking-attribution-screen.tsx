@@ -22,6 +22,7 @@ import {
   Th,
   kpiGrid,
 } from "../rx-ui";
+import { TrackingNumbersCard } from "./tracking-numbers-card";
 
 const dateTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -104,7 +105,11 @@ function CallTable({
                     {call.marketingAttribution.campaignLabel}
                   </div>
                 ) : null}
-                <Chip tone="blue" className="mt-1">Manual · evidence entered</Chip>
+                {call.marketingAttribution.trackingNumber ? (
+                  <Chip tone="green" className="mt-1">Tracking number · {call.marketingAttribution.trackingNumber.label}</Chip>
+                ) : (
+                  <Chip tone="blue" className="mt-1">Manual · evidence entered</Chip>
+                )}
                 <details className="mt-1 max-w-[240px] text-[10.5px] text-[#667085]">
                   <summary className="cursor-pointer font-semibold">Evidence &amp; reason</summary>
                   <p className="mb-1 mt-1 whitespace-pre-wrap">{call.marketingAttribution.evidence}</p>
@@ -228,7 +233,8 @@ export function TrackingAttributionScreen() {
             <Chip tone="blue">Evidence only</Chip>
           </div>
           <p className="mb-0 mt-1 text-[12px] text-[#667085]">
-            Calls, phone-linked bookings and provider-priced charges from saved
+            Calls attributed by the tracking number dialed or by evidence you
+            enter, phone-linked bookings and provider-priced charges from saved
             records. No guessed campaign ROI.
           </p>
         </div>
@@ -278,6 +284,17 @@ export function TrackingAttributionScreen() {
           sub={data.limitations.providerCharges}
         />
         <KpiCard
+          label="Tracking-number calls"
+          value={String(data.metrics.trackingNumberCalls)}
+          sub={`${data.metrics.activeTrackingNumbers} active numbers · ${days} days`}
+          tone="green"
+        />
+        <KpiCard
+          label="Unknown source"
+          value={data.metrics.unknownSourceRate == null ? "No calls" : `${Math.round(data.metrics.unknownSourceRate * 100)}%`}
+          sub="No tracking number or evidence"
+        />
+        <KpiCard
           label="Manual source corrections"
           value={String(data.metrics.manualAttributedCalls)}
           sub={`Evidence entered · ${days} days · not provider-verified`}
@@ -288,6 +305,8 @@ export function TrackingAttributionScreen() {
           sub="No call-to-order link"
         />
       </div>
+
+      <TrackingNumbersCard campaignOptions={data.campaignOptions} />
 
       <div className="grid gap-[18px] lg:grid-cols-[minmax(260px,.82fr)_minmax(0,1.6fr)]">
         <Card overflow>
@@ -307,8 +326,9 @@ export function TrackingAttributionScreen() {
                   <Chip tone="neutral">Shared business line</Chip>
                 </div>
                 <div className="mt-3 text-[11.5px] text-[#667085]">
-                  Provisioned {dateTime(data.line.provisionedAt)}. This line is
-                  not assigned to a specific marketing campaign.
+                  Provisioned {dateTime(data.line.provisionedAt)}. Calls to this
+                  shared line are not assigned to a campaign; use tracking
+                  numbers for that.
                 </div>
               </>
             ) : (

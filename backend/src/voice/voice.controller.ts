@@ -79,7 +79,13 @@ import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service'
 import { VoiceIvrService } from './voice-ivr.service';
 import { VoiceSupervisorService } from './voice-supervisor.service';
 import { VoiceTrackingService } from './voice-tracking.service';
-import { OverrideVoiceCallAttributionDto } from './dto/voice-tracking.dto';
+import {
+  AddVoiceTrackingNumberDto,
+  AssignVoiceTrackingNumberDto,
+  DeactivateVoiceTrackingNumberDto,
+  OverrideVoiceCallAttributionDto,
+} from './dto/voice-tracking.dto';
+import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import {
   CreateVoiceIvrFlowDto,
   PublishVoiceIvrFlowDto,
@@ -139,6 +145,7 @@ export class VoiceController {
     private readonly voiceIvr: VoiceIvrService,
     private readonly voiceSupervisor: VoiceSupervisorService,
     private readonly voiceTracking: VoiceTrackingService,
+    private readonly voiceTrackingNumbers: VoiceTrackingNumbersService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -702,6 +709,46 @@ export class VoiceController {
     @Body() dto: OverrideVoiceCallAttributionDto,
   ) {
     return this.voiceTracking.overrideAttribution(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/tracking/numbers')
+  listVoiceTrackingNumbers(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceTrackingNumbers.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/tracking/numbers')
+  addVoiceTrackingNumber(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AddVoiceTrackingNumberDto,
+  ) {
+    return this.voiceTrackingNumbers.add(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/tracking/numbers/:id/assign')
+  assignVoiceTrackingNumber(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: AssignVoiceTrackingNumberDto,
+  ) {
+    return this.voiceTrackingNumbers.assign(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/tracking/numbers/:id/deactivate')
+  deactivateVoiceTrackingNumber(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: DeactivateVoiceTrackingNumberDto,
+  ) {
+    return this.voiceTrackingNumbers.deactivate(
       user.businessId,
       user.sub,
       id,

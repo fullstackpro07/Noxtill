@@ -3,10 +3,14 @@ import { AppointmentStatus, PhoneCallStatus, Prisma } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { OverrideVoiceCallAttributionDto } from './dto/voice-tracking.dto';
+import { TRACKING_NUMBER_ATTRIBUTION_REASON } from './voice-tracking-numbers.service';
 
 const ALLOWED_WINDOWS = [7, 30, 90] as const;
 
-/** Evidence-only call attribution. Sources are merchant-entered, never inferred from a phone call. */
+/**
+ * Evidence-only call attribution: either the tracking number the caller dialed, or a
+ * merchant-entered correction. Nothing is inferred from the conversation itself.
+ */
 @Injectable()
 export class VoiceTrackingService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
@@ -131,6 +135,8 @@ export class VoiceTrackingService {
       calls,
       manualAttributedCalls,
       campaignOptions,
+      trackingNumberCalls,
+      trackingNumberCount,
     ] = await Promise.all([
       this.tenantPrisma.client.phoneNumber.findUnique({
         where: { businessId },
@@ -174,6 +180,7 @@ export class VoiceTrackingService {
           attributionEvidence: true,
           attributionReason: true,
           attributionUpdatedAt: true,
+          trackingNumber: { select: { phoneNumber: true, label: true } },
           attributionCampaign: {
             select: { provider: true, goal: true },
           },
@@ -194,6 +201,15 @@ export class VoiceTrackingService {
         take: 100,
         select: { id: true, provider: true, goal: true, status: true },
       }),
+      this.tenantPrisma.client.phoneCall.count({
+        where: {
+          ...where,
+          attributionReason: TRACKING_NUMBER_ATTRIBUTION_REASON,
+        },
+      }),
+      this.tenantPrisma.client.voiceTrackingNumber.count({
+        where: { businessId, active: true },
+      }),
     ]);
 
     return {
@@ -212,10 +228,15 @@ export class VoiceTrackingService {
         inboundCalls: callCount,
         callLinkedBookings: linkedBookings,
         completedCallBookings: completedBookings,
-        manualAttributedCalls,
+        manualAttributedCalls: manualAttributedCalls - trackingNumberCalls,
+        trackingNumberCalls,
+        activeTrackingNumbers: trackingNumberCount,
         leads: null,
         qualifiedConversions: null,
-        unknownSourceRate: null,
+        /** Share of calls in the window with no dialed-number or merchant-entered source. */
+        unknownSourceRate: callCount
+          ? (callCount - manualAttributedCalls) / callCount
+          : null,
         campaignRevenue: null,
         providerCharges: chargeRows.map((row) => ({
           unit: row.providerCostUnit,
@@ -249,7 +270,16 @@ export class VoiceTrackingService {
               evidence: call.attributionEvidence,
               reason: call.attributionReason,
               updatedAt: call.attributionUpdatedAt?.toISOString() ?? null,
-              confidence: 'Merchant-entered evidence; not provider-verified',
+              trackingNumber: call.trackingNumber
+                ? {
+                    phoneNumber: call.trackingNumber.phoneNumber,
+                    label: call.trackingNumber.label,
+                  }
+                : null,
+              confidence:
+                call.attributionReason === TRACKING_NUMBER_ATTRIBUTION_REASON
+                  ? 'Dialed tracking number (provider-routed)'
+                  : 'Merchant-entered evidence; not provider-verified',
             }
           : null,
         booking: call.appointment
@@ -271,14 +301,16 @@ export class VoiceTrackingService {
       campaignOptions,
       limitations: {
         marketingAttribution:
-          'Automatic click/session/UTM imports are not configured. Only merchant-entered source corrections with evidence are shown; unknown calls are not assigned to a campaign.',
+          'Click/session/UTM imports are not configured. Calls are attributed only by the tracking number dialed or by a merchant-entered correction with evidence; unknown calls are not assigned to a campaign.',
         campaignRevenue:
           'Not available: a phone call can link to its canonical booking, but there is no call-to-order/revenue link.',
         leads:
           'Not tracked: caller records are not automatically counted as qualified leads.',
-        trackingNumbers: line
-          ? 'This business has one shared Twilio voice line, not campaign-specific tracking numbers.'
-          : 'Not configured: this business has no provisioned Twilio voice line or campaign-specific tracking numbers.',
+        trackingNumbers: trackingNumberCount
+          ? `${trackingNumberCount} active tracking number${trackingNumberCount === 1 ? '' : 's'}; calls to the shared line stay unattributed unless corrected.`
+          : line
+            ? 'No tracking numbers yet: calls arrive on one shared voice line. Add a tracking number per campaign or source.'
+            : 'Not configured: this business has no provisioned voice line or tracking numbers.',
         providerCharges: chargeRows.length
           ? 'Only charges returned and price-checked by the telephony provider are shown; no estimate is added.'
           : 'Not available: no provider-priced calls are recorded in this date window.',

@@ -21,6 +21,7 @@ import { VoiceRoutingRulesService } from './voice-routing-rules.service';
 import { VoiceIvrService } from './voice-ivr.service';
 import { VoiceSupervisorService } from './voice-supervisor.service';
 import { VoiceTrackingService } from './voice-tracking.service';
+import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import { VoiceKnowledgeService } from './voice-knowledge.service';
 import { PollyVoiceService } from './polly-voice.service';
 import { MissedCallService } from './missed-call.service';
@@ -72,6 +73,7 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceIvrService,
     VoiceSupervisorService,
     VoiceTrackingService,
+    VoiceTrackingNumbersService,
     VoiceRoutingRulesService,
     VoiceKnowledgeService,
     PollyVoiceService,

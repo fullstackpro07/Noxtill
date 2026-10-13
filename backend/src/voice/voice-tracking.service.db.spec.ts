@@ -175,7 +175,7 @@ describe('VoiceTrackingService (MySQL)', () => {
       manualAttributedCalls: 0,
       leads: null,
       qualifiedConversions: null,
-      unknownSourceRate: null,
+      unknownSourceRate: 1,
       campaignRevenue: null,
       providerCharges: [{ unit: 'USD', amount: '0.03', checkedCallCount: 1 }],
     });

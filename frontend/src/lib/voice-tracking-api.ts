@@ -21,6 +21,8 @@ export interface VoiceCallAttributionCorrection {
   evidence: string | null;
   reason: string | null;
   updatedAt: string | null;
+  /** Set when the call came in on a tracking number. */
+  trackingNumber: { phoneNumber: string; label: string } | null;
   confidence: string;
 }
 
@@ -47,9 +49,12 @@ export interface VoiceTrackingOverview {
     callLinkedBookings: number;
     completedCallBookings: number;
     manualAttributedCalls: number;
+    trackingNumberCalls: number;
+    activeTrackingNumbers: number;
     leads: null;
     qualifiedConversions: null;
-    unknownSourceRate: null;
+    /** 0–1 share of calls with no dialed-number or merchant-entered source; null when no calls. */
+    unknownSourceRate: number | null;
     campaignRevenue: null;
     providerCharges: VoiceTrackingCharge[];
   };
@@ -96,5 +101,68 @@ export function overrideVoiceCallAttribution(
   return apiFetch<{ callId: string; attribution: Record<string, unknown> }>(
     `/voice/tracking/calls/${callId}/override`,
     { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export interface VoiceTrackingNumber {
+  id: string;
+  phoneNumber: string;
+  label: string;
+  provider: "Twilio";
+  provisionedVia: "purchased" | "connected";
+  source: string;
+  channel: string;
+  campaign: { id: string; label: string } | null;
+  active: boolean;
+  deactivatedAt: string | null;
+  callsLast30Days: number;
+  lastCallAt: string | null;
+  assignments: Array<{
+    id: string;
+    source: string;
+    channel: string;
+    campaignId: string | null;
+    validFrom: string;
+    validTo: string | null;
+    reason: string;
+  }>;
+}
+
+export interface AddVoiceTrackingNumberInput {
+  mode: "purchase" | "connect";
+  label: string;
+  source: string;
+  channel: string;
+  campaignId?: string;
+  phoneNumber?: string;
+  countryCode?: string;
+  areaCode?: string;
+}
+
+export function fetchVoiceTrackingNumbers() {
+  return apiFetch<VoiceTrackingNumber[]>("/voice/tracking/numbers");
+}
+
+export function addVoiceTrackingNumber(input: AddVoiceTrackingNumberInput) {
+  return apiFetch<{ id: string; phoneNumber: string; provisionedVia: string }>(
+    "/voice/tracking/numbers",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function assignVoiceTrackingNumber(
+  id: string,
+  input: { source: string; channel: string; campaignId?: string; reason: string },
+) {
+  return apiFetch<{ id: string }>(`/voice/tracking/numbers/${id}/assign`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deactivateVoiceTrackingNumber(id: string, reason: string) {
+  return apiFetch<{ id: string; active: false }>(
+    `/voice/tracking/numbers/${id}/deactivate`,
+    { method: "POST", body: JSON.stringify({ reason }) },
   );
 }

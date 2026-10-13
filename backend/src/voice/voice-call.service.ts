@@ -20,6 +20,7 @@ import {
 } from './voice.constants';
 import { escapeXml, say, twiml } from './twiml.util';
 import { localParts, isAfterHours } from './voice-insights.service';
+import { resolveTrackingLine } from './voice-tracking-numbers.service';
 import {
   buildTurnAnalysis,
   cleanCallerEmail,
@@ -193,9 +194,14 @@ export class VoiceCallService {
     fromNumber: string,
     toNumber: string,
   ): Promise<string> {
-    const phoneNumber = await this.prisma.phoneNumber.findUnique({
+    const line = await this.prisma.phoneNumber.findUnique({
       where: { phoneNumber: toNumber },
     });
+    // A campaign tracking number routes to its business like the main line, plus attribution.
+    const tracked = line
+      ? null
+      : await resolveTrackingLine(this.prisma, toNumber);
+    const phoneNumber = line ?? tracked;
     if (!phoneNumber) {
       this.logger.warn(`Incoming call to unrecognized number ${toNumber}`);
       return twiml(
@@ -232,6 +238,7 @@ export class VoiceCallService {
         businessId: phoneNumber.businessId,
         callSid,
         fromNumber,
+        ...tracked?.callData,
         status: PhoneCallStatus.in_progress,
         transcript: [],
         voiceAgentVersionId: activeAgent?.publishedVersionId ?? null,
