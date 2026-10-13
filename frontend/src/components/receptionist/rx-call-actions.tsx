@@ -41,7 +41,7 @@ export function useCallActions() {
       title: "Transfer this call to a person?",
       tone: "amber",
       icon: "phone-forwarded",
-      body: "The telephony provider is asked to put the caller through to your transfer number. The AI stops handling the call, and the call is recorded as a transfer.",
+      body: "The telephony provider is asked to put the caller through to your transfer number. The AI stops handling the call, and the call outcome is logged as a transfer.",
       rows: [
         { label: "Caller", value: `${callerName(c)} · ${c.fromNumber}` },
         { label: "Rings", value: rx.settings?.transferNumber ?? "Your server's transfer number" },
@@ -147,12 +147,12 @@ export function useCallActions() {
       icon: mode === "listen" ? "audio-lines" : "user-round",
       body:
         mode === "listen"
-          ? "Noxtill rings YOUR phone and joins you to the live call, muted — you hear the caller and the AI, and they can't hear you."
+          ? "Noxtill rings YOUR phone and bridges it into a Twilio conference with the caller, muted. This is not a silent background tap; moving the caller into the conference stops the AI's turn-based call loop."
           : "Noxtill rings YOUR phone and joins you to the live call, unmuted. You speak with the caller directly and the AI stops handling the call.",
       rows: [
         { label: "Caller", value: `${callerName(c)} · ${c.fromNumber}` },
         { label: "Your phone", value: "The number saved on your Noxtill account" },
-        { label: "Anything the AI was about to do", value: mode === "takeover" ? "Will not happen — you are on the call" : "Carries on", tone: mode === "takeover" ? "neg" : undefined },
+        { label: "AI turn-based handling", value: "Stops when the caller leg moves to the conference", tone: "neg" },
       ],
       primary: mode === "listen" ? "Ring my phone" : "Take over",
       cancel: "Cancel",

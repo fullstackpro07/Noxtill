@@ -824,251 +824,271 @@ model Business {
   /// Last time msgUsed was reset to 0 for a new billing month (INT-014) — null until the first reset.
   msgQuotaResetAt      DateTime? @map("msg_quota_reset_at")
 
-  businessUsers                BusinessUser[]
-  customers                    Customer[]
-  customerPortalSettings       CustomerPortalSettings?
-  customerPortalLayouts        CustomerPortalLayoutVersion[]
-  customerPortalAccounts       CustomerPortalAccount[]
-  customerPortalInvites        CustomerPortalInvite[]
-  customerPortalSessions       CustomerPortalSession[]
-  customerPortalActivities     CustomerPortalActivity[]
-  customerPortalIdempotency    CustomerPortalIdempotency[]
-  customerPortalPasswordResets CustomerPortalPasswordReset[]
-  products                     Product[]
-  orders                       Order[]
-  creditEntries                CreditEntry[]
-  appointments                 Appointment[]
-  messages                     Message[]
-  whatsappWindows              WhatsappWindow[]
-  reviewRequests               ReviewRequest[]
-  privateFeedback              PrivateFeedback[]
-  externalReviews              ExternalReview[]
-  reviewPlatformDestinations   ReviewPlatformDestination[]
-  reviewMetricsSnapshots       ReviewMetricsSnapshot[]
-  stockMovements               StockMovement[]
-  expenses                     Expense[]
-  attendance                   Attendance[]
-  campaigns                    Campaign[]
-  competitors                  Competitor[]
-  competitorObservations       CompetitorObservation[]
-  trackedKeywords              TrackedKeyword[]
-  auditLogs                    AuditLog[]
-  importBatches                ImportBatch[]
-  integrations                 Integration[]
-  adCampaigns                  AdCampaign[]
-  emailCampaigns               EmailCampaign[]
-  productFeedItems             ProductFeedItem[]
-  gmbPosts                     GmbPost[]
-  notifications                Notification[]
-  healthScoreSnapshots         HealthScoreSnapshot[]
-  creditBalanceSnapshots       CreditBalanceSnapshot[]
-  goal                         BusinessGoal?
-  activityEvents               ActivityEvent[]
-  aiInsights                   AiInsight[]
-  biBrainAnswers               BiBrainAnswer[]
-  biDiagnosisHypotheses        BiDiagnosisHypothesis[]
-  biScenarioVersions           BiScenarioVersion[]
-  biTwinAssumptionVersions     BiTwinAssumptionVersion[]
-  actionItemStates             ActionItemState[]
-  heldSales                    HeldSale[]
-  cashShifts                   CashShift[]
-  cashMovements                CashMovement[]
-  voiceSaleDrafts              VoiceSaleDraft[]
-  tables                       Table[]
-  returns                      Return[]
-  receiptLogs                  ReceiptLog[]
-  variantSets                  VariantSet[]
-  bundles                      Bundle[]
-  suppliers                    Supplier[]
-  procurementRequests          ProcurementRequest[]
-  procurementRequestsAtBranch  ProcurementRequest[]          @relation("ProcurementRequestBranch")
-  procurementRequestEvents     ProcurementRequestEvent[]
-  priceHistory                 PriceHistory[]
-  categories                   Category[]
-  scheduledExports             ScheduledExport[]
-  waitlistEntries              WaitlistEntry[]
-  purchaseOrders               PurchaseOrder[]
-  productWaitlistEntries       ProductWaitlistEntry[]
-  queueTokens                  QueueToken[]
-  deposits                     Deposit[]
-  depositSettings              DepositSettings?
-  bookingLinkSettings          BookingLinkSettings?
-  bookingLinkVisits            BookingLinkVisit[]
-  reminderRules                ReminderRule[]
-  installmentPlans             InstallmentPlan[]
-  installments                 Installment[]
-  creditShareLinks             CreditShareLink[]
-  creditReminderRules          CreditReminderRule[]
-  creditReminderLogs           CreditReminderLog[]
-  segments                     Segment[]
-  loyaltyPrograms              LoyaltyProgram[]
-  loyaltyMembers               LoyaltyMember[]
-  membershipPlans              MembershipPlan[]
-  memberships                  Membership[]
-  memoryNotes                  MemoryNote[]
-  customerCustomFields         CustomerCustomField[]
-  customerTags                 CustomerTag[]
-  customerMergeSettings        CustomerMergeSettings?
-  customerPrivacySettings      CustomerPrivacySettings?
-  customerExportLogs           CustomerExportLog[]
-  customerDuplicateDismissals  CustomerDuplicateDismissal[]
-  videoTestimonials            VideoTestimonial[]
-  coupons                      Coupon[]
-  vouchers                     Voucher[]
-  workflows                    Workflow[]
-  workflowVersions             WorkflowVersion[]
-  workflowRuns                 WorkflowRun[]
-  workflowRunAttempts          WorkflowRunAttempt[]
-  workflowApprovals            WorkflowApproval[]
-  workflowVariables            WorkflowVariable[]
-  workflowDeadLetters          WorkflowDeadLetter[]
-  workflowDeadLetterDecisions  WorkflowDeadLetterDecision[]
-  workflowRetentionCleanups    WorkflowRetentionCleanup[]
-  productOpportunities         ProductOpportunity[]
-  productOpportunityAudits     ProductOpportunityAudit[]
-  productValidationRuns        ProductValidationRun[]
-  commerceRfqs                 CommerceRfq[]
-  commerceRfqAudits            CommerceRfqAudit[]
-  commerceSupplierClaims       CommerceSupplierClaim[]
-  commerceSupplierClaimAudits  CommerceSupplierClaimAudit[]
-  commerceQuotes               CommerceSupplierQuote[]
-  commerceListingDrafts        CommerceListingDraft[]
-  commerceChannelListings      CommerceChannelListing[]
-  commerceListingDraftVersions CommerceListingDraftVersion[]
-  commerceListingDraftAudits   CommerceListingDraftAudit[]
-  commerceFulfillmentNodes     CommerceFulfillmentNode[]
-  commerceFulfillmentMappings  CommerceFulfillmentMapping[]
-  commerceFulfillmentAudits    CommerceFulfillmentAudit[]
-  commerceRoutingDecisions     CommerceRoutingDecision[]
-  commerceRoutingAllocations   CommerceRoutingAllocation[]
-  commerceBoms                 CommerceBom[]
-  commerceBomItems             CommerceBomItem[]
-  commerceWorkOrders           CommerceWorkOrder[]
-  commerceWorkOrderMaterials   CommerceWorkOrderMaterial[]
-  commerceWorkOrderAudits      CommerceWorkOrderAudit[]
-  commerceRiskRules            CommerceRiskRule[]
-  commerceRiskCases            CommerceRiskCase[]
-  commerceComplianceDocuments  CommerceComplianceDocument[]
-  commerceMarketEligibility    CommerceMarketEligibility[]
-  commerceRiskAudits           CommerceRiskAudit[]
-  commerceB2bTiers             CommerceB2bTier[]
-  commerceB2bPriceLists        CommerceB2bPriceList[]
-  commerceB2bPriceListItems    CommerceB2bPriceListItem[]
-  commerceB2bAccounts          CommerceB2bAccount[]
-  commerceB2bAudits            CommerceB2bAudit[]
-  commerceSubscriptionPlans    CommerceSubscriptionPlan[]
-  commerceSubscriptions        CommerceSubscription[]
-  commerceSubscriptionCycles   CommerceSubscriptionCycle[]
-  commercePreorderCampaigns    CommercePreorderCampaign[]
-  commercePreorders            CommercePreorder[]
-  commerceSubscriptionAudits   CommerceSubscriptionAudit[]
-  commerceStoreOpportunities   CommerceStoreOpportunity[]
-  commerceStoreAudits          CommerceStoreAudit[]
-  commerceExperiments          CommerceExperiment[]
-  commerceExperimentAudits     CommerceExperimentAudit[]
-  commerceAgentToolRuns        CommerceAgentToolRun[]
-  commerceReconciliationRuns   CommerceReconciliationRun[]
-  commerceReconciliationItems  CommerceReconciliationItem[]
-  workflowEndpoints            WorkflowEndpoint[]
-  workflowEndpointDeliveries   WorkflowEndpointDelivery[]
-  seoAuditRuns                 SeoAuditRun[]
-  seoContentRevisions          SeoContentRevision[]
-  seoContentRevisionAudits     SeoContentRevisionAudit[]
-  seoTechnicalActions          SeoTechnicalAction[]
-  seoTechnicalActionAudits     SeoTechnicalActionAudit[]
-  seoContentBriefs             SeoContentBrief[]
-  seoContentBriefAudits        SeoContentBriefAudit[]
-  seoContentDismissals         SeoContentDismissal[]
-  seoAuditSchedule             SeoAuditSchedule?
-  seoAuditIssues               SeoAuditIssue[]
-  seoAuditIssueAudits          SeoAuditIssueAudit[]
-  seoOffPageLinks              SeoOffPageLink[]
-  seoOffPageOpportunities      SeoOffPageOpportunity[]
-  seoOffPageAudits             SeoOffPageAudit[]
-  seoGuestPublications         SeoGuestPublication[]
-  seoGuestPitches              SeoGuestPitch[]
-  seoGuestPostingAudits        SeoGuestPostingAudit[]
-  seoCompetitorGaps            SeoCompetitorGap[]
-  seoCompetitorGapAudits       SeoCompetitorGapAudit[]
-  contentItems                 ContentItem[]
-  staffShifts                  StaffShift[]
-  timeOff                      TimeOff[]
-  timesheetApprovals           TimesheetApproval[]
-  commissionPayments           CommissionPayment[]
-  staffAdvances                StaffAdvance[]
-  payrollLineItems             PayrollLineItem[]
-  schedulePublishes            SchedulePublish[]
-  stockTransfersOut            StockTransfer[]               @relation("StockTransferSource")
-  stockTransfersIn             StockTransfer[]               @relation("StockTransferDest")
-  stockCounts                  StockCount[]
-  customRoles                  CustomRole[]
-  roleCapabilityOverrides      RoleCapabilityOverride[]
-  labelOverrides               LabelOverride[]
-  optionSets                   OptionSet[]
-  sessions                     Session[]
-  masterListing                MasterListing?
-  listingSyncLogs              ListingSyncLog[]
-  citations                    Citation[]
-  listingPhotos                ListingPhoto[]
-  listingSettings              ListingSettings?
-  gmbPhotos                    GmbPhoto[]
-  gmbQnas                      GmbQna[]
-  gmbInsightsSnapshots         GmbInsightsSnapshot[]
-  socialAccounts               SocialAccount[]
-  mediaAssets                  MediaAsset[]
-  socialPosts                  SocialPost[]
-  socialInboxItems             SocialInboxItem[]
-  socialAnalyticsSnapshots     SocialAnalyticsSnapshot[]
-  socialSettings               SocialSettings?
-  socialPostAnalytics          SocialPostAnalytics[]
-  socialCaptionGenerations     SocialCaptionGeneration[]
-  visibilityScoreSnapshots     VisibilityScoreSnapshot[]
-  competitiveOpportunities     CompetitiveOpportunity[]
-  competitiveSettings          CompetitiveSettings?
-  voiceSettings                VoiceSettings?
-  phoneNumber                  PhoneNumber?
-  phoneCalls                   PhoneCall[]
-  voiceRoutingRules            VoiceRoutingRule[]
-  voiceKnowledgeEntries        VoiceKnowledgeEntry[]
-  digitizerAliases             DigitizerAlias[]
-  riders                       Rider[]
-  deliveries                   Delivery[]
-  routes                       Route[]
-  deliveryZones                DeliveryZone[]
-  deliverySettings             DeliverySettings?
-  deliveryAutomationRuns       DeliveryAutomationRun[]
-  adCreatives                  AdCreative[]
-  adAudiences                  AdAudience[]
-  adLeads                      AdLead[]
-  adSettings                   AdSettings?
-  integrationSyncLogs          IntegrationSyncLog[]
-  ecommerceSyncConflicts       EcommerceSyncConflict[]
-  adCampaignStatsSnapshots     AdCampaignStatsSnapshot[]
-  accountingMappings           AccountingMapping[]
-  outboundWebhooks             OutboundWebhook[]
-  reviewSentimentThemes        ReviewSentimentTheme[]
-  recurringObligations         RecurringObligation[]
-  seoHeatmapPoints             SeoHeatmapPoint[]
-  apiKeys                      ApiKey[]
-  nightlyCloseLogs             NightlyCloseLog[]
-  healthScoreWeightChanges     HealthScoreWeightChange[]
-  voiceCommandDrafts           VoiceCommandDraft[]
-  assistantConversations       AssistantConversation[]
-  notificationPreferences      NotificationPreference[]
-  dataSubjectRequests          DataSubjectRequest[]
-  taxRules                     TaxRule[]
-  websiteSite                  WebsiteSite?
-  websitePages                 WebsitePage[]
-  websitePageVersions          WebsitePageVersion[]
-  websiteDeployments           WebsiteDeployment[]
-  websiteForms                 WebsiteForm[]
-  websiteFormSubmissions       WebsiteFormSubmission[]
-  websiteDomains               WebsiteDomain[]
-  websiteRedirects             WebsiteRedirect[]
-  websiteProductSettings       WebsiteProductSetting[]
-  websiteCollections           WebsiteCollection[]
-  procurementContracts         ProcurementSupplierContract[]
-  procurementContractVersions  ProcurementSupplierContractVersion[]
+  businessUsers                 BusinessUser[]
+  customers                     Customer[]
+  customerPortalSettings        CustomerPortalSettings?
+  customerPortalLayouts         CustomerPortalLayoutVersion[]
+  customerPortalAccounts        CustomerPortalAccount[]
+  customerPortalInvites         CustomerPortalInvite[]
+  customerPortalSessions        CustomerPortalSession[]
+  customerPortalActivities      CustomerPortalActivity[]
+  customerPortalIdempotency     CustomerPortalIdempotency[]
+  customerPortalPasswordResets  CustomerPortalPasswordReset[]
+  products                      Product[]
+  orders                        Order[]
+  creditEntries                 CreditEntry[]
+  appointments                  Appointment[]
+  messages                      Message[]
+  whatsappWindows               WhatsappWindow[]
+  reviewRequests                ReviewRequest[]
+  privateFeedback               PrivateFeedback[]
+  externalReviews               ExternalReview[]
+  reviewPlatformDestinations    ReviewPlatformDestination[]
+  reviewMetricsSnapshots        ReviewMetricsSnapshot[]
+  stockMovements                StockMovement[]
+  expenses                      Expense[]
+  attendance                    Attendance[]
+  campaigns                     Campaign[]
+  competitors                   Competitor[]
+  competitorObservations        CompetitorObservation[]
+  trackedKeywords               TrackedKeyword[]
+  auditLogs                     AuditLog[]
+  importBatches                 ImportBatch[]
+  integrations                  Integration[]
+  adCampaigns                   AdCampaign[]
+  emailCampaigns                EmailCampaign[]
+  productFeedItems              ProductFeedItem[]
+  gmbPosts                      GmbPost[]
+  notifications                 Notification[]
+  healthScoreSnapshots          HealthScoreSnapshot[]
+  creditBalanceSnapshots        CreditBalanceSnapshot[]
+  goal                          BusinessGoal?
+  activityEvents                ActivityEvent[]
+  aiInsights                    AiInsight[]
+  biBrainAnswers                BiBrainAnswer[]
+  biDiagnosisHypotheses         BiDiagnosisHypothesis[]
+  biScenarioVersions            BiScenarioVersion[]
+  biTwinAssumptionVersions      BiTwinAssumptionVersion[]
+  actionItemStates              ActionItemState[]
+  heldSales                     HeldSale[]
+  cashShifts                    CashShift[]
+  cashMovements                 CashMovement[]
+  voiceSaleDrafts               VoiceSaleDraft[]
+  tables                        Table[]
+  returns                       Return[]
+  receiptLogs                   ReceiptLog[]
+  variantSets                   VariantSet[]
+  bundles                       Bundle[]
+  suppliers                     Supplier[]
+  procurementRequests           ProcurementRequest[]
+  procurementRequestsAtBranch   ProcurementRequest[]                 @relation("ProcurementRequestBranch")
+  procurementRequestEvents      ProcurementRequestEvent[]
+  priceHistory                  PriceHistory[]
+  categories                    Category[]
+  scheduledExports              ScheduledExport[]
+  waitlistEntries               WaitlistEntry[]
+  purchaseOrders                PurchaseOrder[]
+  productWaitlistEntries        ProductWaitlistEntry[]
+  queueTokens                   QueueToken[]
+  deposits                      Deposit[]
+  depositSettings               DepositSettings?
+  bookingLinkSettings           BookingLinkSettings?
+  bookingLinkVisits             BookingLinkVisit[]
+  reminderRules                 ReminderRule[]
+  installmentPlans              InstallmentPlan[]
+  installments                  Installment[]
+  creditShareLinks              CreditShareLink[]
+  creditReminderRules           CreditReminderRule[]
+  creditReminderLogs            CreditReminderLog[]
+  segments                      Segment[]
+  loyaltyPrograms               LoyaltyProgram[]
+  loyaltyMembers                LoyaltyMember[]
+  membershipPlans               MembershipPlan[]
+  memberships                   Membership[]
+  memoryNotes                   MemoryNote[]
+  customerCustomFields          CustomerCustomField[]
+  customerTags                  CustomerTag[]
+  customerMergeSettings         CustomerMergeSettings?
+  customerPrivacySettings       CustomerPrivacySettings?
+  customerExportLogs            CustomerExportLog[]
+  customerDuplicateDismissals   CustomerDuplicateDismissal[]
+  videoTestimonials             VideoTestimonial[]
+  coupons                       Coupon[]
+  vouchers                      Voucher[]
+  workflows                     Workflow[]
+  workflowVersions              WorkflowVersion[]
+  workflowRuns                  WorkflowRun[]
+  workflowRunAttempts           WorkflowRunAttempt[]
+  workflowApprovals             WorkflowApproval[]
+  workflowVariables             WorkflowVariable[]
+  workflowDeadLetters           WorkflowDeadLetter[]
+  workflowDeadLetterDecisions   WorkflowDeadLetterDecision[]
+  workflowRetentionCleanups     WorkflowRetentionCleanup[]
+  productOpportunities          ProductOpportunity[]
+  productOpportunityAudits      ProductOpportunityAudit[]
+  productValidationRuns         ProductValidationRun[]
+  commerceRfqs                  CommerceRfq[]
+  commerceRfqAudits             CommerceRfqAudit[]
+  commerceSupplierClaims        CommerceSupplierClaim[]
+  commerceSupplierClaimAudits   CommerceSupplierClaimAudit[]
+  commerceQuotes                CommerceSupplierQuote[]
+  commerceListingDrafts         CommerceListingDraft[]
+  commerceChannelListings       CommerceChannelListing[]
+  commerceListingDraftVersions  CommerceListingDraftVersion[]
+  commerceListingDraftAudits    CommerceListingDraftAudit[]
+  commerceFulfillmentNodes      CommerceFulfillmentNode[]
+  commerceFulfillmentMappings   CommerceFulfillmentMapping[]
+  commerceFulfillmentAudits     CommerceFulfillmentAudit[]
+  commerceRoutingDecisions      CommerceRoutingDecision[]
+  commerceRoutingAllocations    CommerceRoutingAllocation[]
+  commerceBoms                  CommerceBom[]
+  commerceBomItems              CommerceBomItem[]
+  commerceWorkOrders            CommerceWorkOrder[]
+  commerceWorkOrderMaterials    CommerceWorkOrderMaterial[]
+  commerceWorkOrderAudits       CommerceWorkOrderAudit[]
+  commerceRiskRules             CommerceRiskRule[]
+  commerceRiskCases             CommerceRiskCase[]
+  commerceComplianceDocuments   CommerceComplianceDocument[]
+  commerceMarketEligibility     CommerceMarketEligibility[]
+  commerceRiskAudits            CommerceRiskAudit[]
+  commerceB2bTiers              CommerceB2bTier[]
+  commerceB2bPriceLists         CommerceB2bPriceList[]
+  commerceB2bPriceListItems     CommerceB2bPriceListItem[]
+  commerceB2bAccounts           CommerceB2bAccount[]
+  commerceB2bAudits             CommerceB2bAudit[]
+  commerceSubscriptionPlans     CommerceSubscriptionPlan[]
+  commerceSubscriptions         CommerceSubscription[]
+  commerceSubscriptionCycles    CommerceSubscriptionCycle[]
+  commercePreorderCampaigns     CommercePreorderCampaign[]
+  commercePreorders             CommercePreorder[]
+  commerceSubscriptionAudits    CommerceSubscriptionAudit[]
+  commerceStoreOpportunities    CommerceStoreOpportunity[]
+  commerceStoreAudits           CommerceStoreAudit[]
+  commerceExperiments           CommerceExperiment[]
+  commerceExperimentAudits      CommerceExperimentAudit[]
+  commerceAgentToolRuns         CommerceAgentToolRun[]
+  commerceReconciliationRuns    CommerceReconciliationRun[]
+  commerceReconciliationItems   CommerceReconciliationItem[]
+  workflowEndpoints             WorkflowEndpoint[]
+  workflowEndpointDeliveries    WorkflowEndpointDelivery[]
+  seoAuditRuns                  SeoAuditRun[]
+  seoContentRevisions           SeoContentRevision[]
+  seoContentRevisionAudits      SeoContentRevisionAudit[]
+  seoTechnicalActions           SeoTechnicalAction[]
+  seoTechnicalActionAudits      SeoTechnicalActionAudit[]
+  seoContentBriefs              SeoContentBrief[]
+  seoContentBriefAudits         SeoContentBriefAudit[]
+  seoContentDismissals          SeoContentDismissal[]
+  seoAuditSchedule              SeoAuditSchedule?
+  seoAuditIssues                SeoAuditIssue[]
+  seoAuditIssueAudits           SeoAuditIssueAudit[]
+  seoOffPageLinks               SeoOffPageLink[]
+  seoOffPageOpportunities       SeoOffPageOpportunity[]
+  seoOffPageAudits              SeoOffPageAudit[]
+  seoGuestPublications          SeoGuestPublication[]
+  seoGuestPitches               SeoGuestPitch[]
+  seoGuestPostingAudits         SeoGuestPostingAudit[]
+  seoCompetitorGaps             SeoCompetitorGap[]
+  seoCompetitorGapAudits        SeoCompetitorGapAudit[]
+  contentItems                  ContentItem[]
+  staffShifts                   StaffShift[]
+  timeOff                       TimeOff[]
+  timesheetApprovals            TimesheetApproval[]
+  commissionPayments            CommissionPayment[]
+  staffAdvances                 StaffAdvance[]
+  payrollLineItems              PayrollLineItem[]
+  schedulePublishes             SchedulePublish[]
+  stockTransfersOut             StockTransfer[]                      @relation("StockTransferSource")
+  stockTransfersIn              StockTransfer[]                      @relation("StockTransferDest")
+  stockCounts                   StockCount[]
+  customRoles                   CustomRole[]
+  roleCapabilityOverrides       RoleCapabilityOverride[]
+  labelOverrides                LabelOverride[]
+  optionSets                    OptionSet[]
+  sessions                      Session[]
+  masterListing                 MasterListing?
+  listingSyncLogs               ListingSyncLog[]
+  citations                     Citation[]
+  listingPhotos                 ListingPhoto[]
+  listingSettings               ListingSettings?
+  gmbPhotos                     GmbPhoto[]
+  gmbQnas                       GmbQna[]
+  gmbInsightsSnapshots          GmbInsightsSnapshot[]
+  socialAccounts                SocialAccount[]
+  mediaAssets                   MediaAsset[]
+  socialPosts                   SocialPost[]
+  socialInboxItems              SocialInboxItem[]
+  socialAnalyticsSnapshots      SocialAnalyticsSnapshot[]
+  socialSettings                SocialSettings?
+  socialPostAnalytics           SocialPostAnalytics[]
+  socialCaptionGenerations      SocialCaptionGeneration[]
+  visibilityScoreSnapshots      VisibilityScoreSnapshot[]
+  competitiveOpportunities      CompetitiveOpportunity[]
+  competitiveSettings           CompetitiveSettings?
+  voiceSettings                 VoiceSettings?
+  phoneNumber                   PhoneNumber?
+  phoneCalls                    PhoneCall[]
+  voiceHumanAgentProfiles       VoiceHumanAgentProfile[]
+  voiceHumanAgentAssignments    VoiceHumanAgentAssignment[]
+  voiceAiAgents                 VoiceAiAgent[]
+  voiceAiAgentVersions          VoiceAiAgentVersion[]
+  voiceAiAgentTestRuns          VoiceAiAgentTestRun[]
+  voiceCallWrapUps              VoiceCallWrapUp[]
+  voiceQualityRubrics           VoiceQualityRubric[]
+  voiceQualityRubricVersions    VoiceQualityRubricVersion[]
+  voiceQualityReviews           VoiceQualityReview[]
+  voiceCompliancePolicyPacks    VoiceCompliancePolicyPack[]
+  voiceCompliancePolicyVersions VoiceCompliancePolicyVersion[]
+  voiceConsentEvidence          VoiceConsentEvidence[]
+  voiceSuppressionEntries       VoiceSuppressionEntry[]
+  voiceEligibilityDecisions     VoiceOutboundEligibilityDecision[]
+  voiceOutboundCampaigns        VoiceOutboundCampaign[]
+  voiceOutboundCampaignMembers  VoiceOutboundCampaignMember[]
+  voiceVideoMeetings            VoiceVideoMeeting[]
+  voiceMeetingInvites           VoiceMeetingInvite[]
+  voiceIvrFlows                 VoiceIvrFlow[]
+  voiceIvrFlowVersions          VoiceIvrFlowVersion[]
+  voiceRoutingRules             VoiceRoutingRule[]
+  voiceKnowledgeEntries         VoiceKnowledgeEntry[]
+  digitizerAliases              DigitizerAlias[]
+  riders                        Rider[]
+  deliveries                    Delivery[]
+  routes                        Route[]
+  deliveryZones                 DeliveryZone[]
+  deliverySettings              DeliverySettings?
+  deliveryAutomationRuns        DeliveryAutomationRun[]
+  adCreatives                   AdCreative[]
+  adAudiences                   AdAudience[]
+  adLeads                       AdLead[]
+  adSettings                    AdSettings?
+  integrationSyncLogs           IntegrationSyncLog[]
+  ecommerceSyncConflicts        EcommerceSyncConflict[]
+  adCampaignStatsSnapshots      AdCampaignStatsSnapshot[]
+  accountingMappings            AccountingMapping[]
+  outboundWebhooks              OutboundWebhook[]
+  reviewSentimentThemes         ReviewSentimentTheme[]
+  recurringObligations          RecurringObligation[]
+  seoHeatmapPoints              SeoHeatmapPoint[]
+  apiKeys                       ApiKey[]
+  nightlyCloseLogs              NightlyCloseLog[]
+  healthScoreWeightChanges      HealthScoreWeightChange[]
+  voiceCommandDrafts            VoiceCommandDraft[]
+  assistantConversations        AssistantConversation[]
+  notificationPreferences       NotificationPreference[]
+  dataSubjectRequests           DataSubjectRequest[]
+  taxRules                      TaxRule[]
+  websiteSite                   WebsiteSite?
+  websitePages                  WebsitePage[]
+  websitePageVersions           WebsitePageVersion[]
+  websiteDeployments            WebsiteDeployment[]
+  websiteForms                  WebsiteForm[]
+  websiteFormSubmissions        WebsiteFormSubmission[]
+  websiteDomains                WebsiteDomain[]
+  websiteRedirects              WebsiteRedirect[]
+  websiteProductSettings        WebsiteProductSetting[]
+  websiteCollections            WebsiteCollection[]
+  procurementContracts          ProcurementSupplierContract[]
+  procurementContractVersions   ProcurementSupplierContractVersion[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1245,17 +1265,19 @@ model BusinessUser {
   /// for this specific person.
   hourlyRate     Decimal? @map("hourly_rate") @db.Decimal(10, 2)
 
-  attendance         Attendance[]
-  appointments       Appointment[]       @relation("StaffAppointments")
-  orders             Order[]
-  waitlistEntries    WaitlistEntry[]
-  staffShifts        StaffShift[]
-  timeOff            TimeOff[]
-  timesheetApprovals TimesheetApproval[]
-  commissionPayments CommissionPayment[]
-  staffAdvances      StaffAdvance[]
-  payrollLineItems   PayrollLineItem[]
-  contentItems       ContentItem[]
+  attendance          Attendance[]
+  voiceAgentProfile   VoiceHumanAgentProfile?
+  hostedVideoMeetings VoiceVideoMeeting[]     @relation("VoiceMeetingHost")
+  appointments        Appointment[]           @relation("StaffAppointments")
+  orders              Order[]
+  waitlistEntries     WaitlistEntry[]
+  staffShifts         StaffShift[]
+  timeOff             TimeOff[]
+  timesheetApprovals  TimesheetApproval[]
+  commissionPayments  CommissionPayment[]
+  staffAdvances       StaffAdvance[]
+  payrollLineItems    PayrollLineItem[]
+  contentItems        ContentItem[]
 
   /// Roles & Permissions matrix (UPD-BE-035). Null (the default for every existing/new
   /// BusinessUser) means "use `role`'s fixed system capability set" — set only for a user
@@ -1331,28 +1353,31 @@ model Customer {
   /// Set once this customer's first order triggers a reward to their referrer — prevents double-issuance.
   referralRewardedAt   DateTime?  @map("referral_rewarded_at")
 
-  orders                 Order[]
-  creditEntries          CreditEntry[]
-  appointments           Appointment[]
-  messages               Message[]
-  whatsappWindows        WhatsappWindow[]
-  reviewRequests         ReviewRequest[]
-  privateFeedback        PrivateFeedback[]
-  returns                Return[]
-  waitlistEntries        WaitlistEntry[]
-  productWaitlistEntries ProductWaitlistEntry[]
-  queueTokens            QueueToken[]
-  installmentPlans       InstallmentPlan[]
-  creditShareLinks       CreditShareLink[]
-  creditReminderLogs     CreditReminderLog[]
-  loyaltyMembers         LoyaltyMember[]
-  memberships            Membership[]
-  videoTestimonials      VideoTestimonial[]
-  dataSubjectRequests    DataSubjectRequest[]
-  vouchers               Voucher[]
-  portalAccount          CustomerPortalAccount?
-  portalInvites          CustomerPortalInvite[]
-  portalActivities       CustomerPortalActivity[]
+  orders                       Order[]
+  creditEntries                CreditEntry[]
+  appointments                 Appointment[]
+  messages                     Message[]
+  whatsappWindows              WhatsappWindow[]
+  reviewRequests               ReviewRequest[]
+  privateFeedback              PrivateFeedback[]
+  returns                      Return[]
+  waitlistEntries              WaitlistEntry[]
+  productWaitlistEntries       ProductWaitlistEntry[]
+  queueTokens                  QueueToken[]
+  installmentPlans             InstallmentPlan[]
+  creditShareLinks             CreditShareLink[]
+  creditReminderLogs           CreditReminderLog[]
+  loyaltyMembers               LoyaltyMember[]
+  memberships                  Membership[]
+  videoTestimonials            VideoTestimonial[]
+  dataSubjectRequests          DataSubjectRequest[]
+  vouchers                     Voucher[]
+  portalAccount                CustomerPortalAccount?
+  portalInvites                CustomerPortalInvite[]
+  portalActivities             CustomerPortalActivity[]
+  voiceConsentEvidence         VoiceConsentEvidence[]
+  voiceVideoMeetings           VoiceVideoMeeting[]
+  voiceOutboundCampaignMembers VoiceOutboundCampaignMember[]
 
   b2bAccount            CommerceB2bAccount?
   commerceSubscriptions CommerceSubscription[]
@@ -1399,8 +1424,8 @@ model CustomerPortalAccount {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  sessions   CustomerPortalSession[]
-  activities CustomerPortalActivity[] @relation("CustomerPortalAccountActivity")
+  sessions       CustomerPortalSession[]
+  activities     CustomerPortalActivity[]      @relation("CustomerPortalAccountActivity")
   passwordResets CustomerPortalPasswordReset[]
 
   @@index([businessId, active])
@@ -2348,8 +2373,9 @@ model Appointment {
   /// written by a path that predates numbering; every creation path now allocates one.
   bookingNo       Int?              @map("booking_no")
 
-  deposits   Deposit[]
-  phoneCalls PhoneCall[]
+  deposits           Deposit[]
+  phoneCalls         PhoneCall[]
+  voiceVideoMeetings VoiceVideoMeeting[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2775,6 +2801,120 @@ model PhoneNumber {
   @@map("phone_numbers")
 }
 
+/// Voice Agent screen foundation: voice-specific configuration for an existing Staff/BusinessUser
+/// record. This intentionally does not duplicate staff identity or employment data.
+model VoiceHumanAgentProfile {
+  id                 String                      @id @default(uuid())
+  businessId         String                      @map("business_id")
+  business           Business                    @relation(fields: [businessId], references: [id])
+  staffUserId        String                      @unique @map("staff_user_id")
+  staffUser          BusinessUser                @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  skillTags          Json                        @default("[]") @map("skill_tags")
+  languages          Json                        @default("[]")
+  maxConcurrentCalls Int                         @default(1) @map("max_concurrent_calls")
+  active             Boolean                     @default(true)
+  presenceStatus     VoiceAgentPresenceStatus    @default(offline) @map("presence_status")
+  lastHeartbeatAt    DateTime?                   @map("last_heartbeat_at")
+  assignments        VoiceHumanAgentAssignment[]
+  outboundCampaigns  VoiceOutboundCampaign[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, staffUserId], map: "voice_human_agent_business_staff_key")
+  @@index([businessId, active], map: "voice_human_agent_business_active_idx")
+  @@index([businessId, presenceStatus, lastHeartbeatAt], map: "voice_human_agent_presence_idx")
+  @@map("voice_human_agent_profiles")
+}
+
+/// Provider-directed human handoffs reserve one available staff profile until Twilio confirms
+/// the dial result. Staff identity remains canonical in BusinessUser; this is only call routing evidence.
+model VoiceHumanAgentAssignment {
+  id             String                 @id @default(uuid())
+  businessId     String                 @map("business_id")
+  business       Business               @relation(fields: [businessId], references: [id])
+  callId         String                 @unique @map("call_id")
+  call           PhoneCall              @relation(fields: [callId], references: [id], onDelete: Cascade)
+  staffUserId    String                 @map("staff_user_id")
+  profileId      String                 @map("profile_id")
+  profile        VoiceHumanAgentProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  status         String                 @default("offered") @db.VarChar(20)
+  providerStatus String?                @map("provider_status") @db.VarChar(40)
+  connected      Boolean                @default(false)
+  expiresAt      DateTime?              @map("expires_at")
+  releasedAt     DateTime?              @map("released_at")
+  createdAt      DateTime               @default(now()) @map("created_at")
+
+  @@index([businessId, staffUserId, status], map: "voice_agent_assignments_business_staff_status_idx")
+  @@map("voice_human_agent_assignments")
+}
+
+/// Versioned configuration for an AI receptionist. Versions are append-only; editing a draft
+/// creates a new version rather than mutating the one pinned to an in-progress call.
+model VoiceAiAgent {
+  id                    String                  @id @default(uuid())
+  businessId            String                  @map("business_id")
+  business              Business                @relation(fields: [businessId], references: [id])
+  name                  String                  @db.VarChar(120)
+  template              String                  @db.VarChar(40)
+  status                String                  @default("draft") @db.VarChar(20)
+  currentDraftVersionId String?                 @map("current_draft_version_id")
+  publishedVersionId    String?                 @map("published_version_id")
+  createdByUserId       String?                 @map("created_by_user_id")
+  versions              VoiceAiAgentVersion[]
+  outboundCampaigns     VoiceOutboundCampaign[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, name], map: "voice_ai_agents_business_name_key")
+  @@index([businessId, status], map: "voice_ai_agents_business_status_idx")
+  @@map("voice_ai_agents")
+}
+
+/// Immutable JSON snapshot for one AI agent revision. `checksum` covers the canonical config JSON.
+model VoiceAiAgentVersion {
+  id              String                @id @default(uuid())
+  businessId      String                @map("business_id")
+  business        Business              @relation(fields: [businessId], references: [id])
+  agentId         String                @map("agent_id")
+  agent           VoiceAiAgent          @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  version         Int
+  config          Json
+  checksum        String                @db.VarChar(64)
+  createdByUserId String?               @map("created_by_user_id")
+  publishedAt     DateTime?             @map("published_at")
+  phoneCalls      PhoneCall[]
+  testRuns        VoiceAiAgentTestRun[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([agentId, version], map: "voice_ai_agent_versions_agent_version_key")
+  @@index([businessId, agentId, createdAt], map: "voice_ai_agent_versions_business_agent_idx")
+  @@map("voice_ai_agent_versions")
+}
+
+/// Evidence from an explicit sandbox test. Live customer transcripts are never copied here.
+model VoiceAiAgentTestRun {
+  id              String              @id @default(uuid())
+  businessId      String              @map("business_id")
+  business        Business            @relation(fields: [businessId], references: [id])
+  versionId       String              @map("version_id")
+  version         VoiceAiAgentVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  scenario        String              @db.Text
+  response        String?             @db.Text
+  passed          Boolean
+  errorCode       String?             @map("error_code") @db.VarChar(80)
+  errorMessage    String?             @map("error_message") @db.VarChar(500)
+  inputTokens     Int                 @default(0) @map("input_tokens")
+  outputTokens    Int                 @default(0) @map("output_tokens")
+  createdByUserId String?             @map("created_by_user_id")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  @@index([businessId, versionId, createdAt], map: "voice_ai_agent_test_runs_business_version_idx")
+  @@map("voice_ai_agent_test_runs")
+}
+
 /// One row per inbound call (UPD-BE-057/058/059). `transcript` is the full turn-by-turn
 /// conversation (`[{speaker, text, at}]`) — always read/written as one whole per call, so a Json
 /// column matches this app's established "embedded array read as a unit" convention (see
@@ -2782,64 +2922,91 @@ model PhoneNumber {
 /// recording, not Twilio's own URL — kept for as long as `RECORDING_RETENTION_DAYS`, then purged
 /// by the daily retention job alongside the row itself.
 model PhoneCall {
-  id                    String           @id @default(uuid())
-  businessId            String           @map("business_id")
-  business              Business         @relation(fields: [businessId], references: [id])
-  callSid               String           @unique @map("call_sid")
-  fromNumber            String           @map("from_number")
-  status                PhoneCallStatus  @default(in_progress)
-  outcome               PhoneCallOutcome @default(none)
+  id                    String               @id @default(uuid())
+  businessId            String               @map("business_id")
+  business              Business             @relation(fields: [businessId], references: [id])
+  /// Immutable agent config selected when this call began; null means legacy receptionist fallback.
+  voiceAgentVersionId   String?              @map("voice_agent_version_id")
+  voiceAgentVersion     VoiceAiAgentVersion? @relation(fields: [voiceAgentVersionId], references: [id], onDelete: Restrict)
+  callSid               String               @unique @map("call_sid")
+  fromNumber            String               @map("from_number")
+  status                PhoneCallStatus      @default(in_progress)
+  outcome               PhoneCallOutcome     @default(none)
   /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the
   /// AI matched this call to (Call Queue depth fix, UPD-BE-129).
-  customIntentName      String?          @map("custom_intent_name")
-  transcript            Json             @default("[]")
-  recordingKey          String?          @map("recording_key")
-  appointmentId         String?          @map("appointment_id")
-  appointment           Appointment?     @relation(fields: [appointmentId], references: [id])
-  startedAt             DateTime         @default(now()) @map("started_at")
-  endedAt               DateTime?        @map("ended_at")
+  customIntentName      String?              @map("custom_intent_name")
+  transcript            Json                 @default("[]")
+  recordingKey          String?              @map("recording_key")
+  /// Inbound calls record audio only after a published regional policy allows it and the caller presses 1.
+  recordingConsentStatus VoiceRecordingConsentStatus @default(not_configured) @map("recording_consent_status")
+  recordingConsentAt     DateTime?                    @map("recording_consent_at")
+  recordingNoticeSnapshot String?                     @map("recording_notice_snapshot") @db.Text
+  recordingPolicyVersionId String?                    @map("recording_policy_version_id")
+  recordingPolicyVersion VoiceCompliancePolicyVersion? @relation(fields: [recordingPolicyVersionId], references: [id], onDelete: SetNull)
+  recordingRetentionDays Int?                         @map("recording_retention_days")
+  recordingExpiresAt     DateTime?                    @map("recording_expires_at")
+  appointmentId         String?              @map("appointment_id")
+  appointment           Appointment?         @relation(fields: [appointmentId], references: [id])
+  startedAt             DateTime             @default(now()) @map("started_at")
+  endedAt               DateTime?            @map("ended_at")
   /// Call Queue fix (UPD-BE-129) — set when staff mark this "message"/"custom"/missed call as
   /// handled (manually called back, or otherwise resolved). NULL means it's still sitting in the
   /// real operational queue of calls needing human follow-up.
-  resolvedAt            DateTime?        @map("resolved_at")
+  resolvedAt            DateTime?            @map("resolved_at")
   /// Set when staff explicitly log that a callback was promised, without yet marking it resolved —
   /// a distinct state from `resolvedAt` (a queue item can be "callback offered" but not yet done).
-  callbackRequestedAt   DateTime?        @map("callback_requested_at")
+  callbackRequestedAt   DateTime?            @map("callback_requested_at")
   /// Live Calls listen/take-over fix — set the moment a staff member's own phone is bridged live
   /// into this call via a real Twilio conference redirect (Twilio's "modify a live call" REST
   /// action), replacing the earlier disclosed 15s-poll-only gap. Loose reference (no relation), same
   /// convention as `AuditLog.actorUserId`.
-  joinedAt              DateTime?        @map("joined_at")
-  joinedByUserId        String?          @map("joined_by_user_id")
+  joinedAt              DateTime?            @map("joined_at")
+  joinedByUserId        String?              @map("joined_by_user_id")
   /// AI Phone workspace — the staff member who owns the follow-up for this call (a `BusinessUser.id`,
   /// loose reference like `joinedByUserId`). NULL means nobody has been asked to call back yet.
-  assignedToUserId      String?          @map("assigned_to_user_id")
+  assignedToUserId      String?              @map("assigned_to_user_id")
   /// AI Phone workspace — a summary generated ON DEMAND from `transcript` alone (never a live
   /// guess) and cached here. NULL until someone asks for one.
-  summary               String?          @db.Text
-  summaryGeneratedAt    DateTime?        @map("summary_generated_at")
+  summary               String?              @db.Text
+  summaryGeneratedAt    DateTime?            @map("summary_generated_at")
   /// AI Phone, full — only what the caller actually said during the call (the AI extracts a name or an
   /// email address when one is clearly given, never guesses). NULL means the caller never offered it.
-  callerName            String?          @map("caller_name")
-  callerEmail           String?          @map("caller_email")
+  callerName            String?              @map("caller_name")
+  callerEmail           String?              @map("caller_email")
   /// The custom routing rule (VoiceRoutingRule) that decided this call, kept by name too so the call
   /// still explains itself after the rule is edited or deleted. NULL when no custom rule fired.
-  routedRuleId          String?          @map("routed_rule_id")
-  routedRuleName        String?          @map("routed_rule_name")
+  routedRuleId          String?              @map("routed_rule_id")
+  routedRuleName        String?              @map("routed_rule_name")
+  /// Merchant-entered attribution only. This is never provider-verified; the evidence and reason
+  /// for each correction are also preserved in the append-only AuditLog.
+  attributionSource     String?              @map("attribution_source")
+  attributionChannel    String?              @map("attribution_channel")
+  attributionCampaignId String?              @map("attribution_campaign_id")
+  attributionCampaign   AdCampaign?          @relation("PhoneCallAttributionCampaign", fields: [attributionCampaignId], references: [id], onDelete: SetNull)
+  attributionEvidence   String?              @map("attribution_evidence") @db.Text
+  attributionReason     String?              @map("attribution_reason") @db.Text
+  attributionUpdatedAt  DateTime?            @map("attribution_updated_at")
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
-  providerCost          Decimal?         @map("provider_cost") @db.Decimal(10, 4)
-  providerCostUnit      String?          @map("provider_cost_unit")
-  providerCostCheckedAt DateTime?        @map("provider_cost_checked_at")
+  providerCost          Decimal?             @map("provider_cost") @db.Decimal(10, 4)
+  providerCostUnit      String?              @map("provider_cost_unit")
+  providerCostCheckedAt DateTime?            @map("provider_cost_checked_at")
   /// Set when staff deleted the recording and transcript (the call log itself is kept).
-  recordingDeletedAt    DateTime?        @map("recording_deleted_at")
+  recordingDeletedAt    DateTime?            @map("recording_deleted_at")
 
-  notes PhoneCallNote[]
+  notes                PhoneCallNote[]
+  wrapUp               VoiceCallWrapUp?
+  humanAgentAssignment VoiceHumanAgentAssignment?
+  qualityReviews       VoiceQualityReview[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, status, startedAt])
+  @@index([businessId, voiceAgentVersionId], map: "phone_calls_business_agent_version_idx")
   @@index([businessId, resolvedAt])
+  @@index([businessId, attributionSource, startedAt], map: "phone_calls_business_attribution_idx")
+  @@index([recordingExpiresAt], map: "phone_calls_recording_expires_idx")
+  @@index([recordingPolicyVersionId], map: "phone_calls_recording_policy_idx")
   @@map("phone_calls")
 }
 
@@ -2857,6 +3024,458 @@ model PhoneCallNote {
   @@index([callId, createdAt])
   @@index([businessId])
   @@map("phone_call_notes")
+}
+
+/// Final human disposition for a completed call. Kept separate from the AI's detected outcome.
+model VoiceCallWrapUp {
+  id                String                     @id @default(uuid())
+  businessId        String                     @map("business_id")
+  business          Business                   @relation(fields: [businessId], references: [id])
+  callId            String                     @unique @map("call_id")
+  call              PhoneCall                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  disposition       VoiceCallWrapUpDisposition
+  tags              Json                       @default("[]")
+  notes             String?                    @db.Text
+  completedByUserId String?                    @map("completed_by_user_id")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+
+  @@index([businessId, disposition, createdAt], map: "voice_call_wrapups_business_disposition_idx")
+  @@map("voice_call_wrapups")
+}
+
+/// Human-authored QA rubric metadata. Each edit is stored as a new immutable version below.
+model VoiceQualityRubric {
+  id         String                      @id @default(uuid())
+  businessId String                      @map("business_id")
+  business   Business                    @relation(fields: [businessId], references: [id])
+  name       String                      @db.VarChar(120)
+  active     Boolean                     @default(true)
+  versions   VoiceQualityRubricVersion[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, name], map: "voice_quality_rubrics_business_name_key")
+  @@index([businessId, active], map: "voice_quality_rubrics_business_active_idx")
+  @@map("voice_quality_rubrics")
+}
+
+/// Immutable, versioned QA criteria. A published snapshot is never edited in place.
+model VoiceQualityRubricVersion {
+  id              String               @id @default(uuid())
+  businessId      String               @map("business_id")
+  business        Business             @relation(fields: [businessId], references: [id])
+  rubricId        String               @map("rubric_id")
+  rubric          VoiceQualityRubric   @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  version         Int
+  criteria        Json
+  createdByUserId String?              @map("created_by_user_id")
+  publishedAt     DateTime?            @map("published_at")
+  reviews         VoiceQualityReview[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([rubricId, version], map: "voice_quality_rubric_versions_rubric_version_key")
+  @@index([businessId, rubricId, publishedAt], map: "voice_quality_rubric_versions_business_published_idx")
+  @@map("voice_quality_rubric_versions")
+}
+
+/// A reviewer-authored assessment grounded in transcript turn indexes. Transcript text is not
+/// copied into this row; deleting call audio/transcript removes reviews and their evidence too.
+model VoiceQualityReview {
+  id                 String                    @id @default(uuid())
+  businessId         String                    @map("business_id")
+  business           Business                  @relation(fields: [businessId], references: [id])
+  callId             String                    @map("call_id")
+  call               PhoneCall                 @relation(fields: [callId], references: [id], onDelete: Cascade)
+  rubricVersionId    String                    @map("rubric_version_id")
+  rubricVersion      VoiceQualityRubricVersion @relation(fields: [rubricVersionId], references: [id], onDelete: Restrict)
+  status             VoiceQualityReviewStatus  @default(assigned)
+  assignedToUserId   String?                   @map("assigned_to_user_id")
+  reviewerUserId     String?                   @map("reviewer_user_id")
+  criteriaScores     Json                      @default("[]") @map("criteria_scores")
+  computedScore      Int?                      @map("computed_score")
+  overrideScore      Int?                      @map("override_score")
+  overrideReason     String?                   @map("override_reason") @db.Text
+  overriddenByUserId String?                   @map("overridden_by_user_id")
+  submittedAt        DateTime?                 @map("submitted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([callId, rubricVersionId], map: "voice_quality_reviews_call_rubric_version_key")
+  @@index([businessId, status, createdAt], map: "voice_quality_reviews_business_status_idx")
+  @@index([businessId, assignedToUserId, status], map: "voice_quality_reviews_business_assignee_idx")
+  @@map("voice_quality_reviews")
+}
+
+/// Owner-managed jurisdiction/purpose/caller policy envelope. A pack is not a legal ruleset;
+/// each published version records the business's own legal-review attestation.
+model VoiceCompliancePolicyPack {
+  id             String                             @id @default(uuid())
+  businessId     String                             @map("business_id")
+  business       Business                           @relation(fields: [businessId], references: [id])
+  countryCode    String                             @map("country_code") @db.Char(2)
+  purpose        String                             @db.VarChar(40)
+  callerType     VoicePolicyCallerType              @map("caller_type")
+  disabledAt     DateTime?                          @map("disabled_at")
+  disabledReason String?                            @map("disabled_reason") @db.VarChar(500)
+  versions       VoiceCompliancePolicyVersion[]
+  decisions      VoiceOutboundEligibilityDecision[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, countryCode, purpose, callerType], map: "voice_compliance_policy_pack_key")
+  @@index([businessId, countryCode, disabledAt], map: "voice_compliance_policy_region_idx")
+  @@map("voice_compliance_policy_packs")
+}
+
+/// Policy content is versioned; publishing freezes the content. The approval reference is a
+/// business-entered legal-review record, not an external verification or legal certification.
+model VoiceCompliancePolicyVersion {
+  id                     String                             @id @default(uuid())
+  businessId             String                             @map("business_id")
+  business               Business                           @relation(fields: [businessId], references: [id])
+  packId                 String                             @map("pack_id")
+  pack                   VoiceCompliancePolicyPack          @relation(fields: [packId], references: [id], onDelete: Cascade)
+  version                Int
+  aiDisclosureText       String                             @map("ai_disclosure_text") @db.Text
+  recordingAllowed       Boolean                            @default(false) @map("recording_allowed")
+  recordingNoticeText    String?                            @map("recording_notice_text") @db.Text
+  recordingRetentionDays Int?                               @map("recording_retention_days")
+  allowedWindowStart     String?                            @map("allowed_window_start") @db.VarChar(5)
+  allowedWindowEnd       String?                            @map("allowed_window_end") @db.VarChar(5)
+  timeZone               String?                            @map("time_zone") @db.VarChar(100)
+  legalReviewReference   String?                            @map("legal_review_reference") @db.VarChar(191)
+  status                 VoiceCompliancePolicyVersionStatus @default(draft)
+  createdByUserId        String?                            @map("created_by_user_id")
+  publishedByUserId      String?                            @map("published_by_user_id")
+  publishedAt            DateTime?                          @map("published_at")
+  decisions              VoiceOutboundEligibilityDecision[]
+  recordingCalls         PhoneCall[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([packId, version], map: "voice_compliance_policy_version_key")
+  @@index([businessId, packId, status], map: "voice_compliance_policy_version_status_idx")
+  @@map("voice_compliance_policy_versions")
+}
+
+/// Customer-stated permission evidence for an outbound purpose. The proof reference and notice
+/// snapshot are retained so a decision never relies on a bare boolean consent flag.
+model VoiceConsentEvidence {
+  id                String                             @id @default(uuid())
+  businessId        String                             @map("business_id")
+  business          Business                           @relation(fields: [businessId], references: [id])
+  customerId        String?                            @map("customer_id")
+  customer          Customer?                          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  phoneE164         String                             @map("phone_e164") @db.VarChar(16)
+  purpose           String                             @db.VarChar(40)
+  callerType        VoicePolicyCallerType?             @map("caller_type")
+  source            String                             @db.VarChar(40)
+  noticeText        String                             @map("notice_text") @db.Text
+  evidenceReference String                             @map("evidence_reference") @db.VarChar(500)
+  legalBasis        String                             @map("legal_basis") @db.VarChar(120)
+  grantedAt         DateTime                           @map("granted_at")
+  expiresAt         DateTime?                          @map("expires_at")
+  revokedAt         DateTime?                          @map("revoked_at")
+  revocationReason  String?                            @map("revocation_reason") @db.VarChar(500)
+  verifiedAt        DateTime                           @map("verified_at")
+  verifiedByUserId  String                             @map("verified_by_user_id")
+  decisions         VoiceOutboundEligibilityDecision[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, phoneE164, purpose, revokedAt], map: "voice_consent_phone_purpose_idx")
+  @@index([businessId, verifiedAt], map: "voice_consent_verified_idx")
+  @@map("voice_consent_evidence")
+}
+
+/// First-party suppression record. Revocation is audited and soft; imports from external DNC
+/// registries are deliberately not claimed until a licensed source is connected.
+model VoiceSuppressionEntry {
+  id               String                             @id @default(uuid())
+  businessId       String                             @map("business_id")
+  business         Business                           @relation(fields: [businessId], references: [id])
+  phoneE164        String                             @map("phone_e164") @db.VarChar(16)
+  purpose          String?                            @db.VarChar(40)
+  source           String                             @db.VarChar(40)
+  reason           String                             @db.VarChar(500)
+  effectiveAt      DateTime                           @map("effective_at")
+  expiresAt        DateTime?                          @map("expires_at")
+  revokedAt        DateTime?                          @map("revoked_at")
+  revokedByUserId  String?                            @map("revoked_by_user_id")
+  revocationReason String?                            @map("revocation_reason") @db.VarChar(500)
+  decisions        VoiceOutboundEligibilityDecision[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, phoneE164, effectiveAt, revokedAt], map: "voice_suppression_phone_active_idx")
+  @@index([businessId, createdAt], map: "voice_suppression_business_created_idx")
+  @@map("voice_suppression_entries")
+}
+
+/// Immutable decision trace. A downstream outbound dialer must require an allowed decision ID
+/// before starting a provider call; this table alone does not place calls.
+model VoiceOutboundEligibilityDecision {
+  id                 String                        @id @default(uuid())
+  businessId         String                        @map("business_id")
+  business           Business                      @relation(fields: [businessId], references: [id])
+  policyPackId       String?                       @map("policy_pack_id")
+  policyPack         VoiceCompliancePolicyPack?    @relation(fields: [policyPackId], references: [id], onDelete: SetNull)
+  policyVersionId    String?                       @map("policy_version_id")
+  policyVersion      VoiceCompliancePolicyVersion? @relation(fields: [policyVersionId], references: [id], onDelete: SetNull)
+  consentEvidenceId  String?                       @map("consent_evidence_id")
+  consentEvidence    VoiceConsentEvidence?         @relation(fields: [consentEvidenceId], references: [id], onDelete: SetNull)
+  suppressionEntryId String?                       @map("suppression_entry_id")
+  suppressionEntry   VoiceSuppressionEntry?        @relation(fields: [suppressionEntryId], references: [id], onDelete: SetNull)
+  phoneE164          String                        @map("phone_e164") @db.VarChar(16)
+  countryCode        String                        @map("country_code") @db.Char(2)
+  purpose            String                        @db.VarChar(40)
+  callerType         VoicePolicyCallerType         @map("caller_type")
+  allowed            Boolean
+  reasonCode         String                        @map("reason_code") @db.VarChar(40)
+  evaluatedByUserId  String                        @map("evaluated_by_user_id")
+  evaluatedAt        DateTime                      @default(now()) @map("evaluated_at")
+  campaignMembers    VoiceOutboundCampaignMember[] @relation("OutboundMemberDecision")
+
+  @@index([businessId, allowed, evaluatedAt], map: "voice_eligibility_business_allowed_idx")
+  @@index([businessId, phoneE164, evaluatedAt], map: "voice_eligibility_phone_idx")
+  @@map("voice_outbound_eligibility_decisions")
+}
+
+/// Draft-only outbound campaign plan. This is not a dial job; a future telephony adapter must
+/// re-check each member immediately before placing a call.
+model VoiceOutboundCampaign {
+  id                    String                        @id @default(uuid())
+  businessId            String                        @map("business_id")
+  business              Business                      @relation(fields: [businessId], references: [id])
+  name                  String                        @db.VarChar(191)
+  purpose               String                        @db.VarChar(40)
+  callerType            VoicePolicyCallerType         @map("caller_type")
+  countryCode           String                        @map("country_code") @db.Char(2)
+  timeZone              String                        @map("time_zone") @db.VarChar(100)
+  openingScript         String                        @map("opening_script") @db.Text
+  status                VoiceOutboundCampaignStatus   @default(draft)
+  aiAgentId             String?                       @map("ai_agent_id")
+  aiAgent               VoiceAiAgent?                 @relation(fields: [aiAgentId], references: [id], onDelete: SetNull)
+  humanAgentProfileId   String?                       @map("human_agent_profile_id")
+  humanAgentProfile     VoiceHumanAgentProfile?       @relation(fields: [humanAgentProfileId], references: [id], onDelete: SetNull)
+  scheduledAt           DateTime?                     @map("scheduled_at")
+  maxAttemptsPerContact Int                           @default(1) @map("max_attempts_per_contact")
+  retryCooldownHours    Int                           @default(24) @map("retry_cooldown_hours")
+  createdByUserId       String                        @map("created_by_user_id")
+  eligibilityCheckedAt  DateTime?                     @map("eligibility_checked_at")
+  members               VoiceOutboundCampaignMember[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status, createdAt], map: "voice_outbound_campaign_status_idx")
+  @@map("voice_outbound_campaigns")
+}
+
+/// A campaign points at canonical CRM customer rows; it does not duplicate their contact data.
+model VoiceOutboundCampaignMember {
+  id                    String                            @id @default(uuid())
+  businessId            String                            @map("business_id")
+  business              Business                          @relation(fields: [businessId], references: [id])
+  campaignId            String                            @map("campaign_id")
+  campaign              VoiceOutboundCampaign             @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customerId            String                            @map("customer_id")
+  customer              Customer                          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status                VoiceOutboundCampaignMemberStatus @default(selected)
+  blockReasonCode       String?                           @map("block_reason_code") @db.VarChar(40)
+  eligibilityDecisionId String?                           @map("eligibility_decision_id")
+  eligibilityDecision   VoiceOutboundEligibilityDecision? @relation("OutboundMemberDecision", fields: [eligibilityDecisionId], references: [id], onDelete: SetNull)
+  eligibilityCheckedAt  DateTime?                         @map("eligibility_checked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([campaignId, customerId], map: "voice_outbound_campaign_member_key")
+  @@index([businessId, campaignId, status], map: "voice_outbound_member_status_idx")
+  @@map("voice_outbound_campaign_members")
+}
+
+/// Scheduling/control-plane record for the Video Meetings screen. Media state is intentionally
+/// not implied by this row; a meeting stays scheduled until a configured media adapter is present.
+model VoiceVideoMeeting {
+  id                 String                  @id @default(uuid())
+  businessId         String                  @map("business_id")
+  business           Business                @relation(fields: [businessId], references: [id])
+  title              String                  @db.VarChar(200)
+  scheduledAt        DateTime                @map("scheduled_at")
+  durationMin        Int                     @map("duration_min")
+  timeZone           String                  @map("time_zone") @db.VarChar(100)
+  status             VoiceVideoMeetingStatus @default(scheduled)
+  hostBusinessUserId String                  @map("host_business_user_id")
+  host               BusinessUser            @relation("VoiceMeetingHost", fields: [hostBusinessUserId], references: [id])
+  customerId         String?                 @map("customer_id")
+  customer           Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  appointmentId      String?                 @map("appointment_id")
+  appointment        Appointment?            @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdByUserId    String                  @map("created_by_user_id")
+  cancelledAt        DateTime?               @map("cancelled_at")
+  cancellationReason String?                 @map("cancellation_reason") @db.VarChar(500)
+  endedAt            DateTime?               @map("ended_at")
+  invites            VoiceMeetingInvite[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status, scheduledAt], map: "voice_video_meeting_schedule_idx")
+  @@index([businessId, hostBusinessUserId, scheduledAt], map: "voice_video_meeting_host_idx")
+  @@index([businessId, customerId, scheduledAt], map: "voice_video_meeting_customer_idx")
+  @@map("voice_video_meetings")
+}
+
+/// Bearer invitation secret is returned once to the authenticated organizer and stored only as
+/// a SHA-256 digest. It grants meeting details, never media-provider credentials.
+model VoiceMeetingInvite {
+  id              String            @id @default(uuid())
+  businessId      String            @map("business_id")
+  business        Business          @relation(fields: [businessId], references: [id])
+  meetingId       String            @map("meeting_id")
+  meeting         VoiceVideoMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  email           String            @db.VarChar(191)
+  guestName       String?           @map("guest_name") @db.VarChar(120)
+  tokenHash       String            @unique @map("token_hash") @db.Char(64)
+  expiresAt       DateTime          @map("expires_at")
+  revokedAt       DateTime?         @map("revoked_at")
+  createdByUserId String            @map("created_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, meetingId, expiresAt], map: "voice_meeting_invite_meeting_idx")
+  @@index([businessId, email, revokedAt], map: "voice_meeting_invite_guest_idx")
+  @@map("voice_meeting_invites")
+}
+
+/// Versioned business IVR graph. Publishing changes the studio snapshot only; inbound calls
+/// continue using the existing runtime until an execution adapter is configured.
+model VoiceIvrFlow {
+  id               String                @id @default(uuid())
+  businessId       String                @map("business_id")
+  business         Business              @relation(fields: [businessId], references: [id])
+  name             String                @db.VarChar(191)
+  status           VoiceIvrFlowStatus    @default(draft)
+  revision         Int                   @default(0)
+  publishedVersion Int?                  @map("published_version")
+  draftGraph       Json                  @map("draft_graph")
+  versions         VoiceIvrFlowVersion[]
+
+  createdByUserId String   @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([businessId, status, updatedAt], map: "voice_ivr_flows_business_status_idx")
+  @@map("voice_ivr_flows")
+}
+
+/// Immutable published snapshots and rollback targets. Rollback creates a new version copied
+/// from an earlier snapshot rather than rewriting historical evidence.
+model VoiceIvrFlowVersion {
+  id                    String                    @id @default(uuid())
+  businessId            String                    @map("business_id")
+  business              Business                  @relation(fields: [businessId], references: [id])
+  flowId                String                    @map("flow_id")
+  flow                  VoiceIvrFlow              @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  version               Int
+  graph                 Json
+  status                VoiceIvrFlowVersionStatus @default(published)
+  changeSummary         String                    @map("change_summary") @db.VarChar(500)
+  rollbackSourceVersion Int?                      @map("rollback_source_version")
+  createdByUserId       String                    @map("created_by_user_id")
+  publishedAt           DateTime                  @default(now()) @map("published_at")
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  @@unique([flowId, version], map: "voice_ivr_flow_versions_flow_version_key")
+  @@index([businessId, flowId, publishedAt], map: "voice_ivr_flow_versions_business_flow_idx")
+  @@map("voice_ivr_flow_versions")
+}
+
+enum VoicePolicyCallerType {
+  ai_voice
+  live_agent
+  prerecorded
+}
+
+enum VoiceRecordingConsentStatus {
+  not_configured
+  not_allowed
+  pending
+  granted
+  declined
+  no_response
+}
+
+enum VoiceCompliancePolicyVersionStatus {
+  draft
+  published
+  superseded
+}
+
+enum VoiceVideoMeetingStatus {
+  scheduled
+  cancelled
+  ended
+}
+
+enum VoiceIvrFlowStatus {
+  draft
+  published
+}
+
+enum VoiceIvrFlowVersionStatus {
+  published
+  rollback
+}
+
+enum VoiceOutboundCampaignStatus {
+  draft
+  pending_approval
+  approved
+  scheduled
+  running
+  paused
+  stop_requested
+  stopped
+  completed
+}
+
+enum VoiceOutboundCampaignMemberStatus {
+  selected
+  eligible
+  blocked
+  queued
+  calling
+  answered
+  busy
+  no_answer
+  voicemail
+  retry
+  opted_out
+  skipped
+  completed
+}
+
+enum VoiceQualityReviewStatus {
+  assigned
+  in_progress
+  submitted
+  overridden
+}
+
+enum VoiceCallWrapUpDisposition {
+  resolved
+  callback_requested
+  booked
+  escalated
+  not_interested
+  wrong_number
+  other
 }
 
 enum VoiceRoutingTrigger {
@@ -2948,6 +3567,13 @@ enum PhoneCallOutcome {
   transfer
   /// A configured custom intent (`VoiceSettings.customIntents`) was matched — see `customIntentName`.
   custom
+}
+
+enum VoiceAgentPresenceStatus {
+  offline
+  available
+  busy
+  away
 }
 
 /// Receptionist Settings (UPD-FE-051e / Call Queue depth fix) — one row per business, upsert-on-write
@@ -3361,32 +3987,32 @@ enum CommerceSupplierQuoteStatus {
 /// RFQs and Negotiations (Autonomous Commerce screen 3). This is a sourcing request, not a
 /// purchase commitment: the only inventory/financial handoff is a canonical draft PurchaseOrder.
 model CommerceRfq {
-  id                  String                  @id @default(uuid())
-  businessId          String                  @map("business_id")
-  business            Business                @relation(fields: [businessId], references: [id])
-  requirement         String                  @db.Text
-  status              CommerceRfqStatus       @default(draft)
-  market              String?
-  currency            String                  @default("USD") @db.Char(3)
-  destination         String?                 @db.Text
-  terms               String?                 @db.Text
-  dueAt               DateTime?               @map("due_at")
-  ownerUserId         String?                 @map("owner_user_id")
-  sourceOpportunityId String?                 @map("source_opportunity_id")
-  sourceOpportunity   ProductOpportunity?     @relation(fields: [sourceOpportunityId], references: [id])
-  sourceProcurementRequestId String?          @map("source_procurement_request_id")
-  sourceProcurementRequest   ProcurementRequest? @relation(fields: [sourceProcurementRequestId], references: [id], onDelete: SetNull)
-  awardedQuoteId      String?                 @unique @map("awarded_quote_id")
-  awardedQuote        CommerceSupplierQuote?  @relation("CommerceRfqAwardedQuote", fields: [awardedQuoteId], references: [id])
-  purchaseOrderId     String?                 @unique @map("purchase_order_id")
-  purchaseOrder       PurchaseOrder?          @relation(fields: [purchaseOrderId], references: [id])
-  version             Int                     @default(1)
-  items               CommerceRfqItem[]
-  suppliers           CommerceRfqSupplier[]
-  quotes              CommerceSupplierQuote[]
-  audits              CommerceRfqAudit[]
-  createdAt           DateTime                @default(now()) @map("created_at")
-  updatedAt           DateTime                @updatedAt @map("updated_at")
+  id                         String                  @id @default(uuid())
+  businessId                 String                  @map("business_id")
+  business                   Business                @relation(fields: [businessId], references: [id])
+  requirement                String                  @db.Text
+  status                     CommerceRfqStatus       @default(draft)
+  market                     String?
+  currency                   String                  @default("USD") @db.Char(3)
+  destination                String?                 @db.Text
+  terms                      String?                 @db.Text
+  dueAt                      DateTime?               @map("due_at")
+  ownerUserId                String?                 @map("owner_user_id")
+  sourceOpportunityId        String?                 @map("source_opportunity_id")
+  sourceOpportunity          ProductOpportunity?     @relation(fields: [sourceOpportunityId], references: [id])
+  sourceProcurementRequestId String?                 @map("source_procurement_request_id")
+  sourceProcurementRequest   ProcurementRequest?     @relation(fields: [sourceProcurementRequestId], references: [id], onDelete: SetNull)
+  awardedQuoteId             String?                 @unique @map("awarded_quote_id")
+  awardedQuote               CommerceSupplierQuote?  @relation("CommerceRfqAwardedQuote", fields: [awardedQuoteId], references: [id])
+  purchaseOrderId            String?                 @unique @map("purchase_order_id")
+  purchaseOrder              PurchaseOrder?          @relation(fields: [purchaseOrderId], references: [id])
+  version                    Int                     @default(1)
+  items                      CommerceRfqItem[]
+  suppliers                  CommerceRfqSupplier[]
+  quotes                     CommerceSupplierQuote[]
+  audits                     CommerceRfqAudit[]
+  createdAt                  DateTime                @default(now()) @map("created_at")
+  updatedAt                  DateTime                @updatedAt @map("updated_at")
 
   @@index([businessId, status, updatedAt])
   @@index([businessId, dueAt])
@@ -6531,9 +7157,10 @@ model AdCampaign {
   /// to resupply account context on every pause/resume/budget-adjust action.
   providerMeta  Json                @default("{}") @map("provider_meta")
 
-  creatives      AdCreative[]
-  leads          AdLead[]
-  statsSnapshots AdCampaignStatsSnapshot[]
+  creatives            AdCreative[]
+  leads                AdLead[]
+  statsSnapshots       AdCampaignStatsSnapshot[]
+  attributedPhoneCalls PhoneCall[]               @relation("PhoneCallAttributionCampaign")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

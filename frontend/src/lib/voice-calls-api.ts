@@ -2,6 +2,49 @@ import { apiFetch } from "@/lib/api-client";
 
 export type PhoneCallStatus = "in_progress" | "completed" | "missed" | "transferred";
 export type PhoneCallOutcome = "none" | "booking" | "message" | "transfer" | "custom";
+export type VoiceRecordingConsentStatus = "not_configured" | "not_allowed" | "pending" | "granted" | "declined" | "no_response";
+export type VoiceCallWrapUpDisposition =
+  | "resolved"
+  | "callback_requested"
+  | "booked"
+  | "escalated"
+  | "not_interested"
+  | "wrong_number"
+  | "other";
+
+export interface VoiceCallWrapUp {
+  id: string;
+  callId: string;
+  disposition: VoiceCallWrapUpDisposition;
+  tags: string[];
+  notes: string | null;
+  completedByUserId: string | null;
+  createdAt: string;
+}
+
+export interface SubmitVoiceCallWrapUpInput {
+  disposition: VoiceCallWrapUpDisposition;
+  tags?: string[];
+  notes?: string;
+}
+
+export interface VoiceCopilotSuggestion {
+  callId: string;
+  suggestion: string;
+  /** Context supplied to the model; this does not claim that every source was used in the answer. */
+  contextSupplied: Array<{
+    kind: string;
+    label: string;
+    sourceFilename?: string | null;
+    snippet?: string;
+  }>;
+  usage: { inputTokens: number; outputTokens: number };
+  generatedAt: string;
+}
+
+export function generateVoiceCallCopilotSuggestion(callId: string): Promise<VoiceCopilotSuggestion> {
+  return apiFetch<VoiceCopilotSuggestion>(`/voice/calls/${callId}/copilot-suggestion`, { method: "POST" });
+}
 
 /** The fixed taxonomy the AI files a caller's question under (see backend voice-analysis.ts). */
 export type TopicKey =
@@ -86,8 +129,17 @@ export interface PhoneCall {
   customIntentName: string | null;
   transcript: CallTurn[];
   recordingKey: string | null;
+  recordingConsentStatus: VoiceRecordingConsentStatus;
+  recordingConsentAt: string | null;
+  recordingRetentionDays: number | null;
+  recordingExpiresAt: string | null;
+  recordingNoticeSnapshot: string | null;
   appointmentId: string | null;
   appointment: PhoneCallAppointment | null;
+  /** The human's persisted after-call outcome, when the call has been wrapped up. */
+  wrapUp?: VoiceCallWrapUp | null;
+  /** Minimal CRM link resolved only when this caller number identifies one customer in the business. */
+  matchedCustomer?: { id: string; name: string } | null;
   startedAt: string;
   endedAt: string | null;
   createdAt: string;
@@ -113,6 +165,22 @@ export function takeOverCall(callId: string): Promise<PhoneCall> {
 /** Real call log, most recent first (last 200). */
 export function fetchCalls(): Promise<PhoneCall[]> {
   return apiFetch<PhoneCall[]>("/voice/calls");
+}
+
+export function fetchCallWrapUp(callId: string): Promise<VoiceCallWrapUp | null> {
+  return apiFetch<VoiceCallWrapUp | null>(`/voice/calls/${callId}/wrap-up`).then(
+    (result) => result ?? null,
+  );
+}
+
+export function submitCallWrapUp(
+  callId: string,
+  input: SubmitVoiceCallWrapUpInput,
+): Promise<VoiceCallWrapUp> {
+  return apiFetch<VoiceCallWrapUp>(`/voice/calls/${callId}/wrap-up`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function fetchMissedCalls(): Promise<PhoneCall[]> {
@@ -195,6 +263,10 @@ export interface EnrichedCall {
   /** Null when the business has no working hours configured — never a guess. */
   afterHours: boolean | null;
   hasRecording: boolean;
+  recordingConsentStatus: VoiceRecordingConsentStatus;
+  recordingConsentAt: string | null;
+  recordingRetentionDays: number | null;
+  recordingExpiresAt: string | null;
   /** Set when staff deleted the recording and transcript (the call log itself is kept). */
   recordingDeletedAt: string | null;
   transcript: CallTurn[];
@@ -278,8 +350,8 @@ export function summariseCall(callId: string): Promise<{ id: string; summary: st
 
 /* ───────────── AI Phone, full: live-call controls, notes, recordings ───────────── */
 
-/** Transfers a call that is genuinely still live to a person (the business's transfer number, or the one given). */
-export function transferLiveCall(callId: string, toNumber?: string): Promise<{ id: string; outcome: "transfer" }> {
+/** Requests a live-call transfer; the provider callback records the outcome once the callee answers. */
+export function transferLiveCall(callId: string, toNumber?: string): Promise<{ id: string; transferRequested: boolean }> {
   return apiFetch(`/voice/calls/${callId}/transfer`, { method: "POST", body: JSON.stringify(toNumber ? { toNumber } : {}) });
 }
 

@@ -1,5 +1,8 @@
 import axios from 'axios';
+import { randomUUID } from 'crypto';
+import { HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AppException } from '../common/filters/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../common/storage/s3.service';
 import { SpeechToTextService } from '../ai/speech-to-text.service';
@@ -7,8 +10,14 @@ import { AiInfraService } from '../ai/ai-infra.service';
 import { AppointmentsService } from '../bookings/appointments.service';
 import { MissedCallService } from './missed-call.service';
 import { VoiceCallService } from './voice-call.service';
-import { CALL_DISCLOSURE_TEXT } from './voice.constants';
-import { AppointmentSource, PhoneCallOutcome } from '@prisma/client';
+import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.service';
+import { AUTOMATED_ASSISTANT_DISCLOSURE_TEXT } from './voice.constants';
+import {
+  AppointmentSource,
+  PhoneCallOutcome,
+  Role,
+  VoiceAgentPresenceStatus,
+} from '@prisma/client';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -18,6 +27,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
   let service: VoiceCallService;
   let businessId: string;
   let serviceProductId: string;
+  let inboundRecordingPackId: string;
   const s3 = {
     upload: jest.fn(),
     getSignedDownloadUrl: jest.fn(),
@@ -28,6 +38,8 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
   const appointments = { createWalkIn: jest.fn() };
   const missedCall = { notify: jest.fn() };
   let config: ConfigService;
+  let baseHandleIncoming: VoiceCallService['handleIncoming'];
+  let baseHandleRecording: VoiceCallService['handleRecording'];
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -47,6 +59,27 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         phoneNumber: '+15559990000',
       },
     });
+    const recordingPolicy = await prisma.voiceCompliancePolicyPack.create({
+      data: {
+        businessId,
+        countryCode: 'US',
+        purpose: 'inbound_recording',
+        callerType: 'ai_voice',
+        versions: {
+          create: {
+            businessId,
+            version: 1,
+            aiDisclosureText: 'You are speaking with an automated assistant.',
+            recordingAllowed: true,
+            recordingNoticeText: 'This call may be recorded. Press 1 to agree.',
+            recordingRetentionDays: 30,
+            status: 'published',
+            publishedAt: new Date(),
+          },
+        },
+      },
+    });
+    inboundRecordingPackId = recordingPolicy.id;
     const product = await prisma.product.create({
       data: {
         businessId,
@@ -62,6 +95,8 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     config = new ConfigService({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
+      BACKEND_URL: 'https://voice-test.example/api/v1',
+      VOICE_TRANSFER_NUMBER: '',
     });
     service = new VoiceCallService(
       prisma,
@@ -71,13 +106,36 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       aiInfra as unknown as AiInfraService,
       appointments as unknown as AppointmentsService,
       missedCall as unknown as MissedCallService,
+      new VoiceHumanAgentDispatchService(prisma),
     );
+    baseHandleIncoming = (callSid, fromNumber, toNumber) =>
+      VoiceCallService.prototype.handleIncoming.call(
+        service,
+        callSid,
+        fromNumber,
+        toNumber,
+      ) as Promise<string>;
+    baseHandleRecording = (callSid, recordingUrl) =>
+      VoiceCallService.prototype.handleRecording.call(
+        service,
+        callSid,
+        recordingUrl,
+      ) as Promise<string>;
   });
 
   beforeEach(() => {
     mockedAxios.get.mockResolvedValue({ data: new ArrayBuffer(8) });
     s3.upload.mockResolvedValue(undefined);
     speechToText.transcribe.mockResolvedValue('I would like a haircut');
+    // Legacy conversation tests model callers who accept the published notice.
+    // The focused consent cases call baseHandleIncoming directly to test the real choices.
+    service.handleIncoming = async (...args) => {
+      const xml = await baseHandleIncoming(...args);
+      if (args[0] !== 'CA-real-1' && xml.includes('<Gather')) {
+        await service.handleRecordingConsent(args[0], '1');
+      }
+      return xml;
+    };
   });
 
   afterEach(() => {
@@ -86,6 +144,12 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
 
   afterAll(async () => {
     await prisma.phoneCall.deleteMany({ where: { businessId } });
+    await prisma.voiceCompliancePolicyPack.deleteMany({
+      where: { businessId },
+    });
+    await prisma.voiceAiAgentTestRun.deleteMany({ where: { businessId } });
+    await prisma.voiceAiAgentVersion.deleteMany({ where: { businessId } });
+    await prisma.voiceAiAgent.deleteMany({ where: { businessId } });
     await prisma.appointment.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
@@ -102,7 +166,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('rejects a call to an unrecognized number without creating a PhoneCall row', async () => {
       const xml = await service.handleIncoming(
         'CA-unknown-number',
-        '+15550000001',
+        '+14155550101',
         '+19990000000',
       );
       expect(xml).toContain('<Hangup/>');
@@ -112,20 +176,203 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(call).toBeNull();
     });
 
-    it('speaks the mandatory disclosure and starts recording for a real business number', async () => {
+    it('announces the policy and waits for explicit consent before recording', async () => {
       const xml = await service.handleIncoming(
         'CA-real-1',
-        '+15550000001',
+        '+14155550101',
         '+15559990000',
       );
-      expect(xml).toContain(CALL_DISCLOSURE_TEXT);
-      expect(xml).toContain('<Record');
+      expect(xml).toContain(AUTOMATED_ASSISTANT_DISCLOSURE_TEXT);
+      expect(xml).toContain('Press 1 to agree');
+      expect(xml).toContain('<Gather');
+      expect(xml).not.toContain('<Record');
 
       const call = await prisma.phoneCall.findUnique({
         where: { callSid: 'CA-real-1' },
       });
       expect(call?.businessId).toBe(businessId);
       expect(call?.status).toBe('in_progress');
+      expect(call?.recordingConsentStatus).toBe('pending');
+      expect(call?.recordingRetentionDays).toBe(30);
+      expect(call?.recordingNoticeSnapshot).toContain('Press 1 to agree');
+    });
+
+    it('does not record without a published policy for the caller country', async () => {
+      const xml = await baseHandleIncoming(
+        'CA-no-policy',
+        '+442079460018',
+        '+15559990000',
+      );
+      expect(xml).not.toContain('<Gather');
+      expect(xml).not.toContain('<Record');
+      expect(xml).toContain('You are speaking with an automated assistant');
+      expect(xml).toContain('Recording is not configured for your region');
+      expect(xml).toContain('No message was recorded');
+      const call = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-no-policy' },
+      });
+      expect(call.recordingConsentStatus).toBe('not_configured');
+    });
+
+    it('starts recording only after the caller affirmatively presses 1', async () => {
+      await baseHandleIncoming(
+        'CA-consent-yes',
+        '+14155550132',
+        '+15559990000',
+      );
+      const before = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-consent-yes' },
+      });
+      expect(before.recordingConsentStatus).toBe('pending');
+
+      const xml = await service.handleRecordingConsent('CA-consent-yes', '1');
+      const after = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-consent-yes' },
+      });
+      expect(xml).toContain('<Record');
+      expect(after.recordingConsentStatus).toBe('granted');
+      expect(after.recordingConsentAt).toBeInstanceOf(Date);
+    });
+
+    it('rechecks the published policy before honoring a consent response', async () => {
+      await baseHandleIncoming(
+        'CA-consent-policy-disabled',
+        '+14155550135',
+        '+15559990000',
+      );
+      await prisma.voiceCompliancePolicyPack.update({
+        where: { id: inboundRecordingPackId },
+        data: { disabledAt: new Date() },
+      });
+      try {
+        const xml = await service.handleRecordingConsent(
+          'CA-consent-policy-disabled',
+          '1',
+        );
+        const call = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: 'CA-consent-policy-disabled' },
+        });
+        expect(xml).not.toContain('<Record');
+        expect(call.recordingConsentStatus).toBe('not_allowed');
+      } finally {
+        await prisma.voiceCompliancePolicyPack.update({
+          where: { id: inboundRecordingPackId },
+          data: { disabledAt: null },
+        });
+      }
+    });
+
+    it('keeps recording off when the caller declines or gives no answer', async () => {
+      await baseHandleIncoming('CA-consent-no', '+14155550133', '+15559990000');
+      const declined = await service.handleRecordingConsent(
+        'CA-consent-no',
+        '2',
+      );
+      expect(declined).not.toContain('<Record');
+      expect(declined).toContain('You chose not to be recorded');
+      expect(declined).toContain('No message was recorded');
+      const declinedCall = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-consent-no' },
+      });
+      expect(declinedCall.recordingConsentStatus).toBe('declined');
+
+      await baseHandleIncoming(
+        'CA-consent-timeout',
+        '+14155550134',
+        '+15559990000',
+      );
+      const noAnswer = await service.handleRecordingConsent(
+        'CA-consent-timeout',
+        '',
+      );
+      expect(noAnswer).not.toContain('<Record');
+      expect(noAnswer).toContain('No message was recorded');
+      const timeoutCall = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-consent-timeout' },
+      });
+      expect(timeoutCall.recordingConsentStatus).toBe('no_response');
+    });
+
+    it('ignores a recording callback without consent before fetching or storing provider audio', async () => {
+      await baseHandleIncoming(
+        'CA-recording-guard',
+        '+442079460019',
+        '+15559990000',
+      );
+      const xml = await baseHandleRecording(
+        'CA-recording-guard',
+        'https://api.twilio.com/recordings/RE-unauthorized',
+      );
+      expect(xml).toContain('<Hangup/>');
+      expect(mockedAxios.get.mock.calls).toHaveLength(0);
+      expect(s3.upload.mock.calls).toHaveLength(0);
+    });
+
+    it('pins the currently published AI agent version to a new inbound call and uses its saved configuration', async () => {
+      const agentId = randomUUID();
+      const versionId = randomUUID();
+      await prisma.voiceAiAgent.create({
+        data: {
+          id: agentId,
+          businessId,
+          name: 'Pinned QA Receptionist',
+          template: 'receptionist',
+          status: 'active',
+          publishedVersionId: versionId,
+          versions: {
+            create: {
+              id: versionId,
+              businessId,
+              version: 1,
+              config: {
+                agentName: 'Pinned Snapshot Receptionist',
+                template: 'receptionist',
+                purpose: 'Answer customer questions with verified records',
+                voiceStyle: 'Calm and short',
+                instructions: 'Use the pinned production configuration',
+                escalationGuidance: 'Offer a human transfer when needed',
+                languages: ['English'],
+              },
+              checksum: 'a'.repeat(64),
+              publishedAt: new Date(),
+            },
+          },
+        },
+      });
+      await service.handleIncoming(
+        'CA-agent-pinned',
+        '+14155550130',
+        '+15559990000',
+      );
+      const call = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-agent-pinned' },
+      });
+      expect(call.voiceAgentVersionId).toBe(versionId);
+
+      await prisma.voiceAiAgent.update({
+        where: { id: agentId },
+        data: { name: 'Renamed after call began', template: 'sales' },
+      });
+
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: 'I can help with that.', intent: 'continue' }),
+      );
+      await service.handleRecording(
+        'CA-agent-pinned',
+        'https://api.twilio.com/recordings/RE-agent-pinned',
+      );
+      const [, prompt, , kind] = aiInfra.complete.mock.calls[0] as [
+        string,
+        string,
+        number,
+        string,
+      ];
+      expect(kind).toBe('voice_entry');
+      expect(prompt).toContain('Pinned Snapshot Receptionist');
+      expect(prompt).toContain('template receptionist');
+      expect(prompt).not.toContain('template sales');
+      expect(prompt).not.toContain('Renamed after call began');
+      expect(prompt).toContain('Use the pinned production configuration');
     });
   });
 
@@ -133,7 +380,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('transcribes, uploads a real S3 recording, and continues the conversation', async () => {
       await service.handleIncoming(
         'CA-continue',
-        '+15550000002',
+        '+14155550102',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -160,8 +407,48 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(transcript[1].speaker).toBe('assistant');
     });
 
+    it('keeps the uploaded recording and queues a follow-up when speech-to-text is unavailable', async () => {
+      await service.handleIncoming(
+        'CA-transcription-unavailable',
+        '+14155550120',
+        '+15559990000',
+      );
+      speechToText.transcribe.mockRejectedValue(
+        new AppException(
+          'SPEECH_TO_TEXT_UNAVAILABLE',
+          'Voice transcription is not available right now — please try again later.',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        ),
+      );
+
+      const xml = await service.handleRecording(
+        'CA-transcription-unavailable',
+        'https://api.twilio.com/recordings/RE-transcription-unavailable',
+      );
+
+      expect(xml).toContain('speech recognition is unavailable right now');
+      expect(xml).toContain('<Hangup/>');
+      expect(aiInfra.complete).not.toHaveBeenCalled();
+      expect(s3.upload).toHaveBeenCalledTimes(1);
+
+      const call = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-transcription-unavailable' },
+      });
+      expect(call.outcome).toBe(PhoneCallOutcome.message);
+      expect(call.recordingKey).toMatch(/^voice-recordings\//);
+      const transcript = call.transcript as unknown as {
+        speaker: string;
+        text: string;
+      }[];
+      expect(transcript).toHaveLength(1);
+      expect(transcript[0]?.speaker).toBe('assistant');
+      expect(transcript[0]?.text).toContain(
+        'speech recognition is unavailable',
+      );
+    });
+
     it('books a real appointment via AppointmentsService when intent is "book" with resolvable details', async () => {
-      await service.handleIncoming('CA-book', '+15550000003', '+15559990000');
+      await service.handleIncoming('CA-book', '+14155550103', '+15559990000');
       aiInfra.complete.mockResolvedValue(
         JSON.stringify({
           reply: "You're all set!",
@@ -174,7 +461,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       // A real Appointment row (not a bare fake id) — PhoneCall.appointmentId is a real FK, so the
       // mock has to produce what the real AppointmentsService.createWalkIn would.
       const customer = await prisma.customer.create({
-        data: { businessId, name: 'Jordan', phone: '+15550000003' },
+        data: { businessId, name: 'Jordan', phone: '+14155550103' },
       });
       const realAppointment = await prisma.appointment.create({
         data: {
@@ -200,7 +487,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         expect.objectContaining({
           serviceId: serviceProductId,
           startsAt: '2026-09-01T10:00:00.000Z',
-          customerPhone: '+15550000003',
+          customerPhone: '+14155550103',
         }),
         AppointmentSource.phone,
       );
@@ -215,7 +502,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('falls back gracefully and keeps recording when the booking slot is unavailable', async () => {
       await service.handleIncoming(
         'CA-book-fail',
-        '+15550000004',
+        '+14155550104',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -246,7 +533,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('records outcome "message" and hangs up when the caller wants to leave a message', async () => {
       await service.handleIncoming(
         'CA-message',
-        '+15550000005',
+        '+14155550105',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -271,18 +558,21 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
           TWILIO_ACCOUNT_SID: 'AC-test',
           TWILIO_AUTH_TOKEN: 'test-token',
           VOICE_TRANSFER_NUMBER: '+15551239999',
+          BACKEND_URL: 'https://voice-test.example/api/v1',
         }),
         s3 as unknown as S3Service,
         speechToText as unknown as SpeechToTextService,
         aiInfra as unknown as AiInfraService,
         appointments as unknown as AppointmentsService,
         missedCall as unknown as MissedCallService,
+        new VoiceHumanAgentDispatchService(prisma),
       );
       await withTransfer.handleIncoming(
         'CA-transfer',
-        '+15550000006',
+        '+14155550106',
         '+15559990000',
       );
+      await withTransfer.handleRecordingConsent('CA-transfer', '1');
       aiInfra.complete.mockResolvedValue(
         JSON.stringify({ reply: 'Connecting you now.', intent: 'transfer' }),
       );
@@ -291,13 +581,89 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         'CA-transfer',
         'https://api.twilio.com/recordings/RE222',
       );
-      expect(xml).toContain('<Dial>+15551239999</Dial>');
+      expect(xml).toContain(
+        '<Dial action="https://voice-test.example/api/v1/voice/webhook/transfer-result"',
+      );
+      expect(xml).toContain('>+15551239999</Dial>');
+      let call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-transfer' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.none);
+
+      const resultXml = await withTransfer.handleTransferResult(
+        'CA-transfer',
+        'completed',
+      );
+      expect(resultXml).toContain('<Hangup/>');
+      call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-transfer' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.transfer);
+    });
+
+    it('records a failed transfer and saves a caller message for follow-up', async () => {
+      const withTransfer = new VoiceCallService(
+        prisma,
+        new ConfigService({
+          TWILIO_ACCOUNT_SID: 'AC-test',
+          TWILIO_AUTH_TOKEN: 'test-token',
+          VOICE_TRANSFER_NUMBER: '+15551239999',
+          BACKEND_URL: 'https://voice-test.example/api/v1',
+        }),
+        s3 as unknown as S3Service,
+        speechToText as unknown as SpeechToTextService,
+        aiInfra as unknown as AiInfraService,
+        appointments as unknown as AppointmentsService,
+        missedCall as unknown as MissedCallService,
+        new VoiceHumanAgentDispatchService(prisma),
+      );
+      await withTransfer.handleIncoming(
+        'CA-transfer-failed',
+        '+14155550129',
+        '+15559990000',
+      );
+      await withTransfer.handleRecordingConsent('CA-transfer-failed', '1');
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: 'Connecting you now.', intent: 'transfer' }),
+      );
+      await withTransfer.handleRecording(
+        'CA-transfer-failed',
+        'https://api.twilio.com/recordings/RE-transfer-failed',
+      );
+
+      const fallbackXml = await withTransfer.handleTransferResult(
+        'CA-transfer-failed',
+        'no-answer',
+      );
+      expect(fallbackXml).toContain('Please leave a message');
+      expect(fallbackXml).toContain(
+        'https://voice-test.example/api/v1/voice/webhook/transfer-message',
+      );
+      let call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-transfer-failed' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.message);
+
+      speechToText.transcribe.mockResolvedValue('Please call me tomorrow.');
+      const messageXml = await withTransfer.handleTransferMessage(
+        'CA-transfer-failed',
+        'https://api.twilio.com/recordings/RE-transfer-message',
+      );
+      expect(messageXml).toContain('Thanks, I&apos;ve saved your message');
+      call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-transfer-failed' },
+      });
+      const transcript = call?.transcript as unknown as { text: string }[];
+      expect(
+        transcript.some((turn) => turn.text === 'Please call me tomorrow.'),
+      ).toBe(true);
+      expect(call?.outcome).toBe(PhoneCallOutcome.message);
     });
 
     it('ends the call with a graceful fallback when no transfer number is configured', async () => {
       await service.handleIncoming(
         'CA-no-transfer',
-        '+15550000007',
+        '+14155550107',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -319,7 +685,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     });
 
     it('never fabricates: falls back to a real "please repeat" reply when the AI response is unparseable', async () => {
-      await service.handleIncoming('CA-bad-ai', '+15550000008', '+15559990000');
+      await service.handleIncoming('CA-bad-ai', '+14155550108', '+15559990000');
       aiInfra.complete.mockResolvedValue('not valid json at all');
 
       const xml = await service.handleRecording(
@@ -335,7 +701,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('marks a call completed (not missed) on a normal hangup with no outcome yet', async () => {
       await service.handleIncoming(
         'CA-status-ok',
-        '+15550000009',
+        '+14155550109',
         '+15559990000',
       );
       await service.handleStatus('CA-status-ok', 'completed');
@@ -345,6 +711,12 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       });
       expect(call?.status).toBe('completed');
       expect(call?.endedAt).not.toBeNull();
+      expect(call?.recordingExpiresAt?.getTime()).toBeGreaterThanOrEqual(
+        Date.now() + 29 * 24 * 60 * 60 * 1000,
+      );
+      expect(call?.recordingExpiresAt?.getTime()).toBeLessThanOrEqual(
+        Date.now() + 31 * 24 * 60 * 60 * 1000,
+      );
 
       expect(missedCall.notify).not.toHaveBeenCalled();
     });
@@ -352,7 +724,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('marks a call missed and notifies via WhatsApp on no-answer with no outcome', async () => {
       await service.handleIncoming(
         'CA-status-missed',
-        '+15550000010',
+        '+14155550110',
         '+15559990000',
       );
       await service.handleStatus('CA-status-missed', 'no-answer');
@@ -368,7 +740,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('ignores a non-terminal status update', async () => {
       await service.handleIncoming(
         'CA-status-ringing',
-        '+15550000011',
+        '+14155550111',
         '+15559990000',
       );
       await service.handleStatus('CA-status-ringing', 'ringing');
@@ -395,13 +767,17 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         },
       });
 
-      const xml = await service.handleIncoming(
+      const xml = await baseHandleIncoming(
         'CA-settings-voice',
-        '+15550000012',
+        '+14155550112',
         '+15559990000',
       );
       expect(xml).toContain('<Say voice="Polly.Joanna">');
-      expect(xml).toContain('timeout="8"');
+      const consentXml = await service.handleRecordingConsent(
+        'CA-settings-voice',
+        '1',
+      );
+      expect(consentXml).toContain('timeout="8"');
     });
 
     it('uses the configured queueHoldMessage as the real MAX_CALL_TURNS fallback line', async () => {
@@ -413,7 +789,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       });
       await service.handleIncoming(
         'CA-settings-holdmsg',
-        '+15550000013',
+        '+14155550113',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -449,7 +825,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       });
       await service.handleIncoming(
         'CA-settings-custom',
-        '+15550000014',
+        '+14155550114',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -481,7 +857,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       });
       await service.handleIncoming(
         'CA-settings-prompt',
-        '+15550000015',
+        '+14155550115',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -509,7 +885,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       speechToText.transcribe.mockResolvedValue('How much is a haircut?');
       await service.handleIncoming(
         'CA-catalog',
-        '+15550000020',
+        '+14155550120',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -547,7 +923,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       speechToText.transcribe.mockResolvedValue('How much is a haircut?');
       await service.handleIncoming(
         'CA-catalog-off',
-        '+15550000021',
+        '+14155550121',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -579,7 +955,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         );
         await service.handleIncoming(
           'CA-hours',
-          '+15550000029',
+          '+14155550129',
           '+15559990000',
         );
         aiInfra.complete.mockResolvedValue(
@@ -632,7 +1008,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         speechToText.transcribe.mockResolvedValue('What time do you open?');
         await service.handleIncoming(
           'CA-hours-off',
-          '+15550000030',
+          '+14155550130',
           '+15559990000',
         );
         aiInfra.complete.mockResolvedValue(
@@ -663,7 +1039,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         data: { businessId, shareOrderStatus: true },
       });
       const customer = await prisma.customer.create({
-        data: { businessId, name: 'Order Caller', phone: '+15550000022' },
+        data: { businessId, name: 'Order Caller', phone: '+14155550122' },
       });
       const order = await prisma.order.create({
         data: {
@@ -677,7 +1053,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       speechToText.transcribe.mockResolvedValue(
         'What is the status of my order?',
       );
-      await service.handleIncoming('CA-order', '+15550000022', '+15559990000');
+      await service.handleIncoming('CA-order', '+14155550122', '+15559990000');
       aiInfra.complete.mockResolvedValue(
         JSON.stringify({
           reply: `Order ${order.orderNo} is confirmed.`,
@@ -708,7 +1084,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       );
       await service.handleIncoming(
         'CA-order-unverified',
-        '+15550000023',
+        '+14155550123',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -736,7 +1112,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       speechToText.transcribe.mockResolvedValue('Are you open on Eid?');
       await service.handleIncoming(
         'CA-knowledge',
-        '+15550000024',
+        '+14155550124',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -768,7 +1144,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       );
       await service.handleIncoming(
         'CA-identity',
-        '+15550000025',
+        '+14155550125',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -826,7 +1202,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       );
       await service.handleIncoming(
         'CA-rule-transfer',
-        '+15550000026',
+        '+14155550126',
         '+15559990000',
       );
       // The AI itself thinks this is just "continue" — the rule must still win.
@@ -838,9 +1214,14 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         'CA-rule-transfer',
         'https://api.twilio.com/recordings/RE-rule-transfer',
       );
-      expect(xml).toContain('<Dial>+15557778888</Dial>');
+      expect(xml).toContain('>+15557778888</Dial>');
 
-      const call = await prisma.phoneCall.findUnique({
+      let call = await prisma.phoneCall.findUnique({
+        where: { callSid: 'CA-rule-transfer' },
+      });
+      expect(call?.outcome).toBe(PhoneCallOutcome.none);
+      await service.handleTransferResult('CA-rule-transfer', 'completed');
+      call = await prisma.phoneCall.findUnique({
         where: { callSid: 'CA-rule-transfer' },
       });
       expect(call?.outcome).toBe(PhoneCallOutcome.transfer);
@@ -860,7 +1241,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       speechToText.transcribe.mockResolvedValue('Something unclear.');
       await service.handleIncoming(
         'CA-rule-lowconf',
-        '+15550000027',
+        '+14155550127',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -899,7 +1280,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       speechToText.transcribe.mockResolvedValue('I want a lawyer.');
       await service.handleIncoming(
         'CA-rule-inactive',
-        '+15550000028',
+        '+14155550128',
         '+15559990000',
       );
       aiInfra.complete.mockResolvedValue(
@@ -915,6 +1296,85 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         where: { callSid: 'CA-rule-inactive' },
       });
       expect(call?.routedRuleName).toBeNull();
+    });
+
+    it('routes an AI transfer to a fresh available human profile and releases its capacity from provider callbacks', async () => {
+      await prisma.voiceRoutingRule.deleteMany({ where: { businessId } });
+      const staff = await prisma.user.create({
+        data: {
+          email: `voice-human-transfer-${randomUUID()}@example.com`,
+          passwordHash: 'test-only',
+          name: 'Available Call Agent',
+          phone: '+15550004444',
+        },
+      });
+      const member = await prisma.businessUser.create({
+        data: { businessId, userId: staff.id, role: Role.staff },
+      });
+      await prisma.voiceHumanAgentProfile.create({
+        data: {
+          businessId,
+          staffUserId: member.id,
+          maxConcurrentCalls: 1,
+          active: true,
+          presenceStatus: VoiceAgentPresenceStatus.available,
+          lastHeartbeatAt: new Date(),
+        },
+      });
+
+      try {
+        await service.handleIncoming(
+          'CA-human-transfer',
+          '+14155550130',
+          '+15559990000',
+        );
+        aiInfra.complete.mockResolvedValue(
+          JSON.stringify({ reply: 'Connecting you now.', intent: 'transfer' }),
+        );
+
+        const xml = await service.handleRecording(
+          'CA-human-transfer',
+          'https://api.twilio.com/recordings/RE-human-transfer',
+        );
+        expect(xml).toContain('<Number statusCallback=');
+        expect(xml).toContain('>+15550004444</Number>');
+        expect(xml).toContain('parentCallSid=CA-human-transfer');
+
+        const call = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: 'CA-human-transfer' },
+        });
+        const assignment =
+          await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
+            where: { callId: call.id },
+          });
+        expect(assignment.staffUserId).toBe(member.id);
+        expect(assignment.status).toBe('offered');
+
+        await service.handleDialStatus('CA-human-transfer', 'in-progress');
+        const connected =
+          await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
+            where: { callId: call.id },
+          });
+        expect(connected.status).toBe('connected');
+        expect(connected.connected).toBe(true);
+
+        await service.handleTransferResult('CA-human-transfer', 'completed');
+        const released =
+          await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
+            where: { callId: call.id },
+          });
+        expect(released.status).toBe('released');
+        expect(released.providerStatus).toBe('completed');
+      } finally {
+        await prisma.phoneCall.deleteMany({
+          where: { callSid: 'CA-human-transfer' },
+        });
+        await prisma.voiceHumanAgentProfile.deleteMany({
+          where: { businessId, staffUserId: member.id },
+        });
+        await prisma.businessUser.delete({ where: { id: member.id } });
+        await prisma.user.delete({ where: { id: staff.id } });
+      }
     });
   });
 });

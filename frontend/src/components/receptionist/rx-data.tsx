@@ -154,7 +154,7 @@ export function RxDataProvider({ children }: { children: ReactNode }) {
       listen: async (id) => void (await run(() => listenToCall(id), ["Your phone is ringing", "Answer it to hear the call, muted."], "Couldn't join the call")),
       takeOver: async (id) => void (await run(() => takeOverCall(id), ["Your phone is ringing", "Answer it to speak with the caller — the AI steps aside."], "Couldn't take over the call")),
       summarise: async (id) => void (await run(() => summariseCall(id), ["Summary written", "Generated from the transcript alone and saved on the call."], "No summary was generated")),
-      transfer: async (id, toNumber) => void (await run(() => transferLiveCall(id, toNumber), ["Transferring the call", "The caller is being put through to a person."], "Couldn't transfer the call")),
+      transfer: async (id, toNumber) => void (await run(() => transferLiveCall(id, toNumber), ["Transfer started", "The provider will confirm once the person answers."], "Couldn't transfer the call")),
       endCall: async (id) => void (await run(() => endLiveCall(id), ["Ending the call", "The telephony provider has been asked to hang up."], "Couldn't end the call")),
       addNote: (id, body) => run(() => addCallNote(id, body), ["Note added", "Saved on the call and recorded in its audit trail."], "Couldn't save the note"),
       deleteRecording: async (id) =>

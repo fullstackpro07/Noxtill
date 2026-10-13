@@ -48,6 +48,8 @@ export const CAPABILITIES = {
   SOCIAL_MANAGE: 'social.manage',
   COMPETITIVE_MANAGE: 'competitive.manage',
   VOICE_MANAGE: 'voice.manage',
+  /** Supervisor-only live call visibility and participant join controls. */
+  VOICE_SUPERVISE: 'voice.supervise',
   DELIVERY_MANAGE: 'delivery.manage',
   /// Delivery zones, automations and settings change how every delivery is priced, routed and
   /// messaged — owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below), while
@@ -128,6 +130,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.SOCIAL_MANAGE,
   CAPABILITIES.COMPETITIVE_MANAGE,
   CAPABILITIES.VOICE_MANAGE,
+  CAPABILITIES.VOICE_SUPERVISE,
   CAPABILITIES.DELIVERY_MANAGE,
   CAPABILITIES.ADS_MANAGE,
   CAPABILITIES.BOOKINGS_MANAGE,

@@ -8,11 +8,12 @@ import { fetchAppointments } from "@/lib/bookings-api";
 import { fetchReviewRequests } from "@/lib/reviews-api";
 import { fetchCreditSales, fetchCreditPayments } from "@/lib/credit-api";
 import { fetchRecentMessages } from "@/lib/messages-api";
+import { fetchCalls } from "@/lib/voice-calls-api";
 import { formatCurrency, formatDate, formatTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { useCustomersSearchStore } from "@/store/customers-search-store";
 
-type ActivityType = "Purchase" | "Payment" | "Booking" | "Review" | "Message" | "Credit";
+type ActivityType = "Purchase" | "Payment" | "Booking" | "Review" | "Message" | "Credit" | "Call";
 
 interface ActivityRow {
   id: string;
@@ -32,6 +33,7 @@ const TYPE_TONE: Record<ActivityType, { bg: string; fg: string }> = {
   Review: { bg: "#FEF6E7", fg: "#B54708" },
   Message: { bg: "#F5EBFE", fg: "#7E22CE" },
   Credit: { bg: "#FEF3F2", fg: "#B42318" },
+  Call: { bg: "#EAF2FF", fg: "#1D4ED8" },
 };
 
 const selectStyle: React.CSSProperties = { border: "1px solid var(--app-border)", borderRadius: 10, padding: "9px 11px", fontSize: 12.5, fontWeight: 600, color: "var(--app-text-muted)", background: "var(--app-surface)", minHeight: 42 };
@@ -50,6 +52,7 @@ export function CustomerActivityPanel() {
   const { data: sales = [] } = useQuery({ queryKey: ["credit-sales"], queryFn: fetchCreditSales });
   const { data: payments = [] } = useQuery({ queryKey: ["credit-payments"], queryFn: fetchCreditPayments });
   const { data: messages = [] } = useQuery({ queryKey: ["messages", "recent"], queryFn: () => fetchRecentMessages(100) });
+  const { data: calls = [] } = useQuery({ queryKey: ["voice", "calls"], queryFn: fetchCalls });
 
   const rows = useMemo(() => {
     const all: ActivityRow[] = [];
@@ -71,8 +74,18 @@ export function CustomerActivityPanel() {
     for (const m of messages) {
       all.push({ id: `msg-${m.id}`, ts: m.createdAt, type: "Message", name: m.customer?.name ?? "Customer", desc: m.customBody ? m.customBody.slice(0, 60) : m.templateKey, amount: 0, module: "Messaging", href: "/customers" });
     }
+    for (const call of calls) {
+      const customer = call.matchedCustomer;
+      if (!customer) continue;
+      const result = call.wrapUp
+        ? `Disposition: ${call.wrapUp.disposition.replace(/_/g, " ")}`
+        : call.outcome !== "none"
+          ? `Call outcome: ${call.outcome.replace(/_/g, " ")}`
+          : "No call disposition recorded";
+      all.push({ id: `call-${call.id}`, ts: call.endedAt ?? call.startedAt, type: "Call", name: customer.name, desc: `Phone call · ${call.status.replace(/_/g, " ")} · ${result}`, amount: 0, module: "AI Phone", href: "/receptionist/history" });
+    }
     return all.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
-  }, [orders, appointments, reviews, sales, payments, messages]);
+  }, [orders, appointments, reviews, sales, payments, messages, calls]);
 
   const filtered = useMemo(() => {
     const now = new Date().getTime();
@@ -112,6 +125,10 @@ export function CustomerActivityPanel() {
           <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Reviews</div>
           <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{kpi("Review")}</div>
         </div>
+        <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div className="text-[12px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Calls</div>
+          <div className="mt-1.5 text-[21px] font-extrabold" style={{ color: "var(--app-text)" }}>{kpi("Call")}</div>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
@@ -120,7 +137,7 @@ export function CustomerActivityPanel() {
             {["Last 7 days", "Last 30 days", "This year"].map((o) => <option key={o}>{o}</option>)}
           </select>
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} aria-label="Activity type" style={selectStyle}>
-            {["All types", "Purchase", "Payment", "Booking", "Review", "Message", "Credit"].map((o) => <option key={o}>{o}</option>)}
+            {["All types", "Purchase", "Payment", "Booking", "Review", "Message", "Credit", "Call"].map((o) => <option key={o}>{o}</option>)}
           </select>
         </div>
 
@@ -146,7 +163,7 @@ export function CustomerActivityPanel() {
           );
         })}
         <div className="p-[11px_17px] text-[11.5px]" style={{ borderTop: "1px solid var(--app-surface-2)", color: "var(--app-text-disabled)" }}>
-          This is an aggregated view. Each row opens the real module that owns it.
+          This is an aggregated view. Each row opens the real module that owns it. Calls appear here only when the caller number matches one CRM record; unmatched calls remain in AI Phone.
         </div>
       </div>
     </main>

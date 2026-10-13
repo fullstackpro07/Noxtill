@@ -123,7 +123,7 @@ describe('TelephonyService (UPD-BE-056)', () => {
     );
     const unconfigured = new TelephonyService(
       tenantPrisma,
-      new ConfigService({}),
+      new ConfigService({ TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '' }),
     );
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 

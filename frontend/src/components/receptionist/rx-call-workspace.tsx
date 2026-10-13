@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { TOPIC_LABELS, fetchCallContext, fetchRecordingUrl, type CallContext, type EnrichedCall } from "@/lib/voice-calls-api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api-client";
+import { TOPIC_LABELS, fetchCallContext, fetchCallWrapUp, fetchRecordingUrl, submitCallWrapUp, type CallContext, type EnrichedCall, type VoiceCallWrapUpDisposition } from "@/lib/voice-calls-api";
 import { formatCurrency } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import {
@@ -173,6 +174,14 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
               <ChipFor spec={matchChip(call)} h={23} fontSize={10.5} />
               <ChipFor spec={{ label: intentLabel(call), tone: "neutral" }} h={23} fontSize={10.5} />
               <ChipFor spec={outcomeChip(call)} h={23} fontSize={10.5} />
+              <ChipFor
+                spec={{
+                  label: `Recording consent: ${call.recordingConsentStatus.replaceAll("_", " ")}`,
+                  tone: call.recordingConsentStatus === "granted" ? "green" : call.recordingConsentStatus === "declined" || call.recordingConsentStatus === "not_allowed" ? "amber" : "neutral",
+                }}
+                h={23}
+                fontSize={10.5}
+              />
               {confidenceChip(call.analysis?.confidence ?? null) ? <ChipFor spec={confidenceChip(call.analysis?.confidence ?? null)!} h={23} fontSize={10.5} /> : null}
               {sentimentChip(call.analysis?.sentiment ?? null) ? <ChipFor spec={sentimentChip(call.analysis?.sentiment ?? null)!} h={23} fontSize={10.5} /> : null}
               {call.routedRuleName ? <ChipFor spec={{ label: `Rule: ${call.routedRuleName}`, tone: "blue", icon: "list-ordered" }} h={23} fontSize={10.5} /> : null}
@@ -314,6 +323,8 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
           <NoteBox>{data.note}</NoteBox>
         </div>
 
+        <CallWrapUpPanel call={call} />
+
         {/* actions */}
         <div className="flex gap-[7px] overflow-x-auto border-t border-[#EEF0F3] bg-[#FCFCFD] py-3 pl-5 pr-[76px]">
           {actions.map((a) => (
@@ -332,6 +343,120 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
         </div>
       </div>
     </div>
+  );
+}
+
+function CallWrapUpPanel({ call }: { call: EnrichedCall }) {
+  const queryClient = useQueryClient();
+  const rx = useRx();
+  const notify = useRxStore((s) => s.notify);
+  const wrapUpQuery = useQuery({
+    queryKey: ["rx-call-wrap-up", call.id],
+    queryFn: () => fetchCallWrapUp(call.id),
+    enabled: call.status !== "in_progress",
+    staleTime: 30_000,
+  });
+  const [disposition, setDisposition] = useState<VoiceCallWrapUpDisposition | "">("");
+  const [tagsText, setTagsText] = useState("");
+  const [notes, setNotes] = useState("");
+  const submit = useMutation({
+    mutationFn: () => {
+      if (!disposition) throw new Error("Choose a disposition first");
+      return submitCallWrapUp(call.id, {
+        disposition,
+        tags: tagsText.split(",").map((tag) => tag.trim()).filter(Boolean),
+        notes: notes.trim() || undefined,
+      });
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData(["rx-call-wrap-up", call.id], result);
+      notify("After-call wrap-up saved", "It is attached to this call and cannot be submitted twice.");
+      await queryClient.invalidateQueries({ queryKey: ["rx-call-context", call.id] });
+    },
+    onError: (error) => notify(
+      "Could not save the wrap-up",
+      error instanceof ApiError || error instanceof Error ? error.message : "Please try again.",
+      "error",
+    ),
+  });
+
+  if (call.status === "in_progress") return null;
+
+  return (
+    <section className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-5 py-4" aria-label="After-call wrap-up">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-[12px] font-extrabold text-[#0F172A]">After-call wrap-up</h3>
+          <p className="mt-1 text-[11px] text-[#7A8798]">A final operator disposition, separate from what the AI classified.</p>
+        </div>
+        {wrapUpQuery.data ? <ChipFor spec={{ label: "Submitted", tone: "green" }} h={22} fontSize={10} /> : null}
+      </div>
+
+      {wrapUpQuery.isPending ? <p className="mt-3 text-[11px] text-[#7A8798]">Checking this call’s wrap-up…</p> : null}
+      {wrapUpQuery.isError ? <p role="alert" className="mt-3 text-[11px] text-[#B42318]">Wrap-up status could not be loaded.</p> : null}
+      {wrapUpQuery.data ? (
+        <div className="mt-3 rounded-[10px] border border-[#BBF0CB] bg-white p-3 text-[11px] text-[#334155]">
+          <div className="font-bold">{wrapUpQuery.data.disposition.replaceAll("_", " ")}</div>
+          {wrapUpQuery.data.tags.length ? <div className="mt-1">Tags: {wrapUpQuery.data.tags.join(" · ")}</div> : null}
+          {wrapUpQuery.data.notes ? <p className="mt-1 whitespace-pre-wrap">{wrapUpQuery.data.notes}</p> : null}
+          <div className="mt-1 text-[10px] text-[#94A3B8]">Saved {fmtDateTime(wrapUpQuery.data.createdAt, rx.timezone)}</div>
+        </div>
+      ) : null}
+      {!wrapUpQuery.isPending && !wrapUpQuery.isError && !wrapUpQuery.data ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="text-[10.5px] font-bold text-[#5B6675]">Disposition
+            <select
+              aria-label="Call disposition"
+              className="mt-1 h-[34px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2 text-[11px] text-[#0F172A]"
+              value={disposition}
+              onChange={(event) => setDisposition(event.target.value as VoiceCallWrapUpDisposition | "")}
+              disabled={submit.isPending}
+            >
+              <option value="">Choose one</option>
+              <option value="resolved">Resolved</option>
+              <option value="callback_requested">Callback requested</option>
+              <option value="booked">Booking completed</option>
+              <option value="escalated">Escalated</option>
+              <option value="not_interested">Not interested</option>
+              <option value="wrong_number">Wrong number</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label className="text-[10.5px] font-bold text-[#5B6675]">Tags
+            <input
+              aria-label="Call wrap-up tags"
+              className="mt-1 h-[34px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2 text-[11px] text-[#0F172A]"
+              placeholder="Comma-separated"
+              maxLength={400}
+              value={tagsText}
+              onChange={(event) => setTagsText(event.target.value)}
+              disabled={submit.isPending}
+            />
+          </label>
+          <label className="text-[10.5px] font-bold text-[#5B6675] sm:col-span-2">Operator notes
+            <textarea
+              aria-label="Call wrap-up notes"
+              className="mt-1 min-h-[68px] w-full resize-y rounded-[8px] border border-[#D5DAE2] bg-white p-2 text-[11px] text-[#0F172A]"
+              maxLength={2000}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              disabled={submit.isPending}
+            />
+          </label>
+          <div className="flex items-center justify-between gap-3 sm:col-span-2">
+            <span className="text-[10px] text-[#94A3B8]">Submit once after the call ends; this does not change the AI outcome.</span>
+            <button
+              type="button"
+              onClick={() => submit.mutate()}
+              disabled={!disposition || submit.isPending}
+              className="h-[32px] rounded-[8px] border-0 bg-[#16A34A] px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submit.isPending ? "Saving…" : "Submit wrap-up"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -378,6 +503,7 @@ const AUDIT_LABELS: Record<string, string> = {
   "call.listened_in": "Listened in live",
   "call.taken_over": "Took over the call",
   "call.transferred_by_staff": "Transferred the call to a person",
+  "call.transfer_requested_by_staff": "Requested a transfer to a person",
   "call.ended_by_staff": "Ended the call",
 };
 
@@ -428,14 +554,14 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           ]
         : turns.length
           ? turns
-          : [{ speaker: "System", text: c.recordingDeletedAt ? `The transcript was deleted on ${fmtDateTime(c.recordingDeletedAt, h.tz)}.` : "This call has no transcript.", time: "—" }];
+          : [{ speaker: "System", text: c.recordingDeletedAt ? `The transcript was deleted on ${fmtDateTime(c.recordingDeletedAt, h.tz)}.` : c.recordingConsentStatus === "declined" ? "The caller declined recording; no caller audio or transcript was kept." : c.recordingConsentStatus === "no_response" ? "No consent response was received; no caller audio or transcript was kept." : c.recordingConsentStatus === "not_allowed" || c.recordingConsentStatus === "not_configured" ? "Recording was not allowed or configured for this call; no caller audio was captured." : c.recordingConsentStatus === "pending" ? "Waiting for the caller's choice; no caller audio has been captured." : "This call has no transcript.", time: "—" }];
       if (c.joinedAt) out.push({ speaker: "System", text: `${c.joinedByName ?? "A staff member"} joined the call live.`, time: offset(c.joinedAt, c.startedAt) });
       return {
         lineage: missed ? "No transcript exists" : "Speaker-separated, timed from the start of the call",
         rows: [],
         transcript: out,
         title: "What a transcript shows",
-        bullets: ["Caller speech and the AI's spoken replies, timed from the start of the call", "It never shows private model reasoning — only what was said", missed ? "For a missed call there is no speech to show" : "The AI opens every call with the recording and automated-assistant disclosure, which is not part of the transcript"],
+        bullets: ["Caller speech and the AI's spoken replies, timed from the start of the call", "It never shows private model reasoning — only what was said", missed ? "For a missed call there is no speech to show" : "The assistant identifies itself as automated; recording notices are policy-specific and caller audio is captured only after consent"],
         note: "The AI identifies itself as an automated assistant rather than implying it is a person.",
       };
     }
@@ -613,10 +739,10 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           row("Handled by", handlerChip(c.handledBy).label), row("Recorded intent", intentLabel(c)), row("Confidence", confText, conf ? undefined : "muted"), row("Answers declined", String(a?.declinedCount ?? 0), a?.declinedCount ? "neg" : undefined),
           row("Routing rule applied", c.routedRuleName ?? "None", c.routedRuleName ? undefined : "muted"),
           row("Escalation", c.outcome === "transfer" ? (c.routedRuleName ? "A rule of yours transferred it" : "AI chose to transfer") : "Not triggered"), row("Length cap", `${h.maxTurns} spoken lines, then it arranges a callback`),
-          row("Transfer number", h.transferConfigured ? "Configured" : "Not configured — a transfer request is recorded as a message", h.transferConfigured ? "pos" : "neg"),
+          row("Transfer number", h.transferConfigured ? "Configured" : "No fixed number — eligible staff may be rung for AI handoffs; otherwise a follow-up is queued; audio needs consent", h.transferConfigured ? "pos" : "neg"),
         ],
         title: "The rules that applied",
-        bullets: ["Every call opens with the recording and automated-assistant disclosure — it cannot be switched off", `A conversation is capped at ${h.maxTurns} spoken lines (caller and AI combined); then the AI says someone will call back and the call is recorded as a message`, "Your routing rules are checked on every turn and override the AI's own choice", "A booking goes through the booking engine, so a time that isn't free is rejected", "The AI can read some records but has no access to change refunds, credit, stock, prices or permissions"],
+        bullets: ["Every call identifies the assistant as automated; a regional policy notice asks for recording consent before audio is captured", `A consented conversation is capped at ${h.maxTurns} spoken lines (caller and AI combined); then the AI arranges a callback`, "Your routing rules are checked on every turn and override the AI's own choice", "A booking goes through the booking engine, so a time that isn't free is rejected", "The AI can read some records but has no access to change refunds, credit, stock, prices or permissions"],
         note: "Every one of these boundaries is fixed behaviour you can read, not a claim you have to trust.",
       };
 
@@ -626,7 +752,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
         lineage: "The append-only audit trail",
         rows: [
           row("Call recorded", c.recordingDeletedAt ? "Deleted" : c.hasRecording ? "Yes" : "No", c.hasRecording ? undefined : "muted"),
-          row("Recording kept for", `${h.retentionDays} days, then deleted automatically`),
+          row("Recording kept for", `${c.recordingRetentionDays ?? h.retentionDays} days, then deleted automatically`),
           ...(c.recordingDeletedAt ? [row("Recording deleted", fmtDateTime(c.recordingDeletedAt, h.tz), "neg")] : []),
           row("Customer matched", c.customer ? "Yes · saved phone number" : "No match found"), row("Staff joined", c.joinedByName ?? "No"),
           row("Assigned to", c.assignedToName ?? "—"), row("Marked handled", c.resolvedAt ? fmtDateTime(c.resolvedAt, h.tz) : "No"),

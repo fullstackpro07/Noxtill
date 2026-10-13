@@ -58,6 +58,12 @@ describe('CapabilitiesService (UPD-BE-035)', () => {
         customRoleId: null,
       }),
     ).toEqual(SYSTEM_ROLE_CAPABILITIES[Role.staff]);
+    expect(SYSTEM_ROLE_CAPABILITIES[Role.manager]).toContain(
+      CAPABILITIES.VOICE_SUPERVISE,
+    );
+    expect(SYSTEM_ROLE_CAPABILITIES[Role.staff]).not.toContain(
+      CAPABILITIES.VOICE_SUPERVISE,
+    );
   });
 
   it("a real custom role's capabilities replace the system role default entirely", async () => {

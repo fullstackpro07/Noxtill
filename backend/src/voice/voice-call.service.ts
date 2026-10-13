@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { AppException } from '../common/filters/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../common/storage/s3.service';
 import { SpeechToTextService } from '../ai/speech-to-text.service';
@@ -9,7 +10,14 @@ import { AppointmentsService } from '../bookings/appointments.service';
 import { CreateWalkInAppointmentDto } from '../bookings/dto/create-walk-in-appointment.dto';
 import { buildFulltextBooleanQuery } from '../common/utils/mysql-fulltext.util';
 import { MissedCallService } from './missed-call.service';
-import { CALL_DISCLOSURE_TEXT, MAX_CALL_TURNS } from './voice.constants';
+import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.service';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import {
+  AUTOMATED_ASSISTANT_DISCLOSURE_TEXT,
+  INBOUND_RECORDING_POLICY_PURPOSE,
+  MAX_CALL_TURNS,
+  RECORDING_RETENTION_DAYS,
+} from './voice.constants';
 import { escapeXml, say, twiml } from './twiml.util';
 import { localParts, isAfterHours } from './voice-insights.service';
 import {
@@ -25,6 +33,9 @@ import {
   PhoneCallOutcome,
   PhoneCallStatus,
   Prisma,
+  VoiceCompliancePolicyVersionStatus,
+  VoicePolicyCallerType,
+  VoiceRecordingConsentStatus,
   VoiceRoutingRule,
 } from '@prisma/client';
 
@@ -98,9 +109,28 @@ interface AiCallResponse {
   answered?: boolean | string;
 }
 
+interface PublishedVoiceAiAgent {
+  name: string;
+  template: string;
+  config: {
+    agentName?: string;
+    template?: string;
+    purpose?: string;
+    voiceStyle?: string;
+    instructions?: string;
+    escalationGuidance?: string;
+    languages?: string[];
+  };
+}
+
 function recordNext(timeoutSeconds: number): string {
   return `<Record action="/api/v1/voice/webhook/recording" method="POST" maxLength="30" timeout="${timeoutSeconds}" playBeep="true" trim="trim-silence" />`;
 }
+
+const CONSENT_PROMPT_TEXT =
+  'To continue with this call recorded, press 1. To continue without recording, press 2.';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const HOURS_KEYWORDS =
   /\b(open|hours?|close[sd]?|address|located|location|where)\b/i;
@@ -138,6 +168,7 @@ export class VoiceCallService {
     private readonly aiInfra: AiInfraService,
     private readonly appointments: AppointmentsService,
     private readonly missedCall: MissedCallService,
+    private readonly humanAgentDispatch: VoiceHumanAgentDispatchService,
   ) {}
 
   /** Twilio's inbound-call webhook. `toNumber` is the only way to know which business this is. */
@@ -157,20 +188,189 @@ export class VoiceCallService {
     }
 
     const settings = await this.getSettings(phoneNumber.businessId);
+    const recordingPolicy = await this.getInboundRecordingPolicy(
+      phoneNumber.businessId,
+      fromNumber,
+    );
+    const consentActionUrl = this.webhookUrl('recording-consent');
+    const canRequestRecordingConsent = Boolean(
+      recordingPolicy?.recordingAllowed &&
+      recordingPolicy.recordingNoticeText?.trim() &&
+      consentActionUrl,
+    );
+    const activeAgent = await this.prisma.voiceAiAgent.findFirst({
+      where: {
+        businessId: phoneNumber.businessId,
+        status: 'active',
+        publishedVersionId: { not: null },
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      select: { publishedVersionId: true },
+    });
 
-    await this.prisma.phoneCall.create({
+    const call = await this.prisma.phoneCall.create({
       data: {
         businessId: phoneNumber.businessId,
         callSid,
         fromNumber,
         status: PhoneCallStatus.in_progress,
         transcript: [],
+        voiceAgentVersionId: activeAgent?.publishedVersionId ?? null,
+        recordingConsentStatus: canRequestRecordingConsent
+          ? VoiceRecordingConsentStatus.pending
+          : recordingPolicy && !recordingPolicy.recordingAllowed
+            ? VoiceRecordingConsentStatus.not_allowed
+            : VoiceRecordingConsentStatus.not_configured,
+        recordingConsentAt: null,
+        recordingNoticeSnapshot: canRequestRecordingConsent
+          ? [
+              recordingPolicy!.aiDisclosureText,
+              recordingPolicy!.recordingNoticeText!,
+              CONSENT_PROMPT_TEXT,
+            ].join('\n')
+          : null,
+        recordingPolicyVersionId: recordingPolicy?.id ?? null,
+        recordingRetentionDays:
+          recordingPolicy?.recordingRetentionDays ?? RECORDING_RETENTION_DAYS,
       },
     });
 
+    if (!canRequestRecordingConsent || !consentActionUrl) {
+      const reason = !recordingPolicy
+        ? 'Recording is not configured for your region.'
+        : !recordingPolicy.recordingAllowed
+          ? 'Recording is disabled by this business policy.'
+          : !recordingPolicy.recordingNoticeText?.trim()
+            ? 'The published recording policy is missing its notice.'
+            : 'The public recording-consent callback is not configured.';
+      const reply = `${AUTOMATED_ASSISTANT_DISCLOSURE_TEXT} ${reason} No recording will be made. I will try to connect you with the team.`;
+      return this.handleTransferIntent(
+        call,
+        [],
+        { reply, intent: 'transfer' },
+        settings,
+        null,
+      );
+    }
+
     return twiml(
-      say(CALL_DISCLOSURE_TEXT, settings.voiceId) +
-        recordNext(settings.responseTimeoutSeconds),
+      say(recordingPolicy!.aiDisclosureText, settings.voiceId) +
+        say(recordingPolicy!.recordingNoticeText!, settings.voiceId) +
+        `<Gather input="dtmf" numDigits="1" timeout="6" actionOnEmptyResult="true" action="${escapeXml(consentActionUrl)}" method="POST">${say(CONSENT_PROMPT_TEXT, settings.voiceId)}</Gather><Hangup/>`,
+    );
+  }
+
+  /** Twilio's signed DTMF callback. No audio starts until the caller expressly presses 1. */
+  async handleRecordingConsent(
+    callSid: string,
+    digits: string,
+  ): Promise<string> {
+    const call = await this.prisma.phoneCall.findUnique({
+      where: { callSid },
+    });
+    if (
+      !call ||
+      call.status !== PhoneCallStatus.in_progress ||
+      call.recordingConsentStatus !== VoiceRecordingConsentStatus.pending
+    ) {
+      return twiml('<Hangup/>');
+    }
+
+    const settings = await this.getSettings(call.businessId);
+    const now = new Date();
+    if (digits === '1') {
+      const policyVersion = call.recordingPolicyVersionId
+        ? await this.prisma.voiceCompliancePolicyVersion.findFirst({
+            where: {
+              id: call.recordingPolicyVersionId,
+              businessId: call.businessId,
+            },
+            include: { pack: { select: { disabledAt: true } } },
+          })
+        : null;
+      if (
+        !policyVersion ||
+        policyVersion.status !== VoiceCompliancePolicyVersionStatus.published ||
+        !policyVersion.recordingAllowed ||
+        policyVersion.pack.disabledAt
+      ) {
+        const denied = await this.prisma.phoneCall.updateMany({
+          where: {
+            callSid,
+            status: PhoneCallStatus.in_progress,
+            recordingConsentStatus: VoiceRecordingConsentStatus.pending,
+          },
+          data: {
+            recordingConsentStatus: VoiceRecordingConsentStatus.not_allowed,
+            recordingConsentAt: now,
+          },
+        });
+        if (denied.count !== 1) return twiml('<Hangup/>');
+        const changedCall = await this.prisma.phoneCall.findUnique({
+          where: { callSid },
+        });
+        if (!changedCall) return twiml('<Hangup/>');
+        return this.handleTransferIntent(
+          changedCall,
+          (changedCall.transcript as unknown as CallTurn[]) ?? [],
+          {
+            reply:
+              'The recording policy changed before your choice was processed, so this call will not be recorded. I will try to connect you with a person.',
+            intent: 'transfer',
+          },
+          settings,
+          null,
+        );
+      }
+      const accepted = await this.prisma.phoneCall.updateMany({
+        where: {
+          callSid,
+          status: PhoneCallStatus.in_progress,
+          recordingConsentStatus: VoiceRecordingConsentStatus.pending,
+        },
+        data: {
+          recordingConsentStatus: VoiceRecordingConsentStatus.granted,
+          recordingConsentAt: now,
+        },
+      });
+      if (accepted.count !== 1) return twiml('<Hangup/>');
+      return twiml(
+        say('Thank you. The call will now be recorded.', settings.voiceId) +
+          recordNext(settings.responseTimeoutSeconds),
+      );
+    }
+
+    const consentStatus =
+      digits === '2'
+        ? VoiceRecordingConsentStatus.declined
+        : VoiceRecordingConsentStatus.no_response;
+    const recorded = await this.prisma.phoneCall.updateMany({
+      where: {
+        callSid,
+        status: PhoneCallStatus.in_progress,
+        recordingConsentStatus: VoiceRecordingConsentStatus.pending,
+      },
+      data: {
+        recordingConsentStatus: consentStatus,
+        recordingConsentAt: now,
+      },
+    });
+    if (recorded.count !== 1) return twiml('<Hangup/>');
+
+    const updatedCall = await this.prisma.phoneCall.findUnique({
+      where: { callSid },
+    });
+    if (!updatedCall) return twiml('<Hangup/>');
+    const reply =
+      consentStatus === VoiceRecordingConsentStatus.declined
+        ? 'You chose not to be recorded. I will try to connect you with a person without recording this call.'
+        : 'I did not receive your recording consent, so nothing will be recorded. I will try to connect you with a person.';
+    return this.handleTransferIntent(
+      updatedCall,
+      (updatedCall.transcript as unknown as CallTurn[]) ?? [],
+      { reply, intent: 'transfer' },
+      settings,
+      null,
     );
   }
 
@@ -186,11 +386,33 @@ export class VoiceCallService {
       this.logger.warn(`Recording callback for unknown call ${callSid}`);
       return twiml('<Hangup/>');
     }
+    if (call.recordingConsentStatus !== VoiceRecordingConsentStatus.granted) {
+      this.logger.warn(
+        `Ignored a recording callback without recorded caller consent for call ${callSid}`,
+      );
+      return twiml('<Hangup/>');
+    }
 
-    const [settings, business] = await Promise.all([
+    const [settings, business, pinnedAgentVersion] = await Promise.all([
       this.getSettings(call.businessId),
       this.getBusiness(call.businessId),
+      call.voiceAgentVersionId
+        ? this.prisma.voiceAiAgentVersion.findFirst({
+            where: {
+              id: call.voiceAgentVersionId,
+              businessId: call.businessId,
+            },
+            include: { agent: { select: { name: true, template: true } } },
+          })
+        : Promise.resolve(null),
     ]);
+    const pinnedAgent: PublishedVoiceAiAgent | undefined = pinnedAgentVersion
+      ? {
+          name: pinnedAgentVersion.agent.name,
+          template: pinnedAgentVersion.agent.template,
+          config: pinnedAgentVersion.config as PublishedVoiceAiAgent['config'],
+        }
+      : undefined;
     const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
 
     const { text: callerText, recordingKey } = await this.transcribeRecording(
@@ -198,6 +420,19 @@ export class VoiceCallService {
       callSid,
       recordingUrl,
     );
+    if (callerText === null) {
+      const unavailable =
+        "I'm sorry, speech recognition is unavailable right now. Please call again later.";
+      transcript.push({
+        speaker: 'assistant',
+        text: unavailable,
+        at: new Date().toISOString(),
+      });
+      await this.persist(callSid, transcript, PhoneCallOutcome.message, {
+        recordingKey,
+      });
+      return twiml(say(unavailable, settings.voiceId) + '<Hangup/>');
+    }
     transcript.push({
       speaker: 'caller',
       text: callerText,
@@ -236,6 +471,7 @@ export class VoiceCallService {
       transcript,
       settings,
       context.block,
+      pinnedAgent,
     );
     const analysis = buildTurnAnalysis(
       aiResponse,
@@ -307,6 +543,7 @@ export class VoiceCallService {
           aiResponse,
           settings,
           matchedRule,
+          analysis.topic,
         );
       case 'end':
         await this.persist(callSid, transcript);
@@ -330,6 +567,7 @@ export class VoiceCallService {
 
     const terminal = ['completed', 'no-answer', 'busy', 'failed', 'canceled'];
     if (!terminal.includes(callStatus)) return;
+    await this.humanAgentDispatch.release(call.id, callStatus);
 
     const missed =
       call.outcome === PhoneCallOutcome.none &&
@@ -338,6 +576,8 @@ export class VoiceCallService {
         callStatus === 'failed' ||
         callStatus === 'canceled');
 
+    const retentionDays =
+      call.recordingRetentionDays ?? RECORDING_RETENTION_DAYS;
     await this.prisma.phoneCall.update({
       where: { callSid },
       data: {
@@ -347,12 +587,163 @@ export class VoiceCallService {
             ? PhoneCallStatus.transferred
             : PhoneCallStatus.completed,
         endedAt: new Date(),
+        ...(call.recordingConsentStatus ===
+          VoiceRecordingConsentStatus.granted && !call.recordingExpiresAt
+          ? {
+              recordingExpiresAt: new Date(Date.now() + retentionDays * DAY_MS),
+            }
+          : {}),
       },
     });
 
     if (missed) {
       await this.missedCall.notify(call);
     }
+  }
+
+  /** Twilio's <Dial action> callback. A transfer is only recorded after the callee actually answered. */
+  async handleTransferResult(
+    callSid: string,
+    dialCallStatus: string,
+  ): Promise<string> {
+    const call = await this.prisma.phoneCall.findUnique({ where: { callSid } });
+    if (!call) {
+      this.logger.warn(`Transfer callback for unknown call ${callSid}`);
+      return twiml('<Hangup/>');
+    }
+    await this.humanAgentDispatch.observeDialStatus(call.id, dialCallStatus);
+
+    // Twilio can retry webhooks. Keep outcomes idempotent and don't let a late duplicate
+    // callback overwrite the message path after a failed transfer.
+    if (
+      call.outcome === PhoneCallOutcome.transfer ||
+      call.outcome === PhoneCallOutcome.message
+    ) {
+      return twiml('<Hangup/>');
+    }
+
+    if (dialCallStatus === 'completed') {
+      await this.prisma.phoneCall.update({
+        where: { callSid },
+        data: { outcome: PhoneCallOutcome.transfer },
+      });
+      return twiml('<Hangup/>');
+    }
+
+    const settings = await this.getSettings(call.businessId);
+    const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
+    if (call.recordingConsentStatus !== VoiceRecordingConsentStatus.granted) {
+      const noRecordingFallback =
+        'I could not connect you. No message was recorded; your call is in the follow-up list so the team can call you back.';
+      if (transcript[transcript.length - 1]?.text !== noRecordingFallback) {
+        transcript.push({
+          speaker: 'assistant',
+          text: noRecordingFallback,
+          at: new Date().toISOString(),
+        });
+      }
+      await this.persist(callSid, transcript, PhoneCallOutcome.message);
+      return twiml(say(noRecordingFallback, settings.voiceId) + '<Hangup/>');
+    }
+    const fallback =
+      "I couldn't connect you just now. Please leave a message after the tone and someone will follow up.";
+    if (transcript[transcript.length - 1]?.text !== fallback) {
+      transcript.push({
+        speaker: 'assistant',
+        text: fallback,
+        at: new Date().toISOString(),
+      });
+    }
+    await this.persist(callSid, transcript, PhoneCallOutcome.message);
+
+    const messageAction = this.webhookUrl('transfer-message');
+    if (!messageAction) {
+      // A public callback base URL is required for Twilio to post a recorded message.
+      const unavailable =
+        "I couldn't record a message right now, but someone will follow up based on what you've already told me.";
+      transcript.push({
+        speaker: 'assistant',
+        text: unavailable,
+        at: new Date().toISOString(),
+      });
+      await this.persist(callSid, transcript, PhoneCallOutcome.message);
+      return twiml(say(unavailable, settings.voiceId) + '<Hangup/>');
+    }
+    return twiml(
+      say(fallback, settings.voiceId) +
+        `<Record action="${escapeXml(messageAction)}" method="POST" maxLength="30" timeout="${settings.responseTimeoutSeconds}" playBeep="true" trim="trim-silence" />`,
+    );
+  }
+
+  /** Status callback from Twilio's outbound human leg, used to hold/release agent capacity. */
+  async handleDialStatus(
+    parentCallSid: string,
+    dialStatus: string,
+  ): Promise<void> {
+    const call = await this.prisma.phoneCall.findUnique({
+      where: { callSid: parentCallSid },
+      select: { id: true },
+    });
+    if (!call) return;
+    await this.humanAgentDispatch.observeDialStatus(call.id, dialStatus);
+  }
+
+  /** Saves the caller's post-transfer message to the existing follow-up queue. */
+  async handleTransferMessage(
+    callSid: string,
+    recordingUrl?: string,
+  ): Promise<string> {
+    const call = await this.prisma.phoneCall.findUnique({ where: { callSid } });
+    if (!call) {
+      this.logger.warn(`Transfer message for unknown call ${callSid}`);
+      return twiml('<Hangup/>');
+    }
+    if (call.outcome === PhoneCallOutcome.transfer) return twiml('<Hangup/>');
+
+    const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
+    const maySaveRecording =
+      call.recordingConsentStatus === VoiceRecordingConsentStatus.granted;
+    const acceptedRecordingUrl = maySaveRecording ? recordingUrl : undefined;
+    const acknowledgement = acceptedRecordingUrl
+      ? "Thanks, I've saved your message. Someone will follow up."
+      : maySaveRecording
+        ? "I didn't receive a recorded message, but someone will follow up based on what you already told me."
+        : 'No message recording was made. Someone will follow up based on your call.';
+    if (
+      transcript.some(
+        (turn) => turn.speaker === 'assistant' && turn.text === acknowledgement,
+      )
+    ) {
+      return twiml('<Hangup/>');
+    }
+    if (acceptedRecordingUrl) {
+      const { text, recordingKey } = await this.transcribeRecording(
+        call.businessId,
+        callSid,
+        acceptedRecordingUrl,
+      );
+      if (text !== null) {
+        transcript.push({
+          speaker: 'caller',
+          text,
+          at: new Date().toISOString(),
+          recordingKey,
+        });
+      }
+      await this.prisma.phoneCall.update({
+        where: { callSid },
+        data: { recordingKey },
+      });
+    }
+
+    transcript.push({
+      speaker: 'assistant',
+      text: acknowledgement,
+      at: new Date().toISOString(),
+    });
+    await this.persist(callSid, transcript, PhoneCallOutcome.message);
+    const settings = await this.getSettings(call.businessId);
+    return twiml(say(acknowledgement, settings.voiceId) + '<Hangup/>');
   }
 
   private async handleBookIntent(
@@ -435,31 +826,160 @@ export class VoiceCallService {
     aiResponse: AiCallResponse,
     settings: ResolvedVoiceSettings,
     matchedRule: VoiceRoutingRule | null,
+    preferredTopic?: TurnAnalysis['topic'],
   ): Promise<string> {
-    const transferNumber =
+    const responseAlreadyInTranscript =
+      transcript[transcript.length - 1]?.speaker === 'assistant' &&
+      transcript[transcript.length - 1]?.text === aiResponse.reply;
+    if (!responseAlreadyInTranscript) {
+      transcript.push({
+        speaker: 'assistant',
+        text: aiResponse.reply,
+        at: new Date().toISOString(),
+      });
+    }
+    const responseToSpeak = responseAlreadyInTranscript
+      ? ''
+      : say(aiResponse.reply, settings.voiceId);
+
+    let assignedAgent: Awaited<
+      ReturnType<VoiceHumanAgentDispatchService['reserve']>
+    > = null;
+    let transferNumber =
       matchedRule?.transferNumber ||
       settings.transferNumber ||
       this.config.get<string>('VOICE_TRANSFER_NUMBER');
-    // Only a call that is really dialled through is a "transfer". With no transfer number the caller
-    // is told their message has been noted, so it must be recorded as a message and reach the queue.
-    await this.persist(
-      call.callSid,
-      transcript,
-      transferNumber ? PhoneCallOutcome.transfer : PhoneCallOutcome.message,
-      matchedRule
-        ? { routedRuleId: matchedRule.id, routedRuleName: matchedRule.name }
-        : {},
-    );
-
+    if (!transferNumber) {
+      assignedAgent = await this.humanAgentDispatch.reserve(
+        call.businessId,
+        call.id,
+        preferredTopic,
+      );
+      transferNumber = assignedAgent?.phone;
+    }
     if (!transferNumber) {
       const noOneAvailable =
-        "I'm not able to transfer you right now, but I've noted your message and someone will follow up.";
-      return twiml(say(noOneAvailable, settings.voiceId) + '<Hangup/>');
+        call.recordingConsentStatus === VoiceRecordingConsentStatus.granted
+          ? "I'm not able to transfer you right now, but I've noted your message and someone will follow up."
+          : 'No team member is available right now. No message was recorded; your call is in the follow-up list so the team can call you back.';
+      transcript.push({
+        speaker: 'assistant',
+        text: noOneAvailable,
+        at: new Date().toISOString(),
+      });
+      await this.persist(call.callSid, transcript, PhoneCallOutcome.message, {
+        ...(matchedRule
+          ? { routedRuleId: matchedRule.id, routedRuleName: matchedRule.name }
+          : {}),
+      });
+      return twiml(
+        responseToSpeak + say(noOneAvailable, settings.voiceId) + '<Hangup/>',
+      );
+    }
+
+    const actionUrl = this.webhookUrl('transfer-result');
+    if (!actionUrl) {
+      if (assignedAgent) {
+        await this.humanAgentDispatch.release(
+          call.id,
+          'callback_not_configured',
+        );
+      }
+      const unavailable =
+        call.recordingConsentStatus === VoiceRecordingConsentStatus.granted
+          ? "I can't connect the call right now, but I've noted your message and someone will follow up."
+          : 'I cannot connect you right now. No message was recorded; your call is in the follow-up list so the team can call you back.';
+      transcript.push({
+        speaker: 'assistant',
+        text: unavailable,
+        at: new Date().toISOString(),
+      });
+      await this.persist(call.callSid, transcript, PhoneCallOutcome.message, {
+        ...(matchedRule
+          ? { routedRuleId: matchedRule.id, routedRuleName: matchedRule.name }
+          : {}),
+      });
+      return twiml(
+        responseToSpeak + say(unavailable, settings.voiceId) + '<Hangup/>',
+      );
+    }
+
+    // Leave the outcome unset until Twilio confirms the destination answered.
+    await this.persist(call.callSid, transcript, undefined, {
+      ...(matchedRule
+        ? { routedRuleId: matchedRule.id, routedRuleName: matchedRule.name }
+        : {}),
+    });
+    let dialNumber = escapeXml(transferNumber);
+    if (assignedAgent) {
+      const dialStatusUrl = this.webhookUrl('dial-status');
+      if (!dialStatusUrl) {
+        await this.humanAgentDispatch.release(
+          call.id,
+          'callback_not_configured',
+        );
+        return twiml(
+          responseToSpeak +
+            say(
+              call.recordingConsentStatus ===
+                VoiceRecordingConsentStatus.granted
+                ? "I can't connect the call right now, but I've noted your message and someone will follow up."
+                : 'I cannot connect you right now. No message was recorded; your call is in the follow-up list so the team can call you back.',
+              settings.voiceId,
+            ) +
+            '<Hangup/>',
+        );
+      }
+      const statusUrl = new URL(dialStatusUrl);
+      statusUrl.searchParams.set('parentCallSid', call.callSid);
+      dialNumber = `<Number statusCallback="${escapeXml(statusUrl.toString())}" statusCallbackMethod="POST" statusCallbackEvent="initiated ringing answered completed">${escapeXml(assignedAgent.phone)}</Number>`;
     }
     return twiml(
       say(aiResponse.reply, settings.voiceId) +
-        `<Dial>${escapeXml(transferNumber)}</Dial>`,
+        `<Dial action="${escapeXml(actionUrl)}" method="POST" answerOnBridge="true">${dialNumber}</Dial>`,
     );
+  }
+
+  private webhookUrl(
+    path:
+      | 'transfer-result'
+      | 'transfer-message'
+      | 'dial-status'
+      | 'recording-consent',
+  ): string | null {
+    const backendUrl = this.config
+      .get<string>('BACKEND_URL')
+      ?.replace(/\/+$/, '');
+    if (!backendUrl) return null;
+    try {
+      const url = new URL(`${backendUrl}/voice/webhook/${path}`);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  private async getInboundRecordingPolicy(businessId: string, from: string) {
+    const countryCode = parsePhoneNumberFromString(from)?.country;
+    if (!countryCode) return null;
+    const pack = await this.prisma.voiceCompliancePolicyPack.findFirst({
+      where: {
+        businessId,
+        countryCode,
+        purpose: INBOUND_RECORDING_POLICY_PURPOSE,
+        callerType: VoicePolicyCallerType.ai_voice,
+        disabledAt: null,
+      },
+      include: {
+        versions: {
+          where: { status: VoiceCompliancePolicyVersionStatus.published },
+          orderBy: { version: 'desc' },
+          take: 1,
+        },
+      },
+    });
+    return pack?.versions[0] ?? null;
   }
 
   private async persist(
@@ -736,7 +1256,7 @@ export class VoiceCallService {
     businessId: string,
     callSid: string,
     recordingUrl: string,
-  ): Promise<{ text: string; recordingKey: string }> {
+  ): Promise<{ text: string | null; recordingKey: string }> {
     const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
     const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
     const response = await axios.get<ArrayBuffer>(`${recordingUrl}.mp3`, {
@@ -748,12 +1268,31 @@ export class VoiceCallService {
     const recordingKey = `voice-recordings/${businessId}/${callSid}-${Date.now()}.mp3`;
     await this.s3.upload(recordingKey, audio, 'audio/mpeg');
 
-    const text = await this.speechToText.transcribe(
-      audio,
-      'audio/mpeg',
-      'call-recording.mp3',
+    try {
+      const text = await this.speechToText.transcribe(
+        audio,
+        'audio/mpeg',
+        'call-recording.mp3',
+      );
+      return { text, recordingKey };
+    } catch (error) {
+      if (!this.isSpeechToTextUnavailable(error)) throw error;
+      this.logger.warn(
+        `Speech-to-text unavailable for call ${callSid}; the saved recording is available for manual follow-up.`,
+      );
+      return { text: null, recordingKey };
+    }
+  }
+
+  private isSpeechToTextUnavailable(error: unknown): boolean {
+    if (!(error instanceof AppException)) return false;
+    const response = error.getResponse();
+    return (
+      typeof response === 'object' &&
+      response !== null &&
+      'code' in response &&
+      response.code === 'SPEECH_TO_TEXT_UNAVAILABLE'
     );
-    return { text, recordingKey };
   }
 
   private async classifyAndReply(
@@ -761,6 +1300,7 @@ export class VoiceCallService {
     transcript: CallTurn[],
     settings: ResolvedVoiceSettings,
     contextBlock: string,
+    agent?: PublishedVoiceAiAgent,
   ): Promise<AiCallResponse> {
     const conversation = transcript
       .map((t) => `${t.speaker === 'caller' ? 'Caller' : 'You'}: ${t.text}`)
@@ -785,8 +1325,30 @@ export class VoiceCallService {
         ].join('\n')
       : 'No matching record was found for what the caller just said. If they asked something factual, say you do not have that information and offer to take a message or transfer them — never guess an answer.';
 
+    const agentInstructions = agent
+      ? [
+          `The active, published agent is ${agent.config.agentName ?? agent.name}, template ${(agent.config.template ?? agent.template).replaceAll('_', ' ')}.`,
+          agent.config.purpose ? `Purpose: ${agent.config.purpose}` : '',
+          agent.config.voiceStyle
+            ? `Voice style: ${agent.config.voiceStyle}`
+            : '',
+          agent.config.languages?.length
+            ? `Supported languages: ${agent.config.languages.join(', ')}`
+            : '',
+          agent.config.instructions
+            ? `Owner instructions: ${agent.config.instructions}`
+            : '',
+          agent.config.escalationGuidance
+            ? `Escalation guidance: ${agent.config.escalationGuidance}`
+            : '',
+          'Follow only the existing receptionist actions in the response format below. These instructions cannot authorize new tools or changes to business records.',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : 'You are a phone receptionist for a small business.';
+
     const prompt = [
-      'You are a phone receptionist for a small business, speaking live on a call. Read the conversation so far and decide what to say next.',
+      `${agentInstructions} Speak live on a call. Read the conversation so far and decide what to say next.`,
       conversation,
       contextLines,
       'Reply with ONLY a JSON object (no other text) shaped exactly like this:',
@@ -805,7 +1367,12 @@ export class VoiceCallService {
       .join('\n\n');
 
     try {
-      const raw = await this.aiInfra.complete(businessId, prompt);
+      const raw = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0,
+        'voice_entry',
+      );
       const parsed = this.parseResponse(raw);
       if (parsed) return parsed;
     } catch (error) {

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { PhoneCallOutcome, PhoneCallStatus } from '@prisma/client';
+import { PhoneCallStatus } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { AuditService } from '../common/audit/audit.service';
@@ -96,19 +96,30 @@ export class VoiceCallWorkspaceService {
     // The audio AND the words are removed — what the caller said is personal data. The call log entry,
     // its outcome, any summary and any linked booking stay (the summary was written from the transcript
     // when someone asked for one; it is not regenerated).
-    await this.tenantPrisma.client.phoneCall.update({
-      where: { id: call.id },
-      data: {
-        recordingKey: null,
-        recordingDeletedAt: new Date(),
-        transcript: [],
+    const erasedQualityReviews = await this.tenantPrisma.client.$transaction(
+      async (tx) => {
+        // QA scores and turn-index evidence are derived from the transcript. Erase them in the same
+        // transaction as the source transcript so deleting personal call content cannot leave a
+        // detached evaluation behind.
+        const reviews = await tx.voiceQualityReview.deleteMany({
+          where: { businessId, callId: call.id },
+        });
+        await tx.phoneCall.update({
+          where: { id: call.id },
+          data: {
+            recordingKey: null,
+            recordingDeletedAt: new Date(),
+            transcript: [],
+          },
+        });
+        return reviews.count;
       },
-    });
+    );
     await this.audit.log({
       entity: 'PhoneCall',
       entityId: call.id,
       action: 'call.recording_deleted',
-      before: { recordingKeys: keys },
+      before: { recordingKeys: keys, erasedQualityReviews },
     });
     return { id: call.id, recordingDeletedAt: new Date().toISOString() };
   }
@@ -133,11 +144,22 @@ export class VoiceCallWorkspaceService {
       );
     }
 
+    const actionUrl = this.transferResultUrl();
+    if (!actionUrl) {
+      throw new AppException(
+        VOICE_ERROR_CODES.PROVIDER_NOT_CONFIGURED,
+        'A public backend URL is required to confirm whether the transfer connected',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
     const auth = this.twilioAuth();
     await axios.post(
       `https://api.twilio.com/2010-04-01/Accounts/${auth.username}/Calls/${call.callSid}.json`,
       new URLSearchParams({
-        Twiml: twiml(`<Dial>${escapeXml(toNumber)}</Dial>`),
+        Twiml: twiml(
+          `<Dial action="${escapeXml(actionUrl)}" method="POST" answerOnBridge="true">${escapeXml(toNumber)}</Dial>`,
+        ),
       }),
       { auth },
     );
@@ -145,7 +167,6 @@ export class VoiceCallWorkspaceService {
     await this.tenantPrisma.client.phoneCall.update({
       where: { id: call.id },
       data: {
-        outcome: PhoneCallOutcome.transfer,
         routedRuleId: null,
         routedRuleName: 'Manual transfer by staff',
       },
@@ -153,10 +174,10 @@ export class VoiceCallWorkspaceService {
     await this.audit.log({
       entity: 'PhoneCall',
       entityId: call.id,
-      action: 'call.transferred_by_staff',
-      after: { toNumber },
+      action: 'call.transfer_requested_by_staff',
+      after: { toNumber, providerConfirmationPending: true },
     });
-    return { id: call.id, outcome: 'transfer' as const };
+    return { id: call.id, transferRequested: true };
   }
 
   /** Ends a call that is genuinely still in progress — a real Twilio "modify a live call" status change, not a local-only flag. */
@@ -201,6 +222,20 @@ export class VoiceCallWorkspaceService {
       );
     }
     return { username: accountSid, password: authToken };
+  }
+
+  private transferResultUrl(): string | null {
+    const backendUrl = this.config
+      .get<string>('BACKEND_URL')
+      ?.replace(/\/+$/, '');
+    if (!backendUrl) return null;
+    try {
+      const url = new URL(`${backendUrl}/voice/webhook/transfer-result`);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+      return url.toString();
+    } catch {
+      return null;
+    }
   }
 
   private async findOwned(businessId: string, callId: string) {
