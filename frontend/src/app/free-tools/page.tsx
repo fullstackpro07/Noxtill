@@ -2,23 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
-import {
-  Sparkles,
-  ArrowRight,
-  Calculator,
-  Percent,
-  TrendingUp,
-  Receipt,
-  QrCode,
-  Star,
-  MessageCircle,
-  Link as LinkIcon,
-  Mail,
-  PhoneMissed,
-  ShieldCheck,
-  Zap,
-  Lock,
-} from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
+import { legalFontVars } from "@/components/site/legal/fonts";
+import { ToolsCta } from "@/components/site/tools/tool-page-layout";
+import { TOOL_CATEGORIES, TOOLS_CATALOG } from "@/lib/tools-catalog";
 
 export const metadata: Metadata = {
   title: "10 Free Business Tools & Calculators | Noxtill",
@@ -29,195 +16,69 @@ export const metadata: Metadata = {
   },
 };
 
-const TOOLS = [
-  {
-    slug: "discount-calculator",
-    badge: "FT-01",
-    category: "Pricing & Finance",
-    title: "Discount Calculator",
-    desc: "Calculate single and stacked percentage discounts, fixed coupons, and sales tax with zero rounding errors.",
-    icon: Percent,
-  },
-  {
-    slug: "profit-margin-calculator",
-    badge: "FT-02",
-    category: "Pricing & Finance",
-    title: "Profit Margin & Markup Calculator",
-    desc: "Calculate gross margin, markup percentage, and unit profit to price products with confidence.",
-    icon: TrendingUp,
-  },
-  {
-    slug: "break-even-calculator",
-    badge: "FT-03",
-    category: "Pricing & Finance",
-    title: "Break-Even Analysis Calculator",
-    desc: "Determine unit volume and threshold sales revenue required to cover fixed overhead and hit target profit.",
-    icon: Calculator,
-  },
-  {
-    slug: "invoice-generator",
-    badge: "FT-04",
-    category: "Sales & Commerce",
-    title: "Free Invoice Generator",
-    desc: "Generate professional, branded PDF invoices and receipts with line items, tax rates, and payment instructions.",
-    icon: Receipt,
-  },
-  {
-    slug: "qr-code-generator",
-    badge: "FT-05",
-    category: "Marketing & Growth",
-    title: "Static QR Code Generator",
-    desc: "Create clean, permanent static QR codes for links, Wi-Fi networks, vCards, SMS, and WhatsApp in SVG/PNG.",
-    icon: QrCode,
-  },
-  {
-    slug: "google-review-link-generator",
-    badge: "FT-06",
-    category: "Marketing & Growth",
-    title: "Google Review Link & QR Generator",
-    desc: "Generate 1-click Google review links and printable counter display stand cards compliant with non-gating rules.",
-    icon: Star,
-  },
-  {
-    slug: "whatsapp-link-generator",
-    badge: "FT-07",
-    category: "Communication",
-    title: "WhatsApp Click-to-Chat Generator",
-    desc: "Create direct WhatsApp links with international E.164 phone formatting, pre-filled greeting messages, and QR codes.",
-    icon: MessageCircle,
-  },
-  {
-    slug: "utm-campaign-link-builder",
-    badge: "FT-08",
-    category: "Marketing & Growth",
-    title: "UTM Campaign Link Builder",
-    desc: "Assemble GA4-compliant campaign tracking URLs with standard source, medium, campaign parameters and QR generation.",
-    icon: LinkIcon,
-  },
-  {
-    slug: "email-signature-generator",
-    badge: "FT-09",
-    category: "Communication",
-    title: "Email Signature Generator",
-    desc: "Design responsive, email-client-safe HTML signatures with contact info, social icons, and branding.",
-    icon: Mail,
-  },
-  {
-    slug: "missed-call-revenue-calculator",
-    badge: "FT-10",
-    category: "Pricing & Finance",
-    title: "Missed Call Revenue Calculator",
-    desc: "Quantify the real monthly and annual revenue lost to unanswered phone calls and model recoverable pipeline.",
-    icon: PhoneMissed,
-  },
-];
-
+/** /free-tools — the 10 free tools, grouped by what they help with. */
 export default function FreeToolsHubPage() {
   return (
-    <div className="min-h-screen bg-[#021812] text-[#E6F2EC] font-sans antialiased selection:bg-[#2FE3A6]/30 selection:text-white">
+    <div className={`ntool ${legalFontVars} min-h-screen bg-white text-[#10201A] antialiased`} style={{ fontFamily: "var(--font-jakarta), system-ui, sans-serif", colorScheme: "light" }}>
       <SiteHeader />
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden border-b border-[#0E7A5A]/30 bg-gradient-to-b from-[#0A5A44]/35 via-[#042E23]/25 to-transparent pt-16 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(47,227,166,0.18),transparent)]" />
-
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#2FE3A6]/15 text-[#2FE3A6] border border-[#2FE3A6]/30 mb-6">
-            <Sparkles className="w-3.5 h-3.5" />
-            10 Professional Business Utilities · 100% Free Forever
-          </div>
-
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white mb-6">
-            Free Business Tools & <br className="hidden sm:inline" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#2FE3A6] via-[#2EE6B0] to-emerald-400">
-              Interactive Calculators
-            </span>
+      <section className="border-b border-[#E6ECE8] bg-[linear-gradient(180deg,#F1F9F5_0%,#FFFFFF_100%)]">
+        <div className="mx-auto max-w-[1180px] px-5 pb-14 pt-14 text-center sm:px-8 sm:pt-20">
+          <p className="mb-4 text-[12px] font-semibold uppercase tracking-[0.16em] text-[#0B8A4C]">Free tools for small businesses</p>
+          <h1 className="mx-auto max-w-[820px] text-[34px] font-extrabold leading-[1.08] tracking-[-0.025em] sm:text-[52px]">
+            Quick answers for the numbers, links and <span className="text-[#0FA45B]">paperwork you deal with every day.</span>
           </h1>
-
-          <p className="text-base sm:text-lg lg:text-xl text-[#B8CFC5] max-w-2xl mx-auto leading-relaxed mb-8">
-            Built for founders, operators, and growth marketers. Free of charge, no registration required, and engineered with mathematical precision.
+          <p className="mx-auto mt-5 max-w-[640px] text-[16px] leading-relaxed text-[#4A5852] sm:text-[18px]">
+            10 free calculators and generators. Open one, fill in your numbers, copy or download the result.
           </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-[#8EAEA0]">
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-[#2FE3A6]" /> Zero Sign-up Required
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Lock className="w-4 h-4 text-[#2FE3A6]" /> Private & Client-Safe
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-[#2FE3A6]" /> Instant Real-Time Calculations
-            </span>
-          </div>
+          <ul className="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[14px] font-medium text-[#3E4B45]">
+            {["Free, no limits", "No sign-up", "Nothing you enter is stored"].map((t) => (
+              <li key={t} className="flex items-center gap-1.5">
+                <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#E3F4EA] text-[#0B8A4C]">
+                  <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                </span>
+                {t}
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
-      {/* Tools Grid */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {TOOLS.map((tool) => {
-            const Icon = tool.icon;
-            return (
-              <Link
-                key={tool.slug}
-                href={`/free-tools/${tool.slug}`}
-                className="group rounded-2xl border border-[#2FE3A6]/20 bg-[#032019]/75 p-6 backdrop-blur-sm shadow-lg hover:border-[#2FE3A6]/50 hover:bg-[#042A21] hover:shadow-2xl hover:shadow-[#2FE3A6]/10 transition-all flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-[11px] font-bold font-mono px-2.5 py-1 rounded-md bg-[#2FE3A6]/15 text-[#2FE3A6] border border-[#2FE3A6]/30">
-                      {tool.badge}
-                    </span>
-                    <span className="text-xs text-[#8EAEA0] font-medium">{tool.category}</span>
-                  </div>
+      <main className="mx-auto max-w-[1180px] px-5 sm:px-8">
+        {TOOL_CATEGORIES.map((cat) => {
+          const tools = TOOLS_CATALOG.filter((t) => t.category === cat);
+          if (!tools.length) return null;
+          return (
+            <section key={cat} aria-label={cat} className="border-b border-[#E6ECE8] py-12 last:border-b-0">
+              <h2 className="mb-5 text-[13px] font-semibold uppercase tracking-[0.14em] text-[#6B7A72]">{cat}</h2>
+              <div className={`grid gap-4 sm:grid-cols-2 ${tools.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+                {tools.map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <Link
+                      key={t.slug}
+                      href={`/free-tools/${t.slug}`}
+                      className="group flex flex-col rounded-2xl border border-[#E1E8E4] bg-white p-6 transition hover:-translate-y-0.5 hover:border-[#BFE3CE] hover:shadow-[0_14px_32px_rgba(16,32,26,.08)]"
+                    >
+                      <span className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-[#E9F6EF] text-[#0B8A4C] transition group-hover:bg-[#0FA45B] group-hover:text-white">
+                        <Icon className="h-[22px] w-[22px]" aria-hidden />
+                      </span>
+                      <h3 className="text-[17px] font-bold tracking-[-0.01em]">{t.name}</h3>
+                      <p className="mt-1.5 flex-1 text-[14.5px] leading-relaxed text-[#5B6B63]">{t.desc}</p>
+                      <span className="mt-5 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#0B8A4C]">
+                        Open tool <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden />
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
 
-                  <div className="w-12 h-12 rounded-xl bg-[#021A14] border border-[#2FE3A6]/25 flex items-center justify-center text-[#2FE3A6] mb-4 group-hover:scale-105 group-hover:bg-[#2FE3A6]/20 transition-all">
-                    <Icon className="w-6 h-6" />
-                  </div>
-
-                  <h2 className="text-lg font-bold text-white group-hover:text-[#2FE3A6] transition-colors mb-2">
-                    {tool.title}
-                  </h2>
-
-                  <p className="text-xs sm:text-sm text-[#A3C6B8] leading-relaxed mb-6">
-                    {tool.desc}
-                  </p>
-                </div>
-
-                <div className="pt-4 border-t border-white/5 flex items-center justify-between text-xs font-semibold text-[#2FE3A6] group-hover:translate-x-0.5 transition-transform">
-                  <span>Open Free Tool</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </Link>
-            );
-          })}
+        <div className="pt-6">
+          <ToolsCta />
         </div>
-
-        {/* Feature Highlights Banner */}
-        <section className="mt-20 rounded-3xl border border-[#2FE3A6]/25 bg-gradient-to-r from-[#032019] via-[#05382B] to-[#032019] p-8 sm:p-12 text-center relative overflow-hidden">
-          <div className="max-w-3xl mx-auto space-y-4">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-              Power Your Operations with Noxtill
-            </h2>
-            <p className="text-sm sm:text-base text-[#B8CFC5] leading-relaxed">
-              These free tools solve everyday calculations. The full Noxtill platform unifies POS, AI Phone Answering, Online Bookings, CRM, and Multi-location Inventory in one unified system.
-            </p>
-            <div className="pt-4 flex flex-wrap justify-center gap-4">
-              <Link
-                href="/book-a-demo"
-                className="px-6 py-3 rounded-xl bg-[#2FE3A6] text-[#021A14] font-bold text-sm hover:bg-[#28CF96] transition-colors shadow-lg"
-              >
-                Schedule Platform Demo
-              </Link>
-              <Link
-                href="/product"
-                className="px-6 py-3 rounded-xl border border-[#2FE3A6]/40 text-white font-semibold text-sm hover:bg-[#2FE3A6]/10 transition-colors"
-              >
-                Explore All Features
-              </Link>
-            </div>
-          </div>
-        </section>
       </main>
 
       <SiteFooter />

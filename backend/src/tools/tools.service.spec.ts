@@ -167,6 +167,15 @@ describe('ToolsService', () => {
       expect(res.reviewLink).toBe('https://g.page/r/example/review');
       expect(res.qrSvg).toContain('<svg');
     });
+
+    it('rejects a link with no real host', async () => {
+      await expect(
+        service.composeReviewKit({
+          reviewLink: 'hello',
+          businessDisplayName: 'Austin Bakery',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('FT-07: composeWhatsapp', () => {
@@ -201,6 +210,17 @@ describe('ToolsService', () => {
       expect(res.finalUrl).toContain('utm_medium=email');
       expect(res.finalUrl).toContain('utm_campaign=october_launch');
       expect(res.finalUrl).toContain('#plans');
+    });
+
+    it('rejects a destination with no real host', async () => {
+      await expect(
+        service.composeUtm({
+          destinationUrl: 'noxtill',
+          utmSource: 'a',
+          utmMedium: 'b',
+          utmCampaign: 'c',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

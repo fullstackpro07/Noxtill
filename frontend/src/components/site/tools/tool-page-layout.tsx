@@ -1,10 +1,9 @@
-"use client";
-
 import Link from "next/link";
-import { useState } from "react";
+import { ArrowRight, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
-import { ChevronDown, Sparkles, ArrowRight, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { legalFontVars } from "@/components/site/legal/fonts";
+import { TOOLS_CATALOG, toolBySlug } from "@/lib/tools-catalog";
 
 export interface ToolFaqItem {
   question: string;
@@ -20,6 +19,7 @@ export interface ToolFormulaInfo {
 
 export interface ToolPageLayoutProps {
   title: string;
+  /** Kept for the registry's shape; the page shows the tool's category instead. */
   badge?: string;
   description: string;
   currentSlug: string;
@@ -28,196 +28,180 @@ export interface ToolPageLayoutProps {
   children: React.ReactNode;
 }
 
-const ALL_TOOLS_LIST = [
-  { slug: "discount-calculator", name: "Discount Calculator", desc: "Precision multi-mode discounts & taxes" },
-  { slug: "profit-margin-calculator", name: "Profit Margin Calculator", desc: "Unit economics, margins & markup" },
-  { slug: "break-even-calculator", name: "Break-Even Calculator", desc: "Contribution margin & volume threshold" },
-  { slug: "invoice-generator", name: "Invoice Generator", desc: "Customizable PDF invoices & receipts" },
-  { slug: "qr-code-generator", name: "QR Code Generator", desc: "7 safe static QR payload formats" },
-  { slug: "google-review-link-generator", name: "Google Review Link & QR", desc: "Non-gated review invite cards & QR" },
-  { slug: "whatsapp-link-generator", name: "WhatsApp Link Generator", desc: "Click-to-chat links with E.164 formatting" },
-  { slug: "utm-campaign-link-builder", name: "UTM Campaign Link Builder", desc: "Clean GA4-compatible marketing URLs" },
-  { slug: "email-signature-generator", name: "Email Signature Generator", desc: "Clean HTML signatures for Gmail & Outlook" },
-  { slug: "missed-call-revenue-calculator", name: "Missed Call Revenue Calculator", desc: "Recoverable sales opportunity modeling" },
-];
+/** Range sliders (Chrome draws a dark unfilled track for this accent) and print: only the invoice / review card. */
+const RANGE_CSS = `
+.ntool input[type="range"] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; background: #DDE6E1; outline: none; }
+.ntool input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #0FA45B; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(16,32,26,.3); cursor: pointer; }
+.ntool input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #0FA45B; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(16,32,26,.3); cursor: pointer; }
+.ntool input[type="range"]::-moz-range-progress { height: 6px; border-radius: 999px; background: #0FA45B; }
+.ntool input[type="range"]:focus-visible { box-shadow: 0 0 0 3px rgba(15,164,91,.25); }
+@media print {
+  body * { visibility: hidden !important; }
+  #printable-invoice, #printable-invoice *, #printable-review-card, #printable-review-card * { visibility: visible !important; }
+  #printable-invoice, #printable-review-card { position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; margin: 0 !important; box-shadow: none !important; border: 0 !important; }
+}
+`;
 
-export function ToolPageLayout({
-  title,
-  badge = "Free Business Tool",
-  description,
-  currentSlug,
-  formulaInfo,
-  faqs = [],
-  children,
-}: ToolPageLayoutProps) {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [formulaOpen, setFormulaOpen] = useState(true);
-
-  const otherTools = ALL_TOOLS_LIST.filter((t) => t.slug !== currentSlug).slice(0, 4);
+/** Shell of every /free-tools/[slug] page: hero, the tool itself, method + FAQ, more tools, CTA. */
+export function ToolPageLayout({ title, description, currentSlug, formulaInfo, faqs = [], children }: ToolPageLayoutProps) {
+  const meta = toolBySlug(currentSlug);
+  const Icon = meta?.icon;
+  // Same category first, then the rest, so "more tools" stays relevant.
+  const others = TOOLS_CATALOG.filter((t) => t.slug !== currentSlug)
+    .sort((a, b) => Number(b.category === meta?.category) - Number(a.category === meta?.category))
+    .slice(0, 4);
 
   return (
-    <div className="min-h-screen bg-[#021812] text-[#E6F2EC] font-sans antialiased selection:bg-[#2FE3A6]/30 selection:text-white">
+    <div className={`ntool ${legalFontVars} min-h-screen bg-white text-[#10201A] antialiased`} style={{ fontFamily: "var(--font-jakarta), system-ui, sans-serif", colorScheme: "light" }}>
+      <style>{RANGE_CSS}</style>
       <SiteHeader />
 
-      {/* Hero Banner */}
-      <section className="relative overflow-hidden border-b border-[#0E7A5A]/30 bg-gradient-to-b from-[#0A5A44]/35 via-[#042E23]/25 to-transparent pt-12 pb-14 px-4 sm:px-6 lg:px-8">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(47,227,166,0.15),transparent)]" />
-
-        <div className="max-w-6xl mx-auto relative z-10">
-          {/* Breadcrumb */}
-          <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-2 text-xs text-[#9DBBB0]">
-            <Link href="/" className="hover:text-[#2FE3A6] transition-colors">
-              Home
-            </Link>
-            <span>/</span>
-            <Link href="/free-tools" className="hover:text-[#2FE3A6] transition-colors">
-              Free Tools
-            </Link>
-            <span>/</span>
-            <span className="text-[#2FE3A6] font-medium">{title}</span>
+      {/* Hero */}
+      <section className="border-b border-[#E6ECE8] bg-[linear-gradient(180deg,#F1F9F5_0%,#FFFFFF_100%)]">
+        <div className="mx-auto max-w-[1180px] px-5 pb-10 pt-8 sm:px-8 sm:pt-10">
+          <nav aria-label="Breadcrumb" className="mb-7 flex flex-wrap items-center gap-1.5 text-[13px] text-[#6B7A72]">
+            <Link href="/" className="hover:text-[#0B8A4C]">Home</Link>
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            <Link href="/free-tools" className="hover:text-[#0B8A4C]">Free tools</Link>
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            <span className="font-medium text-[#10201A]">{meta?.name ?? title}</span>
           </nav>
 
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#2FE3A6]/15 text-[#2FE3A6] border border-[#2FE3A6]/30">
-              <Sparkles className="w-3.5 h-3.5" />
-              {badge}
-            </span>
-            <span className="inline-flex items-center gap-1 text-xs text-[#7C9E91]">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#2FE3A6]" />
-              No signup required · 100% Free · Client-safe
-            </span>
+          <div className="flex items-start gap-4 sm:gap-5">
+            {Icon && (
+              <span className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#0FA45B] text-white shadow-[0_8px_20px_rgba(15,164,91,.25)] sm:flex">
+                <Icon className="h-7 w-7" aria-hidden />
+              </span>
+            )}
+            <div className="min-w-0">
+              {meta && <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#0B8A4C]">{meta.category}</p>}
+              <h1 className="text-[30px] font-extrabold leading-[1.12] tracking-[-0.02em] sm:text-[40px]">{title}</h1>
+              <p className="mt-3 max-w-[700px] text-[15.5px] leading-relaxed text-[#4A5852] sm:text-[17px]">{description}</p>
+              <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] font-medium text-[#3E4B45]">
+                {["Free, no limits", "No sign-up", "Nothing you enter is stored"].map((t) => (
+                  <li key={t} className="flex items-center gap-1.5">
+                    <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#E3F4EA] text-[#0B8A4C]">
+                      <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                    </span>
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-3">
-            {title}
-          </h1>
-          <p className="text-base sm:text-lg text-[#B8CFC5] max-w-3xl leading-relaxed">
-            {description}
-          </p>
         </div>
       </section>
 
-      {/* Main Interactive Workbench Container */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-12">{children}</div>
+      {/* The tool */}
+      <section id="tool" aria-label="Tool" className="bg-[#F5F8F6]">
+        <div className="mx-auto max-w-[1180px] px-5 py-8 sm:px-8 sm:py-10">{children}</div>
+      </section>
 
-        {/* How It's Calculated Accordion */}
-        {formulaInfo && (
-          <section className="mb-10 rounded-2xl border border-[#2FE3A6]/20 bg-[#03241C]/80 p-6 sm:p-8 backdrop-blur-sm shadow-xl">
-            <button
-              type="button"
-              onClick={() => setFormulaOpen(!formulaOpen)}
-              className="w-full flex items-center justify-between text-left group"
-              aria-expanded={formulaOpen}
-            >
-              <div>
-                <span className="text-xs font-semibold tracking-wider uppercase text-[#2EE6B0]">
-                  Methodology & Formula
-                </span>
-                <h2 className="text-xl font-bold text-white group-hover:text-[#2FE3A6] transition-colors mt-0.5">
-                  {formulaInfo.title}
-                </h2>
-              </div>
-              <ChevronDown
-                className={`w-5 h-5 text-[#9DBBB0] transition-transform duration-200 ${
-                  formulaOpen ? "rotate-180 text-[#2FE3A6]" : ""
-                }`}
-              />
-            </button>
-
-            {formulaOpen && (
-              <div className="mt-5 pt-5 border-t border-[#2FE3A6]/15 text-sm text-[#C9DCD2] space-y-4">
+      <main className="mx-auto max-w-[1180px] px-5 sm:px-8">
+        {/* Method + FAQ */}
+        {(formulaInfo || faqs.length > 0) && (
+          <div className="grid gap-10 py-14 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-14">
+            {formulaInfo && (
+              <section aria-labelledby="method-h">
+                <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#0B8A4C]">How it works</p>
+                <h2 id="method-h" className="text-[24px] font-bold leading-tight tracking-[-0.01em]">{formulaInfo.title}</h2>
+                <p className="mt-3 text-[15px] leading-relaxed text-[#4A5852]">{formulaInfo.description}</p>
                 {formulaInfo.formula && (
-                  <div className="p-3.5 rounded-xl bg-[#021A14] border border-[#2FE3A6]/25 font-mono text-xs sm:text-sm text-[#2FE3A6]">
+                  <div className="mt-5 rounded-xl border border-[#D7EBDF] bg-[#F1F9F5] px-4 py-3.5 text-[13px] leading-relaxed text-[#0B5E36]" style={{ fontFamily: "var(--font-jbmono), ui-monospace, monospace" }}>
                     {formulaInfo.formula}
                   </div>
                 )}
-                <p className="leading-relaxed">{formulaInfo.description}</p>
                 {formulaInfo.steps && formulaInfo.steps.length > 0 && (
-                  <ul className="space-y-2 mt-3">
-                    {formulaInfo.steps.map((step, idx) => (
-                      <li key={idx} className="flex items-start gap-2.5">
-                        <CheckCircle2 className="w-4 h-4 text-[#2FE3A6] flex-shrink-0 mt-0.5" />
-                        <span>{step}</span>
+                  <ol className="mt-5 space-y-3">
+                    {formulaInfo.steps.map((step, i) => (
+                      <li key={i} className="flex gap-3 text-[14.5px] leading-relaxed text-[#3E4B45]">
+                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#10201A] text-[12px] font-bold text-white">{i + 1}</span>
+                        <span>{step.replace(/^Step \d+:\s*/, "")}</span>
                       </li>
                     ))}
-                  </ul>
+                  </ol>
                 )}
-              </div>
+              </section>
             )}
-          </section>
+
+            {faqs.length > 0 && (
+              <section aria-labelledby="faq-h">
+                <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#0B8A4C]">FAQ</p>
+                <h2 id="faq-h" className="text-[24px] font-bold leading-tight tracking-[-0.01em]">Frequently asked questions</h2>
+                <div className="mt-5 divide-y divide-[#E6ECE8] border-y border-[#E6ECE8]">
+                  {faqs.map((faq, i) => (
+                    <details key={i} className="group" open={i === 0}>
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[15.5px] font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
+                        {faq.question}
+                        <ChevronDown className="h-5 w-5 shrink-0 text-[#6B7A72] transition-transform group-open:rotate-180" aria-hidden />
+                      </summary>
+                      <p className="pb-5 pr-8 text-[14.5px] leading-relaxed text-[#4A5852]">{faq.answer}</p>
+                    </details>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
         )}
 
-        {/* FAQs Section */}
-        {faqs.length > 0 && (
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-white mb-6">Frequently Asked Questions</h2>
-            <div className="space-y-3">
-              {faqs.map((faq, idx) => {
-                const isOpen = openFaq === idx;
-                return (
-                  <div
-                    key={idx}
-                    className="rounded-xl border border-[#2FE3A6]/15 bg-[#032019]/60 overflow-hidden transition-colors hover:border-[#2FE3A6]/30"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setOpenFaq(isOpen ? null : idx)}
-                      className="w-full flex items-center justify-between p-4 sm:p-5 text-left font-medium text-white text-sm sm:text-base hover:text-[#2FE3A6] transition-colors"
-                      aria-expanded={isOpen}
-                    >
-                      <span>{faq.question}</span>
-                      <ChevronDown
-                        className={`w-4 h-4 text-[#9DBBB0] flex-shrink-0 transition-transform ${
-                          isOpen ? "rotate-180 text-[#2FE3A6]" : ""
-                        }`}
-                      />
-                    </button>
-                    {isOpen && (
-                      <div className="px-4 pb-5 sm:px-5 sm:pb-6 text-sm text-[#B8CFC5] leading-relaxed border-t border-white/5 pt-3">
-                        {faq.answer}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* Other Free Tools Grid */}
-        <section className="mb-12 pt-8 border-t border-[#2FE3A6]/20">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-white">Explore More Free Tools</h2>
-              <p className="text-xs text-[#9DBBB0]">Built to help small businesses automate and thrive.</p>
-            </div>
-            <Link
-              href="/free-tools"
-              className="text-xs font-semibold text-[#2FE3A6] hover:underline inline-flex items-center gap-1"
-            >
-              View all 10 tools <ArrowRight className="w-3.5 h-3.5" />
+        {/* More tools */}
+        <section aria-labelledby="more-h" className="border-t border-[#E6ECE8] py-14">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+            <h2 id="more-h" className="text-[24px] font-bold tracking-[-0.01em]">More free tools</h2>
+            <Link href="/free-tools" className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#0B8A4C] hover:underline">
+              See all 10 tools <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {otherTools.map((tool) => (
-              <Link
-                key={tool.slug}
-                href={`/free-tools/${tool.slug}`}
-                className="group p-4 rounded-xl border border-[#2FE3A6]/20 bg-[#03241C]/60 hover:bg-[#043327] hover:border-[#2FE3A6]/45 transition-all shadow-sm"
-              >
-                <h3 className="font-semibold text-sm text-white group-hover:text-[#2FE3A6] transition-colors mb-1">
-                  {tool.name}
-                </h3>
-                <p className="text-xs text-[#8EAEA0] line-clamp-2">{tool.desc}</p>
-              </Link>
-            ))}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {others.map((t) => {
+              const I = t.icon;
+              return (
+                <Link
+                  key={t.slug}
+                  href={`/free-tools/${t.slug}`}
+                  className="group rounded-2xl border border-[#E1E8E4] bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#BFE3CE] hover:shadow-[0_12px_28px_rgba(16,32,26,.08)]"
+                >
+                  <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[#E9F6EF] text-[#0B8A4C] transition group-hover:bg-[#0FA45B] group-hover:text-white">
+                    <I className="h-5 w-5" aria-hidden />
+                  </span>
+                  <h3 className="text-[15px] font-bold">{t.name}</h3>
+                  <p className="mt-1 text-[13.5px] leading-relaxed text-[#5B6B63]">{t.desc}</p>
+                </Link>
+              );
+            })}
           </div>
         </section>
+
+        <ToolsCta />
       </main>
 
       <SiteFooter />
     </div>
+  );
+}
+
+/** Closing call to action shared by the tool pages and /free-tools. */
+export function ToolsCta() {
+  return (
+    <section className="mb-16 overflow-hidden rounded-3xl bg-[#0B2E22] px-6 py-10 text-white sm:px-12 sm:py-12">
+      <div className="flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-center">
+        <div className="max-w-[620px]">
+          <h2 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em] sm:text-[30px]">
+            These tools do one job. <span className="text-[#3DDC8F]">Noxtill runs the whole business.</span>
+          </h2>
+          <p className="mt-3 text-[15px] leading-relaxed text-white/75">
+            Sales, bookings, invoices, inventory, reviews and customer messages in one place, with AI that keeps it all moving.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link href="/signup" className="inline-flex items-center gap-2 rounded-full bg-[#0FA45B] px-6 py-3 text-[14.5px] font-semibold text-white transition hover:bg-[#0D9452]">
+            Start free trial <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
+          <Link href="/book-a-demo" className="inline-flex items-center rounded-full border border-white/30 px-6 py-3 text-[14.5px] font-semibold text-white transition hover:bg-white/10">
+            Book a demo
+          </Link>
+        </div>
+      </div>
+    </section>
   );
 }

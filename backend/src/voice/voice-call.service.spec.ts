@@ -9,6 +9,7 @@ import { MissedCallService } from './missed-call.service';
 import { VoiceCallService } from './voice-call.service';
 import { CALL_DISCLOSURE_TEXT } from './voice.constants';
 import { AppointmentSource, PhoneCallOutcome } from '@prisma/client';
+import { isolatedConfig } from '../common/testing/isolated-config';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -59,7 +60,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     });
     serviceProductId = product.id;
 
-    config = new ConfigService({
+    config = isolatedConfig({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
     });
@@ -267,7 +268,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     it('dials the configured transfer number when intent is "transfer"', async () => {
       const withTransfer = new VoiceCallService(
         prisma,
-        new ConfigService({
+        isolatedConfig({
           TWILIO_ACCOUNT_SID: 'AC-test',
           TWILIO_AUTH_TOKEN: 'test-token',
           VOICE_TRANSFER_NUMBER: '+15551239999',

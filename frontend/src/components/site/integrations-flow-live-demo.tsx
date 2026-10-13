@@ -142,7 +142,7 @@ export function IntegrationsFlowLiveDemo() {
         {/* Noxtill dashboard */}
         <div className={`w-[300px] flex-none rounded-2xl border p-4 transition-colors duration-300 ${noxtillActive ? "border-[#a9e8cb] bg-[#f2f9f6]" : "border-border bg-white"}`}>
           <PanelHeader
-            icon={<Image src="/brand/noxtill-mark.png" alt="" width={20} height={20} className="h-4.5 w-4.5 object-contain" />}
+            icon={<Image src="/brand/noxtill-logo1.png" alt="" width={20} height={20} className="h-4.5 w-4.5 object-contain" />}
             label="Noxtill"
             iconBg="border border-[#eef0ef] bg-white"
           />
