@@ -36,6 +36,14 @@ export const SENSITIVE_CAPS: SensitiveCap[] = [
   { key: CAPABILITIES.CUSTOMERS_ERASE, label: 'Customer erasure', description: 'Permanently erasing a customer.', impact: 'Erasure is irreversible and breaks links on historical records.' },
   { key: CAPABILITIES.AI_SETTINGS_MANAGE, label: 'AI settings', description: 'AI spend cap, rate limit and feature switches.', impact: 'Controls what AI features can run and how much they may cost.' },
   { key: CAPABILITIES.INTEGRATIONS_MANAGE, label: 'Integrations and API keys', description: 'Connecting services and creating API keys.', impact: 'An API key can read whatever its scopes allow.' },
+  {
+    key: CAPABILITIES.VOICE_SUPERVISE,
+    label: 'Live call supervision',
+    description:
+      'View masked live-call operations and join a call muted or take it over using the supervisor’s own phone.',
+    impact:
+      'Can expose live conversations and initiate a real provider call to the supervisor; whisper and barge are not supported.',
+  },
 ];
 
 const WHO = [
@@ -48,7 +56,11 @@ async function effectiveRoleCaps(d: HubDeps, businessId: string) {
   const overrides = await d.prisma.roleCapabilityOverride.findMany({ where: { businessId } });
   const pick = (role: Role): Set<string> => {
     const o = overrides.find((x) => x.role === role);
-    return new Set((o ? (o.capabilities as unknown as string[]) : SYSTEM_ROLE_CAPABILITIES[role]) as string[]);
+    return new Set(
+      o
+        ? (o.capabilities as unknown as string[])
+        : SYSTEM_ROLE_CAPABILITIES[role],
+    );
   };
   return { manager: pick(Role.manager), staff: pick(Role.staff), overridden: overrides.length > 0 };
 }
