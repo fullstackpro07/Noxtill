@@ -56,18 +56,22 @@ function CallControls({ call }: { call: VoiceSupervisorLiveCall }) {
 
   const confirmJoin = (mode: "listen" | "takeOver") => {
     const listen = mode === "listen";
+    const connectedHumanAgent = Boolean(call.activeHumanAgent);
     openConfirm({
       title: listen ? "Join this call muted?" : "Take over this call?",
       tone: listen ? "green" : "amber",
       icon: listen ? "audio-lines" : "user-round",
       body: listen
-        ? "Noxtill rings your saved phone and bridges it into a Twilio conference with the caller. You join muted. This is not a silent background tap, and the AI turn-based loop stops when the caller is moved into the conference."
+        ? connectedHumanAgent
+          ? "Noxtill rings your saved phone and adds you to the live agent conference muted. This is not a silent background tap."
+          : "Noxtill rings your saved phone and bridges it into a Twilio conference with the caller. You join muted. This is not a silent background tap, and the AI turn-based loop stops when the caller is moved into the conference."
         : "Noxtill rings your saved phone and joins you to the call unmuted. The AI turn-based loop stops when the caller is moved into the conference.",
       rows: [
         { label: "Caller", value: call.caller },
         {
           label: "Current handler",
           value:
+            call.activeHumanAgent?.name ??
             call.joinedByName ??
             (call.handler === "ai"
               ? "AI receptionist"
@@ -90,14 +94,50 @@ function CallControls({ call }: { call: VoiceSupervisorLiveCall }) {
     });
   };
 
+  const confirmCoach = (mode: "whisper" | "barge") => {
+    const whisper = mode === "whisper";
+    openConfirm({
+      title: whisper ? "Whisper to the agent?" : "Barge into the call?",
+      tone: whisper ? "green" : "amber",
+      icon: whisper ? "audio-lines" : "phone-call",
+      body: whisper
+        ? `Noxtill rings your saved phone. Once you answer, only ${call.activeHumanAgent?.name ?? "the assigned agent"} can hear you.`
+        : "Noxtill rings your saved phone. Once you answer, both the agent and caller can hear you.",
+      rows: [
+        { label: "Caller", value: call.caller },
+        { label: "Assigned agent", value: call.activeHumanAgent?.name ?? "Not available" },
+        { label: "Rings", value: "The phone number on your Noxtill user account" },
+      ],
+      primary: whisper ? "Ring my phone · whisper" : "Ring my phone · barge",
+      cancel: "Cancel",
+      onConfirm: async () => {
+        await rx.actions.supervise(call.id, mode);
+        await queryClient.invalidateQueries({
+          queryKey: ["voice-supervisor-live"],
+        });
+      },
+    });
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
       <SmallBtn icon="audio-lines" onClick={() => confirmJoin("listen")}>
         Join muted
       </SmallBtn>
-      <SmallBtn icon="user-round" onClick={() => confirmJoin("takeOver")}>
-        Take over
-      </SmallBtn>
+      {call.activeHumanAgent ? (
+        <>
+          <SmallBtn icon="audio-lines" onClick={() => confirmCoach("whisper")}>
+            Whisper
+          </SmallBtn>
+          <SmallBtn icon="phone-call" onClick={() => confirmCoach("barge")}>
+            Barge
+          </SmallBtn>
+        </>
+      ) : (
+        <SmallBtn icon="user-round" onClick={() => confirmJoin("takeOver")}>
+          Take over
+        </SmallBtn>
+      )}
       <SmallBtn icon="external-link" onClick={() => openCall(call.id)}>
         Call workspace
       </SmallBtn>
@@ -274,10 +314,12 @@ export function SupervisorCenterScreen() {
                       {call.caller}
                     </span>
                     <Chip
-                      tone={call.handler === "human_joined" ? "blue" : "purple"}
+                      tone={call.activeHumanAgent || call.handler === "human_joined" ? "blue" : "purple"}
                     >
-                      {call.joinedByName
-                        ? `Human · ${call.joinedByName}`
+                      {call.activeHumanAgent
+                        ? `Agent · ${call.activeHumanAgent.name}`
+                        : call.joinedByName
+                          ? `Human · ${call.joinedByName}`
                         : call.handler === "ai_to_human"
                           ? "Transfer requested"
                           : "AI receptionist"}
@@ -406,9 +448,7 @@ export function SupervisorCenterScreen() {
               <Ico name="badge-check" size={14} /> Open Call Quality
             </Link>
             <div className="rounded-[10px] border border-[#E6E8EC] bg-[#FAFBFC] p-3 text-[11px] leading-5 text-[#667085]">
-              <div className="font-bold text-[#344054]">
-                Not available: whisper / barge
-              </div>
+              <div className="font-bold text-[#344054]">Whisper / barge</div>
               {snapshot.limitations.whisperAndBarge}
             </div>
             <Link

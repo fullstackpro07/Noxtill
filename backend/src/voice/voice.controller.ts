@@ -21,7 +21,11 @@ import { VoiceCallService } from './voice-call.service';
 import { VoiceQueryService } from './voice-query.service';
 import { VoiceSettingsService } from './voice-settings.service';
 import { VoiceQueueService } from './voice-queue.service';
-import { VoiceLiveJoinService, type JoinRole } from './voice-live-join.service';
+import {
+  VoiceLiveJoinService,
+  type JoinRole,
+  type SupervisorCoachMode,
+} from './voice-live-join.service';
 import { VoiceCallWorkspaceService } from './voice-call-workspace.service';
 import { VoiceRoutingRulesService } from './voice-routing-rules.service';
 import { VoiceKnowledgeService } from './voice-knowledge.service';
@@ -846,6 +850,16 @@ export class VoiceController {
     return this.voiceLiveJoin.takeOver(user.businessId, user.sub, id);
   }
 
+  @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)
+  @Post('voice/calls/:id/supervisor/:mode')
+  superviseCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('mode') mode: SupervisorCoachMode,
+  ) {
+    return this.voiceLiveJoin.coach(user.businessId, user.sub, id, mode);
+  }
+
   /** AI Phone, full — transfers a call that is genuinely still live to a person. */
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Post('voice/calls/:id/transfer')
@@ -1133,13 +1147,18 @@ export class VoiceController {
     @Headers('x-twilio-signature') signature?: string,
   ) {
     this.verifySignature(req, signature);
-    const body = req.body as { CallStatus?: string };
+    const body = req.body as { CallStatus?: string; CallSid?: string };
     const attemptNumber =
       rawAttemptNumber && /^\d+$/.test(rawAttemptNumber)
         ? Number(rawAttemptNumber)
         : undefined;
     return this.voiceCall
-      .handleDialStatus(parentCallSid, body.CallStatus ?? '', attemptNumber)
+      .handleDialStatus(
+        parentCallSid,
+        body.CallStatus ?? '',
+        attemptNumber,
+        body.CallSid,
+      )
       .then(() => ({ received: true }));
   }
 

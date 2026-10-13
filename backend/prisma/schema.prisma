@@ -2841,6 +2841,9 @@ model VoiceHumanAgentAssignment {
   profile        VoiceHumanAgentProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
   status         String                 @default("offered") @db.VarChar(20)
   providerStatus String?                @map("provider_status") @db.VarChar(40)
+  /// Twilio leg SID and conference SID once an internal transfer is placed into a shared room.
+  providerCallSid String?                @map("provider_call_sid") @db.VarChar(34)
+  conferenceSid   String?                @map("conference_sid") @db.VarChar(34)
   connected      Boolean                @default(false)
   expiresAt      DateTime?              @map("expires_at")
   releasedAt     DateTime?              @map("released_at")

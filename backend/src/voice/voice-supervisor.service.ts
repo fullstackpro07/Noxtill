@@ -37,6 +37,33 @@ export class VoiceSupervisorService {
       }),
       this.agentsService.list(businessId, actorUserId),
     ]);
+    const activeAssignments = liveCalls.length
+      ? await this.tenantPrisma.client.voiceHumanAgentAssignment.findMany({
+          where: {
+            businessId,
+            callId: { in: liveCalls.map((call) => call.id) },
+            status: 'connected',
+            connected: true,
+            providerCallSid: { not: null },
+            conferenceSid: { not: null },
+          },
+          orderBy: [{ attemptNumber: 'desc' }, { createdAt: 'desc' }],
+          select: {
+            callId: true,
+            attemptNumber: true,
+            profile: {
+              select: {
+                staffUser: {
+                  select: { user: { select: { name: true } } },
+                },
+              },
+            },
+          },
+        })
+      : [];
+    const activeAgentByCallId = new Map(
+      activeAssignments.map((assignment) => [assignment.callId, assignment]),
+    );
 
     const nameByUserId = new Map(
       roster.agents.map((agent) => [agent.userId, agent.name]),
@@ -44,6 +71,7 @@ export class VoiceSupervisorService {
     const calls = liveCalls.map((call) => {
       const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
       const analysis = summariseCallAnalysis(transcript);
+      const activeAssignment = activeAgentByCallId.get(call.id);
       return {
         id: call.id,
         caller: this.maskCaller(call.fromNumber),
@@ -64,6 +92,12 @@ export class VoiceSupervisorService {
         joinedAt: call.joinedAt?.toISOString() ?? null,
         joinedByName: call.joinedByUserId
           ? (nameByUserId.get(call.joinedByUserId) ?? null)
+          : null,
+        activeHumanAgent: activeAssignment
+          ? {
+              name: activeAssignment.profile.staffUser.user.name,
+              attemptNumber: activeAssignment.attemptNumber,
+            }
           : null,
       };
     });
@@ -110,7 +144,7 @@ export class VoiceSupervisorService {
         language:
           'Not tracked: call language is not persisted on the call record.',
         whisperAndBarge:
-          'Not available: internal human-agent transfers still use a direct Twilio Dial leg, not a conference participant. There is no agent Call SID in a shared conference to target with Twilio callSidToCoach, so whisper/barge controls are intentionally disabled. The existing listen-in join rings the supervisor and moves the caller to a conference; it is not a silent tap and can interrupt the current AI turn.',
+          'Whisper and barge are available only while an internal voice agent is connected through a shared Twilio conference. External-number transfers are not coachable. Joining a call still rings the supervisor phone; it is not a silent tap.',
         monitoring:
           'Join muted rings the supervisor phone and moves the caller into a conference; it is not a silent tap and the AI turn-based loop stops. Take over joins unmuted.',
         identity:

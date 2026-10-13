@@ -904,17 +904,149 @@ export class VoiceCallService {
     parentCallSid: string,
     dialStatus: string,
     attemptNumber?: number,
+    providerCallSid?: string,
   ): Promise<void> {
     const call = await this.prisma.phoneCall.findUnique({
       where: { callSid: parentCallSid },
-      select: { id: true },
+      select: { id: true, businessId: true, status: true },
     });
     if (!call) return;
+
+    const assignment = await this.prisma.voiceHumanAgentAssignment.findFirst({
+      where: {
+        businessId: call.businessId,
+        callId: call.id,
+        ...(attemptNumber ? { attemptNumber } : {}),
+      },
+      orderBy: { attemptNumber: 'desc' },
+    });
+    if (
+      assignment?.providerCallSid &&
+      providerCallSid &&
+      assignment.providerCallSid !== providerCallSid
+    ) {
+      return;
+    }
+    const normalized = dialStatus.trim().toLowerCase();
+    if (!assignment?.conferenceSid) {
+      await this.humanAgentDispatch.observeDialStatus(
+        call.id,
+        normalized,
+        attemptNumber,
+      );
+      return;
+    }
+    if (assignment.status === 'released') return;
+
+    if (['answered', 'in-progress', 'connected'].includes(normalized)) {
+      await this.humanAgentDispatch.observeDialStatus(
+        call.id,
+        normalized,
+        assignment.attemptNumber,
+      );
+      await this.prisma.phoneCall.updateMany({
+        where: { id: call.id, status: PhoneCallStatus.in_progress },
+        data: { outcome: PhoneCallOutcome.transfer },
+      });
+      return;
+    }
+    if (
+      ![
+        'completed',
+        'complete',
+        'busy',
+        'no-answer',
+        'failed',
+        'canceled',
+      ].includes(normalized)
+    ) {
+      await this.humanAgentDispatch.observeDialStatus(
+        call.id,
+        normalized,
+        assignment.attemptNumber,
+      );
+      return;
+    }
+
     await this.humanAgentDispatch.observeDialStatus(
       call.id,
-      dialStatus,
-      attemptNumber,
+      normalized,
+      assignment.attemptNumber,
     );
+    if (call.status !== PhoneCallStatus.in_progress) return;
+    if (assignment.connected) {
+      await this.finishConferenceTransfer(call.id, parentCallSid, true);
+      return;
+    }
+
+    while (true) {
+      const nextAgent = await this.humanAgentDispatch.reserve(
+        call.businessId,
+        call.id,
+      );
+      if (!nextAgent) break;
+      const transferCall = await this.prisma.phoneCall.findUnique({
+        where: { id: call.id },
+      });
+      if (
+        transferCall &&
+        (await this.startConferenceHumanAgent(transferCall, nextAgent))
+      ) {
+        return;
+      }
+      await this.humanAgentDispatch.release(
+        call.id,
+        'conference_provider_failed',
+        nextAgent.attemptNumber,
+      );
+    }
+    await this.finishConferenceTransfer(call.id, parentCallSid, false);
+  }
+
+  private async finishConferenceTransfer(
+    callId: string,
+    callSid: string,
+    agentConnected: boolean,
+  ) {
+    const call = await this.prisma.phoneCall.findUnique({
+      where: { id: callId },
+    });
+    if (!call || call.status !== PhoneCallStatus.in_progress) return;
+    const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
+    const message = agentConnected
+      ? 'Thanks for speaking with our team. Goodbye.'
+      : 'No team member could join this call. No message was recorded; your team will follow up based on your call.';
+    if (transcript.at(-1)?.text !== message) {
+      transcript.push({
+        speaker: 'assistant',
+        text: message,
+        at: new Date().toISOString(),
+      });
+    }
+    await this.prisma.phoneCall.update({
+      where: { id: call.id },
+      data: {
+        transcript: transcript as unknown as Prisma.InputJsonValue,
+        outcome: agentConnected
+          ? PhoneCallOutcome.transfer
+          : PhoneCallOutcome.message,
+      },
+    });
+
+    const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
+    const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
+    if (!accountSid || !authToken) return;
+    try {
+      await axios.post(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`,
+        new URLSearchParams({ Twiml: twiml(say(message) + '<Hangup/>') }),
+        { auth: { username: accountSid, password: authToken } },
+      );
+    } catch {
+      this.logger.warn(
+        `Twilio could not close the conference for call ${callSid}`,
+      );
+    }
   }
 
   /** Saves the caller's post-transfer message to the existing follow-up queue. */
@@ -1139,45 +1271,108 @@ export class VoiceCallService {
         ? { routedRuleId: matchedRule.id, routedRuleName: matchedRule.name }
         : {}),
     });
-    let dialNumber = escapeXml(transferNumber);
     if (assignedAgent) {
-      const dialStatusUrl = this.webhookUrl('dial-status');
-      if (!dialStatusUrl) {
+      const started = await this.startConferenceHumanAgent(call, assignedAgent);
+      if (!started) {
         await this.humanAgentDispatch.release(
           call.id,
-          'callback_not_configured',
+          'conference_provider_failed',
+          assignedAgent.attemptNumber,
         );
+        const unavailable =
+          'I could not connect you to a team member. No message was recorded; your team will follow up based on your call.';
+        transcript.push({
+          speaker: 'assistant',
+          text: unavailable,
+          at: new Date().toISOString(),
+        });
+        await this.persist(call.callSid, transcript, PhoneCallOutcome.message);
         return twiml(
-          responseToSpeak +
-            say(
-              call.recordingConsentStatus ===
-                VoiceRecordingConsentStatus.granted
-                ? "I can't connect the call right now, but I've noted your message and someone will follow up."
-                : 'I cannot connect you right now. No message was recorded; your call is in the follow-up list so the team can call you back.',
-              settings.voiceId,
-            ) +
-            '<Hangup/>',
+          responseToSpeak + say(unavailable, settings.voiceId) + '<Hangup/>',
         );
       }
-      const statusUrl = new URL(dialStatusUrl);
-      statusUrl.searchParams.set('parentCallSid', call.callSid);
-      statusUrl.searchParams.set(
-        'attemptNumber',
-        String(assignedAgent.attemptNumber),
+      return twiml(
+        responseToSpeak +
+          `<Dial><Conference startConferenceOnEnter="true" endConferenceOnExit="true" muted="false" beep="false" waitUrl="">${escapeXml(call.callSid)}</Conference></Dial>`,
       );
-      dialNumber = `<Number statusCallback="${escapeXml(statusUrl.toString())}" statusCallbackMethod="POST" statusCallbackEvent="initiated ringing answered completed">${escapeXml(assignedAgent.phone)}</Number>`;
     }
+
+    const dialNumber = escapeXml(transferNumber);
     const action = new URL(actionUrl);
-    if (assignedAgent) {
-      action.searchParams.set(
-        'attemptNumber',
-        String(assignedAgent.attemptNumber),
-      );
-    }
     return twiml(
       say(aiResponse.reply, settings.voiceId) +
         `<Dial action="${escapeXml(action.toString())}" method="POST" answerOnBridge="true">${dialNumber}</Dial>`,
     );
+  }
+
+  private async startConferenceHumanAgent(
+    call: PhoneCall,
+    agent: NonNullable<
+      Awaited<ReturnType<VoiceHumanAgentDispatchService['reserve']>>
+    >,
+  ): Promise<boolean> {
+    const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
+    const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
+    const statusCallback = this.webhookUrl('dial-status');
+    const phoneNumber = await this.prisma.phoneNumber.findUnique({
+      where: { businessId: call.businessId },
+      select: { phoneNumber: true },
+    });
+    if (!accountSid || !authToken || !statusCallback || !phoneNumber) {
+      return false;
+    }
+
+    const callback = new URL(statusCallback);
+    callback.searchParams.set('parentCallSid', call.callSid);
+    callback.searchParams.set('attemptNumber', String(agent.attemptNumber));
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Conferences/${encodeURIComponent(call.callSid)}/Participants.json`;
+
+    try {
+      const response = await axios.post<{
+        call_sid?: string;
+        conference_sid?: string;
+      }>(
+        url,
+        new URLSearchParams({
+          To: agent.phone,
+          From: phoneNumber.phoneNumber,
+          Label: `human-agent-${agent.attemptNumber}`,
+          StartConferenceOnEnter: 'false',
+          EndConferenceOnExit: 'false',
+          Muted: 'false',
+          Beep: 'false',
+          Timeout: '20',
+          StatusCallback: callback.toString(),
+          StatusCallbackMethod: 'POST',
+          StatusCallbackEvent: 'initiated ringing answered completed',
+        }),
+        { auth: { username: accountSid, password: authToken } },
+      );
+      const providerCallSid = response.data?.call_sid;
+      const conferenceSid = response.data?.conference_sid;
+      if (
+        typeof providerCallSid !== 'string' ||
+        typeof conferenceSid !== 'string'
+      ) {
+        this.logger.warn(
+          `Twilio did not return conference identifiers for call ${call.callSid}`,
+        );
+        return false;
+      }
+      await this.humanAgentDispatch.recordConferenceParticipant(
+        call.businessId,
+        call.id,
+        agent.attemptNumber,
+        providerCallSid,
+        conferenceSid,
+      );
+      return true;
+    } catch {
+      this.logger.warn(
+        `Twilio could not place an internal agent in conference for call ${call.callSid}`,
+      );
+      return false;
+    }
   }
 
   private async findLatestPublishedIvrVersion(businessId: string) {

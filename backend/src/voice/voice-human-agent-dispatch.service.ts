@@ -275,7 +275,11 @@ export class VoiceHumanAgentDispatchService {
     attemptNumber?: number,
   ) {
     const normalized = providerStatus.trim().toLowerCase();
-    if (normalized === 'answered' || normalized === 'in-progress') {
+    if (
+      normalized === 'answered' ||
+      normalized === 'in-progress' ||
+      normalized === 'connected'
+    ) {
       return this.prisma.voiceHumanAgentAssignment.updateMany({
         where: {
           callId,
@@ -299,6 +303,24 @@ export class VoiceHumanAgentDispatchService {
       return this.release(callId, normalized, attemptNumber);
     }
     return { count: 0 };
+  }
+
+  async recordConferenceParticipant(
+    businessId: string,
+    callId: string,
+    attemptNumber: number,
+    providerCallSid: string,
+    conferenceSid: string,
+  ) {
+    return this.prisma.voiceHumanAgentAssignment.updateMany({
+      where: {
+        businessId,
+        callId,
+        attemptNumber,
+        status: 'offered',
+      },
+      data: { providerCallSid, conferenceSid },
+    });
   }
 
   async releaseExpiredOffers(businessId?: string, now = new Date()) {

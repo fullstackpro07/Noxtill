@@ -111,7 +111,7 @@ describe('VoiceSupervisorService (MySQL)', () => {
   });
 
   it('shows real tenant-scoped live calls, masked caller IDs and agent presence', async () => {
-    await prisma.phoneCall.create({
+    const liveCall = await prisma.phoneCall.create({
       data: {
         businessId,
         callSid: `CA-supervisor-live-${randomUUID()}`,
@@ -151,12 +151,25 @@ describe('VoiceSupervisorService (MySQL)', () => {
         status: PhoneCallStatus.completed,
       },
     });
-    await prisma.voiceHumanAgentProfile.create({
+    const profile = await prisma.voiceHumanAgentProfile.create({
       data: {
         businessId,
         staffUserId: staffBusinessUserId,
         presenceStatus: VoiceAgentPresenceStatus.available,
         lastHeartbeatAt: new Date(),
+      },
+    });
+    await prisma.voiceHumanAgentAssignment.create({
+      data: {
+        businessId,
+        callId: liveCall.id,
+        attemptNumber: 1,
+        staffUserId: staffBusinessUserId,
+        profileId: profile.id,
+        status: 'connected',
+        connected: true,
+        providerCallSid: `CA${'a'.repeat(32)}`,
+        conferenceSid: `CF${'b'.repeat(32)}`,
       },
     });
 
@@ -176,12 +189,13 @@ describe('VoiceSupervisorService (MySQL)', () => {
       sentiment: 'frustrated',
       confidence: 'low',
       recording: 'saved',
+      activeHumanAgent: { name: 'Voice Agent', attemptNumber: 1 },
     });
     expect(result.calls[0]).not.toHaveProperty('fromNumber');
     expect(result.agents[0]).toMatchObject({
       name: 'Voice Agent',
       status: VoiceAgentPresenceStatus.available,
     });
-    expect(result.limitations.whisperAndBarge).toContain('Not available');
+    expect(result.limitations.whisperAndBarge).toContain('available only');
   });
 });

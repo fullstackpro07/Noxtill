@@ -1534,6 +1534,12 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       });
 
       try {
+        mockedAxios.post.mockResolvedValue({
+          data: {
+            call_sid: 'CA-human-agent-1',
+            conference_sid: 'CF-human-transfer',
+          },
+        });
         await service.handleIncoming(
           'CA-human-transfer',
           '+14155550130',
@@ -1547,9 +1553,8 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
           'CA-human-transfer',
           'https://api.twilio.com/recordings/RE-human-transfer',
         );
-        expect(xml).toContain('<Number statusCallback=');
-        expect(xml).toContain('>+15550004444</Number>');
-        expect(xml).toContain('parentCallSid=CA-human-transfer');
+        expect(xml).toContain('<Conference');
+        expect(xml).toContain('>CA-human-transfer</Conference>');
 
         const call = await prisma.phoneCall.findUniqueOrThrow({
           where: { callSid: 'CA-human-transfer' },
@@ -1560,8 +1565,15 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
           });
         expect(assignment.staffUserId).toBe(member.id);
         expect(assignment.status).toBe('offered');
+        expect(assignment.providerCallSid).toBe('CA-human-agent-1');
+        expect(assignment.conferenceSid).toBe('CF-human-transfer');
 
-        await service.handleDialStatus('CA-human-transfer', 'in-progress');
+        await service.handleDialStatus(
+          'CA-human-transfer',
+          'in-progress',
+          1,
+          'CA-human-agent-1',
+        );
         const connected =
           await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
             where: { callId: call.id, attemptNumber: 1 },
@@ -1569,7 +1581,12 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         expect(connected.status).toBe('connected');
         expect(connected.connected).toBe(true);
 
-        await service.handleTransferResult('CA-human-transfer', 'completed');
+        await service.handleDialStatus(
+          'CA-human-transfer',
+          'completed',
+          1,
+          'CA-human-agent-1',
+        );
         const released =
           await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
             where: { callId: call.id, attemptNumber: 1 },
@@ -1618,6 +1635,12 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       }
 
       try {
+        mockedAxios.post.mockResolvedValue({
+          data: {
+            call_sid: 'CA-human-agent-leg',
+            conference_sid: 'CF-human-retry',
+          },
+        });
         await service.handleIncoming(
           'CA-human-retry',
           '+14155550131',
@@ -1630,31 +1653,30 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
           'CA-human-retry',
           'https://api.twilio.com/recordings/RE-human-retry',
         );
-        expect(firstDial).toContain('attemptNumber=1');
+        expect(firstDial).toContain('<Conference');
 
         const firstAssignment =
           await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
             where: { call: { callSid: 'CA-human-retry' }, attemptNumber: 1 },
           });
-        const retryDial = await service.handleTransferResult(
+        await service.handleDialStatus(
           'CA-human-retry',
           'no-answer',
           1,
+          'CA-human-agent-leg',
         );
-        expect(retryDial).toContain('attemptNumber=2');
-        expect(retryDial).toContain('<Dial');
         const secondAssignment =
           await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
             where: { call: { callSid: 'CA-human-retry' }, attemptNumber: 2 },
           });
         expect(secondAssignment.profileId).not.toBe(firstAssignment.profileId);
 
-        const duplicateResult = await service.handleTransferResult(
+        await service.handleDialStatus(
           'CA-human-retry',
           'no-answer',
           1,
+          'CA-human-agent-leg',
         );
-        expect(duplicateResult).toContain('attemptNumber=2');
         const rows = await prisma.voiceHumanAgentAssignment.findMany({
           where: { call: { callSid: 'CA-human-retry' } },
           orderBy: { attemptNumber: 'asc' },
@@ -1662,12 +1684,12 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         expect(rows.map((row) => row.attemptNumber)).toEqual([1, 2]);
         expect(new Set(rows.map((row) => row.profileId)).size).toBe(2);
 
-        const fallback = await service.handleTransferResult(
+        await service.handleDialStatus(
           'CA-human-retry',
-          'busy',
+          'no-answer',
           2,
+          'CA-human-agent-leg',
         );
-        expect(fallback).toContain('Please leave a message');
         const call = await prisma.phoneCall.findUniqueOrThrow({
           where: { callSid: 'CA-human-retry' },
         });

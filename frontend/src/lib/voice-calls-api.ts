@@ -162,6 +162,17 @@ export function takeOverCall(callId: string): Promise<PhoneCall> {
   return apiFetch<PhoneCall>(`/voice/calls/${callId}/take-over`, { method: "POST" });
 }
 
+export type SupervisorCoachMode = "listen" | "whisper" | "barge";
+
+export function setSupervisorCoachMode(
+  callId: string,
+  mode: SupervisorCoachMode,
+): Promise<{ callId: string; mode: SupervisorCoachMode; accepted: boolean }> {
+  return apiFetch(`/voice/calls/${callId}/supervisor/${mode}`, {
+    method: "POST",
+  });
+}
+
 /** Real call log, most recent first (last 200). */
 export function fetchCalls(): Promise<PhoneCall[]> {
   return apiFetch<PhoneCall[]>("/voice/calls");

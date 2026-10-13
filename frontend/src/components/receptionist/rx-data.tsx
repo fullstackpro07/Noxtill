@@ -19,6 +19,8 @@ import {
   reorderRoutingRules,
   summariseCall,
   takeOverCall,
+  setSupervisorCoachMode,
+  type SupervisorCoachMode,
   transferLiveCall,
   updateKnowledgeEntry,
   updateRoutingRule,
@@ -47,6 +49,7 @@ export interface RxActions {
   assign: (callId: string, userId: string | null) => Promise<void>;
   listen: (callId: string) => Promise<void>;
   takeOver: (callId: string) => Promise<void>;
+  supervise: (callId: string, mode: SupervisorCoachMode) => Promise<void>;
   summarise: (callId: string) => Promise<void>;
   /** Live call controls — real telephony-provider actions. */
   transfer: (callId: string, toNumber?: string) => Promise<void>;
@@ -153,6 +156,12 @@ export function RxDataProvider({ children }: { children: ReactNode }) {
         void (await run(() => assignCall(id, userId), [userId ? "Follow-up assigned" : "Assignment cleared", userId ? "The call now has an owner." : undefined], "Couldn't assign that")),
       listen: async (id) => void (await run(() => listenToCall(id), ["Your phone is ringing", "Answer it to hear the call, muted."], "Couldn't join the call")),
       takeOver: async (id) => void (await run(() => takeOverCall(id), ["Your phone is ringing", "Answer it to speak with the caller — the AI steps aside."], "Couldn't take over the call")),
+      supervise: async (id, mode) =>
+        void (await run(
+          () => setSupervisorCoachMode(id, mode),
+          ["Supervisor connection requested", mode === "listen" ? "Answer your phone to listen muted." : mode === "whisper" ? "Answer your phone; only the assigned agent can hear you." : "Answer your phone to speak to everyone in the call."],
+          "Couldn't update supervisor control",
+        )),
       summarise: async (id) => void (await run(() => summariseCall(id), ["Summary written", "Generated from the transcript alone and saved on the call."], "No summary was generated")),
       transfer: async (id, toNumber) => void (await run(() => transferLiveCall(id, toNumber), ["Transfer started", "The provider will confirm once the person answers."], "Couldn't transfer the call")),
       endCall: async (id) => void (await run(() => endLiveCall(id), ["Ending the call", "The telephony provider has been asked to hang up."], "Couldn't end the call")),

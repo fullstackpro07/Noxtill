@@ -12,6 +12,7 @@ export interface VoiceSupervisorLiveCall {
   recording: "saved" | "deleted" | "not_saved_yet";
   joinedAt: string | null;
   joinedByName: string | null;
+  activeHumanAgent: { name: string; attemptNumber: number } | null;
 }
 
 export interface VoiceSupervisorAgent {
