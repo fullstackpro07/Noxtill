@@ -1,10 +1,13 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsInt,
   IsIn,
   IsOptional,
   IsString,
   MaxLength,
+  Max,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -17,6 +20,13 @@ export const VOICE_AI_AGENT_TEMPLATES = [
   'lead_qualification',
   'routing',
   'quality_analyst',
+] as const;
+
+export const VOICE_AI_AGENT_TOOLS = [
+  'book',
+  'message',
+  'transfer',
+  'end',
 ] as const;
 
 export class SaveVoiceAiAgentDraftDto {
@@ -52,6 +62,25 @@ export class SaveVoiceAiAgentDraftDto {
   @IsString({ each: true })
   @MaxLength(40, { each: true })
   languages?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(4)
+  @IsIn(VOICE_AI_AGENT_TOOLS, { each: true })
+  toolPermissions?: (typeof VOICE_AI_AGENT_TOOLS)[number][];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(191, { each: true })
+  knowledgeSourceIds?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(32)
+  @Max(1000)
+  maxTokensPerResponse?: number;
 }
 
 export class TestVoiceAiAgentDto {

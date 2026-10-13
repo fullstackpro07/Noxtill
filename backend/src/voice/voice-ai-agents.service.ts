@@ -9,6 +9,7 @@ import {
   RollbackVoiceAiAgentDto,
   SaveVoiceAiAgentDraftDto,
   VOICE_AI_AGENT_TEMPLATES,
+  VOICE_AI_AGENT_TOOLS,
 } from './dto/voice-ai-agent.dto';
 import { VOICE_ERROR_CODES } from './voice.constants';
 
@@ -20,6 +21,9 @@ type AgentConfig = {
   instructions: string;
   escalationGuidance: string;
   languages: string[];
+  toolPermissions?: string[];
+  knowledgeSourceIds?: string[];
+  maxTokensPerResponse?: number;
 };
 
 const VALID_TEMPLATES = new Set<string>(VOICE_AI_AGENT_TEMPLATES);
@@ -59,9 +63,18 @@ export class VoiceAiAgentsService {
       },
       orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
     });
+    const knowledgeSources =
+      await this.tenantPrisma.client.voiceKnowledgeEntry.findMany({
+        where: { businessId, active: true },
+        select: { id: true, title: true, kind: true },
+        orderBy: [{ title: 'asc' }, { id: 'asc' }],
+        take: 100,
+      });
 
     return {
       templates: VOICE_AI_AGENT_TEMPLATES,
+      tools: VOICE_AI_AGENT_TOOLS,
+      knowledgeSources,
       agents: agents.map((agent) => ({
         id: agent.id,
         name: agent.name,
@@ -75,6 +88,8 @@ export class VoiceAiAgentsService {
           config: version.config as unknown as AgentConfig,
           checksum: version.checksum,
           publishedAt: version.publishedAt?.toISOString() ?? null,
+          approvedAt: version.approvedAt?.toISOString() ?? null,
+          approvedByUserId: version.approvedByUserId,
           createdAt: version.createdAt.toISOString(),
           latestTest: version.testRuns[0]
             ? {
@@ -86,7 +101,7 @@ export class VoiceAiAgentsService {
       })),
       limitations: {
         tools:
-          'The AI receptionist can only use existing booking, message, transfer and end-call actions.',
+          'Each published agent version carries a server-enforced allowlist for booking, messages, transfers and ending calls; knowledge retrieval is restricted to selected active business sources and each AI response has a token ceiling.',
         liveRouting:
           'Published versions are pinned to new inbound calls. If no fixed transfer number is configured, an AI transfer can reserve a fresh available human staff profile with phone capacity; a classified caller topic prefers an exact matching skill tag, with capacity-based fallback when none match. Browser softphone is not configured.',
       },
@@ -99,7 +114,7 @@ export class VoiceAiAgentsService {
     dto: SaveVoiceAiAgentDraftDto,
   ) {
     const name = this.cleanText(dto.name, 120);
-    const config = this.normalizeConfig(dto);
+    const config = await this.normalizeConfig(businessId, dto);
     this.assertTemplate(dto.template);
 
     const existing = await this.tenantPrisma.client.voiceAiAgent.findFirst({
@@ -168,7 +183,7 @@ export class VoiceAiAgentsService {
       );
     }
 
-    const config = this.normalizeConfig(dto);
+    const config = await this.normalizeConfig(businessId, dto);
     const versionId = randomUUID();
     const version = await this.tenantPrisma.client.$transaction(async (tx) => {
       const latest = await tx.voiceAiAgentVersion.findFirst({
@@ -260,7 +275,7 @@ export class VoiceAiAgentsService {
               content: `Sandbox scenario (not a live call): ${this.cleanText(scenario, 1000)}`,
             },
           ],
-          maxTokens: 320,
+          maxTokens: config.maxTokensPerResponse ?? 320,
           temperature: 0.2,
         },
       );
@@ -387,6 +402,13 @@ export class VoiceAiAgentsService {
         HttpStatus.CONFLICT,
       );
     }
+    if (!version.approvedAt || !version.approvedByUserId) {
+      throw new AppException(
+        VOICE_ERROR_CODES.AI_AGENT_APPROVAL_REQUIRED,
+        'The current tested draft must be explicitly approved before it can be published.',
+        HttpStatus.CONFLICT,
+      );
+    }
 
     await this.tenantPrisma.client.$transaction(async (tx) => {
       await tx.voiceAiAgent.updateMany({
@@ -432,6 +454,59 @@ export class VoiceAiAgentsService {
       status: 'active',
       publishedVersionId: version.id,
       version: version.version,
+    };
+  }
+
+  async approve(
+    businessId: string,
+    actorUserId: string,
+    actorRole: Role,
+    agentId: string,
+  ) {
+    this.assertOwner(actorRole);
+    const agent = await this.getAgent(businessId, agentId);
+    if (!agent.currentDraftVersionId) {
+      throw new AppException(
+        VOICE_ERROR_CODES.AI_AGENT_DRAFT_REQUIRED,
+        'Save a draft before approving this agent.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const version =
+      await this.tenantPrisma.client.voiceAiAgentVersion.findFirst({
+        where: { id: agent.currentDraftVersionId, businessId, agentId },
+        include: {
+          testRuns: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { passed: true },
+          },
+        },
+      });
+    if (!version) throw this.notFound();
+    if (version.testRuns.length === 0 || !version.testRuns[0].passed) {
+      throw new AppException(
+        VOICE_ERROR_CODES.AI_AGENT_TEST_REQUIRED,
+        'The latest sandbox test on the current draft must pass before approval.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const approvedAt = version.approvedAt ?? new Date();
+    await this.tenantPrisma.client.voiceAiAgentVersion.updateMany({
+      where: { id: version.id, businessId, agentId },
+      data: { approvedAt, approvedByUserId: actorUserId },
+    });
+    await this.audit.log({
+      entity: 'VoiceAiAgentVersion',
+      entityId: version.id,
+      action: 'voice.ai_agent_approved',
+      after: { agentId, version: version.version, actorUserId },
+    });
+    return {
+      id: version.id,
+      version: version.version,
+      approvedAt: approvedAt.toISOString(),
+      approvedByUserId: actorUserId,
     };
   }
 
@@ -551,13 +626,30 @@ export class VoiceAiAgentsService {
     if (role !== Role.owner) {
       throw new AppException(
         VOICE_ERROR_CODES.AI_AGENT_OWNER_REQUIRED,
-        'Only the business owner can publish or roll back a live AI agent.',
+        'Only the business owner can approve, publish or roll back a live AI agent.',
         HttpStatus.FORBIDDEN,
       );
     }
   }
 
-  private normalizeConfig(dto: SaveVoiceAiAgentDraftDto): AgentConfig {
+  private async normalizeConfig(
+    businessId: string,
+    dto: SaveVoiceAiAgentDraftDto,
+  ): Promise<AgentConfig> {
+    const knowledgeSourceIds = [...new Set(dto.knowledgeSourceIds ?? [])];
+    if (knowledgeSourceIds.length > 0) {
+      const matchingSources =
+        await this.tenantPrisma.client.voiceKnowledgeEntry.count({
+          where: { businessId, active: true, id: { in: knowledgeSourceIds } },
+        });
+      if (matchingSources !== knowledgeSourceIds.length) {
+        throw new AppException(
+          VOICE_ERROR_CODES.AI_AGENT_KNOWLEDGE_SOURCE_INVALID,
+          'Choose active knowledge sources that belong to this business.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
     return {
       agentName: this.cleanText(dto.name, 120),
       template: dto.template,
@@ -572,6 +664,15 @@ export class VoiceAiAgentsService {
             .filter(Boolean),
         ),
       ],
+      toolPermissions: [
+        ...new Set(
+          (dto.toolPermissions ?? [...VOICE_AI_AGENT_TOOLS]).filter((tool) =>
+            (VOICE_AI_AGENT_TOOLS as readonly string[]).includes(tool),
+          ),
+        ),
+      ],
+      knowledgeSourceIds,
+      maxTokensPerResponse: dto.maxTokensPerResponse ?? 320,
     };
   }
 
@@ -588,6 +689,9 @@ export class VoiceAiAgentsService {
       instructions: config.instructions,
       escalationGuidance: config.escalationGuidance,
       languages: [...config.languages].sort(),
+      toolPermissions: [...(config.toolPermissions ?? [])].sort(),
+      knowledgeSourceIds: [...(config.knowledgeSourceIds ?? [])].sort(),
+      maxTokensPerResponse: config.maxTokensPerResponse ?? 320,
     });
     return createHash('sha256').update(canonical).digest('hex');
   }
@@ -608,6 +712,8 @@ export class VoiceAiAgentsService {
       config.escalationGuidance
         ? `Escalation guidance: ${config.escalationGuidance}`
         : '',
+      `Allowed live actions: ${(config.toolPermissions ?? [...VOICE_AI_AGENT_TOOLS]).join(', ') || 'none'}. Do not claim an action outside this allowlist.`,
+      `Maximum response tokens: ${config.maxTokensPerResponse ?? 320}.`,
       'Sandbox only: do not claim to place a real call, make a booking, send a message, or change business data. Do not invent business facts. Demonstrate a short spoken response to the supplied scenario.',
     ]
       .filter(Boolean)

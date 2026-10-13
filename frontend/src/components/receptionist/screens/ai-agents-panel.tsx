@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import {
+  approveVoiceAiAgent,
   createVoiceAiAgent,
   fetchVoiceAiAgents,
   pauseVoiceAiAgent,
@@ -27,6 +28,9 @@ const blankDraft: VoiceAiAgentDraftInput = {
   escalationGuidance:
     "Offer to transfer or take a message when the request needs a person",
   languages: [],
+  toolPermissions: ["book", "message", "transfer", "end"],
+  knowledgeSourceIds: [],
+  maxTokensPerResponse: 320,
 };
 
 const templateName = (value: VoiceAiTemplate) =>
@@ -84,6 +88,15 @@ export function AiAgentsPanel() {
           instructions: sourceVersion.config.instructions,
           escalationGuidance: sourceVersion.config.escalationGuidance,
           languages: sourceVersion.config.languages,
+          toolPermissions: sourceVersion.config.toolPermissions ?? [
+            "book",
+            "message",
+            "transfer",
+            "end",
+          ],
+          knowledgeSourceIds: sourceVersion.config.knowledgeSourceIds ?? [],
+          maxTokensPerResponse:
+            sourceVersion.config.maxTokensPerResponse ?? 320,
         }
       : blankDraft);
   const unsavedChanges = Boolean(
@@ -96,7 +109,20 @@ export function AiAgentsPanel() {
       draft.instructions !== draftVersion.config.instructions ||
       draft.escalationGuidance !== draftVersion.config.escalationGuidance ||
       JSON.stringify(draft.languages) !==
-        JSON.stringify(draftVersion.config.languages)),
+        JSON.stringify(draftVersion.config.languages) ||
+      JSON.stringify(draft.toolPermissions) !==
+        JSON.stringify(
+          draftVersion.config.toolPermissions ?? [
+            "book",
+            "message",
+            "transfer",
+            "end",
+          ],
+        ) ||
+      JSON.stringify(draft.knowledgeSourceIds) !==
+        JSON.stringify(draftVersion.config.knowledgeSourceIds ?? []) ||
+      draft.maxTokensPerResponse !==
+        (draftVersion.config.maxTokensPerResponse ?? 320)),
   );
 
   const refresh = async () =>
@@ -172,6 +198,22 @@ export function AiAgentsPanel() {
           : "Could not publish this version",
       ),
   });
+  const approve = useMutation({
+    mutationFn: () =>
+      selected
+        ? approveVoiceAiAgent(selected.id)
+        : Promise.reject(new Error("Choose an agent first")),
+    onSuccess: async (result) => {
+      setNotice(`Tested version ${result.version} approved for publishing`);
+      await refresh();
+    },
+    onError: (error) =>
+      setNotice(
+        error instanceof ApiError
+          ? error.message
+          : "Could not approve this version",
+      ),
+  });
   const rollback = useMutation({
     mutationFn: () =>
       selected
@@ -212,6 +254,7 @@ export function AiAgentsPanel() {
     create.isPending ||
     save.isPending ||
     test.isPending ||
+    approve.isPending ||
     publish.isPending ||
     rollback.isPending ||
     pause.isPending;
@@ -382,6 +425,92 @@ export function AiAgentsPanel() {
                 }
               />
             </label>
+            <fieldset className="sm:col-span-2">
+              <legend className="text-[11px] font-bold text-[#5B6675]">
+                Allowed live actions
+              </legend>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {(query.data?.tools ?? []).map((tool) => (
+                  <label
+                    key={tool}
+                    className="flex items-center gap-1.5 text-[11px] text-[#475467]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={draft.toolPermissions.includes(tool)}
+                      onChange={(event) =>
+                        updateDraft(
+                          "toolPermissions",
+                          event.target.checked
+                            ? [...draft.toolPermissions, tool]
+                            : draft.toolPermissions.filter(
+                                (value) => value !== tool,
+                              ),
+                        )
+                      }
+                    />
+                    {tool === "end" ? "End call" : tool}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] text-[#7A8798]">
+                The server blocks disabled actions even if the AI requests them.
+              </p>
+            </fieldset>
+            <fieldset className="sm:col-span-2">
+              <legend className="text-[11px] font-bold text-[#5B6675]">
+                Knowledge sources this agent may use
+              </legend>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {(query.data?.knowledgeSources ?? []).map((source) => (
+                  <label
+                    key={source.id}
+                    className="flex items-start gap-2 text-[11px] text-[#475467]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={draft.knowledgeSourceIds.includes(source.id)}
+                      onChange={(event) =>
+                        updateDraft(
+                          "knowledgeSourceIds",
+                          event.target.checked
+                            ? [...draft.knowledgeSourceIds, source.id]
+                            : draft.knowledgeSourceIds.filter(
+                                (id) => id !== source.id,
+                              ),
+                        )
+                      }
+                    />
+                    <span>
+                      {source.title}{" "}
+                      <span className="text-[#7A8798]">· {source.kind}</span>
+                    </span>
+                  </label>
+                ))}
+                {!query.data?.knowledgeSources?.length ? (
+                  <p className="text-[10px] text-[#7A8798]">
+                    No active business knowledge sources are available.
+                  </p>
+                ) : null}
+              </div>
+            </fieldset>
+            <label className="text-[11px] font-bold text-[#5B6675] sm:col-span-2">
+              Maximum output tokens per AI response
+              <input
+                className={inputClass}
+                type="number"
+                min={32}
+                max={1000}
+                step={1}
+                value={draft.maxTokensPerResponse}
+                onChange={(event) =>
+                  updateDraft(
+                    "maxTokensPerResponse",
+                    Number(event.target.value),
+                  )
+                }
+              />
+            </label>
             <div className="flex flex-wrap gap-2 sm:col-span-2">
               <PrimaryBtn
                 disabled={
@@ -489,6 +618,12 @@ export function AiAgentsPanel() {
                   Current live version:{" "}
                   {publishedVersion ? `v${publishedVersion.version}` : "None"}
                 </div>
+                <div className="mt-1 text-[10px] text-[#475467]">
+                  Draft approval:{" "}
+                  {draftVersion?.approvedAt
+                    ? `approved ${new Date(draftVersion.approvedAt).toLocaleString()}`
+                    : "not approved"}
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -496,12 +631,29 @@ export function AiAgentsPanel() {
                       pending ||
                       !draftVersion ||
                       !latestTestPassed ||
+                      Boolean(draftVersion.approvedAt) ||
+                      unsavedChanges ||
+                      qualityAnalyst
+                    }
+                    onClick={() => approve.mutate()}
+                    className="rounded-[8px] border border-[#D5DAE2] px-3 py-2 text-[11px] font-bold text-[#334155] disabled:opacity-50"
+                  >
+                    Approve tested draft
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      pending ||
+                      !draftVersion ||
+                      !latestTestPassed ||
+                      !draftVersion.approvedAt ||
+                      unsavedChanges ||
                       qualityAnalyst
                     }
                     onClick={() => publish.mutate()}
                     className="rounded-[8px] bg-[#15803D] px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50"
                   >
-                    Publish tested draft
+                    Publish approved draft
                   </button>
                   {selected?.status === "active" ? (
                     <button
@@ -559,11 +711,12 @@ export function AiAgentsPanel() {
               </Card>
             ) : null}
             <div className="rounded-[9px] border border-[#FDE49B] bg-[#FFFBEB] p-3 text-[10px] leading-4 text-[#7A5B2C]">
-              This builder changes the receptionist&apos;s instructions and
-              response style only. It cannot add tools or bypass existing
-              booking, transfer, consent or business-data rules. Quality Analyst
-              is a template only; offline quality analysis is not implemented in
-              this slice.
+              Live actions are restricted by the allowlist above, and knowledge
+              retrieval uses only selected sources. Each response has the
+              configured output-token ceiling. A passing sandbox test and
+              explicit owner approval are required before publishing. Quality
+              Analyst is a template only; offline quality analysis is not
+              implemented in this slice.
               {qualityAnalyst
                 ? " This template cannot be AI-tested or published as a live receptionist."
                 : ""}
@@ -584,7 +737,7 @@ export function AiAgentsPanel() {
       ) : null}
       <div className="border-t border-[#EEF0F3] px-4 py-2 text-[10px] text-[#7A8798]">
         {query.data?.limitations.tools ??
-          "Agent actions are limited to existing receptionist workflows."}{" "}
+          "Published agent versions enforce their saved action allowlist, selected knowledge sources and response-token ceiling."}{" "}
         {query.data?.limitations.liveRouting ??
           "Fresh available human profiles with capacity can receive AI-to-human handoffs; a classified caller topic now prefers an exact matching skill tag. Browser softphone is not configured."}
       </div>

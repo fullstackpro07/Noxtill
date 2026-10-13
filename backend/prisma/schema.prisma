@@ -2887,6 +2887,8 @@ model VoiceAiAgentVersion {
   checksum        String                @db.VarChar(64)
   createdByUserId String?               @map("created_by_user_id")
   publishedAt     DateTime?             @map("published_at")
+  approvedAt      DateTime?             @map("approved_at")
+  approvedByUserId String?              @map("approved_by_user_id")
   phoneCalls      PhoneCall[]
   testRuns        VoiceAiAgentTestRun[]
 

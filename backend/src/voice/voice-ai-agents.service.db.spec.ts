@@ -10,6 +10,7 @@ import {
 } from '../common/tenancy/tenant.constants';
 import { AppException } from '../common/filters/app.exception';
 import { VoiceAiAgentsService } from './voice-ai-agents.service';
+import { SaveVoiceAiAgentDraftDto } from './dto/voice-ai-agent.dto';
 
 class FakeClsService {
   private readonly values: Record<string, unknown> = {};
@@ -97,6 +98,7 @@ describe('VoiceAiAgentsService (MySQL)', () => {
 
   afterAll(async () => {
     if (businessId) {
+      await prisma.voiceKnowledgeEntry.deleteMany({ where: { businessId } });
       await prisma.phoneCall.deleteMany({ where: { businessId } });
       await prisma.voiceAiAgentTestRun.deleteMany({ where: { businessId } });
       await prisma.voiceAiAgentVersion.deleteMany({ where: { businessId } });
@@ -104,8 +106,12 @@ describe('VoiceAiAgentsService (MySQL)', () => {
       await prisma.auditLog.deleteMany({ where: { businessId } });
       await prisma.business.delete({ where: { id: businessId } });
     }
-    if (otherBusinessId)
+    if (otherBusinessId) {
+      await prisma.voiceKnowledgeEntry.deleteMany({
+        where: { businessId: otherBusinessId },
+      });
       await prisma.business.delete({ where: { id: otherBusinessId } });
+    }
     if (ownerUserId) await prisma.user.delete({ where: { id: ownerUserId } });
     if (managerUserId)
       await prisma.user.delete({ where: { id: managerUserId } });
@@ -120,7 +126,20 @@ describe('VoiceAiAgentsService (MySQL)', () => {
   afterEach(() => jest.clearAllMocks());
 
   it('stores immutable draft versions, requires a successful test and owner publish, and rolls back with an audit reason', async () => {
-    const created = await service.create(businessId, ownerUserId, draft);
+    const knowledge = await prisma.voiceKnowledgeEntry.create({
+      data: {
+        businessId,
+        kind: 'faq',
+        title: 'QA booking knowledge',
+        content: 'Use the verified booking calendar for availability.',
+      },
+    });
+    const created = await service.create(businessId, ownerUserId, {
+      ...draft,
+      knowledgeSourceIds: [knowledge.id],
+      toolPermissions: ['book', 'transfer'],
+      maxTokensPerResponse: 180,
+    });
     const first = await prisma.voiceAiAgentVersion.findFirstOrThrow({
       where: { businessId, agentId: created.id, version: 1 },
     });
@@ -128,9 +147,18 @@ describe('VoiceAiAgentsService (MySQL)', () => {
     expect(first.config).toMatchObject({
       agentName: draft.name,
       template: draft.template,
+      toolPermissions: ['book', 'transfer'],
+      knowledgeSourceIds: [knowledge.id],
+      maxTokensPerResponse: 180,
     });
 
-    const changed = { ...draft, voiceStyle: 'Calm, warm and concise' };
+    const changed: SaveVoiceAiAgentDraftDto = {
+      ...draft,
+      voiceStyle: 'Calm, warm and concise',
+      toolPermissions: ['book', 'transfer'],
+      knowledgeSourceIds: [knowledge.id],
+      maxTokensPerResponse: 180,
+    };
     const second = await service.saveDraft(
       businessId,
       ownerUserId,
@@ -184,7 +212,7 @@ describe('VoiceAiAgentsService (MySQL)', () => {
     expect(aiInfra.createMessage).toHaveBeenCalledWith(
       businessId,
       'voice_entry',
-      expect.objectContaining({ maxTokens: 320 }),
+      expect.objectContaining({ maxTokens: 180 }),
     );
     aiInfra.createMessage.mockRejectedValueOnce(
       new Error('provider account unavailable'),
@@ -208,6 +236,16 @@ describe('VoiceAiAgentsService (MySQL)', () => {
       created.id,
       'A caller asks about a booking',
     );
+    await expect(
+      service.publish(businessId, ownerUserId, Role.owner, created.id),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'VOICE_AI_AGENT_APPROVAL_REQUIRED',
+      },
+    });
+    await expect(
+      service.approve(businessId, ownerUserId, Role.owner, created.id),
+    ).resolves.toMatchObject({ version: 2, approvedByUserId: ownerUserId });
     await service.publish(businessId, ownerUserId, Role.owner, created.id);
     const publishedV2 = await prisma.voiceAiAgentVersion.findUniqueOrThrow({
       where: { id: second.id },
@@ -225,6 +263,7 @@ describe('VoiceAiAgentsService (MySQL)', () => {
       created.id,
       'Caller asks for a staff member',
     );
+    await service.approve(businessId, ownerUserId, Role.owner, created.id);
     await service.publish(businessId, ownerUserId, Role.owner, created.id);
     const rolledBack = await service.rollback(
       businessId,
@@ -258,6 +297,21 @@ describe('VoiceAiAgentsService (MySQL)', () => {
   });
 
   it('does not expose another business agent and records provider failures without claiming a pass', async () => {
+    const foreignKnowledge = await prisma.voiceKnowledgeEntry.create({
+      data: {
+        businessId: otherBusinessId,
+        kind: 'faq',
+        title: 'Foreign QA source',
+        content: 'This source belongs to another business.',
+      },
+    });
+    await expect(
+      service.create(businessId, ownerUserId, {
+        ...draft,
+        name: 'QA Foreign Knowledge Agent',
+        knowledgeSourceIds: [foreignKnowledge.id],
+      }),
+    ).rejects.toBeInstanceOf(AppException);
     const created = await service.create(businessId, ownerUserId, {
       ...draft,
       name: 'QA Provider Failure Agent',

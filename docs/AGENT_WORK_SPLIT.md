@@ -645,3 +645,41 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   empty states where applicable, and had no console, page or API errors. Sourcing and Website
   Overview were visually inspected. No procurement or website business records were created during
   route-load QA.
+
+## Module 21 progress — call routing (Codex, 2026-10-13)
+
+- Human-agent retry: the call assignment now stores a per-call attempt number, and up to three
+  distinct eligible agents are offered before the existing fallback. Stale/duplicate status
+  callbacks are scoped to their attempt. Migration `20261013224000_voice_human_agent_retry` is
+  applied locally; information-schema indexes/FKs were checked. Real-MySQL retry tests pass.
+- Published IVR runtime: new inbound calls pin the currently published immutable IVR version and
+  execute its supported nodes; input callbacks are bound to the current node. The studio only says
+  the runtime is connected when a published flow exists. Migration
+  `20261013224944_voice_ivr_runtime` is applied locally; focused runtime tests pass.
+- AI agent controls: immutable versions now store the live-action allowlist, selected active
+  business knowledge-source IDs and a per-response output-token cap. Call execution enforces the
+  pinned version's action allowlist, scopes knowledge retrieval to that version, and passes its
+  token ceiling to AI infra. Publishing now requires a successful latest sandbox test followed by
+  explicit owner approval. Migration `20261013231000_voice_ai_agent_guardrails` is applied locally;
+  real-MySQL config/approval/runtime tests pass.
+- Supervisor whisper/barge remains honestly unavailable. Existing human transfers are direct
+  Twilio `<Dial><Number>` legs, not agent participants in a shared conference; there is no agent
+  `CallSid` in a conference to target via `callSidToCoach`. The supervisor API continues to return
+  the limitation and the UI displays it. Existing listen-in is a separate bridged join, not a silent
+  tap.
+- Verification: backend and frontend `tsc --noEmit` pass. Focused MySQL checks pass (5 suites / 51
+  tests). Full backend Jest is 358 suites passed and 1 failed (2,219 passed / 1 failed / 2,220
+  total); the sole failure reproduces in Claude's untracked
+  `voice-outbound-dialer.service.db.spec.ts` because its test Twilio provider rejects the call.
+  That file and implementation remain untouched. Frontend ESLint passes; backend ESLint has one
+  formatting-only error in Claude's shared outbound-dialer hunk at `voice.controller.ts:459`, also
+  left untouched. Fake-data grep found no invented metrics or sample values in these screens.
+- Browser QA in the logged-in Contact Center QA business: `/phone/agents`, `/phone/routing`, and
+  `/phone/supervisor` load with their saved business data and no visible page errors. The published
+  IVR flow appears in Routing Studio and the AI guardrail controls appear in Agents. No live
+  Twilio call was placed: the business shows no configured number and no calls in progress. Thus
+  provider callbacks and live call audio are not end-to-end verified.
+- Local commits: `b180a37` contains human-agent retry and published IVR routing with their two
+  migrations. The AI agent guardrail screen and its migration are being committed separately.
+  Claude's uncommitted outbound-campaign files and their schema/module/constants/controller hunks
+  must not be committed with Codex's changes.

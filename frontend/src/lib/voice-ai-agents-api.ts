@@ -12,6 +12,8 @@ export const VOICE_AI_TEMPLATES = [
 ] as const;
 
 export type VoiceAiTemplate = (typeof VOICE_AI_TEMPLATES)[number];
+export const VOICE_AI_TOOLS = ["book", "message", "transfer", "end"] as const;
+export type VoiceAiTool = (typeof VOICE_AI_TOOLS)[number];
 export interface VoiceAiAgentDraftInput {
   name: string;
   template: VoiceAiTemplate;
@@ -20,17 +22,32 @@ export interface VoiceAiAgentDraftInput {
   instructions: string;
   escalationGuidance: string;
   languages: string[];
+  toolPermissions: VoiceAiTool[];
+  knowledgeSourceIds: string[];
+  maxTokensPerResponse: number;
 }
 
 export interface VoiceAiAgentVersion {
   id: string;
   version: number;
-  config: Omit<VoiceAiAgentDraftInput, "name" | "template"> & {
+  config: Omit<
+    VoiceAiAgentDraftInput,
+    | "name"
+    | "template"
+    | "toolPermissions"
+    | "knowledgeSourceIds"
+    | "maxTokensPerResponse"
+  > & {
     agentName?: string;
     template?: VoiceAiTemplate;
+    toolPermissions?: VoiceAiTool[];
+    knowledgeSourceIds?: string[];
+    maxTokensPerResponse?: number;
   };
   checksum: string;
   publishedAt: string | null;
+  approvedAt: string | null;
+  approvedByUserId: string | null;
   createdAt: string;
   latestTest: {
     id: string;
@@ -56,6 +73,8 @@ export interface VoiceAiAgent {
 
 export interface VoiceAiAgentList {
   templates: VoiceAiTemplate[];
+  tools: VoiceAiTool[];
+  knowledgeSources: { id: string; title: string; kind: "faq" | "document" }[];
   agents: VoiceAiAgent[];
   limitations: { tools: string; liveRouting: string };
 }
@@ -115,6 +134,15 @@ export function publishVoiceAiAgent(agentId: string) {
   }>(`/voice/agents/ai/${agentId}/publish`, {
     method: "POST",
   });
+}
+
+export function approveVoiceAiAgent(agentId: string) {
+  return apiFetch<{
+    id: string;
+    version: number;
+    approvedAt: string;
+    approvedByUserId: string;
+  }>(`/voice/agents/ai/${agentId}/approve`, { method: "POST" });
 }
 
 export function rollbackVoiceAiAgent(

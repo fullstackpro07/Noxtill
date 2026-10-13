@@ -665,6 +665,15 @@ export class VoiceController {
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/approve')
+  approveVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceAiAgents.approve(user.businessId, user.sub, user.role, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Post('voice/agents/ai/:id/publish')
   publishVoiceAiAgent(
     @CurrentUser() user: AuthenticatedUser,
