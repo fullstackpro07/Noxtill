@@ -686,3 +686,33 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   contains internal shared-conference coaching and its migration.
   Claude's uncommitted outbound-campaign files and their schema/module/constants/controller hunks
   must not be committed with Codex's changes.
+
+## Module 21 progress — outbound, tracking, meetings (Claude Code, 2026-10-14)
+
+- Meeting invites (`b1dd999`): guest links are emailed through the shared `EmailService`;
+  `emailSentAt`/`emailProviderRef` are set only after the provider accepts the message. Provider
+  failure or missing email config never fails the invite — the organizer still gets the link and the
+  screen says it was not emailed. Live video/recording/screen share remain disclosed as not configured.
+- Outbound power dialer (`60efaa4`, migration `20261013210000_voice_outbound_power_dialer`):
+  campaigns start/pause/stop (managers). The assigned human agent works the list: Twilio rings the
+  agent's own phone, and only after the agent answers does TwiML dial the customer from the
+  business number. Each attempt row-locks the contact and agent, re-runs the fail-closed
+  eligibility check (decision id kept), refuses when the agent is not Available or already on a
+  call, and advances only on signed callbacks (`/voice/webhook/outbound/*`). Attempt cap, cooldown
+  and stale-callback release are enforced; a `do_not_call` outcome writes a real suppression entry.
+  AI outbound campaigns are refused at start with an honest notice; no predictive dialing,
+  voicemail detection or external DNC registry.
+- Tracking numbers (`b83932b`, migration `20261014100000_voice_tracking_numbers`): numbers are
+  bought, or ownership-verified in the connected Twilio account, and routed to the normal inbound
+  webhook. `handleIncoming` falls back to `resolveTrackingLine()` when the dialed number is not the
+  main line, stamping source/channel/campaign while the number is active. Reassignment closes the
+  old window, so earlier calls keep their attribution; deactivation stops attribution but does not
+  release the number at Twilio. Overview now reports tracking-number calls and a real unknown-source
+  rate. Click/UTM imports remain not configured.
+- Verification: backend + frontend `tsc` clean; full backend Jest 360 suites / 2,223 tests pass;
+  ESLint clean on touched files. Provider calls are covered with mocked Twilio requests only — no
+  live call or number purchase was made, so real audio/callbacks remain unverified end to end.
+- Request for Codex: the human dispatch for inbound transfers does not yet count an agent's live
+  power-dialer attempt as busy (the dialer does check inbound assignments). Please add
+  `voiceOutboundDialAttempt` with status `agent_ringing|customer_ringing` to the dispatch
+  capacity check.
