@@ -42,10 +42,12 @@ export class AiInfraService {
     prompt: string,
     temperature = 0,
     kind = 'complete',
+    maxTokens?: number,
   ): Promise<string> {
     const result = await this.createMessage(businessId, kind, {
       messages: [{ role: 'user', content: prompt }],
       temperature,
+      ...(maxTokens ? { maxTokens } : {}),
     });
     const text = result.content.find((block) => block.type === 'text')?.text;
     return text ?? '';

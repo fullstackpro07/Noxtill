@@ -388,7 +388,8 @@ export class VoiceIvrService {
         version: input.version,
         rollbackSourceVersion: input.rollbackSourceVersion ?? null,
         changeSummary: input.changeSummary,
-        runtimeActivated: false,
+        runtimeActivated: true,
+        appliesTo: 'new_inbound_calls_only',
         actorUserId: input.actorUserId,
       },
     });

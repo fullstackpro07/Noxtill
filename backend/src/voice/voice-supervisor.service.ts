@@ -110,7 +110,7 @@ export class VoiceSupervisorService {
         language:
           'Not tracked: call language is not persisted on the call record.',
         whisperAndBarge:
-          'Not available: the current Twilio conference adapter cannot isolate a supervisor whisper channel.',
+          'Not available: internal human-agent transfers still use a direct Twilio Dial leg, not a conference participant. There is no agent Call SID in a shared conference to target with Twilio callSidToCoach, so whisper/barge controls are intentionally disabled. The existing listen-in join rings the supervisor and moves the caller to a conference; it is not a silent tap and can interrupt the current AI turn.',
         monitoring:
           'Join muted rings the supervisor phone and moves the caller into a conference; it is not a silent tap and the AI turn-based loop stops. Take over joins unmuted.',
         identity:

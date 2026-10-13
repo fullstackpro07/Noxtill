@@ -2833,8 +2833,9 @@ model VoiceHumanAgentAssignment {
   id             String                 @id @default(uuid())
   businessId     String                 @map("business_id")
   business       Business               @relation(fields: [businessId], references: [id])
-  callId         String                 @unique @map("call_id")
+  callId         String                 @map("call_id")
   call           PhoneCall              @relation(fields: [callId], references: [id], onDelete: Cascade)
+  attemptNumber  Int                    @default(1) @map("attempt_number")
   staffUserId    String                 @map("staff_user_id")
   profileId      String                 @map("profile_id")
   profile        VoiceHumanAgentProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
@@ -2845,6 +2846,8 @@ model VoiceHumanAgentAssignment {
   releasedAt     DateTime?              @map("released_at")
   createdAt      DateTime               @default(now()) @map("created_at")
 
+  @@unique([businessId, callId, attemptNumber], map: "voice_agent_assignments_business_call_attempt_key")
+  @@index([callId], map: "voice_agent_assignments_call_id_idx")
   @@index([businessId, staffUserId, status], map: "voice_agent_assignments_business_staff_status_idx")
   @@map("voice_human_agent_assignments")
 }
@@ -2928,6 +2931,10 @@ model PhoneCall {
   /// Immutable agent config selected when this call began; null means legacy receptionist fallback.
   voiceAgentVersionId      String?                       @map("voice_agent_version_id")
   voiceAgentVersion        VoiceAiAgentVersion?          @relation(fields: [voiceAgentVersionId], references: [id], onDelete: Restrict)
+  /// Immutable published IVR graph selected at call arrival; edits affect only later calls.
+  ivrFlowVersionId         String?                       @map("ivr_flow_version_id")
+  ivrFlowVersion           VoiceIvrFlowVersion?          @relation(fields: [ivrFlowVersionId], references: [id], onDelete: Restrict)
+  ivrCurrentNodeId          String?                       @map("ivr_current_node_id") @db.VarChar(80)
   callSid                  String                        @unique @map("call_sid")
   fromNumber               String                        @map("from_number")
   status                   PhoneCallStatus               @default(in_progress)
@@ -2996,13 +3003,14 @@ model PhoneCall {
 
   notes                PhoneCallNote[]
   wrapUp               VoiceCallWrapUp?
-  humanAgentAssignment VoiceHumanAgentAssignment?
+  humanAgentAssignments VoiceHumanAgentAssignment[]
   qualityReviews       VoiceQualityReview[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, status, startedAt])
   @@index([businessId, voiceAgentVersionId], map: "phone_calls_business_agent_version_idx")
+  @@index([businessId, ivrFlowVersionId], map: "phone_calls_business_ivr_version_idx")
   @@index([businessId, resolvedAt])
   @@index([businessId, attributionSource, startedAt], map: "phone_calls_business_attribution_idx")
   @@index([recordingExpiresAt], map: "phone_calls_recording_expires_idx")
@@ -3391,6 +3399,7 @@ model VoiceIvrFlowVersion {
   changeSummary         String                    @map("change_summary") @db.VarChar(500)
   rollbackSourceVersion Int?                      @map("rollback_source_version")
   createdByUserId       String                    @map("created_by_user_id")
+  phoneCalls            PhoneCall[]
   publishedAt           DateTime                  @default(now()) @map("published_at")
   createdAt             DateTime                  @default(now()) @map("created_at")
 

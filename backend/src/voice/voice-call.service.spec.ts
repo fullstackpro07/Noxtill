@@ -150,6 +150,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
     await prisma.voiceAiAgentTestRun.deleteMany({ where: { businessId } });
     await prisma.voiceAiAgentVersion.deleteMany({ where: { businessId } });
     await prisma.voiceAiAgent.deleteMany({ where: { businessId } });
+    await prisma.voiceKnowledgeEntry.deleteMany({ where: { businessId } });
     await prisma.appointment.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.product.deleteMany({ where: { businessId } });
@@ -232,6 +233,124 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(xml).toContain('<Record');
       expect(after.recordingConsentStatus).toBe('granted');
       expect(after.recordingConsentAt).toBeInstanceOf(Date);
+    });
+
+    it('pins the live IVR version on call arrival and keeps that snapshot after a later publish', async () => {
+      const graphV1 = {
+        nodes: [
+          { id: 'start', type: 'start', label: 'Start', config: {} },
+          {
+            id: 'welcome',
+            type: 'greeting',
+            label: 'Welcome version one',
+            config: {},
+          },
+          {
+            id: 'menu',
+            type: 'get_dtmf',
+            label: 'Press 1 for the AI agent',
+            config: {},
+          },
+          {
+            id: 'ai',
+            type: 'ai_agent',
+            label: 'Starting the AI agent',
+            config: {},
+          },
+          { id: 'end', type: 'end', label: 'End', config: {} },
+        ],
+        edges: [
+          { id: 's-w', from: 'start', to: 'welcome', condition: 'default' },
+          { id: 'w-m', from: 'welcome', to: 'menu', condition: 'default' },
+          { id: 'm-ai', from: 'menu', to: 'ai', condition: 'dtmf:1' },
+          { id: 'm-end', from: 'menu', to: 'end', condition: 'default' },
+        ],
+      };
+      const graphV2 = {
+        nodes: [
+          { id: 'start', type: 'start', label: 'Start', config: {} },
+          {
+            id: 'welcome',
+            type: 'greeting',
+            label: 'Welcome version two',
+            config: {},
+          },
+          { id: 'end', type: 'end', label: 'End', config: {} },
+        ],
+        edges: [
+          { id: 's-e', from: 'start', to: 'welcome', condition: 'default' },
+          { id: 'w-e', from: 'welcome', to: 'end', condition: 'default' },
+        ],
+      };
+      const flow = await prisma.voiceIvrFlow.create({
+        data: {
+          businessId,
+          name: `QA IVR live ${randomUUID()}`,
+          status: 'published',
+          publishedVersion: 1,
+          draftGraph: graphV1,
+          createdByUserId: 'test-owner',
+        },
+      });
+      const versionOne = await prisma.voiceIvrFlowVersion.create({
+        data: {
+          businessId,
+          flowId: flow.id,
+          version: 1,
+          graph: graphV1,
+          changeSummary: 'Initial live route for runtime test',
+          createdByUserId: 'test-owner',
+        },
+      });
+
+      try {
+        await baseHandleIncoming('CA-ivr-live', '+14155550137', '+15559990000');
+        const arrivingCall = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: 'CA-ivr-live' },
+        });
+        expect(arrivingCall.ivrFlowVersionId).toBe(versionOne.id);
+
+        await prisma.voiceIvrFlowVersion.create({
+          data: {
+            businessId,
+            flowId: flow.id,
+            version: 2,
+            graph: graphV2,
+            changeSummary: 'New greeting for future calls',
+            createdByUserId: 'test-owner',
+          },
+        });
+        await prisma.voiceIvrFlow.update({
+          where: { id: flow.id },
+          data: { publishedVersion: 2 },
+        });
+
+        const consentResult = await service.handleRecordingConsent(
+          'CA-ivr-live',
+          '1',
+        );
+        expect(consentResult).toContain('Welcome version one');
+        expect(consentResult).not.toContain('Welcome version two');
+        expect(consentResult).toContain('/voice/webhook/ivr-input?nodeId=menu');
+
+        const selectedRoute = await service.handleIvrInput(
+          'CA-ivr-live',
+          '1',
+          'menu',
+        );
+        expect(selectedRoute).toContain('<Record');
+        expect(selectedRoute).not.toContain('Welcome version two');
+        const pinnedCall = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: 'CA-ivr-live' },
+        });
+        expect(pinnedCall.ivrFlowVersionId).toBe(versionOne.id);
+        expect(pinnedCall.ivrCurrentNodeId).toBeNull();
+      } finally {
+        await prisma.phoneCall.deleteMany({
+          where: { callSid: 'CA-ivr-live' },
+        });
+        await prisma.voiceIvrFlow.delete({ where: { id: flow.id } });
+      }
     });
 
     it('rechecks the published policy before honoring a consent response', async () => {
@@ -373,6 +492,98 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(prompt).not.toContain('template sales');
       expect(prompt).not.toContain('Renamed after call began');
       expect(prompt).toContain('Use the pinned production configuration');
+    });
+
+    it('enforces the pinned agent tool allowlist, knowledge sources and output-token limit at runtime', async () => {
+      await prisma.voiceAiAgent.updateMany({
+        where: { businessId, status: 'active' },
+        data: { status: 'paused' },
+      });
+      const knowledge = await prisma.voiceKnowledgeEntry.create({
+        data: {
+          businessId,
+          kind: 'faq',
+          title: 'Secret orchid delivery',
+          content: 'The secret orchid delivery code is Orchid-413.',
+        },
+      });
+      const agentId = randomUUID();
+      const versionId = randomUUID();
+      await prisma.voiceAiAgent.create({
+        data: {
+          id: agentId,
+          businessId,
+          name: 'Restricted QA Agent',
+          template: 'receptionist',
+          status: 'active',
+          publishedVersionId: versionId,
+          versions: {
+            create: {
+              id: versionId,
+              businessId,
+              version: 1,
+              config: {
+                agentName: 'Restricted QA Agent',
+                template: 'receptionist',
+                purpose: 'Answer questions safely',
+                voiceStyle: 'Calm and brief',
+                instructions: '',
+                escalationGuidance: '',
+                languages: ['English'],
+                toolPermissions: [],
+                knowledgeSourceIds: [],
+                maxTokensPerResponse: 64,
+              },
+              checksum: 'b'.repeat(64),
+              publishedAt: new Date(),
+            },
+          },
+        },
+      });
+      await service.handleIncoming(
+        'CA-agent-tools-blocked',
+        '+14155550131',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({ reply: 'Transferring you now.', intent: 'transfer' }),
+      );
+      const xml = await service.handleRecording(
+        'CA-agent-tools-blocked',
+        'https://api.twilio.com/recordings/RE-agent-tools-blocked',
+      );
+      expect(xml).toContain('I can&apos;t complete that action from this call');
+      expect(xml).toContain('<Record');
+      expect(xml).not.toContain('<Dial');
+      expect(aiInfra.complete).toHaveBeenCalledWith(
+        businessId,
+        expect.stringContaining('Allowed live actions: none'),
+        0,
+        'voice_entry',
+        64,
+      );
+      const [, generatedPrompt] = aiInfra.complete.mock.calls[0] as [
+        string,
+        string,
+        number,
+        string,
+        number,
+      ];
+      expect(generatedPrompt).not.toContain('Orchid-413');
+      const call = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-agent-tools-blocked' },
+      });
+      await prisma.voiceAiAgent.update({
+        where: { id: agentId },
+        data: { status: 'paused' },
+      });
+      expect(call.voiceAgentVersionId).toBe(versionId);
+      expect(call.outcome).toBe(PhoneCallOutcome.none);
+      const transcript = call.transcript as unknown as { text: string }[];
+      expect(transcript.at(-1)?.text).toContain(
+        "I can't complete that action from this call",
+      );
+      await prisma.voiceKnowledgeEntry.delete({ where: { id: knowledge.id } });
     });
   });
 
@@ -1344,24 +1555,24 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
           where: { callSid: 'CA-human-transfer' },
         });
         const assignment =
-          await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
-            where: { callId: call.id },
+          await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
+            where: { callId: call.id, attemptNumber: 1 },
           });
         expect(assignment.staffUserId).toBe(member.id);
         expect(assignment.status).toBe('offered');
 
         await service.handleDialStatus('CA-human-transfer', 'in-progress');
         const connected =
-          await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
-            where: { callId: call.id },
+          await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
+            where: { callId: call.id, attemptNumber: 1 },
           });
         expect(connected.status).toBe('connected');
         expect(connected.connected).toBe(true);
 
         await service.handleTransferResult('CA-human-transfer', 'completed');
         const released =
-          await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
-            where: { callId: call.id },
+          await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
+            where: { callId: call.id, attemptNumber: 1 },
           });
         expect(released.status).toBe('released');
         expect(released.providerStatus).toBe('completed');
@@ -1374,6 +1585,110 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         });
         await prisma.businessUser.delete({ where: { id: member.id } });
         await prisma.user.delete({ where: { id: staff.id } });
+      }
+    });
+
+    it('tries the next eligible human after a failed dial, then uses the fallback when exhausted', async () => {
+      await prisma.voiceRoutingRule.deleteMany({ where: { businessId } });
+      const staffUsers: string[] = [];
+      const profileIds: string[] = [];
+      for (const [index, phone] of ['+15550004445', '+15550004446'].entries()) {
+        const staff = await prisma.user.create({
+          data: {
+            email: `voice-human-retry-${index}-${randomUUID()}@example.com`,
+            passwordHash: 'test-only',
+            name: `Retry Agent ${index + 1}`,
+            phone,
+          },
+        });
+        const member = await prisma.businessUser.create({
+          data: { businessId, userId: staff.id, role: Role.staff },
+        });
+        staffUsers.push(staff.id);
+        const profile = await prisma.voiceHumanAgentProfile.create({
+          data: {
+            businessId,
+            staffUserId: member.id,
+            active: true,
+            presenceStatus: VoiceAgentPresenceStatus.available,
+            lastHeartbeatAt: new Date(),
+          },
+        });
+        profileIds.push(profile.id);
+      }
+
+      try {
+        await service.handleIncoming(
+          'CA-human-retry',
+          '+14155550131',
+          '+15559990000',
+        );
+        aiInfra.complete.mockResolvedValue(
+          JSON.stringify({ reply: 'Connecting you now.', intent: 'transfer' }),
+        );
+        const firstDial = await service.handleRecording(
+          'CA-human-retry',
+          'https://api.twilio.com/recordings/RE-human-retry',
+        );
+        expect(firstDial).toContain('attemptNumber=1');
+
+        const firstAssignment =
+          await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
+            where: { call: { callSid: 'CA-human-retry' }, attemptNumber: 1 },
+          });
+        const retryDial = await service.handleTransferResult(
+          'CA-human-retry',
+          'no-answer',
+          1,
+        );
+        expect(retryDial).toContain('attemptNumber=2');
+        expect(retryDial).toContain('<Dial');
+        const secondAssignment =
+          await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
+            where: { call: { callSid: 'CA-human-retry' }, attemptNumber: 2 },
+          });
+        expect(secondAssignment.profileId).not.toBe(firstAssignment.profileId);
+
+        const duplicateResult = await service.handleTransferResult(
+          'CA-human-retry',
+          'no-answer',
+          1,
+        );
+        expect(duplicateResult).toContain('attemptNumber=2');
+        const rows = await prisma.voiceHumanAgentAssignment.findMany({
+          where: { call: { callSid: 'CA-human-retry' } },
+          orderBy: { attemptNumber: 'asc' },
+        });
+        expect(rows.map((row) => row.attemptNumber)).toEqual([1, 2]);
+        expect(new Set(rows.map((row) => row.profileId)).size).toBe(2);
+
+        const fallback = await service.handleTransferResult(
+          'CA-human-retry',
+          'busy',
+          2,
+        );
+        expect(fallback).toContain('Please leave a message');
+        const call = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: 'CA-human-retry' },
+        });
+        expect(call.outcome).toBe(PhoneCallOutcome.message);
+        expect(profileIds).toContain(rows[0].profileId);
+        expect(profileIds).toContain(rows[1].profileId);
+      } finally {
+        await prisma.phoneCall.deleteMany({
+          where: { callSid: 'CA-human-retry' },
+        });
+        await prisma.voiceHumanAgentProfile.deleteMany({
+          where: { id: { in: profileIds } },
+        });
+        const members = await prisma.businessUser.findMany({
+          where: { businessId, userId: { in: staffUsers } },
+          select: { id: true },
+        });
+        await prisma.businessUser.deleteMany({
+          where: { id: { in: members.map((member) => member.id) } },
+        });
+        await prisma.user.deleteMany({ where: { id: { in: staffUsers } } });
       }
     });
   });

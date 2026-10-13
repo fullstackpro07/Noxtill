@@ -1040,9 +1040,12 @@ export class VoiceController {
   ) {
     this.verifySignature(req, signature);
     const body = req.body as { CallSid: string; RecordingUrl: string };
+    const ivrNodeId =
+      typeof req.query.ivrNodeId === 'string' ? req.query.ivrNodeId : undefined;
     const xml = await this.voiceCall.handleRecording(
       body.CallSid,
       body.RecordingUrl,
+      ivrNodeId,
     );
     res.type('text/xml').send(xml);
   }
@@ -1065,6 +1068,27 @@ export class VoiceController {
     res.type('text/xml').send(xml);
   }
 
+  /** Caller keypad input resumes the exact published IVR snapshot pinned to this call. */
+  @Public()
+  @Post('voice/webhook/ivr-input')
+  @HttpCode(200)
+  async ivrInput(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid: string; Digits?: string };
+    const nodeId =
+      typeof req.query.nodeId === 'string' ? req.query.nodeId : undefined;
+    const xml = await this.voiceCall.handleIvrInput(
+      body.CallSid,
+      body.Digits ?? '',
+      nodeId,
+    );
+    res.type('text/xml').send(xml);
+  }
+
   /** Twilio's <Dial action> callback reports whether a human actually answered. */
   @Public()
   @Post('voice/webhook/transfer-result')
@@ -1076,9 +1100,15 @@ export class VoiceController {
   ) {
     this.verifySignature(req, signature);
     const body = req.body as { CallSid: string; DialCallStatus: string };
+    const rawAttemptNumber = req.query.attemptNumber;
+    const attemptNumber =
+      typeof rawAttemptNumber === 'string' && /^\d+$/.test(rawAttemptNumber)
+        ? Number(rawAttemptNumber)
+        : undefined;
     const xml = await this.voiceCall.handleTransferResult(
       body.CallSid,
       body.DialCallStatus,
+      attemptNumber,
     );
     res.type('text/xml').send(xml);
   }
@@ -1090,12 +1120,17 @@ export class VoiceController {
   dialStatus(
     @Req() req: Request,
     @Query('parentCallSid') parentCallSid: string,
+    @Query('attemptNumber') rawAttemptNumber: string | undefined,
     @Headers('x-twilio-signature') signature?: string,
   ) {
     this.verifySignature(req, signature);
     const body = req.body as { CallStatus?: string };
+    const attemptNumber =
+      rawAttemptNumber && /^\d+$/.test(rawAttemptNumber)
+        ? Number(rawAttemptNumber)
+        : undefined;
     return this.voiceCall
-      .handleDialStatus(parentCallSid, body.CallStatus ?? '')
+      .handleDialStatus(parentCallSid, body.CallStatus ?? '', attemptNumber)
       .then(() => ({ received: true }));
   }
 

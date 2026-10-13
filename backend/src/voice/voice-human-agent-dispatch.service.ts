@@ -5,7 +5,10 @@ import {
   VoiceAgentPresenceStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { VOICE_PRESENCE_TTL_SECONDS } from './voice.constants';
+import {
+  VOICE_HUMAN_AGENT_MAX_ATTEMPTS,
+  VOICE_PRESENCE_TTL_SECONDS,
+} from './voice.constants';
 import { TOPICS, type TopicKey } from './voice-analysis';
 
 export interface ReservedHumanAgent {
@@ -15,6 +18,7 @@ export interface ReservedHumanAgent {
   staffUserId: string;
   name: string;
   phone: string;
+  attemptNumber: number;
 }
 
 /**
@@ -61,11 +65,40 @@ export class VoiceHumanAgentDispatchService {
           });
           if (!call) return null;
 
-          const existing = await tx.voiceHumanAgentAssignment.findUnique({
-            where: { callId },
-            select: { id: true },
+          // Serialize reservations for this call so duplicate provider callbacks cannot
+          // create two simultaneous attempts or skip an attempt number.
+          await tx.$queryRaw<{ id: string }[]>`
+            SELECT id FROM phone_calls WHERE id = ${callId} FOR UPDATE
+          `;
+          const previousAttempts = await tx.voiceHumanAgentAssignment.findMany({
+            where: { businessId, callId },
+            orderBy: { attemptNumber: 'asc' },
+            select: {
+              profileId: true,
+              attemptNumber: true,
+              status: true,
+              expiresAt: true,
+            },
           });
-          if (existing) return null;
+          if (
+            previousAttempts.some(
+              (attempt) =>
+                attempt.status === 'connected' ||
+                (attempt.status === 'offered' &&
+                  (attempt.expiresAt?.getTime() ?? 0) > now.getTime()),
+            )
+          ) {
+            return null;
+          }
+          const attemptNumber =
+            Math.max(
+              0,
+              ...previousAttempts.map((attempt) => attempt.attemptNumber),
+            ) + 1;
+          if (attemptNumber > VOICE_HUMAN_AGENT_MAX_ATTEMPTS) return null;
+          const triedProfileIds = new Set(
+            previousAttempts.map((attempt) => attempt.profileId),
+          );
 
           const candidates = await tx.voiceHumanAgentProfile.findMany({
             where: {
@@ -132,6 +165,7 @@ export class VoiceHumanAgentDispatchService {
           });
 
           for (const candidate of ordered) {
+            if (triedProfileIds.has(candidate.id)) continue;
             // InnoDB holds this profile row lock until commit. READ COMMITTED below makes the
             // following capacity count see assignments committed while this transaction waited.
             await tx.$queryRaw<{ id: string }[]>`
@@ -178,6 +212,7 @@ export class VoiceHumanAgentDispatchService {
               data: {
                 businessId,
                 callId,
+                attemptNumber,
                 profileId: profile.id,
                 staffUserId: profile.staffUserId,
                 status: 'offered',
@@ -193,6 +228,7 @@ export class VoiceHumanAgentDispatchService {
               staffUserId: profile.staffUserId,
               name: profile.staffUser.user.name,
               phone: profile.staffUser.user.phone,
+              attemptNumber,
             };
           }
           return null;
@@ -233,11 +269,19 @@ export class VoiceHumanAgentDispatchService {
     );
   }
 
-  async observeDialStatus(callId: string, providerStatus: string) {
+  async observeDialStatus(
+    callId: string,
+    providerStatus: string,
+    attemptNumber?: number,
+  ) {
     const normalized = providerStatus.trim().toLowerCase();
     if (normalized === 'answered' || normalized === 'in-progress') {
       return this.prisma.voiceHumanAgentAssignment.updateMany({
-        where: { callId, status: 'offered' },
+        where: {
+          callId,
+          ...(attemptNumber ? { attemptNumber } : {}),
+          status: 'offered',
+        },
         data: {
           status: 'connected',
           connected: true,
@@ -252,7 +296,7 @@ export class VoiceHumanAgentDispatchService {
         normalized,
       )
     ) {
-      return this.release(callId, normalized);
+      return this.release(callId, normalized, attemptNumber);
     }
     return { count: 0 };
   }
@@ -272,10 +316,18 @@ export class VoiceHumanAgentDispatchService {
     });
   }
 
-  async release(callId: string, providerStatus: string) {
+  async release(
+    callId: string,
+    providerStatus: string,
+    attemptNumber?: number,
+  ) {
     const normalized = providerStatus.trim().toLowerCase();
     return this.prisma.voiceHumanAgentAssignment.updateMany({
-      where: { callId, status: { in: ['offered', 'connected'] } },
+      where: {
+        callId,
+        ...(attemptNumber ? { attemptNumber } : {}),
+        status: { in: ['offered', 'connected'] },
+      },
       data: {
         status: 'released',
         providerStatus: normalized,

@@ -88,3 +88,6 @@ export const VOICE_ERROR_CODES = {
 
 /** Presence is considered live only while the authenticated agent refreshes it within this window. */
 export const VOICE_PRESENCE_TTL_SECONDS = 45;
+
+/** Maximum internal human-agent offers for one inbound call before using its fallback. */
+export const VOICE_HUMAN_AGENT_MAX_ATTEMPTS = 3;

@@ -126,7 +126,9 @@ export function VoiceIvrStudioScreen() {
     onSuccess: async (flow) => {
       setName("");
       setSelectedId(flow.id);
-      setNotice("Draft created. It is not connected to live call routing.");
+      setNotice(
+        "Draft created. It will route new inbound calls after you publish it.",
+      );
       await refresh(flow.id);
     },
     onError: (error) => setNotice(errorText(error)),
@@ -194,7 +196,7 @@ export function VoiceIvrStudioScreen() {
       setSummary("");
       setValidation(null);
       setNotice(
-        `Configuration snapshot ${flow.publishedVersion} saved. Live routing was not changed.`,
+        `Version ${flow.publishedVersion} is live for new inbound calls. Calls already in progress keep their pinned version.`,
       );
       await refresh(flow.id);
     },
@@ -216,7 +218,7 @@ export function VoiceIvrStudioScreen() {
     onSuccess: async (flow) => {
       setRollbackReason("");
       setNotice(
-        `Saved a new rollback snapshot from version ${rollbackVersion}. Live routing was not changed.`,
+        `Rollback version ${flow.publishedVersion} is live for new inbound calls. Existing calls keep their pinned version.`,
       );
       await refresh(flow.id);
     },
@@ -228,6 +230,9 @@ export function VoiceIvrStudioScreen() {
   const versions = detail.data?.versions ?? [];
   const connectionTargets = nodes.filter((node) => node.type !== "start");
   const pageError = flows.error ?? detail.error;
+  const hasPublishedFlow = (flows.data ?? []).some(
+    (flow) => flow.publishedVersion !== null,
+  );
   const busy =
     create.isPending ||
     save.isPending ||
@@ -299,20 +304,22 @@ export function VoiceIvrStudioScreen() {
             IVR &amp; Routing Studio
           </h1>
           <p className="mt-1 max-w-[780px] text-[12px] leading-[1.6] text-[#697586]">
-            Build an accessible call-flow outline, validate routes, simulate a
-            sample input, and keep published versions. The graph is not yet
-            connected to live inbound call execution.
+            Build and test your call flow, then publish it for new inbound
+            calls. Each live call stays pinned to the version it started with.
           </p>
         </div>
-        <Chip tone="amber" h={24} fontSize={11}>
-          Live runtime not connected
+        <Chip tone={hasPublishedFlow ? "green" : "amber"} h={24} fontSize={11}>
+          {hasPublishedFlow ? "Live runtime connected" : "No published flow"}
         </Chip>
       </div>
 
-      <Notice tone="amber" icon="triangle-alert">
-        Publishing stores an immutable configuration snapshot only. New calls
-        still use the existing inbound routing rules; this page does not change
-        phone behavior or place calls.
+      <Notice
+        tone={hasPublishedFlow ? "green" : "amber"}
+        icon={hasPublishedFlow ? "phone" : "triangle-alert"}
+      >
+        {hasPublishedFlow
+          ? "New inbound calls use the most recently published IVR flow. Calls already in progress remain on their pinned version. Without a published flow, the existing receptionist routing is used."
+          : "No IVR flow is published yet. New inbound calls continue through the existing receptionist routing until you publish a flow."}
       </Notice>
       {notice ? (
         <div
@@ -345,7 +352,7 @@ export function VoiceIvrStudioScreen() {
               <EmptyState
                 icon="git-branch"
                 title="No IVR flows"
-                body="Create a draft outline. It will not be activated for callers."
+                body="Create and publish a flow to route new inbound calls through it."
               />
             ) : null}
             {(flows.data ?? []).map((flow) => (
@@ -643,8 +650,8 @@ export function VoiceIvrStudioScreen() {
                               </ul>
                             ) : (
                               <p className="mt-3 text-[11px] text-[#697586]">
-                                Graph structure is valid for a configuration
-                                snapshot. Live provider routing is not verified.
+                                The graph is valid. Its supported nodes run for
+                                new inbound calls after publication.
                               </p>
                             )}
                           </>
@@ -739,11 +746,12 @@ export function VoiceIvrStudioScreen() {
                           disabled={busy || summary.trim().length < 4}
                           onClick={() => publish.mutate()}
                         >
-                          Save published snapshot
+                          Publish version
                         </PrimaryBtn>
                         <p className="text-[10.5px] leading-[1.45] text-[#7A8798]">
-                          Validation runs again on the server. This version is
-                          not yet used by incoming calls.
+                          Validation runs again on the server. Publishing routes
+                          new inbound calls through this version; calls already
+                          in progress keep their pinned version.
                         </p>
                         {versions.length ? (
                           <>
@@ -805,8 +813,8 @@ export function VoiceIvrStudioScreen() {
               </Card>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#E6E8EC] bg-white px-3.5 py-3 text-[11px] text-[#697586]">
                 <span>
-                  Live route outcomes, queue wait, containment and misroutes:
-                  Not tracked by this studio until runtime integration.
+                  Per-version route outcomes, queue wait and misroutes are not
+                  tracked by this studio yet.
                 </span>
                 <a
                   className="font-bold text-[#15803D] underline"

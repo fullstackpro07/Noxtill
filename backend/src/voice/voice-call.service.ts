@@ -34,10 +34,16 @@ import {
   PhoneCallStatus,
   Prisma,
   VoiceCompliancePolicyVersionStatus,
+  VoiceIvrFlowVersionStatus,
   VoicePolicyCallerType,
   VoiceRecordingConsentStatus,
   VoiceRoutingRule,
 } from '@prisma/client';
+import type {
+  VoiceIvrEdge,
+  VoiceIvrGraph,
+  VoiceIvrNode,
+} from './voice-ivr.service';
 
 interface ServiceMatch {
   id: string;
@@ -120,7 +126,17 @@ interface PublishedVoiceAiAgent {
     instructions?: string;
     escalationGuidance?: string;
     languages?: string[];
+    toolPermissions?: string[];
+    knowledgeSourceIds?: string[];
+    maxTokensPerResponse?: number;
   };
+}
+
+interface IvrRuntimeInput {
+  dtmf?: string;
+  intent?: string;
+  value?: string;
+  prefix?: string;
 }
 
 function recordNext(timeoutSeconds: number): string {
@@ -207,6 +223,9 @@ export class VoiceCallService {
       orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
       select: { publishedVersionId: true },
     });
+    const activeIvrVersion = await this.findLatestPublishedIvrVersion(
+      phoneNumber.businessId,
+    );
 
     const call = await this.prisma.phoneCall.create({
       data: {
@@ -216,6 +235,7 @@ export class VoiceCallService {
         status: PhoneCallStatus.in_progress,
         transcript: [],
         voiceAgentVersionId: activeAgent?.publishedVersionId ?? null,
+        ivrFlowVersionId: activeIvrVersion?.id ?? null,
         recordingConsentStatus: canRequestRecordingConsent
           ? VoiceRecordingConsentStatus.pending
           : recordingPolicy && !recordingPolicy.recordingAllowed
@@ -244,6 +264,9 @@ export class VoiceCallService {
             ? 'The published recording policy is missing its notice.'
             : 'The public recording-consent callback is not configured.';
       const reply = `${AUTOMATED_ASSISTANT_DISCLOSURE_TEXT} ${reason} No recording will be made. I will try to connect you with the team.`;
+      if (call.ivrFlowVersionId) {
+        return this.executePinnedIvr(call, settings, [], { prefix: reply });
+      }
       return this.handleTransferIntent(
         call,
         [],
@@ -310,6 +333,17 @@ export class VoiceCallService {
           where: { callSid },
         });
         if (!changedCall) return twiml('<Hangup/>');
+        if (changedCall.ivrFlowVersionId) {
+          return this.executePinnedIvr(
+            changedCall,
+            settings,
+            (changedCall.transcript as unknown as CallTurn[]) ?? [],
+            {
+              prefix:
+                'The recording policy changed before your choice was processed, so this call will not be recorded. I will continue with the call menu.',
+            },
+          );
+        }
         return this.handleTransferIntent(
           changedCall,
           (changedCall.transcript as unknown as CallTurn[]) ?? [],
@@ -334,6 +368,18 @@ export class VoiceCallService {
         },
       });
       if (accepted.count !== 1) return twiml('<Hangup/>');
+      const acceptedCall = await this.prisma.phoneCall.findUnique({
+        where: { callSid },
+      });
+      if (!acceptedCall) return twiml('<Hangup/>');
+      if (acceptedCall.ivrFlowVersionId) {
+        return this.executePinnedIvr(
+          acceptedCall,
+          settings,
+          (acceptedCall.transcript as unknown as CallTurn[]) ?? [],
+          { prefix: 'Thank you. The call will now be recorded.' },
+        );
+      }
       return twiml(
         say('Thank you. The call will now be recorded.', settings.voiceId) +
           recordNext(settings.responseTimeoutSeconds),
@@ -365,6 +411,14 @@ export class VoiceCallService {
       consentStatus === VoiceRecordingConsentStatus.declined
         ? 'You chose not to be recorded. I will try to connect you with a person without recording this call.'
         : 'I did not receive your recording consent, so nothing will be recorded. I will try to connect you with a person.';
+    if (updatedCall.ivrFlowVersionId) {
+      return this.executePinnedIvr(
+        updatedCall,
+        settings,
+        (updatedCall.transcript as unknown as CallTurn[]) ?? [],
+        { prefix: reply },
+      );
+    }
     return this.handleTransferIntent(
       updatedCall,
       (updatedCall.transcript as unknown as CallTurn[]) ?? [],
@@ -374,16 +428,48 @@ export class VoiceCallService {
     );
   }
 
+  /** Twilio's signed DTMF callback for a pinned published IVR version. */
+  async handleIvrInput(
+    callSid: string,
+    digits: string,
+    expectedNodeId?: string,
+  ): Promise<string> {
+    const call = await this.prisma.phoneCall.findUnique({
+      where: { callSid },
+    });
+    if (
+      !call ||
+      call.status !== PhoneCallStatus.in_progress ||
+      !call.ivrFlowVersionId ||
+      !call.ivrCurrentNodeId ||
+      (expectedNodeId && call.ivrCurrentNodeId !== expectedNodeId)
+    ) {
+      return twiml('<Hangup/>');
+    }
+    const settings = await this.getSettings(call.businessId);
+    return this.executePinnedIvr(
+      call,
+      settings,
+      (call.transcript as unknown as CallTurn[]) ?? [],
+      { dtmf: digits },
+      call.ivrCurrentNodeId,
+    );
+  }
+
   /** Twilio's recording-complete webhook — one full conversation turn. */
   async handleRecording(
     callSid: string,
     recordingUrl: string,
+    ivrNodeId?: string,
   ): Promise<string> {
     const call = await this.prisma.phoneCall.findUnique({
       where: { callSid },
     });
     if (!call) {
       this.logger.warn(`Recording callback for unknown call ${callSid}`);
+      return twiml('<Hangup/>');
+    }
+    if (ivrNodeId && call.ivrCurrentNodeId !== ivrNodeId) {
       return twiml('<Hangup/>');
     }
     if (call.recordingConsentStatus !== VoiceRecordingConsentStatus.granted) {
@@ -465,6 +551,7 @@ export class VoiceCallService {
       call.fromNumber,
       callerText,
       settings,
+      pinnedAgent,
     );
     const aiResponse = await this.classifyAndReply(
       call.businessId,
@@ -473,6 +560,18 @@ export class VoiceCallService {
       context.block,
       pinnedAgent,
     );
+    if (call.ivrCurrentNodeId) {
+      const currentIvrNode = await this.getPinnedIvrNode(call);
+      if (currentIvrNode?.type === 'speech_intent') {
+        return this.executePinnedIvr(
+          call,
+          settings,
+          transcript,
+          { intent: aiResponse.intent },
+          currentIvrNode.id,
+        );
+      }
+    }
     const analysis = buildTurnAnalysis(
       aiResponse,
       aiResponse.intent,
@@ -503,28 +602,60 @@ export class VoiceCallService {
     const customMatch = settings.customIntents.find(
       (c) => c.name.toLowerCase() === aiResponse.intent.toLowerCase(),
     );
-    if (customMatch) {
+    const afterHours = isAfterHours(
+      localParts(new Date(), business.timezone),
+      business.workingHours,
+    );
+    const matchedRule = customMatch
+      ? null
+      : await this.evaluateRoutingRules(
+          call.businessId,
+          callerText,
+          analysis,
+          afterHours,
+        );
+    let effectiveIntent = customMatch
+      ? 'message'
+      : matchedRule
+        ? matchedRule.action === 'transfer'
+          ? 'transfer'
+          : 'message'
+        : aiResponse.intent;
+
+    const requiredTool =
+      effectiveIntent === 'book' ||
+      effectiveIntent === 'message' ||
+      effectiveIntent === 'transfer' ||
+      effectiveIntent === 'end'
+        ? effectiveIntent
+        : null;
+    const configuredTools = pinnedAgent?.config.toolPermissions;
+    const toolBlocked = Boolean(
+      requiredTool &&
+      configuredTools &&
+      !configuredTools.includes(requiredTool),
+    );
+    if (toolBlocked) {
+      effectiveIntent = 'continue';
+      const safeReply =
+        "I can't complete that action from this call, but I can answer another question or have the team follow up.";
+      const lastTurn = transcript.at(-1);
+      if (lastTurn?.speaker === 'assistant') {
+        lastTurn.text = safeReply;
+        lastTurn.analysis = buildTurnAnalysis(
+          aiResponse,
+          'continue',
+          context.sources,
+        );
+      }
+    }
+
+    if (customMatch && !toolBlocked) {
       await this.persist(callSid, transcript, PhoneCallOutcome.custom, {
         customIntentName: customMatch.name,
       });
       return twiml(say(aiResponse.reply, settings.voiceId) + '<Hangup/>');
     }
-
-    const afterHours = isAfterHours(
-      localParts(new Date(), business.timezone),
-      business.workingHours,
-    );
-    const matchedRule = await this.evaluateRoutingRules(
-      call.businessId,
-      callerText,
-      analysis,
-      afterHours,
-    );
-    const effectiveIntent = matchedRule
-      ? matchedRule.action === 'transfer'
-        ? 'transfer'
-        : 'message'
-      : aiResponse.intent;
 
     switch (effectiveIntent) {
       case 'book':
@@ -552,8 +683,12 @@ export class VoiceCallService {
       default:
         await this.persist(callSid, transcript);
         return twiml(
-          say(aiResponse.reply, settings.voiceId) +
-            recordNext(settings.responseTimeoutSeconds),
+          say(
+            toolBlocked
+              ? (transcript.at(-1)?.text ?? aiResponse.reply)
+              : aiResponse.reply,
+            settings.voiceId,
+          ) + recordNext(settings.responseTimeoutSeconds),
         );
     }
   }
@@ -605,13 +740,18 @@ export class VoiceCallService {
   async handleTransferResult(
     callSid: string,
     dialCallStatus: string,
+    attemptNumber?: number,
   ): Promise<string> {
     const call = await this.prisma.phoneCall.findUnique({ where: { callSid } });
     if (!call) {
       this.logger.warn(`Transfer callback for unknown call ${callSid}`);
       return twiml('<Hangup/>');
     }
-    await this.humanAgentDispatch.observeDialStatus(call.id, dialCallStatus);
+    await this.humanAgentDispatch.observeDialStatus(
+      call.id,
+      dialCallStatus,
+      attemptNumber,
+    );
 
     // Twilio can retry webhooks. Keep outcomes idempotent and don't let a late duplicate
     // callback overwrite the message path after a failed transfer.
@@ -628,6 +768,90 @@ export class VoiceCallService {
         data: { outcome: PhoneCallOutcome.transfer },
       });
       return twiml('<Hangup/>');
+    }
+
+    if (
+      attemptNumber &&
+      Number.isInteger(attemptNumber) &&
+      attemptNumber > 0 &&
+      ['busy', 'no-answer', 'failed', 'canceled'].includes(
+        dialCallStatus.trim().toLowerCase(),
+      ) &&
+      (await this.prisma.voiceHumanAgentAssignment.findFirst({
+        where: {
+          businessId: call.businessId,
+          callId: call.id,
+          attemptNumber,
+        },
+        select: { id: true },
+      }))
+    ) {
+      const nextAttemptNumber = attemptNumber + 1;
+      const existingNextAttempt =
+        await this.prisma.voiceHumanAgentAssignment.findFirst({
+          where: {
+            businessId: call.businessId,
+            callId: call.id,
+            attemptNumber: nextAttemptNumber,
+            status: 'offered',
+          },
+          include: {
+            profile: {
+              include: { staffUser: { include: { user: true } } },
+            },
+          },
+        });
+      let nextAgent = existingNextAttempt?.profile.staffUser.user.phone
+        ? {
+            phone: existingNextAttempt.profile.staffUser.user.phone,
+            attemptNumber: existingNextAttempt.attemptNumber,
+          }
+        : null;
+      if (!existingNextAttempt) {
+        const reserved = await this.humanAgentDispatch.reserve(
+          call.businessId,
+          call.id,
+        );
+        nextAgent = reserved
+          ? { phone: reserved.phone, attemptNumber: reserved.attemptNumber }
+          : null;
+      }
+      if (nextAgent) {
+        const actionUrl = this.webhookUrl('transfer-result');
+        const dialStatusUrl = this.webhookUrl('dial-status');
+        if (actionUrl && dialStatusUrl) {
+          const action = new URL(actionUrl);
+          action.searchParams.set(
+            'attemptNumber',
+            String(nextAgent.attemptNumber),
+          );
+          const status = new URL(dialStatusUrl);
+          status.searchParams.set('parentCallSid', call.callSid);
+          status.searchParams.set(
+            'attemptNumber',
+            String(nextAgent.attemptNumber),
+          );
+          const settings = await this.getSettings(call.businessId);
+          return twiml(
+            say(
+              'Please hold while I try another team member.',
+              settings.voiceId,
+            ) +
+              `<Dial action="${escapeXml(action.toString())}" method="POST" answerOnBridge="true"><Number statusCallback="${escapeXml(status.toString())}" statusCallbackMethod="POST" statusCallbackEvent="initiated ringing answered completed">${escapeXml(nextAgent.phone)}</Number></Dial>`,
+          );
+        }
+        await this.humanAgentDispatch.release(
+          call.id,
+          'callback_not_configured',
+          nextAgent.attemptNumber,
+        );
+      } else if (existingNextAttempt) {
+        await this.humanAgentDispatch.release(
+          call.id,
+          'agent_phone_unavailable',
+          existingNextAttempt.attemptNumber,
+        );
+      }
     }
 
     const settings = await this.getSettings(call.businessId);
@@ -679,13 +903,18 @@ export class VoiceCallService {
   async handleDialStatus(
     parentCallSid: string,
     dialStatus: string,
+    attemptNumber?: number,
   ): Promise<void> {
     const call = await this.prisma.phoneCall.findUnique({
       where: { callSid: parentCallSid },
       select: { id: true },
     });
     if (!call) return;
-    await this.humanAgentDispatch.observeDialStatus(call.id, dialStatus);
+    await this.humanAgentDispatch.observeDialStatus(
+      call.id,
+      dialStatus,
+      attemptNumber,
+    );
   }
 
   /** Saves the caller's post-transfer message to the existing follow-up queue. */
@@ -932,11 +1161,380 @@ export class VoiceCallService {
       }
       const statusUrl = new URL(dialStatusUrl);
       statusUrl.searchParams.set('parentCallSid', call.callSid);
+      statusUrl.searchParams.set(
+        'attemptNumber',
+        String(assignedAgent.attemptNumber),
+      );
       dialNumber = `<Number statusCallback="${escapeXml(statusUrl.toString())}" statusCallbackMethod="POST" statusCallbackEvent="initiated ringing answered completed">${escapeXml(assignedAgent.phone)}</Number>`;
+    }
+    const action = new URL(actionUrl);
+    if (assignedAgent) {
+      action.searchParams.set(
+        'attemptNumber',
+        String(assignedAgent.attemptNumber),
+      );
     }
     return twiml(
       say(aiResponse.reply, settings.voiceId) +
-        `<Dial action="${escapeXml(actionUrl)}" method="POST" answerOnBridge="true">${dialNumber}</Dial>`,
+        `<Dial action="${escapeXml(action.toString())}" method="POST" answerOnBridge="true">${dialNumber}</Dial>`,
+    );
+  }
+
+  private async findLatestPublishedIvrVersion(businessId: string) {
+    const flows = await this.prisma.voiceIvrFlow.findMany({
+      where: { businessId, publishedVersion: { not: null } },
+      select: { id: true, publishedVersion: true },
+      orderBy: { id: 'asc' },
+    });
+    const versions = await Promise.all(
+      flows.map((flow) =>
+        flow.publishedVersion === null
+          ? Promise.resolve(null)
+          : this.prisma.voiceIvrFlowVersion.findFirst({
+              where: {
+                businessId,
+                flowId: flow.id,
+                version: flow.publishedVersion,
+                status: {
+                  in: [
+                    VoiceIvrFlowVersionStatus.published,
+                    VoiceIvrFlowVersionStatus.rollback,
+                  ],
+                },
+              },
+              select: { id: true, graph: true, publishedAt: true },
+            }),
+      ),
+    );
+    return (
+      versions
+        .filter((version): version is NonNullable<typeof version> => !!version)
+        .sort(
+          (a, b) =>
+            b.publishedAt.getTime() - a.publishedAt.getTime() ||
+            b.id.localeCompare(a.id),
+        )[0] ?? null
+    );
+  }
+
+  private async getPinnedIvrGraph(
+    call: PhoneCall,
+  ): Promise<VoiceIvrGraph | null> {
+    if (!call.ivrFlowVersionId) return null;
+    const version = await this.prisma.voiceIvrFlowVersion.findFirst({
+      where: { id: call.ivrFlowVersionId, businessId: call.businessId },
+      select: { graph: true },
+    });
+    const graph = version?.graph as unknown as VoiceIvrGraph | undefined;
+    return graph && Array.isArray(graph.nodes) && Array.isArray(graph.edges)
+      ? graph
+      : null;
+  }
+
+  private async getPinnedIvrNode(
+    call: PhoneCall,
+  ): Promise<VoiceIvrNode | null> {
+    if (!call.ivrCurrentNodeId) return null;
+    const graph = await this.getPinnedIvrGraph(call);
+    return (
+      graph?.nodes.find((node) => node.id === call.ivrCurrentNodeId) ?? null
+    );
+  }
+
+  /** Execute the immutable graph pinned to this call; input nodes resume via signed Twilio webhooks. */
+  private async executePinnedIvr(
+    call: PhoneCall,
+    settings: ResolvedVoiceSettings,
+    transcript: CallTurn[],
+    input: IvrRuntimeInput = {},
+    resumeNodeId?: string,
+  ): Promise<string> {
+    const graph = await this.getPinnedIvrGraph(call);
+    const nodes = new Map(graph?.nodes.map((node) => [node.id, node]) ?? []);
+    const edgesByFrom = new Map<string, VoiceIvrEdge[]>();
+    for (const edge of graph?.edges ?? []) {
+      edgesByFrom.set(edge.from, [...(edgesByFrom.get(edge.from) ?? []), edge]);
+    }
+    const spoken = input.prefix?.trim() ? [input.prefix.trim()] : [];
+    const speechXml = () =>
+      spoken.map((line) => say(line, settings.voiceId)).join('');
+    const recordSpeech = () => {
+      if (!spoken.length) return;
+      transcript.push({
+        speaker: 'assistant',
+        text: spoken.join(' '),
+        at: new Date().toISOString(),
+      });
+    };
+    const save = async (nodeId: string | null, outcome?: PhoneCallOutcome) => {
+      await this.prisma.phoneCall.update({
+        where: { id: call.id },
+        data: {
+          transcript: transcript as unknown as Prisma.InputJsonValue,
+          ivrCurrentNodeId: nodeId,
+          ...(outcome ? { outcome } : {}),
+        },
+      });
+    };
+    const stopSafely = async (message: string) => {
+      spoken.push(message);
+      recordSpeech();
+      await save(null, PhoneCallOutcome.message);
+      return twiml(speechXml() + '<Hangup/>');
+    };
+    if (!graph || nodes.size === 0) {
+      return stopSafely(
+        'The published call menu is unavailable right now. Your call has been added to the team follow-up list.',
+      );
+    }
+
+    let current: VoiceIvrNode | undefined;
+    if (resumeNodeId) {
+      const inputNode = nodes.get(resumeNodeId);
+      if (!inputNode) {
+        return stopSafely(
+          'The call menu could not resume. Your call has been added to the team follow-up list.',
+        );
+      }
+      const target = await this.selectIvrTarget(
+        call,
+        inputNode,
+        edgesByFrom.get(inputNode.id) ?? [],
+        input,
+      );
+      current = target ? nodes.get(target.to) : undefined;
+    } else {
+      current = graph.nodes.find((node) => node.type === 'start');
+    }
+
+    for (let steps = 0; current && steps <= graph.nodes.length; steps += 1) {
+      const outgoing = edgesByFrom.get(current.id) ?? [];
+      if (current.type === 'start') {
+        const next = outgoing.find((edge) => edge.condition === 'default');
+        current = next ? nodes.get(next.to) : undefined;
+        continue;
+      }
+      if (current.type === 'greeting' || current.type === 'disclosure') {
+        if (current.label.trim()) spoken.push(current.label.trim());
+        const next = outgoing.find((edge) => edge.condition === 'default');
+        current = next ? nodes.get(next.to) : undefined;
+        continue;
+      }
+      if (current.type === 'business_hours') {
+        const target = await this.selectIvrTarget(
+          call,
+          current,
+          outgoing,
+          input,
+        );
+        current = target ? nodes.get(target.to) : undefined;
+        continue;
+      }
+      if (current.type === 'get_dtmf') {
+        const actionUrl = this.webhookUrl('ivr-input');
+        if (!actionUrl) {
+          return stopSafely(
+            'Keypad routing is not configured right now. Your call has been added to the team follow-up list.',
+          );
+        }
+        if (current.label.trim()) spoken.push(current.label.trim());
+        const action = new URL(actionUrl);
+        action.searchParams.set('nodeId', current.id);
+        recordSpeech();
+        await save(current.id);
+        return twiml(
+          speechXml() +
+            `<Gather input="dtmf" numDigits="1" timeout="6" actionOnEmptyResult="true" action="${escapeXml(action.toString())}" method="POST"></Gather><Hangup/>`,
+        );
+      }
+      if (current.type === 'speech_intent') {
+        if (
+          call.recordingConsentStatus !== VoiceRecordingConsentStatus.granted
+        ) {
+          spoken.push(
+            'Voice routing is unavailable without recording permission. I will use the default route.',
+          );
+          const next = outgoing.find((edge) => edge.condition === 'default');
+          current = next ? nodes.get(next.to) : undefined;
+          continue;
+        }
+        if (current.label.trim()) spoken.push(current.label.trim());
+        const recordingAction = this.webhookUrl('recording');
+        if (!recordingAction) {
+          return stopSafely(
+            'Speech routing is not configured right now. Your call has been added to the team follow-up list.',
+          );
+        }
+        const action = new URL(recordingAction);
+        action.searchParams.set('ivrNodeId', current.id);
+        recordSpeech();
+        await save(current.id);
+        return twiml(
+          speechXml() +
+            `<Record action="${escapeXml(action.toString())}" method="POST" maxLength="30" timeout="${settings.responseTimeoutSeconds}" playBeep="true" trim="trim-silence" />`,
+        );
+      }
+      if (
+        current.type === 'branch' ||
+        current.type === 'condition' ||
+        current.type === 'lookup'
+      ) {
+        const target = await this.selectIvrTarget(
+          call,
+          current,
+          outgoing,
+          input,
+        );
+        current = target ? nodes.get(target.to) : undefined;
+        continue;
+      }
+      if (current.type === 'ai_agent') {
+        if (
+          call.recordingConsentStatus !== VoiceRecordingConsentStatus.granted
+        ) {
+          const reply = [
+            ...spoken,
+            current.label.trim(),
+            'I cannot process voice without recording permission, so I will try to connect you with a person.',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          await save(null);
+          return this.handleTransferIntent(
+            call,
+            transcript,
+            { reply, intent: 'transfer' },
+            settings,
+            null,
+          );
+        }
+        if (current.label.trim()) spoken.push(current.label.trim());
+        recordSpeech();
+        await save(null);
+        return twiml(speechXml() + recordNext(settings.responseTimeoutSeconds));
+      }
+      if (
+        current.type === 'human_agent' ||
+        current.type === 'transfer' ||
+        current.type === 'queue'
+      ) {
+        const reply = [...spoken, current.label.trim()]
+          .filter(Boolean)
+          .join(' ');
+        await save(null);
+        return this.handleTransferIntent(
+          call,
+          transcript,
+          {
+            reply: reply || 'I will connect you with a team member now.',
+            intent: 'transfer',
+          },
+          settings,
+          null,
+        );
+      }
+      if (current.type === 'voicemail') {
+        spoken.push(
+          current.label.trim() || 'Please leave a message after the tone.',
+        );
+        if (
+          call.recordingConsentStatus !== VoiceRecordingConsentStatus.granted
+        ) {
+          spoken.push(
+            'No recording will be made. The team will follow up based on your call.',
+          );
+          recordSpeech();
+          await save(null, PhoneCallOutcome.message);
+          return twiml(speechXml() + '<Hangup/>');
+        }
+        const actionUrl = this.webhookUrl('transfer-message');
+        if (!actionUrl) {
+          return stopSafely(
+            'Message recording is not configured right now. The team will follow up based on your call.',
+          );
+        }
+        recordSpeech();
+        await save(null, PhoneCallOutcome.message);
+        return twiml(
+          speechXml() +
+            `<Record action="${escapeXml(actionUrl)}" method="POST" maxLength="60" timeout="${settings.responseTimeoutSeconds}" playBeep="true" trim="trim-silence" />`,
+        );
+      }
+      if (current.type === 'callback') {
+        spoken.push(
+          current.label.trim() ||
+            'We have noted that you would like a callback.',
+        );
+        recordSpeech();
+        await this.prisma.phoneCall.update({
+          where: { id: call.id },
+          data: {
+            transcript: transcript as unknown as Prisma.InputJsonValue,
+            ivrCurrentNodeId: null,
+            callbackRequestedAt: new Date(),
+            outcome: PhoneCallOutcome.message,
+          },
+        });
+        return twiml(speechXml() + '<Hangup/>');
+      }
+      if (current.type === 'end') {
+        if (current.label.trim() && current.label.toLowerCase() !== 'end') {
+          spoken.push(current.label.trim());
+        }
+        recordSpeech();
+        await save(null);
+        return twiml(speechXml() + '<Hangup/>');
+      }
+      return stopSafely(
+        'This call menu step is not available. Your call has been added to the team follow-up list.',
+      );
+    }
+    return stopSafely(
+      'The call menu has no matching route. Your call has been added to the team follow-up list.',
+    );
+  }
+
+  private async selectIvrTarget(
+    call: PhoneCall,
+    node: VoiceIvrNode,
+    outgoing: VoiceIvrEdge[],
+    input: IvrRuntimeInput,
+  ): Promise<VoiceIvrEdge | undefined> {
+    let condition: string | undefined;
+    if (node.type === 'get_dtmf' && input.dtmf) {
+      condition = `dtmf:${input.dtmf}`;
+    } else if (node.type === 'speech_intent' && input.intent) {
+      condition = `intent:${input.intent}`;
+    } else if (node.type === 'business_hours') {
+      const business = await this.getBusiness(call.businessId);
+      const afterHours = isAfterHours(
+        localParts(new Date(), business.timezone),
+        business.workingHours,
+      );
+      if (afterHours !== null) {
+        condition = `business_hours:${afterHours ? 'closed' : 'open'}`;
+      }
+    } else if (node.type === 'lookup') {
+      const customer = await this.prisma.customer.findFirst({
+        where: { businessId: call.businessId, phone: call.fromNumber },
+        select: { id: true },
+      });
+      condition = `value:customer_${customer ? 'found' : 'not_found'}`;
+    } else if (node.type === 'branch' || node.type === 'condition') {
+      const values = [
+        input.value,
+        input.dtmf,
+        input.intent,
+        call.attributionSource ? 'attributed' : undefined,
+      ].filter((value): value is string => !!value);
+      const matching = outgoing.find((edge) =>
+        values.some((value) => edge.condition === `value:${value}`),
+      );
+      if (matching) return matching;
+    }
+    return (
+      outgoing.find((edge) => edge.condition === condition) ??
+      outgoing.find((edge) => edge.condition === 'default')
     );
   }
 
@@ -945,7 +1543,9 @@ export class VoiceCallService {
       | 'transfer-result'
       | 'transfer-message'
       | 'dial-status'
-      | 'recording-consent',
+      | 'recording-consent'
+      | 'ivr-input'
+      | 'recording',
   ): string | null {
     const backendUrl = this.config
       .get<string>('BACKEND_URL')
@@ -1042,6 +1642,7 @@ export class VoiceCallService {
     fromNumber: string,
     callerText: string,
     settings: ResolvedVoiceSettings,
+    agent?: PublishedVoiceAiAgent,
   ): Promise<{ block: string; sources: string[] }> {
     const lines: string[] = [];
     const sources: string[] = [];
@@ -1105,7 +1706,11 @@ export class VoiceCallService {
       sources.push('Credit');
     }
 
-    const knowledge = await this.findKnowledge(businessId, callerText);
+    const knowledge = await this.findKnowledge(
+      businessId,
+      callerText,
+      agent?.config.knowledgeSourceIds,
+    );
     if (knowledge) {
       lines.push(
         `${knowledge.kind === 'faq' ? 'FAQ' : 'Document'} "${knowledge.title}": ${knowledge.content}`,
@@ -1167,6 +1772,7 @@ export class VoiceCallService {
   private async findKnowledge(
     businessId: string,
     text: string,
+    allowedIds?: string[],
   ): Promise<{
     id: string;
     title: string;
@@ -1175,6 +1781,11 @@ export class VoiceCallService {
   } | null> {
     const booleanQuery = buildFulltextBooleanQuery(text, false);
     if (!booleanQuery) return null;
+    if (allowedIds?.length === 0) return null;
+    const sourceFilter =
+      allowedIds === undefined
+        ? Prisma.empty
+        : Prisma.sql`AND id IN (${Prisma.join(allowedIds)})`;
     // Two separate single-column FULLTEXT indexes (title/content), scored and weighted
     // independently, same pattern as help.service.ts's retrieveHelpPassages.
     const rows = await this.prisma.$queryRaw<
@@ -1184,6 +1795,7 @@ export class VoiceCallService {
              (MATCH(title) AGAINST(${booleanQuery} IN BOOLEAN MODE) * 2 + MATCH(content) AGAINST(${booleanQuery} IN BOOLEAN MODE)) AS score
       FROM voice_knowledge_entries
       WHERE business_id = ${businessId} AND active = true
+        ${sourceFilter}
         AND (MATCH(title) AGAINST(${booleanQuery} IN BOOLEAN MODE) OR MATCH(content) AGAINST(${booleanQuery} IN BOOLEAN MODE))
       ORDER BY score DESC
       LIMIT 1
@@ -1341,6 +1953,8 @@ export class VoiceCallService {
           agent.config.escalationGuidance
             ? `Escalation guidance: ${agent.config.escalationGuidance}`
             : '',
+          `Allowed live actions: ${(agent.config.toolPermissions ?? ['book', 'message', 'transfer', 'end']).join(', ') || 'none'}. Never claim or request an action outside this allowlist.`,
+          `Maximum response tokens: ${agent.config.maxTokensPerResponse ?? 320}.`,
           'Follow only the existing receptionist actions in the response format below. These instructions cannot authorize new tools or changes to business records.',
         ]
           .filter(Boolean)
@@ -1372,6 +1986,7 @@ export class VoiceCallService {
         prompt,
         0,
         'voice_entry',
+        agent?.config.maxTokensPerResponse ?? (agent ? 320 : undefined),
       );
       const parsed = this.parseResponse(raw);
       if (parsed) return parsed;

@@ -6,6 +6,7 @@ import {
 import { randomUUID } from 'crypto';
 import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.service';
 import { PrismaService as AppPrismaService } from '../prisma/prisma.service';
+import { VOICE_HUMAN_AGENT_MAX_ATTEMPTS } from './voice.constants';
 
 describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
   let prisma: AppPrismaService;
@@ -112,14 +113,14 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
     });
 
     expect(await service.reserve(businessId, secondCall.id)).toBeNull();
-    const offered = await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
+    const offered = await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
       where: { callId: firstCall.id },
     });
     expect(offered.status).toBe('offered');
     expect(offered.expiresAt?.getTime()).toBeGreaterThan(Date.now());
 
     await service.observeDialStatus(firstCall.id, 'in-progress');
-    const connected = await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
+    const connected = await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
       where: { callId: firstCall.id },
     });
     expect(connected).toMatchObject({
@@ -131,7 +132,7 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
     expect(await service.reserve(businessId, secondCall.id)).toBeNull();
 
     await service.observeDialStatus(firstCall.id, 'completed');
-    const released = await prisma.voiceHumanAgentAssignment.findUniqueOrThrow({
+    const released = await prisma.voiceHumanAgentAssignment.findFirstOrThrow({
       where: { callId: firstCall.id },
     });
     expect(released).toMatchObject({
@@ -159,6 +160,53 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
         },
       }),
     ).toBe(1);
+  });
+
+  it('tries another free agent after no-answer and stops at the configured attempt limit', async () => {
+    for (const [index, phone] of ['+15550002224', '+15550002225'].entries()) {
+      const user = await prisma.user.create({
+        data: {
+          email: `voice-dispatch-retry-${index}-${stamp}@example.com`,
+          passwordHash: 'test-only',
+          name: `Retry Agent ${index + 1}`,
+          phone,
+        },
+      });
+      additionalUserIds.push(user.id);
+      const member = await prisma.businessUser.create({
+        data: { businessId, userId: user.id, role: Role.staff },
+      });
+      await prisma.voiceHumanAgentProfile.create({
+        data: {
+          businessId,
+          staffUserId: member.id,
+          active: true,
+          presenceStatus: VoiceAgentPresenceStatus.available,
+          lastHeartbeatAt: new Date(),
+        },
+      });
+    }
+
+    const call = await createLiveCall();
+    const first = await service.reserve(businessId, call.id);
+    expect(first).not.toBeNull();
+    expect(first?.attemptNumber).toBe(1);
+    await service.observeDialStatus(call.id, 'no-answer');
+
+    const second = await service.reserve(businessId, call.id);
+    expect(second).not.toBeNull();
+    expect(second?.attemptNumber).toBe(2);
+    expect(second?.profileId).not.toBe(first?.profileId);
+    await service.observeDialStatus(call.id, 'busy');
+
+    const third = await service.reserve(businessId, call.id);
+    expect(third).not.toBeNull();
+    expect(third?.attemptNumber).toBe(VOICE_HUMAN_AGENT_MAX_ATTEMPTS);
+    expect(
+      new Set([first?.profileId, second?.profileId, third?.profileId]).size,
+    ).toBe(VOICE_HUMAN_AGENT_MAX_ATTEMPTS);
+    await service.observeDialStatus(call.id, 'no-answer');
+    expect(await service.reserve(businessId, call.id)).toBeNull();
   });
 
   it('prefers a profile with an exact saved skill match for the classified caller topic', async () => {
