@@ -63,7 +63,7 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
   it('does nothing when Twilio credentials are not configured', async () => {
     const processor = new VoiceProviderCostProcessor(
       prisma,
-      new ConfigService({}),
+      new ConfigService({ TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '' }),
     );
     await createEndedCall();
     await processor.runCheck();

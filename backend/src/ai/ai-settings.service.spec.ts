@@ -34,6 +34,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
     const settings = await service.getSettings(businessId);
     expect(settings.featureToggles).toEqual({
       voiceEntry: true,
+      voiceQualityAssist: true,
       photoDigitizer: true,
       reviewReplies: true,
       campaignCopy: true,

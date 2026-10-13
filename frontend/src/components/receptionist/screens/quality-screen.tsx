@@ -8,6 +8,7 @@ import { Card, Chip, EmptyState, Footnote, KpiCard, SmallBtn, TableWrap, Th, kpi
 import { useRx } from "../rx-data";
 import { useRxStore } from "../rx-store";
 import { RxGate } from "../rx-gate";
+import { QualityReviewWorkflow } from "./quality-review-workflow";
 
 export function QualityScreen() {
   return (
@@ -181,6 +182,8 @@ function Quality() {
           </TableWrap>
         )}
       </Card>
+
+      <QualityReviewWorkflow />
     </div>
   );
 }

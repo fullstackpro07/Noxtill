@@ -11,6 +11,7 @@ export const AI_ERROR_CODES = {
  */
 export type AiFeatureKey =
   | 'voiceEntry'
+  | 'voiceQualityAssist'
   | 'photoDigitizer'
   | 'reviewReplies'
   | 'campaignCopy'
@@ -21,6 +22,7 @@ export type AiFeatureKey =
 
 export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'voiceEntry',
+  'voiceQualityAssist',
   'photoDigitizer',
   'reviewReplies',
   'campaignCopy',
@@ -31,17 +33,18 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
 ];
 
 /**
- * Maps every `AiCallLog.kind` this codebase actually writes into one of the 8 toggleable
+ * Maps every `AiCallLog.kind` this codebase actually writes into one of the 9 toggleable
  * features, for both enforcement (`AiInfraService.checkGuardrails`) and the AI Settings screen's
  * per-feature usage figures. Deliberately incomplete: several real AI call sites (branch advisor,
  * pricing-rationale phrasing, segment personas, competitive opportunities, the AI phone
  * receptionist, bundle-pitch copy, the pre-signup business-type mapper) don't correspond to any of
- * the spec's 8 named features and are left off this map on purpose — their usage isn't
+ * the named features and are left off this map on purpose — their usage isn't
  * independently toggleable and is reported under "Other" rather than force-fit into a bucket that
  * doesn't really describe it.
  */
 export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   voice_entry: 'voiceEntry',
+  voice_quality_assist: 'voiceQualityAssist',
   digitizer_scan: 'photoDigitizer',
   digitizer_assistant: 'photoDigitizer',
   review_reply: 'reviewReplies',
@@ -63,7 +66,7 @@ export const AI_USAGE_DISCLOSURE_TEXT =
   'and are not sent automatically. AI features never take an irreversible action ' +
   '(sending a message, writing a sale, changing stock) without a human explicitly confirming it ' +
   'first. Usage is metered per business against the monthly cost cap and per-minute rate limit set ' +
-  'below.';
+  'below. Voice QA suggestions send the selected transcript (with email, phone and payment-card-like numbers masked) and rubric to Anthropic; a human reviewer must verify every suggestion before saving.';
 
 /** claude-3-5-haiku pricing (USD per token, public list price) — good enough for a cost-cap estimate. */
 export const HAIKU_INPUT_COST_PER_TOKEN = 0.8 / 1_000_000;

@@ -20,6 +20,7 @@ const ROLE_ORDER: Role[] = ["owner", "manager", "staff"];
  * path genuinely lets that role use it. */
 const FEATURE_MODULE_KEYS: Record<keyof AiFeatureToggles, string[]> = {
   voiceEntry: ["ai-assistant"],
+  voiceQualityAssist: ["receptionist"],
   photoDigitizer: ["digitizer"],
   reviewReplies: ["reviews"],
   // Real call sites of the `campaign_copy` AI kind: Social's AI Studio and Profit's dead-hours offer.
@@ -43,6 +44,7 @@ function availableToLabel(featureKey: keyof AiFeatureToggles): string {
 
 const FEATURE_LABELS: Record<keyof AiFeatureToggles, { name: string; note: string }> = {
   voiceEntry: { name: "Voice Entry", note: "Confirmation required before any write" },
+  voiceQualityAssist: { name: "Voice QA Suggestions", note: "Transcript-cited drafts; reviewer must verify before saving" },
   photoDigitizer: { name: "Photo Digitizer", note: "Extracts rows from a photo — staged for your review" },
   reviewReplies: { name: "Review Replies", note: "Drafts only — you approve before posting" },
   campaignCopy: { name: "Campaign Copy", note: "Never sends without approval" },

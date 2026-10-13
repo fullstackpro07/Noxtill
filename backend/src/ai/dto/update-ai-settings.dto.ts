@@ -15,6 +15,10 @@ export class AiFeatureTogglesDto {
 
   @IsOptional()
   @IsBoolean()
+  voiceQualityAssist?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   photoDigitizer?: boolean;
 
   @IsOptional()
