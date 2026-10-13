@@ -77,7 +77,7 @@ function Settings() {
       items: [
         { label: "Voice", meta: "The Twilio voice the AI speaks with", value: voice, tone: "neutral", form: <VoiceForm /> },
         { label: "Response window", meta: "Seconds it waits for the caller to speak", value: `${s?.responseTimeoutSeconds ?? 5} s`, tone: "neutral", form: <TimeoutForm /> },
-        { label: "Length cap", meta: "Spoken lines before it arranges a callback", value: `${maxTurns} lines`, tone: "neutral", explain: ["Counts the caller's and the AI's lines together", "At the cap the AI says someone will call back, and the call is recorded as a message"] },
+        { label: "Length cap", meta: "Consented conversation lines before callback", value: `${maxTurns} lines`, tone: "neutral", explain: ["Counts the caller's and the AI's lines together after recording consent", "At the cap the AI arranges a callback; caller audio is kept only when consent was granted"] },
         { label: "Hold message", meta: "What the AI says when it takes a message", value: s?.queueHoldMessage ? "Set" : "Not set", tone: s?.queueHoldMessage ? "green" : "neutral", form: <HoldMessageForm /> },
         { label: "Records the AI may read", meta: "What it can look up to answer a caller", value: sharing, tone: catalog || orders || credit ? "green" : "amber", form: <SharingForm /> },
         { label: "Confidence and mood", meta: "The AI's own reading of each turn", value: "Recorded", tone: "green", explain: ["On every turn the AI reports how sure it is, what topic the caller asked about, whether it could answer, and how the caller sounds", "These are the AI's estimates, stored on the call — a reading it didn't give stays blank rather than being filled in", "Routing rules can act on them (for example: low confidence → take a message)"] },
@@ -87,7 +87,7 @@ function Settings() {
       title: "Escalation",
       icon: "phone-forwarded",
       items: [
-        { label: "Caller asks for a person", meta: "What happens", value: transferOk ? "Transfers" : "Takes a message", tone: transferOk ? "green" : "amber", explain: [transferOk ? "The call is dialled to your transfer number" : "No transfer number is set, so the call is recorded as a message instead"] },
+        { label: "Caller asks for a person", meta: "What happens", value: transferOk ? "Transfers" : "Follow-up queue", tone: transferOk ? "green" : "amber", explain: [transferOk ? "The call is dialled to your transfer number" : "No transfer number is set, so the call joins the follow-up queue; caller audio is kept only with consent"] },
         { label: "Transfer number", meta: "Where a transfer rings", value: ownTransfer ?? (transferOk ? "Server default" : "Not configured"), tone: transferOk ? "blue" : "amber", form: <TransferNumberForm />, explain: ["Used when a caller asks for a person, when the AI can't help, and by “Transfer” on a live call", "A routing rule can ring a different number for its own calls"] },
         { label: "Your routing rules", meta: "Checked on every turn, before the built-in handling", value: rules.length ? `${activeRules} of ${rules.length} on` : "None", tone: rules.length ? "green" : "neutral", go: { label: "Open Queue & Routing", href: "/receptionist/queue" }, explain: ["A rule can match a word, a topic, low confidence, how the caller sounds, or a call outside working hours", "Then it takes a message or transfers — the first match wins"] },
         { label: "Custom situations", meta: "Extra situations the AI recognises", value: custom ? `${custom} set` : "None", tone: custom ? "green" : "neutral", form: <CustomIntentsForm /> },
@@ -122,15 +122,16 @@ function Settings() {
       title: "Recording and privacy",
       icon: "circle-dot",
       items: [
-        { label: "Recording", meta: "What is recorded", value: "Caller turns", tone: "green", explain: ["Each thing the caller says is recorded and kept", "Recording can't be switched off per number", "The recording button in a call plays the caller's most recent turn"] },
+        { label: "Recording", meta: "What is recorded", value: "Only after consent", tone: "green", explain: ["Caller audio is recorded only when a published regional policy allows it and the caller presses 1", "Pressing 2, giving no response, or lacking an approved policy keeps caller audio off", "The recording button in a call plays caller-turn audio only when it was actually stored"] },
+        { label: "Recording policy and consent", meta: "Before caller audio is recorded", value: "Policy + caller choice", tone: "green", explain: ["The caller hears the automated-assistant and recording notices from the business's published regional policy", "Recording starts only after the caller presses 1; pressing 2 or giving no response does not start recording", "If no published policy allows recording for the caller's region, the call is not recorded and the system tries the human-team path", "This records a choice in the call record; it is not a legal-compliance guarantee"] },
         { label: "Transcription", meta: "Every caller turn", value: "Always on", tone: "amber", explain: ["Every recorded turn is transcribed into the call's transcript"] },
-        { label: "Recording announcement", meta: "Said at the start of every call", value: "Fixed", tone: "amber", explain: [lim?.disclosure ?? "This call may be recorded, and you are speaking with an automated assistant."] },
-        { label: "Retention", meta: "How long recordings are kept", value: `${lim?.retentionDays ?? 90} days`, tone: "neutral", explain: [`Recordings and their transcripts are deleted automatically after ${lim?.retentionDays ?? 90} days`, "This is fixed — it can't be shortened or extended here"] },
+        { label: "Recording announcement", meta: "Read from the published regional policy", value: "Policy notice", tone: "neutral", explain: ["The automated-assistant and recording notices come from the published Voice Compliance policy for the caller's region", "If that policy is missing, unpublished, or disallows recording, caller audio is not recorded"] },
+        { label: "Retention", meta: "How long each call's media is kept", value: "Per policy", tone: "neutral", explain: [`A call uses its published policy's retention period; when that policy leaves retention blank, the default is ${lim?.retentionDays ?? 90} days`, "The daily cleanup removes expired call media and transcript; active calls are kept"] },
         { label: "Deleting a recording", meta: "Removing one call's audio early", value: "On request", tone: "green", explain: ["Anyone who can manage the receptionist can delete a call's recording and transcript from the call workspace", "The call log, outcome and any linked booking stay; the deletion itself is recorded in the audit trail"] },
         { label: "Access", meta: "Who may play a recording", value: "Your team", tone: "neutral", explain: ["Anyone on your team who can open Call History can play a recording"] },
         { label: "Access logging", meta: "Every playback is recorded", value: "Always", tone: "green", explain: ["Each time a recording is opened for playback, who and when are written to the append-only audit trail", "You can see them under Audit in any call's workspace"] },
       ],
-      footer: "Noxtill applies the announcement and retention shown here. It makes no claim that this satisfies any particular jurisdiction's rules.",
+      footer: "Noxtill records the selected policy version and the caller's keypad choice. This is not a legal-compliance guarantee; the business must review its policy for each jurisdiction.",
     },
     {
       title: "Notifications",

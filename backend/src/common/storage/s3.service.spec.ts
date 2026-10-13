@@ -15,6 +15,7 @@ describe('S3Service — local-disk fallback (no real S3 credentials configured)'
     const config = new ConfigService({
       LOCAL_STORAGE_ROOT: localRoot,
       BACKEND_URL: backendUrl,
+      JWT_SECRET: 'local-storage-test-secret',
       // Deliberately no S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY — this is the whole point of the test.
     });
     service = new S3Service(config);
@@ -37,13 +38,45 @@ describe('S3Service — local-disk fallback (no real S3 credentials configured)'
     expect(read!.contentType).toBe('image/png');
   });
 
-  it('returns a local-files URL instead of a real signed S3 URL', async () => {
+  it('returns an expiring HMAC-signed local-files URL', async () => {
     const key = 'qr-posters/biz-1/a5-123.pdf';
     await service.upload(key, Buffer.from('pdf-bytes'), 'application/pdf');
 
     const url = await service.getSignedDownloadUrl(key);
-    expect(url).toBe(
-      `${backendUrl}/local-files?key=${encodeURIComponent(key)}`,
+    const parsed = new URL(url);
+    expect(parsed.origin + parsed.pathname).toBe(`${backendUrl}/local-files`);
+    expect(parsed.searchParams.get('key')).toBe(key);
+    expect(
+      service.verifyLocalDownloadSignature(
+        key,
+        parsed.searchParams.get('expires') ?? undefined,
+        parsed.searchParams.get('signature') ?? undefined,
+      ),
+    ).toBe(true);
+    expect(parsed.searchParams.has('signature')).toBe(true);
+  });
+
+  it('rejects expired, tampered, and missing local-file capabilities', async () => {
+    const key = 'voice-recordings/biz-1/call.mp3';
+    const url = new URL(await service.getSignedDownloadUrl(key, 60));
+    const expires = url.searchParams.get('expires') ?? undefined;
+    const signature = url.searchParams.get('signature') ?? undefined;
+
+    expect(service.verifyLocalDownloadSignature(key, expires, signature)).toBe(
+      true,
+    );
+    expect(
+      service.verifyLocalDownloadSignature(`${key}.other`, expires, signature),
+    ).toBe(false);
+    expect(
+      service.verifyLocalDownloadSignature(
+        key,
+        String(Math.floor(Date.now() / 1000)),
+        signature,
+      ),
+    ).toBe(false);
+    expect(service.verifyLocalDownloadSignature(key, expires, undefined)).toBe(
+      false,
     );
   });
 
@@ -55,9 +88,16 @@ describe('S3Service — local-disk fallback (no real S3 credentials configured)'
       'video/mp4',
     );
 
-    expect(url).toBe(
-      `${backendUrl}/local-files?key=${encodeURIComponent(key)}`,
-    );
+    const parsed = new URL(url);
+    expect(parsed.origin + parsed.pathname).toBe(`${backendUrl}/local-files`);
+    expect(parsed.searchParams.get('key')).toBe(key);
+    expect(
+      service.verifyLocalDownloadSignature(
+        key,
+        parsed.searchParams.get('expires') ?? undefined,
+        parsed.searchParams.get('signature') ?? undefined,
+      ),
+    ).toBe(true);
     const read = await service.readLocalFile(key);
     expect(read!.contentType).toBe('video/mp4');
   });

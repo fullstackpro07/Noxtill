@@ -2922,77 +2922,77 @@ model VoiceAiAgentTestRun {
 /// recording, not Twilio's own URL — kept for as long as `RECORDING_RETENTION_DAYS`, then purged
 /// by the daily retention job alongside the row itself.
 model PhoneCall {
-  id                    String               @id @default(uuid())
-  businessId            String               @map("business_id")
-  business              Business             @relation(fields: [businessId], references: [id])
+  id                       String                        @id @default(uuid())
+  businessId               String                        @map("business_id")
+  business                 Business                      @relation(fields: [businessId], references: [id])
   /// Immutable agent config selected when this call began; null means legacy receptionist fallback.
-  voiceAgentVersionId   String?              @map("voice_agent_version_id")
-  voiceAgentVersion     VoiceAiAgentVersion? @relation(fields: [voiceAgentVersionId], references: [id], onDelete: Restrict)
-  callSid               String               @unique @map("call_sid")
-  fromNumber            String               @map("from_number")
-  status                PhoneCallStatus      @default(in_progress)
-  outcome               PhoneCallOutcome     @default(none)
+  voiceAgentVersionId      String?                       @map("voice_agent_version_id")
+  voiceAgentVersion        VoiceAiAgentVersion?          @relation(fields: [voiceAgentVersionId], references: [id], onDelete: Restrict)
+  callSid                  String                        @unique @map("call_sid")
+  fromNumber               String                        @map("from_number")
+  status                   PhoneCallStatus               @default(in_progress)
+  outcome                  PhoneCallOutcome              @default(none)
   /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the
   /// AI matched this call to (Call Queue depth fix, UPD-BE-129).
-  customIntentName      String?              @map("custom_intent_name")
-  transcript            Json                 @default("[]")
-  recordingKey          String?              @map("recording_key")
+  customIntentName         String?                       @map("custom_intent_name")
+  transcript               Json                          @default("[]")
+  recordingKey             String?                       @map("recording_key")
   /// Inbound calls record audio only after a published regional policy allows it and the caller presses 1.
-  recordingConsentStatus VoiceRecordingConsentStatus @default(not_configured) @map("recording_consent_status")
-  recordingConsentAt     DateTime?                    @map("recording_consent_at")
-  recordingNoticeSnapshot String?                     @map("recording_notice_snapshot") @db.Text
-  recordingPolicyVersionId String?                    @map("recording_policy_version_id")
-  recordingPolicyVersion VoiceCompliancePolicyVersion? @relation(fields: [recordingPolicyVersionId], references: [id], onDelete: SetNull)
-  recordingRetentionDays Int?                         @map("recording_retention_days")
-  recordingExpiresAt     DateTime?                    @map("recording_expires_at")
-  appointmentId         String?              @map("appointment_id")
-  appointment           Appointment?         @relation(fields: [appointmentId], references: [id])
-  startedAt             DateTime             @default(now()) @map("started_at")
-  endedAt               DateTime?            @map("ended_at")
+  recordingConsentStatus   VoiceRecordingConsentStatus   @default(not_configured) @map("recording_consent_status")
+  recordingConsentAt       DateTime?                     @map("recording_consent_at")
+  recordingNoticeSnapshot  String?                       @map("recording_notice_snapshot") @db.Text
+  recordingPolicyVersionId String?                       @map("recording_policy_version_id")
+  recordingPolicyVersion   VoiceCompliancePolicyVersion? @relation(fields: [recordingPolicyVersionId], references: [id], onDelete: SetNull)
+  recordingRetentionDays   Int?                          @map("recording_retention_days")
+  recordingExpiresAt       DateTime?                     @map("recording_expires_at")
+  appointmentId            String?                       @map("appointment_id")
+  appointment              Appointment?                  @relation(fields: [appointmentId], references: [id])
+  startedAt                DateTime                      @default(now()) @map("started_at")
+  endedAt                  DateTime?                     @map("ended_at")
   /// Call Queue fix (UPD-BE-129) — set when staff mark this "message"/"custom"/missed call as
   /// handled (manually called back, or otherwise resolved). NULL means it's still sitting in the
   /// real operational queue of calls needing human follow-up.
-  resolvedAt            DateTime?            @map("resolved_at")
+  resolvedAt               DateTime?                     @map("resolved_at")
   /// Set when staff explicitly log that a callback was promised, without yet marking it resolved —
   /// a distinct state from `resolvedAt` (a queue item can be "callback offered" but not yet done).
-  callbackRequestedAt   DateTime?            @map("callback_requested_at")
+  callbackRequestedAt      DateTime?                     @map("callback_requested_at")
   /// Live Calls listen/take-over fix — set the moment a staff member's own phone is bridged live
   /// into this call via a real Twilio conference redirect (Twilio's "modify a live call" REST
   /// action), replacing the earlier disclosed 15s-poll-only gap. Loose reference (no relation), same
   /// convention as `AuditLog.actorUserId`.
-  joinedAt              DateTime?            @map("joined_at")
-  joinedByUserId        String?              @map("joined_by_user_id")
+  joinedAt                 DateTime?                     @map("joined_at")
+  joinedByUserId           String?                       @map("joined_by_user_id")
   /// AI Phone workspace — the staff member who owns the follow-up for this call (a `BusinessUser.id`,
   /// loose reference like `joinedByUserId`). NULL means nobody has been asked to call back yet.
-  assignedToUserId      String?              @map("assigned_to_user_id")
+  assignedToUserId         String?                       @map("assigned_to_user_id")
   /// AI Phone workspace — a summary generated ON DEMAND from `transcript` alone (never a live
   /// guess) and cached here. NULL until someone asks for one.
-  summary               String?              @db.Text
-  summaryGeneratedAt    DateTime?            @map("summary_generated_at")
+  summary                  String?                       @db.Text
+  summaryGeneratedAt       DateTime?                     @map("summary_generated_at")
   /// AI Phone, full — only what the caller actually said during the call (the AI extracts a name or an
   /// email address when one is clearly given, never guesses). NULL means the caller never offered it.
-  callerName            String?              @map("caller_name")
-  callerEmail           String?              @map("caller_email")
+  callerName               String?                       @map("caller_name")
+  callerEmail              String?                       @map("caller_email")
   /// The custom routing rule (VoiceRoutingRule) that decided this call, kept by name too so the call
   /// still explains itself after the rule is edited or deleted. NULL when no custom rule fired.
-  routedRuleId          String?              @map("routed_rule_id")
-  routedRuleName        String?              @map("routed_rule_name")
+  routedRuleId             String?                       @map("routed_rule_id")
+  routedRuleName           String?                       @map("routed_rule_name")
   /// Merchant-entered attribution only. This is never provider-verified; the evidence and reason
   /// for each correction are also preserved in the append-only AuditLog.
-  attributionSource     String?              @map("attribution_source")
-  attributionChannel    String?              @map("attribution_channel")
-  attributionCampaignId String?              @map("attribution_campaign_id")
-  attributionCampaign   AdCampaign?          @relation("PhoneCallAttributionCampaign", fields: [attributionCampaignId], references: [id], onDelete: SetNull)
-  attributionEvidence   String?              @map("attribution_evidence") @db.Text
-  attributionReason     String?              @map("attribution_reason") @db.Text
-  attributionUpdatedAt  DateTime?            @map("attribution_updated_at")
+  attributionSource        String?                       @map("attribution_source")
+  attributionChannel       String?                       @map("attribution_channel")
+  attributionCampaignId    String?                       @map("attribution_campaign_id")
+  attributionCampaign      AdCampaign?                   @relation("PhoneCallAttributionCampaign", fields: [attributionCampaignId], references: [id], onDelete: SetNull)
+  attributionEvidence      String?                       @map("attribution_evidence") @db.Text
+  attributionReason        String?                       @map("attribution_reason") @db.Text
+  attributionUpdatedAt     DateTime?                     @map("attribution_updated_at")
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
-  providerCost          Decimal?             @map("provider_cost") @db.Decimal(10, 4)
-  providerCostUnit      String?              @map("provider_cost_unit")
-  providerCostCheckedAt DateTime?            @map("provider_cost_checked_at")
+  providerCost             Decimal?                      @map("provider_cost") @db.Decimal(10, 4)
+  providerCostUnit         String?                       @map("provider_cost_unit")
+  providerCostCheckedAt    DateTime?                     @map("provider_cost_checked_at")
   /// Set when staff deleted the recording and transcript (the call log itself is kept).
-  recordingDeletedAt    DateTime?            @map("recording_deleted_at")
+  recordingDeletedAt       DateTime?                     @map("recording_deleted_at")
 
   notes                PhoneCallNote[]
   wrapUp               VoiceCallWrapUp?
@@ -3334,17 +3334,20 @@ model VoiceVideoMeeting {
 /// Bearer invitation secret is returned once to the authenticated organizer and stored only as
 /// a SHA-256 digest. It grants meeting details, never media-provider credentials.
 model VoiceMeetingInvite {
-  id              String            @id @default(uuid())
-  businessId      String            @map("business_id")
-  business        Business          @relation(fields: [businessId], references: [id])
-  meetingId       String            @map("meeting_id")
-  meeting         VoiceVideoMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  email           String            @db.VarChar(191)
-  guestName       String?           @map("guest_name") @db.VarChar(120)
-  tokenHash       String            @unique @map("token_hash") @db.Char(64)
-  expiresAt       DateTime          @map("expires_at")
-  revokedAt       DateTime?         @map("revoked_at")
-  createdByUserId String            @map("created_by_user_id")
+  id               String            @id @default(uuid())
+  businessId       String            @map("business_id")
+  business         Business          @relation(fields: [businessId], references: [id])
+  meetingId        String            @map("meeting_id")
+  meeting          VoiceVideoMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  email            String            @db.VarChar(191)
+  guestName        String?           @map("guest_name") @db.VarChar(120)
+  tokenHash        String            @unique @map("token_hash") @db.Char(64)
+  expiresAt        DateTime          @map("expires_at")
+  revokedAt        DateTime?         @map("revoked_at")
+  createdByUserId  String            @map("created_by_user_id")
+  /// Set only after the email provider accepted the invite email; null = shared manually.
+  emailSentAt      DateTime?         @map("email_sent_at")
+  emailProviderRef String?           @map("email_provider_ref") @db.VarChar(191)
 
   createdAt DateTime @default(now()) @map("created_at")
 

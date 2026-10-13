@@ -49,20 +49,20 @@ function Assistant() {
   const voiceRows: Row[] = [
     {
       label: "Disclosure",
-      meta: "Spoken at the start of every call, before anything else",
+      meta: "The AI identifies itself at the start of every call",
       value: "Fixed",
       tone: "amber",
       open: () =>
         openPanel({
           kicker: "Voice & identity",
-          title: "The opening disclosure",
+          title: "The automated-assistant disclosure",
           badge: "Cannot be switched off",
           badgeTone: "amber",
           answerLabel: "Spoken on every call",
-          answer: rx.insights?.limits.disclosure ?? "This call may be recorded, and you are speaking with an automated assistant.",
+          answer: rx.insights?.limits.disclosure ?? "You are speaking with an automated assistant.",
           bulletsTitle: "Why it is fixed",
-          bullets: ["Every caller is told the call may be recorded and that they are speaking with an automated assistant", "It is not part of the settings, so it can't be edited out of the greeting", "The AI is never configured to imply it is a person"],
-          note: "This is a compliance requirement, not a preference.",
+          bullets: ["Every caller is told they are speaking with an automated assistant", "The recording notice is separate: it comes from the published regional policy, and recording starts only after the caller presses 1", "The AI is never configured to imply it is a person"],
+          note: "The business must review its recording policy for each jurisdiction; this disclosure alone is not a legal-compliance guarantee.",
           secondary: "Close",
         }),
     },
@@ -117,7 +117,7 @@ function Assistant() {
       meta: "Spoken lines before it arranges a callback",
       value: `${maxTurns} lines`,
       tone: "neutral",
-      open: () => notify("Length cap", `A call is capped at ${maxTurns} spoken lines (caller and AI combined). At the cap the AI says someone will call back and the call is recorded as a message.`),
+      open: () => notify("Length cap", `A consented AI conversation is capped at ${maxTurns} spoken lines (caller and AI combined). At the cap the AI arranges a callback; the caller's audio and transcript are retained only when recording consent was granted.`),
     },
     {
       label: "Transfer number",
@@ -133,22 +133,22 @@ function Assistant() {
           { label: "Server-wide fallback", value: transferOk && !ownTransfer ? "In use" : "None or not needed" },
           { label: "When a caller asks for a person", value: transferOk ? "The call is dialled through" : "The AI tells them a message is noted, and it joins the follow-up queue" },
         ],
-        ["Used when a caller asks for a person, when the AI can't help, and by “Transfer” on a live call", "A routing rule can ring a different number for its own calls", "Without any number, a transfer request is never lost — it is recorded as a message someone must return"],
+        ["Used when a caller asks for a person, when the AI can't help, and by “Transfer” on a live call", "A routing rule can ring a different number for its own calls", "Without any number, a follow-up is kept; caller audio is recorded only if consent was granted"],
         "Saved settings apply from the very next call.",
       ),
     },
   ];
 
   const script: [string, string][] = [
-    ["Disclosure", "Says the call may be recorded and that it is an automated assistant."],
-    ["Listen", `Records the caller's turn, waiting up to ${timeout} s for them to speak.`],
+    ["Disclosure", "Identifies itself as an automated assistant; a separate regional policy notice asks for recording consent."],
+    ["Listen", `Only after the caller consents, records their turn and waits up to ${timeout} s for them to speak.`],
     ["Transcribe", "Turns the recording into text."],
     ["Find records", "Looks up only what matches what was said — a product or service, your hours and address, an FAQ or document, and (if you allow it) the caller's own order or balance."],
     ["Detect intent", "Decides: keep talking, book, take a message, transfer, end — or one of your custom situations. Also notes its own confidence, the topic, and how the caller sounds."],
     ["Check your rules", "Your routing rules are checked; the first match decides the call, whatever the AI would have done."],
     ["Reply", "Writes a short reply from the conversation and the records it was given — or says it has no record."],
     ["Act", "Books through Bookings, takes a message, or transfers — only when it has what it needs."],
-    ["Close", `Ends the call, or after ${maxTurns} spoken lines says someone will call back and records a message.`],
+    ["Close", `Ends the call, or after ${maxTurns} consented conversation lines arranges a callback.`],
   ];
 
   type Cell = [string, Tone];
@@ -156,7 +156,7 @@ function Assistant() {
   const caps: { capability: string; source: string; clear: Cell; unclear: Cell; limit: Cell; why: string[]; red?: boolean }[] = [
     { capability: "Take a booking", source: "Your services · Bookings", clear: ["Book", "green"], unclear: ["Ask again", "amber"], limit: ["Arrange callback", "amber"], why: ["It books only once it has a clear service and a clear time", "The booking engine rejects a time that isn't free, and the AI asks for another"] },
     { capability: "Take a message", source: "The conversation", clear: ["Take it", "green"], unclear: ["Ask again", "amber"], limit: ["Take it", "green"], why: ["The call joins the follow-up queue until someone marks it handled", "If the caller gives their name or email, only what they said is kept"] },
-    { capability: "Transfer to a person", source: ownTransfer ? "Your transfer number" : "Transfer number", clear: [transferOk ? "Transfer" : "Record message", transferOk ? "green" : "amber"], unclear: ["Ask again", "amber"], limit: ["Arrange callback", "amber"], why: [transferOk ? "The call is dialled to your transfer number" : "No transfer number is set, so it is recorded as a message instead"] },
+    { capability: "Transfer to a person", source: ownTransfer ? "Your transfer number" : "Transfer number", clear: [transferOk ? "Transfer" : "Follow-up", transferOk ? "green" : "amber"], unclear: ["Ask again", "amber"], limit: ["Arrange callback", "amber"], why: [transferOk ? "The call is dialled to your transfer number" : "No transfer number is set, so the call joins the follow-up queue; audio is saved only with caller consent"] },
     { capability: "Your custom situations", source: "Settings", clear: ["Take a message", "green"], unclear: ["Keep talking", "amber"], limit: ["Arrange callback", "amber"], why: ["The AI uses the situation's exact name when a conversation clearly matches it"] },
     { capability: "Business hours and address", source: "Business profile", clear: answer(catalog), unclear: ["Say no record", "amber"], limit: ["Arrange callback", "amber"], why: ["Given to the AI when a caller asks about hours or where you are", "If your working hours or address aren't saved, it says it has no record"] },
     { capability: "Product price and stock", source: "Products", clear: answer(catalog), unclear: ["Say no record", "amber"], limit: ["Arrange callback", "amber"], why: ["A product whose name matches what the caller said is given to the AI with its price and whether it is in stock", "If nothing matches, the AI says it has no record and offers a message"] },

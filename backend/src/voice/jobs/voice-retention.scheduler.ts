@@ -27,5 +27,20 @@ export class VoiceRetentionScheduler implements OnModuleInit {
           `Failed to register voice-retention tick: ${error.message}`,
         ),
       );
+
+    this.queue
+      .add(
+        'expire-agent-reservations',
+        {},
+        {
+          repeat: { pattern: '* * * * *' },
+          jobId: 'voice-agent-reservations-expire-every-minute',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register human-agent reservation expiry: ${error.message}`,
+        ),
+      );
   }
 }
