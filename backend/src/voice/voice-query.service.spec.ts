@@ -23,6 +23,7 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
   let prisma: PrismaService;
   let service: VoiceQueryService;
   let businessId: string;
+  let otherBusinessId: string;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -44,13 +45,23 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
       new AuditService(tenantPrisma, cls as unknown as ClsService),
     );
 
-    const business = await prisma.business.create({
-      data: {
-        name: 'Voice Query Test Biz',
-        slug: `voice-query-test-${Date.now()}`,
-      },
-    });
+    const stamp = Date.now();
+    const [business, otherBusiness] = await Promise.all([
+      prisma.business.create({
+        data: {
+          name: 'Voice Query Test Biz',
+          slug: `voice-query-test-${stamp}`,
+        },
+      }),
+      prisma.business.create({
+        data: {
+          name: 'Other Voice Query Test Biz',
+          slug: `voice-query-other-${stamp}`,
+        },
+      }),
+    ]);
     businessId = business.id;
+    otherBusinessId = otherBusiness.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     // No FK on AuditLog.actorUserId — a plain id is enough to prove who is recorded.
     cls.set(CLS_KEY_USER_ID, 'staff-user-1');
@@ -86,14 +97,45 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
         },
       ],
     });
+    const completedCall = await prisma.phoneCall.findUniqueOrThrow({
+      where: { callSid: 'CA-q-completed' },
+    });
+    await prisma.voiceCallWrapUp.create({
+      data: {
+        businessId,
+        callId: completedCall.id,
+        disposition: 'resolved',
+        tags: ['follow-up complete'],
+      },
+    });
+    await prisma.customer.create({
+      data: {
+        businessId,
+        phone: '+15550003001',
+        name: 'Voice Query Customer',
+      },
+    });
+    await prisma.customer.create({
+      data: {
+        businessId: otherBusinessId,
+        phone: '+15550003002',
+        name: 'Other Tenant Caller',
+      },
+    });
   });
 
   afterAll(async () => {
+    await prisma.voiceCallWrapUp.deleteMany({ where: { businessId } });
     await prisma.phoneCall.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({
+      where: { businessId: otherBusinessId },
+    });
     await prisma.auditLog.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
+      await tx.business.delete({ where: { id: otherBusinessId } });
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
     await prisma.$disconnect();
@@ -102,6 +144,27 @@ describe('VoiceQueryService (UPD-BE-059)', () => {
   it('listCalls() returns every real call, most recent first', async () => {
     const calls = await service.listCalls();
     expect(calls).toHaveLength(3);
+    const completed = calls.find((call) => call.callSid === 'CA-q-completed');
+    expect(completed?.wrapUp).toMatchObject({
+      disposition: 'resolved',
+      tags: ['follow-up complete'],
+    });
+    expect(completed?.matchedCustomer).toMatchObject({
+      name: 'Voice Query Customer',
+    });
+    expect(
+      calls.find((call) => call.callSid === 'CA-q-missed')?.wrapUp,
+    ).toBeNull();
+    expect(
+      calls.find((call) => call.callSid === 'CA-q-missed')?.matchedCustomer,
+    ).toBeNull();
+  });
+
+  it('does not match a caller to a CRM customer in another business', async () => {
+    const calls = await service.listCalls();
+    expect(
+      calls.find((call) => call.callSid === 'CA-q-missed')?.matchedCustomer,
+    ).toBeNull();
   });
 
   it('listMissedCalls() returns only the real missed call', async () => {

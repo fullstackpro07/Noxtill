@@ -241,6 +241,10 @@ export class VoiceInsightsService {
         localHour: parts.hour,
         afterHours: isAfterHours(parts, hours),
         hasRecording: !!c.recordingKey,
+        recordingConsentStatus: c.recordingConsentStatus,
+        recordingConsentAt: c.recordingConsentAt?.toISOString() ?? null,
+        recordingRetentionDays: c.recordingRetentionDays,
+        recordingExpiresAt: c.recordingExpiresAt?.toISOString() ?? null,
         recordingDeletedAt: c.recordingDeletedAt
           ? c.recordingDeletedAt.toISOString()
           : null,
