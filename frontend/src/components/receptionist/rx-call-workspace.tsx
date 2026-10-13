@@ -32,6 +32,7 @@ import { CALL_SECTIONS, useRxStore, type CallSection, type PanelRow } from "./rx
 import { useRx } from "./rx-data";
 import { Bullets, NoteBox, RowTable } from "./rx-overlays";
 import { useCallActions } from "./rx-call-actions";
+import { LegalHoldForm, type LegalHoldFields } from "./rx-legal-hold";
 
 interface SectionData {
   lineage: string;
@@ -128,6 +129,21 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
     });
 
   const next = nextStep(call);
+  const hold = call as typeof call & LegalHoldFields;
+  const openHold = () =>
+    openPanel({
+      kicker: "Legal hold",
+      title: hold.legalHoldAt ? "Release the legal hold?" : "Place this call on legal hold?",
+      badge: hold.legalHoldAt ? `Held since ${fmtDateTime(hold.legalHoldAt, tz)}` : "Not held",
+      badgeTone: hold.legalHoldAt ? "amber" : "neutral",
+      body: <LegalHoldForm callId={call.id} held={!!hold.legalHoldAt} />,
+      bullets: [
+        "While held, nobody can delete the recording or transcript",
+        "The automatic retention purge skips this call",
+        ...(hold.legalHoldReason ? [`Current reason: ${hold.legalHoldReason}`] : []),
+      ],
+      secondary: "Close",
+    });
   const actions: { label: string; icon: string; risky?: boolean; disabled?: boolean; onClick: () => void }[] = [
     { label: "Call back", icon: "phone-outgoing", onClick: doCallBack },
     { label: loadingAudio ? "Loading…" : "Play recording", icon: "play", disabled: !call.hasRecording, onClick: () => void playRecording() },
@@ -143,7 +159,8 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
           { label: "End call", icon: "phone-off", risky: true, onClick: () => ca.endCall(call) },
         ]
       : []),
-    { label: "Delete recording", icon: "trash-2", risky: true, disabled: !call.hasRecording && call.transcript.length === 0, onClick: () => ca.deleteRecording(call) },
+    { label: hold.legalHoldAt ? "Release legal hold" : "Place legal hold", icon: "shield-check", onClick: openHold },
+    { label: hold.legalHoldAt ? "Delete blocked · legal hold" : "Delete recording", icon: "trash-2", risky: true, disabled: !!hold.legalHoldAt || (!call.hasRecording && call.transcript.length === 0), onClick: () => ca.deleteRecording(call) },
   ];
 
   return (
@@ -182,6 +199,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
                 h={23}
                 fontSize={10.5}
               />
+              {hold.legalHoldAt ? <ChipFor spec={{ label: "Legal hold", tone: "amber", icon: "shield-check" }} h={23} fontSize={10.5} /> : null}
               {confidenceChip(call.analysis?.confidence ?? null) ? <ChipFor spec={confidenceChip(call.analysis?.confidence ?? null)!} h={23} fontSize={10.5} /> : null}
               {sentimentChip(call.analysis?.sentiment ?? null) ? <ChipFor spec={sentimentChip(call.analysis?.sentiment ?? null)!} h={23} fontSize={10.5} /> : null}
               {call.routedRuleName ? <ChipFor spec={{ label: `Rule: ${call.routedRuleName}`, tone: "blue", icon: "list-ordered" }} h={23} fontSize={10.5} /> : null}
@@ -495,6 +513,8 @@ interface Helpers {
 const AUDIT_LABELS: Record<string, string> = {
   "call.recording_played": "Played the recording",
   "call.recording_deleted": "Deleted the recording and transcript",
+  "call.legal_hold_placed": "Placed a legal hold",
+  "call.legal_hold_released": "Released the legal hold",
   "call.note_added": "Added a note",
   "call.assigned": "Changed the follow-up owner",
   "call.summary_generated": "Wrote an AI summary",

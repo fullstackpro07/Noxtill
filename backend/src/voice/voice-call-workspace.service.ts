@@ -76,6 +76,13 @@ export class VoiceCallWorkspaceService {
   /** Deletes the recording audio (every turn's S3 copy) AND the transcript text, but keeps the call log entry, its outcome, any summary and any linked booking/order. Irreversible. */
   async deleteRecording(businessId: string, callId: string) {
     const call = await this.findOwned(businessId, callId);
+    if (call.legalHoldAt) {
+      throw new AppException(
+        VOICE_ERROR_CODES.RECORDING_LEGAL_HOLD,
+        'This call is on legal hold. Release the hold before deleting its recording.',
+        HttpStatus.CONFLICT,
+      );
+    }
     const turns = (call.transcript as unknown as CallTurn[]) ?? [];
     const keys = [
       ...new Set(

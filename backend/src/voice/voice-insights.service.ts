@@ -248,6 +248,8 @@ export class VoiceInsightsService {
         recordingDeletedAt: c.recordingDeletedAt
           ? c.recordingDeletedAt.toISOString()
           : null,
+        legalHoldAt: c.legalHoldAt ? c.legalHoldAt.toISOString() : null,
+        legalHoldReason: c.legalHoldReason,
         transcript,
         analysis: summariseCallAnalysis(transcript),
         callerName: c.callerName,

@@ -3009,6 +3009,10 @@ model PhoneCall {
   trackingNumberId         String?                       @map("tracking_number_id")
   trackingNumber           VoiceTrackingNumber?          @relation(fields: [trackingNumberId], references: [id], onDelete: SetNull)
   callback                 VoiceCallback?
+  /// Legal hold: while set, neither manual deletion nor the retention purge may remove audio/transcript.
+  legalHoldAt              DateTime?                     @map("legal_hold_at")
+  legalHoldByUserId        String?                       @map("legal_hold_by_user_id")
+  legalHoldReason          String?                       @map("legal_hold_reason") @db.VarChar(500)
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
   providerCost             Decimal?                      @map("provider_cost") @db.Decimal(10, 4)

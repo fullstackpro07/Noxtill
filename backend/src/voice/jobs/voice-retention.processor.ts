@@ -56,6 +56,8 @@ export class VoiceRetentionProcessor extends WorkerHost {
     const expired = await this.prisma.phoneCall.findMany({
       where: {
         status: { not: 'in_progress' },
+        // A legal hold suspends retention until it is released.
+        legalHoldAt: null,
         OR: [
           { recordingExpiresAt: { lte: now } },
           {

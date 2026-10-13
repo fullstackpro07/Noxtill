@@ -87,6 +87,8 @@ import {
 } from './dto/voice-tracking.dto';
 import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import { VoiceCallbacksService } from './voice-callbacks.service';
+import { VoiceLegalHoldService } from './voice-legal-hold.service';
+import { VoiceLegalHoldDto } from './dto/voice-callback.dto';
 import {
   CompleteVoiceCallbackDto,
   PlaceVoiceCallbackDto,
@@ -152,6 +154,7 @@ export class VoiceController {
     private readonly voiceTracking: VoiceTrackingService,
     private readonly voiceTrackingNumbers: VoiceTrackingNumbersService,
     private readonly voiceCallbacks: VoiceCallbacksService,
+    private readonly voiceLegalHold: VoiceLegalHoldService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -1086,6 +1089,32 @@ export class VoiceController {
     @Param('id') id: string,
   ) {
     return this.voiceWorkspace.deleteRecording(user.businessId, id);
+  }
+
+  /** Legal hold: blocks recording deletion and retention purge until released. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/legal-hold')
+  placeLegalHold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceLegalHoldDto,
+  ) {
+    return this.voiceLegalHold.place(user.businessId, user.sub, id, dto.reason);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/legal-hold/release')
+  releaseLegalHold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceLegalHoldDto,
+  ) {
+    return this.voiceLegalHold.release(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
   }
 
   @Get('voice/routing-rules')

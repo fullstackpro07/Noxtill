@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 
 export class PlaceVoiceCallbackDto {
@@ -33,4 +34,11 @@ export class CompleteVoiceCallbackDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+}
+
+export class VoiceLegalHoldDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(500)
+  reason!: string;
 }
