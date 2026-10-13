@@ -26,6 +26,7 @@ function Numbers() {
   const qc = useQueryClient();
   const notify = useRxStore((s) => s.notify);
   const openPanel = useRxStore((s) => s.openPanel);
+  const openConfirm = useRxStore((s) => s.openConfirm);
   const [busy, setBusy] = useState(false);
   const num = rx.insights?.number ?? null;
   const t = sliceDay(rx.calls, rx.today);
@@ -35,12 +36,29 @@ function Numbers() {
     try {
       await provisionVoiceNumber();
       await qc.invalidateQueries({ queryKey: ["rx-insights"] });
-      notify("Number provisioned", "Your receptionist now has a phone number and will answer it.");
+      notify("Number provisioned", "Twilio returned a phone number and Noxtill saved it for this business.");
     } catch (e) {
       notify("Couldn't provision a number", e instanceof ApiError ? e.message : "Please try again.", "error");
     } finally {
       setBusy(false);
     }
+  };
+
+  const confirmProvision = () => {
+    openConfirm({
+      title: "Provision a Twilio phone number?",
+      tone: "amber",
+      icon: "phone",
+      body: "Continuing sends a request to Twilio to add a phone number to its account. The current server flow selects a US local number and connects its incoming-call webhook to Noxtill. Twilio may charge for the number and call usage; this screen cannot quote the final price. Check the Twilio account's rates before continuing.",
+      rows: [
+        { label: "Provider", value: "Twilio" },
+        { label: "Number region", value: "US local (selected by the server)" },
+        { label: "Business limit", value: "One number per business" },
+      ],
+      primary: "Continue to Twilio provisioning",
+      cancel: "Cancel",
+      onConfirm: provision,
+    });
   };
 
   const durationOf = (list: typeof t.calls) => list.reduce((s, c) => s + (c.durationSeconds ?? 0), 0);
@@ -100,14 +118,14 @@ function Numbers() {
                 rows: [
                   { label: "Assignment", value: `${rx.insights?.businessName ?? "Your business"} · general reception` },
                   { label: "Provider", value: "Twilio" },
-                  { label: "AI answering", value: "On — every inbound call" },
-                  { label: "Recording", value: "The caller's turns are recorded" },
-                  { label: "Transcription", value: "On — every caller turn" },
+                  { label: "Inbound handling", value: "Twilio webhook routes calls to Noxtill" },
+                  { label: "AI response", value: "Uses the configured AI provider; falls back if unavailable" },
+                  { label: "Recording and transcript", value: "Caller turns are recorded and sent for transcription" },
                   { label: "Provisioned", value: fmtDateTime(num.provisionedAt, rx.timezone) },
                   { label: "Calls today", value: String(t.calls.length) },
                 ],
                 bulletsTitle: "How this number behaves",
-                bullets: ["The AI answers every call and opens with the recording and automated-assistant disclosure", "Every call appears in Call History", "Working hours are used to flag calls that arrive outside them"],
+                bullets: ["Twilio is configured to send inbound calls to Noxtill's receptionist webhook", "The call handler identifies the assistant as automated; it reads the published regional recording notice and starts recording only after the caller presses 1", "Without an approved policy, a public consent callback, or caller consent, no caller audio is recorded", "AI responses depend on the configured AI service; when it is unavailable, the handler uses its fallback response"],
                 note: "Recording follows the retention shown in Settings; Noxtill makes no claim about legal compliance.",
                 secondary: "Close",
               })
@@ -123,10 +141,10 @@ function Numbers() {
                 <div className="font-mono text-[13.5px] font-extrabold">{num.phoneNumber}</div>
                 <div className="mt-0.5 text-[11px] text-[#94A3B8]">{rx.insights?.businessName ?? "Your business"} · general reception</div>
               </div>
-              <Chip tone="green" h={22} fontSize={10.5}>Operational</Chip>
+              <Chip tone="green" h={22} fontSize={10.5}>Provisioned</Chip>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <Chip tone="green">AI enabled</Chip>
+              <Chip tone="green">Inbound calls routed</Chip>
               <Chip tone="green">Caller turns recorded</Chip>
               <Chip tone="green">Transcription on</Chip>
             </div>
@@ -141,10 +159,10 @@ function Numbers() {
           </div>
         ) : (
           <Card overflow>
-            <EmptyState icon="phone" title="No number yet" body="Provision a number and your AI receptionist will start answering calls to it straight away." />
+            <EmptyState icon="phone" title="No number yet" body="No Noxtill phone number is connected, so inbound calls cannot reach this receptionist. Provisioning uses the configured Twilio account and currently selects a US local number. Twilio charges may apply; the final price is not shown here." />
             <div className="flex justify-center pb-6">
-              <PrimaryBtn onClick={() => void provision()} disabled={busy} height={36}>
-                {busy ? "Provisioning…" : "Provision a number"}
+              <PrimaryBtn onClick={confirmProvision} disabled={busy} height={36}>
+                Review number provisioning
               </PrimaryBtn>
             </div>
           </Card>
