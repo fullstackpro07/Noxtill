@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { SessionsService } from './sessions.service';
 import { TwoFactorService } from './two-factor.service';
+import { AuthTokensService } from './auth-tokens.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -20,6 +21,7 @@ describe('AuthService', () => {
         { provide: CapabilitiesService, useValue: {} },
         { provide: SessionsService, useValue: {} },
         { provide: TwoFactorService, useValue: {} },
+        { provide: AuthTokensService, useValue: {} },
       ],
     }).compile();
 

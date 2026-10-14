@@ -21,11 +21,19 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
   const business = useAuthStore((s) => s.business);
   const hasSession = Boolean(accessToken && user && business);
 
-  useEffect(() => {
-    if (hasHydrated && !hasSession) router.replace("/login");
-  }, [hasHydrated, hasSession, router]);
+  // Auth & Onboarding: an unconfirmed email goes to Check your email; an owner whose workspace
+  // isn't set up yet goes to onboarding. Sessions persisted before these flags existed have them
+  // undefined and are treated as complete.
+  const pending =
+    user?.emailVerified === false ? "/check-email" : business?.onboardingCompleted === false && user?.role === "owner" ? "/onboarding" : null;
 
-  if (!hasHydrated || !hasSession) return null;
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (!hasSession) router.replace("/login");
+    else if (pending) router.replace(pending);
+  }, [hasHydrated, hasSession, pending, router]);
+
+  if (!hasHydrated || !hasSession || pending) return null;
 
   return <>{children}</>;
 }

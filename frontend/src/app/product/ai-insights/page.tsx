@@ -172,7 +172,7 @@ export default function AiInsightsPage() {
                   <div className="flex overflow-hidden rounded-[6px] bg-white">
                     <div className="hidden w-[120px] flex-none bg-surface-2 p-2.5 md:block">
                       <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold text-fg">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-md bg-primary text-white">N</span> Noxtill
+                        <img src="/brand/noxtill-n.png" alt="" className="h-4 w-4 object-contain" /> Noxtill
                       </p>
                       <div className="flex flex-col gap-0.5">
                         {SIDEBAR.map((s) => (
@@ -313,7 +313,7 @@ export default function AiInsightsPage() {
                   <div className="rounded-md bg-white p-2.5">
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="flex items-center gap-1 text-[9px] font-semibold text-fg">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-md bg-primary text-white">N</span> Noxtill AI
+                        <img src="/brand/noxtill-n.png" alt="" className="h-4 w-4 object-contain" /> Noxtill AI
                       </span>
                       <span className="text-[7px] text-fg-faint">now</span>
                     </div>

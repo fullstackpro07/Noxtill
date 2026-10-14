@@ -7,8 +7,8 @@ export interface AuthTokens {
 }
 
 export interface SignupPayload {
-  businessName: string;
-  name: string;
+  businessName?: string;
+  name?: string;
   email?: string;
   phone?: string;
   password: string;
@@ -20,6 +20,8 @@ export interface SignupPayload {
 export interface LoginPayload {
   emailOrPhone: string;
   password: string;
+  /** Unticked → a one-day refresh window. */
+  rememberMe?: boolean;
 }
 
 /** 2FA is enabled on this account — a real code was just sent; exchange it via `verifyTwoFactorLogin`. */
@@ -59,4 +61,54 @@ export function fetchMe(): Promise<MeResponse> {
 
 export function logout(): Promise<void> {
   return apiFetch<void>("/auth/logout", { method: "POST" });
+}
+
+// ---- Auth & Onboarding (email confirmation, password reset, social sign-in) ----
+
+export interface VerificationStatus {
+  email: string | null;
+  verified: boolean;
+  resendInSeconds: number;
+}
+
+export interface ResendResult {
+  sent: boolean;
+  email: string;
+  resendInSeconds: number;
+}
+
+export function fetchVerificationStatus(): Promise<VerificationStatus> {
+  return apiFetch<VerificationStatus>("/auth/verification");
+}
+
+export function resendVerification(): Promise<ResendResult> {
+  return apiFetch<ResendResult>("/auth/verification/resend", { method: "POST" });
+}
+
+export function changeUnverifiedEmail(email: string): Promise<ResendResult> {
+  return apiFetch<ResendResult>("/auth/verification/email", { method: "PATCH", body: JSON.stringify({ email }) });
+}
+
+export function verifyEmail(token: string): Promise<{ verified: true; email: string | null }> {
+  return apiFetch("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }, { skipAuth: true });
+}
+
+export function forgotPassword(email: string): Promise<{ ok: true }> {
+  return apiFetch("/auth/password/forgot", { method: "POST", body: JSON.stringify({ email }) }, { skipAuth: true });
+}
+
+export function fetchResetTokenStatus(token: string): Promise<{ valid: boolean }> {
+  return apiFetch(`/auth/password/reset?token=${encodeURIComponent(token)}`, {}, { skipAuth: true });
+}
+
+export function resetPassword(token: string, password: string): Promise<{ reset: true }> {
+  return apiFetch("/auth/password/reset", { method: "POST", body: JSON.stringify({ token, password }) }, { skipAuth: true });
+}
+
+export function fetchAuthProviders(): Promise<{ google: boolean; apple: boolean }> {
+  return apiFetch("/auth/providers", {}, { skipAuth: true });
+}
+
+export function fetchGoogleAuthUrl(): Promise<{ url: string }> {
+  return apiFetch("/auth/google", {}, { skipAuth: true });
 }

@@ -1,0 +1,120 @@
+/* Auth & Onboarding — exact tokens from docs/Logo asset and green panel/Noxtill Auth & Onboarding.dc.html */
+.nx-flow {
+  font-family: var(--font-nx-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #0f172a;
+  background: #ffffff;
+  min-height: 100vh;
+}
+.nx-flow *,
+.nx-flow *::before,
+.nx-flow *::after {
+  box-sizing: border-box;
+}
+.nx-flow a {
+  color: #0b6e3b;
+  text-decoration: none;
+}
+.nx-flow a:hover {
+  color: #095a31;
+  text-decoration: underline;
+}
+.nx-flow input,
+.nx-flow textarea,
+.nx-flow button {
+  font-family: inherit;
+}
+.nx-flow input:focus,
+.nx-flow textarea:focus {
+  outline: 2px solid #12a150;
+  outline-offset: 0;
+  border-color: #12a150 !important;
+}
+.nx-flow button:disabled {
+  cursor: not-allowed !important;
+}
+.nx-hover-soft:hover:not(:disabled) {
+  background: #f8fafc !important;
+}
+.nx-hover-primary:hover:not(:disabled) {
+  background: #095a31 !important;
+}
+.nx-hover-confirm:hover:not(:disabled) {
+  background: #0a7540 !important;
+}
+.nx-hover-row:hover {
+  background: #f1f5f9 !important;
+}
+
+@keyframes nxFade {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes nxPop {
+  0% { opacity: 0; transform: scale(0.7); }
+  60% { transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes nxDraw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes nxRing {
+  from { opacity: 0.55; transform: scale(0.75); }
+  to { opacity: 0; transform: scale(1.7); }
+}
+@keyframes nxSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes nxParticle {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nx-flow * {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
+  }
+}
+
+/* Layout B: 416px green panel + content; below 980px the panel hides and the flow goes full width. */
+.nx-ob-grid {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: 416px minmax(0, 1fr);
+}
+.nx-ob-panel {
+  display: flex;
+}
+.nx-ob-main {
+  padding: 28px 40px 100px;
+}
+@media (max-width: 979px) {
+  .nx-ob-grid {
+    grid-template-columns: 1fr;
+  }
+  .nx-ob-panel {
+    display: none !important;
+  }
+  .nx-ob-main {
+    padding: 24px 16px 80px;
+  }
+}
+@media (max-width: 520px) {
+  .nx-auth-card {
+    padding: 32px 20px 26px !important;
+  }
+  .nx-ob-two-up {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Auth pages render at 75% scale on tablet/desktop (the design reads best at that ratio). The page
+ * height is divided by the zoom so the card still centres in the full viewport. Phones stay 100%. */
+.nx-auth-zoom {
+  min-height: 100vh;
+}
+@media (min-width: 768px) {
+  .nx-auth-zoom {
+    zoom: 0.75;
+    min-height: calc(100vh / 0.75);
+  }
+}

@@ -312,9 +312,7 @@ export default function NightlyClosePage() {
                 <div className="relative mx-auto max-w-[320px] rounded-[16px] border border-white/10 bg-[#03251b] p-4 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.6)]">
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-[6px] bg-accent-on-deep/20 font-display text-[11px] font-bold text-accent-on-deep">
-                        N
-                      </span>
+                      <img src="/brand/noxtill-n.png" alt="" className="h-6 w-6 flex-none object-contain" />
                       <span className="text-[13px] font-medium text-fg-on-deep">Nightly Close</span>
                     </div>
                     <span className="text-[10.5px] text-fg-on-deep-faint">10:00 PM</span>

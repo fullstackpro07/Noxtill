@@ -8,6 +8,8 @@ export interface AuthUser {
   email: string | null;
   phone: string | null;
   twoFactorEnabled: boolean;
+  /** Auth & Onboarding: false until the emailed confirmation link is clicked. Absent on sessions persisted before this field existed. */
+  emailVerified?: boolean;
   role: Role;
   businessUserId: string | null;
 }
@@ -22,6 +24,10 @@ export interface AuthBusiness {
   country: string | null;
   parentId: string | null;
   branches: { id: string; name: string }[];
+  /** Sidebar keys approved in onboarding; empty/absent = full sidebar. */
+  enabledModules?: string[];
+  /** False until onboarding Step 5 finishes. Absent on sessions persisted before this field existed. */
+  onboardingCompleted?: boolean;
 }
 
 interface AuthTokens {

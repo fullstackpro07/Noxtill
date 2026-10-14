@@ -1,12 +1,19 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
+  Query,
   Req,
+  Res,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
+import { AccountService } from './account.service';
+import { EmailDto, ResetPasswordDto, TokenDto } from './dto/account.dto';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -27,9 +34,13 @@ function requestMeta(req: Request) {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly account: AccountService,
+  ) {}
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('signup')
   signup(@Body() dto: SignupDto, @Req() req: Request) {
     return this.authService.signup(dto, requestMeta(req));
@@ -88,5 +99,89 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   logout(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.logout(user.sessionId);
+  }
+
+  // ---- Auth & Onboarding: email confirmation ----
+
+  @Get('verification')
+  verificationStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.account.verificationStatus(user.sub);
+  }
+
+  @Post('verification/resend')
+  @HttpCode(HttpStatus.OK)
+  resendVerification(@CurrentUser() user: AuthenticatedUser) {
+    return this.account.resendVerification(user.sub);
+  }
+
+  @Patch('verification/email')
+  changeUnverifiedEmail(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: EmailDto,
+  ) {
+    return this.account.changeUnverifiedEmail(
+      user.sub,
+      user.businessId,
+      dto.email,
+    );
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  verifyEmail(@Body() dto: TokenDto) {
+    return this.account.verifyEmail(dto.token);
+  }
+
+  // ---- Auth & Onboarding: password reset ----
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('password/forgot')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() dto: EmailDto) {
+    return this.account.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @Get('password/reset')
+  resetTokenStatus(@Query('token') token: string) {
+    return this.account.resetTokenStatus(token ?? '');
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('password/reset')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.account.resetPassword(dto.token, dto.password);
+  }
+
+  // ---- Auth & Onboarding: social sign-in ----
+
+  @Public()
+  @Get('providers')
+  providers() {
+    return this.account.providers();
+  }
+
+  @Public()
+  @Get('google')
+  async googleStart() {
+    return { url: await this.account.googleAuthUrl() };
+  }
+
+  @Public()
+  @Get('google/callback')
+  async googleCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    res.redirect(
+      await this.account.googleCallback(code, state, requestMeta(req)),
+    );
   }
 }

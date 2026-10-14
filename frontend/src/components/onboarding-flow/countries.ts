@@ -1,0 +1,23 @@
+/**
+ * Country + dialling-code list from the Auth & Onboarding design. Jurisdictions under comprehensive
+ * US sanctions/embargo are intentionally omitted there and here. `currency` is the ISO-4217 code the
+ * business is set to when the owner picks that country.
+ */
+const DATA =
+  "Albania|AL|355|ALL;Algeria|DZ|213|DZD;Andorra|AD|376|EUR;Angola|AO|244|AOA;Antigua and Barbuda|AG|1268|XCD;Argentina|AR|54|ARS;Armenia|AM|374|AMD;Australia|AU|61|AUD;Austria|AT|43|EUR;Azerbaijan|AZ|994|AZN;Bahamas|BS|1242|BSD;Bahrain|BH|973|BHD;Bangladesh|BD|880|BDT;Barbados|BB|1246|BBD;Belgium|BE|32|EUR;Belize|BZ|501|BZD;Benin|BJ|229|XOF;Bhutan|BT|975|BTN;Bolivia|BO|591|BOB;Bosnia and Herzegovina|BA|387|BAM;Botswana|BW|267|BWP;Brazil|BR|55|BRL;Brunei|BN|673|BND;Bulgaria|BG|359|BGN;Burkina Faso|BF|226|XOF;Burundi|BI|257|BIF;Cambodia|KH|855|KHR;Cameroon|CM|237|XAF;Canada|CA|1|CAD;Cape Verde|CV|238|CVE;Chad|TD|235|XAF;Chile|CL|56|CLP;China|CN|86|CNY;Colombia|CO|57|COP;Comoros|KM|269|KMF;Congo|CG|242|XAF;Costa Rica|CR|506|CRC;Côte d'Ivoire|CI|225|XOF;Croatia|HR|385|EUR;Cyprus|CY|357|EUR;Czechia|CZ|420|CZK;Denmark|DK|45|DKK;Djibouti|DJ|253|DJF;Dominica|DM|1767|XCD;Dominican Republic|DO|1809|DOP;Ecuador|EC|593|USD;Egypt|EG|20|EGP;El Salvador|SV|503|USD;Equatorial Guinea|GQ|240|XAF;Estonia|EE|372|EUR;Eswatini|SZ|268|SZL;Ethiopia|ET|251|ETB;Fiji|FJ|679|FJD;Finland|FI|358|EUR;France|FR|33|EUR;Gabon|GA|241|XAF;Gambia|GM|220|GMD;Georgia|GE|995|GEL;Germany|DE|49|EUR;Ghana|GH|233|GHS;Greece|GR|30|EUR;Grenada|GD|1473|XCD;Guatemala|GT|502|GTQ;Guinea|GN|224|GNF;Guyana|GY|592|GYD;Haiti|HT|509|HTG;Honduras|HN|504|HNL;Hong Kong|HK|852|HKD;Hungary|HU|36|HUF;Iceland|IS|354|ISK;India|IN|91|INR;Indonesia|ID|62|IDR;Iraq|IQ|964|IQD;Ireland|IE|353|EUR;Israel|IL|972|ILS;Italy|IT|39|EUR;Jamaica|JM|1876|JMD;Japan|JP|81|JPY;Jordan|JO|962|JOD;Kazakhstan|KZ|7|KZT;Kenya|KE|254|KES;Kiribati|KI|686|AUD;Kosovo|XK|383|EUR;Kuwait|KW|965|KWD;Kyrgyzstan|KG|996|KGS;Laos|LA|856|LAK;Latvia|LV|371|EUR;Lebanon|LB|961|LBP;Lesotho|LS|266|LSL;Liberia|LR|231|LRD;Libya|LY|218|LYD;Liechtenstein|LI|423|CHF;Lithuania|LT|370|EUR;Luxembourg|LU|352|EUR;Madagascar|MG|261|MGA;Malawi|MW|265|MWK;Malaysia|MY|60|MYR;Maldives|MV|960|MVR;Mali|ML|223|XOF;Malta|MT|356|EUR;Marshall Islands|MH|692|USD;Mauritania|MR|222|MRU;Mauritius|MU|230|MUR;Mexico|MX|52|MXN;Micronesia|FM|691|USD;Moldova|MD|373|MDL;Monaco|MC|377|EUR;Mongolia|MN|976|MNT;Montenegro|ME|382|EUR;Morocco|MA|212|MAD;Mozambique|MZ|258|MZN;Namibia|NA|264|NAD;Nauru|NR|674|AUD;Nepal|NP|977|NPR;Netherlands|NL|31|EUR;New Zealand|NZ|64|NZD;Niger|NE|227|XOF;Nigeria|NG|234|NGN;North Macedonia|MK|389|MKD;Norway|NO|47|NOK;Oman|OM|968|OMR;Pakistan|PK|92|PKR;Palau|PW|680|USD;Palestine|PS|970|ILS;Panama|PA|507|PAB;Papua New Guinea|PG|675|PGK;Paraguay|PY|595|PYG;Peru|PE|51|PEN;Philippines|PH|63|PHP;Poland|PL|48|PLN;Portugal|PT|351|EUR;Qatar|QA|974|QAR;Romania|RO|40|RON;Rwanda|RW|250|RWF;Saint Kitts and Nevis|KN|1869|XCD;Saint Lucia|LC|1758|XCD;Samoa|WS|685|WST;San Marino|SM|378|EUR;Saudi Arabia|SA|966|SAR;Senegal|SN|221|XOF;Serbia|RS|381|RSD;Seychelles|SC|248|SCR;Sierra Leone|SL|232|SLE;Singapore|SG|65|SGD;Slovakia|SK|421|EUR;Slovenia|SI|386|EUR;Solomon Islands|SB|677|SBD;Somalia|SO|252|SOS;South Africa|ZA|27|ZAR;South Korea|KR|82|KRW;South Sudan|SS|211|SSP;Spain|ES|34|EUR;Sri Lanka|LK|94|LKR;Suriname|SR|597|SRD;Sweden|SE|46|SEK;Switzerland|CH|41|CHF;Taiwan|TW|886|TWD;Tajikistan|TJ|992|TJS;Tanzania|TZ|255|TZS;Thailand|TH|66|THB;Timor-Leste|TL|670|USD;Togo|TG|228|XOF;Tonga|TO|676|TOP;Trinidad and Tobago|TT|1868|TTD;Tunisia|TN|216|TND;Türkiye|TR|90|TRY;Turkmenistan|TM|993|TMT;Tuvalu|TV|688|AUD;Uganda|UG|256|UGX;Ukraine|UA|380|UAH;United Arab Emirates|AE|971|AED;United Kingdom|GB|44|GBP;United States|US|1|USD;Uruguay|UY|598|UYU;Uzbekistan|UZ|998|UZS;Vanuatu|VU|678|VUV;Vatican City|VA|379|EUR;Vietnam|VN|84|VND;Yemen|YE|967|YER;Zambia|ZM|260|ZMW";
+
+export interface OnboardingCountry {
+  name: string;
+  iso: string;
+  dial: string;
+  currency: string;
+  flag: string;
+}
+
+export const ONBOARDING_COUNTRIES: OnboardingCountry[] = DATA.split(";").map((row) => {
+  const [name, iso, dial, currency] = row.split("|");
+  return { name, iso, dial: `+${dial}`, currency, flag: `https://flagcdn.com/w40/${iso.toLowerCase()}.png` };
+});
+
+export const countryByIso = (iso?: string) =>
+  ONBOARDING_COUNTRIES.find((c) => c.iso === iso) ?? ONBOARDING_COUNTRIES.find((c) => c.iso === "US")!;

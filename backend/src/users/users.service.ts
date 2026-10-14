@@ -1,3 +1,4 @@
+import { emailVerificationSkipped } from '../auth/email-verification.flag';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -16,6 +17,7 @@ export class UsersService {
         email: true,
         phone: true,
         twoFactorEnabled: true,
+        emailVerifiedAt: true,
       },
     });
     if (!user) throw new NotFoundException('User not found');
@@ -31,6 +33,8 @@ export class UsersService {
         timezone: true,
         country: true,
         parentId: true,
+        enabledModules: true,
+        onboardingCompletedAt: true,
         // Branches depth fix (UPD-INT-012): a deactivated branch no longer appears as a
         // selectable option in the branch switcher — `active` is checked on switch itself too
         // (`TenancyGuard.resolveBranchId`), but hiding it here is what actually keeps it out of
@@ -52,13 +56,25 @@ export class UsersService {
       select: { id: true },
     });
 
+    const { emailVerifiedAt, ...userRest } = user;
+    const { enabledModules, onboardingCompletedAt, ...businessRest } = business;
     return {
       user: {
-        ...user,
+        ...userRest,
+        // Auth & Onboarding: drives the check-email → onboarding → dashboard routing.
+        emailVerified:
+          Boolean(emailVerifiedAt) || !user.email || emailVerificationSkipped(),
         role: authUser.role,
         businessUserId: businessUser?.id ?? null,
       },
-      business,
+      business: {
+        ...businessRest,
+        // Sidebar keys the owner approved in onboarding; [] = not curated (full sidebar).
+        enabledModules: Array.isArray(enabledModules)
+          ? (enabledModules as string[])
+          : [],
+        onboardingCompleted: Boolean(onboardingCompletedAt),
+      },
     };
   }
 }
