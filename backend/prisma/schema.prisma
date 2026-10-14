@@ -590,6 +590,21 @@ model Business {
   phone   String?
   address String?
 
+  /// Auth & Onboarding (Step 2 basics) — business contact email, website, city and the owner's own
+  /// description of what the business does.
+  email       String?
+  website     String?
+  city        String?
+  description String? @db.Text
+
+  /// Sidebar module keys (`lib/nav-items.ts` keys) the owner approved. `[]` means "not curated" —
+  /// every business that predates onboarding keeps the full sidebar.
+  enabledModules        Json      @default("[]") @map("enabled_modules")
+  /// Resumable onboarding state: Step 2 draft answers, the analysis run, approvals and provisioning.
+  onboardingState       Json      @default("{}") @map("onboarding_state")
+  /// Null until Step 5 provisioning finishes; backfilled for every business that predates onboarding.
+  onboardingCompletedAt DateTime? @map("onboarding_completed_at")
+
   nightlyCloseTime   String @default("22:00") @map("nightly_close_time")
   /// Nightly Close, full (UPD-BE-119): `{"sections":["sales","lowStock","reviews","feedback","credit","appointmentsTomorrow"],"voiceNoteEnabled":false,"voiceId":null,"customLines":[{"label":"...","value":"..."}]}`.
   /// An empty `{}` (every pre-existing business) means "all real sections, in their original
@@ -865,12 +880,20 @@ model User {
   twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
   /// Per-user interface preferences (motion, text size, notification sounds) the app applies.
   uiPreferences       Json      @default("{}") @map("ui_preferences")
+  /// Auth & Onboarding: set when the owner clicks the emailed confirmation link (or signs in with a
+  /// provider that already verified the address). Backfilled for every account that predates this.
+  emailVerifiedAt     DateTime? @map("email_verified_at")
+  /// bcrypt hashes of the last few passwords — a reset refuses to reuse any of them.
+  passwordHistory     Json      @default("[]") @map("password_history")
+  /// Google account subject id ("sub") once the user has signed in with Google.
+  googleId            String?   @unique @map("google_id")
 
   businessUsers          BusinessUser[]
   notifications          Notification[]
   sessions               Session[]
   twoFactorCodes         TwoFactorCode[]
   assistantConversations AssistantConversation[]
+  authTokens             AuthToken[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -891,6 +914,23 @@ enum VoiceCommandStatus {
 /// parse of a spoken command is never committed directly — `propose()` only ever creates this row,
 /// `confirm()` is a separate call that performs the real write through the same service/validation
 /// path any other caller of that write would go through.
+/// Single-use email links (verify email / reset password). Only a SHA-256 of the token is stored.
+model AuthToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String    @db.VarChar(32)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  /// For verify_email: the address this link confirms.
+  email     String?
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, purpose])
+  @@map("auth_tokens")
+}
+
 model VoiceCommandDraft {
   id              String             @id @default(uuid())
   businessId      String             @map("business_id")

@@ -359,7 +359,7 @@ export default function PhotoDigitizerPage() {
                 <div className="flex">
                   <div className="hidden w-[140px] flex-none border-r border-border bg-surface-2 p-3 md:block">
                     <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold text-fg">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary text-white">N</span> Noxtill
+                      <img src="/brand/noxtill-n.png" alt="" className="h-5 w-5 object-contain" /> Noxtill
                     </p>
                     <div className="flex flex-col gap-0.5">
                       {SIDEBAR.map((s) => (

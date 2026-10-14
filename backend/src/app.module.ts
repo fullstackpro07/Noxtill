@@ -4,6 +4,7 @@ import { ClsModule } from 'nestjs-cls';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { UsersModule } from './users/users.module';
 import { BusinessesModule } from './businesses/businesses.module';
 import { GdprModule } from './gdpr/gdpr.module';
@@ -94,6 +95,7 @@ import { ToolsModule } from './tools/tools.module';
     LocalizationModule,
     PdfModule,
     AuthModule,
+    OnboardingModule,
     UsersModule,
     BusinessesModule,
     GdprModule,

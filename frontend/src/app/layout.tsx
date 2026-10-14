@@ -50,13 +50,15 @@ export const metadata: Metadata = {
     description: "Run sales, customers, bookings, inventory, payments, marketing, staff and AI workflows in one connected business management platform with Noxtill.",
     images: ["https://noxtill.com/brand/og-image.png"],
   },
+  // "?v=2": the ribbon-N logo replaced the old mark under the same file names — the version
+  // query makes browsers that cached the old favicon fetch the new one.
   icons: {
     icon: [
-      { url: "/favicon.png", type: "image/png", sizes: "48x48" },
-      { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.png?v=2", type: "image/png", sizes: "48x48" },
+      { url: "/icon.png?v=2", type: "image/png" },
     ],
-    shortcut: "/favicon.png",
-    apple: "/apple-icon.png",
+    shortcut: "/favicon.png?v=2",
+    apple: "/apple-icon.png?v=2",
   },
 };
 

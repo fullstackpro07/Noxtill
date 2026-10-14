@@ -8,6 +8,7 @@ import { HUB_KEYS, fetchHubOverview } from "@/lib/integrations-hub-api";
 import { cn } from "@/lib/utils";
 import { navItemsForRole, type Role } from "@/lib/nav-items";
 import { useTranslation } from "@/hooks/use-translation";
+import { useAuthStore } from "@/store/auth-store";
 
 interface SidebarProps {
   role: Role;
@@ -30,9 +31,12 @@ function useIntegrationsAttention(role: Role): number {
 function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string; onNavigate?: () => void }) {
   const { t } = useTranslation();
   const integrationsAttention = useIntegrationsAttention(role);
+  // Auth & Onboarding: only the modules the owner approved (plus Dashboard/Settings); an empty list = not curated.
+  const enabled = useAuthStore((s) => s.business?.enabledModules);
+  const items = navItemsForRole(role).filter((item) => !enabled?.length || enabled.includes(item.key));
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3.5" style={{ paddingTop: 0 }}>
-      {navItemsForRole(role).map((rawItem) => {
+      {items.map((rawItem) => {
         const item = rawItem.key === "integrations" && integrationsAttention > 0 ? { ...rawItem, badge: { count: integrationsAttention, color: "#DC2626" } } : rawItem;
         const active = !item.disabled && isRouteActive(pathname, item.href);
         const Icon = item.icon;
@@ -122,12 +126,8 @@ function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string;
 function Wordmark() {
   return (
     <div className="flex items-center gap-2.5 px-[18px] pb-4 pt-5">
-      <div
-        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] text-[17px] font-extrabold text-white"
-        style={{ background: "linear-gradient(145deg, #16B85C, #0E8442)" }}
-      >
-        N
-      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark, no optimization needed */}
+      <img src="/brand/noxtill-n.png" alt="" className="h-[26px] w-auto shrink-0" />
       <span className="text-[19px] font-extrabold tracking-[-0.4px] text-white">Noxtill</span>
     </div>
   );

@@ -231,9 +231,7 @@ export function StudioScreen() {
                   <div data-r2="1" style={{ display: "grid", gridTemplateColumns: "200px minmax(0,1fr)", gap: 15 }}>
                     <div>
                       <div style={{ aspectRatio: "1", borderRadius: 13, background: "linear-gradient(150deg,#0A1B2A,#132C3E)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 9, padding: 16, textAlign: "center" }}>
-                        <span style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(145deg,#16B85C,#0E8442)", color: "#fff", fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          N
-                        </span>
+                        <img src="/brand/noxtill-n.png" alt="" style={{ width: 40, height: 31, objectFit: "contain" }} />
                         <span style={{ fontSize: 12, fontWeight: 800, color: "#fff", lineHeight: 1.4 }}>{activeProduct?.name || "Product"}</span>
                         <span style={{ fontSize: 10, color: "#8FF0BB", fontWeight: 700 }}>
                           Rs. {activeProduct?.price.toLocaleString() || "0"}

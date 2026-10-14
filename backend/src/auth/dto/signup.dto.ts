@@ -7,13 +7,17 @@ import {
 } from 'class-validator';
 
 export class SignupDto {
+  /** Optional since the Auth & Onboarding redesign — collected in onboarding Step 2. */
+  @IsOptional()
   @IsString()
   @MinLength(2)
-  businessName!: string;
+  businessName?: string;
 
+  /** Optional since the Auth & Onboarding redesign — derived from the email until the owner sets it. */
+  @IsOptional()
   @IsString()
   @MinLength(2)
-  name!: string;
+  name?: string;
 
   @ValidateIf((o: SignupDto) => !o.phone)
   @IsEmail()

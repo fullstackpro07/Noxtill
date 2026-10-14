@@ -4,6 +4,9 @@ import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 
+// These specs exercise the real email-verification gate, whatever the local dev .env sets.
+process.env.AUTH_SKIP_EMAIL_VERIFICATION = 'false';
+
 describe('UsersService', () => {
   let service: UsersService;
   let prisma: {
@@ -66,9 +69,12 @@ describe('UsersService', () => {
       email: 'amara@sunsethair.co',
       phone: null,
       twoFactorEnabled: false,
+      emailVerified: false,
       role: 'owner',
       businessUserId: 'bu1',
     });
+    expect(result.business.onboardingCompleted).toBe(false);
+    expect(result.business.enabledModules).toEqual([]);
     expect(result.business.slug).toBe('sunset-hair-studio');
   });
 

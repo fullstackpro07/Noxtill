@@ -1,6 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
+import { AuthTokensService } from './auth-tokens.service';
+import { AuthMailerService } from './auth-mailer.service';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
@@ -41,6 +43,7 @@ describe('AuthService integration (BE-007)', () => {
       new CapabilitiesService(prisma),
       sessions,
       twoFactor,
+      new AuthTokensService(prisma, new AuthMailerService(config)),
     );
   });
 
@@ -158,6 +161,7 @@ describe('AuthService — deactivated branch blocks login/refresh (Branches dept
       new CapabilitiesService(prisma),
       sessions,
       twoFactor,
+      new AuthTokensService(prisma, new AuthMailerService(config)),
     );
 
     const signup = await authService.signup({
@@ -271,6 +275,7 @@ describe('AuthService — sessions + 2FA (UPD-BE-040)', () => {
       new CapabilitiesService(prisma),
       sessions,
       twoFactor,
+      new AuthTokensService(prisma, new AuthMailerService(config)),
     );
   });
 

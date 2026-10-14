@@ -75,7 +75,7 @@ export function ReportViewer() {
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 14, paddingBottom: 20, borderBottom: `2px solid ${R.navy}` }}>
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: R.green, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>N</div>
+                <img src="/brand/noxtill-n.png" alt="Noxtill" style={{ width: 46, height: 36, objectFit: "contain", flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 800 }}>{branch}</div>
                   <div style={{ fontSize: 11, color: R.label, marginTop: 2 }}>{snap.currency} · prepared by Noxtill</div>

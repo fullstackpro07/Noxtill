@@ -289,7 +289,7 @@ export function platformCategories(d: HubDeps): CategoryDef[] {
               key: 'type',
               label: 'Business type',
               description:
-                'Shapes which modules and terminology Noxtill emphasises. Set when the account was created.',
+                'Shapes which modules and terminology Noxtill emphasises. Set during onboarding (Step 2).',
               state: async (ctx) => {
                 const b = await d.prisma.business.findUniqueOrThrow({
                   where: { id: ctx.businessId },
@@ -298,6 +298,50 @@ export function platformCategories(d: HubDeps): CategoryDef[] {
                 return {
                   value: b.type?.label ?? 'Not set',
                   tone: b.type ? 'neutral' : 'amber',
+                };
+              },
+            }),
+            row({
+              key: 'description',
+              label: 'Business description',
+              description:
+                'What your business does, in your words — written during onboarding.',
+              requires: PROFILE,
+              state: async (ctx) => {
+                const b = await business(d, ctx);
+                return {
+                  value: b.description
+                    ? `${b.description.slice(0, 60)}${b.description.length > 60 ? '…' : ''}`
+                    : 'Not set',
+                  tone: b.description ? 'neutral' : 'amber',
+                  control: {
+                    type: 'text',
+                    current: b.description ?? '',
+                    maxLength: 500,
+                  },
+                };
+              },
+              write: async (ctx, v) =>
+                updateBusiness(d, ctx, { description: str(v, 500) || null }),
+            }),
+            row({
+              key: 'modules',
+              label: 'Workspace modules',
+              description:
+                'The modules shown in your sidebar. Chosen during onboarding — add or remove them anytime.',
+              link: {
+                label: 'Manage modules',
+                href: '/settings/tools/modules',
+              },
+              state: async (ctx) => {
+                const b = await business(d, ctx);
+                const keys = Array.isArray(b.enabledModules)
+                  ? b.enabledModules
+                  : [];
+                return {
+                  value: keys.length
+                    ? `${keys.length} sidebar entries`
+                    : 'All modules shown',
                 };
               },
             }),
@@ -326,6 +370,67 @@ export function platformCategories(d: HubDeps): CategoryDef[] {
               },
               write: async (ctx, v) =>
                 updateBusiness(d, ctx, { phone: str(v, 40) || null }),
+            }),
+            row({
+              key: 'city',
+              label: 'State / City',
+              description:
+                'Shown with your location; used in onboarding insights.',
+              requires: PROFILE,
+              state: async (ctx) => {
+                const b = await business(d, ctx);
+                return {
+                  value: b.city ?? 'Not set',
+                  tone: b.city ? 'neutral' : 'amber',
+                  control: {
+                    type: 'text',
+                    current: b.city ?? '',
+                    maxLength: 191,
+                  },
+                };
+              },
+              write: async (ctx, v) =>
+                updateBusiness(d, ctx, { city: str(v) || null }),
+            }),
+            row({
+              key: 'website',
+              label: 'Website',
+              description: 'Your public website, if you have one.',
+              requires: PROFILE,
+              state: async (ctx) => {
+                const b = await business(d, ctx);
+                return {
+                  value: b.website ?? 'Not set',
+                  tone: b.website ? 'neutral' : 'amber',
+                  control: {
+                    type: 'text',
+                    current: b.website ?? '',
+                    maxLength: 191,
+                  },
+                };
+              },
+              write: async (ctx, v) =>
+                updateBusiness(d, ctx, { website: str(v) || null }),
+            }),
+            row({
+              key: 'email',
+              label: 'Business email',
+              description: 'Where customers and Noxtill reach the business.',
+              requires: PROFILE,
+              state: async (ctx) => {
+                const b = await business(d, ctx);
+                return {
+                  value: b.email ?? 'Not set',
+                  tone: b.email ? 'neutral' : 'amber',
+                  control: {
+                    type: 'text',
+                    current: b.email ?? '',
+                    maxLength: 191,
+                  },
+                };
+              },
+              write: async (ctx, v) =>
+                updateBusiness(d, ctx, { email: str(v) || null }),
             }),
             row({
               key: 'address',

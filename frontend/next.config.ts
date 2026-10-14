@@ -33,7 +33,6 @@ const nextConfig: NextConfig = {
       ...(
         [
           ["/signin", "/login"],
-          ["/signup", "/login?tab=signup"],
           ["/demo", "/book-a-demo"],
           ["/contact-sales", "/contact"],
           ["/security", "/trust/security"],

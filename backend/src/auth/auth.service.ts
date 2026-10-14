@@ -1,3 +1,4 @@
+import { emailVerificationSkipped } from './email-verification.flag';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -12,6 +13,7 @@ import { CapabilitiesService } from '../common/capabilities/capabilities.service
 import { DEFAULT_WORKING_HOURS } from '../bookings/bookings.constants';
 import { SessionsService } from './sessions.service';
 import { TwoFactorService } from './two-factor.service';
+import { AuthTokensService } from './auth-tokens.service';
 import {
   PENDING_2FA_TTL_MINUTES,
   TWO_FACTOR_ERROR_CODES,
@@ -57,8 +59,15 @@ export class AuthService {
     private readonly capabilities: CapabilitiesService,
     private readonly sessions: SessionsService,
     private readonly twoFactor: TwoFactorService,
+    private readonly authTokens: AuthTokensService,
   ) {}
 
+  /**
+   * Auth & Onboarding: the redesigned signup asks only for a work email + password. The business
+   * name, owner name, country and the rest are collected in onboarding Step 2, so until then the
+   * business carries a neutral placeholder name and `onboardingCompletedAt` stays null. An email
+   * signup starts unverified and is sent a real confirmation link.
+   */
   async signup(dto: SignupDto, meta: RequestMeta = {}) {
     const identityFilters: Prisma.UserWhereInput[] = [];
     if (dto.email) identityFilters.push({ email: dto.email });
@@ -79,10 +88,12 @@ export class AuthService {
 
     const { user, business, businessUser } = await this.prisma.$transaction(
       async (tx) => {
+        const businessName = dto.businessName?.trim() || 'My business';
         const business = await tx.business.create({
           data: {
-            name: dto.businessName,
-            slug: slugify(dto.businessName),
+            name: businessName,
+            slug: slugify(businessName),
+            email: dto.email,
             country: dto.country,
             currency: dto.currency ?? 'USD',
             locale: dto.locale ?? 'en',
@@ -96,10 +107,15 @@ export class AuthService {
 
         const user = await tx.user.create({
           data: {
-            name: dto.name,
+            name: dto.name?.trim() || nameFromIdentity(dto.email),
             email: dto.email,
             phone: dto.phone,
             passwordHash,
+            passwordHistory: [passwordHash],
+            // A phone-only signup has no email to confirm (nor does any signup while the dev
+            // AUTH_SKIP_EMAIL_VERIFICATION switch is on).
+            emailVerifiedAt:
+              dto.email && !emailVerificationSkipped() ? null : new Date(),
           },
         });
 
@@ -118,7 +134,16 @@ export class AuthService {
       businessUser.customRoleId,
       meta,
     );
-    return { business, user: this.toPublicUser(user), ...tokens };
+    const verificationEmailSent =
+      user.email && !emailVerificationSkipped()
+        ? await this.authTokens.sendVerifyEmail(user.id, user.email)
+        : false;
+    return {
+      business,
+      user: this.toPublicUser(user),
+      verificationEmailSent,
+      ...tokens,
+    };
   }
 
   async login(
@@ -177,8 +202,21 @@ export class AuthService {
       businessUser.role,
       businessUser.customRoleId,
       meta,
+      dto.rememberMe === false ? '1d' : undefined,
     );
     return { user: this.toPublicUser(user), ...tokens };
+  }
+
+  /** Issues a real session for an already-authenticated identity (Google sign-in, etc.). */
+  async issueSessionFor(userId: string, meta: RequestMeta = {}) {
+    const businessUser = await this.resolveActiveBusinessUser(userId);
+    return this.issueTokens(
+      userId,
+      businessUser.businessId,
+      businessUser.role,
+      businessUser.customRoleId,
+      meta,
+    );
   }
 
   /** Completes a 2FA-gated login — exchanges a real, verified code + pending token for real tokens. */
@@ -415,6 +453,7 @@ export class AuthService {
     role: Role,
     customRoleId: string | null,
     meta: RequestMeta = {},
+    refreshTtl?: string,
   ): Promise<TokenPair> {
     const capabilities = await this.capabilities.resolve({
       businessId,
@@ -452,7 +491,9 @@ export class AuthService {
 
     const refreshToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: (this.config.get<string>('JWT_REFRESH_TTL') ??
+      // "Remember me" unticked → a 1-day refresh window instead of the configured default.
+      expiresIn: (refreshTtl ??
+        this.config.get<string>('JWT_REFRESH_TTL') ??
         '7d') as unknown as number,
     });
 
@@ -490,4 +531,13 @@ export class AuthService {
       phone: user.phone,
     };
   }
+}
+
+/** "emily@greenleafsalon.com" → "Emily" — a placeholder until the owner's real name is known. */
+export function nameFromIdentity(email?: string): string {
+  const local = email?.split('@')[0]?.split(/[._+-]/)[0] ?? '';
+  if (local.length >= 2) {
+    return local.charAt(0).toUpperCase() + local.slice(1).toLowerCase();
+  }
+  return 'Owner';
 }

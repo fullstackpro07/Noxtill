@@ -134,9 +134,7 @@ export function HeroSection() {
                 Give me today&apos;s business report
               </div>
               <div className="mt-2.5 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-[6px] bg-accent font-display text-[11px] font-bold text-white">
-                  N
-                </span>
+                <img src="/brand/noxtill-n.png" alt="" className="h-5 w-5 object-contain" />
                 <span className="text-[11px] font-medium text-fg-muted">Noxtill</span>
                 <span className="ml-auto text-[9px] text-fg-faint">11:31 AM</span>
               </div>
@@ -178,9 +176,7 @@ export function HeroSection() {
                 <div className="grid grid-cols-1 overflow-hidden rounded-[11px] bg-white sm:grid-cols-[128px_minmax(0,1fr)]">
                   <aside className="hidden flex-col border-r border-border bg-surface-2 p-2.5 sm:flex">
                     <div className="mb-3.5 flex items-center gap-1.5 px-1">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-[6px] bg-accent font-display text-xs font-bold text-white">
-                        N
-                      </span>
+                      <img src="/brand/noxtill-n.png" alt="" className="h-5 w-5 object-contain" />
                       <span className="font-display text-[13px] font-semibold text-fg">Noxtill</span>
                     </div>
                     <div className="flex flex-1 flex-col gap-0.5 text-[10px] text-fg-muted">
