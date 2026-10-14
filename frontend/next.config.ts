@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
         destination: "https://noxtill.com/:path*",
         statusCode: 301,
       },
+      // /legal was a second copy of the Legal & Trust Center; /trust is its one URL (the /legal/* documents stay).
+      { source: "/legal", destination: "/trust", statusCode: 301 },
       // Pre-Legal-&-Trust policy URLs now live under /legal.
       { source: "/terms", destination: "/legal/terms", permanent: true },
       { source: "/privacy", destination: "/legal/privacy", permanent: true },

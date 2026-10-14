@@ -18,6 +18,7 @@ import {
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { AI_PROMISE } from "@/lib/marketing/ai-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 export const metadata: Metadata = {
   title: "What Our AI Never Does — Trust & Transparency | Noxtill",
@@ -28,8 +29,9 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/product/ai-promise/",
     title: "What Our AI Never Does — Trust & Transparency | Noxtill",
     description: "No invented numbers, honest uncertainty, and human approval before anything sensitive happens.",
+    images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: "What Our AI Never Does — Trust & Transparency | Noxtill" },
+  twitter: { card: "summary_large_image", title: "What Our AI Never Does — Trust & Transparency | Noxtill", images: [DEFAULT_OG_IMAGE.url] },
 };
 
 const jsonLd = {

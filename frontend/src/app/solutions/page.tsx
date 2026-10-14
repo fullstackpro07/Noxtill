@@ -15,21 +15,24 @@ import {
   SOLUTIONS_FAQS,
   SOLUTIONS_FINAL_CTA,
 } from "@/lib/marketing/solutions-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 export const metadata: Metadata = {
   title: "Business Solutions for Small Businesses | Noxtill",
   description:
-    "See how Noxtill helps salons, restaurants, clinics, retail stores, service businesses and growing companies manage sales, customers, bookings, inventory, payments, communication and business data in one system.",
+    "How Noxtill helps salons, restaurants, clinics, retail and service businesses run sales, customers, bookings, inventory and payments in one system.",
   alternates: { canonical: "https://noxtill.com/solutions" },
   openGraph: {
     type: "website",
     url: "https://noxtill.com/solutions",
     title: "Business Solutions for Small Businesses | Noxtill",
     description: "Enter by your business type or the problem you need to solve, and see exactly how Noxtill fits your daily workflow.",
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: "Business Solutions for Small Businesses | Noxtill",
+    images: [DEFAULT_OG_IMAGE.url],
   },
 };
 

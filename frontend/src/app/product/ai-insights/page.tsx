@@ -22,6 +22,7 @@ import {
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { AI_CAPABILITIES } from "@/lib/marketing/ai-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 const capability = AI_CAPABILITIES.insights;
 
@@ -34,8 +35,9 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/product/ai-insights/",
     title: "AI Insights — What Changed and What to Do Next | Noxtill",
     description: "What changed in the business, why it changed, and what is worth doing about it.",
+    images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: "AI Insights — What Changed and What to Do Next | Noxtill" },
+  twitter: { card: "summary_large_image", title: "AI Insights — What Changed and What to Do Next | Noxtill", images: [DEFAULT_OG_IMAGE.url] },
 };
 
 const jsonLd = {

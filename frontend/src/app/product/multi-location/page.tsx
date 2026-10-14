@@ -27,6 +27,7 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { DetailRelated } from "@/components/site/detail-page-sections";
 import { EcosystemStrip } from "@/components/site/ecosystem-strip";
 import { findProductDetailPage } from "@/lib/marketing/product-detail-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 const page = findProductDetailPage("multi-location")!;
 
@@ -39,8 +40,9 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/product/multi-location/",
     title: page.metaTitle,
     description: page.metaDescription,
+    images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: page.metaTitle },
+  twitter: { card: "summary_large_image", title: page.metaTitle, images: [DEFAULT_OG_IMAGE.url] },
 };
 
 const jsonLd = {

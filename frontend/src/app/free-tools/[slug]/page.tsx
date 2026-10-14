@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { TOOLS_REGISTRY } from "@/lib/tools-registry";
 import { ToolPageLayout } from "@/components/site/tools/tool-page-layout";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 export const dynamicParams = false;
 
@@ -28,7 +29,9 @@ export async function generateMetadata({
       description: tool.metaDescription,
       url,
       type: "website",
+      images: [DEFAULT_OG_IMAGE],
     },
+    twitter: { card: "summary_large_image", title: tool.metaTitle, description: tool.metaDescription, images: [DEFAULT_OG_IMAGE.url] },
   };
 }
 

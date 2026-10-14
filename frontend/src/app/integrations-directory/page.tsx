@@ -29,21 +29,24 @@ import {
   UNIFIED_INBOX,
   type HeroToolIcon,
 } from "@/lib/marketing/integrations-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 export const metadata: Metadata = {
   title: "Noxtill Integrations | Connect Your Business Software & Data",
   description:
-    "Connect Noxtill with the business tools you already use. Sync sales, customers, payments, inventory, bookings, marketing, communication and reporting in one connected system.",
+    "Connect Noxtill with the tools you already use. Sync sales, customers, payments, inventory, bookings, marketing and reporting in one system.",
   alternates: { canonical: "https://noxtill.com/integrations-directory/" },
   openGraph: {
     type: "website",
     url: "https://noxtill.com/integrations-directory/",
     title: "Noxtill Integrations | Connect Your Business Software & Data",
     description: "Connect the tools your business already uses and keep sales, customers, payments, inventory and reporting in sync.",
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: "Noxtill Integrations | Connect Your Business Software & Data",
+    images: [DEFAULT_OG_IMAGE.url],
   },
 };
 

@@ -6,21 +6,24 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { Reveal } from "@/components/site/reveal";
 import { ProductFeatureGroup } from "@/components/site/product-feature-group";
 import { PRODUCT_HERO, PRODUCT_GROUPS_CONTENT, PRODUCT_CALLOUT } from "@/lib/marketing/product-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 export const metadata: Metadata = {
   title: "Noxtill Product | One Connected Business Operating System",
   description:
-    "Explore every Noxtill feature — nightly close, POS, orders, bookings, customer credit, inventory, reports, reputation, messaging and AI tools — in one connected system.",
+    "Every Noxtill feature — nightly close, POS, orders, bookings, credit, inventory, reports, reputation, messaging and AI — in one connected system.",
   alternates: { canonical: "https://noxtill.com/product/" },
   openGraph: {
     type: "website",
     url: "https://noxtill.com/product/",
     title: "Noxtill Product | One Connected Business Operating System",
     description: "Every Noxtill feature in one place: run your day, know your numbers, grow, and the AI tools that sit on top.",
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: "Noxtill Product | One Connected Business Operating System",
+    images: [DEFAULT_OG_IMAGE.url],
   },
 };
 

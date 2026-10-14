@@ -27,6 +27,7 @@ import { DetailRelated } from "@/components/site/detail-page-sections";
 import { UnifiedInboxLiveDemo } from "@/components/site/unified-inbox-live-demo";
 import { findProductDetailPage } from "@/lib/marketing/product-detail-content";
 import { INBOX_CHANNELS } from "@/lib/marketing/home-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 const page = findProductDetailPage("inbox")!;
 
@@ -39,8 +40,9 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/product/inbox/",
     title: page.metaTitle,
     description: page.metaDescription,
+    images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: page.metaTitle },
+  twitter: { card: "summary_large_image", title: page.metaTitle, images: [DEFAULT_OG_IMAGE.url] },
 };
 
 const jsonLd = {

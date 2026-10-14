@@ -67,7 +67,7 @@ export const TOOLS_REGISTRY: Record<string, ToolDefinition> = {
     subtitle: "Master your unit economics: calculate gross margin, markup percentage, and profit per item.",
     category: "Pricing & Finance",
     badge: "FT-02 · Unit Economics",
-    metaTitle: "Profit Margin & Markup Calculator | Noxtill Free Business Tools",
+    metaTitle: "Profit Margin & Markup Calculator | Noxtill",
     metaDescription: "Calculate gross profit, net margin percentage, and required markup to hit target profitability without sacrificing competitiveness.",
     Component: ProfitMarginCalculatorWorkbench,
     formulaInfo: {
@@ -99,7 +99,7 @@ export const TOOLS_REGISTRY: Record<string, ToolDefinition> = {
     subtitle: "Find your exact break-even sales volume, threshold revenue, and required units to hit target profit.",
     category: "Pricing & Finance",
     badge: "FT-03 · Financial Planning",
-    metaTitle: "Break-Even Calculator — Units, Revenue & Target Profit | Noxtill",
+    metaTitle: "Break-Even Calculator — Units, Revenue & Profit | Noxtill",
     metaDescription: "Determine exactly how many units you must sell to cover fixed overhead costs and achieve your monthly or annual profit targets.",
     Component: BreakEvenCalculatorWorkbench,
     formulaInfo: {
@@ -225,7 +225,7 @@ export const TOOLS_REGISTRY: Record<string, ToolDefinition> = {
     subtitle: "Create direct WhatsApp chat links with pre-filled customer messages and scannable QR codes.",
     category: "Communication",
     badge: "FT-07 · Direct Messaging",
-    metaTitle: "WhatsApp Link & QR Generator with Pre-filled Message | Noxtill",
+    metaTitle: "WhatsApp Link & QR Generator with Message | Noxtill",
     metaDescription: "Generate wa.me click-to-chat links and QR codes with international E.164 phone formatting and URL-encoded greeting messages.",
     Component: WhatsappLinkGeneratorWorkbench,
     formulaInfo: {
@@ -321,8 +321,8 @@ export const TOOLS_REGISTRY: Record<string, ToolDefinition> = {
     subtitle: "Quantify the real monthly and annual revenue lost to unanswered customer calls and slow callbacks.",
     category: "Pricing & Finance",
     badge: "FT-10 · Opportunity Cost",
-    metaTitle: "Missed Call Revenue Calculator — Quantify Lost Sales | Noxtill",
-    metaDescription: "Calculate how much revenue and profit your business loses every month to unanswered phone calls. Funnel breakdown across conservative, base, and optimistic models.",
+    metaTitle: "Missed Call Revenue Calculator — Lost Sales | Noxtill",
+    metaDescription: "Calculate the revenue and profit you lose each month to unanswered calls, with a funnel breakdown across conservative, base and optimistic models.",
     Component: MissedCallCalculatorWorkbench,
     formulaInfo: {
       title: "Inbound Call Conversion Funnel Attrition",
