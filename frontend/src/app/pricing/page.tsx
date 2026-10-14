@@ -6,7 +6,7 @@ import { PpPage } from "@/components/site/dc/pp-page";
 export const metadata: Metadata = {
   title: "Noxtill Pricing — Business Management Software Plans",
   description:
-    "Simple, transparent pricing for Noxtill's all-in-one business software. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no credit card required.",
+    "Simple, transparent pricing for Noxtill. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no card required.",
   alternates: {
     canonical: "https://noxtill.com/pricing",
   },
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/pricing",
     title: "Noxtill Pricing — Business Management Software Plans",
     description:
-      "Simple, transparent pricing for Noxtill's all-in-one business software. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no credit card required.",
+      "Simple, transparent pricing for Noxtill. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no card required.",
     images: [
       {
         url: "https://noxtill.com/brand/og-image.png",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Noxtill Pricing — Business Management Software Plans",
     description:
-      "Simple, transparent pricing for Noxtill's all-in-one business software. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no credit card required.",
+      "Simple, transparent pricing for Noxtill. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no card required.",
     images: ["https://noxtill.com/brand/og-image.png"],
   },
 };

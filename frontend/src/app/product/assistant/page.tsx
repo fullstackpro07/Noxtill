@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 export const metadata: Metadata = {
   title: "Business Assistant — Ask Your Business a Question | Noxtill",
@@ -29,8 +30,9 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/product/assistant/",
     title: "Business Assistant — Ask Your Business a Question | Noxtill",
     description: "Ask about sales, profit, stock or who owes money and get an answer from your connected data in seconds.",
+    images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: "Business Assistant — Ask Your Business a Question | Noxtill" },
+  twitter: { card: "summary_large_image", title: "Business Assistant — Ask Your Business a Question | Noxtill", images: [DEFAULT_OG_IMAGE.url] },
 };
 
 const jsonLd = {

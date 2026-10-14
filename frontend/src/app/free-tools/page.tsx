@@ -10,7 +10,7 @@ import { TOOL_CATEGORIES, TOOLS_CATALOG } from "@/lib/tools-catalog";
 export const metadata: Metadata = {
   title: "10 Free Business Tools & Calculators | Noxtill",
   description:
-    "Free interactive business tools for entrepreneurs and operators: Discount Calculator, Profit Margin, Break-Even, Invoicing, QR Codes, Review Link, WhatsApp Link, UTM Builder, Email Signatures, and Missed Call Revenue.",
+    "10 free tools for small businesses: discount, margin and break-even calculators, invoices, QR codes, review and WhatsApp links, UTM links and signatures.",
   alternates: {
     canonical: "https://noxtill.com/free-tools",
   },

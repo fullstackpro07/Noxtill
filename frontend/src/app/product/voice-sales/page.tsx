@@ -20,6 +20,7 @@ import {
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { AI_CAPABILITIES } from "@/lib/marketing/ai-content";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 const capability = AI_CAPABILITIES.voiceSales;
 
@@ -32,8 +33,9 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/product/voice-sales/",
     title: "Voice-Entry Sales — Speak It, Confirm It, Done | Noxtill",
     description: "Say the sale out loud, confirm the details, and Noxtill creates the transaction — no typing every line.",
+    images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: "Voice-Entry Sales — Speak It, Confirm It, Done | Noxtill" },
+  twitter: { card: "summary_large_image", title: "Voice-Entry Sales — Speak It, Confirm It, Done | Noxtill", images: [DEFAULT_OG_IMAGE.url] },
 };
 
 const jsonLd = {

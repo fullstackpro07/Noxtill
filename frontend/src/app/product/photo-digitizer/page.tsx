@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { DEFAULT_OG_IMAGE } from "@/lib/marketing/og-image";
 
 export const metadata: Metadata = {
   title: "Photo Digitizer — Turn Paper Records into Data | Noxtill",
@@ -28,8 +29,9 @@ export const metadata: Metadata = {
     url: "https://noxtill.com/product/photo-digitizer/",
     title: "Photo Digitizer — Turn Paper Records into Data | Noxtill",
     description: "Photograph a paper register and turn it into structured, searchable business data.",
+    images: [DEFAULT_OG_IMAGE],
   },
-  twitter: { card: "summary_large_image", title: "Photo Digitizer — Turn Paper Records into Data | Noxtill" },
+  twitter: { card: "summary_large_image", title: "Photo Digitizer — Turn Paper Records into Data | Noxtill", images: [DEFAULT_OG_IMAGE.url] },
 };
 
 const jsonLd = {

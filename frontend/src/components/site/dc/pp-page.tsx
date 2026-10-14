@@ -41,10 +41,16 @@ export async function ppMetadata(key: string, route: string): Promise<Metadata> 
   return { ...md, alternates: { canonical: url }, openGraph: { ...md.openGraph, url } };
 }
 
+/** "<doc> | Noxtill Legal & Trust Center" when that fits a search result (≤60 chars), else "<doc> | Noxtill". */
+function legalTitle(title: string): string {
+  const full = `${title} | Noxtill Legal & Trust Center`;
+  return full.length <= 60 ? full : `${title} | Noxtill`;
+}
+
 export function legalMetadata(doc: LegalDoc): Metadata {
   const url = "https://noxtill.com" + doc.route;
   return {
-    title: `${doc.title} | Noxtill Legal & Trust Center`,
+    title: legalTitle(doc.title),
     description: doc.desc,
     alternates: { canonical: url },
     openGraph: {
@@ -59,7 +65,7 @@ export function legalMetadata(doc: LegalDoc): Metadata {
           url: "https://noxtill.com/brand/og-image.png",
           width: 1200,
           height: 630,
-          alt: `${doc.title} | Noxtill Legal & Trust Center`,
+          alt: legalTitle(doc.title),
         },
       ],
     },

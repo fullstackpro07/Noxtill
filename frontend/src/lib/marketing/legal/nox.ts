@@ -174,7 +174,7 @@ export const SITE_URL = "https://noxtill.com";
 
 /** Route for a policy key (`terms`, `privacy`, `dns`, `productTerms`, …), optionally with an anchor. */
 export function legalHref(key: string, anchor?: string): string {
-  const base = NOX.legal.policyRoutes[key] ?? "/legal";
+  const base = NOX.legal.policyRoutes[key] ?? "/trust";
   return anchor ? `${base}#${anchor}` : base;
 }
 
