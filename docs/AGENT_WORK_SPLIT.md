@@ -745,3 +745,30 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   routing disclosure visible). No safe live call or queued record was available to exercise transfer
   or take-next in the browser, and console/network diagnostics were not collected; live Twilio
   behavior remains unverified.
+
+## Module 21 progress — original screens (Claude Code, 2026-10-14)
+
+- Missed Calls (`6d4dc09`, migration `20261014110000_voice_callbacks`): `/receptionist/missed-calls`
+  is a real screen (was a redirect). Each call-back re-runs eligibility (purpose `callback`, live
+  agent; decision row kept). Staff may attest that the caller asked for a call-back; that is stored
+  as consent evidence referencing `phone_call:<id>` under their name — never assumed. With a
+  provider and an agent profile Twilio rings the staff phone first and bridges on signed callbacks
+  (`/voice/webhook/callback/*`); otherwise a passed check offers a manual dial (recorded as
+  "eligible · dial manually"). Closing marks the call handled; `do_not_call` adds a suppression. The
+  shared "Call back" action now routes here instead of opening `tel:` unchecked. No automatic
+  text-back is sent.
+- Transcripts & Recordings (`e6ec93b`, migration `20261014121000_voice_call_legal_hold`): legal hold
+  with a required reason (audited, shown in call history). While held, delete is refused and the
+  retention purge skips the call. Existing delete already erases audio, transcript and QA reviews;
+  playback is already audited.
+- Call Analytics (`2f23fdd`): `GET /voice/analytics/export` CSV (managers, ≤92 days, ≤10k rows),
+  masked callers, formula-injection safe, audited; attribution basis column distinguishes
+  tracking number vs merchant-entered vs unknown.
+- Settings (`6509a52`): live provider health (Twilio account status, business-number routing vs the
+  incoming webhook, public webhook URL) plus config facts (storage, speech/AI, email) and this
+  month's measured usage. Usage caps are disclosed as not enforced.
+- Not done: usage-cap enforcement (needs a hook in `handleIncoming`), SIP/trunk mapping, sandbox
+  test number, Call Overview direction/agent-version filters.
+- Request for Codex: inbound dispatch counts power-dialer attempts as busy; please also count
+  `voiceCallbackAttempt` rows in `agent_ringing|customer_ringing` (the dialer and call-backs already
+  check each other and inbound assignments).
