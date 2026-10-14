@@ -10,6 +10,7 @@ import { useRxStore } from "../rx-store";
 import { RxGate } from "../rx-gate";
 import { CustomIntentsForm, HoldMessageForm, TimeoutForm, VoiceForm } from "../rx-settings-forms";
 import { SharingForm, TransferNumberForm } from "../rx-forms";
+import { ProviderHealthCard } from "../rx-provider-health";
 
 export function SettingsScreen() {
   return (
@@ -198,6 +199,7 @@ function Settings() {
           </div>
         ))}
       </div>
+      <ProviderHealthCard />
     </div>
   );
 }

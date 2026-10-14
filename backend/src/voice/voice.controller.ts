@@ -89,6 +89,7 @@ import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import { VoiceCallbacksService } from './voice-callbacks.service';
 import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
+import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceLegalHoldDto } from './dto/voice-callback.dto';
 import {
   CompleteVoiceCallbackDto,
@@ -157,6 +158,7 @@ export class VoiceController {
     private readonly voiceCallbacks: VoiceCallbacksService,
     private readonly voiceLegalHold: VoiceLegalHoldService,
     private readonly voiceAnalyticsExport: VoiceAnalyticsExportService,
+    private readonly voiceProviderHealth: VoiceProviderHealthService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -996,6 +998,19 @@ export class VoiceController {
     @Body() dto: UpdateVoiceSettingsDto,
   ) {
     return this.voiceSettings.update(user.businessId, dto);
+  }
+
+  /** Live provider checks + configuration facts; nothing is assumed healthy. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/settings/provider-health')
+  getVoiceProviderHealth(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceProviderHealth.health(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/settings/usage')
+  voiceUsage(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceProviderHealth.usage(user.businessId);
   }
 
   /** Receptionist Settings depth fix — a real Polly-synthesized preview clip, not fabricated/approximated. Registered before nothing dynamic collides (static path segment). */

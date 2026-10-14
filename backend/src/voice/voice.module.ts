@@ -25,6 +25,7 @@ import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import { VoiceCallbacksService } from './voice-callbacks.service';
 import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
+import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceKnowledgeService } from './voice-knowledge.service';
 import { PollyVoiceService } from './polly-voice.service';
 import { MissedCallService } from './missed-call.service';
@@ -80,6 +81,7 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceCallbacksService,
     VoiceLegalHoldService,
     VoiceAnalyticsExportService,
+    VoiceProviderHealthService,
     VoiceRoutingRulesService,
     VoiceKnowledgeService,
     PollyVoiceService,
