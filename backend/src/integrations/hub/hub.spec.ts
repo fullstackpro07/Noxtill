@@ -216,7 +216,9 @@ describe('Integrations hub read model (redesign)', () => {
           recordsProcessed: 0,
           recordsFailed: 3,
           message: 'No accounting mapping',
-          createdAt: ago(20),
+          // "now", not minutes ago: "today" starts at the business's local midnight, so a row
+          // from 20 minutes ago lands on yesterday when the suite runs just after midnight.
+          createdAt: new Date(),
         },
       ],
     });

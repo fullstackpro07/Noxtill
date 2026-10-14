@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { ClsService } from 'nestjs-cls';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
@@ -12,6 +11,7 @@ import {
 import { VoiceCallWorkspaceService } from './voice-call-workspace.service';
 import { AppException } from '../common/filters/app.exception';
 import { PhoneCallStatus, Prisma } from '@prisma/client';
+import { isolatedConfig } from '../common/testing/isolated-config';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -42,12 +42,12 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
       prisma,
       cls as unknown as ClsService,
     );
-    const config = new ConfigService({
+    const config = isolatedConfig({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
     });
     const audit = new AuditService(tenantPrisma, cls as unknown as ClsService);
-    const s3 = new S3Service(new ConfigService({}));
+    const s3 = new S3Service(isolatedConfig({}));
     service = new VoiceCallWorkspaceService(tenantPrisma, config, audit, s3);
 
     const business = await prisma.business.create({

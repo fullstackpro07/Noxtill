@@ -5,8 +5,15 @@ const nextConfig: NextConfig = {
     remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }],
   },
   async redirects() {
-    // Pre-Legal-&-Trust policy URLs now live under /legal.
     return [
+      // One canonical host: www.noxtill.com → noxtill.com (301), path and query kept.
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.noxtill.com" }],
+        destination: "https://noxtill.com/:path*",
+        statusCode: 301,
+      },
+      // Pre-Legal-&-Trust policy URLs now live under /legal.
       { source: "/terms", destination: "/legal/terms", permanent: true },
       { source: "/privacy", destination: "/legal/privacy", permanent: true },
       { source: "/cookie-policy", destination: "/legal/cookies", permanent: true },

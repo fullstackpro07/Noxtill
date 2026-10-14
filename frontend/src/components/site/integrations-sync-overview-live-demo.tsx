@@ -177,7 +177,7 @@ export function IntegrationsSyncOverviewLiveDemo() {
         {/* Noxtill dashboard */}
         <div className="w-99 flex-none rounded-2xl border border-border bg-white p-4">
           <div className="mb-3.5 flex items-center gap-2">
-            <Image src="/brand/noxtill-mark.png" alt="" width={20} height={20} className="h-5 w-5 object-contain" />
+            <Image src="/brand/noxtill-logo1.png" alt="" width={20} height={20} className="h-5 w-5 object-contain" />
             <span className="font-display text-[14px] font-bold text-fg">Noxtill</span>
             <span className="ml-3 flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[10.5px] text-fg-faint">
               <Search className="h-3 w-3" aria-hidden /> Search anything...

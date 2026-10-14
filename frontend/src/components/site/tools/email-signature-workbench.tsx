@@ -16,6 +16,7 @@ export function EmailSignatureWorkbench() {
   const [avatarUrl, setAvatarUrl] = useState("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80");
   const [template, setTemplate] = useState<"modern" | "minimal" | "corporate" | "compact">("modern");
 
+  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SignatureResult | null>(null);
   const [copiedRich, setCopiedRich] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
@@ -33,7 +34,18 @@ export function EmailSignatureWorkbench() {
       avatarUrl,
       template,
     };
-    renderSignatureApi(input).then(setResult);
+    const timer = setTimeout(() => {
+      renderSignatureApi(input)
+        .then((res) => {
+          setError(null);
+          setResult(res);
+        })
+        .catch((err: Error) => {
+          setError(err.message || "Check the details above.");
+          setResult(null);
+        });
+    }, 350);
+    return () => clearTimeout(timer);
   }, [fullName, jobTitle, department, companyName, email, phone, website, address, avatarUrl, template]);
 
   const copyRichSignature = async () => {
@@ -61,11 +73,16 @@ export function EmailSignatureWorkbench() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {error && (
+        <div role="alert" className="lg:col-span-12 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] text-red-700">
+          {error}
+        </div>
+      )}
       {/* Form Left */}
       <div className="lg:col-span-6 space-y-6">
-        <div className="rounded-2xl border border-[#2FE3A6]/20 bg-[#032019]/70 p-6 backdrop-blur-sm shadow-xl space-y-4">
+        <div className="rounded-[16px] border border-[#E1E8E4] bg-white p-6 shadow-[0_1px_2px_rgba(16,32,26,.04),0_6px_20px_rgba(16,32,26,.05)] space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#2EE6B0]">
+            <span className="text-[14px] font-bold text-[#10201A]">
               Signature Details
             </span>
             <div className="flex items-center gap-1">
@@ -78,10 +95,10 @@ export function EmailSignatureWorkbench() {
                   key={t.id}
                   type="button"
                   onClick={() => setTemplate(t.id as typeof template)}
-                  className={`px-2.5 py-1 text-xs rounded-lg border transition-all ${
+                  className={`px-2.5 py-1 text-xs rounded-[10px] border transition-all ${
                     template === t.id
-                      ? "bg-[#2FE3A6] text-[#032019] border-[#2FE3A6] font-bold"
-                      : "bg-[#021A14] text-[#C9DCD2] border-white/10"
+                      ? "bg-[#0FA45B] text-white border-[#0FA45B] font-bold"
+                      : "bg-white text-[#3E4B45] border-[#E6ECE8]"
                   }`}
                 >
                   {t.label}
@@ -92,85 +109,85 @@ export function EmailSignatureWorkbench() {
 
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="col-span-2 sm:col-span-1">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Full Name *</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Full Name *</label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Job Title</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Job Title</label>
               <input
                 type="text"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Department</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Department</label>
               <input
                 type="text"
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Company Name *</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Company Name *</label>
               <input
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Email Address *</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Email Address *</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Direct Phone</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Direct Phone</label>
               <input
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Website URL</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Website URL</label>
               <input
                 type="text"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Office Address</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Office Address</label>
               <input
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
             <div className="col-span-2">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Avatar / Headshot Image URL (optional)</label>
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Avatar / Headshot Image URL (optional)</label>
               <input
                 type="url"
                 value={avatarUrl}
                 onChange={(e) => setAvatarUrl(e.target.value)}
                 placeholder="https://.../photo.jpg"
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-[#10201A]"
               />
             </div>
           </div>
@@ -180,7 +197,7 @@ export function EmailSignatureWorkbench() {
       {/* Right Column: Simulated Email Client Preview & Copy Button */}
       <div className="lg:col-span-6 space-y-4">
         {/* Mock Email Composer */}
-        <div className="rounded-2xl border border-white/15 bg-white text-gray-900 overflow-hidden shadow-2xl">
+        <div className="rounded-[16px] border border-[#E1E8E4] bg-white text-gray-900 overflow-hidden shadow-[0_1px_2px_rgba(16,32,26,.04),0_10px_30px_rgba(16,32,26,.07)]">
           {/* Email Composer Window Header */}
           <div className="bg-gray-100 border-b border-gray-200 px-4 py-2.5 flex items-center justify-between text-xs text-gray-500">
             <div className="flex items-center gap-2">
@@ -223,7 +240,7 @@ export function EmailSignatureWorkbench() {
           <button
             type="button"
             onClick={copyRichSignature}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-[#2FE3A6] text-[#032019] text-xs font-bold hover:bg-[#44F5C2] transition-colors flex items-center justify-center gap-2 shadow-lg"
+            className="flex-1 py-2.5 px-4 rounded-[12px] bg-[#0FA45B] text-white text-xs font-bold hover:bg-[#0D9452] transition-colors flex items-center justify-center gap-2 shadow-[0_1px_2px_rgba(16,32,26,.04),0_6px_20px_rgba(16,32,26,.05)]"
           >
             {copiedRich ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             {copiedRich ? "Copied! Paste into Gmail/Outlook" : "Copy Rich Signature"}
@@ -232,7 +249,7 @@ export function EmailSignatureWorkbench() {
           <button
             type="button"
             onClick={copyHtmlSource}
-            className="py-2.5 px-3 rounded-xl border border-[#2FE3A6]/30 text-[#2FE3A6] text-xs font-semibold hover:bg-[#2FE3A6]/10 transition-colors"
+            className="py-2.5 px-3 rounded-[12px] border border-[#CFE3D7] text-[#0B8A4C] text-xs font-semibold hover:bg-[#EAF6EF] transition-colors"
           >
             {copiedHtml ? "HTML Copied" : "Copy Raw HTML"}
           </button>

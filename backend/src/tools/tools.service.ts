@@ -17,6 +17,16 @@ import {
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const r4 = (n: number) => Math.round((n + Number.EPSILON) * 10000) / 10000;
 
+/** A parseable http(s) URL whose host has a dot (`noxtill.com`, not a bare word like `hello`). */
+function hasPublicHost(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname;
+    return /^[^.\s]+(\.[^.\s]+)+$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
 @Injectable()
 export class ToolsService {
   /** FT-01: Discount Calculator */
@@ -345,9 +355,7 @@ export class ToolsService {
       link = `https://${link}`;
     }
 
-    try {
-      new URL(link);
-    } catch {
+    if (!hasPublicHost(link)) {
       throw new BadRequestException('Invalid Google review URL provided.');
     }
 
@@ -435,6 +443,7 @@ export class ToolsService {
 
     let url: URL;
     try {
+      if (!hasPublicHost(dest)) throw new Error('no host');
       url = new URL(dest);
     } catch {
       throw new BadRequestException(
@@ -508,7 +517,7 @@ export class ToolsService {
   <tr>
     ${
       avatar
-        ? `<td style="padding-right: 16px; vertical-align: top;"><img src="${avatar}" alt="${name}" width="68" height="68" style="border-radius: 50%; display: block; object-fit: cover;" /></td>`
+        ? `<td style="padding-right: 16px; vertical-align: top;"><img src="${avatar}" alt="${name}" width="68" height="68" style="width: 68px; height: 68px; border-radius: 50%; display: block; object-fit: cover;" /></td>`
         : ''
     }
     <td style="border-left: 3px solid #0E7A5A; padding-left: 14px; vertical-align: top;">

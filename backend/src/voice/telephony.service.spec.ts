@@ -1,11 +1,11 @@
 import axios from 'axios';
 import { ClsService } from 'nestjs-cls';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TelephonyService } from './telephony.service';
 import { AppException } from '../common/filters/app.exception';
+import { isolatedConfig } from '../common/testing/isolated-config';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -34,7 +34,7 @@ describe('TelephonyService (UPD-BE-056)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    const config = new ConfigService({
+    const config = isolatedConfig({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
       BACKEND_URL: 'http://localhost:5000/api/v1',
@@ -121,10 +121,7 @@ describe('TelephonyService (UPD-BE-056)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    const unconfigured = new TelephonyService(
-      tenantPrisma,
-      new ConfigService({}),
-    );
+    const unconfigured = new TelephonyService(tenantPrisma, isolatedConfig({}));
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
     await expect(

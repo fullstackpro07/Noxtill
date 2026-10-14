@@ -96,7 +96,6 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
     links: [
       { label: "About", href: "/about" },
       { label: "Contact", href: "/contact" },
-      { label: "Careers", href: "/careers" },
       { label: "Partners & Referrals", href: "/contact" },
       { label: "Book a Demo", href: "/book-a-demo" },
       { label: "Company Information", href: "/legal/company" },

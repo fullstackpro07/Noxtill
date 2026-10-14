@@ -1,8 +1,8 @@
 import axios from 'axios';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VoiceProviderCostProcessor } from './voice-provider-cost.processor';
 import { PhoneCallStatus } from '@prisma/client';
+import { isolatedConfig } from '../../common/testing/isolated-config';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -63,7 +63,7 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
   it('does nothing when Twilio credentials are not configured', async () => {
     const processor = new VoiceProviderCostProcessor(
       prisma,
-      new ConfigService({}),
+      isolatedConfig({}),
     );
     await createEndedCall();
     await processor.runCheck();
@@ -72,7 +72,7 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
   });
 
   it('records the real price Twilio reports and marks the call checked', async () => {
-    const config = new ConfigService({
+    const config = isolatedConfig({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
     });
@@ -93,7 +93,7 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
   });
 
   it('settles a day-old call as unpriced — no cost is invented when Twilio never priced it', async () => {
-    const config = new ConfigService({
+    const config = isolatedConfig({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
     });
@@ -113,7 +113,7 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
   });
 
   it('leaves a just-ended call unchecked when Twilio has no price yet, so the next hourly tick asks again', async () => {
-    const config = new ConfigService({
+    const config = isolatedConfig({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
     });
@@ -141,7 +141,7 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
   });
 
   it('skips a call that has already been checked', async () => {
-    const config = new ConfigService({
+    const config = isolatedConfig({
       TWILIO_ACCOUNT_SID: 'AC-test',
       TWILIO_AUTH_TOKEN: 'test-token',
     });

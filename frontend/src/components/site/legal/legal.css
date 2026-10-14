@@ -493,6 +493,14 @@
   gap: 20px;
 }
 
+/* The floating chat button (fixed, 28px from the corner, ~64px wide) would sit on the language
+   selector at the end of this row; keep that corner free. */
+@media (min-width: 640px) {
+  .nl-footer .nxf-bottom-bar {
+    padding-right: 92px;
+  }
+}
+
 .nl-footer .nxf-bottom-brand {
   display: flex;
   flex-direction: column;

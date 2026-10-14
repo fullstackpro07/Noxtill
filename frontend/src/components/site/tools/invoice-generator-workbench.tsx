@@ -45,7 +45,10 @@ export function InvoiceGeneratorWorkbench() {
       lines,
       notes,
     };
-    calculateInvoiceApi(input).then(setResult);
+    const timer = setTimeout(() => {
+      calculateInvoiceApi(input).then(setResult);
+    }, 350);
+    return () => clearTimeout(timer);
   }, [currency, invoiceNumber, issueDate, dueDate, seller, buyer, lines, notes]);
 
   const addLine = () => {
@@ -80,16 +83,16 @@ Due Date: ${result.dueDate}`;
   return (
     <div className="space-y-8">
       {/* Top Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-[#2FE3A6]/20 bg-[#032019]/70 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-[12px] border border-[#E1E8E4] bg-white">
         <div className="flex items-center gap-2">
-          <FileText className="w-5 h-5 text-[#2FE3A6]" />
-          <span className="font-semibold text-white text-sm">Invoice Editor & Live Preview</span>
+          <FileText className="w-5 h-5 text-[#0B8A4C]" />
+          <span className="font-semibold text-[#10201A] text-sm">Invoice Editor & Live Preview</span>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={copySummary}
-            className="px-3 py-1.5 rounded-lg border border-[#2FE3A6]/25 text-xs text-[#2FE3A6] hover:bg-[#2FE3A6]/10 transition-colors inline-flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-[10px] border border-[#D5DED9] text-xs text-[#0B8A4C] hover:bg-[#EAF6EF] transition-colors inline-flex items-center gap-1.5"
           >
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
             {copied ? "Copied" : "Copy Summary"}
@@ -97,7 +100,7 @@ Due Date: ${result.dueDate}`;
           <button
             type="button"
             onClick={triggerPrint}
-            className="px-4 py-1.5 rounded-lg bg-[#2FE3A6] text-[#032019] text-xs font-bold hover:bg-[#44F5C2] transition-colors inline-flex items-center gap-1.5"
+            className="px-4 py-1.5 rounded-[10px] bg-[#0FA45B] text-white text-xs font-bold hover:bg-[#0D9452] transition-colors inline-flex items-center gap-1.5"
           >
             <Printer className="w-3.5 h-3.5" />
             Print / Save PDF
@@ -109,24 +112,24 @@ Due Date: ${result.dueDate}`;
         {/* Editor Form (Left 6 cols) */}
         <div className="lg:col-span-6 space-y-6">
           {/* Metadata Card */}
-          <div className="rounded-2xl border border-[#2FE3A6]/20 bg-[#032019]/70 p-5 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#2EE6B0]">Invoice Details</h3>
+          <div className="rounded-[16px] border border-[#E1E8E4] bg-white p-5 space-y-4">
+            <h3 className="text-[14px] font-bold text-[#10201A]">Invoice Details</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="col-span-2">
-                <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Invoice Number</label>
+                <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Invoice Number</label>
                 <input
                   type="text"
                   value={invoiceNumber}
                   onChange={(e) => setInvoiceNumber(e.target.value)}
-                  className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#2FE3A6]"
+                  className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
                 />
               </div>
               <div className="col-span-2">
-                <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Currency</label>
+                <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Currency</label>
                 <select
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
-                  className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#2FE3A6]"
+                  className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
                 >
                   <option value="USD">USD ($)</option>
                   <option value="EUR">EUR (€)</option>
@@ -136,21 +139,21 @@ Due Date: ${result.dueDate}`;
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Issue Date</label>
+                <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Issue Date</label>
                 <input
                   type="date"
                   value={issueDate}
                   onChange={(e) => setIssueDate(e.target.value)}
-                  className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#2FE3A6]"
+                  className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
                 />
               </div>
               <div className="col-span-2">
-                <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">Due Date</label>
+                <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">Due Date</label>
                 <input
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#2FE3A6]"
+                  className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
                 />
               </div>
             </div>
@@ -158,72 +161,72 @@ Due Date: ${result.dueDate}`;
 
           {/* Parties Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-2xl border border-[#2FE3A6]/20 bg-[#032019]/70 p-4 space-y-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#2EE6B0]">Seller (From)</h3>
+            <div className="rounded-[16px] border border-[#E1E8E4] bg-white p-4 space-y-2.5">
+              <h3 className="text-[14px] font-bold text-[#10201A]">Seller (From)</h3>
               <input
                 type="text"
                 placeholder="Business Name"
                 value={seller.name}
                 onChange={(e) => setSeller({ ...seller, name: e.target.value })}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A]"
               />
               <input
                 type="email"
                 placeholder="Email Address"
                 value={seller.email || ""}
                 onChange={(e) => setSeller({ ...seller, email: e.target.value })}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A]"
               />
               <input
                 type="text"
                 placeholder="Address / City"
                 value={seller.address || ""}
                 onChange={(e) => setSeller({ ...seller, address: e.target.value })}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A]"
               />
               <input
                 type="text"
                 placeholder="Tax / VAT ID (optional)"
                 value={seller.taxId || ""}
                 onChange={(e) => setSeller({ ...seller, taxId: e.target.value })}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A]"
               />
             </div>
 
-            <div className="rounded-2xl border border-[#2FE3A6]/20 bg-[#032019]/70 p-4 space-y-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#2EE6B0]">Client (Bill To)</h3>
+            <div className="rounded-[16px] border border-[#E1E8E4] bg-white p-4 space-y-2.5">
+              <h3 className="text-[14px] font-bold text-[#10201A]">Client (Bill To)</h3>
               <input
                 type="text"
                 placeholder="Client Name"
                 value={buyer.name}
                 onChange={(e) => setBuyer({ ...buyer, name: e.target.value })}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A]"
               />
               <input
                 type="email"
                 placeholder="Client Email"
                 value={buyer.email || ""}
                 onChange={(e) => setBuyer({ ...buyer, email: e.target.value })}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A]"
               />
               <input
                 type="text"
                 placeholder="Client Address"
                 value={buyer.address || ""}
                 onChange={(e) => setBuyer({ ...buyer, address: e.target.value })}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-lg px-3 py-1.5 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[10px] px-3 py-1.5 text-xs text-[#10201A]"
               />
             </div>
           </div>
 
           {/* Line Items Card */}
-          <div className="rounded-2xl border border-[#2FE3A6]/20 bg-[#032019]/70 p-5 space-y-3">
+          <div className="rounded-[16px] border border-[#E1E8E4] bg-white p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#2EE6B0]">Line Items</h3>
+              <h3 className="text-[14px] font-bold text-[#10201A]">Line Items</h3>
               <button
                 type="button"
                 onClick={addLine}
-                className="text-xs text-[#2FE3A6] hover:underline inline-flex items-center gap-1 font-semibold"
+                className="text-xs text-[#0B8A4C] hover:underline inline-flex items-center gap-1 font-semibold"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Line
               </button>
@@ -231,20 +234,20 @@ Due Date: ${result.dueDate}`;
 
             <div className="space-y-3">
               {lines.map((line, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-[#021A14] border border-white/5 space-y-2 text-xs">
+                <div key={idx} className="p-3 rounded-[12px] bg-white border border-[#EEF2EF] space-y-2 text-xs">
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
                       placeholder="Description"
                       value={line.description}
                       onChange={(e) => updateLine(idx, { description: e.target.value })}
-                      className="flex-1 bg-transparent border-b border-white/10 px-2 py-1 text-white focus:outline-none focus:border-[#2FE3A6]"
+                      className="flex-1 bg-transparent border-b border-[#E6ECE8] px-2 py-1 text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15"
                     />
                     {lines.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeLine(idx)}
-                        className="text-red-400 hover:text-red-300 p-1"
+                        className="text-red-600 hover:text-red-700 p-1"
                         title="Remove line"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -253,47 +256,47 @@ Due Date: ${result.dueDate}`;
                   </div>
                   <div className="grid grid-cols-4 gap-2">
                     <div>
-                      <span className="text-[10px] text-[#7E9F91] block">Qty</span>
+                      <span className="text-[10px] text-[#6B7A72] block">Qty</span>
                       <input
                         type="number"
                         min="0.1"
                         step="1"
                         value={line.quantity}
                         onChange={(e) => updateLine(idx, { quantity: parseFloat(e.target.value) || 1 })}
-                        className="w-full bg-transparent border-b border-white/10 px-1 py-0.5 text-white"
+                        className="w-full bg-transparent border-b border-[#E6ECE8] px-1 py-0.5 text-[#10201A]"
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#7E9F91] block">Unit Price</span>
+                      <span className="text-[10px] text-[#6B7A72] block">Unit Price</span>
                       <input
                         type="number"
                         min="0"
                         step="1"
                         value={line.unitPrice}
                         onChange={(e) => updateLine(idx, { unitPrice: parseFloat(e.target.value) || 0 })}
-                        className="w-full bg-transparent border-b border-white/10 px-1 py-0.5 text-white"
+                        className="w-full bg-transparent border-b border-[#E6ECE8] px-1 py-0.5 text-[#10201A]"
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#7E9F91] block">Disc %</span>
+                      <span className="text-[10px] text-[#6B7A72] block">Disc %</span>
                       <input
                         type="number"
                         min="0"
                         max="100"
                         value={line.discountPercent || 0}
                         onChange={(e) => updateLine(idx, { discountPercent: parseFloat(e.target.value) || 0 })}
-                        className="w-full bg-transparent border-b border-white/10 px-1 py-0.5 text-white"
+                        className="w-full bg-transparent border-b border-[#E6ECE8] px-1 py-0.5 text-[#10201A]"
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#7E9F91] block">Tax %</span>
+                      <span className="text-[10px] text-[#6B7A72] block">Tax %</span>
                       <input
                         type="number"
                         min="0"
                         max="100"
                         value={line.taxPercent || 0}
                         onChange={(e) => updateLine(idx, { taxPercent: parseFloat(e.target.value) || 0 })}
-                        className="w-full bg-transparent border-b border-white/10 px-1 py-0.5 text-white"
+                        className="w-full bg-transparent border-b border-[#E6ECE8] px-1 py-0.5 text-[#10201A]"
                       />
                     </div>
                   </div>
@@ -301,15 +304,15 @@ Due Date: ${result.dueDate}`;
               ))}
             </div>
 
-            <div className="pt-3 border-t border-white/5">
-              <label className="text-[11px] font-semibold text-[#8EAEA0] block mb-1">
+            <div className="pt-3 border-t border-[#EEF2EF]">
+              <label className="text-[11px] font-semibold text-[#6B7A72] block mb-1">
                 Payment Terms & Notes
               </label>
               <textarea
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3 py-2 text-xs text-white"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3 py-2 text-xs text-[#10201A]"
               />
             </div>
           </div>
@@ -319,7 +322,7 @@ Due Date: ${result.dueDate}`;
         <div className="lg:col-span-6">
           <div
             id="printable-invoice"
-            className="rounded-2xl border border-white/15 bg-white text-gray-900 p-8 shadow-2xl space-y-6"
+            className="rounded-[16px] border border-[#E1E8E4] bg-white text-gray-900 p-8 shadow-[0_1px_2px_rgba(16,32,26,.04),0_10px_30px_rgba(16,32,26,.07)] space-y-6"
           >
             {/* Invoice Header */}
             <div className="flex justify-between items-start border-b border-gray-200 pb-6">
@@ -358,8 +361,8 @@ Due Date: ${result.dueDate}`;
             </div>
 
             {/* Items Table */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <table className="w-full text-left text-xs">
+            <div className="border border-gray-200 rounded-[10px] overflow-x-auto">
+              <table className="w-full min-w-[420px] text-left text-xs">
                 <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold">
                   <tr>
                     <th className="p-3">Item Description</th>
@@ -392,7 +395,7 @@ Due Date: ${result.dueDate}`;
                   <div className="flex justify-between py-1">
                     <span>Subtotal:</span>
                     <span className="text-gray-900 font-medium">
-                      {currency} {result.subtotal.toFixed(2)}
+                      {currency} {(result.subtotal + result.totalDiscount).toFixed(2)}
                     </span>
                   </div>
                   {result.totalDiscount > 0 && (

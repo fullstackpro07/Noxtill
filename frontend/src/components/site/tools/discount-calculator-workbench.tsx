@@ -36,7 +36,10 @@ export function DiscountCalculatorWorkbench() {
       taxPercent,
     };
 
-    calculateDiscountApi(input).then(setResult);
+    const timer = setTimeout(() => {
+      calculateDiscountApi(input).then(setResult);
+    }, 350);
+    return () => clearTimeout(timer);
   }, [unitPrice, quantity, currency, mode, percent, fixedAmount, stackedText, taxMode, taxPercent]);
 
   const copySummary = () => {
@@ -75,36 +78,36 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
       <div className="lg:col-span-7 space-y-6">
         {/* Quick Presets */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-[#8EAEA0] font-medium mr-1">Quick Presets:</span>
+          <span className="text-xs text-[#6B7A72] font-medium mr-1">Quick Presets:</span>
           <button
             type="button"
             onClick={() => applyPreset({ price: 79.99, qty: 1, mode: "percent", pct: 25 })}
-            className="text-xs px-2.5 py-1 rounded-lg bg-[#042A20] border border-[#2FE3A6]/20 text-[#C9DCD2] hover:border-[#2FE3A6] transition-colors"
+            className="text-xs px-2.5 py-1 rounded-[10px] bg-[#F7FAF8] border border-[#E1E8E4] text-[#3E4B45] hover:border-[#0FA45B] transition-colors"
           >
             25% Off Flash Sale
           </button>
           <button
             type="button"
             onClick={() => applyPreset({ price: 120, qty: 1, mode: "stacked", stacked: "30, 10" })}
-            className="text-xs px-2.5 py-1 rounded-lg bg-[#042A20] border border-[#2FE3A6]/20 text-[#C9DCD2] hover:border-[#2FE3A6] transition-colors"
+            className="text-xs px-2.5 py-1 rounded-[10px] bg-[#F7FAF8] border border-[#E1E8E4] text-[#3E4B45] hover:border-[#0FA45B] transition-colors"
           >
             Stacked 30% + 10%
           </button>
           <button
             type="button"
             onClick={() => applyPreset({ price: 50, qty: 3, mode: "fixed", fixed: 20, tax: "exclusive" })}
-            className="text-xs px-2.5 py-1 rounded-lg bg-[#042A20] border border-[#2FE3A6]/20 text-[#C9DCD2] hover:border-[#2FE3A6] transition-colors"
+            className="text-xs px-2.5 py-1 rounded-[10px] bg-[#F7FAF8] border border-[#E1E8E4] text-[#3E4B45] hover:border-[#0FA45B] transition-colors"
           >
             $20 Off 3 Items + Tax
           </button>
         </div>
 
         {/* Input Card */}
-        <div className="rounded-2xl border border-[#2FE3A6]/20 bg-[#032019]/70 p-6 backdrop-blur-sm shadow-xl space-y-5">
+        <div className="rounded-[16px] border border-[#E1E8E4] bg-white p-6 shadow-[0_1px_2px_rgba(16,32,26,.04),0_6px_20px_rgba(16,32,26,.05)] space-y-5">
           {/* Price & Quantity & Currency */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-1.5 block">
+              <label className="text-[#3E4B45] mb-1.5 block text-[13px] font-semibold">
                 Original Price
               </label>
               <div className="relative">
@@ -114,13 +117,13 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
                   step="0.01"
                   value={unitPrice}
                   onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#2FE3A6]"
+                  className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3.5 py-2.5 text-sm text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-1.5 block">
+              <label className="text-[#3E4B45] mb-1.5 block text-[13px] font-semibold">
                 Quantity
               </label>
               <input
@@ -129,18 +132,18 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
                 step="1"
                 value={quantity}
                 onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 1)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#2FE3A6]"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3.5 py-2.5 text-sm text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
               />
             </div>
 
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-1.5 block">
+              <label className="text-[#3E4B45] mb-1.5 block text-[13px] font-semibold">
                 Currency
               </label>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#2FE3A6]"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3.5 py-2.5 text-sm text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
               >
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR (€)</option>
@@ -155,17 +158,17 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
 
           {/* Discount Mode Tabs */}
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-2 block">
+            <label className="text-[#3E4B45] mb-2 block text-[13px] font-semibold">
               Discount Type
             </label>
-            <div className="grid grid-cols-3 gap-2 p-1 bg-[#021A14] border border-[#2FE3A6]/20 rounded-xl">
+            <div className="grid grid-cols-3 gap-2 p-1 bg-white border border-[#E1E8E4] rounded-[12px]">
               <button
                 type="button"
                 onClick={() => setMode("percent")}
-                className={`py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                className={`py-2 px-3 text-xs font-semibold rounded-[10px] flex items-center justify-center gap-1.5 transition-all ${
                   mode === "percent"
-                    ? "bg-[#2FE3A6] text-[#032019] shadow-sm"
-                    : "text-[#B8CFC5] hover:text-white"
+                    ? "bg-[#0FA45B] text-white shadow-sm"
+                    : "text-[#3E4B45] hover:text-[#10201A]"
                 }`}
               >
                 <Percent className="w-3.5 h-3.5" /> Percentage
@@ -173,10 +176,10 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
               <button
                 type="button"
                 onClick={() => setMode("fixed")}
-                className={`py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                className={`py-2 px-3 text-xs font-semibold rounded-[10px] flex items-center justify-center gap-1.5 transition-all ${
                   mode === "fixed"
-                    ? "bg-[#2FE3A6] text-[#032019] shadow-sm"
-                    : "text-[#B8CFC5] hover:text-white"
+                    ? "bg-[#0FA45B] text-white shadow-sm"
+                    : "text-[#3E4B45] hover:text-[#10201A]"
                 }`}
               >
                 <Tag className="w-3.5 h-3.5" /> Fixed Amount
@@ -184,10 +187,10 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
               <button
                 type="button"
                 onClick={() => setMode("stacked")}
-                className={`py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                className={`py-2 px-3 text-xs font-semibold rounded-[10px] flex items-center justify-center gap-1.5 transition-all ${
                   mode === "stacked"
-                    ? "bg-[#2FE3A6] text-[#032019] shadow-sm"
-                    : "text-[#B8CFC5] hover:text-white"
+                    ? "bg-[#0FA45B] text-white shadow-sm"
+                    : "text-[#3E4B45] hover:text-[#10201A]"
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" /> Stacked %
@@ -199,10 +202,10 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
           {mode === "percent" && (
             <div>
               <div className="flex justify-between items-center mb-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0]">
+                <label className="text-[#3E4B45] text-[13px] font-semibold">
                   Discount Percentage
                 </label>
-                <span className="text-sm font-bold text-[#2FE3A6]">{percent}%</span>
+                <span className="text-sm font-bold text-[#0B8A4C]">{percent}%</span>
               </div>
               <input
                 type="range"
@@ -211,14 +214,14 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
                 step="1"
                 value={percent}
                 onChange={(e) => setPercent(parseFloat(e.target.value) || 0)}
-                className="w-full accent-[#2FE3A6] cursor-pointer"
+                className="w-full accent-[#0FA45B] cursor-pointer"
               />
             </div>
           )}
 
           {mode === "fixed" && (
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-1.5 block">
+              <label className="text-[#3E4B45] mb-1.5 block text-[13px] font-semibold">
                 Total Fixed Discount Amount ({currency})
               </label>
               <input
@@ -227,14 +230,14 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
                 step="0.01"
                 value={fixedAmount}
                 onChange={(e) => setFixedAmount(parseFloat(e.target.value) || 0)}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#2FE3A6]"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3.5 py-2.5 text-sm text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
               />
             </div>
           )}
 
           {mode === "stacked" && (
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-1.5 block">
+              <label className="text-[#3E4B45] mb-1.5 block text-[13px] font-semibold">
                 Sequential Discount Percentages (comma separated)
               </label>
               <input
@@ -242,24 +245,24 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
                 value={stackedText}
                 onChange={(e) => setStackedText(e.target.value)}
                 placeholder="e.g. 25, 10, 5"
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#2FE3A6]"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3.5 py-2.5 text-sm text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
               />
-              <p className="text-xs text-[#8EAEA0] mt-1">
+              <p className="text-xs text-[#6B7A72] mt-1">
                 Each discount step applies sequentially to the reduced balance, avoiding erroneous additive math.
               </p>
             </div>
           )}
 
           {/* Tax Options */}
-          <div className="pt-4 border-t border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="pt-4 border-t border-[#E6ECE8] grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-1.5 block">
+              <label className="text-[#3E4B45] mb-1.5 block text-[13px] font-semibold">
                 Tax Mode
               </label>
               <select
                 value={taxMode}
                 onChange={(e) => setTaxMode(e.target.value as "none" | "exclusive" | "inclusive")}
-                className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#2FE3A6]"
+                className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3.5 py-2.5 text-sm text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
               >
                 <option value="none">No Tax</option>
                 <option value="exclusive">Tax Added (Exclusive)</option>
@@ -269,7 +272,7 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
 
             {taxMode !== "none" && (
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wider text-[#9DBBB0] mb-1.5 block">
+                <label className="text-[#3E4B45] mb-1.5 block text-[13px] font-semibold">
                   Tax Rate (%)
                 </label>
                 <input
@@ -279,7 +282,7 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
                   step="0.01"
                   value={taxPercent}
                   onChange={(e) => setTaxPercent(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-[#021A14] border border-[#2FE3A6]/25 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#2FE3A6]"
+                  className="w-full bg-white border border-[#D5DED9] rounded-[12px] px-3.5 py-2.5 text-sm text-[#10201A] focus:outline-none focus:border-[#0FA45B] focus:ring-[3px] focus:ring-[#0FA45B]/15 placeholder:text-[#9AA7A1]"
                 />
               </div>
             )}
@@ -289,18 +292,17 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
 
       {/* Right Column: Live Output & Step Breakdown */}
       <div className="lg:col-span-5 space-y-5">
-        <div className="rounded-2xl border border-[#2FE3A6]/30 bg-[#032019]/90 p-6 backdrop-blur-md shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-[#2FE3A6]/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="rounded-[16px] border border-[#CFE3D7] bg-white p-6 shadow-[0_1px_2px_rgba(16,32,26,.04),0_10px_30px_rgba(16,32,26,.07)] relative overflow-hidden">
 
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#2EE6B0]">
+            <span className="text-[14px] font-bold text-[#10201A]">
               Calculated Result
             </span>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={copySummary}
-                className="p-1.5 rounded-lg border border-[#2FE3A6]/25 text-[#2FE3A6] hover:bg-[#2FE3A6]/15 transition-colors text-xs inline-flex items-center gap-1"
+                className="p-1.5 rounded-[10px] border border-[#D5DED9] text-[#0B8A4C] hover:bg-[#EAF6EF] transition-colors text-xs inline-flex items-center gap-1"
                 title="Copy breakdown"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -312,42 +314,42 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
           {result && (
             <>
               {/* Highlight Total Card */}
-              <div className="p-4 rounded-xl bg-[#021A14] border border-[#2FE3A6]/30 mb-5">
-                <div className="text-xs text-[#8EAEA0] uppercase font-semibold">Final Customer Pays</div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#2FE3A6] mt-0.5 tracking-tight">
+              <div className="p-4 rounded-[12px] bg-white border border-[#CFE3D7] mb-5">
+                <div className="text-xs text-[#6B7A72] uppercase font-semibold">Final Customer Pays</div>
+                <div className="text-3xl sm:text-4xl font-extrabold text-[#0B8A4C] mt-0.5 tracking-tight">
                   {currency} {result.finalTotal.toFixed(2)}
                 </div>
-                <div className="text-xs text-[#A3C6B8] mt-1">
-                  You save <strong className="text-white">{currency} {result.totalDiscount.toFixed(2)}</strong> ({result.savingsPct}% reduction)
+                <div className="text-xs text-[#5B6B63] mt-1">
+                  You save <strong className="text-[#10201A]">{currency} {result.totalDiscount.toFixed(2)}</strong> ({result.savingsPct}% reduction)
                 </div>
               </div>
 
               {/* Metric Breakdown Table */}
               <div className="space-y-2.5 text-sm">
-                <div className="flex justify-between py-1.5 border-b border-white/5 text-[#B8CFC5]">
+                <div className="flex justify-between py-1.5 border-b border-[#EEF2EF] text-[#3E4B45]">
                   <span>Original Gross</span>
-                  <span className="font-semibold text-white">
+                  <span className="font-semibold text-[#10201A]">
                     {currency} {result.gross.toFixed(2)}
                   </span>
                 </div>
-                <div className="flex justify-between py-1.5 border-b border-white/5 text-[#B8CFC5]">
+                <div className="flex justify-between py-1.5 border-b border-[#EEF2EF] text-[#3E4B45]">
                   <span>Discount Total</span>
-                  <span className="font-semibold text-[#2FE3A6]">
+                  <span className="font-semibold text-[#0B8A4C]">
                     -{currency} {result.totalDiscount.toFixed(2)}
                   </span>
                 </div>
-                <div className="flex justify-between py-1.5 border-b border-white/5 text-[#B8CFC5]">
+                <div className="flex justify-between py-1.5 border-b border-[#EEF2EF] text-[#3E4B45]">
                   <span>Subtotal (Net)</span>
-                  <span className="font-semibold text-white">
+                  <span className="font-semibold text-[#10201A]">
                     {currency} {result.net.toFixed(2)}
                   </span>
                 </div>
                 {result.tax > 0 && (
-                  <div className="flex justify-between py-1.5 border-b border-white/5 text-[#B8CFC5]">
+                  <div className="flex justify-between py-1.5 border-b border-[#EEF2EF] text-[#3E4B45]">
                     <span>
                       Tax ({taxPercent}% {taxMode})
                     </span>
-                    <span className="font-semibold text-white">
+                    <span className="font-semibold text-[#10201A]">
                       +{currency} {result.tax.toFixed(2)}
                     </span>
                   </div>
@@ -356,13 +358,13 @@ ${result.tax > 0 ? `Tax (${taxMode}): +${result.currency} ${result.tax.toFixed(2
 
               {/* Sequential Steps if Stacked */}
               {result.steps.length > 1 && (
-                <div className="mt-5 pt-4 border-t border-white/10">
-                  <div className="text-xs font-semibold text-[#8EAEA0] uppercase mb-2">
+                <div className="mt-5 pt-4 border-t border-[#E6ECE8]">
+                  <div className="text-xs font-semibold text-[#6B7A72] uppercase mb-2">
                     Sequential Deduction Path
                   </div>
-                  <div className="space-y-1.5 text-xs text-[#C9DCD2]">
+                  <div className="space-y-1.5 text-xs text-[#3E4B45]">
                     {result.steps.map((s) => (
-                      <div key={s.step} className="flex justify-between py-1 px-2.5 rounded bg-[#021A14]">
+                      <div key={s.step} className="flex justify-between py-1 px-2.5 rounded bg-white">
                         <span>
                           Step {s.step} ({s.rate}% off):
                         </span>
