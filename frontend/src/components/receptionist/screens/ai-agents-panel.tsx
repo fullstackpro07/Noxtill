@@ -31,6 +31,7 @@ const blankDraft: VoiceAiAgentDraftInput = {
   toolPermissions: ["book", "message", "transfer", "end"],
   knowledgeSourceIds: [],
   maxTokensPerResponse: 320,
+  monthlyBudgetUsd: null,
 };
 
 const templateName = (value: VoiceAiTemplate) =>
@@ -97,6 +98,7 @@ export function AiAgentsPanel() {
           knowledgeSourceIds: sourceVersion.config.knowledgeSourceIds ?? [],
           maxTokensPerResponse:
             sourceVersion.config.maxTokensPerResponse ?? 320,
+          monthlyBudgetUsd: sourceVersion.config.monthlyBudgetUsd ?? null,
         }
       : blankDraft);
   const unsavedChanges = Boolean(
@@ -122,7 +124,9 @@ export function AiAgentsPanel() {
       JSON.stringify(draft.knowledgeSourceIds) !==
         JSON.stringify(draftVersion.config.knowledgeSourceIds ?? []) ||
       draft.maxTokensPerResponse !==
-        (draftVersion.config.maxTokensPerResponse ?? 320)),
+        (draftVersion.config.maxTokensPerResponse ?? 320) ||
+      draft.monthlyBudgetUsd !==
+        (draftVersion.config.monthlyBudgetUsd ?? null)),
   );
 
   const refresh = async () =>
@@ -494,6 +498,31 @@ export function AiAgentsPanel() {
                 ) : null}
               </div>
             </fieldset>
+            <label className="text-[11px] font-bold text-[#5B6675] sm:col-span-2">
+              Monthly AI budget for this version (USD)
+              <input
+                className={inputClass}
+                type="number"
+                min={0.01}
+                max={100000}
+                step={0.01}
+                value={draft.monthlyBudgetUsd ?? ""}
+                onChange={(event) =>
+                  updateDraft(
+                    "monthlyBudgetUsd",
+                    event.target.value === ""
+                      ? null
+                      : Number(event.target.value),
+                  )
+                }
+                placeholder="No per-version limit"
+              />
+              <span className="mt-1 block text-[10px] font-normal text-[#7A8798]">
+                {sourceVersion
+                  ? `This month: $${(sourceVersion.monthlySpendUsd ?? 0).toFixed(4)} spent on this version. A call is refused once the budget is reached.`
+                  : "Leave blank for no per-version limit."}
+              </span>
+            </label>
             <label className="text-[11px] font-bold text-[#5B6675] sm:col-span-2">
               Maximum output tokens per AI response
               <input

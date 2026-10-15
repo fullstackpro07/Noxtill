@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from './ai-infra.service';
@@ -108,6 +109,68 @@ describe('AiInfraService (BE-075)', () => {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: capBusiness.id } });
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+    });
+  });
+
+  it('logs per-version voice spend and blocks another call once that version reaches its monthly budget', async () => {
+    const budgetBusiness = await prisma.business.create({
+      data: {
+        name: 'Voice Version Budget Test Biz',
+        slug: `voice-version-budget-${Date.now()}`,
+        aiRateLimitPerMinute: 1000,
+        aiMonthlyCostCapUsd: 10,
+      },
+    });
+    const voiceAgentVersionId = `voice-agent-version-${randomUUID()}`;
+    claude.createMessage.mockResolvedValue(fakeResult());
+
+    const text = await service.complete(
+      budgetBusiness.id,
+      'test voice turn',
+      0,
+      'voice_entry',
+      64,
+      { voiceAgentVersionId, monthlyBudgetUsd: 0.01 },
+    );
+    expect(text).toBe('hello');
+    const firstLog = await prisma.aiCallLog.findFirstOrThrow({
+      where: { businessId: budgetBusiness.id, voiceAgentVersionId },
+    });
+    expect(Number(firstLog.estimatedCostUsd)).toBeGreaterThan(0);
+
+    await prisma.aiCallLog.create({
+      data: {
+        businessId: budgetBusiness.id,
+        voiceAgentVersionId,
+        kind: 'voice_entry',
+        inputTokens: 0,
+        outputTokens: 0,
+        estimatedCostUsd: 0.01,
+      },
+    });
+    claude.createMessage.mockClear();
+
+    await expect(
+      service.complete(
+        budgetBusiness.id,
+        'over budget voice turn',
+        0,
+        'voice_entry',
+        64,
+        { voiceAgentVersionId, monthlyBudgetUsd: 0.01 },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'VOICE_AI_VERSION_BUDGET_REACHED' },
+    });
+    expect(claude.createMessage).not.toHaveBeenCalled();
+
+    await prisma.aiCallLog.deleteMany({
+      where: { businessId: budgetBusiness.id },
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.business.delete({ where: { id: budgetBusiness.id } });
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
   });

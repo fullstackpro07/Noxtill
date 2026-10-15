@@ -789,6 +789,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         0,
         'voice_entry',
         64,
+        undefined,
       );
       const [, generatedPrompt] = aiInfra.complete.mock.calls[0] as [
         string,

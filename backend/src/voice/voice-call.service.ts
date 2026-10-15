@@ -117,9 +117,11 @@ interface AiCallResponse {
   sentiment?: string;
   topic?: string;
   answered?: boolean | string;
+  budgetExceeded?: boolean;
 }
 
 interface PublishedVoiceAiAgent {
+  versionId?: string;
   name: string;
   template: string;
   config: {
@@ -133,6 +135,7 @@ interface PublishedVoiceAiAgent {
     toolPermissions?: string[];
     knowledgeSourceIds?: string[];
     maxTokensPerResponse?: number;
+    monthlyBudgetUsd?: number | null;
   };
 }
 
@@ -572,6 +575,7 @@ export class VoiceCallService {
     ]);
     const pinnedAgent: PublishedVoiceAiAgent | undefined = pinnedAgentVersion
       ? {
+          versionId: pinnedAgentVersion.id,
           name: pinnedAgentVersion.agent.name,
           template: pinnedAgentVersion.agent.template,
           config: pinnedAgentVersion.config as PublishedVoiceAiAgent['config'],
@@ -638,6 +642,15 @@ export class VoiceCallService {
       context.block,
       pinnedAgent,
     );
+    if (aiResponse.budgetExceeded) {
+      transcript.push({
+        speaker: 'assistant',
+        text: aiResponse.reply,
+        at: new Date().toISOString(),
+      });
+      await this.persist(callSid, transcript, PhoneCallOutcome.message);
+      return twiml(say(aiResponse.reply, settings.voiceId) + '<Hangup/>');
+    }
     if (call.ivrCurrentNodeId) {
       const currentIvrNode = await this.getPinnedIvrNode(call);
       if (currentIvrNode?.type === 'speech_intent') {
@@ -2479,10 +2492,28 @@ export class VoiceCallService {
         0,
         'voice_entry',
         agent?.config.maxTokensPerResponse ?? (agent ? 320 : undefined),
+        agent?.versionId && agent.config.monthlyBudgetUsd
+          ? {
+              voiceAgentVersionId: agent.versionId,
+              monthlyBudgetUsd: agent.config.monthlyBudgetUsd,
+            }
+          : undefined,
       );
       const parsed = this.parseResponse(raw);
       if (parsed) return parsed;
     } catch (error) {
+      const errorBody =
+        error instanceof AppException ? error.getResponse() : undefined;
+      if (
+        typeof errorBody === 'object' &&
+        errorBody !== null &&
+        'code' in errorBody &&
+        errorBody.code === 'VOICE_AI_VERSION_BUDGET_REACHED'
+      ) {
+        const reply =
+          'This automated assistant has reached its monthly budget. Please call back later or contact the business directly.';
+        return { reply, intent: 'message', budgetExceeded: true };
+      }
       this.logger.warn(
         `Call intent classification failed: ${(error as Error).message}`,
       );

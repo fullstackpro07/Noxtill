@@ -813,3 +813,14 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   Touched-file ESLint passes except the unchanged 74 formatting-only baseline errors in
   `settings-hub/categories/intelligence.ts`. No live Twilio call was placed; live queue audio and
   callback behavior remain unverified.
+
+## Module 21 progress — per-version AI budget (Codex, 2026-10-16)
+
+- AI agent versions can store a monthly USD budget; live voice AI usage is tagged to its pinned
+  version and the next turn is refused once logged estimated spend reaches the configured limit.
+  The AI Agents screen shows the version's recorded spend for the current UTC month. Real-MySQL tests
+  verify usage logging and blocking with a controlled provider response; no live AI provider call
+  was made, so live billing alignment remains unverified.
+- Backend and frontend type checks pass; full backend Jest passes 371 suites / 2,264 tests, and
+  focused voice/database suites pass 5/5 suites / 59 tests. Touched-file ESLint passes except the
+  unchanged 74 formatting-only baseline errors in `settings-hub/categories/intelligence.ts`.

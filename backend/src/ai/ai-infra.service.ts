@@ -43,14 +43,57 @@ export class AiInfraService {
     temperature = 0,
     kind = 'complete',
     maxTokens?: number,
+    voiceBudget?: {
+      voiceAgentVersionId: string;
+      monthlyBudgetUsd: number;
+    },
   ): Promise<string> {
-    const result = await this.createMessage(businessId, kind, {
-      messages: [{ role: 'user', content: prompt }],
-      temperature,
-      ...(maxTokens ? { maxTokens } : {}),
-    });
+    if (businessId && voiceBudget) {
+      await this.enforceVoiceVersionBudget(
+        businessId,
+        voiceBudget.voiceAgentVersionId,
+        voiceBudget.monthlyBudgetUsd,
+      );
+    }
+    const result = await this.createMessage(
+      businessId,
+      kind,
+      {
+        messages: [{ role: 'user', content: prompt }],
+        temperature,
+        ...(maxTokens ? { maxTokens } : {}),
+      },
+      undefined,
+      voiceBudget?.voiceAgentVersionId,
+    );
     const text = result.content.find((block) => block.type === 'text')?.text;
     return text ?? '';
+  }
+
+  private async enforceVoiceVersionBudget(
+    businessId: string,
+    versionId: string,
+    monthlyBudgetUsd: number,
+  ): Promise<void> {
+    const now = new Date();
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const usage = await this.prisma.aiCallLog.aggregate({
+      where: {
+        businessId,
+        voiceAgentVersionId: versionId,
+        createdAt: { gte: monthStart },
+      },
+      _sum: { estimatedCostUsd: true },
+    });
+    if (Number(usage._sum.estimatedCostUsd ?? 0) >= monthlyBudgetUsd) {
+      throw new AppException(
+        'VOICE_AI_VERSION_BUDGET_REACHED',
+        'This AI agent version has reached its monthly call budget.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
   }
 
   /**
@@ -96,10 +139,17 @@ export class AiInfraService {
     kind: string,
     params: CreateMessageParams,
     toolCalls?: unknown,
+    voiceAgentVersionId?: string,
   ): Promise<CreateMessageResult> {
     await this.checkGuardrails(businessId, kind);
     const result = await this.claude.createMessage(params);
-    await this.recordUsage(businessId, kind, result, toolCalls);
+    await this.recordUsage(
+      businessId,
+      kind,
+      result,
+      toolCalls,
+      voiceAgentVersionId,
+    );
     return result;
   }
 
@@ -152,8 +202,15 @@ export class AiInfraService {
     kind: string,
     result: CreateMessageResult,
     toolCalls?: unknown,
+    voiceAgentVersionId?: string,
   ): Promise<void> {
-    await this.logCall(businessId, kind, result, toolCalls);
+    await this.logCall(
+      businessId,
+      kind,
+      result,
+      toolCalls,
+      voiceAgentVersionId,
+    );
   }
 
   private async enforceRateLimit(businessId: string): Promise<void> {
@@ -200,6 +257,7 @@ export class AiInfraService {
     kind: string,
     result: CreateMessageResult,
     toolCalls?: unknown,
+    voiceAgentVersionId?: string,
   ): Promise<void> {
     const cost =
       result.inputTokens * HAIKU_INPUT_COST_PER_TOKEN +
@@ -213,6 +271,7 @@ export class AiInfraService {
         outputTokens: result.outputTokens,
         estimatedCostUsd: cost,
         toolCalls: toolCalls as Prisma.InputJsonValue,
+        voiceAgentVersionId,
       },
     });
   }

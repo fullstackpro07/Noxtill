@@ -25,6 +25,7 @@ export interface VoiceAiAgentDraftInput {
   toolPermissions: VoiceAiTool[];
   knowledgeSourceIds: string[];
   maxTokensPerResponse: number;
+  monthlyBudgetUsd: number | null;
 }
 
 export interface VoiceAiAgentVersion {
@@ -37,12 +38,14 @@ export interface VoiceAiAgentVersion {
     | "toolPermissions"
     | "knowledgeSourceIds"
     | "maxTokensPerResponse"
+    | "monthlyBudgetUsd"
   > & {
     agentName?: string;
     template?: VoiceAiTemplate;
     toolPermissions?: VoiceAiTool[];
     knowledgeSourceIds?: string[];
     maxTokensPerResponse?: number;
+    monthlyBudgetUsd?: number | null;
   };
   checksum: string;
   publishedAt: string | null;
@@ -59,6 +62,7 @@ export interface VoiceAiAgentVersion {
     outputTokens: number;
     createdAt: string;
   } | null;
+  monthlySpendUsd: number;
 }
 
 export interface VoiceAiAgent {

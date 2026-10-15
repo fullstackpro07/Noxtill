@@ -4,6 +4,7 @@ import {
   IsInt,
   IsIn,
   IsOptional,
+  IsNumber,
   IsString,
   MaxLength,
   Max,
@@ -81,6 +82,13 @@ export class SaveVoiceAiAgentDraftDto {
   @Min(32)
   @Max(1000)
   maxTokensPerResponse?: number;
+
+  /** Monthly AI cost ceiling for calls handled by this immutable version, in USD. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100_000)
+  monthlyBudgetUsd?: number;
 }
 
 export class TestVoiceAiAgentDto {

@@ -24,6 +24,7 @@ type AgentConfig = {
   toolPermissions?: string[];
   knowledgeSourceIds?: string[];
   maxTokensPerResponse?: number;
+  monthlyBudgetUsd?: number | null;
 };
 
 const VALID_TEMPLATES = new Set<string>(VOICE_AI_AGENT_TEMPLATES);
@@ -70,6 +71,29 @@ export class VoiceAiAgentsService {
         orderBy: [{ title: 'asc' }, { id: 'asc' }],
         take: 100,
       });
+    const versionIds = agents.flatMap((agent) =>
+      agent.versions.map((version) => version.id),
+    );
+    const monthStart = new Date(
+      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+    );
+    const spendRows = versionIds.length
+      ? await this.tenantPrisma.client.aiCallLog.groupBy({
+          by: ['voiceAgentVersionId'],
+          where: {
+            businessId,
+            voiceAgentVersionId: { in: versionIds },
+            createdAt: { gte: monthStart },
+          },
+          _sum: { estimatedCostUsd: true },
+        })
+      : [];
+    const spendByVersion = new Map(
+      spendRows.map((row) => [
+        row.voiceAgentVersionId,
+        Number(row._sum.estimatedCostUsd ?? 0),
+      ]),
+    );
 
     return {
       templates: VOICE_AI_AGENT_TEMPLATES,
@@ -86,6 +110,7 @@ export class VoiceAiAgentsService {
           id: version.id,
           version: version.version,
           config: version.config as unknown as AgentConfig,
+          monthlySpendUsd: spendByVersion.get(version.id) ?? 0,
           checksum: version.checksum,
           publishedAt: version.publishedAt?.toISOString() ?? null,
           approvedAt: version.approvedAt?.toISOString() ?? null,
@@ -673,6 +698,7 @@ export class VoiceAiAgentsService {
       ],
       knowledgeSourceIds,
       maxTokensPerResponse: dto.maxTokensPerResponse ?? 320,
+      monthlyBudgetUsd: dto.monthlyBudgetUsd ?? null,
     };
   }
 
@@ -692,6 +718,7 @@ export class VoiceAiAgentsService {
       toolPermissions: [...(config.toolPermissions ?? [])].sort(),
       knowledgeSourceIds: [...(config.knowledgeSourceIds ?? [])].sort(),
       maxTokensPerResponse: config.maxTokensPerResponse ?? 320,
+      monthlyBudgetUsd: config.monthlyBudgetUsd ?? null,
     });
     return createHash('sha256').update(canonical).digest('hex');
   }
