@@ -3,7 +3,7 @@
 // from it, each row with its own destination picker and flags, then duplicates and the approve step.
 // Module: (app)/digitizer review (per-row destination, needsReview, duplicate decisions, accept all,
 // edit rows, original view, approve → import commit).
-const { esc, icon, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
+const { icon, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
 
 const route = "/features/review-approve-data";
 const css = `

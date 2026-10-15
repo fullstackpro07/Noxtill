@@ -4,7 +4,7 @@
 // doesn't add up before it reaches your books.
 // Module: (app)/digitizer (receipt/invoice scanner types → expense destination, invoice reconciliation,
 // total_mismatch).
-const { esc, icon, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
+const { icon, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
 
 const route = "/features/receipt-invoice-scan";
 const css = `

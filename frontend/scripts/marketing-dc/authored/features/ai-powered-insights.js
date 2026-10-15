@@ -2,7 +2,7 @@
 // /features/ai-powered-insights — built around one cause chain: what changed → why → what to do, laid out
 // left to right, then the "ask your business" box answering in plain words with the numbers behind it.
 // Module: (app)/business-brain Situation + Cause views, Ask (assistant), AI Insights.
-const { esc, icon, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
+const { esc, icon, img, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
 
 const route = "/features/ai-powered-insights";
 const css = `

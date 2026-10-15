@@ -3,7 +3,7 @@
 // before → after stock diff it produces, and the lines it couldn't match waiting for a decision.
 // Module: (app)/digitizer (inventory_sheet scanner type → inventory destination; updates the stock of
 // products that already exist).
-const { esc, icon, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
+const { esc, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
 
 const route = "/features/inventory-from-photos";
 const css = `

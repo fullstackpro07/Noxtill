@@ -2,7 +2,7 @@
 // /features/document-scanning — built around the capture moment: the phone camera framing a paper page,
 // the ten kinds of page the scanner knows, and the honest file limits.
 // Module: (app)/digitizer (SCANNER_TYPES, JPEG/PNG/WebP ≤10 MB, PDF ≤20 MB and 40 pages; no HEIC/Office).
-const { esc, icon, img, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
+const { icon, img, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
 
 const route = "/features/document-scanning";
 const css = `

@@ -3,7 +3,7 @@
 // discounts, stock, campaigns), an approval matrix of what runs on its own vs waits for whom, and the
 // audit log that records every automated action.
 // Autonomous Commerce (owner decision 2026-10-15: written as a live feature).
-const { esc, icon, pill, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
+const { icon, CARD, eyebrow, sec, h2, crumb, ctas, faq, closing, page } = require("./fkit");
 
 const route = "/features/commerce-within-your-rules";
 const css = `

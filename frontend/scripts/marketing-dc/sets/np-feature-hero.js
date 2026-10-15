@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // Feature pages (/features/*): the site's palette and one hero layout.
 //
 // 1. Palette — the feature designs drew with their own darks (#0F2A1F …), accents (#2FD39A, #8FE0B3) and a
@@ -130,7 +131,7 @@ function unplace(n) {
   const m = st(n);
   let ch = false;
   for (const k of ["grid-column", "grid-row", "grid-area", "grid-column-start", "grid-column-end"]) if (m.delete(k)) ch = true;
-  if (/^-?\d+$/.test(m.get("order") || "")) (m.delete("order"), (ch = true));
+  if (/^-?\d+$/.test(m.get("order") || "")) { m.delete("order"); ch = true; }
   if (ch) setSt(n, m);
 }
 // a block of copy and/or buttons only (no picture, table or card) — part of the heading block
@@ -164,20 +165,20 @@ function leftAlign(n) {
   if (!isEl(n)) return;
   const s = st(n);
   let ch = false;
-  if (s.has("text-align")) (s.set("text-align", "left"), (ch = true));
-  if (/center|flex-end|end|right/.test(s.get("justify-content") || "")) (s.set("justify-content", "flex-start"), (ch = true));
-  if (/center|end|right/.test(s.get("justify-items") || "") || /center|end/.test(s.get("align-items") || "") && /column/.test(s.get("flex-direction") || "")) (s.set("justify-items", "start"), s.set("align-items", "flex-start"), (ch = true));
+  if (s.has("text-align")) { s.set("text-align", "left"); ch = true; }
+  if (/center|flex-end|end|right/.test(s.get("justify-content") || "")) { s.set("justify-content", "flex-start"); ch = true; }
+  if (/center|end|right/.test(s.get("justify-items") || "") || /center|end/.test(s.get("align-items") || "") && /column/.test(s.get("flex-direction") || "")) { s.set("justify-items", "start"); s.set("align-items", "flex-start"); ch = true; }
   for (const k of ["margin", "margin-left", "margin-right", "margin-inline"]) {
     if (/auto/.test(s.get(k) || "")) {
       if (k === "margin") {
         const p = s.get(k).split(/\s+/);
         if (p.length === 1) s.set(k, "0");
-        else if (p.length >= 2) (p[1] = "0", p.length === 4 && (p[3] = "0"), s.set(k, p.join(" ")));
+        else if (p.length >= 2) { p[1] = "0"; if (p.length === 4) p[3] = "0"; s.set(k, p.join(" ")); }
       } else s.set(k, "0");
       ch = true;
     }
   }
-  if (n[0] === "h1") (s.set("font-size", "clamp(40px, 4.2vw, 60px)"), (ch = true));
+  if (n[0] === "h1") { s.set("font-size", "clamp(40px, 4.2vw, 60px)"); ch = true; }
   if (ch) setSt(n, s);
   n[2].forEach(leftAlign);
 }
@@ -232,7 +233,7 @@ function restructure(tree) {
 
   // buttons that sat beside the text block (not inside it) join it
   const tparent = p[p.length - 3];
-  for (const sib of [...tparent[2]]) if (sib !== text && textish(sib)) (remove(tparent, sib), text[2].push(sib));
+  for (const sib of [...tparent[2]]) if (sib !== text && textish(sib)) { remove(tparent, sib); text[2].push(sib); }
   // mock-ups the design drew inside the text block, after its buttons, move to the visual column
   const ctaAt = text[2].findIndex((k) => isEl(k) && has(k, (x) => x[0] === "a" && /signup|demo|login|contact/i.test(x[1].href || "")));
   const moved = ctaAt >= 0 ? text[2].slice(ctaAt + 1).filter((k) => isEl(k) && boxy(k)) : [];
@@ -245,7 +246,7 @@ function restructure(tree) {
     if (!node[2].some(meaningful)) { remove(parent, node); continue; }
     const s = st(node);
     for (const k of ["padding", "padding-top", "padding-bottom", "padding-left", "padding-right", "margin", "margin-top", "margin-bottom", "max-width", "min-height", "height"]) s.delete(k);
-    if (/grid/.test(s.get("display") || "")) (s.set("grid-template-columns", "minmax(0, 1fr)"), s.delete("grid-template-rows"));
+    if (/grid/.test(s.get("display") || "")) { s.set("grid-template-columns", "minmax(0, 1fr)"); s.delete("grid-template-rows"); }
     if (!node[2].some((k) => isEl(k) && !abs(k))) s.set("min-height", "440px");
     s.set("width", "100%");
     setSt(node, s);
@@ -265,7 +266,7 @@ function restructure(tree) {
   ["display", "grid-template-columns", "align-items", "min-height", "height", "padding", "padding-top", "padding-bottom"].forEach((k) => s.delete(k));
   s.set("position", "relative"); s.set("overflow", "hidden");
   // white heading on a light hero (its photo or dark panel is gone) needs the site's dark background
-  if (!photo && !gathered && !textDark && (lum(bgOf(sec)) ?? 255) > 110) (s.delete("background"), s.set("background", DARK));
+  if (!photo && !gathered && !textDark && (lum(bgOf(sec)) ?? 255) > 110) { s.delete("background"); s.set("background", DARK); }
   setSt(sec, s);
   const ts = st(text);
   ["max-width", "margin", "margin-top", "padding", "padding-top", "padding-bottom", "background", "border-radius", "position", "box-shadow", "backdrop-filter"].forEach((k) => ts.delete(k));
