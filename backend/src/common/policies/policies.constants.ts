@@ -230,6 +230,8 @@ export const POLICY_DEFS = {
     max: 100_000,
     integer: true,
   },
+  // voice/missed-call.service.ts (text a missed caller; on preserves the existing behavior)
+  'voice.missedCallTextBack': { kind: 'boolean', default: true },
   // voice/voice-transcript-redaction.service.ts (post-call PII masking; off preserves current behavior)
   'voice.redactTranscripts': { kind: 'boolean', default: false },
   // procurement/contracts (renewal alert job + Supplier Contracts screen)

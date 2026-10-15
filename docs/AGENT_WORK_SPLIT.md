@@ -745,8 +745,9 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   provider and an agent profile Twilio rings the staff phone first and bridges on signed callbacks
   (`/voice/webhook/callback/*`); otherwise a passed check offers a manual dial (recorded as
   "eligible · dial manually"). Closing marks the call handled; `do_not_call` adds a suppression. The
-  shared "Call back" action now routes here instead of opening `tel:` unchecked. No automatic
-  text-back is sent.
+  shared "Call back" action now routes here instead of opening `tel:` unchecked. (Correction,
+  2026-10-16: an automatic missed-call text-back DID already exist in `MissedCallService`; see the
+  text-back entry below.)
 - Transcripts & Recordings (`e6ec93b`, migration `20261014121000_voice_call_legal_hold`): legal hold
   with a required reason (audited, shown in call history). While held, delete is refused and the
   retention purge skips the call. Existing delete already erases audio, transcript and QA reviews;
@@ -778,3 +779,26 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   “Module access couldn't be checked” and asks to reconnect. No QA-business credentials were
   available in the active browser session, so no settings were changed and no live Twilio call was
   placed.
+
+## Module 21 progress — remaining code, Claude items 1–3 (Claude Code, 2026-10-16)
+
+- Transcript redaction (`eb13ed5`, migration `20261016100000_voice_transcript_redaction`): owner
+  setting `voice.redactTranscripts` (default off). A 5-minute job masks Luhn-valid card numbers,
+  SSN-style IDs, phone numbers and emails in finished calls' transcripts and AI summaries; managers
+  can redact one call on demand. Live calls and legal-hold calls are never changed.
+- Outbound campaigns (`957a370`, migration renamed to `20261016111000_voice_campaign_approval_amd`
+  to avoid colliding with Codex's `20261016110000_*`): campaigns now go draft → pending approval →
+  approved before they can start; a different manager approves (the owner may approve their own),
+  and approved campaigns can be sent back. **AI campaigns can also be requested/approved**; the human
+  dialer's `start` still refuses AI campaigns, so starting an approved AI campaign is Codex's path.
+  Approved human campaigns auto-start when `scheduledAt` arrives (minute job). Optional voicemail
+  detection adds Twilio `machineDetection` on the customer `<Number>` and logs machine answers as
+  `voicemail` (new enum value on both attempt tables). Draft campaigns accept a CSV upload matched
+  to the CRM by phone (new customers get `consentMarketing=false`). Per-campaign report from saved
+  rows only. AMD attribute support on `<Number>` is not verified against live Twilio.
+- Missed-call text-back: correction — `MissedCallService` already texted every missed caller with no
+  consent or suppression check. It now respects owner setting `voice.missedCallTextBack` (default on,
+  preserving behavior), never texts a suppressed number or an opted-out customer, uses an
+  idempotency key per call, and stores the outcome (`textBackStatus`) plus the Message id so the
+  Missed Calls screen shows the provider-reported delivery status. Unknown (non-customer) callers are
+  still texted when the setting is on — disclosed in the setting's impact text.

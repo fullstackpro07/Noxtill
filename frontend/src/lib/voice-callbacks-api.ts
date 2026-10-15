@@ -28,6 +28,12 @@ export interface MissedCallItem {
   resolvedAt: string | null;
   assignedToUserId: string | null;
   trackingSource: string | null;
+  /** Missed-call text-back outcome; `delivery` is the provider-reported message status. */
+  textBack: {
+    status: "queued" | "disabled" | "skipped_suppressed" | "skipped_opted_out" | "failed";
+    delivery: "queued" | "sent" | "delivered" | "read" | "failed" | null;
+    channel: string | null;
+  } | null;
   callback: {
     id: string;
     status: "open" | "calling" | "connected" | "completed";

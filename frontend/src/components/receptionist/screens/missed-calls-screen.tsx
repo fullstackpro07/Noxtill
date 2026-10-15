@@ -149,6 +149,7 @@ export function MissedCallsScreen() {
                         {item.resolvedAt ? <Chip tone="green">Handled</Chip> : null}
                         {cb?.outcome ? <Chip tone="neutral">{readable(cb.outcome)}</Chip> : null}
                         {item.trackingSource ? <Chip tone="blue">Source · {item.trackingSource}</Chip> : null}
+                        {item.textBack ? <TextBackChip textBack={item.textBack} /> : null}
                       </div>
                       <div className="mt-1 text-[11px] text-[#667085]">
                         {when(item.startedAt)} · {cb ? `${cb.attemptCount} call-back${cb.attemptCount === 1 ? "" : "s"} connected to the caller` : "not called back"}
@@ -211,10 +212,37 @@ export function MissedCallsScreen() {
           </div>
         )}
         <div className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-[18px] py-3 text-[11px] leading-5 text-[#667085]">
-          Automatic text-back messages are not sent from here. If Noxtill cannot place calls on this server, a passed check
-          offers your own phone&apos;s dialer instead; those calls are not recorded. No external Do Not Call registry is checked.
+          When &ldquo;Text missed callers&rdquo; is on (AI &amp; Governance settings), each missed caller gets one message
+          unless the number is suppressed or the customer opted out; the label shows the provider&apos;s delivery status. If
+          Noxtill cannot place calls on this server, a passed check offers your own phone&apos;s dialer instead; those calls are
+          not recorded. No external Do Not Call registry is checked.
         </div>
       </Card>
     </div>
   );
+}
+
+const TEXT_BACK_LABEL: Record<NonNullable<MissedCallItem["textBack"]>["status"], string> = {
+  queued: "Text-back sent to provider",
+  disabled: "Text-back off",
+  skipped_suppressed: "Not texted · suppressed",
+  skipped_opted_out: "Not texted · opted out",
+  failed: "Text-back failed",
+};
+
+function TextBackChip({ textBack }: { textBack: NonNullable<MissedCallItem["textBack"]> }) {
+  if (textBack.status !== "queued") {
+    return <Chip tone={textBack.status === "failed" ? "red" : "neutral"}>{TEXT_BACK_LABEL[textBack.status]}</Chip>;
+  }
+  const delivery = textBack.delivery;
+  const tone: Tone = delivery === "delivered" || delivery === "read" ? "green" : delivery === "failed" ? "red" : "blue";
+  const label =
+    delivery === "delivered" || delivery === "read"
+      ? "Text delivered"
+      : delivery === "failed"
+        ? "Text not delivered"
+        : delivery === "sent"
+          ? "Text sent · awaiting delivery"
+          : "Text queued";
+  return <Chip tone={tone}>{label}{textBack.channel ? ` · ${textBack.channel}` : ""}</Chip>;
 }

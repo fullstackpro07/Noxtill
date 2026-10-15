@@ -516,6 +516,24 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               emptyLabel: 'No limit',
             }),
             policyRow(d, {
+              key: 'voice-missed-call-text-back',
+              policy: 'voice.missedCallTextBack',
+              kind: 'toggle',
+              label: 'Text missed callers',
+              description:
+                'After a missed call, send the caller a short "sorry we missed you" message through your messaging channel. Numbers on the suppression list and customers who opted out are never texted.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              impact:
+                'Callers who are not saved customers are texted too; check this fits your local messaging rules. Each send counts against the monthly message quota.',
+              link: {
+                label: 'Open Missed Calls',
+                href: '/receptionist/missed-calls',
+              },
+              on: { text: 'Texting', tone: 'blue' },
+              off: { text: 'Off', tone: 'neutral' },
+            }),
+            policyRow(d, {
               key: 'voice-redact-transcripts',
               policy: 'voice.redactTranscripts',
               kind: 'toggle',

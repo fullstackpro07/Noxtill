@@ -81,6 +81,19 @@ export class VoiceCallbacksService {
       orderBy: [{ startedAt: 'desc' }, { id: 'asc' }],
       take: 200,
     });
+    // Delivery comes from the message pipeline's provider status, never assumed from "queued".
+    const messageIds = calls
+      .map((call) => call.textBackMessageId)
+      .filter((id): id is string => !!id);
+    const messages = messageIds.length
+      ? await this.tenantPrisma.client.message.findMany({
+          where: { businessId, id: { in: messageIds } },
+          select: { id: true, status: true, channel: true },
+        })
+      : [];
+    const messageById = new Map(
+      messages.map((message) => [message.id, message]),
+    );
     const items = calls.map((call) => ({
       callId: call.id,
       caller: call.fromNumber,
@@ -90,6 +103,17 @@ export class VoiceCallbacksService {
       resolvedAt: call.resolvedAt?.toISOString() ?? null,
       assignedToUserId: call.assignedToUserId,
       trackingSource: call.trackingNumberId ? call.attributionSource : null,
+      textBack: call.textBackStatus
+        ? {
+            status: call.textBackStatus,
+            delivery: call.textBackMessageId
+              ? (messageById.get(call.textBackMessageId)?.status ?? null)
+              : null,
+            channel: call.textBackMessageId
+              ? (messageById.get(call.textBackMessageId)?.channel ?? null)
+              : null,
+          }
+        : null,
       callback: call.callback
         ? {
             id: call.callback.id,
