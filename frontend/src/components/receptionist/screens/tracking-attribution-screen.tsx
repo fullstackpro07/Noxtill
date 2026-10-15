@@ -308,6 +308,39 @@ export function TrackingAttributionScreen() {
 
       <TrackingNumbersCard campaignOptions={data.campaignOptions} />
 
+      <Card overflow>
+        <CardHead icon="list" iconColor="#45505F" title="Results by source" sub={`Calls started in the last ${days} days`} />
+        {!data.sources.length ? (
+          <EmptyState icon="phone-call" title="No calls in this window" body="Sources appear here once calls arrive." />
+        ) : (
+          <TableWrap
+            minWidth={640}
+            head={
+              <>
+                <Th>Source</Th>
+                <Th align="right">Calls</Th>
+                <Th align="right">Via tracking number</Th>
+                <Th align="right">Bookings</Th>
+                <Th align="right">Completed</Th>
+                <Th align="right">Deposits captured</Th>
+              </>
+            }
+          >
+            {data.sources.map((row) => (
+              <tr key={row.source} className="border-b border-[#EEF0F3] last:border-0 text-[12px] tabular-nums">
+                <td className="px-3 py-2.5 font-bold">{row.source === "Unknown" ? <Chip tone="neutral">Unknown · not assigned</Chip> : row.source}</td>
+                <td className="px-3 py-2.5 text-right">{row.calls}</td>
+                <td className="px-3 py-2.5 text-right">{row.viaTrackingNumber}</td>
+                <td className="px-3 py-2.5 text-right">{row.bookings}</td>
+                <td className="px-3 py-2.5 text-right">{row.completedBookings}</td>
+                <td className="px-3 py-2.5 text-right">{row.depositsCaptured}</td>
+              </tr>
+            ))}
+          </TableWrap>
+        )}
+        <div className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-[18px] py-3 text-[11px] leading-5 text-[#667085]">{data.limitations.campaignRevenue}</div>
+      </Card>
+
       <div className="grid gap-[18px] lg:grid-cols-[minmax(260px,.82fr)_minmax(0,1.6fr)]">
         <Card overflow>
           <CardHead

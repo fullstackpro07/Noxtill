@@ -1,5 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AppointmentStatus, PhoneCallStatus, Prisma } from '@prisma/client';
+import {
+  AppointmentStatus,
+  DepositStatus,
+  PhoneCallStatus,
+  Prisma,
+} from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { OverrideVoiceCallAttributionDto } from './dto/voice-tracking.dto';
@@ -299,11 +304,12 @@ export class VoiceTrackingService {
             : null,
       })),
       campaignOptions,
+      sources: await this.bySource(businessId, since),
       limitations: {
         marketingAttribution:
           'Click/session/UTM imports are not configured. Calls are attributed only by the tracking number dialed or by a merchant-entered correction with evidence; unknown calls are not assigned to a campaign.',
         campaignRevenue:
-          'Not available: a phone call can link to its canonical booking, but there is no call-to-order/revenue link.',
+          'Bookings do not carry a sale value, so revenue per source is not available. The source table shows captured deposits on call-linked bookings instead.',
         leads:
           'Not tracked: caller records are not automatically counted as qualified leads.',
         trackingNumbers: trackingNumberCount
@@ -317,6 +323,70 @@ export class VoiceTrackingService {
       },
       phoneCallStatuses: Object.values(PhoneCallStatus),
     };
+  }
+
+  /**
+   * Per-source conversion evidence for the window: calls, call-linked bookings, completed
+   * bookings and deposits actually captured on those bookings. Unattributed calls stay "Unknown".
+   */
+  private async bySource(businessId: string, since: Date) {
+    const calls = await this.tenantPrisma.client.phoneCall.findMany({
+      where: { businessId, startedAt: { gte: since } },
+      select: {
+        attributionSource: true,
+        attributionReason: true,
+        appointment: {
+          select: {
+            status: true,
+            deposits: {
+              where: { status: DepositStatus.captured },
+              select: { amount: true },
+            },
+          },
+        },
+      },
+    });
+    const rows = new Map<
+      string,
+      {
+        source: string;
+        calls: number;
+        bookings: number;
+        completedBookings: number;
+        depositsCaptured: number;
+        viaTrackingNumber: number;
+      }
+    >();
+    for (const call of calls) {
+      const source = call.attributionSource ?? 'Unknown';
+      const row = rows.get(source) ?? {
+        source,
+        calls: 0,
+        bookings: 0,
+        completedBookings: 0,
+        depositsCaptured: 0,
+        viaTrackingNumber: 0,
+      };
+      row.calls += 1;
+      if (call.attributionReason === TRACKING_NUMBER_ATTRIBUTION_REASON)
+        row.viaTrackingNumber += 1;
+      if (call.appointment) {
+        row.bookings += 1;
+        if (call.appointment.status === AppointmentStatus.completed)
+          row.completedBookings += 1;
+        row.depositsCaptured += call.appointment.deposits.reduce(
+          (sum, d) => sum + Number(d.amount),
+          0,
+        );
+      }
+      rows.set(source, row);
+    }
+    return [...rows.values()]
+      .sort((a, b) => b.calls - a.calls || a.source.localeCompare(b.source))
+      .map((row) => ({
+        ...row,
+        depositsCaptured: row.depositsCaptured.toFixed(2),
+      }));
   }
 
   private maskCaller(value: string): string {

@@ -197,7 +197,14 @@ describe('VoiceTrackingService (MySQL)', () => {
       ]),
     );
     expect(result.limitations.marketingAttribution).toContain('not configured');
-    expect(result.limitations.campaignRevenue).toContain('Not available');
+    expect(result.limitations.campaignRevenue).toContain('not available');
+    const unknown = result.sources.find((row) => row.source === 'Unknown');
+    expect(unknown).toMatchObject({
+      calls: 2,
+      bookings: 1,
+      completedBookings: 1,
+      viaTrackingNumber: 0,
+    });
   });
 
   it('stores manual source evidence, validates tenant campaigns and audits before/after', async () => {

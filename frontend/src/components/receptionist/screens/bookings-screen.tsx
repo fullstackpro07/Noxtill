@@ -83,6 +83,7 @@ function Bookings() {
                 <Th>Staff</Th>
                 <Th>Deposit</Th>
                 <Th>Created by</Th>
+                <Th>Caller verified</Th>
                 <Th>Status</Th>
                 <Th align="right">Actions</Th>
               </>
@@ -102,7 +103,23 @@ function Bookings() {
                     <ChipFor spec={{ label: a.depositPaid > 0 ? `${money(a.depositPaid)} paid` : "None recorded", tone: a.depositPaid > 0 ? "green" : "neutral" }} />
                   </td>
                   <td className="px-3 py-[11px]">
-                    <ChipFor spec={{ label: "AI", tone: "purple", icon: "sparkles" }} />
+                    <ChipFor
+                      spec={{
+                        label: c.aiAgentVersion ? `${c.aiAgentVersion.agentName} · v${c.aiAgentVersion.version}` : "AI receptionist",
+                        tone: "purple",
+                        icon: "sparkles",
+                      }}
+                    />
+                    {c.humanAgentConnected || c.joinedAt ? <div className="mt-1 text-[10.5px] text-[#667085]">A person also joined the call</div> : null}
+                  </td>
+                  <td className="px-3 py-[11px]">
+                    <ChipFor
+                      spec={
+                        c.customer && c.customer.id === a.customerId
+                          ? { label: "Matches caller's number", tone: "green" }
+                          : { label: "Not verified", tone: "amber" }
+                      }
+                    />
                   </td>
                   <td className="px-3 py-[11px]">
                     <ChipFor spec={st} />
@@ -115,7 +132,7 @@ function Bookings() {
             })}
           </TableWrap>
         )}
-        <Footnote>Bookings owns these records — this is the phone-created subset, with each appointment&apos;s live status. Opening a row shows the call that created it.</Footnote>
+        <Footnote>Bookings owns these records — this is the phone-created subset, with each appointment&apos;s live status. Opening a row shows the call that created it. &ldquo;Created by&rdquo; shows the AI agent version pinned on the call; &ldquo;Caller verified&rdquo; means the booked customer&apos;s saved phone equals the number that called.</Footnote>
       </Card>
     </div>
   );

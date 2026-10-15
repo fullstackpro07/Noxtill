@@ -79,6 +79,15 @@ export interface VoiceTrackingOverview {
     } | null;
   }>;
   campaignOptions: VoiceTrackingCampaignOption[];
+  /** Per-source conversion evidence; deposits are captured amounts, not revenue. */
+  sources: Array<{
+    source: string;
+    calls: number;
+    bookings: number;
+    completedBookings: number;
+    depositsCaptured: string;
+    viaTrackingNumber: number;
+  }>;
   limitations: {
     marketingAttribution: string;
     campaignRevenue: string;
