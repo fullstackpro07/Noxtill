@@ -1,5 +1,17 @@
 import { apiFetch } from "@/lib/api-client";
 
+export interface VoiceSupervisorQueue {
+  key: string;
+  label: string;
+  queueName: string;
+  waitingCalls: number;
+  longestWaitSeconds: number;
+  slaTargetSeconds: number | null;
+  slaAtRisk: number | null;
+  waitEstimateSeconds: number | null;
+  estimateLabel: string;
+}
+
 export interface VoiceSupervisorLiveCall {
   id: string;
   caller: string;
@@ -38,22 +50,32 @@ export interface VoiceSupervisorSnapshot {
     busyAgents: number;
     callbackBacklog: number;
     configuredCapacity: number;
-    waitingCalls: null;
-    longestWaitSeconds: null;
-    slaAtRisk: null;
+    waitingCalls: number;
+    longestWaitSeconds: number;
+    slaAtRisk: number | null;
     aiErrors: null;
   };
   calls: VoiceSupervisorLiveCall[];
   agents: VoiceSupervisorAgent[];
+  queues: VoiceSupervisorQueue[];
   limitations: {
     waitingCalls: string;
-    sla: string;
     aiErrors: string;
     language: string;
     whisperAndBarge: string;
     monitoring: string;
     identity: string;
   };
+}
+
+export function updateVoiceQueueSla(
+  queueKey: string,
+  slaTargetSeconds: number | null,
+): Promise<{ queue: string; slaTargetSeconds: number | null }> {
+  return apiFetch(`/voice/supervisor/queues/${queueKey}/sla`, {
+    method: "PATCH",
+    body: JSON.stringify({ slaTargetSeconds }),
+  });
 }
 
 export function fetchVoiceSupervisorLive(): Promise<VoiceSupervisorSnapshot> {

@@ -12,6 +12,7 @@ import { CreateWalkInAppointmentDto } from '../bookings/dto/create-walk-in-appoi
 import { buildFulltextBooleanQuery } from '../common/utils/mysql-fulltext.util';
 import { MissedCallService } from './missed-call.service';
 import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.service';
+import { VoiceCallQueueService } from './voice-call-queue.service';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import {
   AUTOMATED_ASSISTANT_DISCLOSURE_TEXT,
@@ -188,6 +189,7 @@ export class VoiceCallService {
     private readonly appointments: AppointmentsService,
     private readonly missedCall: MissedCallService,
     private readonly humanAgentDispatch: VoiceHumanAgentDispatchService,
+    private readonly callQueue: VoiceCallQueueService,
   ) {}
 
   /** Twilio's inbound-call webhook. `toNumber` is the only way to know which business this is. */
@@ -1417,6 +1419,15 @@ export class VoiceCallService {
       transferNumber = assignedAgent?.phone;
     }
     if (!transferNumber) {
+      const queued = await this.callQueue.enqueue(call.businessId, call.id);
+      if (queued) {
+        await this.persist(call.callSid, transcript, undefined, {
+          ...(matchedRule
+            ? { routedRuleId: matchedRule.id, routedRuleName: matchedRule.name }
+            : {}),
+        });
+        return twiml(responseToSpeak + queued);
+      }
       const noOneAvailable =
         call.recordingConsentStatus === VoiceRecordingConsentStatus.granted
           ? "I'm not able to transfer you right now, but I've noted your message and someone will follow up."
@@ -1501,6 +1512,94 @@ export class VoiceCallService {
       say(aiResponse.reply, settings.voiceId) +
         `<Dial action="${escapeXml(action.toString())}" method="POST" answerOnBridge="true">${dialNumber}</Dial>`,
     );
+  }
+
+  /** Twilio's <Enqueue> action callback; QueueTime is measured by Twilio, never estimated here. */
+  async handleQueueExit(
+    callId: string,
+    queueSid: string | undefined,
+    queueTime: number,
+    queueResult: string,
+  ): Promise<string> {
+    const entry = await this.callQueue.recordExit(
+      callId,
+      queueSid,
+      queueTime,
+      queueResult === 'bridged' ? 'connected' : 'pending_overflow',
+    );
+    const call = await this.prisma.phoneCall.findFirst({
+      where: { id: callId, businessId: entry.businessId },
+    });
+    if (!call) return twiml('<Hangup/>');
+
+    const policyOwner = await this.prisma.business.findUnique({
+      where: { id: entry.businessId },
+      select: { policies: true },
+    });
+    const policies = resolvePolicies(policyOwner);
+    const waitLimit = policies.num('voice.holdQueueMaxWaitSeconds');
+    const reachedLimit = waitLimit !== null && queueTime >= waitLimit;
+    if (queueResult === 'bridged') return twiml('<Hangup/>');
+    if (!reachedLimit) {
+      return twiml(
+        say(
+          'The phone queue ended before an agent connected. Please leave a message for the team.',
+        ) + '<Hangup/>',
+      );
+    }
+
+    const settings = await this.getSettings(entry.businessId);
+    const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
+    if (
+      policies.bool('voice.holdQueueOverflowToAi') &&
+      call.recordingConsentStatus === VoiceRecordingConsentStatus.granted
+    ) {
+      const resume =
+        'The wait is longer than expected. I can continue helping you with the automated assistant.';
+      transcript.push({
+        speaker: 'assistant',
+        text: resume,
+        at: new Date().toISOString(),
+      });
+      await this.persist(call.callSid, transcript);
+      await this.callQueue.recordExit(callId, queueSid, queueTime, 'ai');
+      return twiml(
+        say(resume, settings.voiceId) +
+          recordNext(settings.responseTimeoutSeconds),
+      );
+    }
+
+    if (policies.bool('voice.holdQueueOverflowToHuman')) {
+      const agent = await this.humanAgentDispatch.reserve(
+        entry.businessId,
+        call.id,
+      );
+      if (agent && (await this.startConferenceHumanAgent(call, agent))) {
+        await this.callQueue.recordExit(callId, queueSid, queueTime, 'human');
+        return twiml(
+          say(
+            'A team member is available now. Please stay on the line.',
+            settings.voiceId,
+          ) +
+            `<Dial><Conference startConferenceOnEnter="true" endConferenceOnExit="true" muted="false" beep="false" waitUrl="">${escapeXml(call.callSid)}</Conference></Dial>`,
+        );
+      }
+    }
+
+    const fallback =
+      'The team could not answer in time. Please leave a message or call back later.';
+    transcript.push({
+      speaker: 'assistant',
+      text: fallback,
+      at: new Date().toISOString(),
+    });
+    await this.persist(call.callSid, transcript, PhoneCallOutcome.message);
+    await this.prisma.phoneCall.update({
+      where: { id: call.id },
+      data: { callbackRequestedAt: new Date() },
+    });
+    await this.callQueue.recordExit(callId, queueSid, queueTime, 'callback');
+    return twiml(say(fallback, settings.voiceId) + '<Hangup/>');
   }
 
   private async startConferenceHumanAgent(

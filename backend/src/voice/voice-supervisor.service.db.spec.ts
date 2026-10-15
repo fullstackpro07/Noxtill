@@ -13,8 +13,10 @@ import {
   CLS_KEY_USER_ID,
 } from '../common/tenancy/tenant.constants';
 import { VoiceQueueService } from './voice-queue.service';
+import { VoiceCallQueueService } from './voice-call-queue.service';
 import { VoiceAgentsService } from './voice-agents.service';
 import { VoiceSupervisorService } from './voice-supervisor.service';
+import { ConfigService } from '@nestjs/config';
 
 class FakeClsService {
   private readonly values: Record<string, unknown> = {};
@@ -47,7 +49,8 @@ describe('VoiceSupervisorService (MySQL)', () => {
     const audit = new AuditService(tenant, cls as unknown as ClsService);
     const queue = new VoiceQueueService(tenant, audit);
     const agents = new VoiceAgentsService(tenant, audit, queue);
-    service = new VoiceSupervisorService(tenant, agents);
+    const callQueue = new VoiceCallQueueService(tenant, new ConfigService({}));
+    service = new VoiceSupervisorService(tenant, agents, callQueue, audit);
 
     const stamp = randomUUID();
     const [business, otherBusiness] = await Promise.all([
@@ -180,7 +183,7 @@ describe('VoiceSupervisorService (MySQL)', () => {
       onlineAgents: 1,
       availableAgents: 1,
       callbackBacklog: 0,
-      waitingCalls: null,
+      waitingCalls: 0,
       slaAtRisk: null,
       aiErrors: null,
     });

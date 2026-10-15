@@ -516,6 +516,54 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               emptyLabel: 'No limit',
             }),
             policyRow(d, {
+              key: 'voice-hold-queue-max-wait',
+              policy: 'voice.holdQueueMaxWaitSeconds',
+              kind: 'number',
+              label: 'Caller hold-queue wait limit',
+              description:
+                'When set, calls that request a person and cannot connect enter Twilio’s real hold queue. At this many seconds, the configured overflow action runs. Empty keeps the current immediate follow-up behavior.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              format: (n) => `${n} seconds`,
+              emptyLabel: 'Hold queue off',
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+            }),
+            policyRow(d, {
+              key: 'voice-hold-queue-overflow-ai',
+              policy: 'voice.holdQueueOverflowToAi',
+              kind: 'toggle',
+              label: 'Return callers to the AI at the wait limit',
+              description:
+                'If enabled, the caller returns to the pinned AI receptionist flow when the hold limit is reached. If disabled, the next enabled overflow option is used, or a callback follow-up.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              on: { text: 'AI overflow on', tone: 'blue' },
+              off: { text: 'Off', tone: 'neutral' },
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+            }),
+            policyRow(d, {
+              key: 'voice-hold-queue-overflow-human',
+              policy: 'voice.holdQueueOverflowToHuman',
+              kind: 'toggle',
+              label: 'Offer callers to another person at the wait limit',
+              description:
+                'If AI overflow is off, this offers the caller to the next available human. If no person is available or this is off, a callback follow-up is created.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              on: { text: 'Human overflow on', tone: 'green' },
+              off: { text: 'Off', tone: 'neutral' },
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+            }),
+            policyRow(d, {
               key: 'voice-missed-call-text-back',
               policy: 'voice.missedCallTextBack',
               kind: 'toggle',

@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { ApiError } from "@/lib/api-client";
 import {
   fetchVoiceSupervisorLive,
+  updateVoiceQueueSla,
   type VoiceSupervisorLiveCall,
 } from "@/lib/voice-supervisor-api";
 import { Ico } from "../rx-icon";
@@ -105,8 +107,14 @@ function CallControls({ call }: { call: VoiceSupervisorLiveCall }) {
         : "Noxtill rings your saved phone. Once you answer, both the agent and caller can hear you.",
       rows: [
         { label: "Caller", value: call.caller },
-        { label: "Assigned agent", value: call.activeHumanAgent?.name ?? "Not available" },
-        { label: "Rings", value: "The phone number on your Noxtill user account" },
+        {
+          label: "Assigned agent",
+          value: call.activeHumanAgent?.name ?? "Not available",
+        },
+        {
+          label: "Rings",
+          value: "The phone number on your Noxtill user account",
+        },
       ],
       primary: whisper ? "Ring my phone · whisper" : "Ring my phone · barge",
       cancel: "Cancel",
@@ -146,11 +154,33 @@ function CallControls({ call }: { call: VoiceSupervisorLiveCall }) {
 }
 
 export function SupervisorCenterScreen() {
+  const queryClient = useQueryClient();
+  const [slaDraft, setSlaDraft] = useState<number | "">("");
+  const [queueNotice, setQueueNotice] = useState("");
   const query = useQuery({
     queryKey: ["voice-supervisor-live"],
     queryFn: fetchVoiceSupervisorLive,
     refetchInterval: 5_000,
     staleTime: 2_000,
+  });
+  const saveSla = useMutation({
+    mutationFn: (value: number | null) => updateVoiceQueueSla("support", value),
+    onSuccess: async (result) => {
+      setQueueNotice(
+        result.slaTargetSeconds === null
+          ? "SLA target cleared"
+          : `Support queue target saved · ${result.slaTargetSeconds}s`,
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["voice-supervisor-live"],
+      });
+    },
+    onError: (error) =>
+      setQueueNotice(
+        error instanceof ApiError
+          ? error.message
+          : "Could not save the queue target",
+      ),
   });
 
   if (query.isPending) {
@@ -255,13 +285,25 @@ export function SupervisorCenterScreen() {
         />
         <KpiCard
           label="Waiting callers"
-          value="Not tracked"
-          sub="No on-hold call state"
+          value={String(metrics.waitingCalls)}
+          sub={
+            metrics.longestWaitSeconds
+              ? `Longest measured wait ${elapsed(metrics.longestWaitSeconds)}`
+              : "Twilio hold-queue records"
+          }
+          tone={metrics.waitingCalls ? "amber" : "neutral"}
         />
         <KpiCard
           label="SLA risk"
-          value="Not configured"
-          sub="No voice SLA target"
+          value={
+            metrics.slaAtRisk === null ? "No target" : String(metrics.slaAtRisk)
+          }
+          sub={
+            metrics.slaAtRisk === null
+              ? "Set a target per queue below"
+              : "Active waits at or beyond target"
+          }
+          tone={metrics.slaAtRisk ? "red" : "neutral"}
         />
         <KpiCard
           label="AI errors"
@@ -269,6 +311,86 @@ export function SupervisorCenterScreen() {
           sub="No live error metric stored"
         />
       </div>
+
+      <Card overflow>
+        <CardHead
+          icon="headset"
+          iconColor="#1D4ED8"
+          title="Caller hold queue"
+          sub="Twilio-measured waiting calls · estimates are labeled"
+        />
+        {snapshot.queues.length === 0 ? (
+          <div className="p-4 text-[12px] text-[#667085]">
+            No hold-queue entries have been recorded. New callers enter only
+            when the wait limit, Twilio callbacks and public hold-music URL are
+            configured.
+          </div>
+        ) : (
+          <div className="divide-y divide-[#EEF0F3]">
+            {snapshot.queues.map((queue) => (
+              <div
+                key={queue.queueName}
+                className="flex flex-wrap items-center gap-3 px-4 py-3"
+              >
+                <div className="min-w-[150px] flex-1">
+                  <div className="text-[12px] font-bold">{queue.label}</div>
+                  <div className="mt-0.5 text-[10.5px] text-[#667085]">
+                    {queue.waitingCalls} waiting · longest{" "}
+                    {elapsed(queue.longestWaitSeconds)} ·{" "}
+                    {queue.slaAtRisk === null
+                      ? "SLA not set"
+                      : `${queue.slaAtRisk} at risk`}
+                  </div>
+                  <div className="mt-0.5 text-[10.5px] text-[#667085]">
+                    {queue.waitEstimateSeconds === null
+                      ? "Wait estimate: Not enough measured waits"
+                      : `Wait estimate: about ${elapsed(queue.waitEstimateSeconds)} · estimate from recent measured waits`}
+                  </div>
+                </div>
+                <label className="text-[10.5px] font-bold text-[#667085]">
+                  SLA target (seconds)
+                  <input
+                    aria-label={`${queue.label} SLA target seconds`}
+                    className="ml-2 h-8 w-28 rounded-[8px] border border-[#D5DAE2] px-2 text-[12px] text-[#0F172A]"
+                    type="number"
+                    min={30}
+                    max={3600}
+                    step={1}
+                    value={
+                      slaDraft === ""
+                        ? (queue.slaTargetSeconds ?? "")
+                        : slaDraft
+                    }
+                    onChange={(event) =>
+                      setSlaDraft(
+                        event.target.value === ""
+                          ? ""
+                          : Number(event.target.value),
+                      )
+                    }
+                    placeholder="Not set"
+                  />
+                </label>
+                <SmallBtn
+                  icon="save"
+                  disabled={saveSla.isPending}
+                  onClick={() =>
+                    saveSla.mutate(slaDraft === "" ? null : slaDraft)
+                  }
+                >
+                  {saveSla.isPending ? "Saving…" : "Save target"}
+                </SmallBtn>
+              </div>
+            ))}
+          </div>
+        )}
+        {queueNotice ? (
+          <div role="status" className="px-4 pb-3 text-[11px] text-[#667085]">
+            {queueNotice}
+          </div>
+        ) : null}
+        <Footnote>{snapshot.limitations.waitingCalls}</Footnote>
+      </Card>
 
       {sentimentRisk > 0 ? (
         <div className="flex items-start gap-2 rounded-[11px] border border-[#FDE49B] bg-[#FFFBEB] px-3.5 py-3 text-[12px] text-[#92400E]">
@@ -314,15 +436,19 @@ export function SupervisorCenterScreen() {
                       {call.caller}
                     </span>
                     <Chip
-                      tone={call.activeHumanAgent || call.handler === "human_joined" ? "blue" : "purple"}
+                      tone={
+                        call.activeHumanAgent || call.handler === "human_joined"
+                          ? "blue"
+                          : "purple"
+                      }
                     >
                       {call.activeHumanAgent
                         ? `Agent · ${call.activeHumanAgent.name}`
                         : call.joinedByName
                           ? `Human · ${call.joinedByName}`
-                        : call.handler === "ai_to_human"
-                          ? "Transfer requested"
-                          : "AI receptionist"}
+                          : call.handler === "ai_to_human"
+                            ? "Transfer requested"
+                            : "AI receptionist"}
                     </Chip>
                     <Chip tone={sentimentTone(call.sentiment)}>
                       {sentimentLabel(call.sentiment)}

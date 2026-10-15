@@ -1,9 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PhoneCallStatus, VoiceAgentPresenceStatus } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { VoiceAgentsService } from './voice-agents.service';
 import { handledBy, type CallTurn } from './voice-insights.service';
 import { summariseCallAnalysis } from './voice-analysis';
+import { VoiceCallQueueService } from './voice-call-queue.service';
+import { AuditService } from '../common/audit/audit.service';
+import { AppException } from '../common/filters/app.exception';
 
 /** A privacy-minimised, tenant-scoped live operations view. */
 @Injectable()
@@ -11,10 +14,12 @@ export class VoiceSupervisorService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly agentsService: VoiceAgentsService,
+    private readonly callQueue: VoiceCallQueueService,
+    private readonly audit: AuditService,
   ) {}
 
   async live(businessId: string, actorUserId: string) {
-    const [business, liveCalls, roster] = await Promise.all([
+    const [business, liveCalls, roster, queueStats] = await Promise.all([
       this.tenantPrisma.client.business.findUnique({
         where: { id: businessId },
         select: { timezone: true },
@@ -36,6 +41,7 @@ export class VoiceSupervisorService {
         },
       }),
       this.agentsService.list(businessId, actorUserId),
+      this.callQueue.supervisorStats(businessId),
     ]);
     const activeAssignments = liveCalls.length
       ? await this.tenantPrisma.client.voiceHumanAgentAssignment.findMany({
@@ -128,17 +134,15 @@ export class VoiceSupervisorService {
         ).length,
         callbackBacklog: roster.metrics.followUpsWaiting,
         configuredCapacity: roster.metrics.configuredConcurrency,
-        waitingCalls: null,
-        longestWaitSeconds: null,
-        slaAtRisk: null,
+        ...queueStats.metrics,
         aiErrors: null,
       },
       calls,
       agents,
+      queues: queueStats.queues,
       limitations: {
         waitingCalls:
-          'Not tracked: inbound calls are answered immediately; the current call model has no on-hold state.',
-        sla: 'Not configured: no voice SLA target is stored for this business.',
+          'Only callers placed in the configured Twilio <Enqueue> queue are counted. The estimate is based on this queue’s recent measured Twilio waits.',
         aiErrors:
           'Not tracked: live AI runtime errors are not persisted as a supervisor metric.',
         language:
@@ -150,6 +154,67 @@ export class VoiceSupervisorService {
         identity:
           'Caller numbers are masked here. Full call details remain in the existing Live Calls workspace.',
       },
+    };
+  }
+
+  async setQueueSlaTarget(
+    businessId: string,
+    actorUserId: string,
+    queueKey: string,
+    slaTargetSeconds: number | null | undefined,
+  ) {
+    if (queueKey !== 'support') {
+      throw new AppException(
+        'VOICE_QUEUE_NOT_FOUND',
+        'This voice queue was not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (
+      slaTargetSeconds !== undefined &&
+      slaTargetSeconds !== null &&
+      (!Number.isInteger(slaTargetSeconds) ||
+        slaTargetSeconds < 30 ||
+        slaTargetSeconds > 3600)
+    ) {
+      throw new AppException(
+        'VOICE_QUEUE_SLA_INVALID',
+        'Set the wait target to a whole number from 30 to 3600 seconds, or clear it.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const queueName = this.callQueue.queueNameForBusiness(businessId);
+    const previous =
+      await this.tenantPrisma.client.voiceCallQueueConfig.findFirst({
+        where: { businessId, queueName },
+      });
+    const saved = await this.tenantPrisma.client.voiceCallQueueConfig.upsert({
+      where: { businessId_queueName: { businessId, queueName } },
+      create: {
+        businessId,
+        queueName,
+        slaTargetSeconds: slaTargetSeconds ?? null,
+        updatedByUserId: actorUserId,
+      },
+      update: {
+        slaTargetSeconds: slaTargetSeconds ?? null,
+        updatedByUserId: actorUserId,
+      },
+    });
+    await this.audit.log({
+      entity: 'VoiceCallQueueConfig',
+      entityId: saved.id,
+      action: 'voice.queue_sla_updated',
+      before: { slaTargetSeconds: previous?.slaTargetSeconds ?? null },
+      after: {
+        queue: queueKey,
+        slaTargetSeconds: saved.slaTargetSeconds,
+        actorUserId,
+      },
+    });
+    return {
+      queue: queueKey,
+      slaTargetSeconds: saved.slaTargetSeconds,
     };
   }
 

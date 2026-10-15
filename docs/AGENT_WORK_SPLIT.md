@@ -802,3 +802,14 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   idempotency key per call, and stores the outcome (`textBackStatus`) plus the Message id so the
   Missed Calls screen shows the provider-reported delivery status. Unknown (non-customer) callers are
   still texted when the setting is on — disclosed in the setting's impact text.
+
+## Module 21 progress — hold queue and SLA (Codex, 2026-10-16)
+
+- Added Twilio `<Enqueue>` with signed wait/exit callbacks, owner-configurable max wait and overflow
+  choices, persisted provider `QueueTime`, and per-queue SLA targets compared with measured waits.
+  Supervisor metrics label the wait estimate as unavailable until enough measured waits exist.
+- Real-MySQL tests cover configuration-off behavior, callback URLs, queue wait persistence and SLA
+  risk. Backend and frontend type checks pass; full backend Jest passes 371 suites / 2,264 tests.
+  Touched-file ESLint passes except the unchanged 74 formatting-only baseline errors in
+  `settings-hub/categories/intelligence.ts`. No live Twilio call was placed; live queue audio and
+  callback behavior remain unverified.

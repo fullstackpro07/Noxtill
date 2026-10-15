@@ -230,6 +230,16 @@ export const POLICY_DEFS = {
     max: 100_000,
     integer: true,
   },
+  // voice/voice-call.service.ts (Twilio hold queue; null keeps the existing immediate fallback)
+  'voice.holdQueueMaxWaitSeconds': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 30,
+    max: 3600,
+    integer: true,
+  },
+  'voice.holdQueueOverflowToAi': { kind: 'boolean', default: false },
+  'voice.holdQueueOverflowToHuman': { kind: 'boolean', default: false },
   // voice/missed-call.service.ts (text a missed caller; on preserves the existing behavior)
   'voice.missedCallTextBack': { kind: 'boolean', default: true },
   // voice/voice-transcript-redaction.service.ts (post-call PII masking; off preserves current behavior)

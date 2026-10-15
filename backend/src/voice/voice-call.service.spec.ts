@@ -11,6 +11,7 @@ import { AppointmentsService } from '../bookings/appointments.service';
 import { MissedCallService } from './missed-call.service';
 import { VoiceCallService } from './voice-call.service';
 import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.service';
+import { VoiceCallQueueService } from './voice-call-queue.service';
 import { AUTOMATED_ASSISTANT_DISCLOSURE_TEXT } from './voice.constants';
 import {
   AppointmentSource,
@@ -109,6 +110,9 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       appointments as unknown as AppointmentsService,
       missedCall as unknown as MissedCallService,
       new VoiceHumanAgentDispatchService(prisma),
+      {
+        enqueue: jest.fn().mockResolvedValue(null),
+      } as unknown as VoiceCallQueueService,
     );
     baseHandleIncoming = (callSid, fromNumber, toNumber) =>
       VoiceCallService.prototype.handleIncoming.call(
@@ -1001,6 +1005,9 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         appointments as unknown as AppointmentsService,
         missedCall as unknown as MissedCallService,
         new VoiceHumanAgentDispatchService(prisma),
+        {
+          enqueue: jest.fn().mockResolvedValue(null),
+        } as unknown as VoiceCallQueueService,
       );
       await withTransfer.handleIncoming(
         'CA-transfer',
@@ -1051,6 +1058,9 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         appointments as unknown as AppointmentsService,
         missedCall as unknown as MissedCallService,
         new VoiceHumanAgentDispatchService(prisma),
+        {
+          enqueue: jest.fn().mockResolvedValue(null),
+        } as unknown as VoiceCallQueueService,
       );
       await withTransfer.handleIncoming(
         'CA-transfer-failed',

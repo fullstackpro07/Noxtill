@@ -79,6 +79,8 @@ import { VoiceMeetingsService } from './voice-meetings.service';
 import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service';
 import { VoiceIvrService } from './voice-ivr.service';
 import { VoiceSupervisorService } from './voice-supervisor.service';
+import { VoiceCallQueueService } from './voice-call-queue.service';
+import { VoiceQueueSlaDto } from './dto/voice-queue-sla.dto';
 import { VoiceTrackingService } from './voice-tracking.service';
 import {
   AddVoiceTrackingNumberDto,
@@ -163,6 +165,7 @@ export class VoiceController {
     private readonly voiceDialer: VoiceOutboundDialerService,
     private readonly voiceIvr: VoiceIvrService,
     private readonly voiceSupervisor: VoiceSupervisorService,
+    private readonly voiceCallQueue: VoiceCallQueueService,
     private readonly voiceTracking: VoiceTrackingService,
     private readonly voiceTrackingNumbers: VoiceTrackingNumbersService,
     private readonly voiceCallbacks: VoiceCallbacksService,
@@ -783,6 +786,21 @@ export class VoiceController {
   @Get('voice/supervisor/live')
   liveSupervisorCenter(@CurrentUser() user: AuthenticatedUser) {
     return this.voiceSupervisor.live(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/supervisor/queues/:queueKey/sla')
+  updateVoiceQueueSla(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('queueKey') queueKey: string,
+    @Body() dto: VoiceQueueSlaDto,
+  ) {
+    return this.voiceSupervisor.setQueueSlaTarget(
+      user.businessId,
+      user.sub,
+      queueKey,
+      dto.slaTargetSeconds,
+    );
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -1428,6 +1446,53 @@ export class VoiceController {
       body.CallSid,
       body.RecordingUrl,
       ivrNodeId,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/queue-wait')
+  @HttpCode(200)
+  async voiceQueueWait(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const body = req.body as { QueueTime?: string };
+    const queueTime = Math.max(
+      0,
+      Number.parseInt(body.QueueTime ?? '0', 10) || 0,
+    );
+    const xml = await this.voiceCallQueue.waitTwiMl(callId, queueTime);
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/queue-exit')
+  @HttpCode(200)
+  async voiceQueueExit(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const body = req.body as {
+      QueueSid?: string;
+      QueueTime?: string;
+      QueueResult?: string;
+    };
+    const queueTime = Math.max(
+      0,
+      Number.parseInt(body.QueueTime ?? '0', 10) || 0,
+    );
+    const xml = await this.voiceCall.handleQueueExit(
+      callId,
+      body.QueueSid,
+      queueTime,
+      body.QueueResult ?? '',
     );
     res.type('text/xml').send(xml);
   }
