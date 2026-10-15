@@ -1033,6 +1033,9 @@ model Business {
   voiceAiAgents                 VoiceAiAgent[]
   voiceAiAgentVersions          VoiceAiAgentVersion[]
   voiceAiAgentTestRuns          VoiceAiAgentTestRun[]
+  voiceAiOutboundAttempts       VoiceAiOutboundAttempt[]
+  voiceCallQueueEntries         VoiceCallQueueEntry[]
+  voiceCallQueueConfigs         VoiceCallQueueConfig[]
   voiceCallWrapUps              VoiceCallWrapUp[]
   voiceQualityRubrics           VoiceQualityRubric[]
   voiceQualityRubricVersions    VoiceQualityRubricVersion[]
@@ -2888,20 +2891,21 @@ model VoiceAiAgent {
 
 /// Immutable JSON snapshot for one AI agent revision. `checksum` covers the canonical config JSON.
 model VoiceAiAgentVersion {
-  id               String                @id @default(uuid())
-  businessId       String                @map("business_id")
-  business         Business              @relation(fields: [businessId], references: [id])
-  agentId          String                @map("agent_id")
-  agent            VoiceAiAgent          @relation(fields: [agentId], references: [id], onDelete: Restrict)
-  version          Int
-  config           Json
-  checksum         String                @db.VarChar(64)
-  createdByUserId  String?               @map("created_by_user_id")
-  publishedAt      DateTime?             @map("published_at")
-  approvedAt       DateTime?             @map("approved_at")
-  approvedByUserId String?               @map("approved_by_user_id")
-  phoneCalls       PhoneCall[]
-  testRuns         VoiceAiAgentTestRun[]
+  id                 String                   @id @default(uuid())
+  businessId         String                   @map("business_id")
+  business           Business                 @relation(fields: [businessId], references: [id])
+  agentId            String                   @map("agent_id")
+  agent              VoiceAiAgent             @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  version            Int
+  config             Json
+  checksum           String                   @db.VarChar(64)
+  createdByUserId    String?                  @map("created_by_user_id")
+  publishedAt        DateTime?                @map("published_at")
+  approvedAt         DateTime?                @map("approved_at")
+  approvedByUserId   String?                  @map("approved_by_user_id")
+  phoneCalls         PhoneCall[]
+  aiOutboundAttempts VoiceAiOutboundAttempt[]
+  testRuns           VoiceAiAgentTestRun[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2941,6 +2945,7 @@ model PhoneCall {
   id                       String                        @id @default(uuid())
   businessId               String                        @map("business_id")
   business                 Business                      @relation(fields: [businessId], references: [id])
+  direction                String                        @default("inbound") @db.VarChar(12)
   /// Immutable agent config selected when this call began; null means legacy receptionist fallback.
   voiceAgentVersionId      String?                       @map("voice_agent_version_id")
   voiceAgentVersion        VoiceAiAgentVersion?          @relation(fields: [voiceAgentVersionId], references: [id], onDelete: Restrict)
@@ -3014,6 +3019,8 @@ model PhoneCall {
   trackingNumberId         String?                       @map("tracking_number_id")
   trackingNumber           VoiceTrackingNumber?          @relation(fields: [trackingNumberId], references: [id], onDelete: SetNull)
   callback                 VoiceCallback?
+  aiOutboundAttempt        VoiceAiOutboundAttempt?
+  holdQueueEntry           VoiceCallQueueEntry?
   /// Legal hold: while set, neither manual deletion nor the retention purge may remove audio/transcript.
   legalHoldAt              DateTime?                     @map("legal_hold_at")
   legalHoldByUserId        String?                       @map("legal_hold_by_user_id")
@@ -3283,6 +3290,7 @@ model VoiceOutboundEligibilityDecision {
   evaluatedByUserId  String                        @map("evaluated_by_user_id")
   evaluatedAt        DateTime                      @default(now()) @map("evaluated_at")
   campaignMembers    VoiceOutboundCampaignMember[] @relation("OutboundMemberDecision")
+  aiOutboundAttempts VoiceAiOutboundAttempt[]
 
   @@index([businessId, allowed, evaluatedAt], map: "voice_eligibility_business_allowed_idx")
   @@index([businessId, phoneE164, evaluatedAt], map: "voice_eligibility_phone_idx")
@@ -3323,6 +3331,7 @@ model VoiceOutboundCampaign {
   voicemailDetection    Boolean                       @default(false) @map("voicemail_detection")
   members               VoiceOutboundCampaignMember[]
   dialAttempts          VoiceOutboundDialAttempt[]
+  aiOutboundAttempts    VoiceAiOutboundAttempt[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3350,6 +3359,7 @@ model VoiceOutboundCampaignMember {
   lastAttemptAt         DateTime?                         @map("last_attempt_at")
   disposition           String?                           @db.VarChar(40)
   dialAttempts          VoiceOutboundDialAttempt[]
+  aiOutboundAttempts    VoiceAiOutboundAttempt[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3393,6 +3403,78 @@ model VoiceOutboundDialAttempt {
   @@index([businessId, agentProfileId, status], map: "voice_dial_attempt_agent_idx")
   @@index([memberId, createdAt], map: "voice_dial_attempt_member_idx")
   @@map("voice_outbound_dial_attempts")
+}
+
+/// One provider call initiated by an approved AI campaign. The agent version and the exact
+/// eligibility decision are pinned before Twilio is asked to place the call.
+model VoiceAiOutboundAttempt {
+  id                    String                            @id @default(uuid())
+  businessId            String                            @map("business_id")
+  business              Business                          @relation(fields: [businessId], references: [id])
+  campaignId            String                            @map("campaign_id")
+  campaign              VoiceOutboundCampaign             @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  memberId              String                            @map("member_id")
+  member                VoiceOutboundCampaignMember       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  versionId             String                            @map("version_id")
+  version               VoiceAiAgentVersion               @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  eligibilityDecisionId String?                           @map("eligibility_decision_id")
+  eligibilityDecision   VoiceOutboundEligibilityDecision? @relation(fields: [eligibilityDecisionId], references: [id], onDelete: SetNull)
+  phoneCallId           String?                           @unique @map("phone_call_id")
+  phoneCall             PhoneCall?                        @relation(fields: [phoneCallId], references: [id], onDelete: SetNull)
+  callSid               String?                           @unique @map("call_sid") @db.VarChar(34)
+  status                String                            @db.VarChar(20)
+  providerStatus        String?                           @map("provider_status") @db.VarChar(40)
+  blockReasonCode       String?                           @map("block_reason_code") @db.VarChar(40)
+  durationSeconds       Int?                              @map("duration_seconds")
+  createdByUserId       String                            @map("created_by_user_id")
+  startedAt             DateTime?                         @map("started_at")
+  endedAt               DateTime?                         @map("ended_at")
+  createdAt             DateTime                          @default(now()) @map("created_at")
+  updatedAt             DateTime                          @updatedAt @map("updated_at")
+
+  @@index([businessId, campaignId, createdAt], map: "voice_ai_outbound_campaign_idx")
+  @@index([businessId, status, createdAt], map: "voice_ai_outbound_status_idx")
+  @@index([memberId, createdAt], map: "voice_ai_outbound_member_idx")
+  @@index([versionId, createdAt], map: "voice_ai_outbound_version_idx")
+  @@map("voice_ai_outbound_attempts")
+}
+
+/// Real Twilio <Enqueue> wait evidence. QueueTime from Twilio, not an estimate, is stored at exit.
+model VoiceCallQueueEntry {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  business         Business  @relation(fields: [businessId], references: [id])
+  callId           String    @unique @map("call_id")
+  call             PhoneCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  queueName        String    @map("queue_name") @db.VarChar(64)
+  providerQueueSid String?   @map("provider_queue_sid") @db.VarChar(34)
+  status           String    @db.VarChar(20)
+  enteredAt        DateTime  @default(now()) @map("entered_at")
+  exitedAt         DateTime? @map("exited_at")
+  waitSeconds      Int?      @map("wait_seconds")
+  overflowAction   String?   @map("overflow_action") @db.VarChar(20)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([businessId, status, enteredAt], map: "voice_call_queue_business_status_idx")
+  @@index([businessId, exitedAt], map: "voice_call_queue_business_exit_idx")
+  @@map("voice_call_queue_entries")
+}
+
+/// Per-queue service-level target, compared only with Twilio-measured queue waits.
+model VoiceCallQueueConfig {
+  id               String   @id @default(uuid())
+  businessId       String   @map("business_id")
+  business         Business @relation(fields: [businessId], references: [id])
+  queueName        String   @map("queue_name") @db.VarChar(64)
+  slaTargetSeconds Int?     @map("sla_target_seconds")
+  updatedByUserId  String?  @map("updated_by_user_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, queueName], map: "voice_call_queue_config_business_name_key")
+  @@index([businessId, queueName], map: "voice_call_queue_config_business_idx")
+  @@map("voice_call_queue_configs")
 }
 
 /// Campaign tracking number: bought from, or ownership-verified in, the connected Twilio account
@@ -8038,17 +8120,20 @@ model Event {
 /// AI-map runs pre-signup, before a business exists) and rate-limit/cost-cap
 /// checks read across this table directly via the raw PrismaService.
 model AiCallLog {
-  id               String   @id @default(uuid())
-  businessId       String?  @map("business_id")
-  kind             String
-  inputTokens      Int      @map("input_tokens")
-  outputTokens     Int      @map("output_tokens")
-  estimatedCostUsd Decimal  @map("estimated_cost_usd") @db.Decimal(10, 4)
+  id                  String   @id @default(uuid())
+  businessId          String?  @map("business_id")
+  kind                String
+  inputTokens         Int      @map("input_tokens")
+  outputTokens        Int      @map("output_tokens")
+  estimatedCostUsd    Decimal  @map("estimated_cost_usd") @db.Decimal(10, 4)
+  /// Set only for live voice turns so a version's monthly budget uses this exact call's usage.
+  voiceAgentVersionId String?  @map("voice_agent_version_id")
   /// Which tools were invoked and what they returned — the audit trail behind "never fabricated" (BE-074).
-  toolCalls        Json?    @map("tool_calls")
-  createdAt        DateTime @default(now()) @map("created_at")
+  toolCalls           Json?    @map("tool_calls")
+  createdAt           DateTime @default(now()) @map("created_at")
 
   @@index([businessId, createdAt])
+  @@index([businessId, voiceAgentVersionId, createdAt], map: "ai_call_logs_voice_version_idx")
   @@map("ai_call_logs")
 }
 
