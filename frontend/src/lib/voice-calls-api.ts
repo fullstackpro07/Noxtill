@@ -265,6 +265,10 @@ export interface EnrichedCall {
   outcome: PhoneCallOutcome;
   customIntentName: string | null;
   handledBy: HandledBy;
+  /** The pinned AI agent version that answered; null when none was published at call time. */
+  aiAgentVersion: { id: string; version: number; agentName: string } | null;
+  /** A dispatched human agent's leg was provider-confirmed connected. */
+  humanAgentConnected: boolean;
   startedAt: string;
   endedAt: string | null;
   durationSeconds: number | null;

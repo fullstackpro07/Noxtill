@@ -169,6 +169,18 @@ export class VoiceInsightsService {
                 customer: { select: { name: true } },
               },
             },
+            voiceAgentVersion: {
+              select: {
+                id: true,
+                version: true,
+                agent: { select: { name: true } },
+              },
+            },
+            _count: {
+              select: {
+                humanAgentAssignments: { where: { status: 'connected' } },
+              },
+            },
           },
         }),
         this.tenantPrisma.client.phoneCallNote.groupBy({
@@ -229,6 +241,16 @@ export class VoiceInsightsService {
         outcome: c.outcome,
         customIntentName: c.customIntentName,
         handledBy: handledBy(c),
+        /** The pinned AI agent version that answered, when one was published at call time. */
+        aiAgentVersion: c.voiceAgentVersion
+          ? {
+              id: c.voiceAgentVersion.id,
+              version: c.voiceAgentVersion.version,
+              agentName: c.voiceAgentVersion.agent.name,
+            }
+          : null,
+        /** A dispatched human agent's leg was provider-confirmed connected. */
+        humanAgentConnected: c._count.humanAgentAssignments > 0,
         startedAt: c.startedAt.toISOString(),
         endedAt: c.endedAt ? c.endedAt.toISOString() : null,
         durationSeconds: c.endedAt

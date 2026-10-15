@@ -90,6 +90,7 @@ import { VoiceCallbacksService } from './voice-callbacks.service';
 import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
+import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
 import { VoiceLegalHoldDto } from './dto/voice-callback.dto';
 import {
   CompleteVoiceCallbackDto,
@@ -159,6 +160,7 @@ export class VoiceController {
     private readonly voiceLegalHold: VoiceLegalHoldService,
     private readonly voiceAnalyticsExport: VoiceAnalyticsExportService,
     private readonly voiceProviderHealth: VoiceProviderHealthService,
+    private readonly voiceOutboundSummary: VoiceOutboundSummaryService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -384,6 +386,15 @@ export class VoiceController {
   @Get('voice/outbound/agents')
   outboundAgents(@CurrentUser() user: AuthenticatedUser) {
     return this.voiceOutboundCampaigns.agents(user.businessId);
+  }
+
+  /** Call Overview outbound card: counts only (no numbers), same audience as the call log. */
+  @Get('voice/outbound/summary')
+  voiceOutboundSummaryRoute(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('from') from?: string,
+  ) {
+    return this.voiceOutboundSummary.since(user.businessId, from);
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)

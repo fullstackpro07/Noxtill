@@ -264,3 +264,16 @@ export function saveDialDisposition(
     body: JSON.stringify({ disposition, notes: notes || undefined }),
   });
 }
+
+export interface OutboundActivityCounts {
+  attempts: number;
+  blocked: number;
+  customerDialed: number;
+  connected: number;
+  talkSeconds: number;
+}
+
+/** GET /voice/outbound/summary — power-dialer and call-back attempts since `from`. */
+export function fetchOutboundSummary(from: string): Promise<{ from: string; powerDialer: OutboundActivityCounts; callbacks: OutboundActivityCounts }> {
+  return apiFetch(`/voice/outbound/summary?from=${encodeURIComponent(from)}`);
+}

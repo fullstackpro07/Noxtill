@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   aiResolved,
@@ -19,6 +19,7 @@ import { BarRow, Card, CardHead, Chip, EmptyState, KpiCard, kpiGrid } from "../r
 import { useRx } from "../rx-data";
 import { useRxStore } from "../rx-store";
 import { RxGate } from "../rx-gate";
+import { DEFAULT_OVERVIEW_FILTERS, OutboundTodayCard, OverviewFilterBar, filterCalls } from "../rx-overview-filters";
 
 export function OverviewScreen() {
   return (
@@ -35,9 +36,12 @@ function Overview() {
   const openCall = useRxStore((s) => s.openCall);
   const whc = !!rx.insights?.workingHoursConfigured;
 
-  const kpis = useMemo(() => buildOverviewKpis(rx.calls, rx.today, whc), [rx.calls, rx.today, whc]);
+  const [filters, setFilters] = useState(DEFAULT_OVERVIEW_FILTERS);
+  // The brief and live list stay unfiltered; the KPI cards and outcomes follow the filters.
+  const calls = useMemo(() => filterCalls(rx.calls, filters), [rx.calls, filters]);
+  const kpis = useMemo(() => buildOverviewKpis(calls, rx.today, whc), [calls, rx.today, whc]);
   const brief = useMemo(() => buildBrief(rx.calls, rx.today, rx.now, whc), [rx.calls, rx.today, rx.now, whc]);
-  const t = useMemo(() => sliceDay(rx.calls, rx.today), [rx.calls, rx.today]);
+  const t = useMemo(() => sliceDay(calls, rx.today), [calls, rx.today]);
 
   const oldestMissed = rx.followUps.find((c) => c.status === "missed");
   const unassigned = rx.followUps.filter((c) => !c.assignedToUserId);
@@ -115,6 +119,8 @@ function Overview() {
         </div>
       </Card>
 
+      <OverviewFilterBar calls={rx.calls} filters={filters} onChange={setFilters} />
+
       <div style={kpiGrid(150)}>
         {kpis.map((k) => (
           <KpiCard
@@ -175,6 +181,8 @@ function Overview() {
             )}
           </div>
         </Card>
+
+        <OutboundTodayCard now={rx.now} timeZone={rx.timezone} />
       </div>
     </div>
   );
