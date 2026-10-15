@@ -90,6 +90,7 @@ import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import { VoiceCallbacksService } from './voice-callbacks.service';
 import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
+import { VoiceAnalyticsTrendsService } from './voice-analytics-trends.service';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
 import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
@@ -162,6 +163,7 @@ export class VoiceController {
     private readonly voiceCallbacks: VoiceCallbacksService,
     private readonly voiceLegalHold: VoiceLegalHoldService,
     private readonly voiceAnalyticsExport: VoiceAnalyticsExportService,
+    private readonly voiceAnalyticsTrends: VoiceAnalyticsTrendsService,
     private readonly voiceProviderHealth: VoiceProviderHealthService,
     private readonly voiceOutboundSummary: VoiceOutboundSummaryService,
     private readonly voiceRedaction: VoiceTranscriptRedactionService,
@@ -1039,6 +1041,16 @@ export class VoiceController {
   @Get('voice/analytics')
   analytics() {
     return this.voiceQuery.analytics();
+  }
+
+  /** Daily trends computed from stored call, review and eligibility facts, with a metric glossary. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/analytics/trends')
+  voiceAnalyticsTrendsRoute(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('days') days?: string,
+  ) {
+    return this.voiceAnalyticsTrends.trends(user.businessId, days);
   }
 
   /** CSV of saved call facts for a date range (max 92 days); caller numbers masked. */

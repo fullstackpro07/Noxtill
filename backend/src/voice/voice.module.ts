@@ -25,6 +25,7 @@ import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
 import { VoiceCallbacksService } from './voice-callbacks.service';
 import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
+import { VoiceAnalyticsTrendsService } from './voice-analytics-trends.service';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
 import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
@@ -83,6 +84,7 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceCallbacksService,
     VoiceLegalHoldService,
     VoiceAnalyticsExportService,
+    VoiceAnalyticsTrendsService,
     VoiceProviderHealthService,
     VoiceOutboundSummaryService,
     VoiceTranscriptRedactionService,

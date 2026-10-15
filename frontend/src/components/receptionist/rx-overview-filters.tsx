@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import type { EnrichedCall } from "@/lib/voice-calls-api";
 import { fetchOutboundSummary, type OutboundActivityCounts } from "@/lib/voice-outbound-api";
+import { ApiError } from "@/lib/api-client";
+import { fetchVoiceAnalyticsTrends } from "@/lib/voice-analytics-trends-api";
 import { Card, CardHead, Chip } from "./rx-ui";
 
 export type HandlerFilter = "all" | "ai" | "person" | "unanswered";
@@ -105,6 +107,38 @@ export function OutboundTodayCard({ now, timeZone }: { now: Date; timeZone: stri
           <p className="m-0 px-[18px] py-2.5 text-[10.5px] leading-[1.5] text-[#94A3B8]">
             Counted from saved attempts. “Connected” means the provider confirmed the customer answered; manual dials from a staff phone are not recorded.
           </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Last 7 days of AI-only vs human-involved minutes and provider-priced spend (managers only). */
+export function MinutesSpendCard() {
+  const trends = useQuery({ queryKey: ["voice-analytics-trends", 7], queryFn: () => fetchVoiceAnalyticsTrends(7), retry: false });
+  if (trends.error instanceof ApiError && trends.error.status === 403) return null;
+  const totals = trends.data?.totals;
+  return (
+    <Card overflow>
+      <CardHead icon="gauge" iconColor="#6D28D9" title="Minutes & spend" right={<span className="text-[11px] text-[#94A3B8]">Last 7 days</span>} />
+      {trends.isPending ? (
+        <p className="m-0 px-[18px] py-3 text-[12px] text-[#7A8798]">Loading…</p>
+      ) : trends.isError || !totals ? (
+        <p className="m-0 px-[18px] py-3 text-[12px] text-[#B42318]">{trends.error?.message ?? "Unavailable"}</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2 px-[18px] py-3 text-[12px]">
+          <div>
+            <div className="text-[16px] font-extrabold tabular-nums">{totals.aiOnlyMinutes}</div>
+            <div className="text-[10.5px] text-[#7A8798]">AI-only minutes</div>
+          </div>
+          <div>
+            <div className="text-[16px] font-extrabold tabular-nums">{totals.humanInvolvedMinutes}</div>
+            <div className="text-[10.5px] text-[#7A8798]">Human-involved minutes</div>
+          </div>
+          <div>
+            <div className="text-[16px] font-extrabold tabular-nums">{totals.pricedCalls ? totals.pricedCost.toFixed(2) : "—"}</div>
+            <div className="text-[10.5px] text-[#7A8798]">{totals.pricedCalls ? `Provider-priced spend · ${totals.pricedCalls} calls` : "No calls priced yet"}</div>
+          </div>
         </div>
       )}
     </Card>

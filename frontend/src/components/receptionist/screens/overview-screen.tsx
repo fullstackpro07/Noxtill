@@ -19,7 +19,7 @@ import { BarRow, Card, CardHead, Chip, EmptyState, KpiCard, kpiGrid } from "../r
 import { useRx } from "../rx-data";
 import { useRxStore } from "../rx-store";
 import { RxGate } from "../rx-gate";
-import { DEFAULT_OVERVIEW_FILTERS, OutboundTodayCard, OverviewFilterBar, filterCalls } from "../rx-overview-filters";
+import { DEFAULT_OVERVIEW_FILTERS, MinutesSpendCard, OutboundTodayCard, OverviewFilterBar, filterCalls } from "../rx-overview-filters";
 
 export function OverviewScreen() {
   return (
@@ -183,6 +183,7 @@ function Overview() {
         </Card>
 
         <OutboundTodayCard now={rx.now} timeZone={rx.timezone} />
+        <MinutesSpendCard />
       </div>
     </div>
   );
