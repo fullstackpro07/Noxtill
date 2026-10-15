@@ -31,6 +31,7 @@ const CONF = require("./sets/" + SET + ".js");
 const SRC = path.join(ROOT, CONF.src);
 const OUT_PUBLIC = path.join(FRONT, "public/marketing", SET);
 const PUBLIC_BASE = "/marketing/" + SET + "/";
+const SEO_HEAD = require("./sets/seo-head.json").replace;
 
 const puppeteer = require(require.resolve("puppeteer", { paths: [FRONT, path.join(ROOT, "backend")] }));
 
@@ -203,6 +204,13 @@ function parseHead(helmetHtml) {
   const canon = helmetHtml.match(/<link rel="canonical" href="([^"]+)"/);
   if (canon) head.canonical = canon[1];
   head.jsonLd = [...helmetHtml.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  // Shortened search titles/descriptions (sets/seo-head.json) replace the designs' own on every build.
+  for (const [from, to] of SEO_HEAD) {
+    if (head.title === from) head.title = to;
+    for (const m of head.meta) if (m[2] === from) m[2] = to;
+    const jf = JSON.stringify(from).slice(1, -1), jt = JSON.stringify(to).slice(1, -1);
+    head.jsonLd = head.jsonLd.map((j) => j.split(jf).join(jt));
+  }
   const css = [...helmetHtml.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n");
   const effects = [...helmetHtml.matchAll(/<script(?![^>]*ld\+json)(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => effectName(m[1]));
   return { head, css, effects };
@@ -489,6 +497,9 @@ function post(tree, rules, responsive = true) {
     if (HINT_TAGS.has(tag)) {
       const hints = ["width", "height"]
         .filter((d) => a[d] != null && /^\d+(\.\d+)?%?$/.test(String(a[d]).trim()) && !new RegExp("(^|;)\\s*" + d + "\\s*:").test(a.style || ""))
+        // With its own aspect-ratio the height follows from the width (the design's `img { height: auto }`
+        // beats the attribute in a browser); a carried inline height would override the ratio.
+        .filter((d) => !(d === "height" && /(^|;)\s*aspect-ratio\s*:/.test(a.style || "")))
         .map((d) => d + ":" + String(a[d]).trim() + (String(a[d]).trim().endsWith("%") ? "" : "px"));
       if (hints.length) a.style = hints.join(";") + ";" + (a.style || "");
     }
@@ -606,8 +617,12 @@ function emitLogic(key, src) {
     if (!body.includes(from)) throw new Error("logic patch not found for " + key + ": " + from.slice(0, 60));
     body = body.split(from).join(to);
   }
+  if (CONF.logicTransform) body = CONF.logicTransform(key, body);
   body = rewriteLogicAssets(body);
   body = rewriteLogicLinks(body);
+  // The design runtime names the class `Component`, and some designs reach its statics through that
+  // name (`C = Component; C.L`); keep it resolving to the renamed class.
+  if (/\bComponent\b/.test(body.replace(/export class Logic/, ""))) body += "\nconst Component = Logic;";
   const imports = ['import { createElement } from "react";', 'import { DcLogic } from "@/components/site/dc/dc-host";', ...((CONF.logicImports || {})[key] || [])];
   const dir = path.join(FRONT, "src/lib/marketing/dc/logic", SET);
   fs.mkdirSync(dir, { recursive: true });
@@ -751,6 +766,8 @@ function emitLogic(key, src) {
     let stripped = [];
     // Set-specific tree edits before the chrome goes (sets/<set>.js transform[key](tree) → tree).
     if ((CONF.transform || {})[key]) raw = CONF.transform[key](raw);
+    // Set-wide tree edits (sets/<set>.js transformAll(key, tree) → tree), e.g. one hero layout for a page family.
+    if (CONF.transformAll) raw = CONF.transformAll(key, raw);
     if (CONF.stripChrome) ({ tree: raw, stripped } = stripChrome(raw));
     // (sets whose designs are responsive on their own — CONF.responsive === false — get no r-* classes)
     const outTree = post(raw, rules, key !== "header" && CONF.responsive !== false);
@@ -759,7 +776,10 @@ function emitLogic(key, src) {
     const extra = (CONF.mobileCss || {})[key] || "";
     // CONF.noZoom: drop a design's `body { zoom: … }` rule (it shrinks the whole page on desktop).
     if (CONF.noZoom) css = css.replace(/@media[^{]*\{\s*body\s*\{\s*zoom:[^}]*\}\s*\}/g, "");
-    const pageCss = scopeCss(rewriteUrls(css), key === "header" ? ".dcxh" : ".dcx") + [...rules.values()].join("\n") + (extra ? "\n" + scopeCss(extra, ".dcx") : "");
+    let pageCss = scopeCss(rewriteUrls(css), key === "header" ? ".dcxh" : ".dcx") + [...rules.values()].join("\n") + (extra ? "\n" + scopeCss(extra, ".dcx") : "");
+    // Set-wide CSS edits (sets/<set>.js cssTransform(key, css) → css), e.g. a page family's palette —
+    // applied last so the hover/pseudo rules generated above are included.
+    if (CONF.cssTransform) pageCss = CONF.cssTransform(key, pageCss);
     fs.writeFileSync(path.join(OUT_PAGES, (SET === "hb" ? "" : SET + "--") + key + ".json"), JSON.stringify({ tree: outTree, css: pageCss, head, effects, logic: logic || undefined }));
     logicKeys.push(...(logic ? [logic] : []));
     console.log(key.padEnd(52), (JSON.stringify(outTree).length / 1024).toFixed(0) + "KB", effects.join(","), stripped.join("+"), logic ? "logic" : "");

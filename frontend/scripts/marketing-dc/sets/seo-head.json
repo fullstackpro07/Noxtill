@@ -1,0 +1,489 @@
+{
+ "_comment": "Search-result titles (<=60) and descriptions (<=160) shortened for the Oct 13 SEO audit. The converter applies each [from, to] to every page's <title>, meta tags and JSON-LD on every build, so a rebuild from the design files keeps them.",
+ "replace": [
+  [
+   "AI Business Management Software for Small Businesses | Noxtill",
+   "AI Business Management Software for Small Business | Noxtill"
+  ],
+  [
+   "Noxtill Features — All 25 Business Management Modules in One Platform",
+   "Noxtill Features — All 25 Business Modules in One Platform"
+  ],
+  [
+   "Noxtill Platform — One Business Operating System for the Whole Business",
+   "Noxtill Platform — One Operating System for Your Business"
+  ],
+  [
+   "Noxtill Resources — Guides, Documentation and Business Management Education",
+   "Noxtill Resources — Guides, Docs & Business Education"
+  ],
+  [
+   "File & PDF Intelligence — Turn Documents Into Business Data | Noxtill",
+   "File & PDF Intelligence — Documents to Data | Noxtill"
+  ],
+  [
+   "Noxtill LLC Legal & Company Information | Arizona, United States",
+   "Noxtill LLC Company Information | Arizona, USA"
+  ],
+  [
+   "Beauty & Personal Care Business Management Software | Noxtill",
+   "Beauty & Personal Care Business Software | Noxtill"
+  ],
+  [
+   "Landscaping & Lawn Care Business Management Software | Noxtill",
+   "Landscaping & Lawn Care Business Software | Noxtill"
+  ],
+  [
+   "Real Estate & Property Business Management Software | Noxtill",
+   "Real Estate & Property Management Software | Noxtill"
+  ],
+  [
+   "Know Your Real Profit — Sales, Cost & Expense Tracking | Noxtill",
+   "Know Your Real Profit — Sales, Costs & Expenses | Noxtill"
+  ],
+  [
+   "Bring Paper Records In — Digitize Files, Photos & Spreadsheets | Noxtill",
+   "Bring Paper Records In — Digitize Files & Photos | Noxtill"
+  ],
+  [
+   "Run Several Locations — Multi-Location Business Management | Noxtill",
+   "Run Several Locations — Multi-Location Software | Noxtill"
+  ],
+  [
+   "Products & Services — One Connected Business Platform | Noxtill",
+   "Products & Services — One Connected Platform | Noxtill"
+  ],
+  [
+   "Reviews & Reputation — Build Trust. Grow Your Business. | Noxtill",
+   "Reviews & Reputation — Build Trust, Grow | Noxtill"
+  ],
+  [
+   "Marketing Automation & Campaigns for Small Businesses | Noxtill",
+   "Marketing Automation & Campaigns | Noxtill"
+  ],
+  [
+   "Business Listings — Be Found Everywhere. Grow Everywhere. | Noxtill",
+   "Business Listings — Be Found Everywhere | Noxtill"
+  ],
+  [
+   "Customer Credit — Track Credit. Build Trust. Get Paid. | Noxtill",
+   "Customer Credit — Track Credit, Get Paid | Noxtill"
+  ],
+  [
+   "AI Agents & Workflows — Multi-Step Work, Done With Your Approval | Noxtill",
+   "AI Agents & Workflows — Done With Your Approval | Noxtill"
+  ],
+  [
+   "AI Reply Drafting — Replies Drafted for You, Sent by You | Noxtill",
+   "AI Reply Drafting — Drafted for You, Sent by You | Noxtill"
+  ],
+  [
+   "Competitive Insights — Know Your Market, Move First | Noxtill",
+   "Competitive Insights — Know Your Market | Noxtill"
+  ],
+  [
+   "Delivery & Riders — Every Order Out, Every Rider Tracked | Noxtill",
+   "Delivery & Riders — Every Order, Every Rider | Noxtill"
+  ],
+  [
+   "Staff & Commissions — Reward Performance. Drive Growth. | Noxtill",
+   "Staff & Commissions — Reward Performance | Noxtill"
+  ],
+  [
+   "Social & Advertising — Create. Launch. Optimize. Grow. | Noxtill",
+   "Social Media & Advertising Management | Noxtill"
+  ],
+  [
+   "Reports — All Your Business Reports. One Powerful Place. | Noxtill",
+   "Reports — All Your Business Reports in One Place | Noxtill"
+  ],
+  [
+   "Noxtill Integrations — Connect Shopify, Stripe, QuickBooks, WhatsApp and More",
+   "Noxtill Integrations — Shopify, Stripe, QuickBooks & More"
+  ],
+  [
+   "Noxtill Photo Digitizer — Turn Paper Records into Usable Business Data",
+   "Noxtill Photo Digitizer — Paper Records to Business Data"
+  ],
+  [
+   "Noxtill AI Insights — Turn Your Business Data into Clear Decisions",
+   "Noxtill AI Insights — Business Data into Clear Decisions"
+  ],
+  [
+   "Business Health Check — A Clearer Picture for a Stronger Tomorrow",
+   "Business Health Check — A Clearer Picture | Noxtill"
+  ],
+  [
+   "Noxtill Business Health Score — Know the Health of Your Business",
+   "Business Health Score — Know Your Business Health | Noxtill"
+  ],
+  [
+   "No-Show Cost Calculator — See What No-Shows Really Cost You | Noxtill",
+   "No-Show Cost Calculator — What No-Shows Cost | Noxtill"
+  ],
+  [
+   "Profit Margin & Markup Calculator | Noxtill Free Business Tools",
+   "Profit Margin & Markup Calculator | Noxtill"
+  ],
+  [
+   "Review Response Generator — Turn Reviews Into Stronger Relationships | Noxtill",
+   "Review Response Generator — Reply to Reviews | Noxtill"
+  ],
+  [
+   "Noxtill API Reference — Powerful APIs for a More Connected Business",
+   "Noxtill API Reference — APIs for a Connected Business"
+  ],
+  [
+   "Finance & Accounting Software for Growing Businesses | Noxtill",
+   "Finance & Accounting Software for Businesses | Noxtill"
+  ],
+  [
+   "Noxtill Blog: Small Business Guides for AI, Automation & Software",
+   "Noxtill Blog: Small Business AI, Automation & Software"
+  ],
+  [
+   "AI Receptionist for Small Business: 2026 Buyer Guide | Noxtill",
+   "AI Receptionist for Small Business: 2026 Guide | Noxtill"
+  ],
+  [
+   "Multi-Location — Manage All Your Branches From One Screen | Noxtill",
+   "Multi-Location — All Your Branches, One Screen | Noxtill"
+  ],
+  [
+   "Social Media & Advertising Software for Small Business | Noxtill",
+   "Social Media & Ad Software for Small Business | Noxtill"
+  ],
+  [
+   "Simple, transparent pricing for Noxtill's all-in-one business software. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no credit card required.",
+   "Simple, transparent pricing for Noxtill. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no card required."
+  ],
+  [
+   "Book a Noxtill demo or talk to sales about POS, CRM, bookings, inventory and business analytics for your industry, team size and locations. 14-day free trial, no credit card required.",
+   "Book a Noxtill demo or talk to sales about POS, CRM, bookings, inventory and analytics for your business. 14-day free trial, no credit card required."
+  ],
+  [
+   "Explore all 25 Noxtill modules: POS software, orders, products, bookings, inventory, CRM, customer credit, reviews, unified inbox, marketing, business analytics, reports and AI business tools.",
+   "Explore all 25 Noxtill modules: POS, orders, products, bookings, inventory, CRM, credit, reviews, inbox, marketing, analytics, reports and AI tools."
+  ],
+  [
+   "Explore every Noxtill feature — nightly close, POS, orders, bookings, customer credit, inventory, reports, reputation, messaging and AI tools — in one connected system.",
+   "Every Noxtill feature — nightly close, POS, orders, bookings, credit, inventory, reports, reputation, messaging and AI — in one connected system."
+  ],
+  [
+   "Noxtill is a business operating system that connects sales, POS, customers, bookings, inventory, communication, marketing and business analytics into one connected operating layer.",
+   "Noxtill connects sales, POS, customers, bookings, inventory, communication, marketing and analytics into one business operating system."
+  ],
+  [
+   "See how Noxtill helps salons, restaurants, clinics, retail stores, service businesses and growing companies manage sales, customers, bookings, inventory, payments, communication and business data in one system.",
+   "How Noxtill helps salons, restaurants, clinics, retail and service businesses run sales, customers, bookings, inventory and payments in one system."
+  ],
+  [
+   "Connect Noxtill with the business tools you already use. Sync sales, customers, payments, inventory, bookings, marketing, communication and reporting in one connected system.",
+   "Connect Noxtill with the tools you already use. Sync sales, customers, payments, inventory, bookings, marketing and reporting in one system."
+  ],
+  [
+   "Guides, product education, documentation and FAQs for Noxtill: inventory management tips, POS and CRM guides, credit ledger practice, booking playbooks and business growth resources.",
+   "Guides, documentation and FAQs for Noxtill: inventory tips, POS and CRM guides, credit ledger practice, booking playbooks and growth resources."
+  ],
+  [
+   "Request business reports by email and receive structured summaries: revenue, profit, orders, bookings, top products and outstanding balances, with PDF, Excel and CSV attachments.",
+   "Request business reports by email: revenue, profit, orders, bookings, top products and balances as summaries with PDF, Excel and CSV attachments."
+  ],
+  [
+   "Send a supported PDF, invoice, price list or written record to Noxtill: information is extracted, shown for confirmation and connected to inventory, products, expenses and customer records.",
+   "Send a supported PDF, invoice, price list or record to Noxtill: details are extracted, shown for you to confirm and linked to your records."
+  ],
+  [
+   "Free interactive business tools for entrepreneurs and operators: Discount Calculator, Profit Margin, Break-Even, Invoicing, QR Codes, Review Link, WhatsApp Link, UTM Builder, Email Signatures, and Missed Call Revenue.",
+   "10 free tools for small businesses: discount, margin and break-even calculators, invoices, QR codes, review and WhatsApp links, UTM links and signatures."
+  ],
+  [
+   "Noxtill helps salons, spas, barbershops and beauty clinics manage appointments, clients, sales, inventory, staff, payments and communication in one connected system.",
+   "Noxtill helps salons, spas, barbershops and beauty clinics manage appointments, clients, sales, stock, staff, payments and messages in one system."
+  ],
+  [
+   "Noxtill helps event planners, venues, photographers and creative businesses manage inquiries, bookings, clients, vendors, payments and communication in one place.",
+   "Noxtill helps event planners, venues, photographers and creative businesses manage inquiries, bookings, clients, vendors and payments in one place."
+  ],
+  [
+   "Noxtill helps pest control businesses manage leads, inspections, quotes, service schedules, recurring plans, payments and customer communication in one connected system.",
+   "Noxtill helps pest control businesses manage leads, inspections, quotes, schedules, recurring plans, payments and customer messages in one system."
+  ],
+  [
+   "Noxtill helps pet groomers, veterinary clinics and pet daycares manage bookings, pet profiles, services, staff, payments and customer communication in one system.",
+   "Noxtill helps pet groomers, vets and pet daycares manage bookings, pet profiles, services, staff, payments and customer messages in one system."
+  ],
+  [
+   "Noxtill helps real estate agents, agencies and property managers manage properties, leads, viewings, clients, documents, payments and communication in one system.",
+   "Noxtill helps agents, agencies and property managers handle properties, leads, viewings, clients, documents, payments and messages in one system."
+  ],
+  [
+   "Noxtill automatically requests reviews after every sale, booking or service — so you get more 5-star reviews, build trust and attract new customers without extra effort.",
+   "Noxtill requests a review after every sale, booking or service, so you get more 5-star reviews and win new customers without extra effort."
+  ],
+  [
+   "Noxtill Fast Sale is a modern point of sale built for speed, accuracy and happy customers. Quick product search, cart management, discounts and instant checkout.",
+   "Noxtill Fast Sale is a point of sale built for speed and accuracy: quick product search, cart management, discounts and instant checkout."
+  ],
+  [
+   "Noxtill Orders helps you manage the entire order journey from creation to delivery. Track every step in real time, keep customers informed and handle exceptions early.",
+   "Noxtill Orders tracks every order from creation to delivery in real time, keeps customers informed and helps you handle exceptions early."
+  ],
+  [
+   "Noxtill brings together the tools and intelligence your business needs to sell, serve, manage and grow — Fast Sale, Orders, Bookings, Customers, Credit, Payments, Inventory, Inbox, Marketing and Analytics.",
+   "Noxtill brings Fast Sale, Orders, Bookings, Customers, Credit, Payments, Inventory, Inbox, Marketing and Analytics together in one platform."
+  ],
+  [
+   "AI-powered CRM software from Noxtill: one customer record with purchases, bookings, messages, credit balance, notes and segments — shared by every module in your business.",
+   "AI-powered CRM from Noxtill: one customer record with purchases, bookings, messages, credit balance, notes and segments, shared by every module."
+  ],
+  [
+   "Create targeted email, WhatsApp, SMS and social media campaigns from your connected customer and sales data. Attract new customers, keep existing ones engaged and drive more sales — all from one platform.",
+   "Create email, WhatsApp, SMS and social campaigns from your customer and sales data to win new customers and keep existing ones coming back."
+  ],
+  [
+   "Noxtill Business Listings helps you manage your business presence across 50+ directories, maps and search platforms from one place. Accurate information. Better visibility. More customers.",
+   "Manage your business across 50+ directories, maps and search platforms from one place. Accurate information, better visibility, more customers."
+  ],
+  [
+   "Noxtill Customer Credit helps you manage credit sales, outstanding balances, payments and customer history in one connected system — so you know who owes you, how much and what to do next.",
+   "Noxtill Customer Credit tracks credit sales, balances, payments and history in one place, so you know who owes you, how much and what to do next."
+  ],
+  [
+   "Build workflows from triggers, conditions and actions, add AI steps that draft, classify and summarise, and require a person's approval before anything consequential runs.",
+   "Build workflows from triggers, conditions and actions, add AI steps that draft, classify and summarise, and require approval before anything major runs."
+  ],
+  [
+   "Plan, build and measure ad campaigns from the same place you manage customers: audiences from your own data, a creative library, A/B experiments, rules and lead tracking to the sale.",
+   "Plan, build and measure ad campaigns where you manage customers: audiences from your data, a creative library, A/B tests, rules and lead tracking."
+  ],
+  [
+   "Track the competitors you choose and compare price, reputation and visibility side by side. Noxtill follows the changes and turns them into ranked opportunities and a weekly brief.",
+   "Track the competitors you choose and compare price, reputation and visibility. Noxtill turns their changes into ranked opportunities and a weekly brief."
+  ],
+  [
+   "Dispatch orders to your own riders, plan routes by zone, share a live tracking link and capture proof of delivery, all connected to the order and customer in Noxtill.",
+   "Dispatch orders to your riders, plan routes by zone, share live tracking and capture proof of delivery, all linked to the order and customer."
+  ],
+  [
+   "Run client projects and internal work with boards, timelines, milestones, time tracking, files and approvals, plus a private portal where clients follow progress and sign off.",
+   "Run client and internal projects with boards, timelines, milestones, time tracking, files and approvals, plus a portal where clients sign off."
+  ],
+  [
+   "One settings hub for currency, tax, roles, refund and discount limits, message wording, security and billing. Change a rule once and every Noxtill module follows it.",
+   "One settings hub for currency, tax, roles, refund and discount limits, messages, security and billing. Change a rule once; every module follows it."
+  ],
+  [
+   "Noxtill Unified Inbox brings every message, from every channel, into one smart workspace so your team can respond faster, stay organized and build stronger customer relationships.",
+   "Noxtill Unified Inbox brings every message from every channel into one workspace, so your team replies faster and stays organized."
+  ],
+  [
+   "Manage your team, track performance and automate commissions — all in one connected system. Motivate your staff with transparent earnings, real-time insights and fair payouts.",
+   "Manage your team, track performance and automate commissions in one system, with transparent earnings, real-time insights and fair payouts."
+  ],
+  [
+   "All your social media and ad campaigns, managed in one smart platform. Plan and publish across all major platforms, run high-performing ad campaigns and track results in real time.",
+   "Plan and publish social posts across major platforms, run ad campaigns and track results in real time, all from one platform."
+  ],
+  [
+   "Noxtill Reports turn your connected business data into powerful, easy-to-understand reports. Get the insights you need to make better decisions, track performance and grow with confidence.",
+   "Noxtill Reports turn your connected business data into clear reports, so you can track performance, make better decisions and grow with confidence."
+  ],
+  [
+   "Browse Noxtill integrations: payments, e-commerce, accounting, communication, Google, Meta, Microsoft, marketing, automation platforms and developer APIs — connected per location.",
+   "Browse Noxtill integrations: payments, e-commerce, accounting, messaging, Google, Meta, Microsoft, marketing, automation and developer APIs."
+  ],
+  [
+   "Business workflow automation in Noxtill: connect business events to supported actions across sales, inventory, customers, notifications and marketing, plus Zapier, Make and n8n.",
+   "Automate workflows in Noxtill: connect business events to actions across sales, inventory, customers, notifications and marketing, plus Zapier, Make and n8n."
+  ],
+  [
+   "Noxtill Business Assistant helps you get clear, useful answers from your connected business information. Ask naturally and see relevant data from your sales, customers, bookings, inventory, credit and profit.",
+   "Ask Noxtill Business Assistant questions in plain language and get clear answers from your sales, customers, bookings, inventory, credit and profit data."
+  ],
+  [
+   "Noxtill's AI Phone Receptionist handles your calls like a real team member — answering questions, booking appointments, providing information and capturing leads, day or night.",
+   "Noxtill's AI Phone Receptionist answers calls like a team member: answering questions, booking appointments and capturing leads, day or night."
+  ],
+  [
+   "Noxtill Photo Digitizer turns supported photographs and documents into structured information that can be reviewed before being used in your connected business records.",
+   "Noxtill Photo Digitizer turns supported photos and documents into structured information you review before it goes into your business records."
+  ],
+  [
+   "Noxtill AI Insights analyzes your sales, customers, bookings, inventory, credit and more to give you simple, practical insights that help you grow your business, faster.",
+   "Noxtill AI Insights analyzes your sales, customers, bookings, inventory and credit to give you simple, practical steps to grow your business."
+  ],
+  [
+   "Noxtill analyzes the most important areas of your business, calculates your Business Health Score, and shows you exactly what's strong, what needs attention, and what to do next.",
+   "Noxtill calculates your Business Health Score from the key areas of your business and shows what's strong, what needs attention and what to do next."
+  ],
+  [
+   "Build custom integrations, automate workflows, and extend Noxtill with our powerful and easy-to-use APIs. Access the same connected business data that powers sales, customers, bookings, inventory, payments and more.",
+   "Build integrations, automate workflows and extend Noxtill with our APIs, using the same data behind sales, customers, bookings, inventory and payments."
+  ],
+  [
+   "Learn how an AI receptionist can answer calls, book appointments, route customers and capture leads. Compare costs, features, fit and risks for U.S. small businesses.",
+   "How an AI receptionist answers calls, books appointments, routes customers and captures leads: costs, features, fit and risks for U.S. small businesses."
+  ],
+  [
+   "A practical guide to all-in-one business software: how to compare connected CRM, POS, bookings, inventory, payments, finance, support and automation before consolidating apps.",
+   "How to compare all-in-one business software: CRM, POS, bookings, inventory, payments, finance, support and automation, before you consolidate apps."
+  ],
+  [
+   "Practical small business automation ideas for leads, bookings, invoices, reviews, inventory, support and reporting—plus a framework for deciding what to automate first.",
+   "Small business automation ideas for leads, bookings, invoices, reviews, inventory, support and reporting, plus how to decide what to automate first."
+  ],
+  [
+   "Terms governing business accounts, software license, permitted activity, customer content, responsibilities, availability, disclaimers, termination and remedies.",
+   "Terms for business accounts, software license, permitted use, customer content, responsibilities, availability, disclaimers, termination and remedies."
+  ],
+  [
+   "AI agents for business workflow automation with clear limits: a stated objective, only the tools you allow, approval for sensitive actions and a full activity log.",
+   "AI agents for workflow automation with clear limits: a stated objective, only the tools you allow, approval for sensitive actions and a full activity log."
+  ],
+  [
+   "AI customer service reply drafting that uses the customer’s context and your approved sources, lets you pick the tone, and never sends anything without a person.",
+   "AI reply drafting that uses the customer's context and your approved sources, lets you pick the tone, and never sends anything without a person."
+  ],
+  [
+   "AI review reply drafting for busy owners: thoughtful drafts based on the review and your guidelines, never posted automatically and never revealing private customer details.",
+   "AI review reply drafts based on the review and your guidelines, never posted automatically and never revealing private customer details."
+  ],
+  [
+   "An appointment calendar for service businesses: day and week views, staff filters, conflict warnings before double bookings, recurring visits and clear statuses.",
+   "An appointment calendar with day and week views, staff filters, conflict warnings before double bookings, recurring visits and clear statuses."
+  ],
+  [
+   "Approval workflows for discounts, refunds and changes: policy rules decide who signs off, substitutes cover time off, overdue requests escalate and every decision is kept.",
+   "Approval workflows for discounts, refunds and changes: rules decide who signs off, substitutes cover time off, overdue requests escalate."
+  ],
+  [
+   "Automated appointment reminder software that sends text or email reminders at the times you choose, respects opt-outs and quiet hours, and shows every delivery status.",
+   "Text or email appointment reminders at the times you choose, respecting opt-outs and quiet hours, with every delivery status shown."
+  ],
+  [
+   "Barcode scanning for retail and stockroom teams: scan with a scanner or phone camera, find the right product instantly, handle duplicate codes and keep working offline.",
+   "Barcode scanning with a scanner or phone camera: find the right product instantly, handle duplicate codes and keep working offline."
+  ],
+  [
+   "A booking management platform for multi-location, multi-service teams: every booking from request to completion, with resources, bulk actions and policy-based edits.",
+   "Manage every booking from request to completion across locations and services, with resources, bulk actions and policy-based edits."
+  ],
+  [
+   "Call analytics dashboard software for sales managers and support supervisors: answered rate, missed calls, peak hours, call duration and outcome tags by team and period.",
+   "Call analytics for sales and support leads: answered rate, missed calls, peak hours, call duration and outcome tags by team and period."
+  ],
+  [
+   "Content optimization for service pages: compare a page to what searchers need, find missing topics and internal links, and review every suggested change before publishing.",
+   "Compare a service page to what searchers need, find missing topics and internal links, and review every suggested change before publishing."
+  ],
+  [
+   "Private customer feedback for service teams: collect suggestions and complaints, allow anonymous messages, sort by theme and track what changed, separate from public reviews.",
+   "Collect private suggestions and complaints, allow anonymous messages, sort by theme and track what changed, separate from public reviews."
+  ],
+  [
+   "Discounts and promotions for retail: set clear rules for what’s discounted, when and for whom, prevent stacking conflicts, limit manual staff discounts and reverse them on refunds.",
+   "Retail discount rules for what's discounted, when and for whom: prevent stacking conflicts, limit manual discounts and reverse them on refunds."
+  ],
+  [
+   "A dispatch board for coordinators running several vans: see open jobs and technician status together, assign or reassign in a click, and see travel time labeled as estimated.",
+   "See open jobs and technician status together, assign or reassign in a click, and see travel time labeled as estimated."
+  ],
+  [
+   "A shared email inbox for small business: connect support@ and sales@, assign threads, label and track status, merge duplicates and control who can see each mailbox.",
+   "A shared email inbox: connect support@ and sales@, assign threads, label and track status, merge duplicates and control who sees each mailbox."
+  ],
+  [
+   "Lead management software that captures inquiries from your website, calls and social messages, merges duplicates, assigns an owner and keeps the next step visible.",
+   "Capture inquiries from your website, calls and social messages, merge duplicates, assign an owner and keep the next step visible."
+  ],
+  [
+   "Local SEO for service-area and storefront businesses: keep your name, address, service area, phone and hours consistent across listings, and see which ones need updates.",
+   "Keep your name, address, service area, phone and hours consistent across listings, and see which ones need updates."
+  ],
+  [
+   "Missed call recovery software that logs unanswered calls, drafts an approved follow-up text where consent exists, and assigns a callback owner so no inquiry is forgotten.",
+   "Log unanswered calls, draft an approved follow-up text where consent exists, and assign a callback owner so no inquiry is forgotten."
+  ],
+  [
+   "Accept the payment methods your customers use: card, tap to pay, digital wallets where your processor supports them, cash, payment links and Customer Credit, with clear refund rules.",
+   "Card, tap to pay and digital wallets where your processor supports them, plus cash, payment links and Customer Credit, with clear refund rules."
+  ],
+  [
+   "Quick checkout for busy retailers and cafés: build the cart, take payment and print or text the receipt from one screen, and only mark a sale paid when the processor confirms.",
+   "Build the cart, take payment and send the receipt from one screen; a sale is marked paid only when the processor confirms."
+  ],
+  [
+   "Receipts and invoices for freelancers, shops and contractors: every sale, invoice and refund searchable, with payment status, tax lines as configured and resend in one click.",
+   "Every sale, invoice and refund searchable, with payment status, tax lines as configured and resend in one click."
+  ],
+  [
+   "Reputation monitoring across review sites: themes and estimated sentiment from public reviews, with source drill-down, corrections and alerts when a concern starts to grow.",
+   "Themes and estimated sentiment from public reviews, with source drill-down, corrections and alerts when a concern starts to grow."
+  ],
+  [
+   "Review analytics for franchises and multi-location businesses: review counts and sentiment by location, source and month, with small samples flagged instead of overstated.",
+   "Review counts and sentiment by location, source and month, with small samples flagged instead of overstated."
+  ],
+  [
+   "Review management for local businesses: public reviews from connected platforms and private feedback in one view, with reply status and owners. No fake reviews, ever.",
+   "Public reviews from connected platforms and private feedback in one view, with reply status and owners. No fake reviews, ever."
+  ],
+  [
+   "Review request software that invites every customer at the right moment, by text or email, with frequency limits and opt-outs, and no review gating or incentives.",
+   "Invite every customer to review at the right moment by text or email, with frequency limits and opt-outs, and no gating or incentives."
+  ],
+  [
+   "Sales history for store owners, auditors and shift managers: find any sale or return, see its true payment state and audit trail, and refund without editing paid records.",
+   "Find any sale or return, see its true payment state and audit trail, and refund without editing paid records."
+  ],
+  [
+   "Scheduled workflow automation for finance, admin and marketing teams: weekly and monthly runs in your time zone, pause controls, missed-run rules and no duplicate runs.",
+   "Weekly and monthly workflow runs in your time zone, with pause controls, missed-run rules and no duplicate runs."
+  ],
+  [
+   "Customer segmentation for small business: build groups from visit frequency, spend and location, exclude opt-outs, see the estimated audience and use it in campaigns.",
+   "Build customer groups from visit frequency, spend and location, exclude opt-outs, see the estimated audience and use it in campaigns."
+  ],
+  [
+   "An SEO audit tool for small business websites: scheduled crawls find broken links, missing titles, slow pages and redirect chains, with scan time and coverage shown.",
+   "Scheduled crawls of your website find broken links, missing titles, slow pages and redirect chains, with scan time and coverage shown."
+  ],
+  [
+   "SEO performance reporting based on real search outcomes: clicks, impressions, CTR and average position from Search Console, with comparison periods, data lag and site changes noted.",
+   "Clicks, impressions, CTR and average position from Search Console, with comparison periods, data lag and site changes noted."
+  ],
+  [
+   "A service calendar for installation and maintenance teams: every visit with its duration and travel buffer, recurring maintenance, cancellations and a clear customer view.",
+   "Every service visit with its duration and travel buffer, recurring maintenance, cancellations and a clear customer view."
+  ],
+  [
+   "Customer conversation team assignment for shared inboxes: queues, priorities and one owner per conversation, with collision warnings, reassignment notes and vacation routing.",
+   "Queues, priorities and one owner per conversation in a shared inbox, with collision warnings, reassignment notes and vacation routing."
+  ],
+  [
+   "Technical SEO checks for developers and site operators: status codes, canonical tags, noindex, redirect chains and metadata per page, with indexing requests clearly labeled.",
+   "Status codes, canonical tags, noindex, redirect chains and metadata per page, with indexing requests clearly labeled."
+  ],
+  [
+   "Technician scheduling for HVAC, repair and field teams: match jobs to the right certifications, check each technician’s capacity and see travel time labeled as estimated.",
+   "Match jobs to the right certifications, check each technician's capacity and see travel time labeled as estimated."
+  ],
+  [
+   "Business automation triggers and actions: pick an event, add filters, map fields to an action and see every run, with retry limits, duplicate protection and clear mapping errors.",
+   "Pick an event, add filters, map fields to an action and see every run, with retry limits, duplicate protection and clear mapping errors."
+  ],
+  [
+   "Webhook automation that turns events from your other apps into Noxtill records, with signature checks, replay protection, retries and a dead-letter queue. Secrets are never shown.",
+   "Turn events from your other apps into Noxtill records with signature checks, replay protection, retries and a dead-letter queue."
+  ],
+  [
+   "A WhatsApp Business shared inbox: connect your official business number, assign conversations, see customer context and follow WhatsApp’s messaging window and template rules.",
+   "Connect your official WhatsApp Business number, assign conversations, see customer context and follow WhatsApp's window and template rules."
+  ],
+  [
+   "Work order software for service trades and facilities teams: scope, checklist, photos, private access notes and signed approval on one work order, across every visit.",
+   "Scope, checklist, photos, private access notes and signed approval on one work order, across every visit."
+  ]
+ ]
+}

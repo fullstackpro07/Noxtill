@@ -82,13 +82,12 @@ export function SiteFooter() {
               <Link href="/" aria-label="Noxtill home" className="nxf-logo-link">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/brand/noxtill-logo1.png"
-                  alt=""
-                  width={52}
-                  height={52}
-                  className="nxf-logo-img"
+                  src="/brand/noxtill-logowhite.png"
+                  alt="Noxtill"
+                  width={2047}
+                  height={461}
+                  className="nxf-logo-wordmark"
                 />
-                <span className="nxf-logo-text">Noxtill</span>
               </Link>
               <p className="nxf-tagline">One platform. A more capable business.</p>
               <p className="nxf-subtagline">AI-powered Business Operating System</p>
@@ -169,13 +168,12 @@ export function SiteFooter() {
               <Link href="/" aria-label="Noxtill home" className="nxf-bottom-brand-link">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/brand/noxtill-logo1.png"
-                  alt=""
-                  width={22}
-                  height={22}
-                  className="nxf-bottom-brand-mark"
+                  src="/brand/noxtill-logowhite.png"
+                  alt="Noxtill"
+                  width={2047}
+                  height={461}
+                  className="nxf-bottom-brand-wordmark"
                 />
-                <span className="nxf-bottom-brand-title">Noxtill</span>
               </Link>
               <p className="nxf-bottom-brand-sub">One platform. A more capable business.</p>
             </div>

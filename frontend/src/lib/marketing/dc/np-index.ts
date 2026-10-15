@@ -9,6 +9,58 @@ import { Body_platform_reports } from "@/components/site/dc/bodies/np/platform--
 import { Body_platform_integrations } from "@/components/site/dc/bodies/np/platform--integrations";
 import { Body_platform_automations_workflows } from "@/components/site/dc/bodies/np/platform--automations-workflows";
 import { Body_nightly_close } from "@/components/site/dc/bodies/np/nightly-close";
+import { Body_features_ai_call_answering } from "@/components/site/dc/bodies/np/features--ai-call-answering";
+import { Body_features_missed_call_recovery } from "@/components/site/dc/bodies/np/features--missed-call-recovery";
+import { Body_features_call_transfer_routing } from "@/components/site/dc/bodies/np/features--call-transfer-routing";
+import { Body_features_auto_dialer_power_dialer } from "@/components/site/dc/bodies/np/features--auto-dialer-power-dialer";
+import { Body_features_ivr_call_menus } from "@/components/site/dc/bodies/np/features--ivr-call-menus";
+import { Body_features_call_analytics } from "@/components/site/dc/bodies/np/features--call-analytics";
+import { Body_features_lead_management } from "@/components/site/dc/bodies/np/features--lead-management";
+import { Body_features_sales_pipeline } from "@/components/site/dc/bodies/np/features--sales-pipeline";
+import { Body_features_customer_360 } from "@/components/site/dc/bodies/np/features--customer-360";
+import { Body_features_follow_ups_reminders } from "@/components/site/dc/bodies/np/features--follow-ups-reminders";
+import { Body_features_segmentation } from "@/components/site/dc/bodies/np/features--segmentation";
+import { Body_features_loyalty_memberships } from "@/components/site/dc/bodies/np/features--loyalty-memberships";
+import { Body_features_online_booking } from "@/components/site/dc/bodies/np/features--online-booking";
+import { Body_features_appointment_calendar } from "@/components/site/dc/bodies/np/features--appointment-calendar";
+import { Body_features_staff_availability } from "@/components/site/dc/bodies/np/features--staff-availability";
+import { Body_features_automated_reminders } from "@/components/site/dc/bodies/np/features--automated-reminders";
+import { Body_features_rescheduling } from "@/components/site/dc/bodies/np/features--rescheduling";
+import { Body_features_booking_management } from "@/components/site/dc/bodies/np/features--booking-management";
+import { Body_features_whatsapp_inbox } from "@/components/site/dc/bodies/np/features--whatsapp-inbox";
+import { Body_features_sms_inbox } from "@/components/site/dc/bodies/np/features--sms-inbox";
+import { Body_features_email_inbox } from "@/components/site/dc/bodies/np/features--email-inbox";
+import { Body_features_instagram_messenger } from "@/components/site/dc/bodies/np/features--instagram-messenger";
+import { Body_features_ai_reply_drafting } from "@/components/site/dc/bodies/np/features--ai-reply-drafting";
+import { Body_features_team_assignment } from "@/components/site/dc/bodies/np/features--team-assignment";
+import { Body_features_workflow_builder } from "@/components/site/dc/bodies/np/features--workflow-builder";
+import { Body_features_ai_agents_workflows } from "@/components/site/dc/bodies/np/features--ai-agents-workflows";
+import { Body_features_triggers_actions } from "@/components/site/dc/bodies/np/features--triggers-actions";
+import { Body_features_scheduled_workflows } from "@/components/site/dc/bodies/np/features--scheduled-workflows";
+import { Body_features_webhook_automation } from "@/components/site/dc/bodies/np/features--webhook-automation";
+import { Body_features_approval_workflows } from "@/components/site/dc/bodies/np/features--approval-workflows";
+import { Body_features_seo_audits } from "@/components/site/dc/bodies/np/features--seo-audits";
+import { Body_features_keyword_tracking } from "@/components/site/dc/bodies/np/features--keyword-tracking";
+import { Body_features_content_optimization } from "@/components/site/dc/bodies/np/features--content-optimization";
+import { Body_features_technical_seo } from "@/components/site/dc/bodies/np/features--technical-seo";
+import { Body_features_local_seo } from "@/components/site/dc/bodies/np/features--local-seo";
+import { Body_features_seo_performance } from "@/components/site/dc/bodies/np/features--seo-performance";
+import { Body_features_review_management } from "@/components/site/dc/bodies/np/features--review-management";
+import { Body_features_review_requests } from "@/components/site/dc/bodies/np/features--review-requests";
+import { Body_features_ai_review_replies } from "@/components/site/dc/bodies/np/features--ai-review-replies";
+import { Body_features_reputation_monitoring } from "@/components/site/dc/bodies/np/features--reputation-monitoring";
+import { Body_features_review_analytics } from "@/components/site/dc/bodies/np/features--review-analytics";
+import { Body_features_customer_feedback } from "@/components/site/dc/bodies/np/features--customer-feedback";
+import { Body_features_quick_checkout } from "@/components/site/dc/bodies/np/features--quick-checkout";
+import { Body_features_barcode_scanning } from "@/components/site/dc/bodies/np/features--barcode-scanning";
+import { Body_features_payment_methods } from "@/components/site/dc/bodies/np/features--payment-methods";
+import { Body_features_receipts_invoices } from "@/components/site/dc/bodies/np/features--receipts-invoices";
+import { Body_features_discounts_promotions } from "@/components/site/dc/bodies/np/features--discounts-promotions";
+import { Body_features_sales_history } from "@/components/site/dc/bodies/np/features--sales-history";
+import { Body_features_work_orders } from "@/components/site/dc/bodies/np/features--work-orders";
+import { Body_features_dispatch_board } from "@/components/site/dc/bodies/np/features--dispatch-board";
+import { Body_features_technician_scheduling } from "@/components/site/dc/bodies/np/features--technician-scheduling";
+import { Body_features_service_calendar } from "@/components/site/dc/bodies/np/features--service-calendar";
 import { Body_ai_assistant } from "@/components/site/dc/bodies/np/ai--assistant";
 import { Body_tools_profit_margin_calculator } from "@/components/site/dc/bodies/np/tools--profit-margin-calculator";
 import { Body_resources } from "@/components/site/dc/bodies/np/resources";
@@ -63,6 +115,26 @@ export const NP_PAGES: Record<string, DcSetPage> = {
   "platform--credit": { load: () => import("./pages/np--platform--credit.json") },
   "ai--agents-workflows": { load: () => import("./pages/np--ai--agents-workflows.json") },
   "ai--reply-drafting": { load: () => import("./pages/np--ai--reply-drafting.json") },
+  "features--ai-powered-insights": { load: () => import("./pages/np--features--ai-powered-insights.json") },
+  "features--ai-powered-operations": { load: () => import("./pages/np--features--ai-powered-operations.json") },
+  "features--automated-fulfillment": { load: () => import("./pages/np--features--automated-fulfillment.json") },
+  "features--business-brain": { load: () => import("./pages/np--features--business-brain.json") },
+  "features--business-simulator": { load: () => import("./pages/np--features--business-simulator.json") },
+  "features--commerce-within-your-rules": { load: () => import("./pages/np--features--commerce-within-your-rules.json") },
+  "features--data-extraction": { load: () => import("./pages/np--features--data-extraction.json") },
+  "features--digital-twin": { load: () => import("./pages/np--features--digital-twin.json") },
+  "features--document-scanning": { load: () => import("./pages/np--features--document-scanning.json") },
+  "features--dynamic-pricing": { load: () => import("./pages/np--features--dynamic-pricing.json") },
+  "features--inspections-checklists": { load: () => import("./pages/np--features--inspections-checklists.json") },
+  "features--intelligence-alerts": { load: () => import("./pages/np--features--intelligence-alerts.json") },
+  "features--inventory-from-photos": { load: () => import("./pages/np--features--inventory-from-photos.json") },
+  "features--job-tracking": { load: () => import("./pages/np--features--job-tracking.json") },
+  "features--opportunity-radar": { load: () => import("./pages/np--features--opportunity-radar.json") },
+  "features--order-optimization": { load: () => import("./pages/np--features--order-optimization.json") },
+  "features--product-digitization": { load: () => import("./pages/np--features--product-digitization.json") },
+  "features--receipt-invoice-scan": { load: () => import("./pages/np--features--receipt-invoice-scan.json") },
+  "features--review-approve-data": { load: () => import("./pages/np--features--review-approve-data.json") },
+  "features--smart-inventory": { load: () => import("./pages/np--features--smart-inventory.json") },
   "platform--advertising": { load: () => import("./pages/np--platform--advertising.json") },
   "platform--competitive-insights": { load: () => import("./pages/np--platform--competitive-insights.json") },
   "platform--dashboard": { load: () => import("./pages/np--platform--dashboard.json") },
@@ -77,6 +149,58 @@ export const NP_PAGES: Record<string, DcSetPage> = {
   "platform--integrations": { load: () => import("./pages/np--platform--integrations.json"), Body: Body_platform_integrations },
   "platform--automations-workflows": { load: () => import("./pages/np--platform--automations-workflows.json"), Body: Body_platform_automations_workflows },
   "nightly-close": { load: () => import("./pages/np--nightly-close.json"), Body: Body_nightly_close },
+  "features--ai-call-answering": { load: () => import("./pages/np--features--ai-call-answering.json"), Body: Body_features_ai_call_answering },
+  "features--missed-call-recovery": { load: () => import("./pages/np--features--missed-call-recovery.json"), Body: Body_features_missed_call_recovery },
+  "features--call-transfer-routing": { load: () => import("./pages/np--features--call-transfer-routing.json"), Body: Body_features_call_transfer_routing },
+  "features--auto-dialer-power-dialer": { load: () => import("./pages/np--features--auto-dialer-power-dialer.json"), Body: Body_features_auto_dialer_power_dialer },
+  "features--ivr-call-menus": { load: () => import("./pages/np--features--ivr-call-menus.json"), Body: Body_features_ivr_call_menus },
+  "features--call-analytics": { load: () => import("./pages/np--features--call-analytics.json"), Body: Body_features_call_analytics },
+  "features--lead-management": { load: () => import("./pages/np--features--lead-management.json"), Body: Body_features_lead_management },
+  "features--sales-pipeline": { load: () => import("./pages/np--features--sales-pipeline.json"), Body: Body_features_sales_pipeline },
+  "features--customer-360": { load: () => import("./pages/np--features--customer-360.json"), Body: Body_features_customer_360 },
+  "features--follow-ups-reminders": { load: () => import("./pages/np--features--follow-ups-reminders.json"), Body: Body_features_follow_ups_reminders },
+  "features--segmentation": { load: () => import("./pages/np--features--segmentation.json"), Body: Body_features_segmentation },
+  "features--loyalty-memberships": { load: () => import("./pages/np--features--loyalty-memberships.json"), Body: Body_features_loyalty_memberships },
+  "features--online-booking": { load: () => import("./pages/np--features--online-booking.json"), Body: Body_features_online_booking },
+  "features--appointment-calendar": { load: () => import("./pages/np--features--appointment-calendar.json"), Body: Body_features_appointment_calendar },
+  "features--staff-availability": { load: () => import("./pages/np--features--staff-availability.json"), Body: Body_features_staff_availability },
+  "features--automated-reminders": { load: () => import("./pages/np--features--automated-reminders.json"), Body: Body_features_automated_reminders },
+  "features--rescheduling": { load: () => import("./pages/np--features--rescheduling.json"), Body: Body_features_rescheduling },
+  "features--booking-management": { load: () => import("./pages/np--features--booking-management.json"), Body: Body_features_booking_management },
+  "features--whatsapp-inbox": { load: () => import("./pages/np--features--whatsapp-inbox.json"), Body: Body_features_whatsapp_inbox },
+  "features--sms-inbox": { load: () => import("./pages/np--features--sms-inbox.json"), Body: Body_features_sms_inbox },
+  "features--email-inbox": { load: () => import("./pages/np--features--email-inbox.json"), Body: Body_features_email_inbox },
+  "features--instagram-messenger": { load: () => import("./pages/np--features--instagram-messenger.json"), Body: Body_features_instagram_messenger },
+  "features--ai-reply-drafting": { load: () => import("./pages/np--features--ai-reply-drafting.json"), Body: Body_features_ai_reply_drafting },
+  "features--team-assignment": { load: () => import("./pages/np--features--team-assignment.json"), Body: Body_features_team_assignment },
+  "features--workflow-builder": { load: () => import("./pages/np--features--workflow-builder.json"), Body: Body_features_workflow_builder },
+  "features--ai-agents-workflows": { load: () => import("./pages/np--features--ai-agents-workflows.json"), Body: Body_features_ai_agents_workflows },
+  "features--triggers-actions": { load: () => import("./pages/np--features--triggers-actions.json"), Body: Body_features_triggers_actions },
+  "features--scheduled-workflows": { load: () => import("./pages/np--features--scheduled-workflows.json"), Body: Body_features_scheduled_workflows },
+  "features--webhook-automation": { load: () => import("./pages/np--features--webhook-automation.json"), Body: Body_features_webhook_automation },
+  "features--approval-workflows": { load: () => import("./pages/np--features--approval-workflows.json"), Body: Body_features_approval_workflows },
+  "features--seo-audits": { load: () => import("./pages/np--features--seo-audits.json"), Body: Body_features_seo_audits },
+  "features--keyword-tracking": { load: () => import("./pages/np--features--keyword-tracking.json"), Body: Body_features_keyword_tracking },
+  "features--content-optimization": { load: () => import("./pages/np--features--content-optimization.json"), Body: Body_features_content_optimization },
+  "features--technical-seo": { load: () => import("./pages/np--features--technical-seo.json"), Body: Body_features_technical_seo },
+  "features--local-seo": { load: () => import("./pages/np--features--local-seo.json"), Body: Body_features_local_seo },
+  "features--seo-performance": { load: () => import("./pages/np--features--seo-performance.json"), Body: Body_features_seo_performance },
+  "features--review-management": { load: () => import("./pages/np--features--review-management.json"), Body: Body_features_review_management },
+  "features--review-requests": { load: () => import("./pages/np--features--review-requests.json"), Body: Body_features_review_requests },
+  "features--ai-review-replies": { load: () => import("./pages/np--features--ai-review-replies.json"), Body: Body_features_ai_review_replies },
+  "features--reputation-monitoring": { load: () => import("./pages/np--features--reputation-monitoring.json"), Body: Body_features_reputation_monitoring },
+  "features--review-analytics": { load: () => import("./pages/np--features--review-analytics.json"), Body: Body_features_review_analytics },
+  "features--customer-feedback": { load: () => import("./pages/np--features--customer-feedback.json"), Body: Body_features_customer_feedback },
+  "features--quick-checkout": { load: () => import("./pages/np--features--quick-checkout.json"), Body: Body_features_quick_checkout },
+  "features--barcode-scanning": { load: () => import("./pages/np--features--barcode-scanning.json"), Body: Body_features_barcode_scanning },
+  "features--payment-methods": { load: () => import("./pages/np--features--payment-methods.json"), Body: Body_features_payment_methods },
+  "features--receipts-invoices": { load: () => import("./pages/np--features--receipts-invoices.json"), Body: Body_features_receipts_invoices },
+  "features--discounts-promotions": { load: () => import("./pages/np--features--discounts-promotions.json"), Body: Body_features_discounts_promotions },
+  "features--sales-history": { load: () => import("./pages/np--features--sales-history.json"), Body: Body_features_sales_history },
+  "features--work-orders": { load: () => import("./pages/np--features--work-orders.json"), Body: Body_features_work_orders },
+  "features--dispatch-board": { load: () => import("./pages/np--features--dispatch-board.json"), Body: Body_features_dispatch_board },
+  "features--technician-scheduling": { load: () => import("./pages/np--features--technician-scheduling.json"), Body: Body_features_technician_scheduling },
+  "features--service-calendar": { load: () => import("./pages/np--features--service-calendar.json"), Body: Body_features_service_calendar },
   "ai--assistant": { load: () => import("./pages/np--ai--assistant.json"), Body: Body_ai_assistant },
   "ai--phone-receptionist": { load: () => import("./pages/np--ai--phone-receptionist.json") },
   "ai--photo-digitizer": { load: () => import("./pages/np--ai--photo-digitizer.json") },

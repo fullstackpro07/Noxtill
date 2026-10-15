@@ -4,6 +4,7 @@
 // Pages with no Claude Design file: authored in the sibling pages' layout by
 // scripts/marketing-dc/authored (build.js → pages/<key>.dc.html), converted like the rest.
 /* eslint-disable @typescript-eslint/no-require-imports */
+const featureHero = require("./np-feature-hero");
 const authored = Object.fromEntries(
   require("fs")
     .readdirSync(require("path").join(__dirname, "../authored/pages"))
@@ -67,6 +68,8 @@ module.exports = {
   // (thispersondoesnotexist.com), stored in public/marketing/np/avatars/. Keyed by image-slot id, or by
   // the published picture path for a plain <img>.
   imageOverrides: {
+    // Feature pages hot-link Pexels photos; served from public/marketing/np/features instead.
+    ...require("./np-feature-images.json"),
 // slots the designs left empty (blank grey frames) — existing pictures
     "bk-qr-stand": "416e5d70-33d2-4b95-bdde-b92a819d8f14-mulr3qyb-2qes.png",
     "bk-reminder-photo": "pasted-1788939737334-0-mttsj3lw-866g.png",
@@ -146,6 +149,59 @@ module.exports = {
     "Integrations.dc.html": "platform--integrations",
     "Automation.dc.html": "platform--automations-workflows",
     "Nightly Close-End.dc.html": "nightly-close",
+    // Feature pages (footer "Everything Your Business Needs"), one per module feature, at /features/<slug>
+    "AI Call Answering.dc.html": "features--ai-call-answering",
+    "Missed Call Recovery.dc.html": "features--missed-call-recovery",
+    "Call Transfer and Routing.dc.html": "features--call-transfer-routing",
+    "Auto Dialer and Power Dialer.dc.html": "features--auto-dialer-power-dialer",
+    "IVR and Call Menus.dc.html": "features--ivr-call-menus",
+    "Call Analytics.dc.html": "features--call-analytics",
+    "Lead Management.dc.html": "features--lead-management",
+    "Sales Pipeline.dc.html": "features--sales-pipeline",
+    "Customer 360.dc.html": "features--customer-360",
+    "Follow-ups and Reminders.dc.html": "features--follow-ups-reminders",
+    "Segmentation.dc.html": "features--segmentation",
+    "Loyalty and Memberships.dc.html": "features--loyalty-memberships",
+    "Online Booking.dc.html": "features--online-booking",
+    "Appointment Calendar.dc.html": "features--appointment-calendar",
+    "Staff Availability.dc.html": "features--staff-availability",
+    "Automated Reminders.dc.html": "features--automated-reminders",
+    "Rescheduling.dc.html": "features--rescheduling",
+    "Booking Management.dc.html": "features--booking-management",
+    "WhatsApp Inbox.dc.html": "features--whatsapp-inbox",
+    "SMS Inbox.dc.html": "features--sms-inbox",
+    "Email Inbox.dc.html": "features--email-inbox",
+    "Instagram and Messenger.dc.html": "features--instagram-messenger",
+    "AI Reply Drafting.dc.html": "features--ai-reply-drafting",
+    "Team Assignment.dc.html": "features--team-assignment",
+    "Workflow Builder.dc.html": "features--workflow-builder",
+    "AI Agents and Workflows.dc.html": "features--ai-agents-workflows",
+    "Triggers and Actions.dc.html": "features--triggers-actions",
+    "Scheduled Workflows.dc.html": "features--scheduled-workflows",
+    "Webhook Automation.dc.html": "features--webhook-automation",
+    "Approval Workflows.dc.html": "features--approval-workflows",
+    "SEO Audits.dc.html": "features--seo-audits",
+    "Keyword Tracking.dc.html": "features--keyword-tracking",
+    "Content Optimization.dc.html": "features--content-optimization",
+    "Technical SEO.dc.html": "features--technical-seo",
+    "Local SEO.dc.html": "features--local-seo",
+    "SEO Performance.dc.html": "features--seo-performance",
+    "Review Management.dc.html": "features--review-management",
+    "Review Requests.dc.html": "features--review-requests",
+    "AI Review Replies.dc.html": "features--ai-review-replies",
+    "Reputation Monitoring.dc.html": "features--reputation-monitoring",
+    "Review Analytics.dc.html": "features--review-analytics",
+    "Customer Feedback.dc.html": "features--customer-feedback",
+    "Quick Checkout.dc.html": "features--quick-checkout",
+    "Barcode Scanning.dc.html": "features--barcode-scanning",
+    "Payment Methods.dc.html": "features--payment-methods",
+    "Receipts and Invoices.dc.html": "features--receipts-invoices",
+    "Discounts and Promotions.dc.html": "features--discounts-promotions",
+    "Sales History.dc.html": "features--sales-history",
+    "Work Orders.dc.html": "features--work-orders",
+    "Dispatch Board.dc.html": "features--dispatch-board",
+    "Technician Scheduling.dc.html": "features--technician-scheduling",
+    "Service Calendar.dc.html": "features--service-calendar",
     // AI
     "Business Assistant-End.dc.html": "ai--assistant",
     "AI Phone Receptionist-end.dc.html": "ai--phone-receptionist",
@@ -233,6 +289,10 @@ module.exports = {
     Pricing: "/pricing",
     Contact: "/contact",
   },
+  // /features/*: the site's palette and its text-left / visual-right hero (sets/np-feature-hero.js).
+  transformAll: (key, tree) => featureHero.featurePages(key, tree),
+  cssTransform: (key, css) => (key.startsWith("features--") ? featureHero.recolor(css) + featureHero.MOBILE_CSS.replace("{ [data-fhero]", "{ .dcx [data-fhero]") + featureHero.scaleCss(key.slice("features--".length)) + featureHero.FEATURE_CSS : css),
+  logicTransform: (key, body) => (key.startsWith("features--") ? featureHero.recolor(body) : body),
   transform: {
     resources: (tree) =>
       fillPlaceholders(tree, [
