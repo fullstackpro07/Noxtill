@@ -215,6 +215,10 @@ describe('VoiceOutboundDialerService (real MySQL)', () => {
     });
     await expectAppError(
       dialer.start(businessId, userId, campaign.id),
+      'VOICE_OUTBOUND_CAMPAIGN_STATE',
+    );
+    await expectAppError(
+      dialer.requestApproval(businessId, userId, campaign.id),
       'VOICE_OUTBOUND_CAMPAIGN_PREVIEW_REQUIRED',
     );
     const preview = await campaigns.eligibilityPreview(
@@ -223,6 +227,13 @@ describe('VoiceOutboundDialerService (real MySQL)', () => {
       campaign.id,
     );
     expect(preview.eligibleCount).toBe(ids.length);
+    await dialer.requestApproval(businessId, userId, campaign.id);
+    // The requester cannot approve their own campaign unless they are the owner.
+    await expectAppError(
+      dialer.approve(businessId, userId, false, campaign.id),
+      'VOICE_OUTBOUND_CAMPAIGN_STATE',
+    );
+    await dialer.approve(businessId, otherUserId, false, campaign.id);
     await dialer.start(businessId, userId, campaign.id);
     return campaign.id;
   }
@@ -437,5 +448,144 @@ describe('VoiceOutboundDialerService (real MySQL)', () => {
       dialer.start(businessId, userId, campaignId),
       'VOICE_OUTBOUND_CAMPAIGN_STATE',
     );
+  });
+
+  it('marks a machine-answered customer leg as voicemail and retries the contact', async () => {
+    await setAvailable(true);
+    const vm = await prisma.customer.create({
+      data: { businessId, name: 'Voicemail Contact', phone: '+14155550135' },
+    });
+    await prisma.voiceConsentEvidence.create({
+      data: {
+        businessId,
+        customerId: vm.id,
+        phoneE164: '+14155550135',
+        purpose: 'callback',
+        source: 'web_form',
+        noticeText: 'Call me back.',
+        evidenceReference: 'form-vm',
+        legalBasis: 'requested_callback',
+        grantedAt: new Date(Date.now() - 60_000),
+        verifiedAt: new Date(),
+        verifiedByUserId: userId,
+      },
+    });
+    const campaignId = await runningCampaign([vm.id], 2);
+    await prisma.voiceOutboundCampaign.update({
+      where: { id: campaignId },
+      data: { voicemailDetection: true },
+    });
+    const next = await dialer.next(businessId, userId, campaignId);
+    const attempt = await dialer.attempt(
+      businessId,
+      userId,
+      campaignId,
+      next.contact!.memberId,
+    );
+    const xml = await dialer.agentAnsweredTwiml(attempt.attemptId);
+    expect(xml).toContain('machineDetection="Enable"');
+    expect(xml).toContain('outbound/amd?attemptId=');
+    await dialer.customerResult(attempt.attemptId, 'completed', 12);
+    await dialer.answeringMachineResult(attempt.attemptId, 'machine_end_beep');
+    const row = await prisma.voiceOutboundDialAttempt.findUniqueOrThrow({
+      where: { id: attempt.attemptId },
+    });
+    expect(row).toMatchObject({
+      status: 'voicemail',
+      answeredBy: 'machine_end_beep',
+    });
+    const member = await prisma.voiceOutboundCampaignMember.findUniqueOrThrow({
+      where: { id: next.contact!.memberId },
+    });
+    expect(member.status).toBe('retry');
+
+    const report = await dialer.report(businessId, campaignId);
+    expect(report).toMatchObject({
+      contacts: 1,
+      voicemails: 1,
+      connected: 0,
+      customerDialed: 1,
+    });
+    expect(report.connectRate).toBe(0);
+  });
+
+  it('imports a contact list without duplicating CRM customers or assuming consent', async () => {
+    const draft = await campaigns.create(businessId, userId, {
+      name: 'Import QA',
+      purpose: 'callback',
+      callerType: 'live_agent',
+      countryCode: 'US',
+      timeZone: 'UTC',
+      openingScript: 'Calling back about your request.',
+      humanAgentProfileId: profileId,
+      customerIds: [customerIds[0]],
+    });
+    const result = await campaigns.importContacts(
+      businessId,
+      userId,
+      draft.id,
+      [
+        { name: 'Existing', phone: '+1 415 555 0131' },
+        {
+          name: 'Brand New',
+          phone: '(415) 555-0177',
+          email: 'new@example.com',
+        },
+        { name: 'Twice', phone: '415-555-0177' },
+        { name: 'Bad', phone: '12' },
+      ],
+    );
+    expect(result).toMatchObject({
+      matched: 1,
+      created: 1,
+      alreadyInCampaign: 1,
+      memberCount: 2,
+    });
+    expect(result.skipped.map((row) => row.reason).sort()).toEqual([
+      'duplicate_in_file',
+      'invalid_phone',
+    ]);
+    const created = await prisma.customer.findFirstOrThrow({
+      where: { businessId, phone: '+14155550177' },
+    });
+    expect(created.consentMarketing).toBe(false);
+    expect(
+      await prisma.customer.count({
+        where: { businessId, phone: '+14155550131' },
+      }),
+    ).toBe(1);
+  });
+
+  it('starts an approved campaign when its schedule arrives', async () => {
+    const draft = await campaigns.create(businessId, userId, {
+      name: 'Scheduled QA',
+      purpose: 'callback',
+      callerType: 'live_agent',
+      countryCode: 'US',
+      timeZone: 'UTC',
+      openingScript: 'Calling back about your request.',
+      humanAgentProfileId: profileId,
+      scheduledAt: new Date(Date.now() + 60_000).toISOString(),
+      customerIds: [customerIds[0]],
+    });
+    await prisma.voiceOutboundCampaign.update({
+      where: { id: draft.id },
+      data: {
+        status: 'approved',
+        approvedByUserId: otherUserId,
+        eligibilityCheckedAt: new Date(),
+      },
+    });
+    expect(await dialer.startDueScheduled(new Date())).toBe(0);
+    expect(
+      await dialer.startDueScheduled(new Date(Date.now() + 120_000)),
+    ).toBeGreaterThanOrEqual(1);
+    const row = await prisma.voiceOutboundCampaign.findUniqueOrThrow({
+      where: { id: draft.id },
+    });
+    expect(row).toMatchObject({
+      status: 'running',
+      startedByUserId: otherUserId,
+    });
   });
 });

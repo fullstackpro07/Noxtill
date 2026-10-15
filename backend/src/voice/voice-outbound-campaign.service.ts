@@ -7,6 +7,7 @@ import {
   VoicePolicyCallerType,
 } from '@prisma/client';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import { normalizePhoneE164 } from '../common/utils/phone.util';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -161,6 +162,7 @@ export class VoiceOutboundCampaignService {
           scheduledAt: this.scheduledAt(configuration.scheduledAt),
           maxAttemptsPerContact: configuration.maxAttemptsPerContact ?? 1,
           retryCooldownHours: configuration.retryCooldownHours ?? 24,
+          voicemailDetection: dto.voicemailDetection ?? false,
           createdByUserId: actorUserId,
           members: {
             create: dto.customerIds.map((customerId) => ({
@@ -265,6 +267,8 @@ export class VoiceOutboundCampaignService {
           scheduledAt: this.scheduledAt(configuration.scheduledAt),
           maxAttemptsPerContact: configuration.maxAttemptsPerContact ?? 1,
           retryCooldownHours: configuration.retryCooldownHours ?? 24,
+          voicemailDetection:
+            dto.voicemailDetection ?? existing.voicemailDetection,
           eligibilityCheckedAt: null,
         },
         include: OUTBOUND_CAMPAIGN_INCLUDE,
@@ -375,6 +379,113 @@ export class VoiceOutboundCampaignService {
         providerCostEstimate: 'not_available',
       },
     };
+  }
+
+  /**
+   * Contact list upload into a draft: each row is matched to the CRM by normalized phone (one
+   * customer per phone per business) or created with marketing consent off — an uploaded list is
+   * not consent evidence. Rows are reported, never silently dropped; members stay capped at 200.
+   */
+  async importContacts(
+    businessId: string,
+    actorUserId: string,
+    campaignId: string,
+    rows: { name: string; phone: string; email?: string }[],
+  ) {
+    const campaign = await this.findCampaign(businessId, campaignId);
+    if (campaign.status !== VoiceOutboundCampaignStatus.draft) {
+      throw new AppException(
+        VOICE_ERROR_CODES.OUTBOUND_CAMPAIGN_NOT_EDITABLE,
+        'Contacts can only be added to a draft campaign.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { country: true },
+    });
+    const existingMembers = new Set(campaign.members.map((m) => m.customerId));
+    const report = {
+      matched: 0,
+      created: 0,
+      alreadyInCampaign: 0,
+      skipped: [] as { row: number; reason: string }[],
+    };
+    const seen = new Set<string>();
+    for (const [index, row] of rows.entries()) {
+      const rowNo = index + 1;
+      const phone = normalizePhoneE164(
+        row.phone,
+        // National numbers are read in the campaign's destination country first.
+        campaign.countryCode || business.country || undefined,
+      );
+      const name = row.name.trim();
+      if (!phone) {
+        report.skipped.push({ row: rowNo, reason: 'invalid_phone' });
+        continue;
+      }
+      if (!name) {
+        report.skipped.push({ row: rowNo, reason: 'missing_name' });
+        continue;
+      }
+      if (seen.has(phone)) {
+        report.skipped.push({ row: rowNo, reason: 'duplicate_in_file' });
+        continue;
+      }
+      seen.add(phone);
+      let customer = await this.tenantPrisma.client.customer.findFirst({
+        where: { businessId, phone },
+        select: { id: true, status: true },
+      });
+      if (customer && customer.status !== CustomerStatus.active) {
+        report.skipped.push({ row: rowNo, reason: 'customer_inactive' });
+        continue;
+      }
+      if (customer) {
+        report.matched += 1;
+      } else {
+        customer = await this.tenantPrisma.client.customer.create({
+          data: {
+            businessId,
+            phone,
+            name,
+            email: row.email?.trim() || null,
+            consentMarketing: false,
+          },
+          select: { id: true, status: true },
+        });
+        report.created += 1;
+      }
+      if (existingMembers.has(customer.id)) {
+        report.alreadyInCampaign += 1;
+        continue;
+      }
+      if (existingMembers.size >= 200) {
+        report.skipped.push({ row: rowNo, reason: 'campaign_full' });
+        continue;
+      }
+      await this.tenantPrisma.client.voiceOutboundCampaignMember.create({
+        data: { businessId, campaignId, customerId: customer.id },
+      });
+      existingMembers.add(customer.id);
+    }
+    await this.tenantPrisma.client.voiceOutboundCampaign.update({
+      where: { id: campaignId },
+      data: { eligibilityCheckedAt: null },
+    });
+    await this.audit.log({
+      entity: 'VoiceOutboundCampaign',
+      entityId: campaignId,
+      action: 'voice.outbound_campaign.contacts_imported',
+      after: {
+        rows: rows.length,
+        matched: report.matched,
+        created: report.created,
+        skipped: report.skipped.length,
+        actorUserId,
+      },
+    });
+    return { ...report, memberCount: existingMembers.size };
   }
 
   /**

@@ -50,6 +50,9 @@ export const DIALER_DISPOSITIONS = [
 ] as const;
 
 /** Twilio `DialCallStatus` → attempt outcome. Anything unknown is a failure, never a success. */
+const isMachine = (answeredBy: string | null) =>
+  !!answeredBy && (answeredBy.startsWith('machine') || answeredBy === 'fax');
+
 const DIAL_RESULT: Record<string, VoiceOutboundDialAttemptStatus> = {
   completed: VoiceOutboundDialAttemptStatus.answered,
   answered: VoiceOutboundDialAttemptStatus.answered,
@@ -92,11 +95,16 @@ export class VoiceOutboundDialerService {
       );
     }
     const startable: VoiceOutboundCampaignStatus[] = [
-      VoiceOutboundCampaignStatus.draft,
+      VoiceOutboundCampaignStatus.approved,
       VoiceOutboundCampaignStatus.paused,
     ];
     if (!startable.includes(campaign.status)) {
-      throw this.stateError(`A ${campaign.status} campaign cannot be started.`);
+      throw this.stateError(
+        campaign.status === VoiceOutboundCampaignStatus.draft ||
+          campaign.status === VoiceOutboundCampaignStatus.pending_approval
+          ? 'This campaign must be approved before it can start.'
+          : `A ${campaign.status} campaign cannot be started.`,
+      );
     }
     if (!campaign.eligibilityCheckedAt) {
       throw new AppException(
@@ -148,6 +156,116 @@ export class VoiceOutboundDialerService {
     return this.status(businessId, campaignId);
   }
 
+  /** Draft → pending approval (human or AI campaigns). The eligibility preview must have run on the current draft. */
+  async requestApproval(
+    businessId: string,
+    actorUserId: string,
+    campaignId: string,
+  ) {
+    const campaign = await this.findCampaign(businessId, campaignId);
+    if (!campaign.eligibilityCheckedAt) {
+      throw new AppException(
+        VOICE_ERROR_CODES.OUTBOUND_CAMPAIGN_PREVIEW_REQUIRED,
+        'Run the eligibility preview before requesting approval.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    return this.transition(
+      businessId,
+      actorUserId,
+      campaignId,
+      [VoiceOutboundCampaignStatus.draft],
+      {
+        status: VoiceOutboundCampaignStatus.pending_approval,
+        approvalRequestedAt: new Date(),
+        approvalRequestedBy: actorUserId,
+      },
+      'voice.campaign.approval_requested',
+    );
+  }
+
+  /**
+   * Pending → approved. A second person must approve; only the business owner may approve a
+   * campaign they requested themselves.
+   */
+  async approve(
+    businessId: string,
+    actorUserId: string,
+    actorIsOwner: boolean,
+    campaignId: string,
+  ) {
+    const campaign = await this.findCampaign(businessId, campaignId);
+    if (campaign.approvalRequestedBy === actorUserId && !actorIsOwner) {
+      throw new AppException(
+        VOICE_ERROR_CODES.OUTBOUND_CAMPAIGN_STATE,
+        'Another manager must approve a campaign you submitted.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    return this.transition(
+      businessId,
+      actorUserId,
+      campaignId,
+      [VoiceOutboundCampaignStatus.pending_approval],
+      {
+        status: VoiceOutboundCampaignStatus.approved,
+        approvedAt: new Date(),
+        approvedByUserId: actorUserId,
+      },
+      'voice.campaign.approved',
+    );
+  }
+
+  /** Pending or approved (not yet started) → back to draft for changes. */
+  async sendBack(businessId: string, actorUserId: string, campaignId: string) {
+    return this.transition(
+      businessId,
+      actorUserId,
+      campaignId,
+      [
+        VoiceOutboundCampaignStatus.pending_approval,
+        VoiceOutboundCampaignStatus.approved,
+      ],
+      {
+        status: VoiceOutboundCampaignStatus.draft,
+        approvalRequestedAt: null,
+        approvalRequestedBy: null,
+        approvedAt: null,
+        approvedByUserId: null,
+      },
+      'voice.campaign.sent_back',
+    );
+  }
+
+  /** Background: approved campaigns whose schedule has arrived start running (no request tenant). */
+  async startDueScheduled(now = new Date()): Promise<number> {
+    const due = await this.prisma.voiceOutboundCampaign.findMany({
+      where: {
+        status: VoiceOutboundCampaignStatus.approved,
+        scheduledAt: { lte: now },
+        callerType: VoicePolicyCallerType.live_agent,
+      },
+      select: { id: true, approvedByUserId: true },
+      take: 100,
+    });
+    let started = 0;
+    for (const campaign of due) {
+      const result = await this.prisma.voiceOutboundCampaign.updateMany({
+        where: {
+          id: campaign.id,
+          status: VoiceOutboundCampaignStatus.approved,
+        },
+        data: {
+          status: VoiceOutboundCampaignStatus.running,
+          startedAt: now,
+          startedByUserId: campaign.approvedByUserId,
+        },
+      });
+      started += result.count;
+    }
+    return started;
+  }
+
   async pause(businessId: string, actorUserId: string, campaignId: string) {
     return this.transition(
       businessId,
@@ -165,7 +283,11 @@ export class VoiceOutboundDialerService {
       businessId,
       actorUserId,
       campaignId,
-      [VoiceOutboundCampaignStatus.running, VoiceOutboundCampaignStatus.paused],
+      [
+        VoiceOutboundCampaignStatus.approved,
+        VoiceOutboundCampaignStatus.running,
+        VoiceOutboundCampaignStatus.paused,
+      ],
       { status: VoiceOutboundCampaignStatus.stopped, stoppedAt: new Date() },
       'voice.campaign.stopped',
     );
@@ -198,6 +320,71 @@ export class VoiceOutboundDialerService {
       stoppedAt: campaign.stoppedAt?.toISOString() ?? null,
       attemptCounts: counts,
       attempts: attempts.map((attempt) => this.presentAttempt(attempt)),
+    };
+  }
+
+  /** Campaign report from saved members and attempts only (no estimates, no ROI guesses). */
+  async report(businessId: string, campaignId: string) {
+    const campaign = await this.findCampaign(businessId, campaignId);
+    const [members, attempts] = await Promise.all([
+      this.tenantPrisma.client.voiceOutboundCampaignMember.findMany({
+        where: { businessId, campaignId },
+        select: {
+          status: true,
+          attemptCount: true,
+          disposition: true,
+          blockReasonCode: true,
+        },
+      }),
+      this.tenantPrisma.client.voiceOutboundDialAttempt.findMany({
+        where: { businessId, campaignId },
+        select: {
+          status: true,
+          customerDialed: true,
+          durationSec: true,
+          blockReasonCode: true,
+        },
+      }),
+    ]);
+    const tally = <T extends string>(values: (T | null)[]) =>
+      values.reduce<Record<string, number>>((acc, value) => {
+        if (value) acc[value] = (acc[value] ?? 0) + 1;
+        return acc;
+      }, {});
+    const dialed = attempts.filter((a) => a.customerDialed).length;
+    const connected = attempts.filter(
+      (a) => a.status === VoiceOutboundDialAttemptStatus.answered,
+    ).length;
+    const blocked = attempts.filter(
+      (a) => a.status === VoiceOutboundDialAttemptStatus.blocked,
+    );
+    const contacted = members.filter((m) => m.attemptCount > 0);
+    return {
+      campaignId,
+      status: campaign.status,
+      contacts: members.length,
+      memberStatus: tally(members.map((m) => m.status)),
+      attempts: attempts.length,
+      attemptStatus: tally(attempts.map((a) => a.status)),
+      customerDialed: dialed,
+      connected,
+      connectRate: dialed ? connected / dialed : null,
+      voicemails: attempts.filter(
+        (a) => a.status === VoiceOutboundDialAttemptStatus.voicemail,
+      ).length,
+      blockedAttempts: blocked.length,
+      blockedRate: attempts.length ? blocked.length / attempts.length : null,
+      blockedReasons: tally(blocked.map((a) => a.blockReasonCode)),
+      dispositions: tally(members.map((m) => m.disposition)),
+      optOuts: members.filter(
+        (m) => m.status === VoiceOutboundCampaignMemberStatus.opted_out,
+      ).length,
+      averageDialsPerContactedContact: contacted.length
+        ? contacted.reduce((sum, m) => sum + m.attemptCount, 0) /
+          contacted.length
+        : null,
+      talkSeconds: attempts.reduce((sum, a) => sum + (a.durationSec ?? 0), 0),
+      providerCost: 'not_available' as const,
     };
   }
 
@@ -638,7 +825,7 @@ export class VoiceOutboundDialerService {
     const attempt = await this.prisma.voiceOutboundDialAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        campaign: { select: { status: true } },
+        campaign: { select: { status: true, voicemailDetection: true } },
         member: {
           include: { customer: { select: { name: true, phone: true } } },
         },
@@ -693,9 +880,14 @@ export class VoiceOutboundDialerService {
       data: { attemptCount: { increment: 1 }, lastAttemptAt: now },
     });
     const backendUrl = this.config.get<string>('BACKEND_URL') ?? '';
-    const action = `${backendUrl}/voice/webhook/outbound/customer-result?attemptId=${encodeURIComponent(attempt.id)}`;
+    const q = `attemptId=${encodeURIComponent(attempt.id)}`;
+    const action = `${backendUrl}/voice/webhook/outbound/customer-result?${q}`;
+    // Answering-machine detection is asynchronous: the result arrives on its own signed callback.
+    const amd = attempt.campaign.voicemailDetection
+      ? ` machineDetection="Enable" amdStatusCallback="${escapeXml(`${backendUrl}/voice/webhook/outbound/amd?${q}`)}" amdStatusCallbackMethod="POST"`
+      : '';
     return twiml(
-      `${say(`Connecting you to ${attempt.member.customer.name}.`)}<Dial callerId="${escapeXml(businessNumber.phoneNumber)}" timeout="${CUSTOMER_RING_SECONDS}" answerOnBridge="true" action="${escapeXml(action)}" method="POST"><Number>${escapeXml(attempt.member.customer.phone)}</Number></Dial>`,
+      `${say(`Connecting you to ${attempt.member.customer.name}.`)}<Dial callerId="${escapeXml(businessNumber.phoneNumber)}" timeout="${CUSTOMER_RING_SECONDS}" answerOnBridge="true" action="${escapeXml(action)}" method="POST"><Number${amd}>${escapeXml(attempt.member.customer.phone)}</Number></Dial>`,
     );
   }
 
@@ -715,8 +907,14 @@ export class VoiceOutboundDialerService {
     ) {
       return twiml('<Hangup/>');
     }
-    const status =
+    const dialed =
       DIAL_RESULT[dialCallStatus] ?? VoiceOutboundDialAttemptStatus.failed;
+    // A connected leg that the provider classified as a machine is a voicemail, not a conversation.
+    const status =
+      dialed === VoiceOutboundDialAttemptStatus.answered &&
+      isMachine(attempt.answeredBy)
+        ? VoiceOutboundDialAttemptStatus.voicemail
+        : dialed;
     const answered = status === VoiceOutboundDialAttemptStatus.answered;
     const now = new Date();
     await this.prisma.$transaction([
@@ -743,6 +941,46 @@ export class VoiceOutboundDialerService {
       }),
     ]);
     return twiml('<Hangup/>');
+  }
+
+  /** Asynchronous answering-machine result for the customer leg. */
+  async answeringMachineResult(attemptId: string, answeredBy: string) {
+    const value = answeredBy.slice(0, 30);
+    const attempt = await this.prisma.voiceOutboundDialAttempt.findUnique({
+      where: { id: attemptId },
+      include: { campaign: true, member: true },
+    });
+    if (!attempt) return;
+    await this.prisma.voiceOutboundDialAttempt.update({
+      where: { id: attempt.id },
+      data: { answeredBy: value },
+    });
+    // The Dial result came first and counted it as answered: correct it to voicemail.
+    if (
+      attempt.status === VoiceOutboundDialAttemptStatus.answered &&
+      !attempt.disposition &&
+      isMachine(value)
+    ) {
+      await this.prisma.$transaction([
+        this.prisma.voiceOutboundDialAttempt.update({
+          where: { id: attempt.id },
+          data: { status: VoiceOutboundDialAttemptStatus.voicemail },
+        }),
+        this.prisma.voiceOutboundCampaignMember.updateMany({
+          where: {
+            id: attempt.memberId,
+            status: VoiceOutboundCampaignMemberStatus.answered,
+          },
+          data: {
+            status:
+              attempt.member.attemptCount <
+              attempt.campaign.maxAttemptsPerContact
+                ? VoiceOutboundCampaignMemberStatus.retry
+                : VoiceOutboundCampaignMemberStatus.completed,
+          },
+        }),
+      ]);
+    }
   }
 
   /** Agent-leg status callback. An agent leg that ended unanswered releases the contact untouched. */

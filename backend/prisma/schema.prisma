@@ -3309,6 +3309,12 @@ model VoiceOutboundCampaign {
   startedByUserId       String?                       @map("started_by_user_id")
   pausedAt              DateTime?                     @map("paused_at")
   stoppedAt             DateTime?                     @map("stopped_at")
+  approvalRequestedAt   DateTime?                     @map("approval_requested_at")
+  approvalRequestedBy   String?                       @map("approval_requested_by")
+  approvedAt            DateTime?                     @map("approved_at")
+  approvedByUserId      String?                       @map("approved_by_user_id")
+  /// Ask the provider to detect answering machines on the customer leg (marks the try `voicemail`).
+  voicemailDetection    Boolean                       @default(false) @map("voicemail_detection")
   members               VoiceOutboundCampaignMember[]
   dialAttempts          VoiceOutboundDialAttempt[]
 
@@ -3365,6 +3371,8 @@ model VoiceOutboundDialAttempt {
   blockReasonCode       String?                        @map("block_reason_code") @db.VarChar(40)
   agentCallSid          String?                        @unique @map("agent_call_sid") @db.VarChar(64)
   customerDialed        Boolean                        @default(false) @map("customer_dialed")
+  /// Provider answering-machine result (`human`, `machine_*`, `fax`, `unknown`), when requested.
+  answeredBy            String?                        @map("answered_by") @db.VarChar(30)
   durationSec           Int?                           @map("duration_sec")
   disposition           String?                        @db.VarChar(40)
   dispositionNotes      String?                        @map("disposition_notes") @db.VarChar(1000)
@@ -3640,6 +3648,7 @@ enum VoiceOutboundDialAttemptStatus {
   agent_no_answer
   customer_ringing
   answered
+  voicemail
   busy
   no_answer
   failed

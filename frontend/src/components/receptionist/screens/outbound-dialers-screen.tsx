@@ -18,6 +18,7 @@ import {
 } from "@/lib/voice-outbound-api";
 import { Card, CardHead, Chip, EmptyState, SmallBtn } from "../rx-ui";
 import { OutboundCampaignRun } from "./outbound-campaign-run";
+import { CampaignImport } from "../rx-campaign-import";
 
 const fieldClass =
   "h-[36px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] outline-none focus:border-[#16A34A]";
@@ -76,6 +77,7 @@ export function OutboundDialersScreen() {
     scheduledAt: "",
     maxAttemptsPerContact: "1",
     retryCooldownHours: "24",
+    voicemailDetection: false,
   });
 
   const selectedCampaign =
@@ -137,6 +139,7 @@ export function OutboundDialersScreen() {
         : "",
       maxAttemptsPerContact: String(campaign.maxAttemptsPerContact),
       retryCooldownHours: String(campaign.retryCooldownHours),
+      voicemailDetection: campaign.voicemailDetection,
     });
     setPreview(null);
     setNotice(null);
@@ -157,6 +160,7 @@ export function OutboundDialersScreen() {
       scheduledAt: "",
       maxAttemptsPerContact: "1",
       retryCooldownHours: "24",
+      voicemailDetection: false,
     });
     setPreview(null);
     setNotice(null);
@@ -179,6 +183,7 @@ export function OutboundDialersScreen() {
         : null,
       maxAttemptsPerContact: Number(form.maxAttemptsPerContact),
       retryCooldownHours: Number(form.retryCooldownHours),
+      voicemailDetection: form.voicemailDetection,
       customerIds: selectedCustomerIds,
     };
     saveMutation.mutate(input);
@@ -394,7 +399,7 @@ export function OutboundDialersScreen() {
             </label>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="grid gap-1.5 text-[11px] font-bold text-[#5B6675]">
-                Requested schedule (draft only)
+                Scheduled start (after approval)
                 <input
                   className={fieldClass}
                   type="datetime-local"
@@ -408,7 +413,7 @@ export function OutboundDialersScreen() {
                   }
                 />
                 <span className="font-normal text-[#7A8798]">
-                  Informational only: campaigns start when a manager presses Start.
+                  An approved campaign starts automatically at this time; leave empty to start it manually.
                 </span>
               </label>
               <label className="grid gap-1.5 text-[11px] font-bold text-[#5B6675]">
@@ -446,6 +451,22 @@ export function OutboundDialersScreen() {
                 />
               </label>
             </div>
+
+            <label className="flex items-start gap-2 text-[11px] font-semibold text-[#334155]">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={form.voicemailDetection}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, voicemailDetection: event.target.checked }))
+                }
+              />
+              <span>
+                Detect voicemail: when the provider reports an answering machine, the try is logged as voicemail and the contact is retried later.
+              </span>
+            </label>
+
+            {selectedCampaign?.status === "draft" ? <CampaignImport campaignId={selectedCampaign.id} /> : null}
 
             <section className="rounded-[10px] border border-[#E6E8EC]">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#EEF0F3] px-3 py-2.5">

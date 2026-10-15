@@ -1,9 +1,11 @@
 import { PartialType } from '@nestjs/mapped-types';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -11,6 +13,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  ValidateNested,
   Max,
   MaxLength,
   Min,
@@ -69,6 +72,10 @@ export class CreateVoiceOutboundCampaignDto {
   @Max(168)
   retryCooldownHours?: number;
 
+  @IsOptional()
+  @IsBoolean()
+  voicemailDetection?: boolean;
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(200)
@@ -115,4 +122,30 @@ export class VoiceDialerDispositionDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+}
+
+export class VoiceCampaignImportRowDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(191)
+  name!: string;
+
+  @IsString()
+  @MinLength(5)
+  @MaxLength(40)
+  phone!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(191)
+  email?: string;
+}
+
+export class VoiceCampaignImportDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => VoiceCampaignImportRowDto)
+  rows!: VoiceCampaignImportRowDto[];
 }

@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { updateMyVoicePresence } from "@/lib/voice-agents-api";
 import {
+  campaignApprovalAction,
   controlOutboundCampaign,
+  fetchCampaignReport,
   fetchCampaignAttempts,
   fetchDialerNext,
   placeDialAttempt,
@@ -28,6 +30,7 @@ const ATTEMPT_LABEL: Record<DialAttemptStatus, { label: string; tone: Tone }> = 
   agent_no_answer: { label: "Agent did not answer", tone: "amber" },
   customer_ringing: { label: "Customer leg in progress", tone: "blue" },
   answered: { label: "Answered", tone: "green" },
+  voicemail: { label: "Voicemail (machine detected)", tone: "amber" },
   busy: { label: "Busy", tone: "amber" },
   no_answer: { label: "No answer", tone: "amber" },
   failed: { label: "Failed", tone: "red" },
@@ -84,6 +87,21 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
       client.invalidateQueries({ queryKey: ["voice-dialer-next", campaign.id] }),
     ]);
   };
+  const report = useQuery({
+    queryKey: ["voice-outbound-report", campaign.id],
+    queryFn: () => fetchCampaignReport(campaign.id),
+    enabled: campaign.status !== "draft" && campaign.status !== "pending_approval",
+    refetchInterval: campaign.status === "running" ? 10_000 : false,
+    retry: false,
+  });
+  const approval = useMutation({
+    mutationFn: (action: "request-approval" | "approve" | "send-back") => campaignApprovalAction(campaign.id, action),
+    onSuccess: async (result) => {
+      setNotice({ text: `Campaign ${readable(result.status)}.` });
+      await refresh();
+    },
+    onError: (error) => setNotice({ text: toError(error), error: true }),
+  });
   const control = useMutation({
     mutationFn: (action: "start" | "pause" | "stop") => controlOutboundCampaign(campaign.id, action),
     onSuccess: async (result) => {
@@ -148,13 +166,32 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {campaign.status === "draft" || campaign.status === "paused" ? (
-              <SmallBtn disabled={busy || !campaign.eligibilityCheckedAt} onClick={() => control.mutate("start")}>
-                {campaign.status === "paused" ? "Resume" : "Start campaign"}
+            {campaign.status === "draft" ? (
+              <SmallBtn disabled={approval.isPending || !campaign.eligibilityCheckedAt} onClick={() => approval.mutate("request-approval")}>
+                Request approval
               </SmallBtn>
             ) : null}
+            {campaign.status === "pending_approval" ? (
+              <>
+                <SmallBtn disabled={approval.isPending} onClick={() => approval.mutate("approve")}>Approve</SmallBtn>
+                <SmallBtn disabled={approval.isPending} onClick={() => approval.mutate("send-back")}>Send back to draft</SmallBtn>
+                <span className="self-center text-[10px] text-[#7A8798]">A different manager approves; the owner may approve their own.</span>
+              </>
+            ) : null}
+            {campaign.status === "approved" ? (
+              <>
+                <SmallBtn disabled={busy} onClick={() => control.mutate("start")}>Start now</SmallBtn>
+                <SmallBtn disabled={approval.isPending} onClick={() => approval.mutate("send-back")}>Send back to draft</SmallBtn>
+                <span className="self-center text-[10px] text-[#7A8798]">
+                  {campaign.scheduledAt ? `Starts automatically at ${new Date(campaign.scheduledAt).toLocaleString()}.` : "No schedule set; start it when ready."}
+                </span>
+              </>
+            ) : null}
+            {campaign.status === "paused" ? (
+              <SmallBtn disabled={busy} onClick={() => control.mutate("start")}>Resume</SmallBtn>
+            ) : null}
             {campaign.status === "running" ? <SmallBtn disabled={busy} onClick={() => control.mutate("pause")}>Pause</SmallBtn> : null}
-            {live ? <SmallBtn disabled={busy} onClick={() => control.mutate("stop")}>Stop for good</SmallBtn> : null}
+            {live || campaign.status === "approved" ? <SmallBtn disabled={busy} onClick={() => control.mutate("stop")}>Stop for good</SmallBtn> : null}
             {campaign.status === "draft" && !campaign.eligibilityCheckedAt ? (
               <span className="self-center text-[10px] text-[#7A8798]">Run the eligibility preview first.</span>
             ) : null}
@@ -246,6 +283,40 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                 </p>
               </div>
             )}
+          </section>
+        ) : null}
+
+        {report.data ? (
+          <section className="rounded-[10px] border border-[#E6E8EC] p-3">
+            <h3 className="mb-2 text-[12px] font-extrabold text-[#334155]">Report</h3>
+            <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+              {[
+                ["Contacts", String(report.data.contacts)],
+                ["Customer dials", String(report.data.customerDialed)],
+                ["Connect rate", report.data.connectRate == null ? "—" : `${Math.round(report.data.connectRate * 100)}%`],
+                ["Voicemails", String(report.data.voicemails)],
+                ["Blocked tries", report.data.blockedRate == null ? "—" : `${report.data.blockedAttempts} (${Math.round(report.data.blockedRate * 100)}%)`],
+                ["Opt-outs", String(report.data.optOuts)],
+                ["Dials per reached contact", report.data.averageDialsPerContactedContact == null ? "—" : report.data.averageDialsPerContactedContact.toFixed(1)],
+                ["Talk time", `${Math.round(report.data.talkSeconds / 60)} min`],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-[8px] bg-[#F7F9FB] p-2">
+                  <div className="text-[14px] font-extrabold tabular-nums">{value}</div>
+                  <div className="text-[10px] text-[#7A8798]">{label}</div>
+                </div>
+              ))}
+            </div>
+            {Object.keys(report.data.dispositions).length ? (
+              <p className="mb-0 mt-2 text-[10.5px] text-[#64748B]">
+                Outcomes: {Object.entries(report.data.dispositions).map(([key, n]) => `${readable(key)} ${n}`).join(" · ")}
+              </p>
+            ) : null}
+            {Object.keys(report.data.blockedReasons).length ? (
+              <p className="mb-0 mt-1 text-[10.5px] text-[#64748B]">
+                Blocked because: {Object.entries(report.data.blockedReasons).map(([key, n]) => `${readable(key)} ${n}`).join(" · ")}
+              </p>
+            ) : null}
+            <p className="mb-0 mt-1 text-[10px] text-[#94A3B8]">Provider cost and revenue are not attributed to campaigns yet.</p>
           </section>
         ) : null}
 

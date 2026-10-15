@@ -32,6 +32,7 @@ export type DialAttemptStatus =
   | "agent_no_answer"
   | "customer_ringing"
   | "answered"
+  | "voicemail"
   | "busy"
   | "no_answer"
   | "failed"
@@ -83,6 +84,11 @@ export interface OutboundCampaign {
   maxAttemptsPerContact: number;
   retryCooldownHours: number;
   eligibilityCheckedAt: string | null;
+  approvalRequestedAt: string | null;
+  approvalRequestedBy: string | null;
+  approvedAt: string | null;
+  approvedByUserId: string | null;
+  voicemailDetection: boolean;
   selectedContactCount: number;
   eligibleCount: number;
   blockedCount: number;
@@ -106,6 +112,7 @@ export interface OutboundCampaignInput {
   scheduledAt?: string | null;
   maxAttemptsPerContact: number;
   retryCooldownHours: number;
+  voicemailDetection?: boolean;
   customerIds: string[];
 }
 
@@ -276,4 +283,45 @@ export interface OutboundActivityCounts {
 /** GET /voice/outbound/summary — power-dialer and call-back attempts since `from`. */
 export function fetchOutboundSummary(from: string): Promise<{ from: string; powerDialer: OutboundActivityCounts; callbacks: OutboundActivityCounts }> {
   return apiFetch(`/voice/outbound/summary?from=${encodeURIComponent(from)}`);
+}
+
+export interface CampaignImportResult {
+  matched: number;
+  created: number;
+  alreadyInCampaign: number;
+  skipped: { row: number; reason: string }[];
+  memberCount: number;
+}
+
+export interface CampaignReport {
+  campaignId: string;
+  status: OutboundCampaignStatus;
+  contacts: number;
+  memberStatus: Record<string, number>;
+  attempts: number;
+  attemptStatus: Record<string, number>;
+  customerDialed: number;
+  connected: number;
+  connectRate: number | null;
+  voicemails: number;
+  blockedAttempts: number;
+  blockedRate: number | null;
+  blockedReasons: Record<string, number>;
+  dispositions: Record<string, number>;
+  optOuts: number;
+  averageDialsPerContactedContact: number | null;
+  talkSeconds: number;
+  providerCost: "not_available";
+}
+
+export function importCampaignContacts(id: string, rows: { name: string; phone: string; email?: string }[]): Promise<CampaignImportResult> {
+  return apiFetch(`/voice/campaigns/${id}/import`, { method: "POST", body: JSON.stringify({ rows }) });
+}
+
+export function campaignApprovalAction(id: string, action: "request-approval" | "approve" | "send-back"): Promise<CampaignRunStatus> {
+  return apiFetch(`/voice/campaigns/${id}/${action}`, { method: "POST" });
+}
+
+export function fetchCampaignReport(id: string): Promise<CampaignReport> {
+  return apiFetch(`/voice/campaigns/${id}/report`);
 }

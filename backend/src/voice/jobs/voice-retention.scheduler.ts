@@ -43,6 +43,22 @@ export class VoiceRetentionScheduler implements OnModuleInit {
         ),
       );
 
+    // Approved outbound campaigns start when their schedule arrives.
+    this.queue
+      .add(
+        'start-scheduled-campaigns',
+        {},
+        {
+          repeat: { pattern: '* * * * *' },
+          jobId: 'voice-outbound-scheduled-start-every-minute',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register scheduled campaign start: ${error.message}`,
+        ),
+      );
+
     // Post-call transcript redaction for businesses that enabled `voice.redactTranscripts`.
     this.queue
       .add(

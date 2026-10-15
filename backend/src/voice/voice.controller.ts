@@ -14,6 +14,7 @@ import {
   Res,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { TelephonyService } from './telephony.service';
@@ -107,6 +108,7 @@ import {
 import {
   CreateVoiceOutboundCampaignDto,
   UpdateVoiceOutboundCampaignDto,
+  VoiceCampaignImportDto,
   VoiceDialerAttemptDto,
   VoiceDialerDispositionDto,
 } from './dto/voice-outbound.dto';
@@ -440,6 +442,63 @@ export class VoiceController {
       user.sub,
       id,
     );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/import')
+  importVoiceCampaignContacts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceCampaignImportDto,
+  ) {
+    return this.voiceOutboundCampaigns.importContacts(
+      user.businessId,
+      user.sub,
+      id,
+      dto.rows,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/request-approval')
+  requestVoiceCampaignApproval(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.requestApproval(user.businessId, user.sub, id);
+  }
+
+  /** A second manager approves; only the owner may approve their own request. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/approve')
+  approveVoiceCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.approve(
+      user.businessId,
+      user.sub,
+      user.role === Role.owner,
+      id,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/send-back')
+  sendBackVoiceCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.sendBack(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/campaigns/:id/report')
+  voiceCampaignReport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.report(user.businessId, id);
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -1592,6 +1651,24 @@ export class VoiceController {
     this.verifySignature(req, signature);
     const xml = await this.voiceDialer.agentAnsweredTwiml(attemptId);
     res.type('text/xml').send(xml);
+  }
+
+  /** Asynchronous answering-machine result for a power-dialer customer leg. */
+  @Public()
+  @Post('voice/webhook/outbound/amd')
+  @HttpCode(200)
+  async outboundAnsweringMachine(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { AnsweredBy?: string };
+    await this.voiceDialer.answeringMachineResult(
+      attemptId,
+      body.AnsweredBy ?? 'unknown',
+    );
+    return { received: true };
   }
 
   @Public()

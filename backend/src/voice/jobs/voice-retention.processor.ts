@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../../common/storage/s3.service';
 import { VoiceHumanAgentDispatchService } from '../voice-human-agent-dispatch.service';
 import { VoiceTranscriptRedactionService } from '../voice-transcript-redaction.service';
+import { VoiceOutboundDialerService } from '../voice-outbound-dialer.service';
 import {
   VOICE_RETENTION_QUEUE,
   RECORDING_RETENTION_DAYS,
@@ -30,6 +31,7 @@ export class VoiceRetentionProcessor extends WorkerHost {
     private readonly s3: S3Service,
     private readonly humanAgentDispatch: VoiceHumanAgentDispatchService,
     private readonly transcriptRedaction?: VoiceTranscriptRedactionService,
+    private readonly outboundDialer?: VoiceOutboundDialerService,
   ) {
     super();
   }
@@ -37,6 +39,13 @@ export class VoiceRetentionProcessor extends WorkerHost {
   async process(job: Job): Promise<void> {
     if (job.name === 'expire-agent-reservations') {
       return this.releaseExpiredAgentReservations();
+    }
+    if (job.name === 'start-scheduled-campaigns') {
+      const started = (await this.outboundDialer?.startDueScheduled()) ?? 0;
+      if (started > 0) {
+        this.logger.log(`Started ${started} scheduled outbound campaign(s)`);
+      }
+      return;
     }
     if (job.name === 'redact-transcripts') {
       const processed = (await this.transcriptRedaction?.runPending()) ?? 0;
