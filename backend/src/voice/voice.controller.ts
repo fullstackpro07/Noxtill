@@ -81,6 +81,8 @@ import { VoiceIvrService } from './voice-ivr.service';
 import { VoiceSupervisorService } from './voice-supervisor.service';
 import { VoiceCallQueueService } from './voice-call-queue.service';
 import { VoiceQueueSlaDto } from './dto/voice-queue-sla.dto';
+import { VoiceSoftphoneService } from './voice-softphone.service';
+import { VoiceSoftphoneHoldDto } from './dto/voice-softphone.dto';
 import { VoiceTrackingService } from './voice-tracking.service';
 import {
   AddVoiceTrackingNumberDto,
@@ -166,6 +168,7 @@ export class VoiceController {
     private readonly voiceIvr: VoiceIvrService,
     private readonly voiceSupervisor: VoiceSupervisorService,
     private readonly voiceCallQueue: VoiceCallQueueService,
+    private readonly voiceSoftphone: VoiceSoftphoneService,
     private readonly voiceTracking: VoiceTrackingService,
     private readonly voiceTrackingNumbers: VoiceTrackingNumbersService,
     private readonly voiceCallbacks: VoiceCallbacksService,
@@ -780,6 +783,50 @@ export class VoiceController {
   @Get('voice/agents')
   listVoiceAgents(@CurrentUser() user: AuthenticatedUser) {
     return this.voiceAgents.list(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/softphone/status')
+  voiceSoftphoneStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceSoftphone.status(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/softphone/token')
+  issueVoiceSoftphoneToken(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceSoftphone.issueToken(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/softphone/calls/:providerCallSid')
+  voiceSoftphoneCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('providerCallSid') providerCallSid: string,
+  ) {
+    return this.voiceSoftphone.callForProviderSid(
+      user.businessId,
+      user.sub,
+      providerCallSid,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/softphone/calls/:id/hold')
+  setVoiceSoftphoneHold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceSoftphoneHoldDto,
+  ) {
+    return this.voiceSoftphone.setHold(user.businessId, user.sub, id, dto.hold);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/softphone/calls/:id/end')
+  endVoiceSoftphoneCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceSoftphone.hangUp(user.businessId, user.sub, id);
   }
 
   @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)

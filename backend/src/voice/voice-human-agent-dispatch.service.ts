@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   Prisma,
   PhoneCallStatus,
@@ -10,6 +11,7 @@ import {
   VOICE_PRESENCE_TTL_SECONDS,
 } from './voice.constants';
 import { TOPICS, type TopicKey } from './voice-analysis';
+import { voiceSoftphoneIdentity } from './voice-softphone.util';
 
 export interface ReservedHumanAgent {
   assignmentId: string;
@@ -27,7 +29,10 @@ export interface ReservedHumanAgent {
  */
 @Injectable()
 export class VoiceHumanAgentDispatchService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: ConfigService,
+  ) {}
 
   async reserve(
     businessId: string,
@@ -38,6 +43,7 @@ export class VoiceHumanAgentDispatchService {
     const freshSince = new Date(
       now.getTime() - VOICE_PRESENCE_TTL_SECONDS * 1000,
     );
+    const softphoneEnabled = this.isSoftphoneConfigured();
 
     try {
       return await this.prisma.$transaction(
@@ -109,7 +115,9 @@ export class VoiceHumanAgentDispatchService {
               staffUser: {
                 is: {
                   active: true,
-                  user: { is: { phone: { not: null } } },
+                  user: {
+                    is: softphoneEnabled ? {} : { phone: { not: null } },
+                  },
                 },
               },
             },
@@ -216,7 +224,9 @@ export class VoiceHumanAgentDispatchService {
                 staffUser: {
                   is: {
                     active: true,
-                    user: { is: { phone: { not: null } } },
+                    user: {
+                      is: softphoneEnabled ? {} : { phone: { not: null } },
+                    },
                   },
                 },
               },
@@ -231,7 +241,11 @@ export class VoiceHumanAgentDispatchService {
                 },
               },
             });
-            if (!profile?.staffUser.user.phone) continue;
+            if (
+              !profile ||
+              (!profile.staffUser.user.phone && !softphoneEnabled)
+            )
+              continue;
 
             const activeAssignments = await tx.voiceHumanAgentAssignment.count({
               where: {
@@ -284,7 +298,9 @@ export class VoiceHumanAgentDispatchService {
               profileId: profile.id,
               staffUserId: profile.staffUserId,
               name: profile.staffUser.user.name,
-              phone: profile.staffUser.user.phone,
+              phone:
+                profile.staffUser.user.phone ??
+                `client:${voiceSoftphoneIdentity(businessId, profile.id)}`,
               attemptNumber,
             };
           }
@@ -302,6 +318,16 @@ export class VoiceHumanAgentDispatchService {
       }
       throw error;
     }
+  }
+
+  private isSoftphoneConfigured() {
+    return Boolean(
+      this.config?.get<string>('TWILIO_ACCOUNT_SID') &&
+      this.config?.get<string>('TWILIO_AUTH_TOKEN') &&
+      this.config?.get<string>('TWILIO_API_KEY_SID') &&
+      this.config?.get<string>('TWILIO_API_KEY_SECRET') &&
+      this.config?.get<string>('TWILIO_TWIML_APP_SID'),
+    );
   }
 
   /** Prefer an exact business-entered skill tag for a topic classified from this call turn. */

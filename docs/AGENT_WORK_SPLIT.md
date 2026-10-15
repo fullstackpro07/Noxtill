@@ -824,3 +824,16 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Backend and frontend type checks pass; full backend Jest passes 371 suites / 2,264 tests, and
   focused voice/database suites pass 5/5 suites / 59 tests. Touched-file ESLint passes except the
   unchanged 74 formatting-only baseline errors in `settings-hub/categories/intelligence.ts`.
+
+## Module 21 progress — browser softphone (Codex, 2026-10-16)
+
+- Added a profile-scoped, one-hour Twilio Voice SDK token endpoint and Agent Workspace controls to
+  connect, answer, mute, hold/resume and hang up. Hold and hang-up call Twilio and report success
+  only after the provider accepts the request; token issuance and call controls are audited.
+  Incoming agent dispatch can target the browser identity when the complete Twilio Voice setup is
+  present; otherwise phone-number dispatch remains in place.
+- The UI honestly shows Not configured until the account, API key/secret and TwiML app are set.
+  Real-MySQL tests validate the signed token and missing-configuration refusal, but no live Twilio
+  call was placed. Backend/frontend type checks and touched-file ESLint pass; full backend Jest is
+  371 suites / 2,264 tests. The 74 existing formatting-only errors in `intelligence.ts` are
+  unchanged.

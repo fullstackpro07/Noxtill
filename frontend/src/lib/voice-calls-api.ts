@@ -1,8 +1,16 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type PhoneCallStatus = "in_progress" | "completed" | "missed" | "transferred";
-export type PhoneCallOutcome = "none" | "booking" | "message" | "transfer" | "custom";
-export type VoiceRecordingConsentStatus = "not_configured" | "not_allowed" | "pending" | "granted" | "declined" | "no_response";
+export type PhoneCallStatus =
+  "in_progress" | "completed" | "missed" | "transferred";
+export type PhoneCallOutcome =
+  "none" | "booking" | "message" | "transfer" | "custom";
+export type VoiceRecordingConsentStatus =
+  | "not_configured"
+  | "not_allowed"
+  | "pending"
+  | "granted"
+  | "declined"
+  | "no_response";
 export type VoiceCallWrapUpDisposition =
   | "resolved"
   | "callback_requested"
@@ -42,8 +50,13 @@ export interface VoiceCopilotSuggestion {
   generatedAt: string;
 }
 
-export function generateVoiceCallCopilotSuggestion(callId: string): Promise<VoiceCopilotSuggestion> {
-  return apiFetch<VoiceCopilotSuggestion>(`/voice/calls/${callId}/copilot-suggestion`, { method: "POST" });
+export function generateVoiceCallCopilotSuggestion(
+  callId: string,
+): Promise<VoiceCopilotSuggestion> {
+  return apiFetch<VoiceCopilotSuggestion>(
+    `/voice/calls/${callId}/copilot-suggestion`,
+    { method: "POST" },
+  );
 }
 
 /** The fixed taxonomy the AI files a caller's question under (see backend voice-analysis.ts). */
@@ -157,11 +170,15 @@ export interface PhoneCall {
  * AI's turn-based handling of the call — a human is now on it.
  */
 export function listenToCall(callId: string): Promise<PhoneCall> {
-  return apiFetch<PhoneCall>(`/voice/calls/${callId}/listen`, { method: "POST" });
+  return apiFetch<PhoneCall>(`/voice/calls/${callId}/listen`, {
+    method: "POST",
+  });
 }
 
 export function takeOverCall(callId: string): Promise<PhoneCall> {
-  return apiFetch<PhoneCall>(`/voice/calls/${callId}/take-over`, { method: "POST" });
+  return apiFetch<PhoneCall>(`/voice/calls/${callId}/take-over`, {
+    method: "POST",
+  });
 }
 
 export type SupervisorCoachMode = "listen" | "whisper" | "barge";
@@ -180,10 +197,12 @@ export function fetchCalls(): Promise<PhoneCall[]> {
   return apiFetch<PhoneCall[]>("/voice/calls");
 }
 
-export function fetchCallWrapUp(callId: string): Promise<VoiceCallWrapUp | null> {
-  return apiFetch<VoiceCallWrapUp | null>(`/voice/calls/${callId}/wrap-up`).then(
-    (result) => result ?? null,
-  );
+export function fetchCallWrapUp(
+  callId: string,
+): Promise<VoiceCallWrapUp | null> {
+  return apiFetch<VoiceCallWrapUp | null>(
+    `/voice/calls/${callId}/wrap-up`,
+  ).then((result) => result ?? null);
 }
 
 export function submitCallWrapUp(
@@ -212,8 +231,12 @@ export function fetchVoiceAnalytics(): Promise<VoiceAnalytics> {
 }
 
 /** Real signed S3 URL (24h TTL) for playback — url is null when the call has no recording. */
-export function fetchRecordingUrl(callId: string): Promise<{ url: string | null }> {
-  return apiFetch<{ url: string | null }>(`/voice/calls/${callId}/recording-url`);
+export function fetchRecordingUrl(
+  callId: string,
+): Promise<{ url: string | null }> {
+  return apiFetch<{ url: string | null }>(
+    `/voice/calls/${callId}/recording-url`,
+  );
 }
 
 export interface ProvisionedPhoneNumber {
@@ -226,7 +249,9 @@ export interface ProvisionedPhoneNumber {
 }
 
 export function provisionVoiceNumber(): Promise<ProvisionedPhoneNumber> {
-  return apiFetch<ProvisionedPhoneNumber>("/voice/provision-number", { method: "POST" });
+  return apiFetch<ProvisionedPhoneNumber>("/voice/provision-number", {
+    method: "POST",
+  });
 }
 
 /**
@@ -251,7 +276,13 @@ export interface EnrichedCallAppointment {
   bookingNo: number | null;
   startsAt: string;
   endsAt: string;
-  status: "requested" | "booked" | "confirmed" | "completed" | "no_show" | "cancelled";
+  status:
+    | "requested"
+    | "booked"
+    | "confirmed"
+    | "completed"
+    | "no_show"
+    | "cancelled";
   depositPaid: number;
   serviceName: string;
   staffName: string | null;
@@ -345,9 +376,19 @@ export interface CallContext {
     lastVisitAt: string | null;
     upcomingAppointments: number;
   } | null;
-  previousCalls: { id: string; startedAt: string; status: PhoneCallStatus; outcome: PhoneCallOutcome }[];
+  previousCalls: {
+    id: string;
+    startedAt: string;
+    status: PhoneCallStatus;
+    outcome: PhoneCallOutcome;
+  }[];
   previousCallsTotal: number;
-  notes: { id: string; body: string; createdAt: string; authorName: string | null }[];
+  notes: {
+    id: string;
+    body: string;
+    createdAt: string;
+    authorName: string | null;
+  }[];
   /** The append-only audit trail for this call: who did what, and when. */
   audit: { id: string; action: string; actorName: string | null; at: string }[];
 }
@@ -357,20 +398,41 @@ export function fetchCallContext(callId: string): Promise<CallContext> {
 }
 
 /** Give a call's follow-up an owner (a staff `BusinessUser.id`), or pass null to clear it. */
-export function assignCall(callId: string, userId: string | null): Promise<{ id: string; assignedToUserId: string | null }> {
-  return apiFetch(`/voice/calls/${callId}/assign`, { method: "POST", body: JSON.stringify({ userId }) });
+export function assignCall(
+  callId: string,
+  userId: string | null,
+): Promise<{ id: string; assignedToUserId: string | null }> {
+  return apiFetch(`/voice/calls/${callId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ userId }),
+  });
 }
 
 /** Generates (and caches) a summary written from the transcript alone. Fails — leaving no summary — if the AI provider isn't available. */
-export function summariseCall(callId: string): Promise<{ id: string; summary: string; summaryGeneratedAt: string }> {
+export function summariseCall(
+  callId: string,
+): Promise<{ id: string; summary: string; summaryGeneratedAt: string }> {
   return apiFetch(`/voice/calls/${callId}/summary`, { method: "POST" });
 }
 
 /* ───────────── AI Phone, full: live-call controls, notes, recordings ───────────── */
 
 /** Requests a live-call transfer; the provider callback records the outcome once the callee answers. */
-export function transferLiveCall(callId: string, mode: "cold" | "warm" = "cold"): Promise<{ id: string; transferRequested: boolean; transferId: string; attemptNumber: number; mode: "cold" | "warm"; status: "pending" }> {
-  return apiFetch(`/voice/calls/${callId}/transfer`, { method: "POST", body: JSON.stringify({ mode }) });
+export function transferLiveCall(
+  callId: string,
+  mode: "cold" | "warm" = "cold",
+): Promise<{
+  id: string;
+  transferRequested: boolean;
+  transferId: string;
+  attemptNumber: number;
+  mode: "cold" | "warm";
+  status: "pending";
+}> {
+  return apiFetch(`/voice/calls/${callId}/transfer`, {
+    method: "POST",
+    body: JSON.stringify({ mode }),
+  });
 }
 
 export interface VoiceCallLeg {
@@ -386,27 +448,97 @@ export interface VoiceCallLeg {
   startedAt: string;
 }
 
-export function fetchCallLegs(callId: string): Promise<{ callId: string; legs: VoiceCallLeg[] }> {
+export function fetchCallLegs(
+  callId: string,
+): Promise<{ callId: string; legs: VoiceCallLeg[] }> {
   return apiFetch(`/voice/calls/${callId}/legs`);
 }
 
 /** Ends a call that is genuinely still live (a real telephony-provider action, not a local flag). */
-export function endLiveCall(callId: string): Promise<{ id: string; ending: boolean }> {
+export function endLiveCall(
+  callId: string,
+): Promise<{ id: string; ending: boolean }> {
   return apiFetch(`/voice/calls/${callId}/end`, { method: "POST" });
 }
 
-export function addCallNote(callId: string, body: string): Promise<{ id: string; body: string; createdAt: string }> {
-  return apiFetch(`/voice/calls/${callId}/notes`, { method: "POST", body: JSON.stringify({ body }) });
+export function addCallNote(
+  callId: string,
+  body: string,
+): Promise<{ id: string; body: string; createdAt: string }> {
+  return apiFetch(`/voice/calls/${callId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
 }
 
 /** Permanently deletes the recording audio and transcript text of one call; the call log entry stays. */
-export function deleteCallRecording(callId: string): Promise<{ id: string; recordingDeletedAt: string }> {
-  return apiFetch(`/voice/calls/${callId}/delete-recording`, { method: "POST" });
+export function deleteCallRecording(
+  callId: string,
+): Promise<{ id: string; recordingDeletedAt: string }> {
+  return apiFetch(`/voice/calls/${callId}/delete-recording`, {
+    method: "POST",
+  });
+}
+
+export interface VoiceSoftphoneStatus {
+  configured: boolean;
+  identity: string | null;
+  status: "ready" | "not_configured";
+  message: string;
+}
+
+export interface VoiceSoftphoneCall {
+  callId: string;
+  caller: string;
+  providerCallSid: string | null;
+  conferenceSid: string | null;
+  status: string;
+  startedAt: string;
+}
+
+export function fetchVoiceSoftphoneStatus(): Promise<VoiceSoftphoneStatus> {
+  return apiFetch("/voice/softphone/status");
+}
+
+export function issueVoiceSoftphoneToken(): Promise<{
+  token: string;
+  identity: string;
+  expiresInSeconds: number;
+}> {
+  return apiFetch("/voice/softphone/token", { method: "POST" });
+}
+
+export function fetchVoiceSoftphoneCall(
+  providerCallSid: string,
+): Promise<VoiceSoftphoneCall | null> {
+  return apiFetch(
+    `/voice/softphone/calls/${encodeURIComponent(providerCallSid)}`,
+  );
+}
+
+export function setVoiceSoftphoneHold(callId: string, hold: boolean) {
+  return apiFetch<{
+    callId: string;
+    held: boolean;
+    providerConfirmed: boolean;
+  }>(`/voice/softphone/calls/${callId}/hold`, {
+    method: "PATCH",
+    body: JSON.stringify({ hold }),
+  });
+}
+
+export function endVoiceSoftphoneCall(callId: string) {
+  return apiFetch<{
+    callId: string;
+    ending: boolean;
+    providerConfirmed: boolean;
+  }>(`/voice/softphone/calls/${callId}/end`, { method: "POST" });
 }
 
 /* ───────────── Routing rules ───────────── */
 
-export type RoutingTrigger = "keyword" | "topic" | "sentiment" | "low_confidence" | "after_hours";
+export type RoutingTrigger =
+  "keyword" | "topic" | "sentiment" | "low_confidence" | "after_hours";
 export type RoutingAction = "ai" | "take_message" | "transfer";
 
 export interface RoutingRule {
@@ -431,17 +563,31 @@ export interface RoutingRuleInput {
 export function fetchRoutingRules(): Promise<RoutingRule[]> {
   return apiFetch<RoutingRule[]>("/voice/routing-rules");
 }
-export function createRoutingRule(input: RoutingRuleInput): Promise<RoutingRule> {
-  return apiFetch<RoutingRule>("/voice/routing-rules", { method: "POST", body: JSON.stringify(input) });
+export function createRoutingRule(
+  input: RoutingRuleInput,
+): Promise<RoutingRule> {
+  return apiFetch<RoutingRule>("/voice/routing-rules", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
-export function updateRoutingRule(id: string, input: Partial<RoutingRuleInput> & { active?: boolean }): Promise<RoutingRule> {
-  return apiFetch<RoutingRule>(`/voice/routing-rules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+export function updateRoutingRule(
+  id: string,
+  input: Partial<RoutingRuleInput> & { active?: boolean },
+): Promise<RoutingRule> {
+  return apiFetch<RoutingRule>(`/voice/routing-rules/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 export function deleteRoutingRule(id: string): Promise<{ id: string }> {
   return apiFetch(`/voice/routing-rules/${id}/delete`, { method: "POST" });
 }
 export function reorderRoutingRules(ids: string[]): Promise<RoutingRule[]> {
-  return apiFetch<RoutingRule[]>("/voice/routing-rules/reorder", { method: "PATCH", body: JSON.stringify({ ids }) });
+  return apiFetch<RoutingRule[]>("/voice/routing-rules/reorder", {
+    method: "PATCH",
+    body: JSON.stringify({ ids }),
+  });
 }
 
 /* ───────────── Knowledge: FAQs and imported documents ───────────── */
@@ -471,14 +617,27 @@ export interface KnowledgeEntryInput {
 export function fetchKnowledge(): Promise<KnowledgeEntry[]> {
   return apiFetch<KnowledgeEntry[]>("/voice/knowledge");
 }
-export function createKnowledgeEntry(input: KnowledgeEntryInput): Promise<KnowledgeEntry> {
-  return apiFetch<KnowledgeEntry>("/voice/knowledge", { method: "POST", body: JSON.stringify(input) });
+export function createKnowledgeEntry(
+  input: KnowledgeEntryInput,
+): Promise<KnowledgeEntry> {
+  return apiFetch<KnowledgeEntry>("/voice/knowledge", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 export function updateKnowledgeEntry(
   id: string,
-  input: { title?: string; question?: string; content?: string; active?: boolean },
+  input: {
+    title?: string;
+    question?: string;
+    content?: string;
+    active?: boolean;
+  },
 ): Promise<KnowledgeEntry> {
-  return apiFetch<KnowledgeEntry>(`/voice/knowledge/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+  return apiFetch<KnowledgeEntry>(`/voice/knowledge/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 export function deleteKnowledgeEntry(id: string): Promise<{ id: string }> {
   return apiFetch(`/voice/knowledge/${id}/delete`, { method: "POST" });
