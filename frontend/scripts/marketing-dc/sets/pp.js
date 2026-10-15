@@ -115,6 +115,13 @@ module.exports = {
       patch: (L) => {
         for (const d of L.docs) d.status = "";
         for (const u of L.updates) u.title = u.title.replace("Legal & Trust Center draft published for review", "Legal & Trust Center published");
+        // Oct 13 SEO audit: descriptions within 160 characters, and Website & E-commerce no longer
+        // reusing the Merchant Payments description word for word.
+        const desc = {
+          terms: "Terms for business accounts, software license, permitted use, customer content, responsibilities, availability, disclaimers, termination and remedies.",
+          "website-commerce": "Terms for Noxtill websites, storefronts, checkout, domains and the customer portal: what you publish, your domain duties and customer self-service.",
+        };
+        for (const d of L.docs) if (desc[d.key]) d.desc = desc[d.key];
       },
     },
   ],

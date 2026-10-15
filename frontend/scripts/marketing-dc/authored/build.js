@@ -10,8 +10,8 @@ const out = path.join(__dirname, "pages");
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
-for (const dir of ["platform", "ai"]) {
-  for (const f of fs.readdirSync(path.join(__dirname, dir)).filter((f) => f.endsWith(".js")).sort()) {
+for (const dir of ["platform", "ai", "features"]) {
+  for (const f of fs.readdirSync(path.join(__dirname, dir)).filter((f) => f.endsWith(".js") && f !== "fkit.js").sort()) {
     const p = require("./" + dir + "/" + f);
     // every image a page uses must already exist under public/
     for (const m of p.html.matchAll(/(?:src="|url\(')(\/marketing\/[^"')]+)/g)) {
