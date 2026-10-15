@@ -91,10 +91,15 @@ import { VoiceCallbacksService } from './voice-callbacks.service';
 import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
 import { VoiceAnalyticsTrendsService } from './voice-analytics-trends.service';
+import { VoicePhoneSystemService } from './voice-phone-system.service';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
 import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
-import { VoiceLegalHoldDto } from './dto/voice-callback.dto';
+import {
+  VoiceLegalHoldDto,
+  VoiceSipTrunkDto,
+  VoiceTestNumbersDto,
+} from './dto/voice-callback.dto';
 import {
   CompleteVoiceCallbackDto,
   PlaceVoiceCallbackDto,
@@ -164,6 +169,7 @@ export class VoiceController {
     private readonly voiceLegalHold: VoiceLegalHoldService,
     private readonly voiceAnalyticsExport: VoiceAnalyticsExportService,
     private readonly voiceAnalyticsTrends: VoiceAnalyticsTrendsService,
+    private readonly voicePhoneSystem: VoicePhoneSystemService,
     private readonly voiceProviderHealth: VoiceProviderHealthService,
     private readonly voiceOutboundSummary: VoiceOutboundSummaryService,
     private readonly voiceRedaction: VoiceTranscriptRedactionService,
@@ -1082,6 +1088,36 @@ export class VoiceController {
     @Body() dto: UpdateVoiceSettingsDto,
   ) {
     return this.voiceSettings.update(user.businessId, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/settings/phone-system')
+  getVoicePhoneSystem(@CurrentUser() user: AuthenticatedUser) {
+    return this.voicePhoneSystem.get(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Put('voice/settings/test-numbers')
+  setVoiceTestNumbers(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VoiceTestNumbersDto,
+  ) {
+    return this.voicePhoneSystem.setTestNumbers(user.businessId, dto.numbers);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/settings/sip-trunk')
+  connectVoiceSipTrunk(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VoiceSipTrunkDto,
+  ) {
+    return this.voicePhoneSystem.connectTrunk(user.businessId, dto.sid);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/settings/sip-trunk/disconnect')
+  disconnectVoiceSipTrunk(@CurrentUser() user: AuthenticatedUser) {
+    return this.voicePhoneSystem.disconnectTrunk(user.businessId);
   }
 
   /** Live provider checks + configuration facts; nothing is assumed healthy. */

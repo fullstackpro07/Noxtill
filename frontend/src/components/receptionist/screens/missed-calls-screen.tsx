@@ -227,6 +227,7 @@ const TEXT_BACK_LABEL: Record<NonNullable<MissedCallItem["textBack"]>["status"],
   disabled: "Text-back off",
   skipped_suppressed: "Not texted · suppressed",
   skipped_opted_out: "Not texted · opted out",
+  skipped_test_call: "Not texted · test call",
   failed: "Text-back failed",
 };
 

@@ -30,7 +30,7 @@ export interface MissedCallItem {
   trackingSource: string | null;
   /** Missed-call text-back outcome; `delivery` is the provider-reported message status. */
   textBack: {
-    status: "queued" | "disabled" | "skipped_suppressed" | "skipped_opted_out" | "failed";
+    status: "queued" | "disabled" | "skipped_suppressed" | "skipped_opted_out" | "skipped_test_call" | "failed";
     delivery: "queued" | "sent" | "delivered" | "read" | "failed" | null;
     channel: string | null;
   } | null;

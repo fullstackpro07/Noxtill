@@ -5,7 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
 
 export type TextBackStatus =
-  'queued' | 'disabled' | 'skipped_suppressed' | 'skipped_opted_out' | 'failed';
+  | 'queued'
+  | 'disabled'
+  | 'skipped_suppressed'
+  | 'skipped_opted_out'
+  | 'skipped_test_call'
+  | 'failed';
 
 /**
  * Missed-call recovery (UPD-BE-059) — reuses the existing send pipeline (`SendGateService`) like
@@ -42,6 +47,10 @@ export class MissedCallService {
         })
         .catch(() => undefined);
 
+    if (call.isTestCall) {
+      await record('skipped_test_call');
+      return;
+    }
     if (!resolvePolicies(business).bool('voice.missedCallTextBack')) {
       await record('disabled');
       return;

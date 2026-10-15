@@ -22,6 +22,7 @@ import {
 import { escapeXml, say, twiml } from './twiml.util';
 import { localParts, isAfterHours } from './voice-insights.service';
 import { resolveTrackingLine } from './voice-tracking-numbers.service';
+import { isTestCaller } from './voice-phone-system.service';
 import {
   buildTurnAnalysis,
   cleanCallerEmail,
@@ -211,6 +212,11 @@ export class VoiceCallService {
     }
 
     const settings = await this.getSettings(phoneNumber.businessId);
+    const testCall = await isTestCaller(
+      this.prisma,
+      phoneNumber.businessId,
+      fromNumber,
+    );
     const recordingPolicy = await this.getInboundRecordingPolicy(
       phoneNumber.businessId,
       fromNumber,
@@ -274,6 +280,7 @@ export class VoiceCallService {
           callSid,
           fromNumber,
           ...tracked?.callData,
+          isTestCall: testCall,
           startedAt: callStartedAt,
           status: PhoneCallStatus.in_progress,
           transcript: [],

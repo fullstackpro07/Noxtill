@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsIn,
   IsOptional,
@@ -41,4 +43,17 @@ export class VoiceLegalHoldDto {
   @MinLength(8)
   @MaxLength(500)
   reason!: string;
+}
+
+export class VoiceTestNumbersDto {
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  numbers!: string[];
+}
+
+export class VoiceSipTrunkDto {
+  @IsString()
+  @MaxLength(34)
+  sid!: string;
 }

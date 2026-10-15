@@ -43,6 +43,7 @@ const COLUMNS = [
   'callback_outcome',
   'provider_cost',
   'provider_cost_unit',
+  'is_test_call',
 ] as const;
 
 /**
@@ -126,6 +127,7 @@ export class VoiceAnalyticsExportService {
       call.callback?.outcome ?? null,
       call.providerCostCheckedAt ? call.providerCost?.toString() : null,
       call.providerCostCheckedAt ? call.providerCostUnit : null,
+      call.isTestCall ? 'yes' : 'no',
     ]);
     const csv = [
       COLUMNS.join(','),

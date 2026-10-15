@@ -138,4 +138,27 @@ describe('MissedCallService (UPD-BE-059)', () => {
         .textBackStatus,
     ).toBe('disabled');
   });
+
+  it('never texts a configured test caller', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: { 'voice.missedCallTextBack': true } },
+    });
+    const call = await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid: `CA-missed-test-${Date.now()}`,
+        fromNumber: '+15550006666',
+        status: 'missed',
+        isTestCall: true,
+        transcript: [],
+      },
+    });
+    await service.notify(call);
+    expect(sendGate.send).not.toHaveBeenCalled();
+    expect(
+      (await prisma.phoneCall.findUniqueOrThrow({ where: { id: call.id } }))
+        .textBackStatus,
+    ).toBe('skipped_test_call');
+  });
 });

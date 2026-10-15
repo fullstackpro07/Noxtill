@@ -199,7 +199,7 @@ export class VoiceProviderHealthService {
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
     );
     const calls = await this.tenantPrisma.client.phoneCall.findMany({
-      where: { businessId, startedAt: { gte: monthStart } },
+      where: { businessId, startedAt: { gte: monthStart }, isTestCall: false },
       select: {
         status: true,
         startedAt: true,

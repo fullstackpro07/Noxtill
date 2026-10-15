@@ -95,7 +95,7 @@ export class VoiceAnalyticsTrendsService {
 
     const [calls, reviews, decisions] = await Promise.all([
       this.tenantPrisma.client.phoneCall.findMany({
-        where: { businessId, startedAt: { gte: since } },
+        where: { businessId, startedAt: { gte: since }, isTestCall: false },
         select: {
           status: true,
           startedAt: true,

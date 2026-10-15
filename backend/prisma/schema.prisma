@@ -3025,6 +3025,8 @@ model PhoneCall {
   textBackStatus           String?                       @map("text_back_status") @db.VarChar(30)
   /// The Message row created by the send gate; its status is the provider-reported delivery state.
   textBackMessageId        String?                       @map("text_back_message_id")
+  /// The caller was one of the business's configured test numbers.
+  isTestCall               Boolean                       @default(false) @map("is_test_call")
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
   providerCost             Decimal?                      @map("provider_cost") @db.Decimal(10, 4)
@@ -3726,6 +3728,10 @@ model VoiceRoutingRule {
   matchValue     String?             @map("match_value")
   action         VoiceRoutingAction
   transferNumber String?             @map("transfer_number")
+  /// E.164 numbers whose inbound calls are tagged as tests (excluded from analytics, usage and text-back).
+  testCallerNumbers      Json     @default("[]") @map("test_caller_numbers")
+  /// Twilio Elastic SIP trunk the business connected (verified against the provider when saved).
+  sipTrunkSid            String?  @map("sip_trunk_sid") @db.VarChar(34)
   active         Boolean             @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
