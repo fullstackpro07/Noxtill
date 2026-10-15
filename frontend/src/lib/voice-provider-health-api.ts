@@ -20,7 +20,13 @@ export interface VoiceUsage {
   outboundDials: number;
   callbackDials: number;
   providerCharges: Array<{ unit: string; amount: string }>;
-  limits: { usageCaps: "not_configured"; note: string };
+  limits: {
+    usageCaps: "not_configured" | "inbound_calls_enforced";
+    maxInboundCallsPerMonth: number | null;
+    automatedCalls: number;
+    quotaRejectedCalls: number;
+    note: string;
+  };
 }
 
 export function fetchVoiceProviderHealth(): Promise<VoiceProviderHealth> {

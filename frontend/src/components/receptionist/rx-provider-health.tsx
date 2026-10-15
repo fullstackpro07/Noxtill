@@ -57,6 +57,8 @@ export function ProviderHealthCard() {
             <div className="grid grid-cols-2 gap-2.5 text-[12px] sm:grid-cols-3">
               {[
                 ["Inbound calls", usage.data.inboundCalls],
+                ["Automated calls admitted", usage.data.limits.automatedCalls],
+                ["Calls routed around the cap", usage.data.limits.quotaRejectedCalls],
                 ["Missed", usage.data.missedCalls],
                 ["Inbound minutes", usage.data.inboundMinutes],
                 ["With an AI agent", usage.data.callsWithAiAgent],
@@ -70,6 +72,9 @@ export function ProviderHealthCard() {
               ))}
             </div>
             <div className="mt-3 text-[11px] text-[#667085]">
+              Monthly automated-call limit: {usage.data.limits.maxInboundCallsPerMonth === null ? "no limit configured" : `${usage.data.limits.automatedCalls} of ${usage.data.limits.maxInboundCallsPerMonth} admitted`}.
+            </div>
+            <div className="mt-2 text-[11px] text-[#667085]">
               Provider-priced charges:{" "}
               {usage.data.providerCharges.length ? usage.data.providerCharges.map((row) => `${row.amount} ${row.unit}`).join(" · ") : "none priced yet"}
             </div>

@@ -62,6 +62,7 @@ export function needsFollowUp(c: EnrichedCall): boolean {
 export const isLead = (c: EnrichedCall): boolean => !c.customer && (c.outcome === "message" || c.outcome === "custom");
 
 export function outcomeChip(c: EnrichedCall): ChipSpec {
+  if (c.quotaRejectedReason) return { label: "Automated cap reached", tone: "amber", icon: "shield-alert" };
   if (c.status === "in_progress") return { label: "In progress", tone: "blue" };
   if (c.status === "missed") {
     if (c.resolvedAt) return { label: "Missed · handled", tone: "neutral" };

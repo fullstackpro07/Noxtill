@@ -494,6 +494,30 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       actions: [{ label: 'Reset section', icon: 'rotate-ccw', kind: 'reset' }, { label: 'View history', icon: 'history', kind: 'history' }, { label: 'Open AI settings', icon: 'external-link', href: '/assistant/settings', kind: 'link' }],
       groups: [
         {
+          title: 'Voice usage limits',
+          hint: 'Applied to every new inbound call',
+          rows: [
+            policyRow(d, {
+              key: 'voice-max-inbound-calls-month',
+              policy: 'voice.maxInboundCallsPerMonth',
+              kind: 'number',
+              label: 'Monthly automated inbound calls',
+              description:
+                'Counts inbound calls admitted to the automated receptionist in the UTC calendar month. Once reached, later calls are logged for follow-up and routed to a human when available; AI and IVR handling are skipped. Empty means no limit.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              impact:
+                'When the cap is reached, callers will not enter the automated assistant or IVR. No caller audio is recorded on a capped call.',
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+              format: (n) => `${n.toLocaleString('en-US')} calls per month`,
+              emptyLabel: 'No limit',
+            }),
+          ],
+        },
+        {
           title: 'AI status',
           hint: 'Honest about its limits',
           rows: [

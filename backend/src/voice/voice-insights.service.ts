@@ -239,6 +239,7 @@ export class VoiceInsightsService {
         fromNumber: c.fromNumber,
         status: c.status,
         outcome: c.outcome,
+        quotaRejectedReason: c.quotaRejectedReason,
         customIntentName: c.customIntentName,
         handledBy: handledBy(c),
         /** The pinned AI agent version that answered, when one was published at call time. */

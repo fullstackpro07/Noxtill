@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { AppException } from '../common/filters/app.exception';
+import { resolvePolicies } from '../common/policies/policies.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../common/storage/s3.service';
 import { SpeechToTextService } from '../ai/speech-to-text.service';
@@ -233,34 +234,95 @@ export class VoiceCallService {
       phoneNumber.businessId,
     );
 
-    const call = await this.prisma.phoneCall.create({
-      data: {
-        businessId: phoneNumber.businessId,
-        callSid,
-        fromNumber,
-        ...tracked?.callData,
-        status: PhoneCallStatus.in_progress,
-        transcript: [],
-        voiceAgentVersionId: activeAgent?.publishedVersionId ?? null,
-        ivrFlowVersionId: activeIvrVersion?.id ?? null,
-        recordingConsentStatus: canRequestRecordingConsent
-          ? VoiceRecordingConsentStatus.pending
-          : recordingPolicy && !recordingPolicy.recordingAllowed
+    const callStartedAt = new Date();
+    const call = await this.prisma.$transaction(async (tx) => {
+      // Serialise admissions per business so simultaneous Twilio webhooks cannot exceed the cap.
+      // The existing business row is the mutex; this is a short transaction and no provider call
+      // is made while the lock is held.
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM businesses WHERE id = ${phoneNumber.businessId} FOR UPDATE
+      `;
+      const business = await tx.business.findUnique({
+        where: { id: phoneNumber.businessId },
+        select: { policies: true },
+      });
+      const monthlyLimit = resolvePolicies(business).num(
+        'voice.maxInboundCallsPerMonth',
+      );
+      const monthStart = new Date(
+        Date.UTC(
+          callStartedAt.getUTCFullYear(),
+          callStartedAt.getUTCMonth(),
+          1,
+        ),
+      );
+      const admittedThisMonth =
+        monthlyLimit === null
+          ? 0
+          : await tx.phoneCall.count({
+              where: {
+                businessId: phoneNumber.businessId,
+                startedAt: { gte: monthStart },
+                quotaRejectedAt: null,
+              },
+            });
+      const capReached =
+        monthlyLimit !== null && admittedThisMonth >= monthlyLimit;
+      return tx.phoneCall.create({
+        data: {
+          businessId: phoneNumber.businessId,
+          callSid,
+          fromNumber,
+          ...tracked?.callData,
+          startedAt: callStartedAt,
+          status: PhoneCallStatus.in_progress,
+          transcript: [],
+          voiceAgentVersionId: capReached
+            ? null
+            : (activeAgent?.publishedVersionId ?? null),
+          ivrFlowVersionId: capReached ? null : (activeIvrVersion?.id ?? null),
+          recordingConsentStatus: capReached
             ? VoiceRecordingConsentStatus.not_allowed
-            : VoiceRecordingConsentStatus.not_configured,
-        recordingConsentAt: null,
-        recordingNoticeSnapshot: canRequestRecordingConsent
-          ? [
-              recordingPolicy!.aiDisclosureText,
-              recordingPolicy!.recordingNoticeText!,
-              CONSENT_PROMPT_TEXT,
-            ].join('\n')
-          : null,
-        recordingPolicyVersionId: recordingPolicy?.id ?? null,
-        recordingRetentionDays:
-          recordingPolicy?.recordingRetentionDays ?? RECORDING_RETENTION_DAYS,
-      },
+            : canRequestRecordingConsent
+              ? VoiceRecordingConsentStatus.pending
+              : recordingPolicy && !recordingPolicy.recordingAllowed
+                ? VoiceRecordingConsentStatus.not_allowed
+                : VoiceRecordingConsentStatus.not_configured,
+          recordingConsentAt: null,
+          recordingNoticeSnapshot:
+            !capReached && canRequestRecordingConsent
+              ? [
+                  recordingPolicy!.aiDisclosureText,
+                  recordingPolicy!.recordingNoticeText!,
+                  CONSENT_PROMPT_TEXT,
+                ].join('\n')
+              : null,
+          recordingPolicyVersionId: capReached
+            ? null
+            : (recordingPolicy?.id ?? null),
+          recordingRetentionDays: capReached
+            ? null
+            : (recordingPolicy?.recordingRetentionDays ??
+              RECORDING_RETENTION_DAYS),
+          quotaRejectedAt: capReached ? callStartedAt : null,
+          quotaRejectedReason: capReached
+            ? `Monthly automated-call limit reached (${monthlyLimit}).`
+            : null,
+        },
+      });
     });
+
+    if (call.quotaRejectedAt) {
+      const reply =
+        'The automated assistant is unavailable right now. I will try to connect you with the team.';
+      return this.handleTransferIntent(
+        call,
+        [],
+        { reply, intent: 'transfer' },
+        settings,
+        null,
+      );
+    }
 
     if (!canRequestRecordingConsent || !consentActionUrl) {
       const reason = !recordingPolicy

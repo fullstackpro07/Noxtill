@@ -241,6 +241,166 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(call).toBeNull();
     });
 
+    it('routes over-cap calls around AI and IVR, records the reason, and keeps the caller eligible for human follow-up', async () => {
+      const seedSid = `CA-cap-seed-${randomUUID()}`;
+      const blockedSid = `CA-cap-blocked-${randomUUID()}`;
+      const monthStart = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+      );
+      await prisma.phoneCall.create({
+        data: {
+          businessId,
+          callSid: seedSid,
+          fromNumber: '+14155550114',
+          status: PhoneCallStatus.completed,
+          transcript: [],
+          startedAt: new Date(),
+        },
+      });
+      const original = await prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      const restorePolicies = original.policies as Prisma.InputJsonValue;
+      const existingAdmitted = await prisma.phoneCall.count({
+        where: {
+          businessId,
+          startedAt: { gte: monthStart },
+          quotaRejectedAt: null,
+        },
+      });
+      const originalPolicies =
+        original.policies &&
+        typeof original.policies === 'object' &&
+        !Array.isArray(original.policies)
+          ? original.policies
+          : {};
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          policies: {
+            ...originalPolicies,
+            'voice.maxInboundCallsPerMonth': existingAdmitted,
+          },
+        },
+      });
+
+      try {
+        const xml = await baseHandleIncoming(
+          blockedSid,
+          '+14155550115',
+          '+15559990000',
+        );
+        const blocked = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: blockedSid },
+        });
+        expect(xml).toContain('automated assistant is unavailable');
+        expect(xml).toContain('<Hangup/>');
+        expect(xml).not.toContain('<Gather');
+        expect(blocked).toMatchObject({
+          status: PhoneCallStatus.in_progress,
+          outcome: PhoneCallOutcome.message,
+          voiceAgentVersionId: null,
+          ivrFlowVersionId: null,
+          recordingConsentStatus: 'not_allowed',
+          quotaRejectedReason: `Monthly automated-call limit reached (${existingAdmitted}).`,
+        });
+        expect(blocked.quotaRejectedAt).not.toBeNull();
+        const blockedTurns = blocked.transcript as unknown as Array<{
+          speaker: string;
+          text: string;
+        }>;
+        expect(
+          blockedTurns.some(
+            (turn) =>
+              turn.speaker === 'assistant' &&
+              turn.text.includes('No team member is available'),
+          ),
+        ).toBe(true);
+      } finally {
+        await prisma.business.update({
+          where: { id: businessId },
+          data: { policies: restorePolicies },
+        });
+      }
+    });
+
+    it('does not block inbound calls when the monthly cap is unset', async () => {
+      const callSid = `CA-cap-unset-${randomUUID()}`;
+      const xml = await baseHandleIncoming(
+        callSid,
+        '+14155550116',
+        '+15559990000',
+      );
+      const call = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid },
+      });
+      expect(xml).toContain('<Gather');
+      expect(call.status).toBe(PhoneCallStatus.in_progress);
+      expect(call.quotaRejectedAt).toBeNull();
+      expect(call.quotaRejectedReason).toBeNull();
+    });
+
+    it('serializes simultaneous admissions so one call cannot exceed the configured cap', async () => {
+      const monthStart = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+      );
+      const original = await prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      const restorePolicies = original.policies as Prisma.InputJsonValue;
+      const originalPolicies =
+        original.policies &&
+        typeof original.policies === 'object' &&
+        !Array.isArray(original.policies)
+          ? original.policies
+          : {};
+      const existingAdmitted = await prisma.phoneCall.count({
+        where: {
+          businessId,
+          startedAt: { gte: monthStart },
+          quotaRejectedAt: null,
+        },
+      });
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          policies: {
+            ...originalPolicies,
+            'voice.maxInboundCallsPerMonth': existingAdmitted + 1,
+          },
+        },
+      });
+
+      const callSids = [
+        `CA-cap-race-a-${randomUUID()}`,
+        `CA-cap-race-b-${randomUUID()}`,
+      ];
+      try {
+        await Promise.all(
+          callSids.map((callSid, index) =>
+            baseHandleIncoming(
+              callSid,
+              `+141555501${17 + index}`,
+              '+15559990000',
+            ),
+          ),
+        );
+        const calls = await prisma.phoneCall.findMany({
+          where: { businessId, callSid: { in: callSids } },
+        });
+        expect(calls).toHaveLength(2);
+        expect(calls.filter((call) => !call.quotaRejectedAt)).toHaveLength(1);
+        expect(calls.filter((call) => call.quotaRejectedAt)).toHaveLength(1);
+      } finally {
+        await prisma.business.update({
+          where: { id: businessId },
+          data: { policies: restorePolicies },
+        });
+      }
+    });
+
     it('announces the policy and waits for explicit consent before recording', async () => {
       const xml = await service.handleIncoming(
         'CA-real-1',

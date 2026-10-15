@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PhoneCallStatus } from '@prisma/client';
 import axios from 'axios';
+import { resolvePolicies } from '../common/policies/policies.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 
 export type HealthStatus = 'ok' | 'warning' | 'error' | 'not_configured';
@@ -207,6 +208,7 @@ export class VoiceProviderHealthService {
         providerCost: true,
         providerCostUnit: true,
         providerCostCheckedAt: true,
+        quotaRejectedAt: true,
         _count: {
           select: { humanAgentAssignments: { where: { status: 'connected' } } },
         },
@@ -225,7 +227,7 @@ export class VoiceProviderHealthService {
         cost.set(unit, (cost.get(unit) ?? 0) + Number(call.providerCost));
       }
     }
-    const [dialAttempts, callbackAttempts] = await Promise.all([
+    const [dialAttempts, callbackAttempts, business] = await Promise.all([
       this.tenantPrisma.client.voiceOutboundDialAttempt.count({
         where: {
           businessId,
@@ -240,7 +242,18 @@ export class VoiceProviderHealthService {
           customerDialed: true,
         },
       }),
+      this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      }),
     ]);
+    const maxInboundCallsPerMonth = resolvePolicies(business).num(
+      'voice.maxInboundCallsPerMonth',
+    );
+    const automatedCalls = calls.filter((call) => !call.quotaRejectedAt).length;
+    const quotaRejectedCalls = calls.filter(
+      (call) => call.quotaRejectedAt,
+    ).length;
     return {
       periodStart: monthStart.toISOString(),
       inboundCalls: calls.length,
@@ -259,8 +272,17 @@ export class VoiceProviderHealthService {
         amount: amount.toFixed(4),
       })),
       limits: {
-        usageCaps: 'not_configured' as const,
-        note: 'Usage caps are not enforced yet; these figures are measurements only.',
+        usageCaps:
+          maxInboundCallsPerMonth === null
+            ? ('not_configured' as const)
+            : ('inbound_calls_enforced' as const),
+        maxInboundCallsPerMonth,
+        automatedCalls,
+        quotaRejectedCalls,
+        note:
+          maxInboundCallsPerMonth === null
+            ? 'No monthly automated-call cap is configured. Inbound minutes, outbound dials and call-back dials are measured only.'
+            : `The automated receptionist admits up to ${maxInboundCallsPerMonth} inbound calls per UTC month. Capped calls skip AI and IVR and are routed to a human when available. Inbound minutes, outbound dials and call-back dials are measured only.`,
       },
     };
   }

@@ -712,10 +712,6 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Verification: backend + frontend `tsc` clean; full backend Jest 360 suites / 2,223 tests pass;
   ESLint clean on touched files. Provider calls are covered with mocked Twilio requests only — no
   live call or number purchase was made, so real audio/callbacks remain unverified end to end.
-- Request for Codex: the human dispatch for inbound transfers does not yet count an agent's live
-  power-dialer attempt as busy (the dialer does check inbound assignments). Please add
-  `voiceOutboundDialAttempt` with status `agent_ringing|customer_ringing` to the dispatch
-  capacity check.
 
 ## Module 21 progress — original screens (Codex, 2026-10-14)
 
@@ -760,9 +756,25 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   tracking number vs merchant-entered vs unknown.
 - Settings (`6509a52`): live provider health (Twilio account status, business-number routing vs the
   incoming webhook, public webhook URL) plus config facts (storage, speech/AI, email) and this
-  month's measured usage. Usage caps are disclosed as not enforced.
-- Not done: usage-cap enforcement (needs a hook in `handleIncoming`), SIP/trunk mapping, sandbox
-  test number, Call Overview direction/agent-version filters.
-- Request for Codex: inbound dispatch counts power-dialer attempts as busy; please also count
-  `voiceCallbackAttempt` rows in `agent_ringing|customer_ringing` (the dialer and call-backs already
-  check each other and inbound assignments).
+  month's measured usage. At the time of this entry, no voice usage cap was enforced; see the
+  later Codex update below for the inbound automated-call cap.
+- Still not implemented: SIP/trunk mapping, sandbox test number, and Call Overview direction/agent-
+  version filters.
+
+## Module 21 progress — inbound automated-call cap (Codex, 2026-10-15)
+
+- Added owner-configurable `voice.maxInboundCallsPerMonth` (null means unlimited) to AI & Governance
+  settings. The UTC-month admission check is serialized per business; capped calls are still saved
+  with the reason, skip AI/IVR and caller-audio recording, and try human handoff before leaving a
+  follow-up record. Receptionist Settings shows the configured limit, admitted calls, and calls
+  routed around the cap. Inbound minutes, outbound calls, and callback dials remain measured only.
+- Added real-MySQL tests for capped calls, unlimited behavior, concurrent admission, and usage
+  reporting. Migration `20261015161247_voice_inbound_call_cap` is applied locally; Prisma reports
+  all 182 migrations applied. Focused MySQL tests pass (47 tests across two suites); full backend
+  Jest passes (364 suites, 2,244 tests). Backend and frontend `tsc --noEmit` and touched-file
+  ESLint pass. `intelligence.ts` retains 74 pre-existing formatting-only ESLint errors, unchanged
+  from its baseline.
+- Browser QA is blocked at the login/module-access gate: `/receptionist/settings` displays
+  “Module access couldn't be checked” and asks to reconnect. No QA-business credentials were
+  available in the active browser session, so no settings were changed and no live Twilio call was
+  placed.

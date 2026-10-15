@@ -126,6 +126,8 @@ export interface PhoneCall {
   fromNumber: string;
   status: PhoneCallStatus;
   outcome: PhoneCallOutcome;
+  quotaRejectedAt: string | null;
+  quotaRejectedReason: string | null;
   customIntentName: string | null;
   transcript: CallTurn[];
   recordingKey: string | null;
@@ -263,6 +265,7 @@ export interface EnrichedCall {
   fromNumber: string;
   status: PhoneCallStatus;
   outcome: PhoneCallOutcome;
+  quotaRejectedReason: string | null;
   customIntentName: string | null;
   handledBy: HandledBy;
   /** The pinned AI agent version that answered; null when none was published at call time. */

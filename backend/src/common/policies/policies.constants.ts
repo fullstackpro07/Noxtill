@@ -222,6 +222,14 @@ export const POLICY_DEFS = {
     kind: 'boolean',
     default: false,
   },
+  // voice/voice-call.service.ts (inbound automated-receptionist cap; null preserves current behavior)
+  'voice.maxInboundCallsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
   // procurement/contracts (renewal alert job + Supplier Contracts screen)
   'procurement.contractRenewalAlertDays': {
     kind: 'number',

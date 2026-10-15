@@ -2950,6 +2950,10 @@ model PhoneCall {
   ivrCurrentNodeId         String?                       @map("ivr_current_node_id") @db.VarChar(80)
   callSid                  String                        @unique @map("call_sid")
   fromNumber               String                        @map("from_number")
+  /// Set when the automated-receptionist monthly call cap blocked AI/IVR handling. The missed call
+  /// remains in the call log so the business can follow up, while the reason stays explicit.
+  quotaRejectedAt          DateTime?                     @map("quota_rejected_at")
+  quotaRejectedReason      String?                       @map("quota_rejected_reason") @db.Text
   status                   PhoneCallStatus               @default(in_progress)
   outcome                  PhoneCallOutcome              @default(none)
   /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the

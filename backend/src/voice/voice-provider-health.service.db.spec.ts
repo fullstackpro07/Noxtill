@@ -134,4 +134,52 @@ describe('VoiceProviderHealthService (real MySQL)', () => {
       limits: { usageCaps: 'not_configured' },
     });
   });
+
+  it('reports the configured automated-call cap separately from rejected calls', async () => {
+    const callSid = `CA-health-capped-${Date.now()}`;
+    await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid,
+        fromNumber: '+14155550183',
+        status: 'missed',
+        transcript: [],
+        quotaRejectedAt: new Date(),
+        quotaRejectedReason: 'Monthly automated-call limit reached (2).',
+      },
+    });
+    const original = await prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { policies: true },
+    });
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          ...((original.policies as Record<string, unknown> | null) ?? {}),
+          'voice.maxInboundCallsPerMonth': 2,
+        },
+      },
+    });
+
+    try {
+      const usage = await service.usage(businessId);
+      expect(usage).toMatchObject({
+        inboundCalls: 3,
+        missedCalls: 2,
+        limits: {
+          usageCaps: 'inbound_calls_enforced',
+          maxInboundCallsPerMonth: 2,
+          automatedCalls: 2,
+          quotaRejectedCalls: 1,
+        },
+      });
+    } finally {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: { policies: original.policies as never },
+      });
+      await prisma.phoneCall.delete({ where: { callSid } });
+    }
+  });
 });

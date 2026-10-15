@@ -191,6 +191,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
               <ChipFor spec={matchChip(call)} h={23} fontSize={10.5} />
               <ChipFor spec={{ label: intentLabel(call), tone: "neutral" }} h={23} fontSize={10.5} />
               <ChipFor spec={outcomeChip(call)} h={23} fontSize={10.5} />
+              {call.quotaRejectedReason ? <ChipFor spec={{ label: call.quotaRejectedReason, tone: "amber", icon: "shield-alert" }} h={23} fontSize={10.5} /> : null}
               <ChipFor
                 spec={{
                   label: `Recording consent: ${call.recordingConsentStatus.replaceAll("_", " ")}`,
@@ -235,6 +236,8 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
           <div className="mt-[9px] text-[12.5px] leading-[1.6] text-[#0F172A]" style={{ textWrap: "pretty" }}>
             {call.summary ? (
               call.summary
+            ) : call.quotaRejectedReason ? (
+              `${call.quotaRejectedReason} The call skipped AI and IVR handling. No caller audio was recorded; the team can still follow up.`
             ) : missed ? (
               `Missed call from ${call.fromNumber} at ${fmtClock(call.startedAt, tz)}. It was never answered, so there is no transcript or recording, and Noxtill doesn't guess why they rang.`
             ) : hasTranscript ? (
