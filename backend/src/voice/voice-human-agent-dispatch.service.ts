@@ -147,12 +147,27 @@ export class VoiceHumanAgentDispatchService {
             },
             _count: { _all: true },
           });
+          const callbackLoads = await tx.voiceCallbackAttempt.groupBy({
+            by: ['agentProfileId'],
+            where: {
+              businessId,
+              agentProfileId: { not: null },
+              status: { in: ['agent_ringing', 'customer_ringing'] },
+            },
+            _count: { _all: true },
+          });
           const loadByProfile = new Map(
             loads.map((load) => [load.profileId, load._count._all]),
           );
           const outboundLoadByProfile = new Map(
             outboundLoads.map((load) => [
               load.agentProfileId,
+              load._count._all,
+            ]),
+          );
+          const callbackLoadByProfile = new Map(
+            callbackLoads.map((load) => [
+              load.agentProfileId!,
               load._count._all,
             ]),
           );
@@ -169,10 +184,12 @@ export class VoiceHumanAgentDispatchService {
 
             const aLoad =
               (loadByProfile.get(a.id) ?? 0) +
-              (outboundLoadByProfile.get(a.id) ?? 0);
+              (outboundLoadByProfile.get(a.id) ?? 0) +
+              (callbackLoadByProfile.get(a.id) ?? 0);
             const bLoad =
               (loadByProfile.get(b.id) ?? 0) +
-              (outboundLoadByProfile.get(b.id) ?? 0);
+              (outboundLoadByProfile.get(b.id) ?? 0) +
+              (callbackLoadByProfile.get(b.id) ?? 0);
             const utilization =
               aLoad / a.maxConcurrentCalls - bLoad / b.maxConcurrentCalls;
             return (
@@ -232,8 +249,17 @@ export class VoiceHumanAgentDispatchService {
                   status: { in: ['agent_ringing', 'customer_ringing'] },
                 },
               });
+            const activeCallbackAttempts = await tx.voiceCallbackAttempt.count({
+              where: {
+                businessId,
+                agentProfileId: profile.id,
+                status: { in: ['agent_ringing', 'customer_ringing'] },
+              },
+            });
             if (
-              activeAssignments + activeOutboundAttempts >=
+              activeAssignments +
+                activeOutboundAttempts +
+                activeCallbackAttempts >=
               profile.maxConcurrentCalls
             ) {
               continue;

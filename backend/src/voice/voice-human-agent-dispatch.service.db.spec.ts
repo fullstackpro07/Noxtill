@@ -225,6 +225,51 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
     ).toBe(0);
   });
 
+  it.each([
+    VoiceOutboundDialAttemptStatus.agent_ringing,
+    VoiceOutboundDialAttemptStatus.customer_ringing,
+  ])('treats an agent on a call-back %s attempt as busy', async (status) => {
+    const callbackCall = await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid: `CA-callback-dispatch-${randomUUID()}`,
+        fromNumber: '+15550004444',
+        status: PhoneCallStatus.completed,
+        transcript: [],
+      },
+    });
+    const callback = await prisma.voiceCallback.create({
+      data: {
+        businessId,
+        phoneCallId: callbackCall.id,
+        phoneE164: '+15550004444',
+        status: 'calling',
+      },
+    });
+    await prisma.voiceCallbackAttempt.create({
+      data: {
+        businessId,
+        callbackId: callback.id,
+        agentProfileId: profileId,
+        status,
+        placedByUserId: userId,
+      },
+    });
+
+    expect(
+      await service.reserve(businessId, (await createLiveCall()).id),
+    ).toBeNull();
+    expect(
+      await prisma.voiceHumanAgentAssignment.count({
+        where: {
+          businessId,
+          profileId,
+          status: { in: ['offered', 'connected'] },
+        },
+      }),
+    ).toBe(0);
+  });
+
   it('tries another free agent after no-answer and stops at the configured attempt limit', async () => {
     for (const [index, phone] of ['+15550002224', '+15550002225'].entries()) {
       const user = await prisma.user.create({
