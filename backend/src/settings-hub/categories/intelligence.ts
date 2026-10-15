@@ -515,6 +515,24 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               format: (n) => `${n.toLocaleString('en-US')} calls per month`,
               emptyLabel: 'No limit',
             }),
+            policyRow(d, {
+              key: 'voice-redact-transcripts',
+              policy: 'voice.redactTranscripts',
+              kind: 'toggle',
+              label: 'Redact call transcripts',
+              description:
+                'After a call ends, card numbers, ID numbers, phone numbers and email addresses in its transcript and AI summary are replaced with placeholders. Calls on legal hold are skipped.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              impact:
+                'Redaction is permanent for each processed call; the original words cannot be recovered. Live calls are never changed.',
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+              on: { text: 'Redacting', tone: 'blue' },
+              off: { text: 'Off', tone: 'neutral' },
+            }),
           ],
         },
         {

@@ -7,7 +7,7 @@ import { inputCls, labelCls, saveCls } from "./rx-settings-forms";
 import { useRxStore } from "./rx-store";
 
 /** The call payload carries these columns; the shared call type does not declare them yet. */
-export type LegalHoldFields = { legalHoldAt?: string | null; legalHoldReason?: string | null };
+export type LegalHoldFields = { legalHoldAt?: string | null; legalHoldReason?: string | null; transcriptRedactedAt?: string | null };
 
 /** Place or release a legal hold on one call's recording and transcript, with a required reason. */
 export function LegalHoldForm({ callId, held }: { callId: string; held: boolean }) {

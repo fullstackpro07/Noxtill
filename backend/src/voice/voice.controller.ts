@@ -91,6 +91,7 @@ import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
+import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
 import { VoiceLegalHoldDto } from './dto/voice-callback.dto';
 import {
   CompleteVoiceCallbackDto,
@@ -161,6 +162,7 @@ export class VoiceController {
     private readonly voiceAnalyticsExport: VoiceAnalyticsExportService,
     private readonly voiceProviderHealth: VoiceProviderHealthService,
     private readonly voiceOutboundSummary: VoiceOutboundSummaryService,
+    private readonly voiceRedaction: VoiceTranscriptRedactionService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -1133,6 +1135,16 @@ export class VoiceController {
     @Param('id') id: string,
   ) {
     return this.voiceWorkspace.deleteRecording(user.businessId, id);
+  }
+
+  /** Replaces card/ID/phone/email details in a finished call's transcript and summary (permanent). */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/redact-transcript')
+  redactTranscript(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceRedaction.redactCall(user.businessId, id);
   }
 
   /** Legal hold: blocks recording deletion and retention purge until released. */

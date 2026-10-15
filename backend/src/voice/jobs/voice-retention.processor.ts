@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../../common/storage/s3.service';
 import { VoiceHumanAgentDispatchService } from '../voice-human-agent-dispatch.service';
+import { VoiceTranscriptRedactionService } from '../voice-transcript-redaction.service';
 import {
   VOICE_RETENTION_QUEUE,
   RECORDING_RETENTION_DAYS,
@@ -28,6 +29,7 @@ export class VoiceRetentionProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly humanAgentDispatch: VoiceHumanAgentDispatchService,
+    private readonly transcriptRedaction?: VoiceTranscriptRedactionService,
   ) {
     super();
   }
@@ -35,6 +37,13 @@ export class VoiceRetentionProcessor extends WorkerHost {
   async process(job: Job): Promise<void> {
     if (job.name === 'expire-agent-reservations') {
       return this.releaseExpiredAgentReservations();
+    }
+    if (job.name === 'redact-transcripts') {
+      const processed = (await this.transcriptRedaction?.runPending()) ?? 0;
+      if (processed > 0) {
+        this.logger.debug(`Redacted ${processed} finished call transcript(s)`);
+      }
+      return;
     }
     if (job.name === 'tick') return this.runPurge();
   }

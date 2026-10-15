@@ -33,6 +33,7 @@ import { useRx } from "./rx-data";
 import { Bullets, NoteBox, RowTable } from "./rx-overlays";
 import { useCallActions } from "./rx-call-actions";
 import { LegalHoldForm, type LegalHoldFields } from "./rx-legal-hold";
+import { redactTranscript } from "@/lib/voice-legal-hold-api";
 
 interface SectionData {
   lineage: string;
@@ -63,6 +64,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
   const closeOverlays = useRxStore((s) => s.closeOverlays);
   const setSection = useRxStore((s) => s.setSection);
   const openPanel = useRxStore((s) => s.openPanel);
+  const qc = useQueryClient();
   const notify = useRxStore((s) => s.notify);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(false);
@@ -130,6 +132,15 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
 
   const next = nextStep(call);
   const hold = call as typeof call & LegalHoldFields;
+  const doRedact = async () => {
+    try {
+      const { redactions } = await redactTranscript(call.id);
+      await qc.invalidateQueries({ queryKey: ["rx-insights"] });
+      notify("Transcript redacted", redactions ? `${redactions} personal detail${redactions === 1 ? "" : "s"} replaced. This cannot be undone.` : "No card, ID, phone or email details were found.");
+    } catch (error) {
+      notify("Couldn't redact the transcript", error instanceof Error ? error.message : "Please try again.", "error");
+    }
+  };
   const openHold = () =>
     openPanel({
       kicker: "Legal hold",
@@ -160,6 +171,9 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
         ]
       : []),
     { label: hold.legalHoldAt ? "Release legal hold" : "Place legal hold", icon: "shield-check", onClick: openHold },
+    ...(!hold.transcriptRedactedAt && call.status !== "in_progress" && call.transcript.length > 0
+      ? [{ label: "Redact transcript", icon: "shield-check", disabled: !!hold.legalHoldAt, onClick: () => void doRedact() }]
+      : []),
     { label: hold.legalHoldAt ? "Delete blocked · legal hold" : "Delete recording", icon: "trash-2", risky: true, disabled: !!hold.legalHoldAt || (!call.hasRecording && call.transcript.length === 0), onClick: () => ca.deleteRecording(call) },
   ];
 
@@ -201,6 +215,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
                 fontSize={10.5}
               />
               {hold.legalHoldAt ? <ChipFor spec={{ label: "Legal hold", tone: "amber", icon: "shield-check" }} h={23} fontSize={10.5} /> : null}
+              {hold.transcriptRedactedAt ? <ChipFor spec={{ label: "Transcript redacted", tone: "neutral", icon: "shield-check" }} h={23} fontSize={10.5} /> : null}
               {confidenceChip(call.analysis?.confidence ?? null) ? <ChipFor spec={confidenceChip(call.analysis?.confidence ?? null)!} h={23} fontSize={10.5} /> : null}
               {sentimentChip(call.analysis?.sentiment ?? null) ? <ChipFor spec={sentimentChip(call.analysis?.sentiment ?? null)!} h={23} fontSize={10.5} /> : null}
               {call.routedRuleName ? <ChipFor spec={{ label: `Rule: ${call.routedRuleName}`, tone: "blue", icon: "list-ordered" }} h={23} fontSize={10.5} /> : null}
@@ -518,6 +533,7 @@ const AUDIT_LABELS: Record<string, string> = {
   "call.recording_deleted": "Deleted the recording and transcript",
   "call.legal_hold_placed": "Placed a legal hold",
   "call.legal_hold_released": "Released the legal hold",
+  "call.transcript_redacted": "Redacted personal details from the transcript",
   "call.note_added": "Added a note",
   "call.assigned": "Changed the follow-up owner",
   "call.summary_generated": "Wrote an AI summary",

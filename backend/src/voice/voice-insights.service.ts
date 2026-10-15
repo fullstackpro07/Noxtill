@@ -273,6 +273,7 @@ export class VoiceInsightsService {
           : null,
         legalHoldAt: c.legalHoldAt ? c.legalHoldAt.toISOString() : null,
         legalHoldReason: c.legalHoldReason,
+        transcriptRedactedAt: c.transcriptRedactedAt?.toISOString() ?? null,
         transcript,
         analysis: summariseCallAnalysis(transcript),
         callerName: c.callerName,

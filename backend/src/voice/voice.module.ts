@@ -27,6 +27,7 @@ import { VoiceLegalHoldService } from './voice-legal-hold.service';
 import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
+import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
 import { VoiceKnowledgeService } from './voice-knowledge.service';
 import { PollyVoiceService } from './polly-voice.service';
 import { MissedCallService } from './missed-call.service';
@@ -84,6 +85,7 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceAnalyticsExportService,
     VoiceProviderHealthService,
     VoiceOutboundSummaryService,
+    VoiceTranscriptRedactionService,
     VoiceRoutingRulesService,
     VoiceKnowledgeService,
     PollyVoiceService,

@@ -3018,6 +3018,9 @@ model PhoneCall {
   legalHoldAt              DateTime?                     @map("legal_hold_at")
   legalHoldByUserId        String?                       @map("legal_hold_by_user_id")
   legalHoldReason          String?                       @map("legal_hold_reason") @db.VarChar(500)
+  /// Set once the transcript and AI summary were scanned for personal details (see voice-redaction.util).
+  transcriptRedactedAt     DateTime?                     @map("transcript_redacted_at")
+  transcriptRedactionCount Int?                          @map("transcript_redaction_count")
   /// What the telephony provider itself reported charging for this call (Twilio call resource
   /// price, stored as a positive amount). NULL until the provider has priced it.
   providerCost             Decimal?                      @map("provider_cost") @db.Decimal(10, 4)

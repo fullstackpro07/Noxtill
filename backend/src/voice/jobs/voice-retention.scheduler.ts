@@ -42,5 +42,21 @@ export class VoiceRetentionScheduler implements OnModuleInit {
           `Failed to register human-agent reservation expiry: ${error.message}`,
         ),
       );
+
+    // Post-call transcript redaction for businesses that enabled `voice.redactTranscripts`.
+    this.queue
+      .add(
+        'redact-transcripts',
+        {},
+        {
+          repeat: { pattern: '*/5 * * * *' },
+          jobId: 'voice-transcript-redaction-every-5-minutes',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register transcript redaction: ${error.message}`,
+        ),
+      );
   }
 }
