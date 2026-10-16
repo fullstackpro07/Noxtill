@@ -275,6 +275,7 @@ export class VoiceCallService {
                 businessId: phoneNumber.businessId,
                 startedAt: { gte: monthStart },
                 quotaRejectedAt: null,
+                isTestCall: false,
               },
             });
       const capReached =

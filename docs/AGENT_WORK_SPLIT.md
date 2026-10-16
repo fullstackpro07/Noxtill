@@ -867,3 +867,9 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Verification for items 4–6: each commit's staged snapshot compiled (backend + frontend) on its own
   and its focused real-MySQL tests passed (item 6 snapshot: 57 tests incl. voice-call.service). A full
   backend Jest run after Codex's latest commits has not been done by Claude.
+
+## Module 21 progress — test-call cap exclusion (Codex, 2026-10-16)
+
+- Inbound automated-call cap now counts only non-test calls. Added a real-MySQL regression covering
+  a configured test caller followed by a normal caller at the limit boundary. Focused
+  `voice-call.service.spec.ts` passes (44 tests). Full Jest/type/lint checks are pending.

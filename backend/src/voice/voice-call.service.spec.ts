@@ -345,6 +345,92 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       expect(call.quotaRejectedReason).toBeNull();
     });
 
+    it('does not count configured test calls toward the inbound automated-call cap', async () => {
+      const testCallSid = `CA-cap-test-${randomUUID()}`;
+      const admittedCallSid = `CA-cap-after-test-${randomUUID()}`;
+      const testCallerNumber = '+14155550118';
+      const monthStart = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+      );
+      const originalBusiness = await prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      const originalPolicies = originalBusiness.policies as Prisma.InputJsonValue;
+      const policyObject =
+        originalBusiness.policies &&
+        typeof originalBusiness.policies === 'object' &&
+        !Array.isArray(originalBusiness.policies)
+          ? originalBusiness.policies
+          : {};
+      const originalSettings = await prisma.voiceSettings.findUnique({
+        where: { businessId },
+        select: { testCallerNumbers: true },
+      });
+      const priorTestNumbers = originalSettings?.testCallerNumbers ?? [];
+      const nonTestAdmitted = await prisma.phoneCall.count({
+        where: {
+          businessId,
+          startedAt: { gte: monthStart },
+          quotaRejectedAt: null,
+          isTestCall: false,
+        },
+      });
+
+      await prisma.voiceSettings.upsert({
+        where: { businessId },
+        create: { businessId, testCallerNumbers: [testCallerNumber] },
+        update: { testCallerNumbers: [testCallerNumber] },
+      });
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          policies: {
+            ...policyObject,
+            'voice.maxInboundCallsPerMonth': nonTestAdmitted + 1,
+          },
+        },
+      });
+
+      try {
+        await baseHandleIncoming(
+          testCallSid,
+          testCallerNumber,
+          '+15559990000',
+        );
+        const testCall = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: testCallSid },
+        });
+        expect(testCall.isTestCall).toBe(true);
+        expect(testCall.quotaRejectedAt).toBeNull();
+
+        const xml = await baseHandleIncoming(
+          admittedCallSid,
+          '+14155550119',
+          '+15559990000',
+        );
+        const admittedCall = await prisma.phoneCall.findUniqueOrThrow({
+          where: { callSid: admittedCallSid },
+        });
+        expect(xml).toContain('<Gather');
+        expect(admittedCall.isTestCall).toBe(false);
+        expect(admittedCall.quotaRejectedAt).toBeNull();
+      } finally {
+        await prisma.business.update({
+          where: { id: businessId },
+          data: { policies: originalPolicies },
+        });
+        if (originalSettings) {
+          await prisma.voiceSettings.update({
+            where: { businessId },
+            data: { testCallerNumbers: priorTestNumbers },
+          });
+        } else {
+          await prisma.voiceSettings.deleteMany({ where: { businessId } });
+        }
+      }
+    });
+
     it('serializes simultaneous admissions so one call cannot exceed the configured cap', async () => {
       const monthStart = new Date(
         Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
@@ -365,6 +451,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
           businessId,
           startedAt: { gte: monthStart },
           quotaRejectedAt: null,
+          isTestCall: false,
         },
       });
       await prisma.business.update({
