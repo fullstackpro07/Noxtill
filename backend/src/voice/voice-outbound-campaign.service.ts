@@ -375,7 +375,7 @@ export class VoiceOutboundCampaignService {
         callProviderExecution:
           campaign.callerType === VoicePolicyCallerType.live_agent
             ? 'human_power_dialer'
-            : 'not_available',
+            : 'ai_agent',
         providerCostEstimate: 'not_available',
       },
     };
@@ -580,11 +580,11 @@ export class VoiceOutboundCampaignService {
           member.eligibilityCheckedAt?.toISOString() ?? null,
       })),
       callsPlaced: members.some((member) => member.attemptCount > 0),
-      /** Human campaigns run on the power dialer; AI outbound is not executed yet. */
+      /** AI voice campaigns use their separate sequential runner, not the human power dialer. */
       callExecution:
         campaign.callerType === VoicePolicyCallerType.live_agent
           ? ('human_power_dialer' as const)
-          : ('not_available' as const),
+          : ('ai_agent' as const),
     };
   }
 

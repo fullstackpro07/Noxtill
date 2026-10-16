@@ -896,3 +896,16 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Migration `20261016140000_voice_ai_booking_attempts` is applied locally and Prisma reports the
   database up to date. The real MySQL voice-call suite passes 45 tests; backend and frontend type
   checks and touched-file ESLint pass.
+
+## Module 21 progress — approved AI outbound campaigns (Codex, 2026-10-16)
+
+- Approved AI campaigns now run as a sequential Twilio dialer separate from the human power dialer.
+  Every contact is checked again through the campaign compliance engine immediately before dialing;
+  the published AI version is pinned across retries, and its tool allowlist is enforced during calls.
+  Calls are not recorded. Voicemail detection and provider cost are disclosed as unavailable rather
+  than inferred. Live Twilio calling was not attempted because this environment has no public HTTPS
+  webhook URL/provider QA setup.
+- Added real-MySQL integration coverage for missing provider configuration, compliance re-check,
+  version pinning, callback idempotency and allowlist refusal. Focused spec passes 2 tests; full
+  backend Jest passes 372 suites / 2,269 tests. Backend/frontend type checks and touched-file ESLint
+  pass.

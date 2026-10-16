@@ -17,6 +17,7 @@ import { VoiceComplianceService } from './voice-compliance.service';
 import { VoiceMeetingsService } from './voice-meetings.service';
 import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service';
 import { VoiceOutboundDialerService } from './voice-outbound-dialer.service';
+import { VoiceAiOutboundService } from './voice-ai-outbound.service';
 import { VoiceRoutingRulesService } from './voice-routing-rules.service';
 import { VoiceIvrService } from './voice-ivr.service';
 import { VoiceSupervisorService } from './voice-supervisor.service';
@@ -80,6 +81,7 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceMeetingsService,
     VoiceOutboundCampaignService,
     VoiceOutboundDialerService,
+    VoiceAiOutboundService,
     VoiceIvrService,
     VoiceSupervisorService,
     VoiceTrackingService,

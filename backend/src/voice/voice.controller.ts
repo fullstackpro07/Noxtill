@@ -123,6 +123,7 @@ import {
   VoiceDialerDispositionDto,
 } from './dto/voice-outbound.dto';
 import { VoiceOutboundDialerService } from './voice-outbound-dialer.service';
+import { VoiceAiOutboundService } from './voice-ai-outbound.service';
 import {
   CreateVoiceMeetingDto,
   CreateVoiceMeetingInviteDto,
@@ -165,6 +166,7 @@ export class VoiceController {
     private readonly voiceMeetings: VoiceMeetingsService,
     private readonly voiceOutboundCampaigns: VoiceOutboundCampaignService,
     private readonly voiceDialer: VoiceOutboundDialerService,
+    private readonly voiceAiOutbound: VoiceAiOutboundService,
     private readonly voiceIvr: VoiceIvrService,
     private readonly voiceSupervisor: VoiceSupervisorService,
     private readonly voiceCallQueue: VoiceCallQueueService,
@@ -523,47 +525,62 @@ export class VoiceController {
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Get('voice/campaigns/:id/report')
-  voiceCampaignReport(
+  async voiceCampaignReport(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
   ) {
-    return this.voiceDialer.report(user.businessId, id);
+    return (
+      (await this.voiceAiOutbound.report(user.businessId, id)) ??
+      this.voiceDialer.report(user.businessId, id)
+    );
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Post('voice/campaigns/:id/start')
-  startVoiceOutboundCampaign(
+  async startVoiceOutboundCampaign(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
   ) {
-    return this.voiceDialer.start(user.businessId, user.sub, id);
+    return (
+      (await this.voiceAiOutbound.start(user.businessId, user.sub, id)) ??
+      this.voiceDialer.start(user.businessId, user.sub, id)
+    );
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Post('voice/campaigns/:id/pause')
-  pauseVoiceOutboundCampaign(
+  async pauseVoiceOutboundCampaign(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
   ) {
-    return this.voiceDialer.pause(user.businessId, user.sub, id);
+    return (
+      (await this.voiceAiOutbound.pause(user.businessId, user.sub, id)) ??
+      this.voiceDialer.pause(user.businessId, user.sub, id)
+    );
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Post('voice/campaigns/:id/stop')
-  stopVoiceOutboundCampaign(
+  async stopVoiceOutboundCampaign(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
   ) {
-    return this.voiceDialer.stop(user.businessId, user.sub, id);
+    return (
+      (await this.voiceAiOutbound.stop(user.businessId, user.sub, id)) ??
+      this.voiceDialer.stop(user.businessId, user.sub, id)
+    );
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Get('voice/campaigns/:id/attempts')
-  voiceOutboundCampaignAttempts(
+  async voiceOutboundCampaignAttempts(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
   ) {
-    return this.voiceDialer.status(user.businessId, id);
+    return (
+      (await this.voiceAiOutbound.status(user.businessId, id)) ??
+      this.voiceDialer.status(user.businessId, id)
+    );
   }
 
   /** Power dialer: ungated like presence, but every call is scoped to the campaign's assigned agent. */
@@ -1842,6 +1859,70 @@ export class VoiceController {
     await this.voiceDialer.answeringMachineResult(
       attemptId,
       body.AnsweredBy ?? 'unknown',
+    );
+    return { received: true };
+  }
+
+  /** AI outbound: Twilio calls this when an approved campaign contact answers. */
+  @Public()
+  @Post('voice/webhook/outbound/ai-answer')
+  @HttpCode(200)
+  async outboundAiAnswer(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string };
+    const xml = await this.voiceCall.handleOutboundAiAnswer(
+      attemptId,
+      body.CallSid ?? '',
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** AI outbound speech is gathered by Twilio; the application does not record this call. */
+  @Public()
+  @Post('voice/webhook/outbound/ai-speech')
+  @HttpCode(200)
+  async outboundAiSpeech(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string; SpeechResult?: string };
+    const xml = await this.voiceCall.handleOutboundAiSpeech(
+      attemptId,
+      body.CallSid ?? '',
+      body.SpeechResult ?? '',
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** Twilio status callback advances an AI campaign only after its current call is terminal. */
+  @Public()
+  @Post('voice/webhook/outbound/ai-status')
+  @HttpCode(200)
+  async outboundAiStatus(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      CallSid?: string;
+      CallStatus?: string;
+      CallDuration?: string;
+    };
+    const duration = body.CallDuration ? Number(body.CallDuration) : undefined;
+    await this.voiceAiOutbound.providerStatus(
+      attemptId,
+      body.CallSid ?? '',
+      body.CallStatus ?? '',
+      duration,
     );
     return { received: true };
   }

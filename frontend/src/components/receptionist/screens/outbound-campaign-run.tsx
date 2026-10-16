@@ -26,6 +26,10 @@ const readable = (value: string) => value.replaceAll("_", " ");
 
 const ATTEMPT_LABEL: Record<DialAttemptStatus, { label: string; tone: Tone }> = {
   blocked: { label: "Blocked before dialing", tone: "red" },
+  initiating: { label: "Starting call", tone: "blue" },
+  ringing: { label: "Ringing customer", tone: "blue" },
+  in_progress: { label: "Call in progress", tone: "blue" },
+  completed: { label: "Call completed", tone: "green" },
   agent_ringing: { label: "Ringing your phone", tone: "blue" },
   agent_no_answer: { label: "Agent did not answer", tone: "amber" },
   customer_ringing: { label: "Customer leg in progress", tone: "blue" },
@@ -150,7 +154,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
     <Card overflow>
       <CardHead
         title="Run campaign"
-        sub={campaign.callerType === "ai_voice" ? "AI outbound calling is not available yet" : "Human power dialer"}
+        sub={campaign.callerType === "ai_voice" ? "AI agent · sequential outbound calls" : "Human power dialer"}
         right={<Chip tone={campaign.status === "running" ? "green" : campaign.status === "paused" ? "amber" : "neutral"}>{readable(campaign.status)}</Chip>}
       />
       <div className="flex flex-col gap-3 p-3.5">
@@ -160,12 +164,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
           </p>
         ) : null}
 
-        {campaign.callerType === "ai_voice" ? (
-          <p className="text-[11px] leading-[1.6] text-[#64748B]">
-            This draft can be previewed, but AI agents do not place outbound calls yet. Use a human agent campaign to dial.
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
             {campaign.status === "draft" ? (
               <SmallBtn disabled={approval.isPending || !campaign.eligibilityCheckedAt} onClick={() => approval.mutate("request-approval")}>
                 Request approval
@@ -183,7 +182,9 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                 <SmallBtn disabled={busy} onClick={() => control.mutate("start")}>Start now</SmallBtn>
                 <SmallBtn disabled={approval.isPending} onClick={() => approval.mutate("send-back")}>Send back to draft</SmallBtn>
                 <span className="self-center text-[10px] text-[#7A8798]">
-                  {campaign.scheduledAt ? `Starts automatically at ${new Date(campaign.scheduledAt).toLocaleString()}.` : "No schedule set; start it when ready."}
+                  {campaign.callerType === "ai_voice"
+                    ? "AI campaigns start only when you press Start now; scheduled auto-start is not enabled."
+                    : campaign.scheduledAt ? `Starts automatically at ${new Date(campaign.scheduledAt).toLocaleString()}.` : "No schedule set; start it when ready."}
                 </span>
               </>
             ) : null}
@@ -195,8 +196,13 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
             {campaign.status === "draft" && !campaign.eligibilityCheckedAt ? (
               <span className="self-center text-[10px] text-[#7A8798]">Run the eligibility preview first.</span>
             ) : null}
-          </div>
-        )}
+        </div>
+
+        {campaign.callerType === "ai_voice" ? (
+          <p className="text-[11px] leading-[1.6] text-[#64748B]">
+            The approved, pinned agent version handles each eligible contact one at a time. Consent and suppression are checked again before every call. Calls are not recorded. Twilio must be configured on the server.
+          </p>
+        ) : null}
 
         {live && campaign.callerType === "live_agent" ? (
           <section className="rounded-[10px] border border-[#E6E8EC] p-3">
@@ -294,7 +300,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                 ["Contacts", String(report.data.contacts)],
                 ["Customer dials", String(report.data.customerDialed)],
                 ["Connect rate", report.data.connectRate == null ? "—" : `${Math.round(report.data.connectRate * 100)}%`],
-                ["Voicemails", String(report.data.voicemails)],
+                ["Voicemails", report.data.voicemails === "not_available" ? "Not tracked" : String(report.data.voicemails)],
                 ["Blocked tries", report.data.blockedRate == null ? "—" : `${report.data.blockedAttempts} (${Math.round(report.data.blockedRate * 100)}%)`],
                 ["Opt-outs", String(report.data.optOuts)],
                 ["Dials per reached contact", report.data.averageDialsPerContactedContact == null ? "—" : report.data.averageDialsPerContactedContact.toFixed(1)],

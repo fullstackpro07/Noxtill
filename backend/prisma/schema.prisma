@@ -3299,8 +3299,8 @@ model VoiceOutboundEligibilityDecision {
   @@map("voice_outbound_eligibility_decisions")
 }
 
-/// Draft-only outbound campaign plan. This is not a dial job; a future telephony adapter must
-/// re-check each member immediately before placing a call.
+/// Outbound campaign plan; approved AI and human dialers re-check each member immediately before
+/// placing a call. Drafts and eligibility previews never place calls.
 model VoiceOutboundCampaign {
   id                    String                        @id @default(uuid())
   businessId            String                        @map("business_id")

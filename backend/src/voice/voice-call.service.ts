@@ -365,6 +365,247 @@ export class VoiceCallService {
     );
   }
 
+  /**
+   * Twilio answer callback for an approved AI campaign. It creates the canonical outbound call
+   * row and speaks the campaign's reviewed opener without enabling call recording.
+   */
+  async handleOutboundAiAnswer(
+    attemptId: string,
+    callSid: string,
+  ): Promise<string> {
+    const attempt = await this.prisma.voiceAiOutboundAttempt.findFirst({
+      where: { id: attemptId },
+      include: {
+        campaign: {
+          select: { businessId: true, openingScript: true, status: true },
+        },
+        member: {
+          include: { customer: { select: { name: true, phone: true } } },
+        },
+      },
+    });
+    if (
+      !attempt ||
+      (attempt.callSid && attempt.callSid !== callSid) ||
+      !['initiating', 'ringing', 'in_progress'].includes(attempt.status) ||
+      attempt.campaign.status === 'stopped'
+    ) {
+      return twiml('<Hangup/>');
+    }
+    const attached = await this.prisma.voiceAiOutboundAttempt.updateMany({
+      where: {
+        id: attemptId,
+        OR: [{ callSid: null }, { callSid }],
+        status: { in: ['initiating', 'ringing', 'in_progress'] },
+      },
+      data: { callSid },
+    });
+    if (attached.count !== 1) return twiml('<Hangup/>');
+    const call = await this.prisma.phoneCall.upsert({
+      where: { callSid },
+      create: {
+        businessId: attempt.businessId,
+        direction: 'outbound',
+        voiceAgentVersionId: attempt.versionId,
+        callSid,
+        fromNumber: attempt.member.customer.phone,
+        callerName: attempt.member.customer.name,
+        recordingConsentStatus: VoiceRecordingConsentStatus.not_configured,
+      },
+      update: {},
+    });
+    await this.prisma.voiceAiOutboundAttempt.updateMany({
+      where: { id: attemptId, callSid },
+      data: {
+        phoneCallId: call.id,
+        status: 'in_progress',
+        providerStatus: 'answered',
+      },
+    });
+    const settings = await this.getSettings(attempt.businessId);
+    const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
+    if (transcript.length === 0) {
+      const opening = `Hello. ${AUTOMATED_ASSISTANT_DISCLOSURE_TEXT} ${attempt.campaign.openingScript}`;
+      transcript.push({
+        speaker: 'assistant',
+        text: opening,
+        at: new Date().toISOString(),
+      });
+      await this.persist(callSid, transcript);
+    }
+    return twiml(
+      say(
+        transcript[0]?.text ?? AUTOMATED_ASSISTANT_DISCLOSURE_TEXT,
+        settings.voiceId,
+      ) + this.outboundSpeechGather(attemptId, settings.responseTimeoutSeconds),
+    );
+  }
+
+  /** Twilio speech-Gather callback for a live, consent-eligible AI outbound attempt. */
+  async handleOutboundAiSpeech(
+    attemptId: string,
+    callSid: string,
+    speechResult: string,
+  ): Promise<string> {
+    const call = await this.prisma.phoneCall.findUnique({
+      where: { callSid },
+      include: {
+        voiceAgentVersion: {
+          include: { agent: { select: { name: true, template: true } } },
+        },
+        aiOutboundAttempt: {
+          include: {
+            campaign: true,
+            member: { include: { customer: { select: { name: true } } } },
+          },
+        },
+      },
+    });
+    if (
+      !call ||
+      call.direction !== 'outbound' ||
+      call.aiOutboundAttempt?.id !== attemptId ||
+      call.status !== PhoneCallStatus.in_progress ||
+      !call.voiceAgentVersion ||
+      call.aiOutboundAttempt.campaign.status === 'stopped'
+    )
+      return twiml('<Hangup/>');
+
+    const settings = await this.getSettings(call.businessId);
+    const transcript = (call.transcript as unknown as CallTurn[]) ?? [];
+    const callerText = speechResult.trim().slice(0, 2000);
+    if (!callerText) {
+      const response = "I didn't catch that. I'll let you go for now. Goodbye.";
+      transcript.push({
+        speaker: 'assistant',
+        text: response,
+        at: new Date().toISOString(),
+      });
+      await this.persist(callSid, transcript);
+      return twiml(say(response, settings.voiceId) + '<Hangup/>');
+    }
+    transcript.push({
+      speaker: 'caller',
+      text: callerText,
+      at: new Date().toISOString(),
+    });
+    if (transcript.length >= MAX_CALL_TURNS) {
+      const closing = 'Thank you for your time. Goodbye.';
+      transcript.push({
+        speaker: 'assistant',
+        text: closing,
+        at: new Date().toISOString(),
+      });
+      await this.persist(callSid, transcript);
+      return twiml(say(closing, settings.voiceId) + '<Hangup/>');
+    }
+
+    const pinnedAgent: PublishedVoiceAiAgent = {
+      versionId: call.voiceAgentVersion.id,
+      name: call.voiceAgentVersion.agent.name,
+      template: call.voiceAgentVersion.agent.template,
+      config: call.voiceAgentVersion.config as PublishedVoiceAiAgent['config'],
+    };
+    const business = await this.getBusiness(call.businessId);
+    const context = await this.gatherContext(
+      call.businessId,
+      business,
+      call.fromNumber,
+      callerText,
+      settings,
+      pinnedAgent,
+    );
+    const response = await this.classifyAndReply(
+      call.businessId,
+      transcript,
+      settings,
+      context.block,
+      pinnedAgent,
+    );
+    if (response.budgetExceeded) {
+      transcript.push({
+        speaker: 'assistant',
+        text: response.reply,
+        at: new Date().toISOString(),
+      });
+      await this.persist(callSid, transcript, PhoneCallOutcome.message);
+      return twiml(say(response.reply, settings.voiceId) + '<Hangup/>');
+    }
+
+    const permissions = new Set(pinnedAgent.config.toolPermissions ?? []);
+    const requestedAction = ['book', 'message', 'transfer', 'end'].includes(
+      response.intent,
+    )
+      ? response.intent
+      : null;
+    if (requestedAction && !permissions.has(requestedAction)) {
+      const safeReply =
+        "I can't complete that action on this call. Thank you for your time.";
+      transcript.push({
+        speaker: 'assistant',
+        text: safeReply,
+        at: new Date().toISOString(),
+        analysis: buildTurnAnalysis(response, 'continue', context.sources),
+      });
+      await this.persist(callSid, transcript);
+      return twiml(say(safeReply, settings.voiceId) + '<Hangup/>');
+    }
+
+    transcript.push({
+      speaker: 'assistant',
+      text: response.reply,
+      at: new Date().toISOString(),
+      analysis: buildTurnAnalysis(response, response.intent, context.sources),
+    });
+    if (response.intent === 'book') {
+      return this.handleBookIntent(
+        call,
+        transcript,
+        response,
+        settings,
+        (prompt) =>
+          twiml(
+            say(prompt, settings.voiceId) +
+              this.outboundSpeechGather(
+                attemptId,
+                settings.responseTimeoutSeconds,
+              ),
+          ),
+      );
+    }
+    if (response.intent === 'transfer') {
+      return this.handleTransferIntent(
+        call,
+        transcript,
+        response,
+        settings,
+        null,
+      );
+    }
+    if (response.intent === 'message') {
+      await this.persist(callSid, transcript, PhoneCallOutcome.message);
+      return twiml(say(response.reply, settings.voiceId) + '<Hangup/>');
+    }
+    if (response.intent === 'end') {
+      await this.persist(callSid, transcript);
+      return twiml(say(response.reply, settings.voiceId) + '<Hangup/>');
+    }
+    await this.persist(callSid, transcript);
+    return twiml(
+      say(response.reply, settings.voiceId) +
+        this.outboundSpeechGather(attemptId, settings.responseTimeoutSeconds),
+    );
+  }
+
+  private outboundSpeechGather(attemptId: string, timeoutSeconds: number) {
+    const backendUrl = this.config
+      .get<string>('BACKEND_URL')
+      ?.replace(/\/+$/, '');
+    if (!backendUrl) return '<Hangup/>';
+    const action = `${backendUrl}/voice/webhook/outbound/ai-speech?attemptId=${encodeURIComponent(attemptId)}`;
+    return `<Gather input="speech" action="${escapeXml(action)}" method="POST" speechTimeout="auto" timeout="${Math.max(2, Math.min(10, timeoutSeconds))}" actionOnEmptyResult="true" /> <Hangup/>`;
+  }
+
   /** Twilio's signed DTMF callback. No audio starts until the caller expressly presses 1. */
   async handleRecordingConsent(
     callSid: string,
@@ -1326,6 +1567,7 @@ export class VoiceCallService {
     transcript: CallTurn[],
     aiResponse: AiCallResponse,
     settings: ResolvedVoiceSettings,
+    continuePrompt?: (prompt: string) => string,
   ): Promise<string> {
     const service = aiResponse.service
       ? await this.findService(call.businessId, aiResponse.service)
@@ -1344,10 +1586,12 @@ export class VoiceCallService {
             : 'start_time_not_provided',
       );
       await this.persist(call.callSid, transcript);
-      return twiml(
-        say(aiResponse.reply, settings.voiceId) +
-          recordNext(settings.responseTimeoutSeconds),
-      );
+      return continuePrompt
+        ? continuePrompt(aiResponse.reply)
+        : twiml(
+            say(aiResponse.reply, settings.voiceId) +
+              recordNext(settings.responseTimeoutSeconds),
+          );
     }
 
     // Only the create itself is allowed to fall back to "try another time" — once a real
@@ -1387,10 +1631,12 @@ export class VoiceCallService {
         aiResponse,
         'booking_engine_rejected',
       );
-      return twiml(
-        say(fallback, settings.voiceId) +
-          recordNext(settings.responseTimeoutSeconds),
-      );
+      return continuePrompt
+        ? continuePrompt(fallback)
+        : twiml(
+            say(fallback, settings.voiceId) +
+              recordNext(settings.responseTimeoutSeconds),
+          );
     }
 
     const confirmation = `You're booked for ${service.name}. See you then!`;

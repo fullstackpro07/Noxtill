@@ -67,7 +67,7 @@ const DIAL_RESULT: Record<string, VoiceOutboundDialAttemptStatus> = {
  * (agents have no browser softphone); only when the agent answers does TwiML dial the customer
  * from the business number. Each attempt re-runs the fail-closed eligibility check, holds a row
  * lock on the contact and the agent, and advances only on signed provider callbacks.
- * AI auto-dialing is not executed here and is refused at campaign start. Webhooks run without a
+ * AI auto-dialing is handled by VoiceAiOutboundService and refused here. Webhooks run without a
  * request tenant, so their evidence is the attempt row itself (AuditService needs a CLS tenant).
  */
 @Injectable()
@@ -90,7 +90,7 @@ export class VoiceOutboundDialerService {
     if (campaign.callerType === VoicePolicyCallerType.ai_voice) {
       throw new AppException(
         VOICE_ERROR_CODES.OUTBOUND_AI_NOT_AVAILABLE,
-        'AI outbound calling is not available yet. Use a human agent campaign for the power dialer.',
+        'AI campaigns must use the AI campaign runner, not the human power dialer.',
         HttpStatus.CONFLICT,
       );
     }

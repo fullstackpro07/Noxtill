@@ -28,6 +28,10 @@ export type OutboundCampaignStatus =
   | "completed";
 export type DialAttemptStatus =
   | "blocked"
+  | "initiating"
+  | "ringing"
+  | "in_progress"
+  | "completed"
   | "agent_ringing"
   | "agent_no_answer"
   | "customer_ringing"
@@ -94,8 +98,7 @@ export interface OutboundCampaign {
   blockedCount: number;
   members: OutboundCampaignMember[];
   callsPlaced: boolean;
-  /** Human campaigns run on the power dialer; AI outbound is not executed yet. */
-  callExecution: "human_power_dialer" | "not_available";
+  callExecution: "human_power_dialer" | "ai_agent";
   aiAgent: { id: string; name: string; status: string } | null;
   humanAgent: { id: string; name: string } | null;
 }
@@ -136,7 +139,7 @@ export interface OutboundEligibilityPreview {
   message: string;
   limitations: {
     externalDoNotCallRegistry: "not_configured";
-    callProviderExecution: "human_power_dialer" | "not_available";
+    callProviderExecution: "human_power_dialer" | "ai_agent" | "not_available";
     providerCostEstimate: "not_available";
   };
 }
@@ -303,7 +306,7 @@ export interface CampaignReport {
   customerDialed: number;
   connected: number;
   connectRate: number | null;
-  voicemails: number;
+  voicemails: number | "not_available";
   blockedAttempts: number;
   blockedRate: number | null;
   blockedReasons: Record<string, number>;

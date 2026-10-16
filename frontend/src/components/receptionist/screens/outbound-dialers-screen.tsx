@@ -206,12 +206,13 @@ export function OutboundDialersScreen() {
           <p className="mt-1 max-w-[790px] text-[12px] leading-[1.6] text-[#697586]">
             Prepare a callback or service campaign, check each selected customer
             against this business&apos;s saved consent, policy, opt-out and
-            suppression evidence, then let the assigned human agent work the list
-            with the power dialer. Every call is re-checked right before dialing.
+            suppression evidence, then start approved AI calls one at a time or
+            let the assigned human agent work the list with the power dialer.
+            Eligibility is re-checked right before every call.
           </p>
         </div>
         <Chip tone="amber" h={24} fontSize={11}>
-          Human power dialer · AI outbound not available
+          Human dialer · approved AI campaigns
         </Chip>
       </div>
 
