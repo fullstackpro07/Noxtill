@@ -8,17 +8,20 @@ import { fetchVoiceAnalyticsTrends } from "@/lib/voice-analytics-trends-api";
 import { Card, CardHead, Chip } from "./rx-ui";
 
 export type HandlerFilter = "all" | "ai" | "person" | "unanswered";
+export type DirectionFilter = "all" | "inbound" | "outbound";
 export interface OverviewFilters {
+  direction: DirectionFilter;
   handler: HandlerFilter;
   /** "all", "none" (no published AI agent at call time) or an AI agent version id. */
   version: string;
 }
 
-export const DEFAULT_OVERVIEW_FILTERS: OverviewFilters = { handler: "all", version: "all" };
+export const DEFAULT_OVERVIEW_FILTERS: OverviewFilters = { direction: "all", handler: "all", version: "all" };
 
-/** Applies the Overview filters to saved inbound calls; every field used is stored on the call. */
+/** Applies the Overview filters to saved calls; every field used is stored on the call. */
 export function filterCalls(calls: EnrichedCall[], filters: OverviewFilters): EnrichedCall[] {
   return calls.filter((call) => {
+    if (filters.direction !== "all" && call.direction !== filters.direction) return false;
     const person = call.handledBy === "human_joined" || call.handledBy === "ai_to_human" || call.humanAgentConnected;
     if (filters.handler === "ai" && (call.handledBy !== "ai" || person)) return false;
     if (filters.handler === "person" && !person) return false;
@@ -36,10 +39,15 @@ export function OverviewFilterBar({ calls, filters, onChange }: { calls: Enriche
   for (const call of calls) {
     if (call.aiAgentVersion) versions.set(call.aiAgentVersion.id, `${call.aiAgentVersion.agentName} · v${call.aiAgentVersion.version}`);
   }
-  const active = filters.handler !== "all" || filters.version !== "all";
+  const active = filters.direction !== "all" || filters.handler !== "all" || filters.version !== "all";
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]">Inbound calls</span>
+      <span className="text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]">Calls</span>
+      <select aria-label="Call direction" className={select} value={filters.direction} onChange={(event) => onChange({ ...filters, direction: event.target.value as DirectionFilter })}>
+        <option value="all">All directions</option>
+        <option value="inbound">Inbound</option>
+        <option value="outbound">Outbound</option>
+      </select>
       <select aria-label="Who handled the call" className={select} value={filters.handler} onChange={(event) => onChange({ ...filters, handler: event.target.value as HandlerFilter })}>
         <option value="all">All handlers</option>
         <option value="ai">AI only</option>

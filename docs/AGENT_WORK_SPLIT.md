@@ -759,8 +759,8 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   incoming webhook, public webhook URL) plus config facts (storage, speech/AI, email) and this
   month's measured usage. At the time of this entry, no voice usage cap was enforced; see the
   later Codex update below for the inbound automated-call cap.
-- Still not implemented: SIP/trunk mapping, sandbox test number, and Call Overview direction/agent-
-  version filters.
+- At the time of this entry, SIP/trunk mapping, sandbox test numbers, and Call Overview
+  direction/agent-version filters were still outstanding; later completion is recorded below.
 
 ## Module 21 progress — inbound automated-call cap (Codex, 2026-10-15)
 
@@ -909,3 +909,22 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   version pinning, callback idempotency and allowlist refusal. Focused spec passes 2 tests; full
   backend Jest passes 372 suites / 2,269 tests. Backend/frontend type checks and touched-file ESLint
   pass.
+
+## Module 21 progress — Call Overview direction filter and settings schema correction (Codex, 2026-10-16)
+
+- Call Overview now filters saved calls by inbound/outbound direction alongside its existing
+  handler and pinned AI-agent-version filters. The direction comes from `PhoneCall.direction`;
+  it is not inferred from call outcomes. Added a real-MySQL regression proving direction is exposed
+  in the enriched insights response.
+- Corrected the `VoiceSettings` Prisma model to own `testCallerNumbers` and `sipTrunkSid`, matching
+  migration `20261016130000_voice_test_numbers_sip_trunk` and the settings service. `prisma migrate
+  status` reports the database up to date; `information_schema` confirms both columns are on
+  `voice_settings`. No new migration was needed.
+- Verification: focused Insights MySQL spec 15/15; Prisma generate/validate and migration status
+  clean; backend and frontend `tsc --noEmit` pass; ESLint passes on changed files and the earlier
+  inbound-cap files; full backend Jest passes 372/372 suites and 2,269/2,269 tests with
+  `--runInBand`. The parallel `--maxWorkers=2` run had one Customer Portal teardown FK error; that
+  suite passed alone and the serialized full suite passed.
+- Browser QA is blocked because the signed-in QA session shows “Module access couldn't be checked”
+  on `/receptionist` after retry. Browser console reported no errors; the Overview filters could
+  not be reached through the UI.

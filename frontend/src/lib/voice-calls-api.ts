@@ -294,6 +294,7 @@ export interface EnrichedCall {
   id: string;
   callSid: string;
   fromNumber: string;
+  direction: string;
   status: PhoneCallStatus;
   outcome: PhoneCallOutcome;
   bookingAttempts: Array<{

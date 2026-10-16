@@ -75,6 +75,7 @@ describe('VoiceInsightsService (real DB)', () => {
   let matchedCallId: string;
   let repeatCallId: string;
   let missedCallId: string;
+  let outboundCallId: string;
   const ai = { complete: jest.fn() };
   const config = { get: jest.fn() };
 
@@ -196,6 +197,20 @@ describe('VoiceInsightsService (real DB)', () => {
         },
       })
     ).id;
+    outboundCallId = (
+      await prisma.phoneCall.create({
+        data: {
+          businessId,
+          callSid: `CA-outbound-${stamp}`,
+          fromNumber: '+923001234567',
+          direction: 'outbound',
+          status: 'completed',
+          outcome: 'none',
+          startedAt: hoursAgo(3),
+          endedAt: hoursAgo(3),
+        },
+      })
+    ).id;
   });
 
   beforeEach(() => {
@@ -226,6 +241,10 @@ describe('VoiceInsightsService (real DB)', () => {
     expect(matched.previousCalls).toBe(1); // the earlier call
     expect(matched.durationSeconds).toBe(184);
     expect(matched.handledBy).toBe('ai');
+    expect(matched.direction).toBe('inbound');
+
+    const outbound = result.calls.find((c) => c.id === outboundCallId)!;
+    expect(outbound.direction).toBe('outbound');
 
     const missed = result.calls.find((c) => c.id === missedCallId)!;
     expect(missed.customer).toBeNull();

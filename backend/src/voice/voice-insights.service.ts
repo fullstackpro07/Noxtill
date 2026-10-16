@@ -237,6 +237,7 @@ export class VoiceInsightsService {
         id: c.id,
         callSid: c.callSid,
         fromNumber: c.fromNumber,
+        direction: c.direction,
         status: c.status,
         outcome: c.outcome,
         bookingAttempts: Array.isArray(c.bookingAttempts)

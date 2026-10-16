@@ -3812,10 +3812,6 @@ model VoiceRoutingRule {
   matchValue     String?             @map("match_value")
   action         VoiceRoutingAction
   transferNumber String?             @map("transfer_number")
-  /// E.164 numbers whose inbound calls are tagged as tests (excluded from analytics, usage and text-back).
-  testCallerNumbers      Json     @default("[]") @map("test_caller_numbers")
-  /// Twilio Elastic SIP trunk the business connected (verified against the provider when saved).
-  sipTrunkSid            String?  @map("sip_trunk_sid") @db.VarChar(34)
   active         Boolean             @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -3908,6 +3904,10 @@ model VoiceSettings {
   shareCreditBalance     Boolean  @default(false) @map("share_credit_balance")
   /// Where a transfer rings. NULL falls back to the server-wide VOICE_TRANSFER_NUMBER, if set.
   transferNumber         String?  @map("transfer_number")
+  /// E.164 numbers whose inbound calls are tagged as tests (excluded from analytics, usage and text-back).
+  testCallerNumbers      Json     @default("[]") @map("test_caller_numbers")
+  /// Twilio Elastic SIP trunk the business connected (verified against the provider when saved).
+  sipTrunkSid            String?  @map("sip_trunk_sid") @db.VarChar(34)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
