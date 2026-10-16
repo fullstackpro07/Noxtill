@@ -985,3 +985,22 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Verification for this QA batch: backend/frontend `tsc --noEmit`, production backend build and
   touched-file ESLint pass; full backend Jest 373/373 suites, 2,278/2,278 tests (`--runInBand`).
   No migration or secret-bearing tracked file was added. Nothing was pushed.
+
+## Module 21 progress — truthful Numbers and Compliance status (Codex, 2026-10-16)
+
+- Numbers now derives routing status from the existing real provider-health response rather than
+  claiming inbound routing from the presence of a saved number. Removed unconditional recording /
+  transcription claims; the UI explains the published-policy, consent and transcription-provider
+  requirements. Corrected the stale claim that additional campaign numbers are unsupported.
+- Exposed the persisted `PhoneCall.isTestCall` flag in enriched calls and excluded test calls from
+  Numbers' business counts, minutes, costs and latest-call display. Added a real-MySQL regression.
+  The QA number page shows Routing verified and zero business calls even though its QA ringing
+  call remains in call history. No data was fabricated or deleted.
+- Compliance's footer no longer claims the outbound dialer is unimplemented. Verified the human
+  and AI outbound services use `evaluateMember()` / compliance before calls; the standalone policy
+  check still does not place a call. Browser QA confirmed the policy is draft and unpublished.
+- Verification: backend/frontend type checks and touched-file ESLint pass; the full batch passed
+  373 suites / 2,278 tests. Numbers, Agents and Compliance loaded without browser warnings/errors;
+  screenshots saved locally as `/tmp/noxtill-number-routing-verified.png` and
+  `/tmp/noxtill-ai-credit-blocker.png`. These prove status/error UI only, not live audio quality.
+  No migration. No push. Real AI audio, booking, transfer and recording QA remains outstanding.

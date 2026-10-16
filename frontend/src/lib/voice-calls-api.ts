@@ -295,6 +295,7 @@ export interface EnrichedCall {
   callSid: string;
   fromNumber: string;
   direction: string;
+  isTestCall: boolean;
   status: PhoneCallStatus;
   outcome: PhoneCallOutcome;
   bookingAttempts: Array<{

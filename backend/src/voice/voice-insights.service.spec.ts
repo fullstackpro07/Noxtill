@@ -488,6 +488,28 @@ describe('VoiceInsightsService (real DB)', () => {
     }
   });
 
+  it('exposes the saved test-call flag so Numbers can exclude QA calls from business metrics', async () => {
+    const call = await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid: `CA-flag-${Date.now()}`,
+        fromNumber: '+15005550006',
+        isTestCall: true,
+      },
+    });
+    try {
+      const result = await service.insights(businessId, 30);
+      expect(result.calls.find((row) => row.id === call.id)?.isTestCall).toBe(
+        true,
+      );
+      expect(
+        result.calls.find((row) => row.id === missedCallId)?.isTestCall,
+      ).toBe(false);
+    } finally {
+      await prisma.phoneCall.delete({ where: { id: call.id } });
+    }
+  });
+
   it('questionClusters() groups real declined/answered questions by their fixed topic, never inventing a cluster', async () => {
     const earlier = new Date(Date.now() - 60_000).toISOString();
     const later = new Date().toISOString();

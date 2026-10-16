@@ -406,7 +406,7 @@ export function ComplianceScreen() {
         </div>
       ) : null}
 
-      <Footnote>These records reflect business-entered evidence and decisions only. Noxtill is not legal advice; no country rules or third-party DNC registry are preloaded. The outbound dialer is not implemented yet, so the check endpoint does not start calls.</Footnote>
+      <Footnote>These records reflect business-entered evidence and decisions only. Noxtill is not legal advice; no country rules or third-party DNC registry are preloaded. Running a policy check here does not place a call. Approved outbound campaigns re-check eligibility before each call.</Footnote>
     </div>
   );
 }
