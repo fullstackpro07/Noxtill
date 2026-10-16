@@ -226,7 +226,7 @@ function Workspace() {
               <div className="mt-1 text-[11px] leading-[1.55] text-[#7C5A14]">
                 {hasStaffPhone
                   ? `Your saved number is ${selfAgent?.phone}. Listen-in and take-over ring your account phone through the configured telephony provider. If no fixed transfer number is configured, available AI handoffs can also ring this phone while your profile has capacity.`
-                  : "Your account has no phone number saved, so listen-in and take-over cannot ring you yet. Add a phone number to your account. A browser softphone and device-health check are not configured."}
+                  : "Your account has no phone number saved, so phone-based supervisor listen-in and take-over cannot ring you yet. Browser-phone readiness is shown in the Browser softphone panel. Automatic device-health checks are not available."}
               </div>
             </div>
           </div>
@@ -286,7 +286,7 @@ function Workspace() {
             <EmptyState
               icon="phone-call"
               title="No active call right now"
-              body="This business has no call currently in progress. New connected calls will appear here from the telephony records; this is not a browser softphone or a ringing queue."
+              body="This business has no call currently in progress. New connected calls appear here from telephony records. Incoming browser calls are answered in the Browser softphone panel."
             />
           </Card>
         ) : (

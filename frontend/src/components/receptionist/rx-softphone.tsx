@@ -85,8 +85,8 @@ export function RxSoftphone() {
       });
       deviceRef.current?.destroy();
       deviceRef.current = device;
-      await device.register();
       setDeviceState("Connecting…");
+      await device.register();
     } catch (connectError) {
       setError(
         connectError instanceof ApiError

@@ -768,7 +768,7 @@ export function AiAgentsPanel() {
         {query.data?.limitations.tools ??
           "Published agent versions enforce their saved action allowlist, selected knowledge sources and response-token ceiling."}{" "}
         {query.data?.limitations.liveRouting ??
-          "Fresh available human profiles with capacity can receive AI-to-human handoffs; a classified caller topic now prefers an exact matching skill tag. Browser softphone is not configured."}
+          "Fresh available human profiles with capacity can receive AI-to-human handoffs; a classified caller topic prefers an exact matching skill tag. Check browser-phone readiness in Agent Workspace."}
       </div>
     </Card>
   );

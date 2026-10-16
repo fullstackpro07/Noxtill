@@ -928,3 +928,39 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Browser QA is blocked because the signed-in QA session shows “Module access couldn't be checked”
   on `/receptionist` after retry. Browser console reported no errors; the Overview filters could
   not be reached through the UI.
+
+## Module 21 progress — live Twilio browser setup (Codex, 2026-10-16)
+
+- Verified the supplied Voice SDK API key against Twilio and the existing number's voice capability.
+  Created one `Noxtill Voice SDK` TwiML Application through Twilio's REST API, which accepts an
+  omitted Voice URL. Stored its SID and the supplied key only in git-ignored `backend/.env`.
+  Browser outbound dialing is not implemented; no outgoing application URL was invented.
+- Started the existing Redis LaunchAgent and verified `PONG`. Corrected the local frontend backend
+  address in git-ignored `frontend/.env.local` to port 5001; macOS Control Center occupies 5000.
+  The QA account now reaches the app without the earlier module-access error.
+- Fixed Twilio webhook verification behind an HTTPS proxy: the signed URL uses the configured
+  backend origin and preserves the encoded request path/query. Added five regression cases,
+  including a real HMAC over the public URL, an invalid signature and invalid configuration.
+- Added `backend/scripts/voice-webhook-proxy.cjs`: a localhost-only development gateway that exposes
+  POST voice-webhook routes and a gateway health response. Other API routes return 404 and unsigned
+  webhook requests return 403. A temporary Cloudflare tunnel forwards only to this gateway.
+  Public HTTP probes verified a signed webhook returns TwiML/200, an invalid signature returns 403,
+  and a private API route returns 404. The probe used an unrecognized dialed number and created no
+  business call record. This tunnel is temporary; production needs a permanent public HTTPS backend.
+- Created the isolated `QA Test Business Voice 20261016` account and its staff-linked voice profile.
+  Linked the existing, provider-verified number to this QA business and configured its incoming and
+  status callbacks; Twilio read-back confirmed both URLs and POST. No new phone number was purchased.
+  The live Settings page also reports Telephony account, Webhook address and Business number as OK;
+  browser console inspection found no errors or warnings on Settings or Agent Workspace.
+- Browser QA verified real Twilio registration (`Ready`) and a live Twilio call ringing only the QA
+  browser identity. The test was not answered: Twilio reported `no-answer`, duration 0; the saved QA
+  call is flagged `isTestCall` and its agent reservation was released using that provider result.
+  No audio was recorded and no customer phone was dialed. Microphone/audio, real PSTN reception,
+  conversation, transfers and hold music are not live-verified by this test.
+- Fixed a browser state race that overwrote `Ready` with `Connecting` after registration. Removed
+  stale hardcoded claims that the now-implemented browser phone is unavailable; actual readiness
+  remains supplied by the softphone endpoint and the SDK registration event.
+- Verification: backend/frontend `tsc --noEmit` and touched-file ESLint pass. Full backend Jest:
+  373/373 suites, 2,274/2,274 tests (`--runInBand`); focused URL/AI-agent and URL/softphone MySQL
+  runs pass 7 tests each. Frontend route types were regenerated after a transient `.next` generated
+  file parse error during dev-server startup. No migration was added. Nothing was pushed.

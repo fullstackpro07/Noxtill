@@ -128,7 +128,7 @@ export class VoiceAiAgentsService {
         tools:
           'Each published agent version carries a server-enforced allowlist for booking, messages, transfers and ending calls; knowledge retrieval is restricted to selected active business sources and each AI response has a token ceiling.',
         liveRouting:
-          'Published versions are pinned to new inbound calls. If no fixed transfer number is configured, an AI transfer can reserve a fresh available human staff profile with phone capacity; a classified caller topic prefers an exact matching skill tag, with capacity-based fallback when none match. Browser softphone is not configured.',
+          'Published versions are pinned to new inbound calls. If no fixed transfer number is configured, an AI transfer can reserve a fresh available human staff profile with phone capacity; a classified caller topic prefers an exact matching skill tag, with capacity-based fallback when none match. Browser-phone readiness is shown in Agent Workspace.',
       },
     };
   }

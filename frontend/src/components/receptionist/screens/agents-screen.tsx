@@ -201,7 +201,7 @@ export function AgentsScreen() {
         <div className="flex flex-col gap-3">
           <Card pad={16}>
             <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#334155]"><Ico name="phone" size={14} />Presence and routing</div>
-            <p className="mt-2 text-[11px] leading-5 text-[#64748B]">Presence refreshes every 20 seconds while this page is open and {roster.data ? `expires after ${roster.data.limitations.presenceTtlSeconds} seconds` : "uses a server-defined expiry window"}. When no fixed transfer number is set, AI handoffs can reserve an available staff phone if the profile is active, has a fresh heartbeat and has capacity. A classified caller topic prefers an exact matching skill tag; if none matches, capacity-based fallback is used. Browser softphone and queue membership are not configured; direct ordinary calls still enter through the AI receptionist.</p>
+            <p className="mt-2 text-[11px] leading-5 text-[#64748B]">Presence refreshes every 20 seconds while this page is open and {roster.data ? `expires after ${roster.data.limitations.presenceTtlSeconds} seconds` : "uses a server-defined expiry window"}. When no fixed transfer number is set, AI handoffs can reserve an available staff phone if the profile is active, has a fresh heartbeat and has capacity. A classified caller topic prefers an exact matching skill tag; if none matches, capacity-based fallback is used. Check browser-phone readiness in Agent Workspace and queue settings in Supervisor Center. Direct ordinary calls still enter through the AI receptionist.</p>
           </Card>
         </div>
       </div>

@@ -66,6 +66,7 @@ import {
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { SubmitVoiceCallWrapUpDto } from './dto/voice-call-wrap-up.dto';
 import { verifyTwilioSignature } from '../common/webhooks/signature.util';
+import { voiceWebhookRequestUrl } from './voice-webhook-url.util';
 import { VoiceCopilotService } from './voice-copilot.service';
 import { VoiceQualityService } from './voice-quality.service';
 import {
@@ -1968,7 +1969,14 @@ export class VoiceController {
     if (!authToken) {
       throw new ServiceUnavailableException('Voice webhook is not configured');
     }
-    const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    const fullUrl = voiceWebhookRequestUrl(
+      this.config.get<string>('BACKEND_URL'),
+      {
+        protocol: req.protocol,
+        host: req.get('host'),
+        originalUrl: req.originalUrl,
+      },
+    );
     if (
       !verifyTwilioSignature(
         fullUrl,
