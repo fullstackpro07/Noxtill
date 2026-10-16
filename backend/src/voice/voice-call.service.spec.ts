@@ -356,7 +356,8 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         where: { id: businessId },
         select: { policies: true },
       });
-      const originalPolicies = originalBusiness.policies as Prisma.InputJsonValue;
+      const originalPolicies =
+        originalBusiness.policies as Prisma.InputJsonValue;
       const policyObject =
         originalBusiness.policies &&
         typeof originalBusiness.policies === 'object' &&
@@ -393,11 +394,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       });
 
       try {
-        await baseHandleIncoming(
-          testCallSid,
-          testCallerNumber,
-          '+15559990000',
-        );
+        await baseHandleIncoming(testCallSid, testCallerNumber, '+15559990000');
         const testCall = await prisma.phoneCall.findUniqueOrThrow({
           where: { callSid: testCallSid },
         });
@@ -1055,6 +1052,42 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
         where: { callSid: 'CA-book-fail' },
       });
       expect(call?.outcome).toBe(PhoneCallOutcome.none);
+      expect(call?.bookingAttempts).toHaveLength(1);
+      expect(call?.bookingAttempts).toMatchObject([
+        { serviceRequested: 'Haircut', reasonCode: 'booking_engine_rejected' },
+      ]);
+    });
+
+    it('records unresolved booking details on the call without creating an appointment', async () => {
+      await service.handleIncoming(
+        'CA-book-unresolved',
+        '+14155550113',
+        '+15559990000',
+      );
+      aiInfra.complete.mockResolvedValue(
+        JSON.stringify({
+          reply: 'Which service would you like?',
+          intent: 'book',
+          startsAt: '2026-10-20T10:00:00.000Z',
+        }),
+      );
+
+      const xml = await service.handleRecording(
+        'CA-book-unresolved',
+        'https://api.twilio.com/recordings/RE-unresolved',
+      );
+      expect(xml).toContain('<Record');
+      const call = await prisma.phoneCall.findUniqueOrThrow({
+        where: { callSid: 'CA-book-unresolved' },
+      });
+      expect(call.appointmentId).toBeNull();
+      expect(call.bookingAttempts).toMatchObject([
+        {
+          serviceRequested: null,
+          startsAtRequested: '2026-10-20T10:00:00.000Z',
+          reasonCode: 'service_not_provided',
+        },
+      ]);
     });
 
     it('records outcome "message" and hangs up when the caller wants to leave a message', async () => {

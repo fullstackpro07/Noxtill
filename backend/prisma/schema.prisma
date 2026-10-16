@@ -2961,6 +2961,8 @@ model PhoneCall {
   quotaRejectedReason      String?                       @map("quota_rejected_reason") @db.Text
   status                   PhoneCallStatus               @default(in_progress)
   outcome                  PhoneCallOutcome              @default(none)
+  /// Failed AI booking requests tied to this call; successful bookings remain the Appointment relation.
+  bookingAttempts          Json                          @default("[]") @map("booking_attempts")
   /// Only set when `outcome = custom` — the configured `VoiceSettings.customIntents` entry name the
   /// AI matched this call to (Call Queue depth fix, UPD-BE-129).
   customIntentName         String?                       @map("custom_intent_name")

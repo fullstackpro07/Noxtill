@@ -239,6 +239,9 @@ export class VoiceInsightsService {
         fromNumber: c.fromNumber,
         status: c.status,
         outcome: c.outcome,
+        bookingAttempts: Array.isArray(c.bookingAttempts)
+          ? c.bookingAttempts
+          : [],
         quotaRejectedReason: c.quotaRejectedReason,
         customIntentName: c.customIntentName,
         handledBy: handledBy(c),

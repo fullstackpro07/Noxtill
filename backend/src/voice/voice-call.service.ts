@@ -1333,6 +1333,16 @@ export class VoiceCallService {
 
     if (!service || !aiResponse.startsAt) {
       // Missing/unresolvable details — keep the conversation going rather than fail silently.
+      await this.recordFailedBookingAttempt(
+        call,
+        transcript,
+        aiResponse,
+        !aiResponse.service
+          ? 'service_not_provided'
+          : !service
+            ? 'service_not_found'
+            : 'start_time_not_provided',
+      );
       await this.persist(call.callSid, transcript);
       return twiml(
         say(aiResponse.reply, settings.voiceId) +
@@ -1371,7 +1381,12 @@ export class VoiceCallService {
         text: fallback,
         at: new Date().toISOString(),
       });
-      await this.persist(call.callSid, transcript);
+      await this.recordFailedBookingAttempt(
+        call,
+        transcript,
+        aiResponse,
+        'booking_engine_rejected',
+      );
       return twiml(
         say(fallback, settings.voiceId) +
           recordNext(settings.responseTimeoutSeconds),
@@ -1393,6 +1408,35 @@ export class VoiceCallService {
       },
     });
     return twiml(say(confirmation, settings.voiceId) + '<Hangup/>');
+  }
+
+  private async recordFailedBookingAttempt(
+    call: PhoneCall,
+    transcript: CallTurn[],
+    response: AiCallResponse,
+    reasonCode: string,
+  ) {
+    const existing = Array.isArray(call.bookingAttempts)
+      ? (call.bookingAttempts as unknown as {
+          at: string;
+          serviceRequested: string | null;
+          startsAtRequested: string | null;
+          reasonCode: string;
+        }[])
+      : [];
+    const attempt = {
+      at: new Date().toISOString(),
+      serviceRequested: response.service?.trim().slice(0, 191) || null,
+      startsAtRequested: response.startsAt?.trim().slice(0, 100) || null,
+      reasonCode,
+    };
+    await this.prisma.phoneCall.update({
+      where: { callSid: call.callSid },
+      data: {
+        transcript: transcript as unknown as Prisma.InputJsonValue,
+        bookingAttempts: [...existing, attempt],
+      },
+    });
   }
 
   private async handleTransferIntent(

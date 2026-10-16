@@ -296,6 +296,12 @@ export interface EnrichedCall {
   fromNumber: string;
   status: PhoneCallStatus;
   outcome: PhoneCallOutcome;
+  bookingAttempts: Array<{
+    at: string;
+    serviceRequested: string | null;
+    startsAtRequested: string | null;
+    reasonCode: string;
+  }>;
   quotaRejectedReason: string | null;
   customIntentName: string | null;
   handledBy: HandledBy;

@@ -886,3 +886,13 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Real-MySQL token/host/invite tests pass (5/5); backend and frontend type checks and touched-file
   ESLint pass. Live provider connectivity and browser media permissions have not been tested because
   no LiveKit server credentials are configured in this environment.
+
+## Module 21 progress — failed AI booking attempts (Codex, 2026-10-16)
+
+- Added `PhoneCall.bookingAttempts` with a hand-written MySQL migration. Missing service/time details
+  and booking-engine rejections are saved with the requested service/time and a safe reason code;
+  successful appointments remain canonical Booking records. The Insights API exposes the attempts,
+  and Bookings from Calls lists failures separately without counting them as appointments.
+- Migration `20261016140000_voice_ai_booking_attempts` is applied locally and Prisma reports the
+  database up to date. The real MySQL voice-call suite passes 45 tests; backend and frontend type
+  checks and touched-file ESLint pass.
