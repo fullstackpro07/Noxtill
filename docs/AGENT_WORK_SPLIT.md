@@ -837,3 +837,33 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   call was placed. Backend/frontend type checks and touched-file ESLint pass; full backend Jest is
   371 suites / 2,264 tests. The 74 existing formatting-only errors in `intelligence.ts` are
   unchanged.
+
+## Module 21 progress — remaining code, Claude items 4–6 and handover (Claude Code, 2026-10-16)
+
+- Analytics trends (`10fe571`): `GET /voice/analytics/trends?days=7|30|90` — daily rows in the business
+  time zone from stored facts (calls, missed, transferred, AI-contained, human-connected, AI-only vs
+  human-involved minutes, cost per provider-priced call, average submitted quality score, outbound
+  compliance blocked rate) plus a glossary and data-lag note. Call Analytics shows single-series
+  charts with hover values and a table view; Overview has a managers' Minutes & spend card.
+  Human-involved minutes include the AI portion before handoff (no per-leg timing stored).
+- Tracking/Bookings (`662c3ca`): per-source table (calls, via tracking number, bookings, completed,
+  deposits captured). Revenue per source stays "not available" — bookings carry no sale value.
+  Bookings from Calls no longer hardcodes an "AI" chip: shows the pinned AI agent version and a
+  caller-verified flag (booked customer's phone equals caller number).
+- Settings (`eac97b8`, migration `20261016130000_voice_test_numbers_sip_trunk`): up to 10 test caller
+  numbers; `handleIncoming` sets `PhoneCall.isTestCall` via `isTestCaller()`. Test calls are excluded
+  from trends and monthly usage, never texted back, and flagged in the CSV export. Twilio Elastic SIP
+  trunk saved only after `trunking.twilio.com` confirms it; origination URLs and numbers read live,
+  warning when the business number is on the trunk. **Codex: the inbound automated-call cap counts
+  should also exclude `isTestCall` calls.**
+- Handover to Codex — item 7 (live video meetings) is NOT started. Suggested approach: LiveKit
+  (self-hostable). Backend: mint HS256 access tokens for host and invite-token guests (no long-lived
+  credentials in URLs), room per meeting, recording only after consent, `LIVEKIT_URL/API_KEY/API_SECRET`
+  missing → keep the existing "Live video not configured" disclosure. Frontend: add `livekit-client`
+  (+ components) after the softphone package.json change is settled; guests cannot screen share or
+  record by default.
+- Open decision for the owner: `voice.missedCallTextBack` defaults to on (preserves old behaviour) and
+  also texts callers who are not saved customers.
+- Verification for items 4–6: each commit's staged snapshot compiled (backend + frontend) on its own
+  and its focused real-MySQL tests passed (item 6 snapshot: 57 tests incl. voice-call.service). A full
+  backend Jest run after Codex's latest commits has not been done by Claude.
