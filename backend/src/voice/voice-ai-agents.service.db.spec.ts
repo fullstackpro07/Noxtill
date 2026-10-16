@@ -1,5 +1,6 @@
 import { ClsService } from 'nestjs-cls';
 import { randomUUID } from 'crypto';
+import { AxiosError, AxiosHeaders } from 'axios';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -295,6 +296,72 @@ describe('VoiceAiAgentsService (MySQL)', () => {
       }),
     ).toBe(1);
   });
+
+  it.each([
+    {
+      status: 400,
+      type: 'invalid_request_error',
+      message: 'Your credit balance is too low to access the Anthropic API.',
+      code: 'AI_PROVIDER_INSUFFICIENT_CREDIT',
+    },
+    {
+      status: 401,
+      type: 'authentication_error',
+      message: 'Invalid API key: sk-test-private-value',
+      code: 'AI_PROVIDER_ACCESS_DENIED',
+    },
+    {
+      status: 404,
+      type: 'not_found_error',
+      message: 'Model not found: unavailable-test-model',
+      code: 'AI_PROVIDER_MODEL_UNAVAILABLE',
+    },
+  ])(
+    'records actionable provider error $code and keeps publication blocked',
+    async (failure) => {
+      const created = await service.create(businessId, ownerUserId, {
+        ...draft,
+        name: `QA ${failure.code}`,
+      });
+      aiInfra.createMessage.mockRejectedValueOnce(
+        new AxiosError(
+          'Provider request failed',
+          undefined,
+          undefined,
+          undefined,
+          {
+            status: failure.status,
+            statusText: 'Provider rejected request',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+            data: { error: { type: failure.type, message: failure.message } },
+          },
+        ),
+      );
+      const result = await service.testDraft(
+        businessId,
+        ownerUserId,
+        created.id,
+        'QA caller asks for help',
+      );
+      expect(result).toMatchObject({
+        passed: false,
+        errorCode: failure.code,
+        response: null,
+      });
+      expect(result.errorMessage).not.toContain('sk-test-private-value');
+      const saved = await prisma.voiceAiAgentTestRun.findUniqueOrThrow({
+        where: { id: result.id },
+      });
+      expect(saved.errorCode).toBe(failure.code);
+      expect(saved.passed).toBe(false);
+      await expect(
+        service.publish(businessId, ownerUserId, Role.owner, created.id),
+      ).rejects.toMatchObject({
+        response: { code: 'VOICE_AI_AGENT_TEST_REQUIRED' },
+      });
+    },
+  );
 
   it('does not expose another business agent and records provider failures without claiming a pass', async () => {
     const foreignKnowledge = await prisma.voiceKnowledgeEntry.create({

@@ -964,3 +964,24 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   373/373 suites, 2,274/2,274 tests (`--runInBand`); focused URL/AI-agent and URL/softphone MySQL
   runs pass 7 tests each. Frontend route types were regenerated after a transient `.next` generated
   file parse error during dev-server startup. No migration was added. Nothing was pushed.
+
+## Module 21 progress — live AI provider QA and safe failure messages (Codex, 2026-10-16)
+
+- In the isolated QA voice business, created `QA Receptionist Provider Check` (draft v1), a
+  canonical QA booking service, and a US `inbound_recording` policy draft with a one-day recording
+  retention proposal. No customer call was placed. No agent or recording policy was published.
+- The real sandbox request failed because Anthropic returned HTTP 400 / `invalid_request_error`:
+  "Your credit balance is too low to access the Anthropic API." No model substitution or provider
+  switch was made. Live AI conversation, booking, transfer and recording tests remain blocked by
+  provider credit and, for recording, an actual business review of the notice and policy.
+- The agent sandbox now persists actionable, sanitized error codes for insufficient credit,
+  rejected provider access and unavailable models, without leaking raw provider responses or keys.
+  Added three real-MySQL regression cases (external AI mocked, database real). A failed latest test
+  still blocks publication. The live API now saves `AI_PROVIDER_INSUFFICIENT_CREDIT`; publishing
+  returns 409 / `VOICE_AI_AGENT_TEST_REQUIRED`. Browser QA shows the credit message and disabled
+  approval/publish buttons; console inspection found no errors or warnings.
+- Confirmed policy publication rejects a missing review reference / false review attestation
+  (400 / `VALIDATION_ERROR`). The recording policy remains draft; no review was invented.
+- Verification for this QA batch: backend/frontend `tsc --noEmit`, production backend build and
+  touched-file ESLint pass; full backend Jest 373/373 suites, 2,278/2,278 tests (`--runInBand`).
+  No migration or secret-bearing tracked file was added. Nothing was pushed.

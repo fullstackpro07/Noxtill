@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
+import axios from 'axios';
 import { Prisma, Role } from '@prisma/client';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AuditService } from '../common/audit/audit.service';
@@ -761,6 +762,39 @@ export class VoiceAiAgentsService {
             typeof record.message === 'string'
               ? record.message
               : 'AI request was refused by a business guardrail.',
+        };
+      }
+    }
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const data = error.response?.data as
+        { error?: { type?: unknown; message?: unknown } } | undefined;
+      const message =
+        typeof data?.error?.message === 'string' ? data.error.message : '';
+      if (
+        status === 400 &&
+        /credit balance.*(?:low|insufficient)|insufficient.*credit/i.test(
+          message,
+        )
+      ) {
+        return {
+          code: 'AI_PROVIDER_INSUFFICIENT_CREDIT',
+          message:
+            'The AI provider account has insufficient credit. Ask the platform administrator to add credit before retrying.',
+        };
+      }
+      if (status === 401 || status === 403) {
+        return {
+          code: 'AI_PROVIDER_ACCESS_DENIED',
+          message:
+            'The AI provider rejected server access. Ask the platform administrator to check the API key and permissions.',
+        };
+      }
+      if (status === 404 && data?.error?.type === 'not_found_error') {
+        return {
+          code: 'AI_PROVIDER_MODEL_UNAVAILABLE',
+          message:
+            'The configured AI model is not available to this provider account. Ask the platform administrator to check model access.',
         };
       }
     }
