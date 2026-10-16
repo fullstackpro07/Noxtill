@@ -29,7 +29,7 @@ export interface VoiceVideoMeeting {
   appointment: { id: string; bookingNo: string | null; status: string } | null;
   inviteCount: number;
   invites: VoiceMeetingInviteSummary[];
-  media: "not_configured";
+  media: "not_configured" | "configured";
   recording: "not_available";
 }
 
@@ -57,8 +57,17 @@ export interface PublicVoiceMeetingInvite {
   durationMin: number;
   timeZone: string;
   expiresAt: string;
-  mediaAvailable: false;
+  mediaAvailable: boolean;
   message: string;
+}
+
+export interface VoiceMeetingJoinToken {
+  url: string;
+  token: string;
+  roomName: string;
+  expiresAt: string;
+  screenShare: false;
+  recording: "not_available";
 }
 
 export function fetchVoiceMeetingHosts(): Promise<VoiceMeetingHost[]> {
@@ -103,5 +112,13 @@ export function revokeVoiceMeetingInvite(meetingId: string, inviteId: string, re
 
 export function fetchPublicVoiceMeetingInvite(token: string): Promise<PublicVoiceMeetingInvite> {
   return apiFetch(`/voice/meeting-invites/${encodeURIComponent(token)}`, {}, { skipAuth: true });
+}
+
+export function createVoiceMeetingHostJoinToken(id: string): Promise<VoiceMeetingJoinToken> {
+  return apiFetch(`/voice/meetings/${encodeURIComponent(id)}/join-token`, { method: "POST" });
+}
+
+export function createVoiceMeetingGuestJoinToken(token: string): Promise<VoiceMeetingJoinToken> {
+  return apiFetch(`/voice/meeting-invites/${encodeURIComponent(token)}/join-token`, { method: "POST" }, { skipAuth: true });
 }
 

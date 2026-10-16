@@ -395,6 +395,21 @@ export class VoiceController {
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/join-token')
+  voiceMeetingHostJoinToken(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceMeetings.hostJoinToken(user.businessId, user.sub, id);
+  }
+
+  @Public()
+  @Post('voice/meeting-invites/:token/join-token')
+  voiceMeetingGuestJoinToken(@Param('token') token: string) {
+    return this.voiceMeetings.guestJoinToken(token);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Get('voice/outbound/audience')
   outboundAudience(@CurrentUser() user: AuthenticatedUser) {
     return this.voiceOutboundCampaigns.audience(user.businessId);

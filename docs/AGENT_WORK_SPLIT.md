@@ -873,3 +873,16 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
 - Inbound automated-call cap now counts only non-test calls. Added a real-MySQL regression covering
   a configured test caller followed by a normal caller at the limit boundary. Focused
   `voice-call.service.spec.ts` passes (44 tests). Full Jest/type/lint checks are pending.
+
+## Module 21 progress — LiveKit meeting rooms (Codex, 2026-10-16)
+
+- Added host and invited-guest short-lived LiveKit join tokens, scoped to one meeting room and
+  issued only during its join window. Token grants restrict publishing to camera/microphone and
+  disable data publishing and room recording. Guests remain unable to record or share screens.
+- Added the browser room client with camera/microphone off until the participant enables them. The
+  meetings and public invite pages preserve an honest “Live video not configured” state until all
+  three LiveKit server settings are present. No recording feature is enabled, so no call or meeting
+  audio/video is retained by this implementation.
+- Real-MySQL token/host/invite tests pass (5/5); backend and frontend type checks and touched-file
+  ESLint pass. Live provider connectivity and browser media permissions have not been tested because
+  no LiveKit server credentials are configured in this environment.

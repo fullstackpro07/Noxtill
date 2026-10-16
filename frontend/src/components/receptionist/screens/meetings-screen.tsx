@@ -13,10 +13,13 @@ import {
   fetchVoiceMeetings,
   rescheduleVoiceMeeting,
   revokeVoiceMeetingInvite,
+  createVoiceMeetingHostJoinToken,
   type VoiceVideoMeeting,
+  type VoiceMeetingJoinToken,
 } from "@/lib/voice-meetings-api";
 import { Card, CardHead, Chip, EmptyState, Footnote, PrimaryBtn, SmallBtn } from "../rx-ui";
 import { useRx } from "../rx-data";
+import { VoiceMeetingRoom } from "../voice-meeting-room";
 
 const inputClass = "h-[36px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] outline-none focus:border-[#16A34A]";
 const errorText = (error: unknown) => error instanceof ApiError ? error.message : error instanceof Error ? error.message : "The request could not be completed.";
@@ -48,6 +51,8 @@ export function VoiceMeetingsScreen() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [createdLink, setCreatedLink] = useState("");
+  const [joiningMeetingId, setJoiningMeetingId] = useState<string | null>(null);
+  const [roomAccess, setRoomAccess] = useState<VoiceMeetingJoinToken | null>(null);
   const [meetingForm, setMeetingForm] = useState({
     title: "",
     scheduledAt: localDateTime(new Date(now.getTime() + 60 * 60_000)),
@@ -85,7 +90,7 @@ export function VoiceMeetingsScreen() {
       appointmentId: meetingForm.appointmentId || null,
     }),
     onSuccess: async () => {
-      setNotice("Meeting scheduled. Live video is not configured on this server.");
+      setNotice(meetings.data?.some((meeting) => meeting.media === "configured") ? "Meeting scheduled. The assigned host and invited guests can join during its join window." : "Meeting scheduled. Live video is not configured on this server.");
       setMeetingForm((form) => ({ ...form, title: "", appointmentId: "" }));
       await refresh();
     },
@@ -135,6 +140,11 @@ export function VoiceMeetingsScreen() {
     onSuccess: async () => { setNotice("Guest invite revoked"); await refresh(); },
     onError: (error) => setNotice(errorText(error)),
   });
+  const join = useMutation({
+    mutationFn: createVoiceMeetingHostJoinToken,
+    onSuccess: (access, meetingId) => { setJoiningMeetingId(meetingId); setRoomAccess(access); setNotice(""); },
+    onError: (error) => setNotice(errorText(error)),
+  });
 
   const hostOptions = hosts.data ?? [];
   const rows = meetings.data ?? [];
@@ -173,11 +183,9 @@ export function VoiceMeetingsScreen() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-[21px] font-extrabold tracking-[-.02em]">Video Meetings</h1>
-          <p className="mt-1 max-w-[760px] text-[12px] leading-[1.6] text-[#697586]">
-            Schedule a meeting and email the guest a time-limited link. Meetings are separate from phone calls; live video, screen sharing, recording and AI summaries are not configured here.
-          </p>
+          <p className="mt-1 max-w-[760px] text-[12px] leading-[1.6] text-[#697586]">Schedule meetings and email personal guest links. {rows.some((meeting) => meeting.media === "configured") ? "Live video is available for assigned hosts and invited guests; recording and screen sharing are disabled." : "Live video not configured. Set the LiveKit server URL and API credentials to enable rooms."}</p>
         </div>
-        <Chip tone="amber" h={24} fontSize={11}>Live video not configured</Chip>
+        <Chip tone={rows.some((meeting) => meeting.media === "configured") ? "green" : "amber"} h={24} fontSize={11}>{rows.some((meeting) => meeting.media === "configured") ? "Live video configured" : "Live video not configured"}</Chip>
       </div>
 
       <div className="grid gap-[18px] xl:grid-cols-[minmax(0,1.05fr)_minmax(400px,.95fr)]">
@@ -244,19 +252,22 @@ export function VoiceMeetingsScreen() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {meeting.status === "scheduled" ? <>
+                      {meeting.media === "configured" ? <SmallBtn disabled={join.isPending} onClick={() => join.mutate(meeting.id)}>{join.isPending && join.variables === meeting.id ? "Joining…" : "Join video"}</SmallBtn> : null}
                       <SmallBtn onClick={() => setInviteFor(inviteFor === meeting.id ? null : meeting.id)}>Invite guest</SmallBtn>
                       <SmallBtn onClick={() => startReschedule(meeting)}>Reschedule</SmallBtn>
                       <SmallBtn disabled={cancel.isPending} onClick={() => void cancelMeeting(meeting)}>Cancel</SmallBtn>
                     </> : null}
-                    <Chip tone="amber">Video not configured</Chip>
+                    {meeting.media === "configured" ? <Chip tone="green">Video ready</Chip> : <Chip tone="amber">Video not configured</Chip>}
                   </div>
+
+                  {joiningMeetingId === meeting.id && roomAccess ? <VoiceMeetingRoom access={roomAccess} onLeave={() => { setRoomAccess(null); setJoiningMeetingId(null); }} /> : null}
 
                   {inviteFor === meeting.id ? (
                     <form ref={inviteFormRef} className="mt-3 grid gap-2 rounded-[9px] bg-[#F7F9FB] p-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); invite.mutate({ meetingId: meeting.id, email: inviteEmail.trim(), name: inviteName.trim() }); }}>
                       <input className={inputClass} type="email" required maxLength={191} value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Guest email" aria-label="Guest email" />
                       <input className={inputClass} maxLength={120} value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Guest name (optional)" aria-label="Guest name optional" />
                       <PrimaryBtn onClick={() => inviteFormRef.current?.requestSubmit()} disabled={invite.isPending}>{invite.isPending ? "Sending…" : "Send invite"}</PrimaryBtn>
-                      <p className="text-[11px] leading-[1.5] text-[#7A8798] sm:col-span-3">The link is shown once and copied if browser permission allows. No email is sent; the link currently opens meeting details only, not video.</p>
+                      <p className="text-[11px] leading-[1.5] text-[#7A8798] sm:col-span-3">The personal guest link is shown once and copied if browser permission allows. When LiveKit is configured, invited guests can join during the meeting window. Recording and screen sharing are disabled.</p>
                     </form>
                   ) : null}
 
@@ -289,7 +300,7 @@ export function VoiceMeetingsScreen() {
               ))}
             </div>
           </div>
-          <Footnote>Guest tokens expire after the meeting and are stored hashed. Invite links reveal meeting details only; they do not grant video access.</Footnote>
+          <Footnote>Invite tokens are stored hashed. Short-lived video tokens are issued only to the assigned active host or an invited guest during the meeting window. Recording and screen sharing are disabled.</Footnote>
         </Card>
       </div>
 

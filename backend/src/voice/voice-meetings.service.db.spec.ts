@@ -33,7 +33,6 @@ describe('VoiceMeetingsService (real MySQL)', () => {
   let appointmentId: string;
   let otherBusinessId: string;
   let otherUserId: string;
-  let otherHostId: string;
   let tenantPrisma: TenantPrismaService;
   let audit: AuditService;
   const sentEmails: { to: string; text: string; templateKey: string }[] = [];
@@ -125,15 +124,6 @@ describe('VoiceMeetingsService (real MySQL)', () => {
       },
     });
     otherUserId = otherUser.id;
-    const otherHost = await prisma.businessUser.create({
-      data: {
-        businessId: otherBusinessId,
-        userId: otherUserId,
-        role: Role.staff,
-      },
-    });
-    otherHostId = otherHost.id;
-
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     cls.set(CLS_KEY_USER_ID, userId);
   });
@@ -218,6 +208,88 @@ describe('VoiceMeetingsService (real MySQL)', () => {
       media: 'not_configured',
       recording: 'not_available',
     });
+  });
+
+  it('issues short-lived, restricted LiveKit tokens only to the host and invited guest', async () => {
+    emailConfig.LIVEKIT_URL = 'https://livekit.example.test';
+    emailConfig.LIVEKIT_API_KEY = 'qa-livekit-key';
+    emailConfig.LIVEKIT_API_SECRET =
+      'qa-livekit-secret-that-is-not-used-outside-this-test';
+    try {
+      const meeting = await service.create(businessId, userId, {
+        ...meetingInput('QA LiveKit room'),
+        scheduledAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      });
+      const invite = await service.createInvite(
+        businessId,
+        userId,
+        meeting.id,
+        {
+          email: 'livekit-guest@example.com',
+          guestName: 'QA video guest',
+        },
+      );
+      const preview = await service.previewInvite(invite.token);
+      expect(preview.mediaAvailable).toBe(true);
+      expect(preview.message).toContain('Live video is available');
+
+      const hostToken = await service.hostJoinToken(
+        businessId,
+        userId,
+        meeting.id,
+      );
+      const guestToken = await service.guestJoinToken(invite.token);
+      expect(hostToken.url).toBe('wss://livekit.example.test');
+      expect(hostToken.roomName).toBe(`voice-meeting-${meeting.id}`);
+      expect(guestToken.roomName).toBe(hostToken.roomName);
+      expect(hostToken.screenShare).toBe(false);
+      expect(hostToken.recording).toBe('not_available');
+
+      for (const token of [hostToken.token, guestToken.token]) {
+        const claims = JSON.parse(
+          Buffer.from(token.split('.')[1], 'base64url').toString('utf8'),
+        ) as unknown as {
+          exp: number;
+          video?: {
+            room: string;
+            roomJoin: boolean;
+            canPublish: boolean;
+            canPublishData: boolean;
+            roomRecord: boolean;
+            canPublishSources: string[];
+          };
+        };
+        expect(claims.exp).toBeLessThanOrEqual(
+          Math.floor(Date.now() / 1000) + 15 * 60 + 2,
+        );
+        expect(claims.video?.room).toBe(hostToken.roomName);
+        expect(claims.video?.roomJoin).toBe(true);
+        expect(claims.video?.canPublish).toBe(true);
+        expect(claims.video?.canPublishData).toBe(false);
+        expect(claims.video?.roomRecord).toBe(false);
+        expect(claims.video?.canPublishSources).toEqual([
+          'camera',
+          'microphone',
+        ]);
+      }
+
+      await expectAppError(
+        service.hostJoinToken(businessId, otherUserId, meeting.id),
+        'VOICE_MEETING_HOST_NOT_FOUND',
+      );
+      await prisma.voiceMeetingInvite.update({
+        where: { id: invite.id },
+        data: { revokedAt: new Date() },
+      });
+      await expectAppError(
+        service.guestJoinToken(invite.token),
+        'VOICE_MEETING_INVITE_INVALID',
+      );
+    } finally {
+      delete emailConfig.LIVEKIT_URL;
+      delete emailConfig.LIVEKIT_API_KEY;
+      delete emailConfig.LIVEKIT_API_SECRET;
+    }
   });
 
   it('reschedules and cancels only scheduled meetings, revoking active guest links', async () => {

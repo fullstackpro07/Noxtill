@@ -2,9 +2,11 @@
 
 import { use } from "react";
 import { notFound } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { ApiError } from "@/lib/api-client";
-import { fetchPublicVoiceMeetingInvite } from "@/lib/voice-meetings-api";
+import { createVoiceMeetingGuestJoinToken, fetchPublicVoiceMeetingInvite, type VoiceMeetingJoinToken } from "@/lib/voice-meetings-api";
+import { VoiceMeetingRoom } from "@/components/receptionist/voice-meeting-room";
 
 export default function PublicVoiceMeetingInvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -13,6 +15,8 @@ export default function PublicVoiceMeetingInvitePage({ params }: { params: Promi
     queryFn: () => fetchPublicVoiceMeetingInvite(token),
     retry: false,
   });
+  const [roomAccess, setRoomAccess] = useState<VoiceMeetingJoinToken | null>(null);
+  const join = useMutation({ mutationFn: () => createVoiceMeetingGuestJoinToken(token), onSuccess: setRoomAccess });
 
   if (invite.isError && invite.error instanceof ApiError && invite.error.status === 404) notFound();
   if (invite.isPending) {
@@ -30,11 +34,21 @@ export default function PublicVoiceMeetingInvitePage({ params }: { params: Promi
         <h1 className="mt-3 text-2xl font-extrabold tracking-tight">{meeting.title}</h1>
         <p className="mt-3 text-sm text-[#45505F]">{new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeStyle: "short", timeZone: meeting.timeZone }).format(new Date(meeting.scheduledAt))}</p>
         <p className="mt-1 text-sm text-[#697586]">{meeting.durationMin} minutes · {meeting.timeZone}</p>
-        <div className="mt-5 rounded-xl border border-[#FDE49B] bg-[#FFFBEB] p-4">
-          <h2 className="text-sm font-bold text-[#92400E]">Video is not available yet</h2>
-          <p className="mt-1 text-sm leading-6 text-[#7A4E11]">{meeting.message}</p>
-        </div>
-        <p className="mt-4 text-xs text-[#7A8798]">This link shows meeting details only. It does not authenticate you as a Noxtill customer or provide a video room.</p>
+        {meeting.mediaAvailable ? (
+          <div className="mt-5 rounded-xl border border-[#D8E6DD] bg-[#F7FBF8] p-4">
+            <h2 className="text-sm font-bold text-[#166534]">Join the live meeting</h2>
+            <p className="mt-1 text-sm leading-6 text-[#45505F]">This personal invite can join during the meeting window. Camera and microphone stay off until you turn them on. Recording and screen sharing are disabled.</p>
+            <button type="button" onClick={() => join.mutate()} disabled={join.isPending || Boolean(roomAccess)} className="mt-3 rounded-lg bg-[#15803D] px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{join.isPending ? "Joining…" : roomAccess ? "Connected" : "Join meeting"}</button>
+            {join.isError ? <p role="alert" className="mt-2 text-sm text-[#B42318]">{join.error instanceof Error ? join.error.message : "Could not join the meeting."}</p> : null}
+            {roomAccess ? <VoiceMeetingRoom access={roomAccess} onLeave={() => setRoomAccess(null)} /> : null}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-[#FDE49B] bg-[#FFFBEB] p-4">
+            <h2 className="text-sm font-bold text-[#92400E]">Live video not configured</h2>
+            <p className="mt-1 text-sm leading-6 text-[#7A4E11]">{meeting.message}</p>
+          </div>
+        )}
+        <p className="mt-4 text-xs text-[#7A8798]">The invite only authorizes this guest to join this meeting. Recording and screen sharing are disabled.</p>
       </section>
     </main>
   );
