@@ -295,6 +295,11 @@ export class TestVoiceAiAgentScenariosDto {
   @ValidateNested({ each: true })
   @Type(() => VoiceAiAgentScenarioChecksDto)
   checks?: VoiceAiAgentScenarioChecksDto[];
+
+  /** Also ask an independent model to judge each reply against the platform policy (metered). */
+  @IsOptional()
+  @IsBoolean()
+  safetyReview?: boolean;
 }
 
 export class RollbackVoiceAiAgentDto {

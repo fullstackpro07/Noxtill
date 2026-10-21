@@ -223,10 +223,16 @@ export type VoiceAiAgentScenarioChecks = {
   expectedIntent?: "continue" | "book" | "message" | "transfer" | "end";
 };
 
+export type VoiceAiSafetyReview = {
+  verdict: "pass" | "fail" | "uncertain" | "not_run";
+  reason: string;
+};
+
 export function testVoiceAiAgentScenarios(
   agentId: string,
   scenarios: string[],
   checks?: VoiceAiAgentScenarioChecks[],
+  safetyReview = false,
 ) {
   return apiFetch<{
     version: number | null;
@@ -251,10 +257,15 @@ export function testVoiceAiAgentScenarios(
       inputTokens: number;
       outputTokens: number;
       createdAt: string;
+      safetyReview?: VoiceAiSafetyReview | null;
     }[];
   }>(`/voice/agents/ai/${agentId}/test-suite`, {
     method: "POST",
-    body: JSON.stringify({ scenarios, ...(checks ? { checks } : {}) }),
+    body: JSON.stringify({
+      scenarios,
+      ...(checks ? { checks } : {}),
+      ...(safetyReview ? { safetyReview: true } : {}),
+    }),
   });
 }
 

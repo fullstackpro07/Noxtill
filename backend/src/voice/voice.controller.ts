@@ -1208,6 +1208,7 @@ export class VoiceController {
       id,
       dto.scenarios,
       dto.checks,
+      dto.safetyReview === true,
     );
   }
 

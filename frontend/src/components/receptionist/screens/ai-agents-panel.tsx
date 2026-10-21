@@ -16,6 +16,7 @@ import {
   saveVoiceAiAgentDraft,
   testVoiceAiAgent,
   testVoiceAiAgentScenarios,
+  type VoiceAiSafetyReview,
   voiceAiControls,
   type VoiceAiAgent,
   type VoiceAiAgentDraftInput,
@@ -180,8 +181,10 @@ export function AiAgentsPanel() {
       errorMessage: string | null;
       inputTokens: number;
       outputTokens: number;
+      safetyReview?: VoiceAiSafetyReview | null;
     }[];
   } | null>(null);
+  const [scenarioSafetyReview, setScenarioSafetyReview] = useState(false);
   const [rollbackVersionId, setRollbackVersionId] = useState("");
   const [rollbackReason, setRollbackReason] = useState("");
   const [notice, setNotice] = useState("");
@@ -431,6 +434,7 @@ export function AiAgentsPanel() {
             selected.id,
             scenarios,
             hasChecks ? checks : undefined,
+            scenarioSafetyReview,
           )
         : Promise.reject(new Error("Choose an agent first"));
     },
@@ -1111,6 +1115,14 @@ export function AiAgentsPanel() {
                     >
                       Load safety attack pack
                     </button>
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-[#334155]">
+                      <input
+                        type="checkbox"
+                        checked={scenarioSafetyReview}
+                        onChange={(event) => setScenarioSafetyReview(event.target.checked)}
+                      />
+                      Also run AI safety review (one extra metered request per reply)
+                    </label>
                     <span className="text-[10px] text-[#667085]">
                       8 prompt-injection, data-leak and false-claim attacks with phrase tripwires. A pass is not a full safety review; running it makes metered AI requests.
                     </span>
@@ -1221,6 +1233,17 @@ export function AiAgentsPanel() {
                               {failure}
                             </p>
                           ))}
+                          {result.safetyReview ? (
+                            <p
+                              className={`mt-1 ${result.safetyReview.verdict === "fail" ? "text-[#B42318]" : result.safetyReview.verdict === "pass" ? "text-[#166534]" : "text-[#475467]"}`}
+                            >
+                              AI safety review:{" "}
+                              {result.safetyReview.verdict === "not_run"
+                                ? "not run"
+                                : result.safetyReview.verdict}{" "}
+                              · {result.safetyReview.reason}
+                            </p>
+                          ) : null}
                           {result.expectedIntent ? (
                             <p className="mt-1 text-[#475467]">
                               Expected outcome: {result.expectedIntent} ·

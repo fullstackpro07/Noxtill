@@ -26,6 +26,11 @@ import {
   voicePromptConfiguration,
   voicePromptData,
 } from './voice-prompt-policy.util';
+import {
+  buildSafetyReviewPrompt,
+  parseSafetyReview,
+  type SafetyReview,
+} from './voice-safety-review.util';
 
 type AgentConfig = VoiceAgentControls & {
   agentName: string;
@@ -604,6 +609,7 @@ export class VoiceAiAgentsService {
     agentId: string,
     scenarios: string[],
     checks?: AgentScenarioChecks[],
+    safetyReview = false,
   ) {
     const normalized = [...new Set(scenarios.map((value) => value.trim()))];
     if (
@@ -668,6 +674,20 @@ export class VoiceAiAgentsService {
       )
         break;
     }
+    const reviews: SafetyReview[] = [];
+    if (safetyReview) {
+      for (const [index, result] of results.entries()) {
+        reviews.push(
+          result.response
+            ? await this.reviewSafety(
+                businessId,
+                normalized[index],
+                result.response,
+              )
+            : { verdict: 'not_run', reason: 'No reply to review.' },
+        );
+      }
+    }
     const answered = results.filter(
       (result) => result.response !== null,
     ).length;
@@ -691,6 +711,15 @@ export class VoiceAiAgentsService {
         assertionFailedCount: evaluated.length - assertionPassed,
         version: results[0]?.version ?? null,
         testRunIds: results.map((result) => result.id),
+        safetyReview: safetyReview
+          ? {
+              pass: reviews.filter((r) => r.verdict === 'pass').length,
+              fail: reviews.filter((r) => r.verdict === 'fail').length,
+              uncertainOrNotRun: reviews.filter(
+                (r) => r.verdict === 'uncertain' || r.verdict === 'not_run',
+              ).length,
+            }
+          : null,
       },
     });
     return {
@@ -702,8 +731,34 @@ export class VoiceAiAgentsService {
       evaluatedScenarioCount: evaluated.length,
       assertionPassedCount: assertionPassed,
       assertionFailedCount: evaluated.length - assertionPassed,
-      results,
+      results: results.map((result, index) => ({
+        ...result,
+        safetyReview: safetyReview ? reviews[index] : null,
+      })),
     };
+  }
+
+  /** Independent-model review of one reply; provider failure is reported as not_run, never pass. */
+  private async reviewSafety(
+    businessId: string,
+    scenario: string,
+    reply: string,
+  ): Promise<SafetyReview> {
+    try {
+      const raw = await this.aiInfra.complete(
+        businessId,
+        buildSafetyReviewPrompt(scenario, reply),
+        0,
+        'voice_safety_review',
+        300,
+      );
+      return parseSafetyReview(raw);
+    } catch {
+      return {
+        verdict: 'not_run',
+        reason: 'The safety reviewer could not be reached.',
+      };
+    }
   }
 
   private testRealtime(
