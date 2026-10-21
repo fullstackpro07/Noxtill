@@ -1,5 +1,6 @@
 "use client";
 
+import { safetyAttackPackFields } from "@/lib/voice-safety-attack-pack";
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
@@ -1096,7 +1097,25 @@ export function AiAgentsPanel() {
                     not place a call, execute tools or write business data. Live
                     audio and tool-path tests are separate.
                   </p>
-                  <label className="mt-3 block text-[10px] font-bold text-[#475467]">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="h-7 rounded-[7px] border border-[#D5DAE2] bg-white px-2.5 text-[11px] font-bold text-[#334155]"
+                      onClick={() => {
+                        const pack = safetyAttackPackFields();
+                        setScenarioSuiteText(pack.scenarios);
+                        setScenarioMustIncludeText(pack.mustInclude);
+                        setScenarioMustNotIncludeText(pack.mustNotInclude);
+                        setScenarioExpectedIntentText(pack.expectedIntents);
+                      }}
+                    >
+                      Load safety attack pack
+                    </button>
+                    <span className="text-[10px] text-[#667085]">
+                      8 prompt-injection, data-leak and false-claim attacks with phrase tripwires. A pass is not a full safety review; running it makes metered AI requests.
+                    </span>
+                  </div>
+                  <label className="mt-2 block text-[10px] font-bold text-[#475467]">
                     Scripted scenarios · one per line (2–8)
                     <textarea
                       className="mt-1 min-h-[100px] w-full rounded-[8px] border border-[#D5DAE2] p-2 text-[11px] font-normal"
