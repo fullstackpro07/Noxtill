@@ -35,6 +35,7 @@ import { VoiceProviderHealthService } from './voice-provider-health.service';
 import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
 import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
 import { VoiceNumberFeesService } from './voice-number-fees.service';
+import { VoiceAlertForwarderService } from './voice-alert-forwarder.service';
 import { VoiceCallQueueService } from './voice-call-queue.service';
 import { VoiceSoftphoneService } from './voice-softphone.service';
 import { VoiceKnowledgeService } from './voice-knowledge.service';
@@ -112,6 +113,7 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceOutboundSummaryService,
     VoiceTranscriptRedactionService,
     VoiceNumberFeesService,
+    VoiceAlertForwarderService,
     VoiceCallQueueService,
     VoiceSoftphoneService,
     VoiceRoutingRulesService,

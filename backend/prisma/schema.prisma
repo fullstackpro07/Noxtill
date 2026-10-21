@@ -4165,6 +4165,23 @@ model VoiceBillingUsageClaim {
   @@map("voice_billing_usage_claims")
 }
 
+/// Outbound delivery of platform operations alerts (failure bursts, budget warnings, dead-lettered
+/// provider events) to OPS_ALERT_WEBHOOK_URL. One row per source alert; retried until delivered.
+model VoiceAlertDelivery {
+  id          String    @id @default(uuid())
+  businessId  String    @map("business_id")
+  sourceKey   String    @unique @map("source_key") @db.VarChar(191)
+  kind        String    @db.VarChar(40)
+  attempts    Int       @default(0)
+  deliveredAt DateTime? @map("delivered_at")
+  lastError   String?   @map("last_error") @db.VarChar(300)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([deliveredAt, attempts], map: "voice_alert_delivery_pending_idx")
+  @@map("voice_alert_deliveries")
+}
+
 /// Customer support requests are not reviews: no synthetic star rating is created for a call.
 model CustomerSupportTicket {
   id           String     @id @default(uuid())

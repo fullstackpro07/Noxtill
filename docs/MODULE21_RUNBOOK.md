@@ -237,6 +237,11 @@ handoff is a reviewed local Billing record; it does not create, send or pay a pr
   and an external uptime monitor at `/health/ready`; paging on 503 must be configured externally.
   Both probes are exempt from the API rate limit; readiness results are shared by concurrent
   probes and reused for 1 s, so frequent probing does not load the database.
+- External alerts: set `OPS_ALERT_WEBHOOK_URL` (Slack-compatible incoming webhook; the body also
+  has `kind`, `businessId`, `occurredAt`). A minute job forwards realtime failure bursts, phone
+  budget 70/90% warnings and provider callbacks that reached dead-letter — each once, retried up
+  to 8 times; delivery is logged in `voice_alert_deliveries`. Messages contain business name and
+  counts only. Unset = in-app notifications only.
 - Rate limit: 120 requests/minute per business (per IP when anonymous). The phone screens poll
   several endpoints every few seconds, so many staff of one business on phone screens at once
   can hit this limit (HTTP 429). `API_RATE_LIMIT_PER_MINUTE` raises it per environment; choose

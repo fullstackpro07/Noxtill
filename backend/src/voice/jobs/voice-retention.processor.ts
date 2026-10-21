@@ -6,6 +6,7 @@ import { S3Service } from '../../common/storage/s3.service';
 import { VoiceHumanAgentDispatchService } from '../voice-human-agent-dispatch.service';
 import { VoiceTranscriptRedactionService } from '../voice-transcript-redaction.service';
 import { VoiceNumberFeesService } from '../voice-number-fees.service';
+import { VoiceAlertForwarderService } from '../voice-alert-forwarder.service';
 import { VoiceOutboundDialerService } from '../voice-outbound-dialer.service';
 import { VoiceCallReconciliationService } from '../voice-call-reconciliation.service';
 import { VoiceRealtimeService } from '../voice-realtime.service';
@@ -56,11 +57,16 @@ export class VoiceRetentionProcessor extends WorkerHost {
     @Optional()
     private readonly providerWebhookEvents?: VoiceProviderWebhookEventsService,
     @Optional() private readonly numberFees?: VoiceNumberFeesService,
+    @Optional() private readonly alertForwarder?: VoiceAlertForwarderService,
   ) {
     super();
   }
 
   async process(job: Job): Promise<void> {
+    if (job.name === 'forward-ops-alerts') {
+      await this.alertForwarder?.forward();
+      return;
+    }
     if (job.name === 'record-number-fees') {
       await this.numberFees?.recordMonth();
       return;

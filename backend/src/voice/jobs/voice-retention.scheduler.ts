@@ -74,6 +74,22 @@ export class VoiceRetentionScheduler implements OnModuleInit {
       );
 
     // Post-call transcript redaction for businesses that enabled `voice.redactTranscripts`.
+    // External operations alerts (OPS_ALERT_WEBHOOK_URL); each source alert is sent once.
+    this.queue
+      .add(
+        'forward-ops-alerts',
+        {},
+        {
+          repeat: { pattern: '* * * * *' },
+          jobId: 'voice-ops-alert-forwarding-every-minute',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register operations alert forwarding: ${error.message}`,
+        ),
+      );
+
     // Phone-number recurring fees: idempotent per number per UTC month, so a daily run is safe.
     this.queue
       .add(
