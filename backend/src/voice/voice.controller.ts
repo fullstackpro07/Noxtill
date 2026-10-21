@@ -2148,7 +2148,10 @@ export class VoiceController {
   ) {
     this.verifySignature(req, signature);
     const body = req.body as { CallStatus?: string };
-    await this.voiceCallbacks.agentStatus(attemptId, body.CallStatus ?? '');
+    await this.voiceWebhookEvents.receiveCallbackAgentStatus(
+      attemptId,
+      body.CallStatus ?? '',
+    );
     return { received: true };
   }
 
@@ -2200,7 +2203,7 @@ export class VoiceController {
   ) {
     this.verifySignature(req, signature);
     const body = req.body as { AnsweredBy?: string };
-    await this.voiceDialer.answeringMachineResult(
+    await this.voiceWebhookEvents.receiveDialerAnsweringMachine(
       attemptId,
       body.AnsweredBy ?? 'unknown',
     );
@@ -2324,7 +2327,10 @@ export class VoiceController {
   ) {
     this.verifySignature(req, signature);
     const body = req.body as { CallStatus?: string };
-    await this.voiceDialer.agentStatus(attemptId, body.CallStatus ?? '');
+    await this.voiceWebhookEvents.receiveDialerAgentStatus(
+      attemptId,
+      body.CallStatus ?? '',
+    );
     return { received: true };
   }
 

@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { VoiceCallService } from './voice-call.service';
 import { VoiceMediaMeteringService } from './voice-media-metering.service';
 import { VoiceRealtimeService } from './voice-realtime.service';
+import { VoiceOutboundDialerService } from './voice-outbound-dialer.service';
+import { VoiceCallbacksService } from './voice-callbacks.service';
 
 const MAX_CONSECUTIVE_FAILURES = 5;
 const PROCESSING_LEASE_MS = 2 * 60 * 1000;
@@ -39,12 +41,16 @@ type ConferenceUsagePayload = {
 
 type RealtimeRecordingPayload = { callSid: string; recordingSid: string };
 
+/** Power-dialer / call-back agent-leg status and answering-machine results, keyed by attempt. */
+type AttemptStatusPayload = { attemptId: string; value: string };
+
 type VoiceEventPayload =
   | StatusPayload
   | TransferStatusPayload
   | AgentStatusPayload
   | ConferenceUsagePayload
-  | RealtimeRecordingPayload;
+  | RealtimeRecordingPayload
+  | AttemptStatusPayload;
 
 /**
  * Durable inbox for signed Twilio callbacks whose projections are replay-safe.
@@ -61,7 +67,74 @@ export class VoiceProviderWebhookEventsService {
     private readonly voiceCall: VoiceCallService,
     @Optional() private readonly mediaMetering?: VoiceMediaMeteringService,
     @Optional() private readonly realtimeVoice?: VoiceRealtimeService,
+    @Optional() private readonly outboundDialer?: VoiceOutboundDialerService,
+    @Optional() private readonly callbacks?: VoiceCallbacksService,
   ) {}
+
+  /**
+   * Status-only outbound callbacks. Their projectors act only while the attempt is still in the
+   * expected state, so duplicate or replayed delivery cannot change an outcome twice. The
+   * TwiML-returning answer/result callbacks stay outside this inbox.
+   */
+  async receiveDialerAgentStatus(
+    attemptId: string,
+    callStatus: string,
+  ): Promise<void> {
+    const attempt = await this.prisma.voiceOutboundDialAttempt.findUnique({
+      where: { id: attemptId },
+      select: { businessId: true, agentCallSid: true },
+    });
+    if (!attempt) return;
+    await this.receive(
+      attempt.businessId,
+      attempt.agentCallSid ?? attemptId,
+      'dialer.agent.status',
+      {
+        attemptId,
+        value: this.safeField(callStatus, 40),
+      },
+    );
+  }
+
+  async receiveDialerAnsweringMachine(
+    attemptId: string,
+    answeredBy: string,
+  ): Promise<void> {
+    const attempt = await this.prisma.voiceOutboundDialAttempt.findUnique({
+      where: { id: attemptId },
+      select: { businessId: true, agentCallSid: true },
+    });
+    if (!attempt) return;
+    await this.receive(
+      attempt.businessId,
+      attempt.agentCallSid ?? attemptId,
+      'dialer.amd',
+      {
+        attemptId,
+        value: this.safeField(answeredBy, 30),
+      },
+    );
+  }
+
+  async receiveCallbackAgentStatus(
+    attemptId: string,
+    callStatus: string,
+  ): Promise<void> {
+    const attempt = await this.prisma.voiceCallbackAttempt.findUnique({
+      where: { id: attemptId },
+      select: { businessId: true, agentCallSid: true },
+    });
+    if (!attempt) return;
+    await this.receive(
+      attempt.businessId,
+      attempt.agentCallSid ?? attemptId,
+      'callback.agent.status',
+      {
+        attemptId,
+        value: this.safeField(callStatus, 40),
+      },
+    );
+  }
 
   async receiveCallStatus(
     callSid: string,
@@ -468,6 +541,24 @@ export class VoiceProviderWebhookEventsService {
           recording.callSid,
           recording.recordingSid,
         );
+      } else if (event.eventType === 'dialer.agent.status') {
+        const status = payload as AttemptStatusPayload;
+        await this.requireProjector(this.outboundDialer).agentStatus(
+          status.attemptId,
+          status.value,
+        );
+      } else if (event.eventType === 'dialer.amd') {
+        const status = payload as AttemptStatusPayload;
+        await this.requireProjector(this.outboundDialer).answeringMachineResult(
+          status.attemptId,
+          status.value,
+        );
+      } else if (event.eventType === 'callback.agent.status') {
+        const status = payload as AttemptStatusPayload;
+        await this.requireProjector(this.callbacks).agentStatus(
+          status.attemptId,
+          status.value,
+        );
       } else {
         throw new AppException(
           'VOICE_WEBHOOK_EVENT_UNSUPPORTED',
@@ -505,6 +596,16 @@ export class VoiceProviderWebhookEventsService {
       });
       throw error;
     }
+  }
+
+  private requireProjector<T>(projector: T | undefined): T {
+    if (!projector)
+      throw new AppException(
+        'VOICE_WEBHOOK_PROJECTOR_UNAVAILABLE',
+        'Outbound status processing is unavailable.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    return projector;
   }
 
   private validSequence(value?: number): number | null {
