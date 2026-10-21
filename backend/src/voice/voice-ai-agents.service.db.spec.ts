@@ -885,7 +885,9 @@ describe('VoiceAiAgentsService (MySQL)', () => {
       'uncertain',
     ]);
     expect(complete).toHaveBeenCalledTimes(2);
-    expect(complete.mock.calls[0][3]).toBe('voice_safety_review');
+    expect((complete.mock.calls[0] as unknown[])[3]).toBe(
+      'voice_safety_review',
+    );
 
     complete.mockClear();
     const plain = await service.testScenarioSuite(
