@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { raw } from 'express';
 import { AppModule } from './app.module';
 import { resolveDatabaseUrl } from './prisma/resolve-database-url';
+import { requestIdMiddleware } from './common/request-id.middleware';
 
 const MIN_SECRET_LENGTH = 22; // spec §6
 const PLACEHOLDER_SECRETS = new Set(['your-secret', 'your-refresh-secret']);
@@ -49,12 +50,17 @@ async function bootstrap() {
     raw({ type: 'application/webhook+json', limit: '128kb' }),
   );
 
+  app.use(requestIdMiddleware);
   app.use(helmet());
 
   const corsAllowlist = (process.env.CORS_ALLOWLIST ?? 'http://localhost:3000')
     .split(',')
     .map((origin) => origin.trim());
-  app.enableCors({ origin: corsAllowlist, credentials: true });
+  app.enableCors({
+    origin: corsAllowlist,
+    credentials: true,
+    exposedHeaders: ['X-Request-Id'],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

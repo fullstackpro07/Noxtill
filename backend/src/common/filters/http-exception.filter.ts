@@ -6,12 +6,14 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
 interface ErrorBody {
   code: string;
   message: string;
   fields?: Record<string, string[]>;
+  /** Correlation id (see request-id.middleware) so a report can be matched to server logs. */
+  requestId?: string;
 }
 
 function toMessage(value: unknown, fallback: string): string {
@@ -32,16 +34,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request | undefined>();
+    const header = request?.headers?.['x-request-id'];
+    const requestId = typeof header === 'string' ? header : undefined;
 
     const { status, body } = this.normalize(exception);
 
     if (status >= 500) {
       this.logger.error(
-        exception instanceof Error ? exception.stack : exception,
+        `${requestId ? `[request ${requestId}] ` : ''}${
+          exception instanceof Error ? exception.stack : String(exception)
+        }`,
       );
     }
 
-    response.status(status).json({ error: body });
+    response
+      .status(status)
+      .json({ error: requestId ? { ...body, requestId } : body });
   }
 
   private normalize(exception: unknown): { status: number; body: ErrorBody } {
