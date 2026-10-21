@@ -22,8 +22,12 @@ export interface VoiceBillingDraft {
   total: string;
   currency: string;
   currencyMinorUnits: number;
-  status: "draft" | "approved" | "cancelled";
+  status: "draft" | "approved" | "cancelled" | "posting" | "posted";
   periodStart: string;
+  /** Set only after Stripe accepted the invoice item. */
+  postedAt?: string | null;
+  providerInvoiceItemId?: string | null;
+  postError?: string | null;
   createdAt: string;
   approvedAt: string | null;
   decisionReason: string | null;
@@ -88,3 +92,7 @@ export const decideVoiceBillingDraft = (
     method: "POST",
     body: JSON.stringify({ reason }),
   });
+
+/** Sends an approved draft to Stripe once, as a pending item on the business's next invoice. */
+export const postVoiceBillingDraft = (id: string) =>
+  apiFetch<{ id: string; status: string; providerInvoiceItemId: string | null }>(`${base}/drafts/${id}/post`, { method: "POST" });

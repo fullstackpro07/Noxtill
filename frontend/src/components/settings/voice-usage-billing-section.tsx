@@ -11,6 +11,7 @@ import {
   captureVoiceBillingRates,
   createVoiceBillingDraft,
   decideVoiceBillingDraft,
+  postVoiceBillingDraft,
   fetchVoiceBillingDraft,
   fetchVoiceUsageBilling,
 } from "@/lib/voice-usage-billing-api";
@@ -45,7 +46,7 @@ function VoiceUsageBillingContent({ branchId }: { branchId: string | null }) {
   };
   const operation = useMutation({
     mutationFn: async (task: {
-      type: "capture" | "rate" | "create" | "approve" | "cancel";
+      type: "capture" | "rate" | "create" | "approve" | "cancel" | "post";
       id?: string;
       reason?: string;
     }) => {
@@ -54,6 +55,7 @@ function VoiceUsageBillingContent({ branchId }: { branchId: string | null }) {
         return approveVoiceBillingRate(task.id!, task.reason!);
       if (task.type === "create")
         return createVoiceBillingDraft(selectedRate, month);
+      if (task.type === "post") return postVoiceBillingDraft(task.id!);
       return decideVoiceBillingDraft(task.id!, task.type, task.reason!);
     },
     onSuccess: async (result, task) => {
@@ -61,7 +63,9 @@ function VoiceUsageBillingContent({ branchId }: { branchId: string | null }) {
       setNotice(
         task.type === "approve"
           ? "Usage approved for platform Billing review. No invoice has been created or paid."
-          : "Saved.",
+          : task.type === "post"
+            ? "Sent to Stripe as one item on the next invoice. Stripe collects it with the normal invoice; nothing was charged directly."
+            : "Saved.",
       );
       await refresh();
     },
@@ -310,7 +314,11 @@ function VoiceUsageBillingContent({ branchId }: { branchId: string | null }) {
                     <td className="p-2">
                       {draft.status === "approved"
                         ? "Approved for billing review"
-                        : draft.status}
+                        : draft.status === "posted"
+                          ? "On next Stripe invoice"
+                          : draft.status === "posting"
+                            ? "Sending to Stripe…"
+                            : draft.status}
                     </td>
                     <td className="p-2">
                       <Button
@@ -416,6 +424,33 @@ function VoiceUsageBillingContent({ branchId }: { branchId: string | null }) {
                       rounded once to the currency precision configured in this
                       rate version.
                     </p>
+                    {(detail.data.status === "approved" ||
+                      detail.data.status === "posting") && (
+                      <div className="flex flex-col gap-1.5">
+                        {detail.data.postError ? (
+                          <p className="text-xs text-danger">
+                            Last attempt was not accepted by Stripe: {detail.data.postError}
+                          </p>
+                        ) : null}
+                        <div>
+                          <Button
+                            size="sm"
+                            disabled={operation.isPending}
+                            onClick={() => operation.mutate({ type: "post", id: selectedDraft })}
+                          >
+                            Send to billing (Stripe)
+                          </Button>
+                        </div>
+                        <p className="text-xs text-fg-muted">
+                          Adds one item to this business&apos;s next Stripe invoice. It can only be sent once.
+                        </p>
+                      </div>
+                    )}
+                    {detail.data.status === "posted" && (
+                      <p className="text-xs text-fg-muted">
+                        Sent to Stripe{detail.data.postedAt ? ` on ${new Date(detail.data.postedAt).toLocaleString()}` : ""} · item {detail.data.providerInvoiceItemId}
+                      </p>
+                    )}
                     {detail.data.status === "draft" && (
                       <div className="flex flex-wrap gap-2">
                         <Button

@@ -8,10 +8,14 @@ import {
   VoiceBillingDecisionDto,
 } from './dto/voice-usage-billing.dto';
 import { VoiceUsageBillingService } from './voice-usage-billing.service';
+import { VoiceUsageBillingHandoffService } from './voice-usage-billing-handoff.service';
 
 @Controller('billing/voice-usage')
 export class VoiceUsageBillingController {
-  constructor(private readonly service: VoiceUsageBillingService) {}
+  constructor(
+    private readonly service: VoiceUsageBillingService,
+    private readonly handoff: VoiceUsageBillingHandoffService,
+  ) {}
 
   @Get()
   @RequireCapability(CAPABILITIES.BILLING_MANAGE)
@@ -88,5 +92,12 @@ export class VoiceUsageBillingController {
       'cancelled',
       dto.reason,
     );
+  }
+
+  /** Sends an approved draft to Stripe once, as a pending invoice item on the next invoice. */
+  @Post('drafts/:id/post')
+  @RequireCapability(CAPABILITIES.BILLING_MANAGE)
+  postDraft(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.handoff.post(user.businessId, user.sub, id);
   }
 }
