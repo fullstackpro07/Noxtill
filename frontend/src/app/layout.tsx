@@ -1,28 +1,7 @@
 import type { Metadata } from "next";
-import { Poppins, DM_Sans, JetBrains_Mono } from "next/font/google";
+import { rootDmSans as dmSans, rootJetBrainsMono as jetbrainsMono, rootPoppins as poppins } from "@/fonts";
 import { AppProviders } from "@/providers/app-providers";
 import "./globals.css";
-
-const poppins = Poppins({
-  variable: "--font-poppins",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://noxtill.com"),

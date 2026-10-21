@@ -1,11 +1,5 @@
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { nxJakarta as jakarta } from "@/fonts";
 import "@/components/auth-flow/auth-flow.css";
-
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-nx-jakarta",
-});
 
 /** Layout A (Auth & Onboarding design): minimal white page, one centered card, no marketing panel. */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {

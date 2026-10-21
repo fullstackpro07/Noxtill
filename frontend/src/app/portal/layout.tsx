@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
-import { Plus_Jakarta_Sans } from "next/font/google";
-
-const plusJakarta = Plus_Jakarta_Sans({ variable: "--font-plus-jakarta", subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], display: "swap" });
+import { plusJakarta } from "@/fonts";
 
 export const metadata = { title: "Project portal", robots: { index: false, follow: false } };
 
