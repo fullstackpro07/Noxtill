@@ -43,9 +43,9 @@ function gapAdvice(topic: TopicKey, orders: boolean, credit: boolean): { hint: s
     case "service_pricing":
       return { hint: "Check the item exists in Products with the name callers use — or add the answer as an FAQ.", needsSharing: false };
     case "order_status":
-      return { hint: orders ? "Sharing is on, but the caller's number must match a saved customer with an order. Add an FAQ for the general case." : "The AI isn't allowed to read order status. Allow it, or add an FAQ.", needsSharing: !orders };
+      return { hint: orders ? "Sharing is on, but private order details also need the customer's booking-management reference and a matching caller number. Use a general FAQ or staff transfer when verification is unavailable." : "Order sharing is off. Enabling it still requires private-reference verification.", needsSharing: !orders };
     case "credit_balance":
-      return { hint: credit ? "Sharing is on, but the caller's number must match a saved customer. Add an FAQ for the general case." : "The AI isn't allowed to read credit balances. Allow it, or add an FAQ.", needsSharing: !credit };
+      return { hint: credit ? "Sharing is on, but account balances require private booking-reference verification as well as caller matching. Use a staff transfer when verification is unavailable." : "Credit sharing is off. Enabling it still requires private-reference verification.", needsSharing: !credit };
     case "refund_returns":
     case "complaint":
       return { hint: "The AI can't process refunds or resolve complaints, so it declines. Send these to a person with a routing rule — or add an FAQ explaining your policy.", needsSharing: false, needsRule: true };
@@ -81,7 +81,7 @@ function Knowledge() {
       badge: "Applies from the next call",
       badgeTone: "blue",
       body: <SharingForm />,
-      bullets: ["Order status and credit balance are only ever shown for a caller whose number exactly matches a saved customer", "Caller ID can be faked, so both are off until you choose to share them"],
+      bullets: ["Recorded-turn account replies require a matching caller number and a private booking-management reference for that customer, supplied with the question", "The booking must be upcoming or within the last 90 days and not canceled. Caller ID alone is never verified identity", "Live-audio agents expose only their pinned tool allowlist; customer lookup returns minimal non-sensitive matching information"],
       secondary: "Close",
     });
 
@@ -89,11 +89,11 @@ function Knowledge() {
     openPanel({
       kicker: entry ? "Edit FAQ" : "New FAQ",
       title: entry ? entry.title : "Teach the AI an answer",
-      badge: "Used from the next call",
+      badge: "Published agents use snapshots",
       badgeTone: "blue",
       body: <KnowledgeForm kind="faq" entry={entry} prefillQuestion={prefillQuestion} />,
       bulletsTitle: "How an FAQ is used",
-      bullets: ["When a caller's words match it, the answer is put in front of the AI on that call", "The AI answers from it and says so plainly — it doesn't add details that aren't in your answer", "Only you can change it; the AI never edits your FAQs"],
+      bullets: ["New agent drafts capture the selected source content and hash; save, test, approve and publish a new version to use edits", "An existing snapshot does not silently change when an FAQ is edited. Disabling the source revokes it immediately", "Older versions without snapshots and the default receptionist still read active sources. The AI never edits your FAQs"],
       secondary: "Close",
     });
 
@@ -105,7 +105,7 @@ function Knowledge() {
       badgeTone: "neutral",
       body: <KnowledgeForm kind="document" entry={entry} />,
       bulletsTitle: "How a document is used",
-      bullets: ["The whole text is stored, but the AI is only shown the passage that best matches what a caller just said", "Use it for policies, price lists, menus, directions — anything callers ask about", "Only text is read: a .txt, .md or .csv file, or pasted text. PDFs and Word files aren't parsed"],
+      bullets: ["New agent drafts pin selected document content and provenance. Publish a new tested version to use edits; disabling a source revokes it immediately", "Recorded turns select a matching passage; live audio uses a bounded selected corpus with source references", "Only text is read: a .txt, .md or .csv file, or pasted text. PDFs and Word files aren't parsed"],
       secondary: "Close",
     });
 
@@ -168,12 +168,12 @@ function Knowledge() {
       owner: "Orders",
       freshness: orders ? "Real time" : "Not shared",
       freshTone: orders ? "green" : "neutral",
-      used: orders ? "Matched callers only" : "No",
+      used: orders ? "Verified reference only" : "No",
       usedTone: orders ? "amber" : "neutral",
       status: orders ? "Active" : "Off",
       statusTone: orders ? "green" : "amber",
       entries: "—",
-      bullets: ["Only a caller whose number exactly matches a saved customer, and only their own most recent order (status and total)", "Caller ID can be faked, which is why this is off until you turn it on", "The AI can't change an order or promise a delivery date"],
+      bullets: ["Only the verified customer's own most recent order (status and total), after caller matching and a valid private booking reference", "Reference verification is required even when sharing is enabled", "The AI can't change an order or promise a delivery date"],
     },
     {
       source: "Credit balances",
@@ -181,12 +181,12 @@ function Knowledge() {
       owner: "Credit",
       freshness: credit ? "Real time" : "Not shared",
       freshTone: credit ? "green" : "neutral",
-      used: credit ? "Matched callers only" : "No",
+      used: credit ? "Verified reference only" : "No",
       usedTone: credit ? "amber" : "neutral",
       status: credit ? "Active" : "Off",
       statusTone: credit ? "green" : "amber",
       entries: "—",
-      bullets: ["Only a caller whose number exactly matches a saved customer, and only their own balance", "Off by default — a balance is more sensitive than an order status", "The AI can't record a payment or change a balance"],
+      bullets: ["Recorded-turn replies need both a matching caller number and a valid private booking-management reference, and read only that customer's balance", "Off by default; enabling it does not bypass verification", "The AI can't record a payment or change a balance"],
     },
     {
       source: "Your FAQs",
@@ -251,7 +251,7 @@ function Knowledge() {
             <div className="text-[13px] font-bold" style={{ textWrap: "pretty" }}>
               {g.sampleQuestion ? `“${g.sampleQuestion}”` : TOPIC_LABELS[g.topic]}
             </div>
-            <div className="mt-[3px] text-[11px] text-[#94A3B8]">
+            <div className="mt-[3px] text-[11px] text-[color:var(--app-text-faintest,#667085)]">
               {TOPIC_LABELS[g.topic]} · asked {g.asked} time{g.asked === 1 ? "" : "s"} · the AI had no record {g.declined} time{g.declined === 1 ? "" : "s"}
               {g.lastAskedAt ? ` · last ${relAgo(g.lastAskedAt, rx.now)}` : ""}
             </div>
@@ -259,7 +259,7 @@ function Knowledge() {
           </div>
           <div className="flex-none text-right">
             <div className="text-[20px] font-extrabold tabular-nums text-[#B45309]">{g.declined}</div>
-            <div className="text-[9.5px] text-[#94A3B8]">declined · 30 days</div>
+            <div className="text-[9.5px] text-[color:var(--app-text-faintest,#667085)]">declined · 30 days</div>
           </div>
           <div className="flex flex-none gap-1.5">
             {advice.needsRule ? (
@@ -272,7 +272,7 @@ function Knowledge() {
                 Allow it
               </button>
             ) : null}
-            <button type="button" onClick={() => openFaq(g.sampleQuestion ?? undefined)} className="flex h-8 cursor-pointer items-center rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]">
+            <button type="button" onClick={() => openFaq(g.sampleQuestion ?? undefined)} className="flex h-8 cursor-pointer items-center rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]">
               Add FAQ
             </button>
           </div>
@@ -287,7 +287,7 @@ function Knowledge() {
         <div className="flex flex-wrap items-center gap-2.5 px-[2px]">
           <Ico name="lightbulb" size={16} className="text-[#B45309]" />
           <div className="text-[13.5px] font-extrabold">Knowledge gaps from real calls</div>
-          <div className="ml-auto text-[10.5px] text-[#94A3B8]">Counted from questions the AI itself said it had no record for · last 30 days</div>
+          <div className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">Counted from questions the AI itself said it had no record for · last 30 days</div>
         </div>
         {gaps.length === 0 ? (
           <div className="mt-3 rounded-[11px] border border-[#BBF0CB] bg-[#F6FEF9] px-3.5 py-3 text-[12.5px] leading-[1.6] text-[#45505F]">
@@ -296,7 +296,7 @@ function Knowledge() {
         ) : (
           <div className="mt-3 flex flex-col gap-2.5">{gaps.map(gapRow)}</div>
         )}
-        <div className="mt-3 text-[11px] leading-[1.5] text-[#94A3B8]">Declining is correct behaviour — the AI won&apos;t invent an answer. But a question asked again and again is a real cost, and the loop only closes when a person adds the real answer.</div>
+        <div className="mt-3 text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">Declining is correct behaviour — the AI won&apos;t invent an answer. But a question asked again and again is a real cost, and the loop only closes when a person adds the real answer.</div>
       </Card>
 
       <Card overflow>
@@ -309,7 +309,7 @@ function Knowledge() {
                 <Ico name="upload" size={13} />
                 Import document
               </button>
-              <button type="button" onClick={() => openFaq()} className="flex h-[30px] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[8px] border-0 bg-[#16A34A] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]">
+              <button type="button" onClick={() => openFaq()} className="flex h-[30px] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[8px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]">
                 <Ico name="plus" size={13} strokeWidth={2.25} />
                 Add FAQ
               </button>
@@ -330,9 +330,9 @@ function Knowledge() {
                   <Chip tone={k.kind === "faq" ? "purple" : "blue"}>{k.kind === "faq" ? "FAQ" : "Document"}</Chip>
                   {!k.active ? <Chip tone="neutral">Off</Chip> : null}
                 </div>
-                <div className="mt-[3px] line-clamp-2 text-[11px] leading-[1.5] text-[#7A8798]">{k.content}</div>
-                <div className="mt-1 text-[10.5px] text-[#94A3B8]">
-                  {k.usedCount ? `Used on ${k.usedCount} call${k.usedCount === 1 ? "" : "s"}${k.lastUsedAt ? ` · last ${relAgo(k.lastUsedAt, rx.now)}` : ""}` : "Not used on a call yet"} · updated {fmtDateTime(k.updatedAt, rx.timezone)}
+                <div className="mt-[3px] line-clamp-2 text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">{k.content}</div>
+                <div className="mt-1 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
+                  {k.usedCount ? `Retrieved ${k.usedCount} time${k.usedCount === 1 ? "" : "s"}${k.lastUsedAt ? ` · last ${relAgo(k.lastUsedAt, rx.now)}` : ""}` : "No recorded retrievals yet"} · updated {fmtDateTime(k.updatedAt, rx.timezone)}
                   {k.sourceFilename ? ` · from ${k.sourceFilename}` : ""}
                 </div>
               </div>
@@ -376,7 +376,7 @@ function Knowledge() {
               <Th>Type</Th>
               <Th>Owned by</Th>
               <Th>Freshness</Th>
-              <Th>Used by AI</Th>
+                  <Th>Available to AI</Th>
               <Th>Status</Th>
               <Th align="center">Entries</Th>
             </>
@@ -395,7 +395,7 @@ function Knowledge() {
                     { label: "Type", value: r.type },
                     { label: "Owned by", value: r.owner },
                     { label: "Freshness", value: r.freshness },
-                    { label: "Used by AI", value: r.used },
+                    { label: "Available to AI", value: r.used },
                     { label: "Entries", value: r.entries },
                     { label: "Status", value: r.status },
                   ],

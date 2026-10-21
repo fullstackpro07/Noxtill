@@ -48,7 +48,7 @@ export function PhoneSystemCard() {
         <section>
           <h3 className="m-0 text-[12px] font-extrabold text-[#334155]">Test caller numbers</h3>
           <p className="mb-2 mt-1 text-[11px] leading-[1.5] text-[#667085]">
-            Calls from these numbers still go through the receptionist but are tagged as tests: left out of analytics and usage, and never texted after a missed call.
+            Calls from these numbers still go through the receptionist but are tagged as tests: excluded from non-test analytics and the inbound automated-call cap, and never texted after a missed call. Actual provider costs and storage usage still count.
           </p>
           <div className="flex flex-wrap gap-1.5">
             {current.length ? (
@@ -61,7 +61,7 @@ export function PhoneSystemCard() {
                 </span>
               ))
             ) : (
-              <span className="text-[11px] text-[#94A3B8]">No test numbers.</span>
+              <span className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">No test numbers.</span>
             )}
           </div>
           <form

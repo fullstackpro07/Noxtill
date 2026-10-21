@@ -99,7 +99,7 @@ function History() {
       <Card overflow>
         <div className="flex flex-wrap items-center gap-2 px-[18px] py-3.5">
           <div className="flex h-[34px] min-w-0 flex-[1_1_200px] items-center gap-2 rounded-[10px] border border-[#D5DAE2] bg-white px-[11px]">
-            <Ico name="search" size={14} className="text-[#7A8798]" />
+            <Ico name="search" size={14} className="text-[color:var(--app-text-faintest,#667085)]" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}

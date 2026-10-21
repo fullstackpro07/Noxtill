@@ -69,7 +69,13 @@ export function outcomeChip(c: EnrichedCall): ChipSpec {
     if (c.callbackRequestedAt) return { label: "Callback offered", tone: "amber" };
     return { label: "Callback required", tone: "red" };
   }
-  if (c.outcome === "booking") return { label: "Booked", tone: "green" };
+  if (c.outcome === "booking") {
+    if (!c.appointment) return { label: "Booking record unavailable", tone: "neutral" };
+    if (c.appointment.status === "requested") return { label: "Booking awaiting approval", tone: "amber" };
+    if (c.appointment.status === "cancelled") return { label: "Booking cancelled", tone: "neutral" };
+    if (c.appointment.status === "no_show") return { label: "Booking · no-show", tone: "amber" };
+    return { label: c.appointment.status === "completed" ? "Booking completed" : "Booked", tone: "green" };
+  }
   if (c.outcome === "transfer") return { label: "Transferred", tone: "blue" };
   if (c.outcome === "message" || c.outcome === "custom") {
     const what = c.outcome === "custom" ? (c.customIntentName ?? "Custom") : "Message";
@@ -215,7 +221,7 @@ export function sliceDay(all: EnrichedCall[], day: string): DaySlice {
     ai: calls.filter((c) => c.handledBy === "ai"),
     human: calls.filter((c) => c.handledBy === "human_joined"),
     transferred: calls.filter((c) => c.outcome === "transfer" || c.status === "transferred"),
-    booked: calls.filter((c) => c.outcome === "booking" && !!c.appointment),
+    booked: calls.filter((c) => c.outcome === "booking" && c.appointment && ["booked", "confirmed", "completed"].includes(c.appointment.status)),
     leads: calls.filter(isLead),
     customerCalls: calls.filter((c) => !!c.customer),
     newCallers: calls.filter((c) => !c.customer && c.previousCalls === 0),

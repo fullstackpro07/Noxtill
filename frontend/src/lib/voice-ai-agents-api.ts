@@ -12,14 +12,76 @@ export const VOICE_AI_TEMPLATES = [
 ] as const;
 
 export type VoiceAiTemplate = (typeof VOICE_AI_TEMPLATES)[number];
-export const VOICE_AI_TOOLS = ["book", "message", "transfer", "end"] as const;
+export const VOICE_REALTIME_VOICES = [
+  "alloy",
+  "ash",
+  "ballad",
+  "coral",
+  "echo",
+  "sage",
+  "shimmer",
+  "verse",
+  "marin",
+  "cedar",
+] as const;
+export type VoiceRealtimeVoice = (typeof VOICE_REALTIME_VOICES)[number];
+export const VOICE_AI_TOOLS = [
+  "book",
+  "message",
+  "transfer",
+  "end",
+  "catalog",
+  "slots",
+  "customer_lookup",
+  "reschedule",
+  "support_ticket",
+  "inbox_draft",
+] as const;
 export type VoiceAiTool = (typeof VOICE_AI_TOOLS)[number];
-export interface VoiceAiAgentDraftInput {
+export interface VoiceAiAgentControls {
+  runtimeMode?: "recorded_turns" | "realtime";
+  realtimeVoice?: VoiceRealtimeVoice;
+  inboundEnabled?: boolean;
+  outboundEnabled?: boolean;
+  timeZone?: string;
+  weeklyHours?: { day: number; opens: string; closes: string }[];
+  holidays?: string[];
+  rolloutPercent?: number;
+  maxConcurrentCalls?: number;
+  maxCallSeconds?: number;
+  maxToolCalls?: number;
+  assignedOwnerBusinessUserId?: string | null;
+}
+
+export const voiceAiControls = (config: VoiceAiAgentControls = {}) => ({
+  runtimeMode: config.runtimeMode ?? "recorded_turns",
+  realtimeVoice: config.realtimeVoice ?? "marin",
+  inboundEnabled: config.inboundEnabled ?? true,
+  outboundEnabled: config.outboundEnabled ?? true,
+  timeZone: config.timeZone ?? "UTC",
+  weeklyHours: config.weeklyHours ?? [],
+  holidays: config.holidays ?? [],
+  rolloutPercent: config.rolloutPercent ?? 100,
+  maxConcurrentCalls: config.maxConcurrentCalls ?? 10,
+  maxCallSeconds: config.maxCallSeconds ?? 600,
+  maxToolCalls: config.maxToolCalls ?? 10,
+  assignedOwnerBusinessUserId: config.assignedOwnerBusinessUserId ?? null,
+});
+
+export interface VoiceAiAgentDraftInput extends VoiceAiAgentControls {
   name: string;
   template: VoiceAiTemplate;
   purpose: string;
   voiceStyle: string;
   instructions: string;
+  exclusions: string[];
+  dialogue: {
+    greeting: string;
+    disclosures: string[];
+    requiredQuestions: string[];
+    clarificationPrompt: string;
+    edgeCases: string[];
+  };
   escalationGuidance: string;
   languages: string[];
   toolPermissions: VoiceAiTool[];
@@ -60,6 +122,8 @@ export interface VoiceAiAgentVersion {
     errorMessage: string | null;
     inputTokens: number;
     outputTokens: number;
+    expectedIntent: "continue" | "book" | "message" | "transfer" | "end" | null;
+    actualIntent: "continue" | "book" | "message" | "transfer" | "end" | null;
     createdAt: string;
   } | null;
   monthlySpendUsd: number;
@@ -78,6 +142,14 @@ export interface VoiceAiAgent {
 export interface VoiceAiAgentList {
   templates: VoiceAiTemplate[];
   tools: VoiceAiTool[];
+  realtimeVoices: VoiceRealtimeVoice[];
+  businessScope: { id: string; name: string; isBranch: boolean } | null;
+  internalOwners: {
+    id: string;
+    name: string;
+    role: string;
+    hasActiveVoiceProfile: boolean;
+  }[];
   knowledgeSources: { id: string; title: string; kind: "faq" | "document" }[];
   agents: VoiceAiAgent[];
   limitations: { tools: string; liveRouting: string };
@@ -117,6 +189,8 @@ export function testVoiceAiAgent(agentId: string, scenario: string) {
     id: string;
     version: number;
     passed: boolean;
+    evaluationStatus: "not_evaluated" | "passed" | "failed";
+    assertionFailures: string[];
     response: string | null;
     errorCode: string | null;
     errorMessage: string | null;
@@ -126,6 +200,61 @@ export function testVoiceAiAgent(agentId: string, scenario: string) {
   }>(`/voice/agents/ai/${agentId}/test`, {
     method: "POST",
     body: JSON.stringify({ scenario }),
+  });
+}
+
+export function previewVoiceAiAgent(agentId: string, voice: VoiceRealtimeVoice) {
+  return apiFetch<{
+    audioBase64: string;
+    voice: VoiceRealtimeVoice;
+    sampleRate: 24000;
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+  }>(`/voice/agents/ai/${agentId}/voice-preview`, {
+    method: "POST",
+    body: JSON.stringify({ voice }),
+  });
+}
+
+export type VoiceAiAgentScenarioChecks = {
+  mustInclude?: string[];
+  mustNotInclude?: string[];
+  expectedIntent?: "continue" | "book" | "message" | "transfer" | "end";
+};
+
+export function testVoiceAiAgentScenarios(
+  agentId: string,
+  scenarios: string[],
+  checks?: VoiceAiAgentScenarioChecks[],
+) {
+  return apiFetch<{
+    version: number | null;
+    requestedScenarioCount: number;
+    scenarioCount: number;
+    stoppedEarly: boolean;
+    nonEmptyResponses: number;
+    evaluatedScenarioCount: number;
+    assertionPassedCount: number;
+    assertionFailedCount: number;
+    results: {
+      id: string;
+      version: number;
+      passed: boolean;
+      evaluationStatus: "not_evaluated" | "passed" | "failed";
+      assertionFailures: string[];
+      expectedIntent: VoiceAiAgentScenarioChecks["expectedIntent"] | null;
+      actualIntent: VoiceAiAgentScenarioChecks["expectedIntent"] | null;
+      response: string | null;
+      errorCode: string | null;
+      errorMessage: string | null;
+      inputTokens: number;
+      outputTokens: number;
+      createdAt: string;
+    }[];
+  }>(`/voice/agents/ai/${agentId}/test-suite`, {
+    method: "POST",
+    body: JSON.stringify({ scenarios, ...(checks ? { checks } : {}) }),
   });
 }
 

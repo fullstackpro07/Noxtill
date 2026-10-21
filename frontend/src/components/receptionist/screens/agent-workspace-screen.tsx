@@ -133,7 +133,7 @@ function Workspace() {
           <div className="text-[20px] font-extrabold tracking-[-.03em] text-[#0F172A]">
             Agent Workspace
           </div>
-          <div className="mt-1 text-[12px] text-[#7A8798]">
+          <div className="mt-1 text-[12px] text-[color:var(--app-text-faintest,#667085)]">
             Live calls and human follow-ups from this business&apos;s real phone
             records.
           </div>
@@ -207,13 +207,13 @@ function Workspace() {
           />
           <div className="grid gap-4 p-[18px] sm:grid-cols-2">
             <div className="min-w-0">
-              <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[#94A3B8]">
+              <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]">
                 Signed-in agent
               </div>
               <div className="mt-1 text-[15px] font-extrabold text-[#0F172A]">
                 {selfAgent?.name ?? "Not set up"}
               </div>
-              <div className="mt-1 text-[11px] text-[#7A8798]">
+              <div className="mt-1 text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                 {selfAgent
                   ? `${selfAgent.role}${selfAgent.skillTags.length ? ` · ${selfAgent.skillTags.join(", ")}` : ""}`
                   : "Create a voice profile from an existing Staff record to report presence."}
@@ -230,7 +230,7 @@ function Workspace() {
               </div>
             </div>
           </div>
-          <div className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-[18px] py-3 text-[10.5px] leading-[1.5] text-[#7A8798]">
+          <div className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-[18px] py-3 text-[10.5px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">
             Presence is self-reported and expires after{" "}
             {roster.data?.limitations.presenceTtlSeconds ?? "the configured"}{" "}
             seconds. A fresh available profile with capacity can receive
@@ -277,7 +277,7 @@ function Workspace() {
           <Chip tone={rx.live.length ? "blue" : "neutral"}>
             {rx.live.length}
           </Chip>
-          <span className="ml-auto text-[10.5px] text-[#94A3B8]">
+          <span className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
             Live call records · refresh automatically
           </span>
         </div>
@@ -312,7 +312,7 @@ function Workspace() {
                       <div className="truncate text-[14px] font-extrabold text-[#0F172A]">
                         {callerName(call)}
                       </div>
-                      <div className="mt-0.5 font-mono text-[11px] text-[#7A8798]">
+                      <div className="mt-0.5 font-mono text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                         {call.fromNumber} ·{" "}
                         {fmtWhen(
                           call.startedAt,
@@ -335,7 +335,7 @@ function Workspace() {
                     </div>
                   </div>
                   <div className="space-y-2 p-4">
-                    <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-[#94A3B8]">
+                    <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]">
                       Customer context
                     </div>
                     <div className="text-[11.5px] text-[#45505F]">
@@ -351,7 +351,7 @@ function Workspace() {
                       {call.previousCalls === 1 ? "" : "s"}
                     </div>
                     <div className="rounded-[9px] border border-[#E6E8EC] bg-[#FAFBFC] p-2.5 text-[11.5px] leading-[1.5] text-[#45505F]">
-                      <span className="font-bold text-[#7A8798]">
+                      <span className="font-bold text-[color:var(--app-text-faintest,#667085)]">
                         Last caller words:{" "}
                       </span>
                       {lastCaller
@@ -379,7 +379,7 @@ function Workspace() {
                               : "Generate suggestion"}
                         </SmallBtn>
                       </div>
-                      <div className="mt-1 text-[10.5px] leading-[1.5] text-[#7A8798]">
+                      <div className="mt-1 text-[10.5px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">
                         Only on your click, recent call text and matching active
                         knowledge snippets are sent to the configured AI
                         provider. Nothing is sent to the caller.
@@ -397,7 +397,7 @@ function Workspace() {
                           <div className="text-[11.5px] leading-[1.55] text-[#334155]">
                             {copilotResult.suggestion}
                           </div>
-                          <div className="mt-2 border-t border-[#F1ECFA] pt-2 text-[10px] text-[#7A8798]">
+                          <div className="mt-2 border-t border-[#F1ECFA] pt-2 text-[10px] text-[color:var(--app-text-faintest,#667085)]">
                             Context supplied:{" "}
                             {copilotResult.contextSupplied
                               .map((source) => source.label)
@@ -434,7 +434,7 @@ function Workspace() {
                               </div>
                             </details>
                           ) : null}
-                          <div className="mt-1 text-[9.5px] text-[#94A3B8]">
+                          <div className="mt-1 text-[9.5px] text-[color:var(--app-text-faintest,#667085)]">
                             AI-generated ·{" "}
                             {copilotResult.usage.inputTokens +
                               copilotResult.usage.outputTokens}{" "}
@@ -501,7 +501,7 @@ function Workspace() {
           <Chip tone={followUps.length ? "amber" : "neutral"}>
             {followUps.length} waiting
           </Chip>
-          <span className="ml-auto text-[10.5px] text-[#94A3B8]">
+          <span className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
             Unresolved missed calls, messages and custom situations
           </span>
         </div>
@@ -531,10 +531,10 @@ function Workspace() {
                       <div className="truncate text-[12.5px] font-extrabold text-[#0F172A]">
                         {callerName(call)}
                       </div>
-                      <div className="mt-0.5 font-mono text-[10.5px] text-[#7A8798]">
+                      <div className="mt-0.5 font-mono text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
                         {call.fromNumber}
                       </div>
-                      <div className="mt-1 text-[10px] text-[#94A3B8]">
+                      <div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">
                         {fmtWhen(
                           call.startedAt,
                           rx.timezone,

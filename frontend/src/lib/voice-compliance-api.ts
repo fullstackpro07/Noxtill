@@ -11,6 +11,8 @@ export interface VoiceCompliancePolicyVersion {
   recordingAllowed: boolean;
   recordingNoticeText: string | null;
   recordingRetentionDays: number | null;
+  meetingAiProcessingAllowed: boolean;
+  meetingAiProcessingNoticeText: string | null;
   allowedWindowStart: string | null;
   allowedWindowEnd: string | null;
   timeZone: string | null;
@@ -103,6 +105,8 @@ export interface VoiceCompliancePolicyInput {
   recordingAllowed: boolean;
   recordingNoticeText?: string | null;
   recordingRetentionDays?: number | null;
+  meetingAiProcessingAllowed?: boolean;
+  meetingAiProcessingNoticeText?: string | null;
   allowedWindowStart?: string | null;
   allowedWindowEnd?: string | null;
   timeZone?: string | null;
@@ -113,6 +117,8 @@ export interface VoiceCompliancePolicyVersionInput {
   recordingAllowed: boolean;
   recordingNoticeText?: string | null;
   recordingRetentionDays?: number | null;
+  meetingAiProcessingAllowed?: boolean;
+  meetingAiProcessingNoticeText?: string | null;
   allowedWindowStart?: string | null;
   allowedWindowEnd?: string | null;
   timeZone?: string | null;

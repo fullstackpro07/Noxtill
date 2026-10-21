@@ -26,7 +26,7 @@ export function ProviderHealthCard() {
           right={<SmallBtn icon="refresh-cw" disabled={health.isFetching} onClick={() => void health.refetch()}>{health.isFetching ? "Checking…" : "Re-check"}</SmallBtn>}
         />
         {health.isPending ? (
-          <p className="m-0 p-[18px] text-[12px] text-[#7A8798]">Checking…</p>
+          <p className="m-0 p-[18px] text-[12px] text-[color:var(--app-text-faintest,#667085)]">Checking…</p>
         ) : health.isError ? (
           <p className="m-0 p-[18px] text-[12px] text-[#B42318]">{health.error.message}</p>
         ) : (
@@ -47,9 +47,9 @@ export function ProviderHealthCard() {
         )}
       </Card>
       <Card overflow>
-        <CardHead title="Usage this month" sub={usage.data ? `Since ${when(usage.data.periodStart)} (UTC)` : "Measured from saved calls"} />
+        <CardHead title="Usage this month" sub={usage.data ? `Since ${new Date(usage.data.periodStart).toLocaleString(undefined, { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" })} (UTC)` : "Measured from saved calls"} />
         {usage.isPending ? (
-          <p className="m-0 p-[18px] text-[12px] text-[#7A8798]">Loading…</p>
+          <p className="m-0 p-[18px] text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading…</p>
         ) : usage.isError ? (
           <p className="m-0 p-[18px] text-[12px] text-[#B42318]">{usage.error.message}</p>
         ) : (
@@ -67,7 +67,7 @@ export function ProviderHealthCard() {
               ].map(([label, value]) => (
                 <div key={label} className="rounded-[9px] bg-[#F7F9FB] p-2.5">
                   <div className="text-[16px] font-extrabold tabular-nums">{value}</div>
-                  <div className="text-[10.5px] text-[#7A8798]">{label}</div>
+                  <div className="text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{label}</div>
                 </div>
               ))}
             </div>

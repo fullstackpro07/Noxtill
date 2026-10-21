@@ -34,6 +34,7 @@ import { Bullets, NoteBox, RowTable } from "./rx-overlays";
 import { useCallActions } from "./rx-call-actions";
 import { LegalHoldForm, type LegalHoldFields } from "./rx-legal-hold";
 import { redactTranscript } from "@/lib/voice-legal-hold-api";
+import { CallFollowUps } from "./rx-call-follow-ups";
 
 interface SectionData {
   lineage: string;
@@ -77,6 +78,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
   const when = fmtWhen(call.startedAt, tz, rx.today, call.localDay);
   const status = statusChip(call);
   const hasTranscript = call.transcript.length > 0;
+  const serviceFailure = [...call.transcript].reverse().find((turn) => turn.serviceFailure)?.serviceFailure;
   const data = sectionFor(section, call, ctx, { tz, money, businessName: rx.insights?.businessName ?? "your business", maxTurns: rx.insights?.limits.maxCallTurns ?? 8, retentionDays: rx.insights?.limits.retentionDays ?? 90, transferConfigured: !!rx.insights?.transferConfigured, customIntents: rx.settings?.customIntents.length ?? 0, holdMessage: !!rx.settings?.queueHoldMessage, shareCatalog: rx.settings?.shareCatalog ?? true, shareOrderStatus: rx.settings?.shareOrderStatus ?? false, shareCreditBalance: rx.settings?.shareCreditBalance ?? false, today: rx.today });
 
   const playRecording = async () => {
@@ -196,7 +198,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
             <div className="text-[17px] font-extrabold tracking-[-.015em]" style={{ textWrap: "pretty" }}>
               {callerName(call)}
             </div>
-            <div className="mt-[3px] font-mono text-[11.5px] text-[#7A8798]">
+            <div className="mt-[3px] font-mono text-[11.5px] text-[color:var(--app-text-faintest,#667085)]">
               {call.fromNumber} · {when} · {fmtDuration(call.durationSeconds)} · {rx.insights?.businessName ?? "Your business"}
             </div>
             <div className="mt-[9px] flex flex-wrap items-center gap-[7px]">
@@ -221,16 +223,17 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
               {call.routedRuleName ? <ChipFor spec={{ label: `Rule: ${call.routedRuleName}`, tone: "blue", icon: "list-ordered" }} h={23} fontSize={10.5} /> : null}
             </div>
           </div>
-          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
+          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[color:var(--app-text-faintest,#667085)] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
             <Ico name="x" size={16} strokeWidth={2.25} />
           </button>
         </div>
 
+        <CallFollowUps callId={call.id} />
         {/* summary */}
         <div className="border-b border-[#EEF0F3] bg-[#FAFBFC] px-5 py-3.5">
           <div className="flex flex-wrap items-center gap-[9px]">
             <Ico name="audio-lines" size={15} className="text-[#45505F]" />
-            <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]">Call summary</div>
+            <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]">Call summary</div>
             <div className="ml-auto flex flex-wrap gap-[7px]">
               <button
                 type="button"
@@ -275,8 +278,16 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
               "This call has no transcript, so there is nothing to summarise."
             )}
           </div>
-          {call.summary ? <div className="mt-1.5 text-[10.5px] text-[#94A3B8]">Written by AI from the transcript alone{call.summaryGeneratedAt ? ` · ${fmtDateTime(call.summaryGeneratedAt, tz)}` : ""}</div> : null}
+          {call.summary ? <div className="mt-1.5 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">Written by AI from the transcript alone{call.summaryGeneratedAt ? ` · ${fmtDateTime(call.summaryGeneratedAt, tz)}` : ""}</div> : null}
         </div>
+
+        {serviceFailure ? (
+          <div role="status" className="border-b border-[#EEF0F3] bg-[#FFFBEB] px-5 py-3 text-[12px] leading-[1.6] text-[#92400E]">
+            <div className="font-bold">{serviceFailure.stage === "ai_reply" ? "AI reply unavailable" : "Speech transcription unavailable"}</div>
+            <div>{serviceFailure.message}</div>
+            <div className="mt-1 text-[10.5px]">Recorded service issue · {serviceFailure.code}</div>
+          </div>
+        ) : null}
 
         {/* what should I do */}
         <div className="border-b border-[#EEF0F3] bg-[#FBFAFF] px-5 py-3.5">
@@ -299,14 +310,14 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
             <button
               type="button"
               onClick={next.actionable ? doCallBack : () => setSection("Summary")}
-              className="flex h-8 cursor-pointer items-center rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D]"
+              className="flex h-8 cursor-pointer items-center rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D]"
             >
               {next.actionable ? "Take action" : "Open call"}
             </button>
             <button type="button" onClick={openTrace} className="flex h-8 cursor-pointer items-center rounded-[9px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]">
               Answer trace
             </button>
-            <div className="ml-auto text-[10.5px] text-[#94A3B8]">{next.evidence}</div>
+            <div className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{next.evidence}</div>
           </div>
         </div>
 
@@ -342,15 +353,15 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
                   <div className="min-w-0 flex-1 text-[12.5px] leading-[1.55] text-[#0F172A]" style={{ textWrap: "pretty" }}>
                     {t.text}
                   </div>
-                  <div className="flex-none font-mono text-[10px] text-[#94A3B8]">{t.time}</div>
+                  <div className="flex-none font-mono text-[10px] text-[color:var(--app-text-faintest,#667085)]">{t.time}</div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="flex-none overflow-hidden rounded-[12px] border border-[#E6E8EC]">
               <div className="flex items-center gap-[9px] border-b border-[#EEF0F3] bg-[#FAFBFC] px-[13px] py-[11px]">
-                <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]">{section}</div>
-                <div className="ml-auto text-[10.5px] text-[#94A3B8]">{data.lineage}</div>
+                <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]">{section}</div>
+                <div className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{data.lineage}</div>
               </div>
               <RowTable rows={data.rows} />
             </div>
@@ -423,19 +434,19 @@ function CallWrapUpPanel({ call }: { call: EnrichedCall }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-[12px] font-extrabold text-[#0F172A]">After-call wrap-up</h3>
-          <p className="mt-1 text-[11px] text-[#7A8798]">A final operator disposition, separate from what the AI classified.</p>
+          <p className="mt-1 text-[11px] text-[color:var(--app-text-faintest,#667085)]">A final operator disposition, separate from what the AI classified.</p>
         </div>
         {wrapUpQuery.data ? <ChipFor spec={{ label: "Submitted", tone: "green" }} h={22} fontSize={10} /> : null}
       </div>
 
-      {wrapUpQuery.isPending ? <p className="mt-3 text-[11px] text-[#7A8798]">Checking this call’s wrap-up…</p> : null}
+      {wrapUpQuery.isPending ? <p className="mt-3 text-[11px] text-[color:var(--app-text-faintest,#667085)]">Checking this call’s wrap-up…</p> : null}
       {wrapUpQuery.isError ? <p role="alert" className="mt-3 text-[11px] text-[#B42318]">Wrap-up status could not be loaded.</p> : null}
       {wrapUpQuery.data ? (
         <div className="mt-3 rounded-[10px] border border-[#BBF0CB] bg-white p-3 text-[11px] text-[#334155]">
           <div className="font-bold">{wrapUpQuery.data.disposition.replaceAll("_", " ")}</div>
           {wrapUpQuery.data.tags.length ? <div className="mt-1">Tags: {wrapUpQuery.data.tags.join(" · ")}</div> : null}
           {wrapUpQuery.data.notes ? <p className="mt-1 whitespace-pre-wrap">{wrapUpQuery.data.notes}</p> : null}
-          <div className="mt-1 text-[10px] text-[#94A3B8]">Saved {fmtDateTime(wrapUpQuery.data.createdAt, rx.timezone)}</div>
+          <div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">Saved {fmtDateTime(wrapUpQuery.data.createdAt, rx.timezone)}</div>
         </div>
       ) : null}
       {!wrapUpQuery.isPending && !wrapUpQuery.isError && !wrapUpQuery.data ? (
@@ -480,12 +491,12 @@ function CallWrapUpPanel({ call }: { call: EnrichedCall }) {
             />
           </label>
           <div className="flex items-center justify-between gap-3 sm:col-span-2">
-            <span className="text-[10px] text-[#94A3B8]">Submit once after the call ends; this does not change the AI outcome.</span>
+            <span className="text-[10px] text-[color:var(--app-text-faintest,#667085)]">Submit once after the call ends; this does not change the AI outcome.</span>
             <button
               type="button"
               onClick={() => submit.mutate()}
               disabled={!disposition || submit.isPending}
-              className="h-[32px] rounded-[8px] border-0 bg-[#16A34A] px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-[32px] rounded-[8px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submit.isPending ? "Saving…" : "Submit wrap-up"}
             </button>
@@ -499,6 +510,10 @@ function CallWrapUpPanel({ call }: { call: EnrichedCall }) {
 /* ─────────────────────────────── next step (rule-based, from the record) ─────────────────────────────── */
 
 function nextStep(c: EnrichedCall): { title: string; why: string; evidence: string; actionable: boolean } {
+  if (c.appointment?.status === "requested")
+    return { title: "Review the booking request — it is not confirmed.", why: "Staff must review the request, assign eligible staff and arrange any required deposit in Bookings.", evidence: "Based on the requested booking status", actionable: true };
+  if (c.appointment?.status === "cancelled")
+    return { title: "The booking was cancelled.", why: "Check the Bookings record before arranging another time with the caller.", evidence: "Based on the booking status", actionable: true };
   if (c.status === "missed" && !c.resolvedAt)
     return { title: "Call back — this call was never answered.", why: "There is no transcript or recording, and Noxtill doesn't guess why they rang. The number and the time are all that is known.", evidence: "Based on the call status", actionable: true };
   if (needsFollowUp(c)) {
@@ -506,7 +521,7 @@ function nextStep(c: EnrichedCall): { title: string; why: string; evidence: stri
     return { title: c.outcome === "custom" ? `Follow up — matched “${c.customIntentName}”.` : "Return this caller's message.", why: said ? `They said: “${said}”` : "They asked for a callback.", evidence: "Based on the transcript", actionable: true };
   }
   if (c.outcome === "transfer") return { title: "Review the transfer — the AI handed this call to a person.", why: "The AI chose to transfer. Whether the person answered isn't recorded, so check that the caller was helped.", evidence: "Based on the call outcome", actionable: false };
-  if (c.outcome === "booking" && c.appointment) return { title: "No action needed — a booking was created.", why: `${c.appointment.serviceName}${c.appointment.staffName ? ` with ${c.appointment.staffName}` : ""} — it now lives in Bookings.`, evidence: "Based on the booking record", actionable: false };
+  if (c.outcome === "booking" && c.appointment) return { title: c.appointment.status === "no_show" ? "Review the missed appointment." : "A booking exists — check its current status below.", why: `${c.appointment.serviceName}${c.appointment.staffName ? ` with ${c.appointment.staffName}` : ""} — status: ${c.appointment.status.replace("_", " ")}.`, evidence: "Based on the booking record", actionable: c.appointment.status === "no_show" };
   if (c.status === "in_progress") return { title: "This call is live right now.", why: "Open Live Calls to listen in or take over.", evidence: "Based on the call status", actionable: false };
   return { title: "No action needed.", why: c.resolvedAt ? "This follow-up has been marked handled." : "The call completed and nothing was left waiting for a person.", evidence: "Based on the call record", actionable: false };
 }
@@ -668,7 +683,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           row("Marked handled", c.resolvedAt ? fmtDateTime(c.resolvedAt, h.tz) : "No"),
           row("Assigned to", c.assignedToName ?? "Unassigned", c.assignedToName ? undefined : "muted"),
           row("Staff joined live", c.joinedByName ? `${c.joinedByName}${c.joinedAt ? ` · ${fmtClock(c.joinedAt, h.tz)}` : ""}` : "No"),
-          row("Message to caller", missed ? "Missed-call message attempted automatically · delivery not recorded" : "None", missed ? "muted" : undefined),
+          row("Message to caller", missed ? "See Missed Calls for the send outcome and provider delivery status" : "None", missed ? "muted" : undefined),
         ],
         title: "What the AI is able to write",
         bullets: ["Bookings (through the booking engine), messages left for follow-up, and a transfer", "It can read your records but cannot refund, change credit, adjust stock, change a price or alter permissions — it has no way to write to any of those", "Every write is attached to this call"],
@@ -685,7 +700,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
               row("Created by", "AI receptionist · phone"),
             ],
             title: "How it was created",
-            bullets: ["The AI passes the service and time to the booking engine, which rejects a time that isn't free", "The booking lives in Bookings — this is a reference to it", "A failed attempt isn't logged on the call, so it doesn't appear here"],
+            bullets: ["The AI passes the service and time to the booking engine, which rejects a time that isn't free", "The booking lives in Bookings — this is a reference to it", "Failed booking attempts are saved on the call and listed separately in Bookings from Calls"],
             note: "Bookings owns the record; changes made there are reflected here.",
           }
         : {
@@ -707,7 +722,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
         ],
         title: gave ? "What the AI was shown" : "Nothing to show",
         bullets: [
-          "The AI can read a caller's own most recent order — status and total — but only when sharing is on and the calling number exactly matches a saved customer",
+          "Recorded-turn order replies require enabled sharing, a matching caller number and a valid private booking-management reference; matching a phone number alone never verifies identity",
           h.shareOrderStatus ? "Sharing is on, and it only looks when the caller mentions an order" : "Sharing is off, so the AI is never shown an order — turn it on in Assistant → Records the AI may read",
           "It cannot change an order, promise a delivery date or refund one",
         ],
@@ -767,7 +782,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           ...(ctx?.notes ?? []).map((n) => row(`${n.authorName ?? "Someone"} · ${fmtDateTime(n.createdAt, h.tz)}`, n.body)),
         ],
         title: "What sends automatically",
-        bullets: ["A missed call triggers a message to the caller on your preferred messaging channel — delivery isn't recorded here", "Nothing else is sent to the caller automatically", "The follow-up stays in the queue until someone marks it handled", "Notes are for your team only; add one from the action bar"],
+        bullets: ["Missed-call messages depend on the business's text-back policy and contact eligibility — see Missed Calls for the send outcome and provider delivery status", "Nothing else is sent to the caller automatically", "The follow-up stays in the queue until someone marks it handled", "Notes are for your team only; add one from the action bar"],
         note: "The AI never messages a customer on a channel you haven't connected.",
       };
 

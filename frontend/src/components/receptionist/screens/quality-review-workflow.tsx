@@ -220,7 +220,7 @@ export function QualityReviewWorkflow() {
         <div className="flex flex-col gap-3 p-4">
           <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_auto]">
             <input className={inputClass} value={rubricName} onChange={(event) => setRubricName(event.target.value)} placeholder="Rubric name" maxLength={120} />
-            <div className="text-[11px] font-semibold text-[#7A8798]">Weights: {weightTotal}% {weightTotal === 100 ? "· ready" : "· must total 100%"}</div>
+            <div className="text-[11px] font-semibold text-[color:var(--app-text-faintest,#667085)]">Weights: {weightTotal}% {weightTotal === 100 ? "· ready" : "· must total 100%"}</div>
           </div>
           {criteria.map((criterion, index) => (
             <div key={`${index}-${criterion.key}`} className="grid gap-2 rounded-[10px] border border-[#EEF0F3] p-3 sm:grid-cols-[1fr_110px_72px_auto]">
@@ -250,7 +250,7 @@ export function QualityReviewWorkflow() {
               ))}
               {rubric.versions[0]?.publishedAt ? <button type="button" className="h-[27px] rounded-[7px] border border-[#D5DAE2] bg-white px-2 text-[10.5px] font-bold" onClick={() => openDraft(rubric.id)}>New version</button> : null}
             </div>
-          )) : rubrics.isPending ? <div className="text-[12px] text-[#7A8798]">Loading rubrics…</div> : <EmptyState icon="list-checks" title="No rubric yet" body="Create and publish a reviewer rubric before assigning calls for scoring." />}
+          )) : rubrics.isPending ? <div className="text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading rubrics…</div> : <EmptyState icon="list-checks" title="No rubric yet" body="Create and publish a reviewer rubric before assigning calls for scoring." />}
         </div>
         <Footnote>Suggested starting criteria are editable draft content, not measured business data. Published versions stay unchanged; each edit creates a new version.</Footnote>
       </Card>
@@ -263,7 +263,7 @@ export function QualityReviewWorkflow() {
             {eligibleCalls.map((call) => <option key={call.id} value={call.id}>{call.localDay} · {maskedNumber(call.fromNumber)} · {call.outcome}</option>)}
           </select>
           <PrimaryBtn disabled={!selectedCallId || startReview.isPending || !rubricRows.some((rubric) => rubric.versions.some((version) => !!version.publishedAt))} onClick={() => selectedCallId && startReview.mutate(selectedCallId)}>Assign to me</PrimaryBtn>
-          <span className="text-[11px] text-[#7A8798]">Only calls with a saved transcript can be reviewed.</span>
+          <span className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">Only calls with a saved transcript can be reviewed.</span>
         </div>
         {reviewError ? <div className="px-4 pb-4"><InlineNotice tone="error">{reviewError}</InlineNotice></div> : null}
         {reviewRows.length ? (
@@ -272,7 +272,7 @@ export function QualityReviewWorkflow() {
               <div key={review.id} className={`flex flex-wrap items-center gap-2 px-4 py-3 ${review.id === selectedReviewId ? "bg-[#F0FDF4]" : "bg-white"}`}>
                 <button type="button" className="min-w-[200px] flex-1 text-left" onClick={() => setSelectedReviewId(review.id)}>
                   <span className="block text-[12px] font-bold">{review.call ? `${maskedNumber(review.call.fromNumber)} · ${new Date(review.call.startedAt).toLocaleString()}` : "Call source unavailable"}</span>
-                  <span className="mt-1 block text-[10.5px] text-[#7A8798]">{review.rubric?.name ?? "Rubric unavailable"} · v{review.rubric?.version ?? "—"} · {review.call?.transcript.length ?? 0} transcript turns</span>
+                  <span className="mt-1 block text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{review.rubric?.name ?? "Rubric unavailable"} · v{review.rubric?.version ?? "—"} · {review.call?.transcript.length ?? 0} transcript turns</span>
                 </button>
                 <Chip tone={statusTone(review.status)}>{review.status.replace("_", " ")}</Chip>
                 {review.effectiveScore != null ? <span className="text-[12px] font-extrabold tabular-nums">{review.effectiveScore}/100</span> : null}
@@ -285,7 +285,7 @@ export function QualityReviewWorkflow() {
               </div>
             ))}
           </div>
-        ) : reviews.isPending ? <div className="px-4 pb-4 text-[12px] text-[#7A8798]">Loading review queue…</div> : <EmptyState icon="badge-check" title="No reviews assigned" body="Select a call above after publishing a rubric. Calls without transcripts are intentionally excluded." />}
+        ) : reviews.isPending ? <div className="px-4 pb-4 text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading review queue…</div> : <EmptyState icon="badge-check" title="No reviews assigned" body="Select a call above after publishing a rubric. Calls without transcripts are intentionally excluded." />}
       </Card>
 
       {selectedReview ? <ReviewEditor
@@ -312,7 +312,7 @@ export function QualityReviewWorkflow() {
       {overview.data ? (
         <Card pad={14}>
           <div className="text-[12px] font-extrabold">Not tracked by current call records</div>
-          <div className="mt-1 text-[11px] leading-[1.6] text-[#7A8798]">Language coverage and speech-recognition accuracy benchmarks are not stored, so they are not reported. AI sentiment and confidence elsewhere are model-reported estimates, not human QA findings.</div>
+          <div className="mt-1 text-[11px] leading-[1.6] text-[color:var(--app-text-faintest,#667085)]">Language coverage and speech-recognition accuracy benchmarks are not stored, so they are not reported. AI sentiment and confidence elsewhere are model-reported estimates, not human QA findings.</div>
         </Card>
       ) : null}
       {notice ? <InlineNotice tone={notice.toLowerCase().includes("could not") || notice.includes("must") || notice.includes("error") ? "error" : "neutral"}>{notice}</InlineNotice> : null}
@@ -378,7 +378,7 @@ function ReviewEditor({
           <div className="text-[11px] font-extrabold uppercase tracking-[.06em] text-[#5B6675]">Transcript · contact details masked</div>
           {transcript.length ? transcript.map((turn) => (
             <div key={turn.index} className="rounded-[9px] border border-[#EEF0F3] bg-[#FCFCFD] p-2.5">
-              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-bold text-[#7A8798]"><span>{turn.speaker} · turn {turn.index + 1}</span><span>{turn.at ?? "Time not recorded"}</span></div>
+              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-bold text-[color:var(--app-text-faintest,#667085)]"><span>{turn.speaker} · turn {turn.index + 1}</span><span>{turn.at ?? "Time not recorded"}</span></div>
               <div className="text-[12px] leading-[1.55]">{maskContactDetails(turn.text)}</div>
             </div>
           )) : <EmptyState icon="file-audio-2" title="Transcript unavailable" body="A call without transcript text cannot be scored or cited." />}
@@ -398,12 +398,12 @@ function ReviewEditor({
             const draft = scoreDraft[criterion.key] ?? { score: null, evidenceTurnIndexes: [], note: "" };
             return (
               <div key={criterion.key} className="rounded-[10px] border border-[#E6E8EC] p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2"><div className="text-[12px] font-extrabold">{criterion.label} <span className="font-normal text-[#7A8798]">· {criterion.weight}%</span></div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><div className="text-[12px] font-extrabold">{criterion.label} <span className="font-normal text-[color:var(--app-text-faintest,#667085)]">· {criterion.weight}%</span></div>
                   <select aria-label={`Score ${criterion.label}`} className="h-[31px] rounded-[7px] border border-[#D5DAE2] bg-white px-2 text-[11px]" disabled={closed} value={draft.score ?? ""} onChange={(event) => onUpdateScore(criterion.key, { score: event.target.value === "" ? null : Number(event.target.value) })}>
                     <option value="">Score</option>{[0, 1, 2, 3, 4, 5].map((score) => <option key={score} value={score}>{score} / 5</option>)}
                   </select>
                 </div>
-                <div className="mt-1 text-[10.5px] leading-[1.5] text-[#7A8798]">{criterion.guidance}</div>
+                <div className="mt-1 text-[10.5px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">{criterion.guidance}</div>
                 <input className={`${inputClass} mt-2`} aria-label={`Reviewer note ${criterion.label}`} value={draft.note} disabled={closed} onChange={(event) => onUpdateScore(criterion.key, { note: event.target.value })} placeholder="Reviewer note" maxLength={1000} />
                 {draft.score != null && draft.score < 5 ? (
                   <div className="mt-2 flex flex-col gap-1.5">

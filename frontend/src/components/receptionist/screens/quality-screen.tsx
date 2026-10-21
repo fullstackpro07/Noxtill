@@ -114,7 +114,7 @@ function Quality() {
       <Card overflow>
         <div className="flex flex-wrap items-center gap-2.5 border-b border-[#EEF0F3] px-[18px] py-3.5">
           <div className="text-[13.5px] font-extrabold">Quality signals</div>
-          <div className="text-[11px] text-[#94A3B8]">Detected from call events and the AI&apos;s own per-turn readings</div>
+          <div className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">Detected from call events and the AI&apos;s own per-turn readings</div>
         </div>
         {signals.length === 0 ? (
           <EmptyState icon="badge-check" title="No quality signals right now" body="Nothing in your call log currently points at a problem: no unreturned missed calls, stale follow-ups, repeated declined questions, low-confidence or upset calls, or calls that hit the length cap." />
@@ -133,11 +133,11 @@ function Quality() {
                 <div className="text-[12.5px] font-bold" style={{ textWrap: "pretty" }}>
                   {s.signal}
                 </div>
-                <div className="mt-[3px] text-[10.5px] text-[#94A3B8]">{s.evidence}</div>
+                <div className="mt-[3px] text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{s.evidence}</div>
               </div>
               <div className="flex-none text-right">
                 <div className="text-[14px] font-extrabold tabular-nums">{s.count}</div>
-                <div className="text-[9.5px] text-[#94A3B8]">{s.period}</div>
+                <div className="text-[9.5px] text-[color:var(--app-text-faintest,#667085)]">{s.period}</div>
               </div>
               <SmallBtn onClick={s.go}>{s.action}</SmallBtn>
             </div>
@@ -149,7 +149,7 @@ function Quality() {
       <Card overflow>
         <div className="flex flex-wrap items-center gap-2.5 border-b border-[#EEF0F3] px-[18px] py-3.5">
           <div className="text-[13.5px] font-extrabold">Top question clusters</div>
-          <div className="text-[11px] text-[#94A3B8]">Factual questions grouped by the topic the AI filed them under · last 30 days</div>
+          <div className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">Factual questions grouped by the topic the AI filed them under · last 30 days</div>
         </div>
         {clusterRows.length === 0 ? (
           <EmptyState icon="lightbulb" title="No questions recorded yet" body="When a caller asks something factual — hours, a price, an order — the AI files it under a topic and notes whether it could answer. They appear here, most asked first." />
@@ -176,7 +176,7 @@ function Quality() {
                   {c.declined ? <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-[6px] bg-[#FEF3C7] px-1.5 text-[11px] font-extrabold text-[#B45309]">{c.declined}</span> : 0}
                 </td>
                 <td className="px-3 py-[11px] text-center text-[11.5px] tabular-nums">{c.transferred}</td>
-                <td className="py-[11px] pl-3 pr-[18px] text-[11.5px] text-[#7A8798]">{c.declined ? `No record for ${c.declined}` : "None"}</td>
+                <td className="py-[11px] pl-3 pr-[18px] text-[11.5px] text-[color:var(--app-text-faintest,#667085)]">{c.declined ? `No record for ${c.declined}` : "None"}</td>
               </tr>
             ))}
           </TableWrap>

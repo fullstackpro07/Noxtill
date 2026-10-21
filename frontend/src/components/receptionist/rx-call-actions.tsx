@@ -72,7 +72,7 @@ export function useCallActions() {
           <button type="button" onClick={() => { closeOverlays(); confirmTransfer(c, "cold"); }} className="h-9 rounded-[9px] border border-[#D5DAE2] bg-white px-3 text-[12px] font-bold hover:bg-[#F1F3F6]">
             Cold transfer
           </button>
-          <button type="button" onClick={() => { closeOverlays(); confirmTransfer(c, "warm"); }} className="h-9 rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]">
+          <button type="button" onClick={() => { closeOverlays(); confirmTransfer(c, "warm"); }} className="h-9 rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]">
             Warm transfer with briefing
           </button>
         </div>
@@ -205,7 +205,7 @@ export function AssignPicker({ callId, current }: { callId: string; current: str
   const staff = rx.staff.filter((s) => s.active);
   return (
     <div className="flex-none rounded-[12px] border border-[#E6E8EC] p-3.5">
-      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]" htmlFor="assign-staff">
+      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]" htmlFor="assign-staff">
         Owner
       </label>
       <select id="assign-staff" value={pick} onChange={(e) => setPick(e.target.value)} className="h-[38px] w-full rounded-[10px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-semibold">
@@ -225,7 +225,7 @@ export function AssignPicker({ callId, current }: { callId: string; current: str
           setBusy(false);
           closeOverlays();
         }}
-        className="mt-3 flex h-[34px] cursor-pointer items-center rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-55"
+        className="mt-3 flex h-[34px] cursor-pointer items-center rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-55"
       >
         {busy ? "Saving…" : "Save owner"}
       </button>

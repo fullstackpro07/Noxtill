@@ -174,14 +174,14 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
               <>
                 <SmallBtn disabled={approval.isPending} onClick={() => approval.mutate("approve")}>Approve</SmallBtn>
                 <SmallBtn disabled={approval.isPending} onClick={() => approval.mutate("send-back")}>Send back to draft</SmallBtn>
-                <span className="self-center text-[10px] text-[#7A8798]">A different manager approves; the owner may approve their own.</span>
+                <span className="self-center text-[10px] text-[color:var(--app-text-faintest,#667085)]">A different manager approves; the owner may approve their own.</span>
               </>
             ) : null}
             {campaign.status === "approved" ? (
               <>
                 <SmallBtn disabled={busy} onClick={() => control.mutate("start")}>Start now</SmallBtn>
                 <SmallBtn disabled={approval.isPending} onClick={() => approval.mutate("send-back")}>Send back to draft</SmallBtn>
-                <span className="self-center text-[10px] text-[#7A8798]">
+                <span className="self-center text-[10px] text-[color:var(--app-text-faintest,#667085)]">
                   {campaign.callerType === "ai_voice"
                     ? "AI campaigns start only when you press Start now; scheduled auto-start is not enabled."
                     : campaign.scheduledAt ? `Starts automatically at ${new Date(campaign.scheduledAt).toLocaleString()}.` : "No schedule set; start it when ready."}
@@ -194,7 +194,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
             {campaign.status === "running" ? <SmallBtn disabled={busy} onClick={() => control.mutate("pause")}>Pause</SmallBtn> : null}
             {live || campaign.status === "approved" ? <SmallBtn disabled={busy} onClick={() => control.mutate("stop")}>Stop for good</SmallBtn> : null}
             {campaign.status === "draft" && !campaign.eligibilityCheckedAt ? (
-              <span className="self-center text-[10px] text-[#7A8798]">Run the eligibility preview first.</span>
+              <span className="self-center text-[10px] text-[color:var(--app-text-faintest,#667085)]">Run the eligibility preview first.</span>
             ) : null}
         </div>
 
@@ -214,7 +214,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
             ) : dialer.error ? (
               <p className="mt-1.5 text-[11px] text-[#B42318]">{toError(dialer.error)}</p>
             ) : !next ? (
-              <p className="mt-1.5 text-[11px] text-[#7A8798]">Loading…</p>
+              <p className="mt-1.5 text-[11px] text-[color:var(--app-text-faintest,#667085)]">Loading…</p>
             ) : (
               <div className="mt-2 flex flex-col gap-2.5 text-[11px]">
                 <label className="flex items-center gap-2 font-semibold text-[#334155]">
@@ -230,7 +230,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                 </p>
                 {next.inFlight ? (
                   <div className="flex items-center justify-between gap-2 rounded-[8px] border border-[#DBE7F6] bg-[#F5F9FF] p-2.5">
-                    <span>{next.inFlight.contactName} <span className="text-[#7A8798]">{next.inFlight.phone}</span></span>
+                    <span>{next.inFlight.contactName} <span className="text-[color:var(--app-text-faintest,#667085)]">{next.inFlight.phone}</span></span>
                     <Chip tone={ATTEMPT_LABEL[next.inFlight.status].tone}>{ATTEMPT_LABEL[next.inFlight.status].label}</Chip>
                   </div>
                 ) : null}
@@ -250,7 +250,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                       {DISPOSITIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                     </select>
                     <input className="h-[32px] rounded-[7px] border border-[#D5DAE2] bg-white px-2" maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notes (optional)" />
-                    <button type="submit" disabled={outcome.isPending} className="h-[30px] rounded-[8px] bg-[#16A34A] px-3 text-[12px] font-bold text-white disabled:opacity-60">
+                    <button type="submit" disabled={outcome.isPending} className="h-[30px] rounded-[8px] bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12px] font-bold text-white disabled:opacity-60">
                       {outcome.isPending ? "Saving…" : "Save outcome"}
                     </button>
                   </form>
@@ -260,7 +260,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                     <div className="flex items-start justify-between gap-2">
                       <span>
                         <span className="block text-[12px] font-extrabold text-[#243041]">{next.contact.name}</span>
-                        <span className="text-[#7A8798]">{next.contact.phone} · attempt {next.contact.attemptCount + 1} of {next.contact.maxAttempts}</span>
+                        <span className="text-[color:var(--app-text-faintest,#667085)]">{next.contact.phone} · attempt {next.contact.attemptCount + 1} of {next.contact.maxAttempts}</span>
                       </span>
                       <Chip tone="neutral">{readable(next.contact.status)}</Chip>
                     </div>
@@ -282,9 +282,9 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                     </div>
                   </div>
                 ) : !next.inFlight && !next.awaitingDisposition ? (
-                  <p className="text-[#7A8798]">No contact is callable right now (all called, blocked, at their attempt limit or cooling down).</p>
+                  <p className="text-[color:var(--app-text-faintest,#667085)]">No contact is callable right now (all called, blocked, at their attempt limit or cooling down).</p>
                 ) : null}
-                <p className="text-[10px] leading-[1.5] text-[#7A8798]">
+                <p className="text-[10px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">
                   Each call re-checks consent, opt-out, suppression and calling hours first. Your own phone rings, and the customer is dialed from the business number only after you answer.
                 </p>
               </div>
@@ -308,7 +308,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
               ].map(([label, value]) => (
                 <div key={label} className="rounded-[8px] bg-[#F7F9FB] p-2">
                   <div className="text-[14px] font-extrabold tabular-nums">{value}</div>
-                  <div className="text-[10px] text-[#7A8798]">{label}</div>
+                  <div className="text-[10px] text-[color:var(--app-text-faintest,#667085)]">{label}</div>
                 </div>
               ))}
             </div>
@@ -322,7 +322,7 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
                 Blocked because: {Object.entries(report.data.blockedReasons).map(([key, n]) => `${readable(key)} ${n}`).join(" · ")}
               </p>
             ) : null}
-            <p className="mb-0 mt-1 text-[10px] text-[#94A3B8]">Provider cost and revenue are not attributed to campaigns yet.</p>
+            <p className="mb-0 mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">Provider cost and revenue are not attributed to campaigns yet.</p>
           </section>
         ) : null}
 
@@ -330,15 +330,15 @@ export function OutboundCampaignRun({ campaign }: { campaign: OutboundCampaign }
           <section>
             <h3 className="mb-1.5 text-[12px] font-extrabold text-[#334155]">Attempts</h3>
             {attempts.error ? (
-              <p className="text-[11px] text-[#7A8798]">{toError(attempts.error)}</p>
+              <p className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">{toError(attempts.error)}</p>
             ) : !(attempts.data?.attempts ?? []).length ? (
-              <p className="text-[11px] text-[#7A8798]">No dial attempts yet.</p>
+              <p className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">No dial attempts yet.</p>
             ) : (
               <div className="max-h-[260px] overflow-y-auto">
                 {(attempts.data?.attempts ?? []).map((row) => (
                   <div key={row.id} className="flex items-center justify-between gap-2 border-b border-[#EEF0F3] py-1.5 text-[11px] last:border-0">
                     <span className="min-w-0 truncate">
-                      {row.contactName} <span className="text-[#7A8798]">{row.phone} · {new Date(row.createdAt).toLocaleTimeString()}</span>
+                      {row.contactName} <span className="text-[color:var(--app-text-faintest,#667085)]">{row.phone} · {new Date(row.createdAt).toLocaleTimeString()}</span>
                       {row.blockReasonCode ? <span className="text-[#B42318]"> · {readable(row.blockReasonCode)}</span> : null}
                       {row.disposition ? <span className="text-[#475569]"> · {readable(row.disposition)}</span> : null}
                     </span>

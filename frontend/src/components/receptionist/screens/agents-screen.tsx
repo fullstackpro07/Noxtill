@@ -111,7 +111,7 @@ export function AgentsScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-[20px] font-extrabold tracking-[-.03em] text-[#0F172A]">Agents &amp; Availability</div>
-          <div className="mt-1 text-[12px] text-[#7A8798]">Voice profiles attach to existing Staff records; employee details stay in Staff.</div>
+          <div className="mt-1 text-[12px] text-[color:var(--app-text-faintest,#667085)]">Voice profiles attach to existing Staff records; employee details stay in Staff.</div>
         </div>
         {selfAgent ? (
           <label className="flex items-center gap-2 text-[12px] font-bold text-[#45505F]">
@@ -146,21 +146,21 @@ export function AgentsScreen() {
       <Card overflow>
         <CardHead icon="headset" iconColor="#16A34A" title="Human voice agents" sub="Canonical staff identity · voice-only settings" />
         {loading ? (
-          <div className="p-4 text-[12px] text-[#7A8798]">Loading voice profiles…</div>
+          <div className="p-4 text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading voice profiles…</div>
         ) : errorText ? (
-          <div className="p-4 text-[12px] text-[#7A8798]">Voice profiles are unavailable until the roster loads.</div>
+          <div className="p-4 text-[12px] text-[color:var(--app-text-faintest,#667085)]">Voice profiles are unavailable until the roster loads.</div>
         ) : people.length === 0 ? (
           <div className="p-4"><EmptyState icon="users-round" title="No human voice profiles yet" body="Select an existing active Staff member below to configure skills, languages and a concurrency setting." /></div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] border-collapse text-left">
-              <thead><tr className="border-b border-[#E6E8EC] bg-[#FAFBFC] text-[10px] font-extrabold uppercase tracking-[.07em] text-[#7A8798]"><th className="px-3 py-3">Agent</th><th className="px-3 py-3">Skills · languages</th><th className="px-3 py-3">Presence</th><th className="px-3 py-3 text-right">Calls · slots</th><th className="px-3 py-3">Profile</th></tr></thead>
+              <thead><tr className="border-b border-[#E6E8EC] bg-[#FAFBFC] text-[10px] font-extrabold uppercase tracking-[.07em] text-[color:var(--app-text-faintest,#667085)]"><th className="px-3 py-3">Agent</th><th className="px-3 py-3">Skills · languages</th><th className="px-3 py-3">Presence</th><th className="px-3 py-3 text-right">Calls · slots</th><th className="px-3 py-3">Profile</th></tr></thead>
               <tbody>
                 {people.map((agent: VoiceAgentRosterRow) => (
                   <tr key={agent.id} className="border-b border-[#EEF0F3] text-[12px] last:border-0">
-                    <td className="px-3 py-3.5"><div className="font-bold text-[#0F172A]">{agent.name}{agent.isSelf ? <span className="ml-1.5 text-[10px] text-[#64748B]">You</span> : null}</div><div className="mt-0.5 text-[10px] text-[#94A3B8]">{agent.role}{agent.phone ? ` · ${agent.phone}` : " · no phone on Staff record"}</div></td>
-                    <td className="px-3 py-3.5"><div>{agent.skillTags.length ? agent.skillTags.join(", ") : "No skills recorded"}</div><div className="mt-0.5 text-[10px] text-[#94A3B8]">{agent.languages.length ? agent.languages.join(", ") : "No languages recorded"}</div></td>
-                    <td className="px-3 py-3.5"><Chip tone={statusTone[agent.presenceStatus]}>{agent.presenceStatus}</Chip><div className="mt-1 text-[10px] text-[#94A3B8]">{agent.presenceExpired ? "Heartbeat expired" : readableTime(agent.lastHeartbeatAt)}</div></td>
+                    <td className="px-3 py-3.5"><div className="font-bold text-[#0F172A]">{agent.name}{agent.isSelf ? <span className="ml-1.5 text-[10px] text-[#64748B]">You</span> : null}</div><div className="mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{agent.role}{agent.phone ? ` · ${agent.phone}` : " · no phone on Staff record"}</div></td>
+                    <td className="px-3 py-3.5"><div>{agent.skillTags.length ? agent.skillTags.join(", ") : "No skills recorded"}</div><div className="mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{agent.languages.length ? agent.languages.join(", ") : "No languages recorded"}</div></td>
+                    <td className="px-3 py-3.5"><Chip tone={statusTone[agent.presenceStatus]}>{agent.presenceStatus}</Chip><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{agent.presenceExpired ? "Heartbeat expired" : readableTime(agent.lastHeartbeatAt)}</div></td>
                     <td className="px-3 py-3.5 text-right tabular-nums">{agent.liveCalls} · {agent.maxConcurrentCalls}</td>
                     <td className="px-3 py-3.5"><button type="button" onClick={() => setSelectedStaffId(agent.staffUserId)} className="rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#334155] hover:bg-[#F1F3F6]">Edit</button></td>
                   </tr>
@@ -187,13 +187,13 @@ export function AgentsScreen() {
             </label>
             <label className="text-[11px] font-bold text-[#5B6675]">Skills (comma-separated)
               <input className={`${inputClass} mt-1`} value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="Support, bookings" />
-              <span className="mt-1 block text-[10px] font-normal leading-4 text-[#7A8798]">For AI handoffs, an exact caller-topic skill is preferred (for example booking_availability or complaint). If no available agent matches, the usual capacity-based fallback is used.</span>
+              <span className="mt-1 block text-[10px] font-normal leading-4 text-[color:var(--app-text-faintest,#667085)]">For AI handoffs, an exact caller-topic skill is preferred (for example booking_availability or complaint). If no available agent matches, the usual capacity-based fallback is used.</span>
             </label>
             <label className="text-[11px] font-bold text-[#5B6675]">Languages (comma-separated)
               <input className={`${inputClass} mt-1`} value={languages} onChange={(event) => setLanguages(event.target.value)} placeholder="English, Urdu" />
             </label>
           </div>
-          {roster.data && !people.length && !roster.data.staffOptions.length ? <p className="mt-3 text-[11px] text-[#7A8798]">No eligible active Staff records are available in this business.</p> : null}
+          {roster.data && !people.length && !roster.data.staffOptions.length ? <p className="mt-3 text-[11px] text-[color:var(--app-text-faintest,#667085)]">No eligible active Staff records are available in this business.</p> : null}
           <label className="mt-3 flex items-center gap-2 text-[11px] font-semibold text-[#45505F]"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />Active voice profile</label>
           <div className="mt-4 flex justify-end"><PrimaryBtn onClick={() => save.mutate()} disabled={!selectedStaffId || save.isPending || Number(capacity) < 1 || Number(capacity) > 10}>{save.isPending ? "Saving…" : "Save profile"}</PrimaryBtn></div>
         </Card>

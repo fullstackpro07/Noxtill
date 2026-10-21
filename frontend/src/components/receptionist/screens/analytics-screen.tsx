@@ -90,7 +90,7 @@ function Analytics() {
         <Card pad={17}>
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="text-[14px] font-extrabold">Calls by hour</div>
-            <div className="ml-auto text-[11px] text-[#94A3B8]">Today · {t.calls.length} call{t.calls.length === 1 ? "" : "s"}</div>
+            <div className="ml-auto text-[11px] text-[color:var(--app-text-faintest,#667085)]">Today · {t.calls.length} call{t.calls.length === 1 ? "" : "s"}</div>
           </div>
           <div className="mt-4 flex h-[150px] items-end gap-[5px]">
             {bars.map((b) => {
@@ -106,7 +106,7 @@ function Analytics() {
                     {b.missed ? <div style={{ height: `${(b.missed / Math.max(1, total)) * h}%`, background: "#DC2626", borderRadius: "4px 4px 0 0" }} /> : null}
                     {b.answered ? <div style={{ height: `${(b.answered / Math.max(1, total)) * h}%`, background: "#16A34A", borderRadius: b.missed ? "0 0 4px 4px" : 4 }} /> : null}
                   </div>
-                  <div className="text-[9px] text-[#94A3B8]">{b.label}</div>
+                  <div className="text-[9px] text-[color:var(--app-text-faintest,#667085)]">{b.label}</div>
                 </div>
               );
             })}
@@ -114,18 +114,18 @@ function Analytics() {
           <div className="mt-[13px] flex flex-wrap gap-3 border-t border-[#EEF0F3] pt-3">
             <span className="inline-flex items-center gap-[5px] text-[11px] font-semibold text-[#5B6675]"><span className="h-2 w-2 rounded-[2px] bg-[#16A34A]" />Answered</span>
             <span className="inline-flex items-center gap-[5px] text-[11px] font-semibold text-[#5B6675]"><span className="h-2 w-2 rounded-[2px] bg-[#DC2626]" />Missed</span>
-            <span className="ml-auto text-[10.5px] text-[#94A3B8]">Hours are on your business&apos;s own clock.</span>
+            <span className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">Hours are on your business&apos;s own clock.</span>
           </div>
         </Card>
 
         <Card pad={17}>
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="text-[14px] font-extrabold">Intent breakdown</div>
-            <div className="ml-auto text-[11px] text-[#94A3B8]">Last 30 days · {rx.calls.length} call{rx.calls.length === 1 ? "" : "s"}</div>
+            <div className="ml-auto text-[11px] text-[color:var(--app-text-faintest,#667085)]">Last 30 days · {rx.calls.length} call{rx.calls.length === 1 ? "" : "s"}</div>
           </div>
           <div className="mt-[15px] flex flex-col gap-[11px]">
             {intents.length === 0 ? (
-              <div className="py-6 text-center text-[12px] text-[#94A3B8]">No calls yet.</div>
+              <div className="py-6 text-center text-[12px] text-[color:var(--app-text-faintest,#667085)]">No calls yet.</div>
             ) : (
               intents.map((i) => <BarRow key={i.label} label={i.label} sub={i.detail} value={String(i.count)} widthPct={(i.count / maxIntent) * 100} color={i.color} onClick={() => notify(`${i.label} · ${i.count} call${i.count === 1 ? "" : "s"}`, i.detail)} />)
             )}
@@ -136,7 +136,7 @@ function Analytics() {
       <Card overflow>
         <div className="flex flex-wrap items-center gap-2.5 border-b border-[#EEF0F3] px-[18px] py-3.5">
           <div className="text-[13.5px] font-extrabold">Staff call handling</div>
-          <div className="text-[11px] text-[#94A3B8]">Only what the call log names — several measures, never a single ranking</div>
+          <div className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">Only what the call log names — several measures, never a single ranking</div>
         </div>
         {staffRows.length === 0 ? (
           <EmptyState icon="users-round" title="No staff activity on calls yet" body="A team member appears here once they join a live call, or once a follow-up is assigned to them." />
@@ -161,9 +161,9 @@ function Analytics() {
                 <td className="px-3 py-[11px] text-center text-[11.5px] tabular-nums">{r.assigned}</td>
                 <td className="px-3 py-[11px] text-center text-[11.5px] tabular-nums">{r.timed ? fmtDuration(Math.round(r.secs / r.timed)) : "—"}</td>
                 <td className="px-3 py-[11px] text-center">
-                  {r.assigned ? <span className="inline-flex h-5 items-center rounded-[6px] bg-[#ECFDF3] px-[7px] text-[11px] font-extrabold text-[#15803D]">{r.handled} of {r.assigned}</span> : <span className="text-[11px] text-[#94A3B8]">—</span>}
+                  {r.assigned ? <span className="inline-flex h-5 items-center rounded-[6px] bg-[#ECFDF3] px-[7px] text-[11px] font-extrabold text-[#15803D]">{r.handled} of {r.assigned}</span> : <span className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">—</span>}
                 </td>
-                <td className="max-w-[240px] py-[11px] pl-3 pr-[18px] text-[11px] text-[#7A8798]">
+                <td className="max-w-[240px] py-[11px] pl-3 pr-[18px] text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                   {r.joined ? `Joined ${r.joined} live call${r.joined === 1 ? "" : "s"} (listen in or take over).` : ""} {r.assigned ? `Owns ${r.assigned} follow-up${r.assigned === 1 ? "" : "s"}.` : ""}
                 </td>
               </tr>

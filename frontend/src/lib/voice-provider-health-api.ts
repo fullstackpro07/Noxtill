@@ -5,7 +5,12 @@ export type HealthStatus = "ok" | "warning" | "error" | "not_configured";
 export interface VoiceProviderHealth {
   checkedAt: string;
   overall: "ok" | "warning" | "error";
-  checks: Array<{ key: string; label: string; status: HealthStatus; detail: string }>;
+  checks: Array<{
+    key: string;
+    label: string;
+    status: HealthStatus;
+    detail: string;
+  }>;
   activeTrackingNumbers: number;
   lastCallAt: string | null;
 }
@@ -35,4 +40,19 @@ export function fetchVoiceProviderHealth(): Promise<VoiceProviderHealth> {
 
 export function fetchVoiceUsage(): Promise<VoiceUsage> {
   return apiFetch("/voice/settings/usage");
+}
+
+export interface VoiceMetering {
+  measuredAt: string;
+  units: { unit: string; state: string; quantity: number; records: number }[];
+  costs: { currency: string; state: string; amount: number }[];
+  pendingOrUnpriced: number;
+  spendCapUsd: number | null;
+  spendAgainstCapUsd: number;
+  warnings: number[];
+  pricing: { reason: string };
+}
+
+export function fetchVoiceMetering(): Promise<VoiceMetering> {
+  return apiFetch("/voice/settings/metering");
 }

@@ -76,7 +76,7 @@ export function CampaignImport({ campaignId }: { campaignId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="m-0 text-[12px] font-extrabold">Upload contacts (CSV)</h2>
-          <p className="mb-0 mt-0.5 text-[10px] text-[#7A8798]">
+          <p className="mb-0 mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">
             Columns: name, phone, email (optional). Existing customers are matched by phone; new ones are added to the CRM with marketing consent off. Run the eligibility preview again afterwards.
           </p>
         </div>

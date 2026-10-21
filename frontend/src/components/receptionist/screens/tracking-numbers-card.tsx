@@ -156,7 +156,7 @@ export function TrackingNumbersCard({ campaignOptions }: { campaignOptions: Voic
             </label>
           ) : null}
           <div className="flex items-center gap-2 md:col-span-2">
-            <button type="submit" disabled={save.isPending} className="flex h-8 items-center rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white disabled:opacity-60">
+            <button type="submit" disabled={save.isPending} className="flex h-8 items-center rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white disabled:opacity-60">
               {save.isPending ? "Saving…" : editing.kind === "add" ? (form.mode === "purchase" ? "Buy number" : "Verify & connect") : editing.kind === "assign" ? "Reassign" : "Deactivate"}
             </button>
             <SmallBtn onClick={() => setEditing(null)}>Cancel</SmallBtn>
@@ -164,7 +164,7 @@ export function TrackingNumbersCard({ campaignOptions }: { campaignOptions: Voic
         </form>
       ) : null}
       {numbers.isPending ? (
-        <p className="p-[18px] text-[12px] text-[#7A8798]">Loading tracking numbers…</p>
+        <p className="p-[18px] text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading tracking numbers…</p>
       ) : numbers.isError ? (
         <p className="p-[18px] text-[12px] text-[#B42318]">{toError(numbers.error)}</p>
       ) : !numbers.data.length ? (

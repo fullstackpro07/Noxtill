@@ -50,6 +50,8 @@ interface PolicyForm {
   recordingAllowed: boolean;
   recordingNoticeText: string;
   recordingRetentionDays: string;
+  meetingAiProcessingAllowed: boolean;
+  meetingAiProcessingNoticeText: string;
   allowedWindowStart: string;
   allowedWindowEnd: string;
   timeZone: string;
@@ -63,6 +65,8 @@ const emptyPolicy: PolicyForm = {
   recordingAllowed: false,
   recordingNoticeText: "",
   recordingRetentionDays: "",
+  meetingAiProcessingAllowed: false,
+  meetingAiProcessingNoticeText: "",
   allowedWindowStart: "",
   allowedWindowEnd: "",
   timeZone: "",
@@ -200,6 +204,8 @@ export function ComplianceScreen() {
       recordingAllowed: version.recordingAllowed,
       recordingNoticeText: version.recordingNoticeText ?? "",
       recordingRetentionDays: version.recordingRetentionDays == null ? "" : String(version.recordingRetentionDays),
+      meetingAiProcessingAllowed: version.meetingAiProcessingAllowed,
+      meetingAiProcessingNoticeText: version.meetingAiProcessingNoticeText ?? "",
       allowedWindowStart: version.allowedWindowStart ?? "",
       allowedWindowEnd: version.allowedWindowEnd ?? "",
       timeZone: version.timeZone ?? "",
@@ -257,7 +263,7 @@ export function ComplianceScreen() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[16px] font-extrabold">Consent &amp; Compliance</div>
-          <div className="mt-1 text-[11.5px] text-[#7A8798]">Business-owned outbound policy, consent evidence, suppression and decision trace.</div>
+          <div className="mt-1 text-[11.5px] text-[color:var(--app-text-faintest,#667085)]">Business-owned outbound policy, consent evidence, suppression and decision trace.</div>
         </div>
         <Chip tone="amber">Unknown or unapproved policy = blocked</Chip>
       </div>
@@ -273,7 +279,7 @@ export function ComplianceScreen() {
         ))}
       </div>
 
-      {pending ? <Card><div className="p-4 text-[12px] text-[#7A8798]">Loading real compliance records…</div></Card> : null}
+      {pending ? <Card><div className="p-4 text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading real compliance records…</div></Card> : null}
 
       {tab === "overview" && overview.data ? (
         <>
@@ -318,6 +324,8 @@ export function ComplianceScreen() {
               {policyForm.recordingAllowed ? <>
                 <Field label="Recording notice"><textarea className={textAreaClass} value={policyForm.recordingNoticeText} onChange={(event) => setField("recordingNoticeText", event.target.value)} placeholder="Region-specific recording notice" maxLength={2000} /></Field>
                 <Field label="Retention days"><input className={inputClass} type="number" min={1} max={3650} value={policyForm.recordingRetentionDays} onChange={(event) => setField("recordingRetentionDays", event.target.value)} placeholder="Enter reviewed limit" /></Field>
+                <label className="flex items-center gap-2 text-[11px] font-semibold text-[#45505F]"><input type="checkbox" checked={policyForm.meetingAiProcessingAllowed} onChange={(event) => setField("meetingAiProcessingAllowed", event.target.checked)} /> Allow AI transcription and meeting summaries only under the separate notice below</label>
+                {policyForm.meetingAiProcessingAllowed ? <Field label="Separate AI processing notice"><textarea className={textAreaClass} value={policyForm.meetingAiProcessingNoticeText} onChange={(event) => setField("meetingAiProcessingNoticeText", event.target.value)} placeholder="Explain that audio is transcribed and summarized by AI, why, and how the result is reviewed" maxLength={2000} /></Field> : null}
               </> : null}
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Calling window start"><input className={inputClass} type="time" value={policyForm.allowedWindowStart} onChange={(event) => setField("allowedWindowStart", event.target.value)} /></Field>
@@ -396,12 +404,12 @@ export function ComplianceScreen() {
               <div className="grid grid-cols-2 gap-2"><Field label="Country code"><input className={inputClass} value={checkForm.countryCode} onChange={(event) => setCheckForm({ ...checkForm, countryCode: event.target.value.toUpperCase() })} placeholder="US" maxLength={2} /></Field><Field label="Purpose"><input className={inputClass} value={checkForm.purpose} onChange={(event) => setCheckForm({ ...checkForm, purpose: event.target.value })} placeholder="sales / booking" /></Field></div>
               <Field label="Caller type"><select className={inputClass} value={checkForm.callerType} onChange={(event) => setCheckForm({ ...checkForm, callerType: event.target.value as VoicePolicyCallerType })}>{callerTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></Field>
               <PrimaryBtn disabled={check.isPending || !checkForm.phoneE164 || checkForm.countryCode.trim().length !== 2 || !checkForm.purpose} onClick={() => check.mutate()}>Run policy check</PrimaryBtn>
-              {lastCheck ? <div className={`rounded-[9px] border p-3 ${lastCheck.allowed ? "border-[#A7E3C1] bg-[#F0FDF4]" : "border-[#F2C6C2] bg-[#FEF3F2]"}`}><div className="text-[12px] font-extrabold">{lastCheck.allowed ? "Eligible under configured checks" : "Blocked"}</div><div className="mt-1 text-[11px] leading-[1.5]">{lastCheck.message}</div><div className="mt-2 text-[10px] text-[#7A8798]">Decision {lastCheck.id} · policy v{lastCheck.policyVersion ?? "—"} · no call placed</div></div> : null}
+              {lastCheck ? <div className={`rounded-[9px] border p-3 ${lastCheck.allowed ? "border-[#A7E3C1] bg-[#F0FDF4]" : "border-[#F2C6C2] bg-[#FEF3F2]"}`}><div className="text-[12px] font-extrabold">{lastCheck.allowed ? "Eligible under configured checks" : "Blocked"}</div><div className="mt-1 text-[11px] leading-[1.5]">{lastCheck.message}</div><div className="mt-2 text-[10px] text-[color:var(--app-text-faintest,#667085)]">Decision {lastCheck.id} · policy v{lastCheck.policyVersion ?? "—"} · no call placed</div></div> : null}
             </div>
           </Card>
           <Card overflow>
             <CardHead title="Decision audit" sub="Latest recorded allow/block results, with the policy version used" />
-            {auditData.length ? auditData.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 border-b border-[#EEF0F3] px-4 py-3 last:border-0"><Chip tone={item.allowed ? "green" : "red"}>{item.allowed ? "Allowed by configured checks" : "Blocked"}</Chip><div className="min-w-[180px] flex-1 text-[11px] font-semibold">{item.phone} · {item.countryCode} · {item.purpose} · {item.callerType}</div><div className="text-[10px] text-[#7A8798]">{item.reasonCode} · policy v{item.policyVersion ?? "—"} · {new Date(item.evaluatedAt).toLocaleString()}</div></div>) : <EmptyState icon="clipboard-check" title="No eligibility checks" body="Checks and their decision IDs will be listed here after they are run." />}
+            {auditData.length ? auditData.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 border-b border-[#EEF0F3] px-4 py-3 last:border-0"><Chip tone={item.allowed ? "green" : "red"}>{item.allowed ? "Allowed by configured checks" : "Blocked"}</Chip><div className="min-w-[180px] flex-1 text-[11px] font-semibold">{item.phone} · {item.countryCode} · {item.purpose} · {item.callerType}</div><div className="text-[10px] text-[color:var(--app-text-faintest,#667085)]">{item.reasonCode} · policy v{item.policyVersion ?? "—"} · {new Date(item.evaluatedAt).toLocaleString()}</div></div>) : <EmptyState icon="clipboard-check" title="No eligibility checks" body="Checks and their decision IDs will be listed here after they are run." />}
           </Card>
         </div>
       ) : null}
@@ -423,7 +431,7 @@ function PolicyPackRow({
 }) {
   return (
     <div className="border-b border-[#EEF0F3] px-4 py-3.5 last:border-0">
-      <div className="flex flex-wrap items-start gap-2"><div className="min-w-[180px] flex-1"><div className="text-[12px] font-extrabold">{pack.countryCode} · {pack.purpose} · {pack.callerType.replaceAll("_", " ")}</div><div className="mt-1 text-[10px] text-[#7A8798]">Latest v{pack.latestVersion ?? "—"}</div></div><Chip tone={pack.status === "published" ? "green" : pack.status === "disabled" ? "red" : "amber"}>{pack.status}</Chip></div>
+      <div className="flex flex-wrap items-start gap-2"><div className="min-w-[180px] flex-1"><div className="text-[12px] font-extrabold">{pack.countryCode} · {pack.purpose} · {pack.callerType.replaceAll("_", " ")}</div><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">Latest v{pack.latestVersion ?? "—"}</div></div><Chip tone={pack.status === "published" ? "green" : pack.status === "disabled" ? "red" : "amber"}>{pack.status}</Chip></div>
       {pack.versions.map((version) => <div key={version.id} className="mt-2 flex flex-wrap items-center gap-2 rounded-[8px] bg-[#F8FAFC] px-2.5 py-2"><Chip tone={version.status === "published" ? "green" : version.status === "draft" ? "amber" : "neutral"}>v{version.version} · {version.status}</Chip><span className="min-w-[140px] flex-1 text-[10px] text-[#647184]">Recording {version.recordingAllowed ? "enabled by policy" : "not permitted"}{version.allowedWindowStart ? ` · ${version.allowedWindowStart}–${version.allowedWindowEnd} ${version.timeZone}` : " · no hours configured"}</span>{version.status === "draft" ? <><button type="button" className="h-[27px] rounded-[7px] border border-[#D5DAE2] bg-white px-2 text-[10px] font-bold" onClick={() => onVersion(version)}>Load into editor</button><button type="button" className="h-[27px] rounded-[7px] border border-[#A7E3C1] bg-[#F0FDF4] px-2 text-[10px] font-bold text-[#137C48]" disabled={busy} onClick={() => onPublish(version)}>Publish after review</button></> : null}{version.status === "published" && !pack.disabledAt ? <button type="button" className="h-[27px] rounded-[7px] border border-[#D5DAE2] bg-white px-2 text-[10px] font-bold" onClick={onNewVersion}>New version</button> : null}</div>)}
       {!pack.disabledAt && pack.status !== "disabled" ? <button type="button" className="mt-2 h-[27px] rounded-[7px] border border-[#F2C6C2] bg-white px-2 text-[10px] font-bold text-[#B42318]" onClick={() => onDisable(pack)}>Disable this pack</button> : null}
     </div>
@@ -432,16 +440,16 @@ function PolicyPackRow({
 
 function ConsentRow({ item, now, onRevoke }: { item: Awaited<ReturnType<typeof fetchVoiceConsents>>[number]; now: Date; onRevoke: () => void }) {
   const active = !item.revokedAt && (!item.expiresAt || new Date(item.expiresAt).getTime() > now.getTime());
-  return <div className="flex flex-wrap items-start gap-2 border-b border-[#EEF0F3] px-4 py-3 last:border-0"><div className="min-w-[180px] flex-1"><div className="text-[11px] font-bold">{item.phone} · {item.purpose} · {item.callerType ?? "any caller type"}</div><div className="mt-1 text-[10px] text-[#7A8798]">{item.source} · {item.legalBasis} · proof: {item.evidenceReference}</div><div className="mt-1 text-[10px] text-[#7A8798]">Granted {new Date(item.grantedAt).toLocaleString()}{item.expiresAt ? ` · expires ${new Date(item.expiresAt).toLocaleString()}` : " · no expiry recorded"}</div></div><Chip tone={active ? "green" : "neutral"}>{active ? "Active" : item.revokedAt ? "Revoked" : "Expired"}</Chip>{active ? <button type="button" className="h-[27px] rounded-[7px] border border-[#F2C6C2] bg-white px-2 text-[10px] font-bold text-[#B42318]" onClick={onRevoke}>Revoke</button> : null}</div>;
+  return <div className="flex flex-wrap items-start gap-2 border-b border-[#EEF0F3] px-4 py-3 last:border-0"><div className="min-w-[180px] flex-1"><div className="text-[11px] font-bold">{item.phone} · {item.purpose} · {item.callerType ?? "any caller type"}</div><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{item.source} · {item.legalBasis} · proof: {item.evidenceReference}</div><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">Granted {new Date(item.grantedAt).toLocaleString()}{item.expiresAt ? ` · expires ${new Date(item.expiresAt).toLocaleString()}` : " · no expiry recorded"}</div></div><Chip tone={active ? "green" : "neutral"}>{active ? "Active" : item.revokedAt ? "Revoked" : "Expired"}</Chip>{active ? <button type="button" className="h-[27px] rounded-[7px] border border-[#F2C6C2] bg-white px-2 text-[10px] font-bold text-[#B42318]" onClick={onRevoke}>Revoke</button> : null}</div>;
 }
 
 function SuppressionRow({ item, now, onRevoke }: { item: Awaited<ReturnType<typeof fetchVoiceSuppressions>>[number]; now: Date; onRevoke: () => void }) {
   const active = !item.revokedAt && new Date(item.effectiveAt).getTime() <= now.getTime() && (!item.expiresAt || new Date(item.expiresAt).getTime() > now.getTime());
-  return <div className="flex flex-wrap items-start gap-2 border-b border-[#EEF0F3] px-4 py-3 last:border-0"><div className="min-w-[180px] flex-1"><div className="text-[11px] font-bold">{item.phone} · {item.purpose ?? "all outbound purposes"}</div><div className="mt-1 text-[10px] text-[#7A8798]">{item.reason} · source: {item.source}</div><div className="mt-1 text-[10px] text-[#7A8798]">Effective {new Date(item.effectiveAt).toLocaleString()}{item.expiresAt ? ` · expires ${new Date(item.expiresAt).toLocaleString()}` : " · no expiry recorded"}</div></div><Chip tone={active ? "red" : "neutral"}>{active ? "Active block" : item.revokedAt ? "Removed" : "Not currently active"}</Chip>{active ? <button type="button" className="h-[27px] rounded-[7px] border border-[#D5DAE2] bg-white px-2 text-[10px] font-bold" onClick={onRevoke}>Remove with reason</button> : null}</div>;
+  return <div className="flex flex-wrap items-start gap-2 border-b border-[#EEF0F3] px-4 py-3 last:border-0"><div className="min-w-[180px] flex-1"><div className="text-[11px] font-bold">{item.phone} · {item.purpose ?? "all outbound purposes"}</div><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{item.reason} · source: {item.source}</div><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">Effective {new Date(item.effectiveAt).toLocaleString()}{item.expiresAt ? ` · expires ${new Date(item.expiresAt).toLocaleString()}` : " · no expiry recorded"}</div></div><Chip tone={active ? "red" : "neutral"}>{active ? "Active block" : item.revokedAt ? "Removed" : "Not currently active"}</Chip>{active ? <button type="button" className="h-[27px] rounded-[7px] border border-[#D5DAE2] bg-white px-2 text-[10px] font-bold" onClick={onRevoke}>Remove with reason</button> : null}</div>;
 }
 
 function Metric({ label, value, sub }: { label: string; value: number; sub: string }) {
-  return <div className="rounded-[12px] border border-[#E6E8EC] bg-white px-3.5 py-3 shadow-[0_1px_2px_rgba(16,24,40,.04)]"><div className="text-[10.5px] font-bold text-[#5B6675]">{label}</div><div className="mt-1.5 text-[18px] font-extrabold tabular-nums text-[#0F172A]">{value}</div><div className="mt-1 text-[10px] text-[#7A8798]">{sub}</div></div>;
+  return <div className="rounded-[12px] border border-[#E6E8EC] bg-white px-3.5 py-3 shadow-[0_1px_2px_rgba(16,24,40,.04)]"><div className="text-[10.5px] font-bold text-[#5B6675]">{label}</div><div className="mt-1.5 text-[18px] font-extrabold tabular-nums text-[#0F172A]">{value}</div><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{sub}</div></div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -453,11 +461,11 @@ function InlineNotice({ children, tone }: { children: string; tone: "error" | "n
 }
 
 function HealthRow({ title, value, description }: { title: string; value: string; description: string }) {
-  return <div className="rounded-[10px] border border-[#EEF0F3] bg-[#FCFCFD] p-3"><div className="text-[10px] font-bold uppercase tracking-[.05em] text-[#7A8798]">{title}</div><div className="mt-1 text-[12px] font-extrabold">{value}</div><div className="mt-1 text-[10.5px] leading-[1.5] text-[#7A8798]">{description}</div></div>;
+  return <div className="rounded-[10px] border border-[#EEF0F3] bg-[#FCFCFD] p-3"><div className="text-[10px] font-bold uppercase tracking-[.05em] text-[color:var(--app-text-faintest,#667085)]">{title}</div><div className="mt-1 text-[12px] font-extrabold">{value}</div><div className="mt-1 text-[10.5px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">{description}</div></div>;
 }
 
 function Step({ title, text }: { title: string; text: string }) {
-  return <div className="rounded-[10px] border border-[#EEF0F3] bg-[#FCFCFD] p-3"><div className="text-[11px] font-extrabold">{title}</div><div className="mt-1 text-[10px] text-[#7A8798]">{text}</div></div>;
+  return <div className="rounded-[10px] border border-[#EEF0F3] bg-[#FCFCFD] p-3"><div className="text-[11px] font-extrabold">{title}</div><div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{text}</div></div>;
 }
 
 function policyPayload(form: PolicyForm): Omit<VoiceCompliancePolicyInput, "countryCode" | "purpose" | "callerType"> {
@@ -466,6 +474,8 @@ function policyPayload(form: PolicyForm): Omit<VoiceCompliancePolicyInput, "coun
     recordingAllowed: form.recordingAllowed,
     recordingNoticeText: form.recordingAllowed ? form.recordingNoticeText.trim() : null,
     recordingRetentionDays: form.recordingAllowed && form.recordingRetentionDays ? Number(form.recordingRetentionDays) : null,
+    meetingAiProcessingAllowed: form.recordingAllowed && form.meetingAiProcessingAllowed,
+    meetingAiProcessingNoticeText: form.recordingAllowed && form.meetingAiProcessingAllowed ? form.meetingAiProcessingNoticeText.trim() : null,
     allowedWindowStart: form.allowedWindowStart || null,
     allowedWindowEnd: form.allowedWindowEnd || null,
     timeZone: form.allowedWindowStart ? form.timeZone.trim() : null,

@@ -75,7 +75,7 @@ function Leads() {
                   <td className="max-w-[260px] px-3 py-[11px] text-[11.5px] text-[#45505F]">
                     <span className="line-clamp-2">{said ? `“${said}”` : "—"}</span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-[11px] text-[11.5px] text-[#94A3B8]">{fmtWhen(c.startedAt, rx.timezone, rx.today, c.localDay)}</td>
+                  <td className="whitespace-nowrap px-3 py-[11px] text-[11.5px] text-[color:var(--app-text-faintest,#667085)]">{fmtWhen(c.startedAt, rx.timezone, rx.today, c.localDay)}</td>
                   <td className="px-3 py-[11px]">
                     <ChipFor spec={{ label: "None", tone: "neutral" }} />
                   </td>

@@ -22,6 +22,7 @@ import {
 } from "../rx-ui";
 import { useRx } from "../rx-data";
 import { useRxStore } from "../rx-store";
+import { VoiceOperationsHealth } from "../rx-operations-health";
 
 const elapsed = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -245,6 +246,7 @@ export function SupervisorCenterScreen() {
 
   return (
     <div className="flex flex-col gap-[18px]">
+      <VoiceOperationsHealth />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -307,8 +309,9 @@ export function SupervisorCenterScreen() {
         />
         <KpiCard
           label="AI errors"
-          value="Not tracked"
-          sub="No live error metric stored"
+          value={String(metrics.aiErrors)}
+          sub="Calls with saved provider failures · last 24 hours"
+          tone={metrics.aiErrors ? "amber" : "neutral"}
         />
       </div>
 
@@ -494,7 +497,7 @@ export function SupervisorCenterScreen() {
             iconColor="#16A34A"
             title="Agent status"
             right={
-              <span className="text-[11px] text-[#94A3B8]">
+              <span className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                 Configured capacity: {metrics.configuredCapacity}
               </span>
             }
@@ -520,7 +523,7 @@ export function SupervisorCenterScreen() {
                   <div className="min-w-[150px] flex-1">
                     <div className="text-[12px] font-bold">
                       {agent.name}{" "}
-                      <span className="font-normal text-[#94A3B8]">
+                      <span className="font-normal text-[color:var(--app-text-faintest,#667085)]">
                         · {agent.role}
                       </span>
                     </div>

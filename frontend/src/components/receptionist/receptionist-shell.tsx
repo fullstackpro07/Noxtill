@@ -360,7 +360,7 @@ export function ReceptionistShell({ children }: { children: ReactNode }) {
       <span className="min-w-0 flex-1 truncate text-[13px] text-[#8B97A6]">
         Ask — “which missed calls need follow-up?”
       </span>
-      <span className="rounded-[5px] border border-[#E6E8EC] border-b-2 bg-white px-1.5 py-0.5 font-mono text-[10.5px] text-[#7A8798]">
+      <span className="rounded-[5px] border border-[#E6E8EC] border-b-2 bg-white px-1.5 py-0.5 font-mono text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
         /
       </span>
     </div>
@@ -523,7 +523,7 @@ function AskBody() {
           ))}
         </div>
       ) : null}
-      <div className="text-[11px] text-[#94A3B8]">
+      <div className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">
         Answers are computed from your call log — nothing is estimated.
       </div>
     </div>

@@ -87,7 +87,7 @@ export function MissedCallsScreen() {
     onError: (error) => setNotice({ text: toError(error), error: true }),
   });
 
-  if (query.isPending) return <Card pad={20}><p className="text-[12px] text-[#7A8798]">Loading missed calls…</p></Card>;
+  if (query.isPending) return <Card pad={20}><p className="text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading missed calls…</p></Card>;
   if (query.isError) return <Card pad={20}><p role="alert" className="text-[12px] text-[#B42318]">{toError(query.error)}</p></Card>;
 
   const data = query.data;
@@ -201,7 +201,7 @@ export function MissedCallsScreen() {
                         {OUTCOMES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                       <input className="h-9 rounded-[8px] border border-[#D5DAE2] bg-white px-2 text-[12px]" maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notes (optional)" />
-                      <button type="submit" disabled={close.isPending} className="h-9 rounded-[8px] bg-[#16A34A] px-3 text-[12px] font-bold text-white disabled:opacity-60">
+                      <button type="submit" disabled={close.isPending} className="h-9 rounded-[8px] bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12px] font-bold text-white disabled:opacity-60">
                         {close.isPending ? "Saving…" : "Close call-back"}
                       </button>
                     </form>

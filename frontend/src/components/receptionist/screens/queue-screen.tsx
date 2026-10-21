@@ -335,7 +335,7 @@ function Queue() {
       <Card pad={18}>
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="text-[14px] font-extrabold">Routing flow</div>
-          <div className="ml-auto text-[11px] text-[#94A3B8]">What happens to every call, in order</div>
+          <div className="ml-auto text-[11px] text-[color:var(--app-text-faintest,#667085)]">What happens to every call, in order</div>
         </div>
         <div className="mt-[15px] flex flex-wrap items-center gap-2">
           {FLOW.map(([label, icon], i) => (
@@ -365,7 +365,7 @@ function Queue() {
               <button type="button" onClick={addSituation} className="flex h-8 cursor-pointer items-center rounded-[9px] border border-[#D5DAE2] bg-white px-[11px] text-[12px] font-bold hover:bg-[#F1F3F6]">
                 Add situation
               </button>
-              <button type="button" onClick={addRule} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-[9px] border-0 bg-[#16A34A] px-[11px] text-[12px] font-bold text-white hover:bg-[#15803D]">
+              <button type="button" onClick={addRule} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-[11px] text-[12px] font-bold text-white hover:bg-[#15803D]">
                 <Ico name="plus" size={13} strokeWidth={2.25} />
                 Add rule
               </button>
@@ -391,7 +391,7 @@ function Queue() {
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#F1F3F6] text-[11px] font-extrabold text-[#45505F]">{r.order}</span>
               </td>
               <td className="px-3 py-[11px] text-[12px] font-bold">
-                {r.rule ? <div className="text-[10.5px] font-semibold text-[#7A8798]">{r.rule.name}</div> : null}
+                {r.rule ? <div className="text-[10.5px] font-semibold text-[color:var(--app-text-faintest,#667085)]">{r.rule.name}</div> : null}
                 {r.when}
               </td>
               <td className="px-3 py-[11px] text-[11.5px] text-[#45505F]">{r.then}</td>
@@ -419,7 +419,7 @@ function Queue() {
                     const callId = await rx.actions.takeNext(rx.queue!.queueId!);
                     if (callId) openCall(callId);
                   }}
-                  className="flex h-[30px] cursor-pointer items-center rounded-[8px] border-0 bg-[#16A34A] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]"
+                  className="flex h-[30px] cursor-pointer items-center rounded-[8px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]"
                 >
                   Take next
                 </button>
@@ -458,20 +458,20 @@ function Queue() {
                 <div className="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-[#FEF3C7] text-[12.5px] font-extrabold text-[#B45309]">{i + 1}</div>
                 <div className="min-w-[180px] flex-[1_1_200px]">
                   <div className="text-[12.5px] font-bold">{callerName(c)}</div>
-                  <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
+                  <div className="mt-0.5 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
                     {c.fromNumber} · {fmtWhen(c.startedAt, rx.timezone, rx.today, c.localDay)} · {c.assignedToName ? `owner ${c.assignedToName}` : "unassigned"}
                   </div>
-                  <div className="mt-1 text-[10px] text-[#7A8798]">
+                  <div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">
                     Priority {queueItem?.priority === "high" ? "High · missed call" : "Normal"} · Skill {queueItem?.requiredSkill ?? "Not classified"} · Language {queueItem?.language ?? "Not captured"}
                   </div>
                 </div>
                 <div className="min-w-[140px] flex-[1_1_160px] text-[11.5px] text-[#45505F]">
                   <ChipFor spec={outcomeChip(c)} />
-                  {said ? <div className="mt-1 line-clamp-2 text-[11px] text-[#7A8798]">“{said}”</div> : null}
+                  {said ? <div className="mt-1 line-clamp-2 text-[11px] text-[color:var(--app-text-faintest,#667085)]">“{said}”</div> : null}
                 </div>
                 <div className="w-[96px] flex-none text-right">
                   <div className="text-[13px] font-extrabold tabular-nums">{waitedFor(c, rx.now)}</div>
-                  <div className="mt-0.5 text-[10px] text-[#94A3B8]">waiting</div>
+                  <div className="mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">waiting</div>
                 </div>
                 <div className="flex min-w-[214px] flex-none justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <RowAction primary onClick={() => ca.callBack(c)}>

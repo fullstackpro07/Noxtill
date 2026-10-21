@@ -10,6 +10,8 @@ import {
   createVoiceMeeting,
   createVoiceMeetingInvite,
   fetchVoiceMeetingHosts,
+  fetchVoiceMeetingConfiguration,
+  fetchVoiceMeetingRecordingPolicies,
   fetchVoiceMeetings,
   rescheduleVoiceMeeting,
   revokeVoiceMeetingInvite,
@@ -20,6 +22,7 @@ import {
 import { Card, CardHead, Chip, EmptyState, Footnote, PrimaryBtn, SmallBtn } from "../rx-ui";
 import { useRx } from "../rx-data";
 import { VoiceMeetingRoom } from "../voice-meeting-room";
+import { VoiceMeetingHostControls } from "../voice-meeting-host-controls";
 
 const inputClass = "h-[36px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] outline-none focus:border-[#16A34A]";
 const errorText = (error: unknown) => error instanceof ApiError ? error.message : error instanceof Error ? error.message : "The request could not be completed.";
@@ -53,18 +56,22 @@ export function VoiceMeetingsScreen() {
   const [createdLink, setCreatedLink] = useState("");
   const [joiningMeetingId, setJoiningMeetingId] = useState<string | null>(null);
   const [roomAccess, setRoomAccess] = useState<VoiceMeetingJoinToken | null>(null);
+  const [hostControlsId, setHostControlsId] = useState<string | null>(null);
   const [meetingForm, setMeetingForm] = useState({
     title: "",
     scheduledAt: localDateTime(new Date(now.getTime() + 60 * 60_000)),
     durationMin: "30",
     hostBusinessUserId: "",
     appointmentId: "",
+    recordingPolicyVersionId: "",
   });
   const [rescheduleMeeting, setRescheduleMeeting] = useState<VoiceVideoMeeting | null>(null);
   const [rescheduleForm, setRescheduleForm] = useState({ scheduledAt: "", durationMin: "30" });
 
   const meetings = useQuery({ queryKey: ["voice-meetings"], queryFn: fetchVoiceMeetings });
+  const configuration = useQuery({ queryKey: ["voice-meeting-configuration"], queryFn: fetchVoiceMeetingConfiguration });
   const hosts = useQuery({ queryKey: ["voice-meeting-hosts"], queryFn: fetchVoiceMeetingHosts });
+  const recordingPolicies = useQuery({ queryKey: ["voice-meeting-recording-policies"], queryFn: fetchVoiceMeetingRecordingPolicies });
   const appointmentRange = useMemo(() => ({
     from: now.toISOString(),
     to: new Date(now.getTime() + 180 * 24 * 60 * 60_000).toISOString(),
@@ -88,17 +95,18 @@ export function VoiceMeetingsScreen() {
       timeZone,
       hostBusinessUserId: meetingForm.hostBusinessUserId,
       appointmentId: meetingForm.appointmentId || null,
+      recordingPolicyVersionId: meetingForm.recordingPolicyVersionId || null,
     }),
     onSuccess: async () => {
-      setNotice(meetings.data?.some((meeting) => meeting.media === "configured") ? "Meeting scheduled. The assigned host and invited guests can join during its join window." : "Meeting scheduled. Live video is not configured on this server.");
-      setMeetingForm((form) => ({ ...form, title: "", appointmentId: "" }));
+      setNotice(configuration.data?.mediaConfigured ? "Meeting scheduled. The assigned host can admit invited guests during its join window." : "Meeting scheduled. Live video is not configured on this server.");
+      setMeetingForm((form) => ({ ...form, title: "", appointmentId: "", recordingPolicyVersionId: "" }));
       await refresh();
     },
     onError: (error) => setNotice(errorText(error)),
   });
   const cancel = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => cancelVoiceMeeting(id, reason),
-    onSuccess: async () => { setNotice("Meeting canceled and active guest links revoked"); await refresh(); },
+    onSuccess: async () => { setNotice("Schedule canceled and new guest joins revoked. Existing room closure follows provider confirmation."); await refresh(); },
     onError: (error) => setNotice(errorText(error)),
   });
   const reschedule = useMutation({
@@ -183,9 +191,9 @@ export function VoiceMeetingsScreen() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-[21px] font-extrabold tracking-[-.02em]">Video Meetings</h1>
-          <p className="mt-1 max-w-[760px] text-[12px] leading-[1.6] text-[#697586]">Schedule meetings and email personal guest links. {rows.some((meeting) => meeting.media === "configured") ? "Live video is available for assigned hosts and invited guests; recording and screen sharing are disabled." : "Live video not configured. Set the LiveKit server URL and API credentials to enable rooms."}</p>
+          <p className="mt-1 max-w-[760px] text-[12px] leading-[1.6] text-[#697586]">Schedule meetings and email personal guest links. {configuration.isPending ? "Checking video configuration…" : configuration.error ? "Video configuration could not be checked." : configuration.data?.mediaConfigured ? `Guests wait for assigned-host admission. Only the host can share a screen. Recording ${configuration.data.recording === "configured" ? "requires a published regional policy and every attendee's consent" : "is not configured on the server"}. Meeting chat is not available.` : "Live video not configured. Set the LiveKit server URL and API credentials to enable rooms."}</p>
         </div>
-        <Chip tone={rows.some((meeting) => meeting.media === "configured") ? "green" : "amber"} h={24} fontSize={11}>{rows.some((meeting) => meeting.media === "configured") ? "Live video configured" : "Live video not configured"}</Chip>
+        <Chip tone={configuration.data?.mediaConfigured ? "green" : "amber"} h={24} fontSize={11}>{configuration.isPending ? "Checking configuration" : configuration.error ? "Configuration unavailable" : configuration.data?.mediaConfigured ? "Live video configured" : "Live video not configured"}</Chip>
       </div>
 
       <div className="grid gap-[18px] xl:grid-cols-[minmax(0,1.05fr)_minmax(400px,.95fr)]">
@@ -221,9 +229,17 @@ export function VoiceMeetingsScreen() {
                 ))}
               </select>
             </label>
+            <label className="grid gap-1.5 text-[11px] font-bold text-[#5B6675]">Recording policy (optional)
+              <select className={inputClass} value={meetingForm.recordingPolicyVersionId} onChange={(event) => setMeetingForm((form) => ({ ...form, recordingPolicyVersionId: event.target.value }))}>
+                <option value="">Do not enable recording for this meeting</option>
+                {(recordingPolicies.data ?? []).map((policy) => <option key={policy.id} value={policy.id}>{policy.countryCode} · {policy.purpose} · {policy.callerType} · v{policy.version} · {policy.retentionDays} day retention</option>)}
+              </select>
+              <span className="font-normal text-[color:var(--app-text-faintest,#667085)]">Use a published policy reviewed for this meeting. The selected country does not establish a guest&apos;s location or legal jurisdiction.</span>
+              {recordingPolicies.error ? <span role="alert" className="font-normal text-[#B42318]">Published recording policies could not be loaded: {errorText(recordingPolicies.error)}</span> : null}
+            </label>
             {appointments.isError ? <p className="text-[11px] text-[#B42318]">Bookings could not be loaded: {errorText(appointments.error)}</p> : null}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EEF0F3] pt-3">
-              <p className="max-w-[490px] text-[11px] leading-[1.55] text-[#7A8798]">The time uses this device&apos;s time zone. Scheduling does not create a video room or send email.</p>
+              <p className="max-w-[490px] text-[11px] leading-[1.55] text-[color:var(--app-text-faintest,#667085)]">The time uses this device&apos;s time zone. Scheduling does not create a video room or send email.</p>
               <PrimaryBtn onClick={() => createFormRef.current?.requestSubmit()} disabled={create.isPending || hostOptions.length === 0}>
                 {create.isPending ? "Scheduling…" : "Schedule meeting"}
               </PrimaryBtn>
@@ -248,26 +264,30 @@ export function VoiceMeetingsScreen() {
                         {meeting.appointment ? `Booking ${meeting.appointment.bookingNo ?? meeting.appointment.id} · ${meeting.customer?.name ?? "Customer linked"}` : "No booking linked"}
                       </p>
                     </div>
-                    <Chip tone={meeting.status === "scheduled" ? "blue" : meeting.status === "cancelled" ? "red" : "neutral"}>{meeting.status}</Chip>
+                    <Chip tone={meeting.status === "scheduled" ? "blue" : meeting.status === "cancelled" ? "red" : "neutral"}>{meeting.status === "cancelled" ? `Cancelled${meeting.roomState === "ending" ? " · media closure pending" : ""}` : meeting.roomState === "active" || meeting.roomState === "ending" ? meeting.roomState : meeting.status}</Chip>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {meeting.status === "scheduled" ? <>
                       {meeting.media === "configured" ? <SmallBtn disabled={join.isPending} onClick={() => join.mutate(meeting.id)}>{join.isPending && join.variables === meeting.id ? "Joining…" : "Join video"}</SmallBtn> : null}
+                      <SmallBtn onClick={() => setHostControlsId(hostControlsId === meeting.id ? null : meeting.id)}>Host controls</SmallBtn>
                       <SmallBtn onClick={() => setInviteFor(inviteFor === meeting.id ? null : meeting.id)}>Invite guest</SmallBtn>
                       <SmallBtn onClick={() => startReschedule(meeting)}>Reschedule</SmallBtn>
                       <SmallBtn disabled={cancel.isPending} onClick={() => void cancelMeeting(meeting)}>Cancel</SmallBtn>
                     </> : null}
-                    {meeting.media === "configured" ? <Chip tone="green">Video ready</Chip> : <Chip tone="amber">Video not configured</Chip>}
+                    {meeting.media === "configured" ? <Chip tone="green">Video configured</Chip> : <Chip tone="amber">Video not configured</Chip>}
+                    <Chip tone={meeting.recording === "ready" ? "green" : meeting.recording === "recording" ? "red" : "neutral"}>Recording · {meeting.recording.replaceAll("_", " ")}</Chip>
+                    {meeting.recordingFinalizedAt ? <span className="self-center text-[10px] text-[#697586]">File confirmed · {meeting.recordingSizeBytes ?? "size unavailable"} bytes · expires {meeting.recordingExpiresAt ? formatMeetingTime(meeting.recordingExpiresAt, meeting.timeZone) : "not set"}</span> : null}
                   </div>
 
                   {joiningMeetingId === meeting.id && roomAccess ? <VoiceMeetingRoom access={roomAccess} onLeave={() => { setRoomAccess(null); setJoiningMeetingId(null); }} /> : null}
+                  {hostControlsId === meeting.id && !(joiningMeetingId === meeting.id && roomAccess) ? <VoiceMeetingHostControls meetingId={meeting.id} /> : null}
 
                   {inviteFor === meeting.id ? (
                     <form ref={inviteFormRef} className="mt-3 grid gap-2 rounded-[9px] bg-[#F7F9FB] p-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); invite.mutate({ meetingId: meeting.id, email: inviteEmail.trim(), name: inviteName.trim() }); }}>
                       <input className={inputClass} type="email" required maxLength={191} value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Guest email" aria-label="Guest email" />
                       <input className={inputClass} maxLength={120} value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Guest name (optional)" aria-label="Guest name optional" />
                       <PrimaryBtn onClick={() => inviteFormRef.current?.requestSubmit()} disabled={invite.isPending}>{invite.isPending ? "Sending…" : "Send invite"}</PrimaryBtn>
-                      <p className="text-[11px] leading-[1.5] text-[#7A8798] sm:col-span-3">The personal guest link is shown once and copied if browser permission allows. When LiveKit is configured, invited guests can join during the meeting window. Recording and screen sharing are disabled.</p>
+                      <p className="text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)] sm:col-span-3">The personal guest link is shown once and copied if permitted. Guests request admission during the join window and receive no room token until the host admits them. Only the host can screen share. If this meeting has a published recording policy, guests must read and accept its notice before joining a recording.</p>
                     </form>
                   ) : null}
 
@@ -284,7 +304,7 @@ export function VoiceMeetingsScreen() {
 
                   {meeting.invites.length ? (
                     <div className="mt-3 border-t border-[#EEF0F3] pt-2.5">
-                      <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-[#7A8798]">Guest links</p>
+                      <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-[color:var(--app-text-faintest,#667085)]">Guest links</p>
                       {meeting.invites.map((guest) => (
                         <div key={guest.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-[11px]">
                           <span className="flex flex-wrap items-center gap-1.5">
@@ -300,7 +320,7 @@ export function VoiceMeetingsScreen() {
               ))}
             </div>
           </div>
-          <Footnote>Invite tokens are stored hashed. Short-lived video tokens are issued only to the assigned active host or an invited guest during the meeting window. Recording and screen sharing are disabled.</Footnote>
+          <Footnote>Invite tokens are stored hashed. Room tokens expire within 60 seconds and are issued only to the active assigned host or an admitted invitation during the join window. Guests cannot screen share or moderate participants. Recording requires a published regional policy, every connected participant&apos;s consent, provider confirmation and a verified private file. Admission is not proof of a media connection.</Footnote>
         </Card>
       </div>
 

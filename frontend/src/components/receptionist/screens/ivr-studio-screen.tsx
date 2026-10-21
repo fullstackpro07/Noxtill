@@ -567,7 +567,7 @@ export function VoiceIvrStudioScreen() {
                           Connect
                         </SmallBtn>
                       </div>
-                      <p className="mt-2 text-[10.5px] text-[#7A8798]">
+                      <p className="mt-2 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
                         Branch nodes need a route condition and a{" "}
                         <code>default</code> fallback. Supported simulation
                         conditions include <code>dtmf:1</code>,{" "}
@@ -601,7 +601,7 @@ export function VoiceIvrStudioScreen() {
                             );
                           })
                         ) : (
-                          <li className="text-[11px] text-[#94A3B8]">
+                          <li className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                             No routes connected
                           </li>
                         )}
@@ -748,7 +748,7 @@ export function VoiceIvrStudioScreen() {
                         >
                           Publish version
                         </PrimaryBtn>
-                        <p className="text-[10.5px] leading-[1.45] text-[#7A8798]">
+                        <p className="text-[10.5px] leading-[1.45] text-[color:var(--app-text-faintest,#667085)]">
                           Validation runs again on the server. Publishing routes
                           new inbound calls through this version; calls already
                           in progress keep their pinned version.
@@ -802,7 +802,7 @@ export function VoiceIvrStudioScreen() {
                             </SmallBtn>
                           </>
                         ) : (
-                          <p className="text-[10.5px] text-[#7A8798]">
+                          <p className="text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
                             No published snapshots to compare or restore yet.
                           </p>
                         )}

@@ -69,7 +69,7 @@ function Bookings() {
           </SmallBtn>
         }
       >
-        Bookings the AI creates go through the same booking engine as your own. Successful appointments appear above; failed requests are listed separately below with the requested details and a safe reason code.
+        Phone bookings use the canonical booking engine. A saved request can still await staff approval or a deposit — check its current status before promising confirmation. Failed attempts are listed separately below with the requested details and a safe reason code.
       </Notice>
 
       <Card overflow>
@@ -87,7 +87,7 @@ function Bookings() {
                 <Th>Staff</Th>
                 <Th>Deposit</Th>
                 <Th>Created by</Th>
-                <Th>Caller verified</Th>
+                <Th>Caller number match</Th>
                 <Th>Status</Th>
                 <Th align="right">Actions</Th>
               </>
@@ -136,7 +136,7 @@ function Bookings() {
             })}
           </TableWrap>
         )}
-        <Footnote>Bookings owns these records — this is the phone-created subset, with each appointment&apos;s live status. Opening a row shows the call that created it. &ldquo;Created by&rdquo; shows the AI agent version pinned on the call; &ldquo;Caller verified&rdquo; means the booked customer&apos;s saved phone equals the number that called.</Footnote>
+        <Footnote>Bookings owns these records — this is the phone-created subset, with each appointment&apos;s live status. Opening a row shows the call that created it. &ldquo;Created by&rdquo; shows the pinned AI agent version. A caller number match is only a saved-phone match, not verified identity.</Footnote>
       </Card>
 
       {failedAttempts.length ? (

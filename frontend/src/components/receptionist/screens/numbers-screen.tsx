@@ -145,7 +145,7 @@ function Numbers() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-mono text-[13.5px] font-extrabold">{num.phoneNumber}</div>
-                <div className="mt-0.5 text-[11px] text-[#94A3B8]">{rx.insights?.businessName ?? "Your business"} · general reception</div>
+                <div className="mt-0.5 text-[11px] text-[color:var(--app-text-faintest,#667085)]">{rx.insights?.businessName ?? "Your business"} · general reception</div>
               </div>
               <Chip tone="green" h={22} fontSize={10.5}>Connected</Chip>
             </div>
@@ -157,7 +157,7 @@ function Numbers() {
             <div className="mt-[13px] grid gap-[9px] border-t border-[#EEF0F3] pt-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(74px, 1fr))" }}>
               {stats.map(([l, v]) => (
                 <div key={l}>
-                  <div className="text-[9.5px] font-bold uppercase tracking-[.06em] text-[#94A3B8]">{l}</div>
+                  <div className="text-[9.5px] font-bold uppercase tracking-[.06em] text-[color:var(--app-text-faintest,#667085)]">{l}</div>
                   <div className="mt-[3px] text-[14px] font-extrabold tabular-nums">{v}</div>
                 </div>
               ))}
@@ -186,15 +186,15 @@ function Numbers() {
         <div className="mt-3.5 grid gap-[11px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))" }}>
           {account.map((a) => (
             <div key={a.label} onClick={() => notify(`${a.label} · ${a.value}`, a.meta)} className="cursor-pointer rounded-[11px] border border-[#EEF0F3] p-3 hover:bg-[#F7F8FA]">
-              <div className="text-[9.5px] font-bold uppercase tracking-[.07em] text-[#94A3B8]">{a.label}</div>
+              <div className="text-[9.5px] font-bold uppercase tracking-[.07em] text-[color:var(--app-text-faintest,#667085)]">{a.label}</div>
               <div className="mt-[5px] font-extrabold tabular-nums" style={{ fontSize: a.muted ? 12 : 15, color: a.muted ? "#94A3B8" : "#0F172A" }}>
                 {a.value}
               </div>
-              <div className="mt-1 text-[10.5px] leading-[1.45] text-[#94A3B8]">{a.meta}</div>
+              <div className="mt-1 text-[10.5px] leading-[1.45] text-[color:var(--app-text-faintest,#667085)]">{a.meta}</div>
             </div>
           ))}
         </div>
-        <div className="mt-[13px] text-[11px] leading-[1.5] text-[#94A3B8]">Test calls are excluded from these business metrics. Minutes are calculated from each call&apos;s start and end time. Cost is the price Twilio reports, checked hourly after the call ends; unpriced calls are left out, never estimated. One primary number is connected per business. Additional campaign numbers are managed in Tracking &amp; Attribution; per-branch primary-number routing is not supported.</div>
+        <div className="mt-[13px] text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">Test calls are excluded from these business metrics. Minutes are calculated from each call&apos;s start and end time. Cost is the price Twilio reports, checked hourly after the call ends; unpriced calls are left out, never estimated. One primary number is connected per business. Additional campaign numbers are managed in Tracking &amp; Attribution; per-branch primary-number routing is not supported.</div>
       </Card>
     </div>
   );

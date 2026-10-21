@@ -51,7 +51,7 @@ function MiniBars({ rows, metric }: { rows: VoiceTrendRow[]; metric: Metric }) {
           </div>
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-[9.5px] text-[#94A3B8]">
+      <div className="mt-1 flex justify-between text-[9.5px] text-[color:var(--app-text-faintest,#667085)]">
         <span>{rows[0]?.day ?? ""}</span>
         <span>{rows.at(-1)?.day ?? ""}</span>
       </div>
@@ -86,11 +86,11 @@ export function AnalyticsTrendsCard() {
         }
       />
       {query.isPending ? (
-        <p className="m-0 p-[18px] text-[12px] text-[#7A8798]">Loading trends…</p>
+        <p className="m-0 p-[18px] text-[12px] text-[color:var(--app-text-faintest,#667085)]">Loading trends…</p>
       ) : query.isError ? (
         <p className="m-0 p-[18px] text-[12px] text-[#B42318]">{query.error.message}</p>
       ) : !query.data.series.length ? (
-        <p className="m-0 p-[18px] text-[12px] text-[#7A8798]">No calls or compliance checks in this window.</p>
+        <p className="m-0 p-[18px] text-[12px] text-[color:var(--app-text-faintest,#667085)]">No calls or compliance checks in this window.</p>
       ) : (
         <div className="flex flex-col gap-3 p-[18px]">
           <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
@@ -110,7 +110,7 @@ export function AnalyticsTrendsCard() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-collapse text-[11px] tabular-nums">
                 <thead>
-                  <tr className="text-left text-[10px] uppercase tracking-[.06em] text-[#7A8798]">
+                  <tr className="text-left text-[10px] uppercase tracking-[.06em] text-[color:var(--app-text-faintest,#667085)]">
                     {["Day", "Calls", "Missed", "Transferred", "AI contained", "Human", "AI min", "Human min", "Cost/priced call", "Quality", "Blocked"].map((h) => (
                       <th key={h} className="border-b border-[#EEF0F3] px-2 py-1.5 font-bold">{h}</th>
                     ))}

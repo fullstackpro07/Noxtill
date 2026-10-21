@@ -77,7 +77,7 @@ function CallTable({
         <tr key={call.id} className="border-b border-[#EEF0F3] last:border-0">
           <td className="px-3 py-3">
             <div className="text-[12px] font-bold">{call.caller}</div>
-            <div className="mt-1 text-[10.5px] capitalize text-[#94A3B8]">
+            <div className="mt-1 text-[10.5px] capitalize text-[color:var(--app-text-faintest,#667085)]">
               {call.status.replaceAll("_", " ")}
             </div>
           </td>
@@ -89,7 +89,7 @@ function CallTable({
               {call.outcome.replaceAll("_", " ")}
             </div>
             {call.routingRule ? (
-              <div className="mt-1 text-[10.5px] text-[#94A3B8]">
+              <div className="mt-1 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
                 Routed by {call.routingRule}
               </div>
             ) : null}
@@ -186,7 +186,7 @@ export function TrackingAttributionScreen() {
 
   if (query.isPending) {
     return (
-      <div className="animate-pulse rounded-[13px] border border-[#E6E8EC] bg-white p-6 text-[13px] text-[#7A8798]">
+      <div className="animate-pulse rounded-[13px] border border-[#E6E8EC] bg-white p-6 text-[13px] text-[color:var(--app-text-faintest,#667085)]">
         Loading call tracking evidence…
       </div>
     );
@@ -477,7 +477,7 @@ export function TrackingAttributionScreen() {
                 <button
                   type="submit"
                   disabled={correction.isPending}
-                  className="flex h-8 flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-8 flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {correction.isPending ? "Saving…" : "Save correction"}
                 </button>

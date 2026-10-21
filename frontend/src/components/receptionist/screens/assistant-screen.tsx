@@ -68,7 +68,7 @@ function Assistant() {
     },
     {
       label: "Voice",
-      meta: "The Twilio voice the AI speaks with",
+      meta: "Twilio voice for recorded-turn replies; live audio uses its configured runtime",
       value: voiceLabel(s?.voiceId),
       tone: "neutral",
       open: edit("Choose the voice", voiceLabel(s?.voiceId), <VoiceForm />, [{ label: "Current voice", value: voiceLabel(s?.voiceId) }], ["Only Twilio's built-in voices are available", "“Polly” voices can be previewed here with the same engine used on a real call", "A change applies from the very next call"], "There is no custom voice cloning."),
@@ -98,11 +98,11 @@ function Assistant() {
         <SharingForm />,
         [
           { label: "Prices, stock, services, hours, address", value: catalog ? "Shared" : "Not shared" },
-          { label: "A caller's own order status", value: orders ? "Shared, matched callers only" : "Not shared" },
-          { label: "A caller's own credit balance", value: credit ? "Shared, matched callers only" : "Not shared" },
+          { label: "A caller's own order status", value: orders ? "Enabled, private reference required" : "Not shared" },
+          { label: "A caller's own credit balance", value: credit ? "Enabled, private reference required" : "Not shared" },
         ],
-        ["The AI is only ever shown the records that match what the caller just said — never your whole catalogue", "Order status and credit balance are shown only when the calling number exactly matches a saved customer", "Anything it isn't shown, it says it has no record of and offers a message or a transfer"],
-        "Caller ID can be faked, so account details are off until you choose to share them.",
+        ["The AI is only ever shown records that match the caller's question — never the whole catalogue", "Recorded-turn order and balance replies also need a valid private booking-management reference for the matching customer, supplied with the question", "The reference must belong to an upcoming or recent (90-day), non-canceled booking. Without verification, account details and account existence are withheld"],
+        "Caller ID is not identity verification. Sharing remains off by default, and enabling it does not bypass verification.",
       ),
     },
     {
@@ -162,8 +162,8 @@ function Assistant() {
     { capability: "Product price and stock", source: "Products", clear: answer(catalog), unclear: ["Say no record", "amber"], limit: ["Arrange callback", "amber"], why: ["A product whose name matches what the caller said is given to the AI with its price and whether it is in stock", "If nothing matches, the AI says it has no record and offers a message"] },
     { capability: "Service price and duration", source: "Products · services", clear: answer(catalog), unclear: ["Say no record", "amber"], limit: ["Arrange callback", "amber"], why: ["A service that matches is given to the AI with its price and duration", "Booking itself always goes through the booking engine"] },
     { capability: "FAQs and documents", source: `Knowledge · ${knowledgeCount} active`, clear: knowledgeCount ? ["Answer", "green"] : ["None added", "neutral"], unclear: ["Say no record", "amber"], limit: ["Arrange callback", "amber"], why: ["The passage that best matches what the caller said is given to the AI", "Add FAQs or import a text document under Knowledge"] },
-    { capability: "Order status", source: "Orders · matched callers", clear: answer(orders), unclear: ["Say no record", "amber"], limit: ["Arrange callback", "amber"], why: ["Only a caller whose number exactly matches a saved customer, and only their own most recent order", orders ? "Turned on in Records the AI may read" : "Off until you turn it on in Records the AI may read"] },
-    { capability: "Credit balance", source: "Credit · matched callers", clear: answer(credit), unclear: ["Say no record", "amber"], limit: ["Arrange callback", "amber"], why: ["Only a caller whose number exactly matches a saved customer, and only their own balance", credit ? "Turned on in Records the AI may read" : "Off until you turn it on in Records the AI may read"] },
+    { capability: "Order status", source: "Orders · private reference verified", clear: answer(orders), unclear: ["Verify or transfer", "amber"], limit: ["Arrange callback", "amber"], why: ["Recorded-turn replies require a matching caller and a private booking reference; only that customer's own most recent order is read", orders ? "Enabled with verification" : "Sharing is off"] },
+    { capability: "Credit balance", source: "Credit · private reference verified", clear: answer(credit), unclear: ["Verify or transfer", "amber"], limit: ["Arrange callback", "amber"], why: ["Recorded-turn replies require a matching caller and a private booking reference; only that customer's own balance is read", credit ? "Enabled with verification" : "Sharing is off"] },
     { capability: "Refunds and complaints", source: "Not something it can do", clear: ["Not available", "red"], unclear: ["Not available", "red"], limit: ["—", "neutral"], red: true, why: ["It cannot process refunds or resolve complaints — it has no access to do either", "To send these to a person, add a routing rule: topic “Refund and returns” or “Complaint” → transfer"] },
   ];
 
@@ -178,7 +178,7 @@ function Assistant() {
           </button>
         }
       >
-        The AI answers only from the words spoken on the call and the records it is actually given — a matching product or service, your hours and address, FAQs and documents you added, and (only if you allow it) a matched caller&apos;s own order status or balance. Where it has no record it says so and offers a message or a transfer; it never invents a price, a slot, a stock level or a balance.
+        The AI answers from actual business records. Recorded-turn account replies require enabled sharing, a matching caller number and a valid private booking reference; caller ID alone never unlocks private details. Live-audio agents use their pinned tool allowlist. Missing or unverified information leads to clarification or staff help, not an invented answer.
       </Notice>
 
       <div className="grid items-start gap-[18px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}>
@@ -188,7 +188,7 @@ function Assistant() {
             <div key={r.label} onClick={r.open} className="flex cursor-pointer items-center gap-[11px] px-[18px] py-[11px] hover:bg-[#FAFBFC]" style={{ borderTop: i === 0 ? "none" : "1px solid #F3F4F7" }}>
               <div className="min-w-0 flex-1">
                 <div className="text-[12px] font-bold">{r.label}</div>
-                <div className="mt-0.5 text-[10.5px] leading-[1.45] text-[#94A3B8]">{r.meta}</div>
+                <div className="mt-0.5 text-[10.5px] leading-[1.45] text-[color:var(--app-text-faintest,#667085)]">{r.meta}</div>
               </div>
               <Chip tone={r.tone}>{r.value}</Chip>
             </div>
@@ -203,7 +203,7 @@ function Assistant() {
               <div className="flex h-6 w-6 flex-none items-center justify-center rounded-[7px] bg-[#ECFDF3] text-[11px] font-extrabold text-[#15803D]">{i + 1}</div>
               <div className="min-w-0 flex-1">
                 <div className="text-[12px] font-bold">{step}</div>
-                <div className="mt-0.5 text-[10.5px] leading-[1.45] text-[#94A3B8]">{detail}</div>
+                <div className="mt-0.5 text-[10.5px] leading-[1.45] text-[color:var(--app-text-faintest,#667085)]">{detail}</div>
               </div>
             </div>
           ))}

@@ -42,7 +42,7 @@ export function AnalyticsExportCard() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[220px] flex-1">
           <div className="text-[13px] font-extrabold">Export call data</div>
-          <div className="mt-1 text-[11px] leading-[1.5] text-[#7A8798]">
+          <div className="mt-1 text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">
             One row per saved call: status, outcome, AI agent version, human connection, booking, attribution basis, consent and provider-priced cost. Caller numbers are masked; up to 92 days.
           </div>
         </div>

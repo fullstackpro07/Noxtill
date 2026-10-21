@@ -1,5 +1,59 @@
 import { apiFetch } from "@/lib/api-client";
 
+export interface VoiceOperations {
+  sessions: number;
+  completed: number;
+  failed: number;
+  interruptions: number;
+  firstAudioP95Ms: number | null;
+  latencySamples: number;
+  controlRequestSamples: number;
+  controlRequestP95Ms: number | null;
+  controlRequestFailures: number;
+  controlSampleLimited: boolean;
+  pendingUsageOlderThanHour: number;
+  instanceUptimeSeconds: number;
+  sampleLimited: boolean;
+  availabilityNote: string;
+  errors: string[];
+}
+
+export function fetchVoiceOperations(): Promise<VoiceOperations> {
+  return apiFetch("/voice/operations");
+}
+
+export interface VoiceProviderWebhookFailure {
+  id: string;
+  eventType: string;
+  callSid: string;
+  state: "failed" | "dead_letter";
+  attemptCount: number;
+  consecutiveFailures: number;
+  replayCount: number;
+  lastError: string | null;
+  receivedAt: string;
+  lastAttemptAt: string | null;
+  nextAttemptAt: string | null;
+}
+
+export function fetchVoiceProviderWebhookFailures(): Promise<VoiceProviderWebhookFailure[]> {
+  return apiFetch("/voice/provider-webhooks/failures");
+}
+
+export function replayVoiceProviderWebhook(id: string): Promise<{
+  id: string;
+  state: string;
+  attemptCount: number;
+  consecutiveFailures: number;
+  replayCount: number;
+  lastError: string | null;
+  processedAt: string | null;
+}> {
+  return apiFetch(`/voice/provider-webhooks/${encodeURIComponent(id)}/replay`, {
+    method: "POST",
+  });
+}
+
 export interface VoiceSupervisorQueue {
   key: string;
   label: string;
@@ -53,7 +107,7 @@ export interface VoiceSupervisorSnapshot {
     waitingCalls: number;
     longestWaitSeconds: number;
     slaAtRisk: number | null;
-    aiErrors: null;
+    aiErrors: number;
   };
   calls: VoiceSupervisorLiveCall[];
   agents: VoiceSupervisorAgent[];

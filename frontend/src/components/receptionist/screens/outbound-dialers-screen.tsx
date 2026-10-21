@@ -393,7 +393,7 @@ export function OutboundDialersScreen() {
                 }
                 placeholder="Enter the opening words for this campaign"
               />
-              <span className="font-normal text-[#7A8798]">
+              <span className="font-normal text-[color:var(--app-text-faintest,#667085)]">
                 No text is generated automatically. Recording disclosures still
                 follow the published country policy.
               </span>
@@ -413,7 +413,7 @@ export function OutboundDialersScreen() {
                     }))
                   }
                 />
-                <span className="font-normal text-[#7A8798]">
+                <span className="font-normal text-[color:var(--app-text-faintest,#667085)]">
                   An approved campaign starts automatically at this time; leave empty to start it manually.
                 </span>
               </label>
@@ -475,7 +475,7 @@ export function OutboundDialersScreen() {
                   <h2 className="text-[12px] font-extrabold">
                     Select CRM customers
                   </h2>
-                  <p className="mt-0.5 text-[10px] text-[#7A8798]">
+                  <p className="mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">
                     First 200 active CRM customers with saved phones; numbers
                     are masked. Campaigns reference CRM rows rather than copying
                     contact data.
@@ -487,12 +487,12 @@ export function OutboundDialersScreen() {
               </div>
               <div className="max-h-[220px] overflow-y-auto p-2">
                 {audience.isPending ? (
-                  <p className="p-2 text-[11px] text-[#7A8798]">
+                  <p className="p-2 text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                     Loading CRM audience…
                   </p>
                 ) : null}
                 {!audience.isPending && !(audience.data ?? []).length ? (
-                  <p className="p-2 text-[11px] text-[#7A8798]">
+                  <p className="p-2 text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                     No active CRM customers with phone numbers are available.
                   </p>
                 ) : null}
@@ -508,7 +508,7 @@ export function OutboundDialersScreen() {
                     />
                     <span className="min-w-0 flex-1 truncate font-semibold text-[#334155]">
                       {customer.name}
-                      <span className="ml-2 font-normal text-[#7A8798]">
+                      <span className="ml-2 font-normal text-[color:var(--app-text-faintest,#667085)]">
                         {customer.phone}
                       </span>
                     </span>
@@ -537,7 +537,7 @@ export function OutboundDialersScreen() {
                     selectedCustomerIds.length === 0 ||
                     !activeAgentExists
                   }
-                  className="flex h-[32px] flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-[32px] flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saveMutation.isPending
                     ? "Saving…"
@@ -590,7 +590,7 @@ export function OutboundDialersScreen() {
             />
             <div className="flex flex-col gap-2.5 p-3.5">
               {campaigns.isPending ? (
-                <p className="text-[11px] text-[#7A8798]">
+                <p className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">
                   Loading campaign drafts…
                 </p>
               ) : null}
@@ -613,7 +613,7 @@ export function OutboundDialersScreen() {
                       <span className="block truncate text-[12px] font-extrabold text-[#243041]">
                         {campaign.name}
                       </span>
-                      <span className="mt-1 block text-[10px] text-[#7A8798]">
+                      <span className="mt-1 block text-[10px] text-[color:var(--app-text-faintest,#667085)]">
                         {campaign.purpose} ·{" "}
                         {campaign.callerType === "ai_voice"
                           ? (campaign.aiAgent?.name ?? "AI agent")
@@ -654,13 +654,13 @@ export function OutboundDialersScreen() {
                     <div className="text-[16px] font-extrabold">
                       {preview.selectedCount}
                     </div>
-                    <div className="text-[10px] text-[#7A8798]">Selected</div>
+                    <div className="text-[10px] text-[color:var(--app-text-faintest,#667085)]">Selected</div>
                   </div>
                   <div className="rounded-[8px] bg-[#F0FDF4] p-2">
                     <div className="text-[16px] font-extrabold text-[#15803D]">
                       {preview.eligibleCount}
                     </div>
-                    <div className="text-[10px] text-[#7A8798]">
+                    <div className="text-[10px] text-[color:var(--app-text-faintest,#667085)]">
                       First-party pass
                     </div>
                   </div>
@@ -668,7 +668,7 @@ export function OutboundDialersScreen() {
                     <div className="text-[16px] font-extrabold text-[#B42318]">
                       {preview.blockedCount}
                     </div>
-                    <div className="text-[10px] text-[#7A8798]">Blocked</div>
+                    <div className="text-[10px] text-[color:var(--app-text-faintest,#667085)]">Blocked</div>
                   </div>
                 </div>
                 <div className="mt-3 max-h-[250px] overflow-y-auto">
@@ -679,7 +679,7 @@ export function OutboundDialersScreen() {
                     >
                       <span className="min-w-0 truncate font-semibold">
                         {member.name}
-                        <span className="ml-2 font-normal text-[#7A8798]">
+                        <span className="ml-2 font-normal text-[color:var(--app-text-faintest,#667085)]">
                           {member.phone}
                         </span>
                       </span>
@@ -693,7 +693,7 @@ export function OutboundDialersScreen() {
                 </div>
               </div>
             ) : (
-              <div className="p-4 text-[11px] leading-[1.6] text-[#7A8798]">
+              <div className="p-4 text-[11px] leading-[1.6] text-[color:var(--app-text-faintest,#667085)]">
                 Select a saved draft and run a fresh check. Missing consent,
                 unpublished policy, opt-out, suppression, country mismatch and
                 invalid numbers remain blocked.

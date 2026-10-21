@@ -1,5 +1,20 @@
 import { apiFetch } from "@/lib/api-client";
 
+export interface CallFollowUps {
+  tickets: {
+    id: string;
+    title: string;
+    body: string;
+    status: string;
+    createdAt: string;
+  }[];
+  drafts: { id: string; body: string; status: string; createdAt: string }[];
+}
+
+export function fetchCallFollowUps(callId: string): Promise<CallFollowUps> {
+  return apiFetch(`/voice/calls/${callId}/follow-ups`);
+}
+
 export type PhoneCallStatus =
   "in_progress" | "completed" | "missed" | "transferred";
 export type PhoneCallOutcome =
@@ -107,6 +122,12 @@ export interface CallTurn {
   at: string;
   recordingKey?: string;
   analysis?: TurnAnalysis;
+  /** Sanitized server-observed failure, never an AI-generated assessment. */
+  serviceFailure?: {
+    stage: "transcription" | "ai_reply";
+    code: string;
+    message: string;
+  };
 }
 
 export interface CallQuestion {
