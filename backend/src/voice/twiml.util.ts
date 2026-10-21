@@ -16,3 +16,8 @@ export function say(text: string, voiceId?: string | null): string {
 export function twiml(inner: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><Response>${inner}</Response>`;
 }
+
+export function conferenceUsageAttributes(backendUrl?: string): string {
+  if (!backendUrl) return '';
+  return ` statusCallback="${escapeXml(`${backendUrl.replace(/\/+$/, '')}/voice/webhook/conference-usage`)}" statusCallbackMethod="POST" statusCallbackEvent="join leave"`;
+}

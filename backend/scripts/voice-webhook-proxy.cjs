@@ -54,6 +54,38 @@ const gateway = http.createServer((req, res) => {
   req.pipe(upstream);
 });
 
+// The media bridge validates Twilio's WSS signature and a call-bound one-use token in Nest.
+gateway.on('upgrade', (req, socket, head) => {
+  if (!['/api/v1/voice/webhook/media-stream', '/api/v1/voice/webhook/media-stream/'].includes(req.url) ||
+      !req.headers['x-twilio-signature']) {
+    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+  const headers = { ...req.headers };
+  delete headers.authorization;
+  delete headers['proxy-authorization'];
+  const upstream = http.request({ hostname: '127.0.0.1', port: backendPort,
+    path: req.url, method: 'GET', headers });
+  upstream.setTimeout(10_000, () => upstream.destroy());
+  upstream.on('upgrade', (response, stream, upstreamHead) => {
+    let handshake = 'HTTP/1.1 101 Switching Protocols\r\n';
+    for (let i = 0; i < response.rawHeaders.length; i += 2)
+      handshake += `${response.rawHeaders[i]}: ${response.rawHeaders[i + 1]}\r\n`;
+    socket.write(`${handshake}\r\n`);
+    if (upstreamHead.length) socket.write(upstreamHead);
+    if (head.length) stream.write(head);
+    stream.pipe(socket);
+    socket.pipe(stream);
+    stream.on('error', () => socket.destroy());
+    socket.on('error', () => stream.destroy());
+    socket.on('close', () => stream.destroy());
+  });
+  upstream.on('response', () => { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); });
+  upstream.on('error', () => socket.destroy());
+  upstream.end();
+});
+
 gateway.listen(port, '127.0.0.1', () => {
   console.log(`Voice webhook gateway listening on 127.0.0.1:${port}`);
 });

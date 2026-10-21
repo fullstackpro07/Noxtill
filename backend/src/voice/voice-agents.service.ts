@@ -65,7 +65,11 @@ export class VoiceAgentsService {
         where: {
           businessId,
           status: { in: ['offered', 'connected'] },
-          OR: [{ status: 'connected' }, { expiresAt: { gt: new Date() } }],
+          OR: [
+            { status: 'connected' },
+            { expiresAt: { gt: new Date() } },
+            { providerDispatchState: { in: ['requested', 'uncertain'] } },
+          ],
         },
         select: { profileId: true, callId: true },
       }),

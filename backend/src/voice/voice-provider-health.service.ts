@@ -4,6 +4,7 @@ import { PhoneCallStatus } from '@prisma/client';
 import axios from 'axios';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import type { CallServiceFailure } from './voice-analysis';
 
 export type HealthStatus = 'ok' | 'warning' | 'error' | 'not_configured';
 
@@ -38,7 +39,7 @@ export class VoiceProviderHealthService {
       ? `https://api.twilio.com/2010-04-01/Accounts/${accountSid}`
       : '';
 
-    const [line, trackingNumbers, lastCall] = await Promise.all([
+    const [line, trackingNumbers, lastCall, latestAiTest] = await Promise.all([
       this.tenantPrisma.client.phoneNumber.findUnique({
         where: { businessId },
       }),
@@ -48,7 +49,16 @@ export class VoiceProviderHealthService {
       this.tenantPrisma.client.phoneCall.findFirst({
         where: { businessId },
         orderBy: { startedAt: 'desc' },
-        select: { startedAt: true },
+        select: { startedAt: true, transcript: true },
+      }),
+      this.tenantPrisma.client.voiceAiAgentTestRun.findFirst({
+        where: { businessId },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: {
+          passed: true,
+          errorMessage: true,
+          createdAt: true,
+        },
       }),
     ]);
 
@@ -159,13 +169,63 @@ export class VoiceProviderHealthService {
         : 'Recordings are stored on this server’s local disk with signed, expiring links (no S3 credentials).',
     });
     const speech = !!this.config.get<string>('OPENAI_API_KEY');
+    const aiReplies = !!this.config.get<string>('ANTHROPIC_API_KEY');
+    checks.push({
+      key: 'realtime_voice', label: 'Live AI audio',
+      status: speech && publicUrl ? 'warning' : 'not_configured',
+      detail: speech && publicUrl
+        ? 'OpenAI credentials and public HTTPS are present. Published agents can select live audio; an actual stream is still required to verify account access, audio and interruption behavior.'
+        : 'Live audio requires OpenAI credentials and a public HTTPS address that forwards the media WebSocket. Recorded-turn mode remains separate.',
+    });
+    const turns = Array.isArray(lastCall?.transcript)
+      ? (lastCall.transcript as unknown as {
+          at: string;
+          serviceFailure?: CallServiceFailure;
+          analysis?: unknown;
+        }[])
+      : [];
+    const speechFailure = [...turns]
+      .reverse()
+      .find((turn) => turn.serviceFailure?.stage === 'transcription');
+    const liveReplyResult = [...turns]
+      .reverse()
+      .find(
+        (turn) => turn.serviceFailure?.stage === 'ai_reply' || turn.analysis,
+      );
+    const latestReplyFailure =
+      liveReplyResult &&
+      (!latestAiTest ||
+        new Date(liveReplyResult.at).getTime() >=
+          latestAiTest.createdAt.getTime())
+        ? liveReplyResult.serviceFailure?.message
+        : latestAiTest && !latestAiTest.passed
+          ? latestAiTest.errorMessage
+          : null;
     checks.push({
       key: 'speech_ai',
-      label: 'Transcription & AI replies',
-      status: speech ? 'ok' : 'not_configured',
-      detail: speech
-        ? 'Speech-to-text and AI reply keys are set (not called by this check).'
-        : 'OPENAI_API_KEY is not set; calls cannot be transcribed or answered by AI.',
+      label: 'Speech transcription',
+      status: !speech ? 'not_configured' : speechFailure ? 'error' : 'warning',
+      detail: !speech
+        ? 'The OpenAI speech transcription key is not set.'
+        : speechFailure
+          ? `Last saved call reported a transcription failure: ${speechFailure.serviceFailure?.message} Provider access has not been rechecked.`
+          : 'The OpenAI speech transcription key is set. Provider access and available credit are not verified by this check.',
+    });
+    checks.push({
+      key: 'ai_replies',
+      label: 'AI reply provider',
+      status: !aiReplies
+        ? 'not_configured'
+        : latestReplyFailure
+          ? 'error'
+          : 'warning',
+      detail: !aiReplies
+        ? 'The Anthropic AI reply key is not set. A speech transcription key alone cannot provide AI replies.'
+        : latestReplyFailure
+          ? `Last saved AI result: ${latestReplyFailure} Provider access has not been rechecked.`
+          : latestAiTest?.passed
+            ? `Last saved sandbox test passed at ${latestAiTest.createdAt.toISOString()}. Current provider access and credit are not rechecked here.`
+            : 'The Anthropic AI reply key is set. Provider access and available credit are not verified by this check.',
     });
     const email =
       !!this.config.get<string>('EMAIL_PROVIDER_KEY') &&
@@ -199,7 +259,12 @@ export class VoiceProviderHealthService {
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
     );
     const calls = await this.tenantPrisma.client.phoneCall.findMany({
-      where: { businessId, startedAt: { gte: monthStart }, isTestCall: false },
+      where: {
+        businessId,
+        direction: 'inbound',
+        startedAt: { gte: monthStart },
+        isTestCall: false,
+      },
       select: {
         status: true,
         startedAt: true,

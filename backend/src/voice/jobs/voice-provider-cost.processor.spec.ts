@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VoiceProviderCostProcessor } from './voice-provider-cost.processor';
 import { PhoneCallStatus } from '@prisma/client';
+import { VoiceUsageMeteringService } from '../voice-usage-metering.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -25,6 +26,8 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
   });
 
   afterAll(async () => {
+    await prisma.voiceUsageRecord.deleteMany({ where: { businessId } });
+    await prisma.message.deleteMany({ where: { businessId } });
     await prisma.phoneCall.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
@@ -151,5 +154,180 @@ describe('VoiceProviderCostProcessor (AI Phone, full — Numbers screen "Provide
     await processor.runCheck();
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockedAxios.get).not.toHaveBeenCalled();
+  });
+
+  it('checks the oldest eligible calls first with a stable tie-breaker', async () => {
+    const processor = new VoiceProviderCostProcessor(
+      prisma,
+      new ConfigService({
+        TWILIO_ACCOUNT_SID: 'AC-test',
+        TWILIO_AUTH_TOKEN: 'test-token',
+      }),
+    );
+    await createEndedCall();
+    mockedAxios.get.mockResolvedValue({
+      data: { duration: '1', price: '-0.001', price_unit: 'USD' },
+    });
+    const findMany = jest.spyOn(prisma.phoneCall, 'findMany');
+    try {
+      await processor.runCheck();
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+          take: 200,
+        }),
+      );
+    } finally {
+      findMany.mockRestore();
+    }
+  });
+
+  it('records Twilio text-back message price and segments once without double-counting the charge', async () => {
+    const config = new ConfigService({
+      TWILIO_ACCOUNT_SID: 'AC-test',
+      TWILIO_AUTH_TOKEN: 'test-token',
+    });
+    const processor = new VoiceProviderCostProcessor(
+      prisma,
+      config,
+      new VoiceUsageMeteringService(prisma),
+    );
+    const sid = `SM${'a'.repeat(32)}`;
+    const message = await prisma.message.create({
+      data: {
+        businessId,
+        channel: 'sms',
+        category: 'utility',
+        templateKey: 'missed_call',
+        status: 'sent',
+        providerRef: sid,
+      },
+    });
+    await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid: `CA-sms-cost-${Date.now()}`,
+        fromNumber: '+15550000001',
+        status: PhoneCallStatus.completed,
+        textBackStatus: 'queued',
+        textBackMessageId: message.id,
+      },
+    });
+    mockedAxios.get.mockResolvedValue({
+      data: {
+        price: '-0.0120',
+        price_unit: 'USD',
+        num_segments: '2',
+        status: 'delivered',
+        date_sent: new Date().toUTCString(),
+      },
+    });
+
+    await expect(processor.runMessageCheck()).resolves.toEqual({
+      checked: 1,
+      priced: 1,
+    });
+    const charge = await prisma.voiceUsageRecord.findUniqueOrThrow({
+      where: {
+        businessId_eventKey: { businessId, eventKey: `twilio:sms:${sid}` },
+      },
+    });
+    const segments = await prisma.voiceUsageRecord.findUniqueOrThrow({
+      where: {
+        businessId_eventKey: {
+          businessId,
+          eventKey: `twilio:sms-segments:${sid}`,
+        },
+      },
+    });
+    expect(charge).toMatchObject({
+      provider: 'twilio',
+      unit: 'outbound_sms_messages',
+      currency: 'USD',
+      state: 'confirmed',
+    });
+    expect(Number(charge.cost)).toBeCloseTo(0.012);
+    expect(Number(segments.quantity)).toBe(2);
+    expect(segments.cost).toBeNull();
+
+    await processor.runMessageCheck();
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    expect(
+      await prisma.voiceUsageRecord.count({
+        where: { businessId, unit: 'outbound_sms_messages' },
+      }),
+    ).toBe(1);
+  });
+
+  it('retries an unpriced message and updates its ledger row when Twilio later reports the charge', async () => {
+    const config = new ConfigService({
+      TWILIO_ACCOUNT_SID: 'AC-test',
+      TWILIO_AUTH_TOKEN: 'test-token',
+    });
+    const processor = new VoiceProviderCostProcessor(
+      prisma,
+      config,
+      new VoiceUsageMeteringService(prisma),
+    );
+    const sid = `SM${'b'.repeat(32)}`;
+    const message = await prisma.message.create({
+      data: {
+        businessId,
+        channel: 'sms',
+        category: 'utility',
+        templateKey: 'missed_call',
+        status: 'sent',
+        providerRef: sid,
+      },
+    });
+    await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid: `CA-sms-pending-${Date.now()}`,
+        fromNumber: '+15550000002',
+        status: PhoneCallStatus.completed,
+        textBackStatus: 'queued',
+        textBackMessageId: message.id,
+      },
+    });
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {
+        price: null,
+        price_unit: null,
+        num_segments: '0',
+        status: 'sent',
+      },
+    });
+    await processor.runMessageCheck();
+    let charge = await prisma.voiceUsageRecord.findUniqueOrThrow({
+      where: {
+        businessId_eventKey: { businessId, eventKey: `twilio:sms:${sid}` },
+      },
+    });
+    expect(charge.state).toBe('pending');
+    expect(charge.cost).toBeNull();
+
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {
+        price: '-0.021',
+        price_unit: 'USD',
+        num_segments: '3',
+        status: 'delivered',
+      },
+    });
+    await processor.runMessageCheck();
+    charge = await prisma.voiceUsageRecord.findUniqueOrThrow({
+      where: {
+        businessId_eventKey: { businessId, eventKey: `twilio:sms:${sid}` },
+      },
+    });
+    expect(charge.state).toBe('confirmed');
+    expect(Number(charge.cost)).toBeCloseTo(0.021);
+    expect(
+      await prisma.voiceUsageRecord.count({
+        where: { businessId, eventKey: `twilio:sms:${sid}` },
+      }),
+    ).toBe(1);
   });
 });

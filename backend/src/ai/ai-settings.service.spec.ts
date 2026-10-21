@@ -42,6 +42,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       whatIf: true,
       assistant: true,
       workflowAgents: true,
+      voiceMeetingSummary: true,
     });
     expect(settings.disclosureText).toContain('AI');
   });

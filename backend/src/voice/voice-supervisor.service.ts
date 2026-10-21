@@ -19,6 +19,7 @@ export class VoiceSupervisorService {
   ) {}
 
   async live(businessId: string, actorUserId: string) {
+    const errorWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [business, liveCalls, roster, queueStats] = await Promise.all([
       this.tenantPrisma.client.business.findUnique({
         where: { id: businessId },
@@ -43,6 +44,26 @@ export class VoiceSupervisorService {
       this.agentsService.list(businessId, actorUserId),
       this.callQueue.supervisorStats(businessId),
     ]);
+    const [aiErrorRow] = await this.tenantPrisma.client.$queryRaw<
+      { count: bigint }[]
+    >`
+      SELECT COUNT(DISTINCT phone_call.id) AS count
+      FROM phone_calls AS phone_call
+      JOIN JSON_TABLE(
+        phone_call.transcript,
+        '$[*]' COLUMNS (
+          failure_stage VARCHAR(32) PATH '$.serviceFailure.stage' NULL ON EMPTY,
+          failure_code VARCHAR(128) PATH '$.serviceFailure.code' NULL ON EMPTY
+        )
+      ) AS failure_turn ON TRUE
+      WHERE phone_call.business_id = ${businessId}
+        AND phone_call.status IN ('in_progress', 'completed', 'missed', 'transferred')
+        AND phone_call.is_test_call = 0
+        AND phone_call.started_at >= ${errorWindowStart}
+        AND failure_turn.failure_stage IN ('transcription', 'ai_reply')
+        AND failure_turn.failure_code IS NOT NULL
+    `;
+    const aiErrorCalls = Number(aiErrorRow?.count ?? 0);
     const activeAssignments = liveCalls.length
       ? await this.tenantPrisma.client.voiceHumanAgentAssignment.findMany({
           where: {
@@ -135,7 +156,7 @@ export class VoiceSupervisorService {
         callbackBacklog: roster.metrics.followUpsWaiting,
         configuredCapacity: roster.metrics.configuredConcurrency,
         ...queueStats.metrics,
-        aiErrors: null,
+        aiErrors: aiErrorCalls,
       },
       calls,
       agents,
@@ -144,7 +165,7 @@ export class VoiceSupervisorService {
         waitingCalls:
           'Only callers placed in the configured Twilio <Enqueue> queue are counted. The estimate is based on this queue’s recent measured Twilio waits.',
         aiErrors:
-          'Not tracked: live AI runtime errors are not persisted as a supervisor metric.',
+          'Counts non-test calls started in the last 24 hours with a saved transcription or AI-reply failure. It does not include failures without recorded call metadata.',
         language:
           'Not tracked: call language is not persisted on the call record.',
         whisperAndBarge:

@@ -37,6 +37,19 @@ export class VoiceCompliancePolicyFieldsDto {
   recordingRetentionDays?: number | null;
 
   @IsOptional()
+  @IsBoolean()
+  meetingAiProcessingAllowed?: boolean;
+
+  @ValidateIf(
+    (value: VoiceCompliancePolicyFieldsDto) =>
+      value.meetingAiProcessingAllowed === true,
+  )
+  @IsString()
+  @MinLength(10)
+  @MaxLength(2000)
+  meetingAiProcessingNoticeText?: string | null;
+
+  @IsOptional()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   allowedWindowStart?: string | null;
 

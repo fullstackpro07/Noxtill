@@ -38,6 +38,7 @@ export class VoiceHumanAgentDispatchService {
     businessId: string,
     callId: string,
     preferredTopic?: TopicKey | null,
+    preferredStaffUserId?: string | null,
   ): Promise<ReservedHumanAgent | null> {
     const now = new Date();
     const freshSince = new Date(
@@ -53,6 +54,12 @@ export class VoiceHumanAgentDispatchService {
               businessId,
               status: 'offered',
               expiresAt: { lte: now },
+              OR: [
+                { providerDispatchState: null },
+                {
+                  providerDispatchState: { notIn: ['requested', 'uncertain'] },
+                },
+              ],
             },
             data: {
               status: 'released',
@@ -84,6 +91,7 @@ export class VoiceHumanAgentDispatchService {
               attemptNumber: true,
               status: true,
               expiresAt: true,
+              providerDispatchState: true,
             },
           });
           if (
@@ -91,7 +99,10 @@ export class VoiceHumanAgentDispatchService {
               (attempt) =>
                 attempt.status === 'connected' ||
                 (attempt.status === 'offered' &&
-                  (attempt.expiresAt?.getTime() ?? 0) > now.getTime()),
+                  (['requested', 'uncertain'].includes(
+                    attempt.providerDispatchState ?? '',
+                  ) ||
+                    (attempt.expiresAt?.getTime() ?? 0) > now.getTime())),
             )
           ) {
             return null;
@@ -143,7 +154,11 @@ export class VoiceHumanAgentDispatchService {
             where: {
               businessId,
               status: { in: ['offered', 'connected'] },
-              OR: [{ status: 'connected' }, { expiresAt: { gt: now } }],
+              OR: [
+                { status: 'connected' },
+                { expiresAt: { gt: now } },
+                { providerDispatchState: { in: ['requested', 'uncertain'] } },
+              ],
             },
             _count: { _all: true },
           });
@@ -180,6 +195,15 @@ export class VoiceHumanAgentDispatchService {
             ]),
           );
           const ordered = [...candidates].sort((a, b) => {
+            const aIsAssignedOwner =
+              Boolean(preferredStaffUserId) &&
+              a.staffUserId === preferredStaffUserId;
+            const bIsAssignedOwner =
+              Boolean(preferredStaffUserId) &&
+              b.staffUserId === preferredStaffUserId;
+            if (aIsAssignedOwner !== bIsAssignedOwner)
+              return aIsAssignedOwner ? -1 : 1;
+
             const aMatchesTopic = this.hasTopicSkill(
               a.skillTags,
               preferredTopic,
@@ -252,7 +276,11 @@ export class VoiceHumanAgentDispatchService {
                 businessId,
                 profileId: profile.id,
                 status: { in: ['offered', 'connected'] },
-                OR: [{ status: 'connected' }, { expiresAt: { gt: now } }],
+                OR: [
+                  { status: 'connected' },
+                  { expiresAt: { gt: now } },
+                  { providerDispatchState: { in: ['requested', 'uncertain'] } },
+                ],
               },
             });
             const activeOutboundAttempts =
@@ -356,8 +384,71 @@ export class VoiceHumanAgentDispatchService {
     callId: string,
     providerStatus: string,
     attemptNumber?: number,
+    sequenceNumber?: number,
+    pendingAction?: string | null,
   ) {
     const normalized = providerStatus.trim().toLowerCase();
+    if (
+      Number.isSafeInteger(sequenceNumber) &&
+      sequenceNumber! >= 0 &&
+      sequenceNumber! <= 2_147_483_647
+    ) {
+      const updateWhere = {
+        callId,
+        ...(attemptNumber ? { attemptNumber } : {}),
+        status: { in: ['offered', 'connected'] },
+        OR: [
+          { providerStatusSequence: null },
+          { providerStatusSequence: { lt: sequenceNumber } },
+        ],
+      };
+      if (
+        normalized === 'answered' ||
+        normalized === 'in-progress' ||
+        normalized === 'connected'
+      ) {
+        return this.prisma.voiceHumanAgentAssignment.updateMany({
+          where: updateWhere,
+          data: {
+            status: 'connected',
+            connected: true,
+            providerStatus: normalized,
+            providerStatusSequence: sequenceNumber,
+            ...(pendingAction !== undefined ? { pendingAction } : {}),
+            expiresAt: null,
+          },
+        });
+      }
+      if (
+        ['completed', 'busy', 'no-answer', 'failed', 'canceled'].includes(
+          normalized,
+        )
+      ) {
+        return this.prisma.voiceHumanAgentAssignment.updateMany({
+          where: updateWhere,
+          data: {
+            status: 'released',
+            providerStatus: normalized,
+            providerStatusSequence: sequenceNumber,
+            ...(pendingAction !== undefined ? { pendingAction } : {}),
+            connected:
+              normalized === 'completed' ||
+              normalized === 'answered' ||
+              normalized === 'in-progress',
+            releasedAt: new Date(),
+            expiresAt: null,
+          },
+        });
+      }
+      return this.prisma.voiceHumanAgentAssignment.updateMany({
+        where: updateWhere,
+        data: {
+          providerStatus: normalized,
+          providerStatusSequence: sequenceNumber,
+          ...(pendingAction !== undefined ? { pendingAction } : {}),
+        },
+      });
+    }
     if (
       normalized === 'answered' ||
       normalized === 'in-progress' ||
@@ -374,6 +465,7 @@ export class VoiceHumanAgentDispatchService {
           connected: true,
           providerStatus: normalized,
           expiresAt: null,
+          ...(pendingAction !== undefined ? { pendingAction } : {}),
         },
       });
     }
@@ -383,7 +475,7 @@ export class VoiceHumanAgentDispatchService {
         normalized,
       )
     ) {
-      return this.release(callId, normalized, attemptNumber);
+      return this.release(callId, normalized, attemptNumber, pendingAction);
     }
     return { count: 0 };
   }
@@ -400,9 +492,13 @@ export class VoiceHumanAgentDispatchService {
         businessId,
         callId,
         attemptNumber,
-        status: 'offered',
+        OR: [{ providerCallSid: null }, { providerCallSid }],
       },
-      data: { providerCallSid, conferenceSid },
+      data: {
+        providerCallSid,
+        conferenceSid,
+        providerDispatchState: 'confirmed',
+      },
     });
   }
 
@@ -412,6 +508,10 @@ export class VoiceHumanAgentDispatchService {
         ...(businessId ? { businessId } : {}),
         status: 'offered',
         expiresAt: { lte: now },
+        OR: [
+          { providerDispatchState: null },
+          { providerDispatchState: { notIn: ['requested', 'uncertain'] } },
+        ],
       },
       data: {
         status: 'released',
@@ -425,6 +525,7 @@ export class VoiceHumanAgentDispatchService {
     callId: string,
     providerStatus: string,
     attemptNumber?: number,
+    pendingAction?: string | null,
   ) {
     const normalized = providerStatus.trim().toLowerCase();
     return this.prisma.voiceHumanAgentAssignment.updateMany({
@@ -442,6 +543,7 @@ export class VoiceHumanAgentDispatchService {
           normalized === 'in-progress',
         releasedAt: new Date(),
         expiresAt: null,
+        ...(pendingAction !== undefined ? { pendingAction } : {}),
       },
     });
   }

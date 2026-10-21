@@ -3,12 +3,17 @@ import { S3Service } from '../../common/storage/s3.service';
 import { VoiceRetentionProcessor } from './voice-retention.processor';
 import { RECORDING_RETENTION_DAYS } from '../voice.constants';
 import { VoiceHumanAgentDispatchService } from '../voice-human-agent-dispatch.service';
+import { VoiceUsageMeteringService } from '../voice-usage-metering.service';
+import { VoiceCallReconciliationService } from '../voice-call-reconciliation.service';
+import { VoiceProviderWebhookEventsService } from '../voice-provider-webhook-events.service';
+import { Job } from 'bullmq';
 
 describe('VoiceRetentionProcessor (UPD-BE-059)', () => {
   let prisma: PrismaService;
   let processor: VoiceRetentionProcessor;
   let businessId: string;
   const s3 = { delete: jest.fn() };
+  const providerWebhookEvents = { retryDue: jest.fn() };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -17,6 +22,16 @@ describe('VoiceRetentionProcessor (UPD-BE-059)', () => {
       prisma,
       s3 as unknown as S3Service,
       new VoiceHumanAgentDispatchService(prisma),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new VoiceUsageMeteringService(prisma),
+      providerWebhookEvents as unknown as VoiceProviderWebhookEventsService,
     );
 
     const business = await prisma.business.create({
@@ -33,6 +48,7 @@ describe('VoiceRetentionProcessor (UPD-BE-059)', () => {
   });
 
   afterAll(async () => {
+    await prisma.voiceUsageRecord.deleteMany({ where: { businessId } });
     await prisma.phoneCall.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
@@ -97,6 +113,101 @@ describe('VoiceRetentionProcessor (UPD-BE-059)', () => {
     expect(s3.delete).toHaveBeenCalledWith('voice-recordings/x/expired.mp3');
     expect(s3.delete).toHaveBeenCalledWith('voice-recordings/x/root-only.mp3');
     expect(s3.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs the provider webhook retry job through the retention queue worker', async () => {
+    providerWebhookEvents.retryDue.mockResolvedValue({
+      attempted: 2,
+      deadLettered: 1,
+    });
+
+    await processor.process({ name: 'retry-provider-webhook-events' } as Job);
+
+    expect(providerWebhookEvents.retryDue).toHaveBeenCalledTimes(1);
+  });
+
+  it('records actual stored byte-days when a metered call recording is deleted', async () => {
+    s3.delete.mockResolvedValue(undefined);
+    const call = await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid: 'CA-metered-retention',
+        fromNumber: '+15550004014',
+        status: 'completed',
+        startedAt: new Date(
+          Date.now() - (RECORDING_RETENTION_DAYS + 2) * 86400000,
+        ),
+        recordingKey: 'voice-recordings/qa/retention-metering.mp3',
+        transcript: [],
+      },
+    });
+    const metering = new VoiceUsageMeteringService(prisma);
+    await metering.recordUpload(
+      businessId,
+      call.callSid,
+      call.recordingKey!,
+      4096,
+    );
+    const upload = await prisma.voiceUsageRecord.findFirstOrThrow({
+      where: { businessId, callId: call.id, unit: 'recording_uploaded_bytes' },
+    });
+    const storedFrom = new Date(Date.now() - 2 * 86400000);
+    await prisma.voiceUsageRecord.update({
+      where: { id: upload.id },
+      data: { measuredAt: storedFrom },
+    });
+
+    await processor.runPurge();
+
+    const retention = await prisma.voiceUsageRecord.findFirstOrThrow({
+      where: {
+        businessId,
+        eventKey: upload.eventKey.replace(
+          'storage:upload:',
+          'storage:byte-days:',
+        ),
+      },
+    });
+    const evidence = retention.evidence as {
+      storedFrom: string;
+      deletedAt: string;
+    };
+    const expectedByteDays =
+      (4096 *
+        (new Date(evidence.deletedAt).getTime() -
+          new Date(evidence.storedFrom).getTime())) /
+      86400000;
+    expect(Number(retention.quantity)).toBeCloseTo(expectedByteDays, 4);
+    expect(retention).toMatchObject({
+      unit: 'recording_storage_byte_days',
+      provider: 'storage',
+      state: 'unpriced',
+      cost: null,
+      callId: null,
+    });
+  });
+
+  it('dispatches the orphaned-call job to provider reconciliation', async () => {
+    const reconciliation = {
+      reconcileStaleCalls: jest.fn().mockResolvedValue({
+        checked: 1,
+        reconciled: 0,
+        failed: 0,
+        notConfigured: false,
+      }),
+    };
+    const worker = new VoiceRetentionProcessor(
+      prisma,
+      s3 as unknown as S3Service,
+      new VoiceHumanAgentDispatchService(prisma),
+      undefined,
+      undefined,
+      reconciliation as unknown as VoiceCallReconciliationService,
+    );
+
+    await worker.process({ name: 'reconcile-orphaned-calls' } as Job);
+
+    expect(reconciliation.reconcileStaleCalls).toHaveBeenCalledTimes(1);
   });
 
   it('does not abort the whole run when one row fails to purge', async () => {

@@ -14,6 +14,7 @@ import {
   summariseCallAnalysis,
   TOPICS,
   type CallQuestion,
+  type CallServiceFailure,
   type TopicKey,
   type TurnAnalysis,
 } from './voice-analysis';
@@ -40,6 +41,7 @@ export interface CallTurn {
   at: string;
   recordingKey?: string;
   analysis?: TurnAnalysis;
+  serviceFailure?: CallServiceFailure;
 }
 
 /** `Business.workingHours` — `{ mon: [["09:00","17:00"]], … }`. An absent or empty day means closed. */

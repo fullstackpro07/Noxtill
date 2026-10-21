@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
 const ANTHROPIC_API_VERSION = '2023-06-01';
-const DEFAULT_MODEL = 'claude-3-5-haiku-20241022'; // fast/cheap tier per spec §14
+const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'; // available fast/low-cost tier for the configured Anthropic account
 /** claude-3-5-haiku has no image input support — UPD-BE-060 (AI Photo Digitizer) needs a vision-capable model; still the fast/cheap tier, just the vision-capable one. */
 export const VISION_MODEL = 'claude-3-haiku-20240307';
 const DEFAULT_MAX_TOKENS = 1024;

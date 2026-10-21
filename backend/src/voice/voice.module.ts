@@ -15,6 +15,9 @@ import { VoiceCopilotService } from './voice-copilot.service';
 import { VoiceQualityService } from './voice-quality.service';
 import { VoiceComplianceService } from './voice-compliance.service';
 import { VoiceMeetingsService } from './voice-meetings.service';
+import { VoiceVideoRoomService } from './voice-video-room.service';
+import { VoiceVideoRecordingService } from './voice-video-recording.service';
+import { VoiceMeetingArtifactsService } from './voice-meeting-artifacts.service';
 import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service';
 import { VoiceOutboundDialerService } from './voice-outbound-dialer.service';
 import { VoiceAiOutboundService } from './voice-ai-outbound.service';
@@ -42,6 +45,16 @@ import { VoiceRetentionScheduler } from './jobs/voice-retention.scheduler';
 import { VoiceRetentionProcessor } from './jobs/voice-retention.processor';
 import { VoiceProviderCostScheduler } from './jobs/voice-provider-cost.scheduler';
 import { VoiceProviderCostProcessor } from './jobs/voice-provider-cost.processor';
+import { VoiceCallReconciliationService } from './voice-call-reconciliation.service';
+import { VoiceRealtimeService } from './voice-realtime.service';
+import { VoiceRealtimeSandboxService } from './voice-realtime-sandbox.service';
+import { VoiceRealtimeGateway } from './voice-realtime.gateway';
+import { VoiceRealtimeToolsService } from './voice-realtime-tools.service';
+import { VoiceUsageMeteringService } from './voice-usage-metering.service';
+import { VoiceOperationsService } from './voice-operations.service';
+import { VoiceMediaMeteringService } from './voice-media-metering.service';
+import { VoiceProviderWebhookEventsService } from './voice-provider-webhook-events.service';
+import { VoiceControlMetricsInterceptor } from './voice-control-metrics.interceptor';
 import {
   VOICE_PROVIDER_COST_QUEUE,
   VOICE_RETENTION_QUEUE,
@@ -79,6 +92,9 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceQualityService,
     VoiceComplianceService,
     VoiceMeetingsService,
+    VoiceVideoRoomService,
+    VoiceVideoRecordingService,
+    VoiceMeetingArtifactsService,
     VoiceOutboundCampaignService,
     VoiceOutboundDialerService,
     VoiceAiOutboundService,
@@ -105,6 +121,16 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceRetentionProcessor,
     VoiceProviderCostScheduler,
     VoiceProviderCostProcessor,
+    VoiceCallReconciliationService,
+    VoiceRealtimeService,
+    VoiceRealtimeSandboxService,
+    VoiceRealtimeGateway,
+    VoiceRealtimeToolsService,
+    VoiceUsageMeteringService,
+    VoiceOperationsService,
+    VoiceMediaMeteringService,
+    VoiceProviderWebhookEventsService,
+    VoiceControlMetricsInterceptor,
   ],
 })
 export class VoiceModule {}

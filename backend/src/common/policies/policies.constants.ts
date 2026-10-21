@@ -230,6 +230,20 @@ export const POLICY_DEFS = {
     max: 100_000,
     integer: true,
   },
+  'voice.monthlySpendCapUsd': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0.01,
+    max: 100_000,
+  },
+  'voice.bookingsRequireStaffApproval': { kind: 'boolean', default: false },
+  'voice.meetingGuestLimit': {
+    kind: 'number',
+    default: 20,
+    min: 1,
+    max: 200,
+    integer: true,
+  },
   // voice/voice-call.service.ts (Twilio hold queue; null keeps the existing immediate fallback)
   'voice.holdQueueMaxWaitSeconds': {
     kind: 'nullableNumber',

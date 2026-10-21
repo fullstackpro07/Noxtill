@@ -284,6 +284,7 @@ describe('CustomerPortalService (real MySQL)', () => {
 
   afterAll(async () => {
     if (businessId) {
+      await prisma.activityEvent.deleteMany({ where: { businessId } });
       await prisma.customerPortalPasswordReset.deleteMany({
         where: { businessId },
       });

@@ -72,7 +72,12 @@ describe('WorkflowTriggerService (UPD-BE-028)', () => {
     deadLettersService = new WorkflowDeadLettersService(tenantPrisma, service);
 
     const customer = await prisma.customer.create({
-      data: { businessId, phone: `+1${Date.now()}`, name: 'Trigger Customer' },
+      data: {
+        businessId,
+        phone: `+1${Date.now()}`,
+        name: 'Trigger Customer',
+        lastVisitAt: new Date(),
+      },
     });
     customerId = customer.id;
 

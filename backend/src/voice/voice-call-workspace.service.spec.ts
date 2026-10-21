@@ -59,6 +59,13 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
       },
     });
     businessId = business.id;
+    await prisma.phoneNumber.create({
+      data: {
+        businessId,
+        twilioSid: `PN-workspace-${Date.now()}`,
+        phoneNumber: '+15559990001',
+      },
+    });
     const user = await prisma.user.create({
       data: {
         email: `voice-workspace-${Date.now()}@example.com`,
@@ -75,6 +82,7 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
     await prisma.phoneCallNote.deleteMany({ where: { businessId } });
     await prisma.phoneCall.deleteMany({ where: { businessId } });
     await prisma.auditLog.deleteMany({ where: { businessId } });
+    await prisma.phoneNumber.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
@@ -221,7 +229,7 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
     expect(url).toContain(`Calls/${call.callSid}.json`);
     expect(body.get('Twiml')).toContain('+15551234567');
     expect(body.get('Twiml')).toContain(
-      '<Dial action="https://voice-test.example/api/v1/voice/webhook/transfer-result?transferAttemptNumber=1" method="POST" answerOnBridge="true">',
+      '<Dial action="https://voice-test.example/api/v1/voice/webhook/transfer-result?transferAttemptNumber=1" method="POST" answerOnBridge="true" callerId="+15559990001">',
     );
     expect(body.get('Twiml')).toContain('<Number statusCallback=');
     expect(body.get('Twiml')).toContain(

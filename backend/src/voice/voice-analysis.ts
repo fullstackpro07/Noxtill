@@ -26,6 +26,13 @@ export const TOPIC_KEYS = Object.keys(TOPICS) as TopicKey[];
 export type Confidence = 'high' | 'medium' | 'low';
 export type Sentiment = 'positive' | 'neutral' | 'negative' | 'frustrated';
 
+/** A server-observed service failure, distinct from anything the model inferred. */
+export interface CallServiceFailure {
+  stage: 'transcription' | 'ai_reply';
+  code: string;
+  message: string;
+}
+
 const CONFIDENCES: Confidence[] = ['high', 'medium', 'low'];
 const SENTIMENTS: Sentiment[] = [
   'positive',

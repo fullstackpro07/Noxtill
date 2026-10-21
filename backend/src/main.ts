@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import { raw } from 'express';
 import { AppModule } from './app.module';
 import { resolveDatabaseUrl } from './prisma/resolve-database-url';
 
@@ -42,6 +43,11 @@ async function bootstrap() {
 
   // rawBody is needed to verify webhook signatures (Meta/Stripe HMAC) against the exact bytes sent.
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  // LiveKit signs the exact application/webhook+json bytes, not re-serialized JSON.
+  app.use(
+    '/api/v1/voice/webhook/livekit',
+    raw({ type: 'application/webhook+json', limit: '128kb' }),
+  );
 
   app.use(helmet());
 

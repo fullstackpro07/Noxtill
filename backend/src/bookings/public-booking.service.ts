@@ -14,6 +14,7 @@ import {
 } from './bookings.constants';
 import { assertSlotAvailable } from './booking-lock.util';
 import { nextBookingNo } from './booking-number.util';
+import { assertBufferAvailable } from './booking-buffer.util';
 import { resolvePolicies } from '../common/policies/policies.service';
 import {
   assertBookingWindow,
@@ -22,6 +23,7 @@ import {
   countBookingsOnDay,
   windowViolation,
 } from './booking-policy.util';
+import { assertPhoneBookingSlot } from './phone-booking-policy.util';
 import {
   AppointmentSource,
   AppointmentStatus,
@@ -351,7 +353,11 @@ export class PublicBookingService {
     return appointment;
   }
 
-  async reschedule(token: string, startsAt: string) {
+  async reschedule(
+    token: string,
+    startsAt: string,
+    options?: { phone?: boolean },
+  ) {
     const appointment = await this.loadByToken(token);
     const durationMs =
       appointment.endsAt.getTime() - appointment.startsAt.getTime();
@@ -364,6 +370,8 @@ export class PublicBookingService {
     const now = new Date();
     assertChangeWindow(policies, 'reschedule', appointment.startsAt, now);
     assertBookingWindow(policies, newStart, now);
+    if (options?.phone)
+      assertPhoneBookingSlot(business, newStart, durationMs / 60_000);
 
     return this.prisma.$transaction(async (tx) => {
       await assertSlotAvailable(tx, {
@@ -383,9 +391,91 @@ export class PublicBookingService {
         appointment.id,
       );
 
+      if (options?.phone) {
+        // Keep cancellation/completion from racing a verified phone change.
+        // This must be a current locking read, not a Prisma snapshot read after waiting.
+        const rows = await tx.$queryRaw<
+          {
+            id: string;
+            status: AppointmentStatus;
+            serviceId: string;
+            staffUserId: string | null;
+            updatedAt: Date;
+          }[]
+        >`SELECT id, status, service_id AS serviceId, staff_user_id AS staffUserId, updated_at AS updatedAt FROM appointments WHERE id = ${appointment.id} AND business_id = ${business.id} FOR UPDATE`;
+        const current = rows[0];
+        if (
+          !current ||
+          current.status === 'cancelled' ||
+          current.status === 'completed'
+        ) {
+          throw new AppException(
+            BOOKING_ERROR_CODES.INVALID_STATUS_TRANSITION,
+            'This booking can no longer be rescheduled',
+          );
+        }
+        if (current.updatedAt.getTime() !== appointment.updatedAt.getTime()) {
+          throw new AppException(
+            'BOOKING_CHANGED',
+            'This booking changed during the request. Re-check the details with the caller before trying again',
+            HttpStatus.CONFLICT,
+          );
+        }
+        const service = await tx.product.findFirst({
+          where: {
+            id: current.serviceId,
+            businessId: business.id,
+            active: true,
+          },
+        });
+        if (!service)
+          throw new AppException(
+            BOOKING_ERROR_CODES.SERVICE_NOT_FOUND,
+            'The service is no longer available',
+          );
+        if (current.staffUserId) {
+          const staff = await tx.businessUser.findFirst({
+            where: {
+              id: current.staffUserId,
+              businessId: business.id,
+              active: true,
+            },
+          });
+          const eligible = Array.isArray(service.eligibleStaffIds)
+            ? service.eligibleStaffIds
+            : [];
+          if (
+            !staff ||
+            (eligible.length > 0 && !eligible.includes(current.staffUserId))
+          ) {
+            throw new AppException(
+              BOOKING_ERROR_CODES.STAFF_NOT_ELIGIBLE,
+              'Staff availability needs review before this booking can move',
+            );
+          }
+        }
+        await assertBufferAvailable(tx, {
+          businessId: business.id,
+          staffId: current.staffUserId,
+          startsAt: newStart,
+          endsAt: newEnd,
+          bufferBeforeMin: service.bufferBeforeMin,
+          bufferAfterMin: service.bufferAfterMin,
+          excludeAppointmentId: current.id,
+          checkUnassigned: true,
+        });
+      }
+
       return tx.appointment.update({
         where: { id: appointment.id },
-        data: { startsAt: newStart, endsAt: newEnd },
+        data: {
+          startsAt: newStart,
+          endsAt: newEnd,
+          ...(options?.phone &&
+          policies.bool('voice.bookingsRequireStaffApproval')
+            ? { status: AppointmentStatus.requested }
+            : {}),
+        },
       });
     });
   }

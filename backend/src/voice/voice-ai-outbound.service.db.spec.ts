@@ -43,6 +43,13 @@ describe('VoiceAiOutboundService (real MySQL)', () => {
   let versionId: string;
   let customerIds: string[];
   let policyVersionId: string;
+  const aiReply = {
+    complete: jest.fn<Promise<string>, []>(),
+    createMessage: jest.fn<
+      Promise<{ content: { type: 'text'; text: string }[] }>,
+      []
+    >(),
+  };
   const configValues: Record<string, string | undefined> = {
     TWILIO_ACCOUNT_SID: '',
     TWILIO_AUTH_TOKEN: '',
@@ -177,16 +184,7 @@ describe('VoiceAiOutboundService (real MySQL)', () => {
       config,
       {} as never,
       {} as never,
-      {
-        complete: jest.fn().mockResolvedValue(
-          JSON.stringify({
-            reply: 'I will book that for you.',
-            intent: 'book',
-            service: 'Consultation',
-            startsAt: '2026-10-20T10:00:00.000Z',
-          }),
-        ),
-      } as never,
+      aiReply as never,
       {} as never,
       {} as never,
       {} as never,
@@ -207,6 +205,17 @@ describe('VoiceAiOutboundService (real MySQL)', () => {
   });
 
   beforeEach(() => {
+    aiReply.complete.mockReset().mockResolvedValue(
+      JSON.stringify({
+        reply: 'I will book that for you.',
+        intent: 'book',
+        service: 'Consultation',
+        startsAt: '2026-10-20T10:00:00.000Z',
+      }),
+    );
+    aiReply.createMessage.mockReset().mockImplementation(async () => ({
+      content: [{ type: 'text', text: await aiReply.complete() }],
+    }));
     mockedAxios.post.mockReset();
     let callNumber = 0;
     mockedAxios.post.mockImplementation(() =>
@@ -366,5 +375,79 @@ describe('VoiceAiOutboundService (real MySQL)', () => {
       voicemails: 'not_available',
     });
     expect(policyVersionId).toBeTruthy();
+  });
+
+  it('records an AI provider outage and ends the outbound conversation without another speech gather', async () => {
+    const campaignId = await createApprovedCampaign();
+    configValues.TWILIO_ACCOUNT_SID = 'AC-test';
+    configValues.TWILIO_AUTH_TOKEN = 'test-token';
+    configValues.BACKEND_URL = 'https://api.example.test/api/v1';
+    await aiOutbound.start(businessId, userId, campaignId);
+    const attempt = await prisma.voiceAiOutboundAttempt.findFirstOrThrow({
+      where: { businessId, campaignId },
+      orderBy: { createdAt: 'asc' },
+    });
+    await voiceCall.handleOutboundAiAnswer(attempt.id, attempt.callSid!);
+    aiReply.complete.mockRejectedValueOnce(
+      new AppException(
+        'AI_PROVIDER_INSUFFICIENT_CREDIT',
+        'The AI provider account has insufficient credit.',
+        503,
+      ),
+    );
+    const xml = await voiceCall.handleOutboundAiSpeech(
+      attempt.id,
+      attempt.callSid!,
+      'Please tell me about the service',
+    );
+    expect(xml).toContain('automated assistant is unavailable');
+    expect(xml).toContain('<Hangup/>');
+    expect(xml).not.toContain('<Gather');
+    expect(xml).not.toContain('<Record');
+    const call = await prisma.phoneCall.findUniqueOrThrow({
+      where: { callSid: attempt.callSid! },
+    });
+    expect(call.outcome).toBe('message');
+    expect(call.voiceAgentVersionId).toBe(attempt.versionId);
+    expect((call.transcript as unknown as object[]).at(-1)).toMatchObject({
+      serviceFailure: {
+        stage: 'ai_reply',
+        code: 'AI_PROVIDER_INSUFFICIENT_CREDIT',
+      },
+    });
+    expect(
+      await prisma.voiceOutboundCampaign.findUniqueOrThrow({
+        where: { id: campaignId },
+        select: { status: true },
+      }),
+    ).toEqual({ status: 'paused' });
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          businessId,
+          entityId: campaignId,
+          action: 'voice.ai_campaign.provider_paused',
+        },
+      }),
+    ).toBe(1);
+    await voiceCall.handleOutboundAiSpeech(
+      attempt.id,
+      attempt.callSid!,
+      'Duplicate provider callback',
+    );
+    expect(aiReply.complete.mock.calls).toHaveLength(1);
+    await aiOutbound.providerStatus(
+      attempt.id,
+      attempt.callSid!,
+      'completed',
+      5,
+    );
+    expect(mockedAxios.post.mock.calls).toHaveLength(1);
+    expect(
+      await prisma.voiceAiOutboundAttempt.count({
+        where: { businessId, campaignId },
+      }),
+    ).toBe(1);
+    await aiOutbound.stop(businessId, userId, campaignId);
   });
 });

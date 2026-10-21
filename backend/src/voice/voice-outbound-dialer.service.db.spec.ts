@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { ClsService } from 'nestjs-cls';
 import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'crypto';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -75,7 +76,8 @@ describe('VoiceOutboundDialerService (real MySQL)', () => {
       data: {
         businessId,
         twilioSid: `PN${suffix}`,
-        phoneNumber: `+1415555${String(Date.now()).slice(-4)}`,
+        // The old four-digit clock suffix collided with fixtures in parallel suites.
+        phoneNumber: `+1${randomInt(2000000000, 9999999999)}`,
       },
     });
     const user = await prisma.user.create({

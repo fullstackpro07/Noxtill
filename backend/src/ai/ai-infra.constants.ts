@@ -12,6 +12,7 @@ export const AI_ERROR_CODES = {
 export type AiFeatureKey =
   | 'voiceEntry'
   | 'voiceQualityAssist'
+  | 'voiceMeetingSummary'
   | 'photoDigitizer'
   | 'reviewReplies'
   | 'campaignCopy'
@@ -23,6 +24,7 @@ export type AiFeatureKey =
 export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'voiceEntry',
   'voiceQualityAssist',
+  'voiceMeetingSummary',
   'photoDigitizer',
   'reviewReplies',
   'campaignCopy',
@@ -44,7 +46,9 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
  */
 export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   voice_entry: 'voiceEntry',
+  voice_realtime: 'voiceEntry',
   voice_quality_assist: 'voiceQualityAssist',
+  voice_meeting_summary: 'voiceMeetingSummary',
   digitizer_scan: 'photoDigitizer',
   digitizer_assistant: 'photoDigitizer',
   review_reply: 'reviewReplies',
@@ -60,17 +64,19 @@ export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
 
 /** EU AI Act transparency requirement (UPD-BE-115) — shown verbatim on the AI Settings screen. */
 export const AI_USAGE_DISCLOSURE_TEXT =
-  'Noxtill uses AI (Anthropic Claude, and OpenAI for voice transcription and image generation) to ' +
+  'Noxtill uses AI (Anthropic Claude, and OpenAI for live voice, transcription and image generation) to ' +
   "power the features below. AI-generated text and suggestions are based on this business's own " +
   'data and are clearly presented as AI-generated. Workflow AI drafts are saved to run history ' +
-  'and are not sent automatically. AI features never take an irreversible action ' +
+  'and are not sent automatically. Meeting audio is transcribed and summarized only when the ' +
+  'published policy allows it and every participant consents; those results are for human review. ' +
+  'AI features never take an irreversible action ' +
   '(sending a message, writing a sale, changing stock) without a human explicitly confirming it ' +
   'first. Usage is metered per business against the monthly cost cap and per-minute rate limit set ' +
   'below. Voice QA suggestions send the selected transcript (with email, phone and payment-card-like numbers masked) and rubric to Anthropic; a human reviewer must verify every suggestion before saving.';
 
-/** claude-3-5-haiku pricing (USD per token, public list price) — good enough for a cost-cap estimate. */
-export const HAIKU_INPUT_COST_PER_TOKEN = 0.8 / 1_000_000;
-export const HAIKU_OUTPUT_COST_PER_TOKEN = 4 / 1_000_000;
+/** Haiku 4.5 standard USD token rates, matching ClaudeClient's default model; still an estimate, not a provider invoice. */
+export const HAIKU_INPUT_COST_PER_TOKEN = 1 / 1_000_000;
+export const HAIKU_OUTPUT_COST_PER_TOKEN = 5 / 1_000_000;
 
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 

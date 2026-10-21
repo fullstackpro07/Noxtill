@@ -1053,8 +1053,15 @@ model Business {
   voiceCallbacks                VoiceCallback[]
   voiceCallbackAttempts         VoiceCallbackAttempt[]
   voiceCallTransfers            VoiceCallTransfer[]
+  voiceProviderWebhookEvents    VoiceProviderWebhookEvent[]
+  voiceBillingRates             VoiceBillingRateVersion[]
+  voiceBillingDrafts            VoiceBillingDraft[]
+  voiceBillingUsageClaims       VoiceBillingUsageClaim[]
   voiceVideoMeetings            VoiceVideoMeeting[]
   voiceMeetingInvites           VoiceMeetingInvite[]
+  voiceMeetingParticipants      VoiceMeetingParticipant[]
+  voiceVideoRecordings          VoiceVideoRecording[]
+  voiceVideoRecordingConsents   VoiceVideoRecordingConsent[]
   voiceIvrFlows                 VoiceIvrFlow[]
   voiceIvrFlowVersions          VoiceIvrFlowVersion[]
   voiceRoutingRules             VoiceRoutingRule[]
@@ -1387,6 +1394,8 @@ model Customer {
   voiceConsentEvidence         VoiceConsentEvidence[]
   voiceVideoMeetings           VoiceVideoMeeting[]
   voiceOutboundCampaignMembers VoiceOutboundCampaignMember[]
+  supportTickets               CustomerSupportTicket[]
+  messageDrafts                MessageDraft[]
 
   b2bAccount            CommerceB2bAccount?
   commerceSubscriptions CommerceSubscription[]
@@ -2852,6 +2861,12 @@ model VoiceHumanAgentAssignment {
   profile         VoiceHumanAgentProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
   status          String                 @default("offered") @db.VarChar(20)
   providerStatus  String?                @map("provider_status") @db.VarChar(40)
+  providerStatusSequence Int?                 @map("provider_status_sequence")
+  /// The callback's follow-on work remains pending until its effects finish.
+  pendingAction   String?                 @map("pending_action") @db.VarChar(24)
+  /// A requested/uncertain provider command must be reconciled rather than originated twice.
+  providerDispatchState String?           @map("provider_dispatch_state") @db.VarChar(20)
+  providerDispatchStartedAt DateTime?      @map("provider_dispatch_started_at")
   /// Twilio leg SID and conference SID once an internal transfer is placed into a shared room.
   providerCallSid String?                @map("provider_call_sid") @db.VarChar(34)
   conferenceSid   String?                @map("conference_sid") @db.VarChar(34)
@@ -2923,6 +2938,8 @@ model VoiceAiAgentTestRun {
   version         VoiceAiAgentVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
   scenario        String              @db.Text
   response        String?             @db.Text
+  expectedIntent  String?             @map("expected_intent") @db.VarChar(20)
+  actualIntent    String?             @map("actual_intent") @db.VarChar(20)
   passed          Boolean
   errorCode       String?             @map("error_code") @db.VarChar(80)
   errorMessage    String?             @map("error_message") @db.VarChar(500)
@@ -3041,10 +3058,18 @@ model PhoneCall {
   providerCost             Decimal?                      @map("provider_cost") @db.Decimal(10, 4)
   providerCostUnit         String?                       @map("provider_cost_unit")
   providerCostCheckedAt    DateTime?                     @map("provider_cost_checked_at")
+  /// Last provider status reconciliation attempt. Prevents stale live calls from starving newer ones.
+  providerStatusCheckedAt  DateTime?                     @map("provider_status_checked_at")
+  /// Latest Twilio Call-status callback sequence accepted; stale replays cannot reverse terminal state.
+  statusSequenceNumber    Int?                          @map("status_sequence_number")
   /// Set when staff deleted the recording and transcript (the call log itself is kept).
   recordingDeletedAt       DateTime?                     @map("recording_deleted_at")
 
   notes                 PhoneCallNote[]
+  realtimeSession       VoiceRealtimeSession?
+  usageRecords          VoiceUsageRecord[]
+  supportTickets        CustomerSupportTicket[]
+  messageDrafts         MessageDraft[]
   wrapUp                VoiceCallWrapUp?
   humanAgentAssignments VoiceHumanAgentAssignment[]
   transfers             VoiceCallTransfer[]
@@ -3053,6 +3078,7 @@ model PhoneCall {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, status, startedAt])
+  @@index([status, providerStatusCheckedAt, startedAt], map: "phone_calls_status_provider_check_idx")
   @@index([businessId, voiceAgentVersionId], map: "phone_calls_business_agent_version_idx")
   @@index([businessId, ivrFlowVersionId], map: "phone_calls_business_ivr_version_idx")
   @@index([businessId, resolvedAt])
@@ -3197,6 +3223,8 @@ model VoiceCompliancePolicyVersion {
   recordingAllowed       Boolean                            @default(false) @map("recording_allowed")
   recordingNoticeText    String?                            @map("recording_notice_text") @db.Text
   recordingRetentionDays Int?                               @map("recording_retention_days")
+  meetingAiProcessingAllowed Boolean                         @default(false) @map("meeting_ai_processing_allowed")
+  meetingAiProcessingNoticeText String?                      @map("meeting_ai_processing_notice_text") @db.Text
   allowedWindowStart     String?                            @map("allowed_window_start") @db.VarChar(5)
   allowedWindowEnd       String?                            @map("allowed_window_end") @db.VarChar(5)
   timeZone               String?                            @map("time_zone") @db.VarChar(100)
@@ -3207,6 +3235,8 @@ model VoiceCompliancePolicyVersion {
   publishedAt            DateTime?                          @map("published_at")
   decisions              VoiceOutboundEligibilityDecision[]
   recordingCalls         PhoneCall[]
+  recordingMeetings      VoiceVideoMeeting[]       @relation("VoiceMeetingRecordingPolicy")
+  videoRecordings        VoiceVideoRecording[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -3604,6 +3634,14 @@ model VoiceVideoMeeting {
   cancellationReason String?                 @map("cancellation_reason") @db.VarChar(500)
   endedAt            DateTime?               @map("ended_at")
   invites            VoiceMeetingInvite[]
+  participants       VoiceMeetingParticipant[]
+  roomState          String                  @default("not_started") @map("room_state") @db.VarChar(30)
+  endRequestedAt     DateTime?               @map("end_requested_at")
+  providerEventAt    DateTime?               @map("provider_event_at")
+  recordingPolicyVersionId String?            @map("recording_policy_version_id")
+  recordingPolicyVersion VoiceCompliancePolicyVersion? @relation("VoiceMeetingRecordingPolicy", fields: [recordingPolicyVersionId], references: [id], onDelete: SetNull)
+  recordings         VoiceVideoRecording[]
+  messageDrafts      MessageDraft[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3631,12 +3669,110 @@ model VoiceMeetingInvite {
   /// Set only after the email provider accepted the invite email; null = shared manually.
   emailSentAt      DateTime?         @map("email_sent_at")
   emailProviderRef String?           @map("email_provider_ref") @db.VarChar(191)
+  participant      VoiceMeetingParticipant?
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([businessId, meetingId, expiresAt], map: "voice_meeting_invite_meeting_idx")
   @@index([businessId, email, revokedAt], map: "voice_meeting_invite_guest_idx")
   @@map("voice_meeting_invites")
+}
+
+/// Application admission is not a claim of a live media connection. Provider timestamps are
+/// populated only from signed LiveKit receipts or an authenticated provider lookup.
+model VoiceMeetingParticipant {
+  id               String             @id @default(uuid())
+  businessId       String             @map("business_id")
+  business         Business           @relation(fields: [businessId], references: [id])
+  meetingId        String             @map("meeting_id")
+  meeting          VoiceVideoMeeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  inviteId         String?            @unique @map("invite_id")
+  invite           VoiceMeetingInvite? @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  identity         String             @db.VarChar(191)
+  role             String             @db.VarChar(10)
+  admission        String             @default("waiting") @db.VarChar(20)
+  admittedAt       DateTime?          @map("admitted_at")
+  decidedByUserId  String?            @map("decided_by_user_id")
+  decisionReason   String?            @map("decision_reason") @db.VarChar(500)
+  providerSid      String?            @map("provider_sid") @db.VarChar(191)
+  providerJoinedAt DateTime?          @map("provider_joined_at")
+  providerLeftAt   DateTime?          @map("provider_left_at")
+  providerEventAt  DateTime?          @map("provider_event_at")
+  requestedAt      DateTime           @default(now()) @map("requested_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  recordingConsents VoiceVideoRecordingConsent[]
+
+  @@unique([meetingId, identity])
+  @@index([businessId, meetingId, admission, requestedAt], map: "voice_meeting_participant_lobby_idx")
+  @@map("voice_meeting_participants")
+}
+
+/// One LiveKit Egress session. Provider acceptance, recording completion, and private-object
+/// existence are separate states; only a verified uploaded object becomes downloadable.
+model VoiceVideoRecording {
+  id                       String                            @id @default(uuid())
+  businessId               String                            @map("business_id")
+  business                 Business                          @relation(fields: [businessId], references: [id])
+  meetingId                String                            @map("meeting_id")
+  meeting                  VoiceVideoMeeting                 @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  policyVersionId          String                            @map("policy_version_id")
+  policyVersion            VoiceCompliancePolicyVersion      @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  startedByUserId          String                            @map("started_by_user_id")
+  status                   String                            @default("consent_pending") @db.VarChar(24)
+  noticeSnapshot           String                            @map("notice_snapshot") @db.Text
+  noticeHash               String                            @map("notice_hash") @db.Char(64)
+  regionCode               String                            @map("region_code") @db.Char(2)
+  retentionDays            Int                               @map("retention_days")
+  retentionExpiresAt       DateTime                          @map("retention_expires_at")
+  aiProcessingAllowed      Boolean                           @default(false) @map("ai_processing_allowed")
+  aiProcessingNoticeSnapshot String?                         @map("ai_processing_notice_snapshot") @db.Text
+  artifactStatus           String                            @default("not_requested") @map("artifact_status") @db.VarChar(24)
+  transcriptText           String?                           @map("transcript_text") @db.LongText
+  generatedSummary         String?                           @map("generated_summary") @db.Text
+  followUpDraft            String?                           @map("follow_up_draft") @db.Text
+  artifactsGeneratedAt     DateTime?                         @map("artifacts_generated_at")
+  artifactFailureMessage   String?                           @map("artifact_failure_message") @db.VarChar(500)
+  storageKey               String?                           @map("storage_key") @db.VarChar(500)
+  egressId                 String?                           @unique @map("egress_id") @db.VarChar(191)
+  providerStartedAt        DateTime?                         @map("provider_started_at")
+  stopRequestedAt          DateTime?                         @map("stop_requested_at")
+  providerEndedAt          DateTime?                         @map("provider_ended_at")
+  finalizedAt              DateTime?                         @map("finalized_at")
+  durationSeconds          BigInt?                           @map("duration_seconds")
+  sizeBytes                BigInt?                           @map("size_bytes")
+  failureCode              String?                           @map("failure_code") @db.VarChar(80)
+  failureMessage           String?                           @map("failure_message") @db.VarChar(500)
+  consents                 VoiceVideoRecordingConsent[]
+  createdAt                DateTime                          @default(now()) @map("created_at")
+  updatedAt                DateTime                          @updatedAt @map("updated_at")
+
+  @@index([businessId, meetingId, status, createdAt], map: "voice_video_recordings_meeting_status_idx")
+  @@index([businessId, status, retentionExpiresAt], map: "voice_video_recordings_retention_idx")
+  @@map("voice_video_recordings")
+}
+
+/// Append-only per-participant recording permission evidence, including the exact notice shown.
+model VoiceVideoRecordingConsent {
+  id               String                  @id @default(uuid())
+  businessId       String                  @map("business_id")
+  business         Business                @relation(fields: [businessId], references: [id])
+  recordingId      String                  @map("recording_id")
+  recording        VoiceVideoRecording     @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  participantId    String?                 @map("participant_id")
+  participant      VoiceMeetingParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  identity         String                  @db.VarChar(191)
+  role             String                  @db.VarChar(10)
+  decision         String                  @db.VarChar(12)
+  noticeSnapshot   String                  @map("notice_snapshot") @db.Text
+  noticeHash       String                  @map("notice_hash") @db.Char(64)
+  source           String                  @db.VarChar(24)
+  decidedAt        DateTime?               @map("decided_at")
+  revokedAt        DateTime?               @map("revoked_at")
+  createdAt        DateTime                @default(now()) @map("created_at")
+
+  @@unique([recordingId, identity], map: "voice_video_recording_consents_recording_identity_key")
+  @@index([businessId, recordingId, decision], map: "voice_video_recording_consents_decision_idx")
+  @@map("voice_video_recording_consents")
 }
 
 /// Versioned business IVR graph. Publishing changes the studio snapshot only; inbound calls
@@ -3913,6 +4049,157 @@ model VoiceSettings {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("voice_settings")
+}
+
+/// One server-authenticated media connection per call. No provider keys or raw audio are stored.
+model VoiceRealtimeSession {
+  id           String    @id @default(uuid())
+  businessId   String    @map("business_id")
+  callId       String    @unique @map("call_id")
+  call         PhoneCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  tokenHash    String    @map("token_hash") @db.VarChar(64)
+  expiresAt    DateTime  @map("expires_at")
+  model        String    @db.VarChar(100)
+  status       String    @default("pending") @db.VarChar(24)
+  streamSid    String?   @map("stream_sid") @db.VarChar(40)
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  errorCode    String?   @map("error_code") @db.VarChar(80)
+  metrics      Json      @default("{}")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([businessId, status, createdAt], map: "voice_realtime_sessions_business_status_idx")
+  @@map("voice_realtime_sessions")
+}
+
+/// Idempotent measurements. Cost NULL means unpriced; estimated costs are never invoices.
+model VoiceUsageRecord {
+  id          String     @id @default(uuid())
+  businessId  String     @map("business_id")
+  callId      String?    @map("call_id")
+  call        PhoneCall? @relation(fields: [callId], references: [id], onDelete: SetNull)
+  eventKey    String     @map("event_key") @db.VarChar(191)
+  provider    String     @db.VarChar(32)
+  unit        String     @db.VarChar(64)
+  quantity    Decimal    @db.Decimal(18, 6)
+  cost        Decimal?   @db.Decimal(14, 6)
+  currency    String?    @db.VarChar(3)
+  state       String     @db.VarChar(24)
+  evidence    Json
+  measuredAt  DateTime   @default(now()) @map("measured_at")
+  billingClaim VoiceBillingUsageClaim?
+
+  @@unique([businessId, eventKey], map: "voice_usage_records_business_event_key")
+  @@index([businessId, measuredAt, unit], map: "voice_usage_records_business_measured_unit_idx")
+  @@map("voice_usage_records")
+}
+
+/// Server-configured selling rates, frozen when captured and approved by the business owner.
+model VoiceBillingRateVersion {
+  id                 String   @id @default(uuid())
+  businessId         String   @map("business_id")
+  business           Business @relation(fields: [businessId], references: [id])
+  version            Int
+  sourceVersion      String   @map("source_version") @db.VarChar(80)
+  sourceReference    String   @map("source_reference") @db.VarChar(500)
+  sourceHash         String   @map("source_hash") @db.VarChar(64)
+  currency           String   @db.VarChar(3)
+  currencyMinorUnits Int      @map("currency_minor_units")
+  rates              Json
+  effectiveFrom      DateTime @map("effective_from")
+  approvedAt         DateTime? @map("approved_at")
+  approvedByUserId   String?  @map("approved_by_user_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  drafts             VoiceBillingDraft[]
+
+  @@unique([businessId, version], map: "voice_billing_rates_business_version_key")
+  @@unique([businessId, sourceVersion], map: "voice_billing_rates_business_source_key")
+  @@map("voice_billing_rate_versions")
+}
+
+/// Reviewable platform-usage handoff. Approval alone never creates or pays a provider invoice.
+model VoiceBillingDraft {
+  id                 String   @id @default(uuid())
+  businessId         String   @map("business_id")
+  business           Business @relation(fields: [businessId], references: [id])
+  rateVersionId      String   @map("rate_version_id")
+  rateVersion        VoiceBillingRateVersion @relation(fields: [rateVersionId], references: [id], onDelete: Restrict)
+  periodStart        DateTime @map("period_start")
+  periodEnd          DateTime @map("period_end")
+  currency           String   @db.VarChar(3)
+  currencyMinorUnits Int      @map("currency_minor_units")
+  total              Decimal  @db.Decimal(18, 6)
+  evidenceHash       String   @map("evidence_hash") @db.VarChar(64)
+  itemCount          Int      @map("item_count")
+  items              Json
+  status             String   @default("draft") @db.VarChar(24)
+  createdByUserId    String   @map("created_by_user_id")
+  approvedByUserId   String?  @map("approved_by_user_id")
+  approvedAt         DateTime? @map("approved_at")
+  decisionReason     String?  @map("decision_reason") @db.VarChar(500)
+  createdAt          DateTime @default(now()) @map("created_at")
+  usageClaims        VoiceBillingUsageClaim[]
+
+  @@index([businessId, periodStart, createdAt], map: "voice_billing_drafts_business_period_idx")
+  @@map("voice_billing_drafts")
+}
+
+/// A usage row can be approved for billing once. Keeps the reviewed source evidence immutable.
+model VoiceBillingUsageClaim {
+  id            String   @id @default(uuid())
+  businessId    String   @map("business_id")
+  business      Business @relation(fields: [businessId], references: [id])
+  draftId       String   @map("draft_id")
+  draft         VoiceBillingDraft @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  usageRecordId String   @unique(map: "voice_billing_claims_usage_key") @map("usage_record_id")
+  usageRecord   VoiceUsageRecord @relation(fields: [usageRecordId], references: [id], onDelete: Restrict)
+  snapshot      Json
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, draftId], map: "voice_billing_claims_business_draft_idx")
+  @@map("voice_billing_usage_claims")
+}
+
+/// Customer support requests are not reviews: no synthetic star rating is created for a call.
+model CustomerSupportTicket {
+  id            String     @id @default(uuid())
+  businessId    String     @map("business_id")
+  customerId    String     @map("customer_id")
+  customer      Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sourceCallId  String?    @map("source_call_id")
+  sourceCall    PhoneCall? @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
+  sourceKey     String     @map("source_key") @db.VarChar(191)
+  title         String     @db.VarChar(160)
+  body          String     @db.Text
+  status        String     @default("open") @db.VarChar(24)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  @@unique([businessId, sourceKey], map: "customer_support_tickets_business_source_key")
+  @@index([businessId, customerId, status], map: "customer_support_tickets_business_customer_status_idx")
+  @@map("customer_support_tickets")
+}
+
+/// Canonical message drafts. A voice agent can create a draft but never queues its delivery.
+model MessageDraft {
+  id           String     @id @default(uuid())
+  businessId   String     @map("business_id")
+  customerId   String     @map("customer_id")
+  customer     Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sourceCallId String?    @map("source_call_id")
+  sourceCall   PhoneCall? @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
+  sourceMeetingId String? @map("source_meeting_id")
+  sourceMeeting VoiceVideoMeeting? @relation(fields: [sourceMeetingId], references: [id], onDelete: SetNull)
+  sourceKey    String     @map("source_key") @db.VarChar(191)
+  body         String     @db.Text
+  status       String     @default("draft") @db.VarChar(24)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@unique([businessId, sourceKey], map: "message_drafts_business_source_key")
+  @@index([businessId, customerId, status], map: "message_drafts_business_customer_status_idx")
+  @@index([businessId, sourceMeetingId, status], map: "message_drafts_business_meeting_status_idx")
+  @@map("message_drafts")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -9405,6 +9692,8 @@ model VoiceCallTransfer {
   destination       String    @db.VarChar(32)
   status            String    @default("pending") @db.VarChar(24)
   providerStatus    String?   @map("provider_status") @db.VarChar(40)
+  /// Latest sequence from the destination call leg's Twilio status callback.
+  providerStatusSequence Int? @map("provider_status_sequence")
   providerCallSid   String?   @map("provider_call_sid") @db.VarChar(34)
   requestedByUserId String?   @map("requested_by_user_id")
   requestedAt       DateTime  @default(now()) @map("requested_at")
@@ -9415,4 +9704,32 @@ model VoiceCallTransfer {
   @@unique([businessId, callId, attemptNumber], map: "voice_call_transfer_attempt_key")
   @@index([businessId, callId, status], map: "voice_call_transfer_call_status_idx")
   @@map("voice_call_transfers")
+}
+
+/// Durable, sanitized status-callback inbox. Payloads contain only the fields needed to project
+/// call/transfer state; provider signatures and raw request bodies are never stored.
+model VoiceProviderWebhookEvent {
+  id                  String   @id @default(uuid())
+  businessId          String   @map("business_id")
+  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  eventKey            String   @map("event_key") @db.VarChar(64)
+  eventType           String   @map("event_type") @db.VarChar(40)
+  callSid             String   @map("call_sid") @db.VarChar(191)
+  sequenceNumber      Int?     @map("sequence_number")
+  payload             Json
+  state               String   @default("received") @db.VarChar(20)
+  attemptCount        Int      @default(0) @map("attempt_count")
+  consecutiveFailures Int      @default(0) @map("consecutive_failures")
+  replayCount         Int      @default(0) @map("replay_count")
+  lastError           String?  @map("last_error") @db.Text
+  receivedAt          DateTime @default(now()) @map("received_at")
+  lastAttemptAt       DateTime? @map("last_attempt_at")
+  nextAttemptAt       DateTime? @map("next_attempt_at")
+  processingUntil     DateTime? @map("processing_until")
+  processedAt         DateTime? @map("processed_at")
+
+  @@unique([businessId, eventKey], map: "voice_provider_webhook_business_event_key")
+  @@index([businessId, state, receivedAt], map: "voice_provider_webhook_business_state_idx")
+  @@index([state, nextAttemptAt, processingUntil], map: "voice_provider_webhook_retry_idx")
+  @@map("voice_provider_webhook_events")
 }

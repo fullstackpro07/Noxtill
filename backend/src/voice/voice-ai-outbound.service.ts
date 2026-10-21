@@ -13,6 +13,11 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service';
 import { VOICE_ERROR_CODES } from './voice.constants';
+import { voiceSpendState } from './voice-usage-metering.service';
+import {
+  voiceAgentAdmissionReason,
+  type VoiceAgentControls,
+} from './voice-agent-controls.util';
 
 const STARTABLE: VoiceOutboundCampaignStatus[] = [
   VoiceOutboundCampaignStatus.approved,
@@ -513,6 +518,13 @@ export class VoiceAiOutboundService {
     pinnedVersionId: string,
   ) {
     const reservation = await this.prisma.$transaction(async (tx) => {
+      if ((await voiceSpendState(tx, businessId)).reached) {
+        throw new AppException(
+          'VOICE_SPEND_CAP_REACHED',
+          'This business has reached its monthly phone spending cap.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
       await tx.$queryRaw`SELECT id FROM voice_outbound_campaigns WHERE id = ${campaignId} AND business_id = ${businessId} FOR UPDATE`;
       const campaign = await tx.voiceOutboundCampaign.findFirst({
         where: { id: campaignId, businessId },
@@ -558,7 +570,7 @@ export class VoiceAiOutboundService {
           agentId: campaign.aiAgentId ?? undefined,
           publishedAt: { not: null },
         },
-        select: { id: true },
+        select: { id: true, config: true },
       });
       if (!version || campaign.aiAgent?.status !== 'active') {
         throw new AppException(
@@ -566,6 +578,29 @@ export class VoiceAiOutboundService {
           'The campaign’s pinned AI agent version is no longer available.',
           HttpStatus.CONFLICT,
         );
+      }
+      const controls = version.config as VoiceAgentControls;
+      // Eligibility persists its own business-scoped decision on another connection; locking
+      // the parent business here would block that insert's FK check. Use the pinned version.
+      await tx.$queryRaw`SELECT id FROM voice_ai_agent_versions WHERE id = ${version.id} AND business_id = ${businessId} FOR UPDATE`;
+      if (voiceAgentAdmissionReason(controls, campaignId, 'outbound'))
+        return null;
+      if (controls.maxConcurrentCalls) {
+        const active = await tx.phoneCall.count({
+          where: {
+            businessId,
+            voiceAgentVersionId: version.id,
+            status: PhoneCallStatus.in_progress,
+          },
+        });
+        const pending = await tx.voiceAiOutboundAttempt.count({
+          where: {
+            businessId,
+            versionId: version.id,
+            status: { in: ['initiating', 'ringing'] },
+          },
+        });
+        if (active + pending >= controls.maxConcurrentCalls) return null;
       }
       for (const member of candidates) {
         const decision = await this.campaigns.evaluateMember(

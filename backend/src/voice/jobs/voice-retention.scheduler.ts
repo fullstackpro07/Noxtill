@@ -15,6 +15,20 @@ export class VoiceRetentionScheduler implements OnModuleInit {
   onModuleInit() {
     this.queue
       .add(
+        'monitor-operations',
+        {},
+        {
+          repeat: { pattern: '*/5 * * * *' },
+          jobId: 'voice-monitor-operations-every-5-minutes',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register voice monitoring: ${error.message}`,
+        ),
+      );
+    this.queue
+      .add(
         'tick',
         {},
         {
@@ -72,6 +86,37 @@ export class VoiceRetentionScheduler implements OnModuleInit {
       .catch((error: Error) =>
         this.logger.error(
           `Failed to register transcript redaction: ${error.message}`,
+        ),
+      );
+
+    // Recover call outcomes if Twilio's terminal status callback was lost.
+    this.queue
+      .add(
+        'reconcile-orphaned-calls',
+        {},
+        {
+          repeat: { pattern: '*/5 * * * *' },
+          jobId: 'voice-orphaned-call-reconciliation-every-5-minutes',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register voice call reconciliation tick: ${error.message}`,
+        ),
+      );
+
+    this.queue
+      .add(
+        'retry-provider-webhook-events',
+        {},
+        {
+          repeat: { pattern: '*/5 * * * *' },
+          jobId: 'voice-provider-webhook-retry-every-5-minutes',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register provider webhook retry tick: ${error.message}`,
         ),
       );
   }

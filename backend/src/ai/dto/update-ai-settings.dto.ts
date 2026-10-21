@@ -19,6 +19,10 @@ export class AiFeatureTogglesDto {
 
   @IsOptional()
   @IsBoolean()
+  voiceMeetingSummary?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   photoDigitizer?: boolean;
 
   @IsOptional()

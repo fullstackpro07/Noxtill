@@ -45,10 +45,10 @@ export class AiInfraService {
     maxTokens?: number,
     voiceBudget?: {
       voiceAgentVersionId: string;
-      monthlyBudgetUsd: number;
+      monthlyBudgetUsd?: number | null;
     },
   ): Promise<string> {
-    if (businessId && voiceBudget) {
+    if (businessId && voiceBudget?.monthlyBudgetUsd != null) {
       await this.enforceVoiceVersionBudget(
         businessId,
         voiceBudget.voiceAgentVersionId,
@@ -142,6 +142,26 @@ export class AiInfraService {
     voiceAgentVersionId?: string,
   ): Promise<CreateMessageResult> {
     await this.checkGuardrails(businessId, kind);
+    if (businessId && voiceAgentVersionId) {
+      const version = await this.prisma.voiceAiAgentVersion.findFirst({
+        where: { id: voiceAgentVersionId, businessId },
+        select: { config: true },
+      });
+      if (!version)
+        throw new AppException(
+          'VOICE_AI_VERSION_NOT_FOUND',
+          'The AI agent version is not available in this business.',
+          HttpStatus.NOT_FOUND,
+        );
+      const budget = (version.config as { monthlyBudgetUsd?: unknown })
+        .monthlyBudgetUsd;
+      if (typeof budget === 'number' && Number.isFinite(budget))
+        await this.enforceVoiceVersionBudget(
+          businessId,
+          voiceAgentVersionId,
+          budget,
+        );
+    }
     const result = await this.claude.createMessage(params);
     await this.recordUsage(
       businessId,
@@ -160,7 +180,7 @@ export class AiInfraService {
    * stream — it still needs the exact same rate-limit/cost-cap/logging path.
    *
    * `kind` is optional and, when given, also enforced against AI Settings' per-feature toggle
-   * (UPD-BE-115) — only for kinds that map to one of the 7 named toggleable features
+   * (UPD-BE-115) — only for kinds that map to one of the named toggleable features
    * (`KIND_TO_FEATURE`); everything else (e.g. the bare `'complete'` default) has no toggle to
    * check and is always allowed through this gate.
    */
@@ -263,7 +283,7 @@ export class AiInfraService {
       result.inputTokens * HAIKU_INPUT_COST_PER_TOKEN +
       result.outputTokens * HAIKU_OUTPUT_COST_PER_TOKEN;
 
-    await this.prisma.aiCallLog.create({
+    const log = await this.prisma.aiCallLog.create({
       data: {
         businessId,
         kind,
@@ -274,5 +294,25 @@ export class AiInfraService {
         voiceAgentVersionId,
       },
     });
+    if (businessId && kind === 'voice_entry') {
+      await this.prisma.voiceUsageRecord.create({
+        data: {
+          businessId,
+          eventKey: `anthropic:voice:${log.id}`,
+          provider: 'anthropic',
+          unit: 'voice_text_tokens',
+          quantity: result.inputTokens + result.outputTokens,
+          cost,
+          currency: 'USD',
+          state: 'estimated',
+          evidence: {
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            costBasis: 'haiku_default_list_price_estimate',
+            voiceAgentVersionId: voiceAgentVersionId ?? null,
+          },
+        },
+      });
+    }
   }
 }

@@ -156,6 +156,30 @@ export class VoiceCallWorkspaceService {
       );
     }
 
+    const primaryLine = await this.tenantPrisma.client.phoneNumber.findUnique({
+      where: { businessId },
+      select: { phoneNumber: true },
+    });
+    const trackingLine =
+      !primaryLine && call.trackingNumberId
+        ? await this.tenantPrisma.client.voiceTrackingNumber.findFirst({
+            where: {
+              id: call.trackingNumberId,
+              businessId,
+              active: true,
+            },
+            select: { phoneNumber: true },
+          })
+        : null;
+    const callerId = primaryLine?.phoneNumber ?? trackingLine?.phoneNumber;
+    if (!callerId) {
+      throw new AppException(
+        VOICE_ERROR_CODES.PROVIDER_NOT_CONFIGURED,
+        'No active receptionist number is available as caller ID for this transfer',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
     const actionUrlBase = this.transferResultUrl();
     if (!actionUrlBase) {
       throw new AppException(
@@ -237,7 +261,7 @@ export class VoiceCallWorkspaceService {
         `https://api.twilio.com/2010-04-01/Accounts/${auth.username}/Calls/${call.callSid}.json`,
         new URLSearchParams({
           Twiml: twiml(
-            `<Dial action="${escapeXml(actionUrl.toString())}" method="POST" answerOnBridge="true"><Number ${numberAttributes}>${escapeXml(toNumber)}</Number></Dial>`,
+            `<Dial action="${escapeXml(actionUrl.toString())}" method="POST" answerOnBridge="true" callerId="${escapeXml(callerId)}"><Number ${numberAttributes}>${escapeXml(toNumber)}</Number></Dial>`,
           ),
         }),
         { auth },

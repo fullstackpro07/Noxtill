@@ -11,6 +11,7 @@ import {
 import axios from 'axios';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
+import { voiceSpendState } from './voice-usage-metering.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceDialerDispositionDto } from './dto/voice-outbound.dto';
@@ -508,6 +509,13 @@ export class VoiceOutboundDialerService {
 
     // 1. Reserve the contact and the agent atomically (two concurrent clicks → one call).
     const reserved = await this.prisma.$transaction(async (tx) => {
+      if ((await voiceSpendState(tx, businessId)).reached) {
+        throw new AppException(
+          'VOICE_SPEND_CAP_REACHED',
+          'This business has reached its monthly phone spending cap.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
       await tx.$queryRaw`SELECT id FROM voice_human_agent_profiles WHERE id = ${profile.id} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM voice_outbound_campaign_members WHERE id = ${memberId} FOR UPDATE`;
       const fresh = await tx.voiceOutboundCampaign.findFirst({
@@ -541,6 +549,10 @@ export class VoiceOutboundDialerService {
           OR: [
             { status: 'connected' },
             { status: 'offered', expiresAt: { gt: new Date() } },
+            {
+              status: 'offered',
+              providerDispatchState: { in: ['requested', 'uncertain'] },
+            },
           ],
         },
       });

@@ -28,6 +28,8 @@ type PolicyFields = {
   recordingAllowed: boolean;
   recordingNoticeText?: string | null;
   recordingRetentionDays?: number | null;
+  meetingAiProcessingAllowed?: boolean;
+  meetingAiProcessingNoticeText?: string | null;
   allowedWindowStart?: string | null;
   allowedWindowEnd?: string | null;
   timeZone?: string | null;
@@ -131,6 +133,8 @@ export class VoiceComplianceService {
         recordingAllowed: version.recordingAllowed,
         recordingNoticeText: version.recordingNoticeText,
         recordingRetentionDays: version.recordingRetentionDays,
+        meetingAiProcessingAllowed: version.meetingAiProcessingAllowed,
+        meetingAiProcessingNoticeText: version.meetingAiProcessingNoticeText,
         allowedWindowStart: version.allowedWindowStart,
         allowedWindowEnd: version.allowedWindowEnd,
         timeZone: version.timeZone,
@@ -705,6 +709,14 @@ export class VoiceComplianceService {
         'Recording retention must be between 1 and 3650 days.',
       );
     }
+    if (
+      dto.meetingAiProcessingAllowed &&
+      !dto.meetingAiProcessingNoticeText?.trim()
+    ) {
+      throw this.invalidInput(
+        'A separate AI transcription and summary notice is required when meeting AI processing is enabled.',
+      );
+    }
     const hasStart = !!dto.allowedWindowStart;
     const hasEnd = !!dto.allowedWindowEnd;
     if (hasStart !== hasEnd) {
@@ -741,6 +753,12 @@ export class VoiceComplianceService {
       recordingRetentionDays: dto.recordingAllowed
         ? (dto.recordingRetentionDays ?? null)
         : null,
+      meetingAiProcessingAllowed:
+        dto.recordingAllowed && dto.meetingAiProcessingAllowed === true,
+      meetingAiProcessingNoticeText:
+        dto.recordingAllowed && dto.meetingAiProcessingAllowed === true
+          ? (dto.meetingAiProcessingNoticeText?.trim() ?? null)
+          : null,
       allowedWindowStart: dto.allowedWindowStart || null,
       allowedWindowEnd: dto.allowedWindowEnd || null,
       timeZone: dto.allowedWindowStart ? (dto.timeZone?.trim() ?? null) : null,

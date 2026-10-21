@@ -2,7 +2,11 @@ import { createHash, randomBytes } from 'node:crypto';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { VoiceVideoMeetingStatus } from '@prisma/client';
-import { AccessToken, TrackSource } from 'livekit-server-sdk';
+import { VoiceVideoRoomService } from './voice-video-room.service';
+import {
+  findValidMeetingInvite,
+  liveKitVideoConfig,
+} from './voice-meeting-access.util';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,10 +23,6 @@ import { VOICE_ERROR_CODES } from './voice.constants';
 const hashInvite = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 
-const MEETING_JOIN_WINDOW_BEFORE_MS = 15 * 60_000;
-const MEETING_JOIN_WINDOW_AFTER_MS = 60 * 60_000;
-const MEETING_TOKEN_TTL_SECONDS = 15 * 60;
-
 /** `sent` only after the email provider accepted the message; otherwise the organizer shares the link. */
 export type VoiceMeetingInviteEmailDelivery =
   'sent' | 'failed' | 'not_configured';
@@ -37,6 +37,7 @@ export class VoiceMeetingsService {
     private readonly audit: AuditService,
     private readonly email: EmailService,
     private readonly config: ConfigService,
+    private readonly videoRooms: VoiceVideoRoomService,
   ) {}
 
   async listHosts(businessId: string) {
@@ -52,6 +53,17 @@ export class VoiceMeetingsService {
     }));
   }
 
+  configuration() {
+    return {
+      mediaConfigured: Boolean(this.liveKitConfig()),
+      screenSharing: 'host_only' as const,
+      recording: this.videoRooms.recordingConfigured()
+        ? ('configured' as const)
+        : ('not_configured' as const),
+      chat: 'not_available' as const,
+    };
+  }
+
   async list(businessId: string) {
     const meetings = await this.tenantPrisma.client.voiceVideoMeeting.findMany({
       where: { businessId },
@@ -60,6 +72,11 @@ export class VoiceMeetingsService {
         customer: { select: { id: true, name: true } },
         appointment: { select: { id: true, bookingNo: true, status: true } },
         _count: { select: { invites: { where: { revokedAt: null } } } },
+        recordings: {
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: 1,
+          select: { status: true, retentionExpiresAt: true, finalizedAt: true, sizeBytes: true },
+        },
         invites: {
           where: { revokedAt: null },
           select: {
@@ -82,6 +99,7 @@ export class VoiceMeetingsService {
       durationMin: meeting.durationMin,
       timeZone: meeting.timeZone,
       status: meeting.status,
+      roomState: meeting.roomState,
       host: {
         id: meeting.host.id,
         name: meeting.host.user.name,
@@ -99,7 +117,10 @@ export class VoiceMeetingsService {
       media: this.liveKitConfig()
         ? ('configured' as const)
         : ('not_configured' as const),
-      recording: 'not_available' as const,
+      recording: meeting.recordings[0]?.status ?? 'not_started',
+      recordingExpiresAt: meeting.recordings[0]?.retentionExpiresAt.toISOString() ?? null,
+      recordingFinalizedAt: meeting.recordings[0]?.finalizedAt?.toISOString() ?? null,
+      recordingSizeBytes: meeting.recordings[0]?.sizeBytes?.toString() ?? null,
     }));
   }
 
@@ -120,6 +141,23 @@ export class VoiceMeetingsService {
         'Select an active host in this business.',
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    const recordingPolicyVersionId = dto.recordingPolicyVersionId || null;
+    if (recordingPolicyVersionId) {
+      const policy = await this.tenantPrisma.client.voiceCompliancePolicyVersion.findFirst({
+        where: {
+          id: recordingPolicyVersionId,
+          businessId,
+          status: 'published',
+          recordingAllowed: true,
+          recordingNoticeText: { not: null },
+          recordingRetentionDays: { not: null },
+          pack: { businessId, disabledAt: null },
+        },
+        select: { id: true },
+      });
+      if (!policy) throw this.invalid('Choose an active published recording policy that permits recording and defines retention.');
     }
 
     let customerId = dto.customerId || null;
@@ -153,6 +191,7 @@ export class VoiceMeetingsService {
         hostBusinessUserId: host.id,
         customerId,
         appointmentId: dto.appointmentId || null,
+        recordingPolicyVersionId,
         createdByUserId: actorUserId,
       },
     });
@@ -179,7 +218,11 @@ export class VoiceMeetingsService {
     dto: RescheduleVoiceMeetingDto,
   ) {
     const meeting = await this.findMeeting(businessId, meetingId);
-    if (meeting.status !== VoiceVideoMeetingStatus.scheduled) {
+    if (
+      meeting.status !== VoiceVideoMeetingStatus.scheduled ||
+      meeting.roomState !== 'not_started' ||
+      meeting.endRequestedAt
+    ) {
       throw this.invalid('Only a scheduled meeting can be rescheduled.');
     }
     const scheduledAt = this.validateSchedule(dto.scheduledAt, dto.durationMin);
@@ -221,6 +264,8 @@ export class VoiceMeetingsService {
         status: VoiceVideoMeetingStatus.cancelled,
         cancelledAt: now,
         cancellationReason: dto.reason.trim(),
+        roomState: 'ending',
+        endRequestedAt: now,
       },
     });
     await this.tenantPrisma.client.voiceMeetingInvite.updateMany({
@@ -233,6 +278,8 @@ export class VoiceMeetingsService {
       action: 'voice.meeting.cancelled',
       after: { reason: dto.reason.trim(), actorUserId },
     });
+    // Idempotent provider lookup/delete; lack of provider confirmation stays visible as ending.
+    await this.videoRooms.reconcileClosures(businessId, meeting.id);
     return updated;
   }
 
@@ -379,6 +426,11 @@ export class VoiceMeetingsService {
       where: { id: invite.id },
       data: { revokedAt },
     });
+    await this.videoRooms.revokeInviteParticipant(
+      businessId,
+      actorUserId,
+      invite.id,
+    );
     await this.audit.log({
       entity: 'VoiceMeetingInvite',
       entityId: invite.id,
@@ -400,7 +452,7 @@ export class VoiceMeetingsService {
       expiresAt: invite.expiresAt.toISOString(),
       mediaAvailable,
       message: mediaAvailable
-        ? 'Live video is available for this meeting. Join with this personal invitation; recording and screen sharing are disabled.'
+        ? 'Live video is available. Request admission using this personal invitation. Only the host can screen share. If recording is enabled, read and accept its published notice before joining.'
         : 'This invite is valid for meeting details, but live video is not configured on this server yet.',
     };
   }
@@ -410,61 +462,11 @@ export class VoiceMeetingsService {
     actorUserId: string,
     meetingId: string,
   ) {
-    const meeting = await this.findMeeting(businessId, meetingId);
-    const host = await this.tenantPrisma.client.businessUser.findFirst({
-      where: {
-        id: meeting.hostBusinessUserId,
-        businessId,
-        userId: actorUserId,
-        active: true,
-      },
-      include: { user: { select: { name: true } } },
-    });
-    if (!host) {
-      throw new AppException(
-        VOICE_ERROR_CODES.MEETING_HOST_NOT_FOUND,
-        'Only the assigned active meeting host can join as host.',
-        HttpStatus.FORBIDDEN,
-      );
-    }
-    this.assertJoinWindow(meeting);
-    const issued = await this.mintJoinToken(
-      meeting.id,
-      `host:${host.id}`,
-      host.user.name,
-      meeting.scheduledAt,
-      meeting.durationMin,
-    );
-    await this.audit.log({
-      entity: 'VoiceVideoMeeting',
-      entityId: meeting.id,
-      action: 'voice.meeting.host_join_token_issued',
-      after: { hostBusinessUserId: host.id, expiresAt: issued.expiresAt },
-    });
-    return issued;
+    return this.videoRooms.hostJoinToken(businessId, actorUserId, meetingId);
   }
 
   async guestJoinToken(token: string) {
-    const invite = await this.findValidInvite(token);
-    this.assertJoinWindow(invite.meeting);
-    const issued = await this.mintJoinToken(
-      invite.meeting.id,
-      `guest:${invite.id}`,
-      invite.guestName?.trim() || 'Guest',
-      invite.meeting.scheduledAt,
-      invite.meeting.durationMin,
-    );
-    await this.prisma.auditLog.create({
-      data: {
-        businessId: invite.businessId,
-        actorUserId: null,
-        entity: 'VoiceMeetingInvite',
-        entityId: invite.id,
-        action: 'voice.meeting.guest_join_token_issued',
-        after: { expiresAt: issued.expiresAt },
-      },
-    });
-    return issued;
+    return this.videoRooms.guestJoinToken(token);
   }
 
   private async findMeeting(businessId: string, meetingId: string) {
@@ -482,117 +484,11 @@ export class VoiceMeetingsService {
   }
 
   private async findValidInvite(token: string) {
-    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw this.inviteNotFound();
-    const invite = await this.prisma.voiceMeetingInvite.findFirst({
-      where: {
-        tokenHash: hashInvite(token),
-        revokedAt: null,
-        expiresAt: { gt: new Date() },
-        meeting: { status: VoiceVideoMeetingStatus.scheduled },
-      },
-      include: {
-        meeting: { include: { business: { select: { name: true } } } },
-      },
-    });
-    if (!invite) throw this.inviteNotFound();
-    return invite;
+    return findValidMeetingInvite(this.prisma, token);
   }
 
   private liveKitConfig() {
-    const configuredUrl = this.config.get<string>('LIVEKIT_URL')?.trim();
-    const apiKey = this.config.get<string>('LIVEKIT_API_KEY')?.trim();
-    const apiSecret = this.config.get<string>('LIVEKIT_API_SECRET')?.trim();
-    if (!configuredUrl || !apiKey || !apiSecret) return null;
-    try {
-      const parsed = new URL(configuredUrl);
-      if (!['ws:', 'wss:', 'http:', 'https:'].includes(parsed.protocol)) {
-        return null;
-      }
-      if (parsed.protocol === 'http:') parsed.protocol = 'ws:';
-      if (parsed.protocol === 'https:') parsed.protocol = 'wss:';
-      return {
-        url: parsed.toString().replace(/\/+$/, ''),
-        apiKey,
-        apiSecret,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  private async mintJoinToken(
-    meetingId: string,
-    identity: string,
-    name: string,
-    scheduledAt: Date,
-    durationMin: number,
-  ) {
-    const liveKit = this.liveKitConfig();
-    if (!liveKit) {
-      throw new AppException(
-        VOICE_ERROR_CODES.PROVIDER_NOT_CONFIGURED,
-        'Live video not configured. Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET on the server.',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-    const now = new Date();
-    const meetingExpiry =
-      scheduledAt.getTime() +
-      durationMin * 60_000 +
-      MEETING_JOIN_WINDOW_AFTER_MS;
-    const ttlSeconds = Math.min(
-      MEETING_TOKEN_TTL_SECONDS,
-      Math.floor((meetingExpiry - now.getTime()) / 1000),
-    );
-    if (ttlSeconds < 60) {
-      throw this.invalid(
-        'This meeting is too close to its end to issue a join token.',
-      );
-    }
-    const roomName = `voice-meeting-${meetingId}`;
-    const accessToken = new AccessToken(liveKit.apiKey, liveKit.apiSecret, {
-      identity,
-      name: name.slice(0, 120),
-      ttl: ttlSeconds,
-    });
-    accessToken.addGrant({
-      room: roomName,
-      roomJoin: true,
-      canSubscribe: true,
-      canPublish: true,
-      canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE],
-      canPublishData: false,
-      roomRecord: false,
-    });
-    return {
-      url: liveKit.url,
-      token: await accessToken.toJwt(),
-      roomName,
-      expiresAt: new Date(now.getTime() + ttlSeconds * 1000).toISOString(),
-      screenShare: false as const,
-      recording: 'not_available' as const,
-    };
-  }
-
-  private assertJoinWindow(meeting: {
-    status: VoiceVideoMeetingStatus;
-    scheduledAt: Date;
-    durationMin: number;
-  }) {
-    const now = Date.now();
-    const earliest =
-      meeting.scheduledAt.getTime() - MEETING_JOIN_WINDOW_BEFORE_MS;
-    const latest =
-      meeting.scheduledAt.getTime() +
-      meeting.durationMin * 60_000 +
-      MEETING_JOIN_WINDOW_AFTER_MS;
-    if (
-      meeting.status !== VoiceVideoMeetingStatus.scheduled ||
-      now < earliest ||
-      now >= latest
-    ) {
-      throw this.invalid('This meeting is outside its video join window.');
-    }
+    return liveKitVideoConfig(this.config);
   }
 
   private validateSchedule(value: string, durationMin: number) {

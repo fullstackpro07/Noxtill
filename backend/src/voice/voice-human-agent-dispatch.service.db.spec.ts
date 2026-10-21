@@ -152,6 +152,25 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
     expect(await service.reserve(businessId, secondCall.id)).not.toBeNull();
   });
 
+  it('keeps capacity reserved when an expired originate has an uncertain provider result', async () => {
+    const firstCall = await createLiveCall();
+    const nextCall = await createLiveCall();
+    const offer = await service.reserve(businessId, firstCall.id);
+    expect(offer).not.toBeNull();
+    await prisma.voiceHumanAgentAssignment.update({
+      where: { id: offer!.assignmentId },
+      data: {
+        providerDispatchState: 'uncertain',
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+    expect((await service.releaseExpiredOffers(businessId)).count).toBe(0);
+    expect(await service.reserve(businessId, firstCall.id)).toBeNull();
+    expect(await service.reserve(businessId, nextCall.id)).toBeNull();
+    await service.observeDialStatus(firstCall.id, 'failed', 1, 4);
+    expect(await service.reserve(businessId, nextCall.id)).not.toBeNull();
+  });
+
   it('serializes simultaneous reservations so one profile is not over capacity', async () => {
     const calls = await Promise.all([createLiveCall(), createLiveCall()]);
     const results = await Promise.all(
@@ -168,6 +187,44 @@ describe('VoiceHumanAgentDispatchService (real MySQL)', () => {
         },
       }),
     ).toBe(1);
+  });
+
+  it('prefers the pinned AI agent owner when that owner has an eligible voice profile', async () => {
+    const preferredUser = await prisma.user.create({
+      data: {
+        email: `voice-dispatch-owner-${stamp}@example.com`,
+        passwordHash: 'test-only',
+        name: 'Assigned AI Agent Owner',
+        phone: '+15550002223',
+      },
+    });
+    additionalUserIds.push(preferredUser.id);
+    const preferredMembership = await prisma.businessUser.create({
+      data: { businessId, userId: preferredUser.id, role: Role.staff },
+    });
+    const preferredProfile = await prisma.voiceHumanAgentProfile.create({
+      data: {
+        businessId,
+        staffUserId: preferredMembership.id,
+        active: true,
+        presenceStatus: VoiceAgentPresenceStatus.available,
+        lastHeartbeatAt: new Date(),
+      },
+    });
+    const call = await createLiveCall();
+
+    const reserved = await service.reserve(
+      businessId,
+      call.id,
+      undefined,
+      preferredMembership.id,
+    );
+
+    expect(reserved).toMatchObject({
+      profileId: preferredProfile.id,
+      staffUserId: preferredMembership.id,
+      name: 'Assigned AI Agent Owner',
+    });
   });
 
   it.each([

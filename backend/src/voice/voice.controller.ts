@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -13,6 +14,7 @@ import {
   Req,
   Res,
   ServiceUnavailableException,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
@@ -49,6 +51,7 @@ import {
 import { Public } from '../common/decorators/public.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { VoiceInsightsService } from './voice-insights.service';
 import { VoiceAgentsService } from './voice-agents.service';
@@ -60,8 +63,10 @@ import {
 } from './dto/voice-agent.dto';
 import {
   RollbackVoiceAiAgentDto,
+  PreviewVoiceAiAgentVoiceDto,
   SaveVoiceAiAgentDraftDto,
   TestVoiceAiAgentDto,
+  TestVoiceAiAgentScenariosDto,
 } from './dto/voice-ai-agent.dto';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { SubmitVoiceCallWrapUpDto } from './dto/voice-call-wrap-up.dto';
@@ -77,6 +82,7 @@ import {
 } from './dto/voice-quality.dto';
 import { VoiceComplianceService } from './voice-compliance.service';
 import { VoiceMeetingsService } from './voice-meetings.service';
+import { VoiceVideoRoomService } from './voice-video-room.service';
 import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service';
 import { VoiceIvrService } from './voice-ivr.service';
 import { VoiceSupervisorService } from './voice-supervisor.service';
@@ -98,6 +104,7 @@ import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
 import { VoiceAnalyticsTrendsService } from './voice-analytics-trends.service';
 import { VoicePhoneSystemService } from './voice-phone-system.service';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
+import { VoiceProviderWebhookEventsService } from './voice-provider-webhook-events.service';
 import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
 import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
 import {
@@ -125,12 +132,23 @@ import {
 } from './dto/voice-outbound.dto';
 import { VoiceOutboundDialerService } from './voice-outbound-dialer.service';
 import { VoiceAiOutboundService } from './voice-ai-outbound.service';
+import { VoiceRealtimeService } from './voice-realtime.service';
+import { VoiceUsageMeteringService } from './voice-usage-metering.service';
+import { CustomerCommunicationsService } from '../messaging/customer-communications.service';
+import { VoiceOperationsService } from './voice-operations.service';
+import { VoiceMediaMeteringService } from './voice-media-metering.service';
+import { VoiceControlMetricsInterceptor } from './voice-control-metrics.interceptor';
 import {
   CreateVoiceMeetingDto,
   CreateVoiceMeetingInviteDto,
   RescheduleVoiceMeetingDto,
   VoiceMeetingReasonDto,
+  VoiceMeetingAdmissionDto,
+  VoiceMeetingModerationDto,
+  VoiceMeetingRecordingConsentDto,
 } from './dto/voice-meeting.dto';
+import { VoiceVideoRecordingService } from './voice-video-recording.service';
+import { VoiceMeetingArtifactsService } from './voice-meeting-artifacts.service';
 import {
   CheckVoiceEligibilityDto,
   CreateVoiceCompliancePolicyDto,
@@ -144,8 +162,14 @@ import {
 } from './dto/voice-compliance.dto';
 
 @Controller()
+@UseInterceptors(VoiceControlMetricsInterceptor)
 export class VoiceController {
   constructor(
+    private readonly realtimeVoice: VoiceRealtimeService,
+    private readonly voiceMetering: VoiceUsageMeteringService,
+    private readonly voiceCommunications: CustomerCommunicationsService,
+    private readonly voiceOperations: VoiceOperationsService,
+    private readonly mediaMetering: VoiceMediaMeteringService,
     private readonly telephony: TelephonyService,
     private readonly voiceCall: VoiceCallService,
     private readonly voiceQuery: VoiceQueryService,
@@ -165,6 +189,7 @@ export class VoiceController {
     private readonly voiceQuality: VoiceQualityService,
     private readonly voiceCompliance: VoiceComplianceService,
     private readonly voiceMeetings: VoiceMeetingsService,
+    private readonly voiceVideoRooms: VoiceVideoRoomService,
     private readonly voiceOutboundCampaigns: VoiceOutboundCampaignService,
     private readonly voiceDialer: VoiceOutboundDialerService,
     private readonly voiceAiOutbound: VoiceAiOutboundService,
@@ -182,6 +207,9 @@ export class VoiceController {
     private readonly voiceProviderHealth: VoiceProviderHealthService,
     private readonly voiceOutboundSummary: VoiceOutboundSummaryService,
     private readonly voiceRedaction: VoiceTranscriptRedactionService,
+    private readonly voiceVideoRecordings: VoiceVideoRecordingService,
+    private readonly voiceMeetingArtifactService: VoiceMeetingArtifactsService,
+    private readonly voiceWebhookEvents: VoiceProviderWebhookEventsService,
   ) {}
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -330,6 +358,18 @@ export class VoiceController {
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/configuration')
+  voiceMeetingConfiguration() {
+    return this.voiceMeetings.configuration();
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/recording-policies')
+  voiceMeetingRecordingPolicies(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceVideoRecordings.recordingPolicies(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Get('voice/meetings/hosts')
   voiceMeetingHosts(@CurrentUser() user: AuthenticatedUser) {
     return this.voiceMeetings.listHosts(user.businessId);
@@ -410,6 +450,159 @@ export class VoiceController {
   @Post('voice/meeting-invites/:token/join-token')
   voiceMeetingGuestJoinToken(@Param('token') token: string) {
     return this.voiceMeetings.guestJoinToken(token);
+  }
+
+  @Public()
+  @Get('voice/meeting-invites/:token/lobby')
+  voiceMeetingGuestLobby(@Param('token') token: string) {
+    return this.voiceVideoRooms.guestLobby(token);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/:id/lobby')
+  voiceMeetingHostLobby(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceVideoRooms.hostLobby(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/participants/:participantId/admission')
+  voiceMeetingAdmit(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+    @Body() dto: VoiceMeetingAdmissionDto,
+  ) {
+    return this.voiceVideoRooms.decide(
+      user.businessId,
+      user.sub,
+      id,
+      participantId,
+      dto.admission,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/participants/:participantId/moderate')
+  voiceMeetingModerate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+    @Body() dto: VoiceMeetingModerationDto,
+  ) {
+    return this.voiceVideoRooms.moderate(
+      user.businessId,
+      user.sub,
+      id,
+      participantId,
+      dto.action,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/end')
+  voiceMeetingEnd(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceMeetingReasonDto,
+  ) {
+    return this.voiceVideoRooms.end(user.businessId, user.sub, id, dto.reason);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/consent')
+  prepareVoiceMeetingRecording(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceMeetingRecordingConsentDto,
+  ) {
+    return this.voiceVideoRecordings.startConsent(
+      user.businessId,
+      user.sub,
+      id,
+      dto.accepted,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/start')
+  startVoiceMeetingRecording(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceVideoRecordings.start(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/stop')
+  stopVoiceMeetingRecording(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceMeetingReasonDto,
+  ) {
+    return this.voiceVideoRecordings.stop(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/:id/recordings')
+  voiceMeetingArtifacts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceVideoRecordings.artifacts(user.businessId, id, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/:recordingId/ai-artifacts')
+  requestVoiceMeetingAiArtifacts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('recordingId') recordingId: string,
+  ) {
+    return this.voiceMeetingArtifactService.request(
+      user.businessId,
+      user.sub,
+      id,
+      recordingId,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/:recordingId/follow-up-draft')
+  createVoiceMeetingFollowUpDraft(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('recordingId') recordingId: string,
+  ) {
+    return this.voiceMeetingArtifactService.createFollowUpDraft(
+      user.businessId,
+      user.sub,
+      id,
+      recordingId,
+    );
+  }
+
+  @Public()
+  @Post('voice/meeting-invites/:token/recordings/:recordingId/consent')
+  guestVoiceMeetingRecordingConsent(
+    @Param('token') token: string,
+    @Param('recordingId') recordingId: string,
+    @Body() dto: VoiceMeetingRecordingConsentDto,
+  ) {
+    return this.voiceVideoRecordings.guestConsent(
+      token,
+      recordingId,
+      dto.accepted,
+    );
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -988,6 +1181,37 @@ export class VoiceController {
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/voice-preview')
+  previewVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PreviewVoiceAiAgentVoiceDto,
+  ) {
+    return this.voiceAiAgents.previewVoice(
+      user.businessId,
+      user.sub,
+      id,
+      dto.voice,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/test-suite')
+  testVoiceAiAgentScenarios(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: TestVoiceAiAgentScenariosDto,
+  ) {
+    return this.voiceAiAgents.testScenarioSuite(
+      user.businessId,
+      user.sub,
+      id,
+      dto.scenarios,
+      dto.checks,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
   @Post('voice/agents/ai/:id/approve')
   approveVoiceAiAgent(
     @CurrentUser() user: AuthenticatedUser,
@@ -1229,6 +1453,42 @@ export class VoiceController {
   @Get('voice/settings/usage')
   voiceUsage(@CurrentUser() user: AuthenticatedUser) {
     return this.voiceProviderHealth.usage(user.businessId);
+  }
+
+  @Get('voice/settings/metering')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  voiceMeteredUsage(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceMetering.summary(user.businessId);
+  }
+
+  @Get('voice/operations')
+  @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)
+  voiceOperationSnapshot(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceOperations.snapshot(user.businessId);
+  }
+
+  @Get('voice/provider-webhooks/failures')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  voiceProviderWebhookFailures(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceWebhookEvents.listFailures(user.businessId);
+  }
+
+  @Post('voice/provider-webhooks/:id/replay')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  replayVoiceProviderWebhook(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceWebhookEvents.replay(user.businessId, user.sub, id);
+  }
+
+  @Get('voice/calls/:id/follow-ups')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  voiceCallFollowUps(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceCommunications.forCall(user.businessId, id);
   }
 
   /** Receptionist Settings depth fix — a real Polly-synthesized preview clip, not fabricated/approximated. Registered before nothing dynamic collides (static path segment). */
@@ -1511,6 +1771,26 @@ export class VoiceController {
   }
 
   @Public()
+  @Post('voice/webhook/booking-confirm')
+  @HttpCode(200)
+  async bookingConfirm(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string; Digits?: string };
+    const requestId =
+      typeof req.query.requestId === 'string' ? req.query.requestId : '';
+    const xml = await this.voiceCall.confirmRecordedBooking(
+      body.CallSid ?? '',
+      requestId,
+      body.Digits,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
   @Post('voice/webhook/recording')
   @HttpCode(200)
   async recording(
@@ -1592,7 +1872,9 @@ export class VoiceController {
       body.CallSid,
       body.Digits ?? '',
     );
-    res.type('text/xml').send(xml);
+    res
+      .type('text/xml')
+      .send(await this.realtimeVoice.maybeConnect(xml, body.CallSid));
   }
 
   /** Caller keypad input resumes the exact published IVR snapshot pinned to this call. */
@@ -1613,7 +1895,9 @@ export class VoiceController {
       body.Digits ?? '',
       nodeId,
     );
-    res.type('text/xml').send(xml);
+    res
+      .type('text/xml')
+      .send(await this.realtimeVoice.maybeConnect(xml, body.CallSid));
   }
 
   /** Twilio's <Dial action> callback reports whether a human actually answered. */
@@ -1693,12 +1977,21 @@ export class VoiceController {
         ? req.query.attemptNumber
         : '';
     const attemptNumber = /^\d+$/.test(rawAttempt) ? Number(rawAttempt) : 0;
-    const body = req.body as { CallStatus?: string; CallSid?: string };
-    await this.voiceCall.recordTransferProviderStatus(
+    const body = req.body as {
+      CallStatus?: string;
+      CallSid?: string;
+      SequenceNumber?: string;
+    };
+    const sequenceNumber =
+      body.SequenceNumber && /^\d+$/.test(body.SequenceNumber)
+        ? Number(body.SequenceNumber)
+        : undefined;
+    await this.voiceWebhookEvents.receiveTransferStatus(
       callId,
       attemptNumber,
       body.CallStatus ?? '',
       body.CallSid,
+      sequenceNumber,
     );
     res.status(200).send('received');
   }
@@ -1714,17 +2007,24 @@ export class VoiceController {
     @Headers('x-twilio-signature') signature?: string,
   ) {
     this.verifySignature(req, signature);
-    const body = req.body as { CallStatus?: string; CallSid?: string };
+    const body = req.body as {
+      CallStatus?: string;
+      CallSid?: string;
+      SequenceNumber?: string;
+    };
     const attemptNumber =
       rawAttemptNumber && /^\d+$/.test(rawAttemptNumber)
         ? Number(rawAttemptNumber)
         : undefined;
-    return this.voiceCall
-      .handleDialStatus(
+    return this.voiceWebhookEvents
+      .receiveAgentStatus(
         parentCallSid,
         body.CallStatus ?? '',
         attemptNumber,
         body.CallSid,
+        body.SequenceNumber && /^\d+$/.test(body.SequenceNumber)
+          ? Number(body.SequenceNumber)
+          : undefined,
       )
       .then(() => ({ received: true }));
   }
@@ -1748,6 +2048,37 @@ export class VoiceController {
   }
 
   /** Live Calls listen/take-over depth fix — both the redirected caller leg and the outbound staff leg land here. */
+  @Public()
+  @Post('voice/webhook/livekit')
+  @HttpCode(200)
+  async livekitUsage(
+    @Req() req: Request & { rawBody?: Buffer },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const body = req.rawBody ?? (Buffer.isBuffer(req.body) ? req.body : null);
+    if (!body)
+      throw new AppException(
+        'VOICE_VIDEO_WEBHOOK_INVALID',
+        'An unmodified webhook body is required.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return this.mediaMetering.livekit(body, authorization);
+  }
+
+  @Public()
+  @Post('voice/webhook/conference-usage')
+  @HttpCode(200)
+  async conferenceUsage(
+    @Req() req: Request,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    await this.voiceWebhookEvents.receiveConferenceUsage(
+      req.body as Record<string, string>,
+    );
+    return { accepted: true };
+  }
+
   @Public()
   @Post('voice/webhook/conference')
   @HttpCode(200)
@@ -1776,8 +2107,20 @@ export class VoiceController {
     @Headers('x-twilio-signature') signature?: string,
   ) {
     this.verifySignature(req, signature);
-    const body = req.body as { CallSid: string; CallStatus: string };
-    await this.voiceCall.handleStatus(body.CallSid, body.CallStatus);
+    const body = req.body as {
+      CallSid: string;
+      CallStatus: string;
+      SequenceNumber?: string;
+    };
+    const sequenceNumber =
+      body.SequenceNumber && /^\d+$/.test(body.SequenceNumber)
+        ? Number(body.SequenceNumber)
+        : undefined;
+    await this.voiceWebhookEvents.receiveCallStatus(
+      body.CallSid,
+      body.CallStatus,
+      sequenceNumber,
+    );
     return { received: true };
   }
 
@@ -1880,7 +2223,50 @@ export class VoiceController {
       attemptId,
       body.CallSid ?? '',
     );
+    res
+      .type('text/xml')
+      .send(await this.realtimeVoice.maybeConnect(xml, body.CallSid ?? ''));
+  }
+
+  @Public()
+  @Post('voice/webhook/realtime-ended')
+  @HttpCode(200)
+  async realtimeEnded(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string; CallStatus?: string };
+    const xml =
+      body.CallStatus === 'completed'
+        ? '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+        : await this.voiceCall.realtimeTransition(
+            body.CallSid ?? '',
+            'fallback',
+          );
     res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/realtime-recording')
+  @HttpCode(200)
+  async realtimeRecording(
+    @Req() req: Request,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      CallSid?: string;
+      RecordingSid?: string;
+      RecordingStatus?: string;
+    };
+    if (body.RecordingStatus === 'completed')
+      await this.voiceWebhookEvents.receiveRealtimeRecording(
+        body.CallSid ?? '',
+        body.RecordingSid ?? '',
+      );
+    return { received: true };
   }
 
   /** AI outbound speech is gathered by Twilio; the application does not record this call. */

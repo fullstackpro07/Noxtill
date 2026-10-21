@@ -71,7 +71,7 @@ describe('AiInfraService (BE-075)', () => {
     const logs = await prisma.aiCallLog.findMany({ where: { businessId } });
     expect(logs).toHaveLength(1);
     expect(logs[0].inputTokens).toBe(1000);
-    expect(Number(logs[0].estimatedCostUsd)).toBeGreaterThan(0);
+    expect(Number(logs[0].estimatedCostUsd)).toBeCloseTo(0.0035, 4);
   });
 
   it('blocks further calls once the per-minute rate limit is reached', async () => {
@@ -122,7 +122,24 @@ describe('AiInfraService (BE-075)', () => {
         aiMonthlyCostCapUsd: 10,
       },
     });
-    const voiceAgentVersionId = `voice-agent-version-${randomUUID()}`;
+    const agent = await prisma.voiceAiAgent.create({
+      data: {
+        businessId: budgetBusiness.id,
+        name: 'QA budget agent',
+        template: 'receptionist',
+      },
+    });
+    const voiceAgentVersionId = randomUUID();
+    await prisma.voiceAiAgentVersion.create({
+      data: {
+        id: voiceAgentVersionId,
+        businessId: budgetBusiness.id,
+        agentId: agent.id,
+        version: 1,
+        checksum: 'qa',
+        config: { monthlyBudgetUsd: 0.01 },
+      },
+    });
     claude.createMessage.mockResolvedValue(fakeResult());
 
     const text = await service.complete(
@@ -165,9 +182,16 @@ describe('AiInfraService (BE-075)', () => {
     });
     expect(claude.createMessage).not.toHaveBeenCalled();
 
+    await prisma.voiceUsageRecord.deleteMany({
+      where: { businessId: budgetBusiness.id },
+    });
     await prisma.aiCallLog.deleteMany({
       where: { businessId: budgetBusiness.id },
     });
+    await prisma.voiceAiAgentVersion.delete({
+      where: { id: voiceAgentVersionId },
+    });
+    await prisma.voiceAiAgent.delete({ where: { id: agent.id } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: budgetBusiness.id } });
@@ -302,7 +326,36 @@ describe('AiInfraService (BE-075)', () => {
       });
     });
 
-    it('allows a call whose kind is not one of the 7 toggleable features, regardless of toggles', async () => {
+    it('blocks meeting transcription summaries when the owner disables the meeting AI feature', async () => {
+      const toggledOffBusiness = await prisma.business.create({
+        data: {
+          name: 'Meeting AI Toggle Off Test Biz',
+          slug: `meeting-ai-toggle-off-${Date.now()}`,
+          aiFeatureToggles: { voiceMeetingSummary: false },
+        },
+      });
+      claude.createMessage.mockResolvedValue(fakeResult());
+
+      await expect(
+        service.complete(
+          toggledOffBusiness.id,
+          'Summarize a consented meeting transcript.',
+          0,
+          'voice_meeting_summary',
+        ),
+      ).rejects.toMatchObject({
+        response: { code: 'AI_FEATURE_DISABLED' },
+      });
+      expect(claude.createMessage).not.toHaveBeenCalled();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        await tx.business.delete({ where: { id: toggledOffBusiness.id } });
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
+    });
+
+    it('allows a call whose kind has no toggle mapping, regardless of other feature toggles', async () => {
       const business = await prisma.business.create({
         data: {
           name: 'AI Untracked Kind Test Biz',

@@ -11,6 +11,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../messaging/channels/email.service';
 import { VoiceMeetingsService } from './voice-meetings.service';
+import { VoiceVideoRoomService } from './voice-video-room.service';
+import { ParticipantInfo, RoomServiceClient } from 'livekit-server-sdk';
 
 class FakeClsService {
   private readonly store: Record<string, unknown> = {};
@@ -35,6 +37,7 @@ describe('VoiceMeetingsService (real MySQL)', () => {
   let otherUserId: string;
   let tenantPrisma: TenantPrismaService;
   let audit: AuditService;
+  let videoRooms: VoiceVideoRoomService;
   const sentEmails: { to: string; text: string; templateKey: string }[] = [];
   const emailConfig: Record<string, string | undefined> = {
     EMAIL_PROVIDER_KEY: 'test-key',
@@ -62,12 +65,14 @@ describe('VoiceMeetingsService (real MySQL)', () => {
       cls as unknown as ClsService,
     );
     audit = new AuditService(tenantPrisma, cls as unknown as ClsService);
+    videoRooms = new VoiceVideoRoomService(prisma, fakeConfig);
     service = new VoiceMeetingsService(
       tenantPrisma,
       prisma,
       audit,
       fakeEmail,
       fakeConfig,
+      videoRooms,
     );
 
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -206,7 +211,7 @@ describe('VoiceMeetingsService (real MySQL)', () => {
       customer: { id: customerId },
       inviteCount: 1,
       media: 'not_configured',
-      recording: 'not_available',
+      recording: 'not_started',
     });
   });
 
@@ -238,11 +243,41 @@ describe('VoiceMeetingsService (real MySQL)', () => {
         userId,
         meeting.id,
       );
-      const guestToken = await service.guestJoinToken(invite.token);
+      const waiting = await service.guestJoinToken(invite.token);
+      expect(waiting).toMatchObject({ status: 'waiting' });
+      expect('token' in waiting).toBe(false);
+      const requested = await prisma.voiceMeetingParticipant.findUniqueOrThrow({
+        where: { inviteId: invite.id },
+      });
+      const presence = jest
+        .spyOn(RoomServiceClient.prototype, 'listParticipants')
+        .mockResolvedValue([
+          new ParticipantInfo({ identity: `host:${hostId}` }),
+        ]);
+      let guestToken: Awaited<
+        ReturnType<VoiceMeetingsService['hostJoinToken']>
+      >;
+      try {
+        await videoRooms.decide(
+          businessId,
+          userId,
+          meeting.id,
+          requested.id,
+          'admitted',
+          'Host approved the QA invitation',
+        );
+        const access = await service.guestJoinToken(invite.token);
+        if (!('token' in access))
+          throw new Error('Expected admitted guest access');
+        guestToken = access;
+      } finally {
+        presence.mockRestore();
+      }
       expect(hostToken.url).toBe('wss://livekit.example.test');
       expect(hostToken.roomName).toBe(`voice-meeting-${meeting.id}`);
       expect(guestToken.roomName).toBe(hostToken.roomName);
-      expect(hostToken.screenShare).toBe(false);
+      expect(hostToken.screenShare).toBe(true);
+      expect(guestToken.screenShare).toBe(false);
       expect(hostToken.recording).toBe('not_available');
 
       for (const token of [hostToken.token, guestToken.token]) {
@@ -260,17 +295,18 @@ describe('VoiceMeetingsService (real MySQL)', () => {
           };
         };
         expect(claims.exp).toBeLessThanOrEqual(
-          Math.floor(Date.now() / 1000) + 15 * 60 + 2,
+          Math.floor(Date.now() / 1000) + 60 + 2,
         );
         expect(claims.video?.room).toBe(hostToken.roomName);
         expect(claims.video?.roomJoin).toBe(true);
         expect(claims.video?.canPublish).toBe(true);
         expect(claims.video?.canPublishData).toBe(false);
         expect(claims.video?.roomRecord).toBe(false);
-        expect(claims.video?.canPublishSources).toEqual([
-          'camera',
-          'microphone',
-        ]);
+        expect(claims.video?.canPublishSources).toEqual(
+          token === hostToken.token
+            ? ['camera', 'microphone', 'screen_share', 'screen_share_audio']
+            : ['camera', 'microphone'],
+        );
       }
 
       await expectAppError(

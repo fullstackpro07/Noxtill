@@ -6,6 +6,7 @@ import * as path from 'path';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -117,6 +118,30 @@ export class S3Service {
     }
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
     return getSignedUrl(this.client!, command, { expiresIn: expiresInSeconds });
+  }
+
+  /** Confirm a private object exists without downloading its contents. */
+  async headObject(
+    key: string,
+  ): Promise<{ sizeBytes: number; contentType: string | null } | null> {
+    if (this.useLocalStorage) return null;
+    try {
+      const out = await this.client!.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      if (!Number.isSafeInteger(out.ContentLength) || out.ContentLength! < 1)
+        return null;
+      return {
+        sizeBytes: out.ContentLength!,
+        contentType: out.ContentType ?? null,
+      };
+    } catch (error) {
+      const status = (error as { $metadata?: { httpStatusCode?: number } })
+        .$metadata?.httpStatusCode;
+      if (status === 404 || (error as { name?: string }).name === 'NotFound')
+        return null;
+      throw error;
+    }
   }
 
   /** Verify a local-file capability without revealing whether the requested object exists. */
@@ -260,17 +285,56 @@ export class S3Service {
   }
 
   /** Reads a stored object's bytes back in either storage mode. Returns null (never throws) when the key is missing. */
-  async readObject(key: string): Promise<Buffer | null> {
+  async readObject(key: string, maxBytes?: number): Promise<Buffer | null> {
     if (this.useLocalStorage) {
-      return (await this.readLocalFile(key))?.buffer ?? null;
+      try {
+        if (maxBytes !== undefined) {
+          const stat = await fs.stat(this.resolveLocalPath(key));
+          if (stat.size > maxBytes)
+            throw new Error('Stored object exceeds the allowed read size.');
+        }
+        return (await this.readLocalFile(key))?.buffer ?? null;
+      } catch (error) {
+        if ((error as Error).message.includes('exceeds the allowed read size'))
+          throw error;
+        return null;
+      }
     }
     try {
       const out = await this.client!.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       );
+      if (
+        maxBytes !== undefined &&
+        (!Number.isSafeInteger(maxBytes) ||
+          maxBytes < 1 ||
+          !Number.isSafeInteger(out.ContentLength) ||
+          out.ContentLength! > maxBytes)
+      )
+        throw new Error('Stored object exceeds the allowed read size.');
+      if (
+        maxBytes !== undefined &&
+        out.Body &&
+        Symbol.asyncIterator in out.Body
+      ) {
+        const chunks: Buffer[] = [];
+        let totalBytes = 0;
+        for await (const part of out.Body as AsyncIterable<Uint8Array>) {
+          const chunk = Buffer.from(part);
+          totalBytes += chunk.length;
+          if (totalBytes > maxBytes)
+            throw new Error('Stored object exceeds the allowed read size.');
+          chunks.push(chunk);
+        }
+        return Buffer.concat(chunks, totalBytes);
+      }
       const bytes = await out.Body?.transformToByteArray();
+      if (maxBytes !== undefined && bytes && bytes.byteLength > maxBytes)
+        throw new Error('Stored object exceeds the allowed read size.');
       return bytes ? Buffer.from(bytes) : null;
-    } catch {
+    } catch (error) {
+      if ((error as Error).message.includes('exceeds the allowed read size'))
+        throw error;
       return null;
     }
   }

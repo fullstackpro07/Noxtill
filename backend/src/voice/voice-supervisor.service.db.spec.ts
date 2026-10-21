@@ -185,7 +185,7 @@ describe('VoiceSupervisorService (MySQL)', () => {
       callbackBacklog: 0,
       waitingCalls: 0,
       slaAtRisk: null,
-      aiErrors: null,
+      aiErrors: 0,
     });
     expect(result.calls[0]).toMatchObject({
       caller: '•••• 2222',
@@ -200,5 +200,68 @@ describe('VoiceSupervisorService (MySQL)', () => {
       status: VoiceAgentPresenceStatus.available,
     });
     expect(result.limitations.whisperAndBarge).toContain('available only');
+  });
+
+  it('counts recent saved provider-failure calls without test or cross-business rows', async () => {
+    const now = new Date();
+    const errorTurn = (stage: 'ai_reply' | 'transcription') => [
+      {
+        speaker: 'assistant',
+        text: 'Your call has been added to follow-up.',
+        at: now.toISOString(),
+        serviceFailure: {
+          stage,
+          code:
+            stage === 'ai_reply'
+              ? 'AI_PROVIDER_INSUFFICIENT_CREDIT'
+              : 'SPEECH_TO_TEXT_UNAVAILABLE',
+          message: 'Provider unavailable.',
+        },
+      },
+    ];
+    const calls = [
+      {
+        businessId,
+        callSid: `CA-supervisor-error-ai-${randomUUID()}`,
+        fromNumber: '+15551230001',
+        startedAt: now,
+        transcript: errorTurn('ai_reply'),
+      },
+      {
+        businessId,
+        callSid: `CA-supervisor-error-speech-${randomUUID()}`,
+        fromNumber: '+15551230002',
+        startedAt: now,
+        transcript: errorTurn('transcription'),
+      },
+      {
+        businessId,
+        callSid: `CA-supervisor-error-test-${randomUUID()}`,
+        fromNumber: '+15551230003',
+        startedAt: now,
+        isTestCall: true,
+        transcript: errorTurn('ai_reply'),
+      },
+      {
+        businessId: otherBusinessId,
+        callSid: `CA-supervisor-error-other-${randomUUID()}`,
+        fromNumber: '+15551230004',
+        startedAt: now,
+        transcript: errorTurn('ai_reply'),
+      },
+      {
+        businessId,
+        callSid: `CA-supervisor-error-old-${randomUUID()}`,
+        fromNumber: '+15551230005',
+        startedAt: new Date(now.getTime() - 25 * 60 * 60 * 1000),
+        transcript: errorTurn('ai_reply'),
+      },
+    ];
+    await Promise.all(calls.map((data) => prisma.phoneCall.create({ data })));
+
+    const result = await service.live(businessId, supervisorUserId);
+
+    expect(result.metrics.aiErrors).toBe(2);
+    expect(result.limitations.aiErrors).toContain('last 24 hours');
   });
 });

@@ -10,7 +10,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { AuditService } from '../common/audit/audit.service';
 import { VOICE_ERROR_CODES } from './voice.constants';
-import { escapeXml, twiml } from './twiml.util';
+import { conferenceUsageAttributes, escapeXml, twiml } from './twiml.util';
 import { PhoneCallStatus } from '@prisma/client';
 
 export type JoinRole = 'caller' | 'staff';
@@ -23,17 +23,16 @@ export type SupervisorCoachMode = 'listen' | 'whisper' | 'barge';
  * bridged onto the live call via a real Twilio Conference. This is deliberately built on Twilio's
  * documented "modify a live call" REST action (redirect the in-progress caller leg into a
  * `<Dial><Conference>`) plus a second outbound `Calls` create to dial the staff member in — both
- * standard, production-grade Twilio primitives, rather than hand-rolled bidirectional audio
- * streaming (Twilio Media Streams), which would need a new WebSocket gateway and μ-law audio
- * encode/decode pipeline for a fraction of the reliability.
+ * standard Twilio primitives. The separate AI realtime gateway uses bidirectional Media Streams;
+ * it is not a second controller for this human conference.
  *
  * "Listen" and "take over" are the SAME real mechanism, differing only in whether the staff leg
  * joins muted: listening in is joining muted (they hear everything, including the AI's own
  * `<Say>` turns, but can't be heard), taking over is joining unmuted (fully live, two-way).
  * Joining necessarily ends the AI's turn-based handling of the call — once a human is bridged on,
  * the AI stops running the `<Record>`/classify loop, which is the correct behavior for "take over"
- * and an accepted, disclosed tradeoff for "listen" (a truly silent, non-disruptive tap would need
- * the Media Streams approach above; this app doesn't have one).
+ * and a disclosed tradeoff for the legacy "listen" redirect. This path is not advertised as a
+ * non-disruptive tap on an active AI realtime stream.
  */
 @Injectable()
 export class VoiceLiveJoinService {
@@ -376,7 +375,7 @@ export class VoiceLiveJoinService {
   ): string {
     const endConferenceOnExit = role === 'caller';
     return twiml(
-      `<Dial><Conference startConferenceOnEnter="true" endConferenceOnExit="${endConferenceOnExit}" muted="${muted}">${escapeXml(conferenceName)}</Conference></Dial>`,
+      `<Dial><Conference${conferenceUsageAttributes(this.config.get<string>('BACKEND_URL'))} startConferenceOnEnter="true" endConferenceOnExit="${endConferenceOnExit}" muted="${muted}">${escapeXml(conferenceName)}</Conference></Dial>`,
     );
   }
 }

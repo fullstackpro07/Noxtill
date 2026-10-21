@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
-import axios from 'axios';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { describeAiProviderFailure } from '../ai/ai-provider-error.util';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -11,21 +11,67 @@ import {
   SaveVoiceAiAgentDraftDto,
   VOICE_AI_AGENT_TEMPLATES,
   VOICE_AI_AGENT_TOOLS,
+  VOICE_AI_TEST_INTENTS,
+  VOICE_REALTIME_VOICES,
 } from './dto/voice-ai-agent.dto';
 import { VOICE_ERROR_CODES } from './voice.constants';
+import type { VoiceAgentControls } from './voice-agent-controls.util';
+import { VoiceRealtimeSandboxService } from './voice-realtime-sandbox.service';
+import {
+  snapshotKnowledge,
+  type VoiceKnowledgeSnapshot,
+} from './voice-knowledge-snapshot.util';
+import {
+  VOICE_AGENT_AUTHORITY_POLICY,
+  voicePromptConfiguration,
+  voicePromptData,
+} from './voice-prompt-policy.util';
 
-type AgentConfig = {
+type AgentConfig = VoiceAgentControls & {
   agentName: string;
   template: string;
   purpose: string;
   voiceStyle: string;
   instructions: string;
+  exclusions?: string[];
+  dialogue?: {
+    greeting?: string;
+    disclosures?: string[];
+    requiredQuestions?: string[];
+    clarificationPrompt?: string;
+    edgeCases?: string[];
+  };
+  realtimeVoice?: string;
   escalationGuidance: string;
   languages: string[];
   toolPermissions?: string[];
   knowledgeSourceIds?: string[];
+  knowledgeSnapshots?: VoiceKnowledgeSnapshot[];
+  assignedOwnerBusinessUserId?: string | null;
   maxTokensPerResponse?: number;
   monthlyBudgetUsd?: number | null;
+};
+
+type AgentTestResult = {
+  id: string;
+  version: number;
+  passed: boolean;
+  evaluationStatus: 'not_evaluated' | 'passed' | 'failed';
+  assertionFailures: string[];
+  expectedIntent: string | null;
+  actualIntent: string | null;
+  response: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  createdAt: string;
+};
+
+type AgentScenarioChecks = {
+  mustInclude?: string[];
+  mustNotInclude?: string[];
+  expectedIntent?: (typeof VOICE_AI_TEST_INTENTS)[number];
 };
 
 const VALID_TEMPLATES = new Set<string>(VOICE_AI_AGENT_TEMPLATES);
@@ -36,35 +82,54 @@ export class VoiceAiAgentsService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly audit: AuditService,
     private readonly aiInfra: AiInfraService,
+    @Optional() private readonly realtimeSandbox?: VoiceRealtimeSandboxService,
   ) {}
 
   async list(businessId: string) {
-    const agents = await this.tenantPrisma.client.voiceAiAgent.findMany({
-      where: { businessId },
-      include: {
-        versions: {
-          orderBy: { version: 'desc' },
-          take: 20,
-          include: {
-            testRuns: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-              select: {
-                id: true,
-                passed: true,
-                response: true,
-                errorCode: true,
-                errorMessage: true,
-                createdAt: true,
-                inputTokens: true,
-                outputTokens: true,
+    const [agents, businessScope, internalOwners] = await Promise.all([
+      this.tenantPrisma.client.voiceAiAgent.findMany({
+        where: { businessId },
+        include: {
+          versions: {
+            orderBy: { version: 'desc' },
+            take: 20,
+            include: {
+              testRuns: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: {
+                  id: true,
+                  passed: true,
+                  response: true,
+                  errorCode: true,
+                  errorMessage: true,
+                  createdAt: true,
+                  inputTokens: true,
+                  outputTokens: true,
+                  expectedIntent: true,
+                  actualIntent: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
-    });
+        orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
+      }),
+      this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, name: true, parentId: true },
+      }),
+      this.tenantPrisma.client.businessUser.findMany({
+        where: { businessId, active: true },
+        select: {
+          id: true,
+          role: true,
+          user: { select: { name: true } },
+          voiceAgentProfile: { select: { id: true, active: true } },
+        },
+        orderBy: [{ user: { name: 'asc' } }, { id: 'asc' }],
+      }),
+    ]);
     const knowledgeSources =
       await this.tenantPrisma.client.voiceKnowledgeEntry.findMany({
         where: { businessId, active: true },
@@ -99,6 +164,20 @@ export class VoiceAiAgentsService {
     return {
       templates: VOICE_AI_AGENT_TEMPLATES,
       tools: VOICE_AI_AGENT_TOOLS,
+      realtimeVoices: VOICE_REALTIME_VOICES,
+      businessScope: businessScope
+        ? {
+            id: businessScope.id,
+            name: businessScope.name,
+            isBranch: businessScope.parentId !== null,
+          }
+        : null,
+      internalOwners: internalOwners.map((owner) => ({
+        id: owner.id,
+        name: owner.user.name,
+        role: owner.role,
+        hasActiveVoiceProfile: Boolean(owner.voiceAgentProfile?.active),
+      })),
       knowledgeSources,
       agents: agents.map((agent) => ({
         id: agent.id,
@@ -127,7 +206,7 @@ export class VoiceAiAgentsService {
       })),
       limitations: {
         tools:
-          'Each published agent version carries a server-enforced allowlist for booking, messages, transfers and ending calls; knowledge retrieval is restricted to selected active business sources and each AI response has a token ceiling.',
+          'Published versions carry a server-enforced tool allowlist. Live audio supports service and slot lookup, minimal caller matching, verified booking changes, support tickets and unsent message drafts. Booking and customer writes require caller keypad confirmation. Knowledge sources, availability, pilot allocation, concurrency, duration and tool limits are pinned per version.',
         liveRouting:
           'Published versions are pinned to new inbound calls. If no fixed transfer number is configured, an AI transfer can reserve a fresh available human staff profile with phone capacity; a classified caller topic prefers an exact matching skill tag, with capacity-based fallback when none match. Browser-phone readiness is shown in Agent Workspace.',
       },
@@ -250,14 +329,53 @@ export class VoiceAiAgentsService {
     return { id: versionId, version, checksum: this.checksum(config) };
   }
 
+  async previewVoice(
+    businessId: string,
+    actorUserId: string,
+    agentId: string,
+    voice: string,
+  ) {
+    const agent = await this.getAgent(businessId, agentId);
+    const versionId = agent.currentDraftVersionId ?? agent.publishedVersionId;
+    if (!versionId)
+      throw new AppException(
+        VOICE_ERROR_CODES.AI_AGENT_DRAFT_REQUIRED,
+        'Save or publish an AI agent version before previewing its voice.',
+        HttpStatus.CONFLICT,
+      );
+    const version =
+      await this.tenantPrisma.client.voiceAiAgentVersion.findFirst({
+        where: { id: versionId, businessId, agentId },
+        select: { config: true },
+      });
+    if (!version) throw this.notFound();
+    if (!this.realtimeSandbox)
+      throw new AppException(
+        'VOICE_REALTIME_NOT_CONFIGURED',
+        'OpenAI Realtime voice preview is not available on the server.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    const config = version.config as unknown as AgentConfig;
+    return this.realtimeSandbox.previewVoice(
+      businessId,
+      actorUserId,
+      versionId,
+      voice,
+      config.monthlyBudgetUsd,
+    );
+  }
+
   async testDraft(
     businessId: string,
     actorUserId: string,
     agentId: string,
     scenario: string,
-  ) {
+    expectedVersionId?: string,
+    checks?: AgentScenarioChecks,
+  ): Promise<AgentTestResult> {
     const agent = await this.getAgent(businessId, agentId);
-    if (!agent.currentDraftVersionId) {
+    const versionId = expectedVersionId ?? agent.currentDraftVersionId;
+    if (!versionId) {
       throw new AppException(
         VOICE_ERROR_CODES.AI_AGENT_DRAFT_REQUIRED,
         'Save a draft before testing this agent.',
@@ -267,7 +385,7 @@ export class VoiceAiAgentsService {
     const version =
       await this.tenantPrisma.client.voiceAiAgentVersion.findFirst({
         where: {
-          id: agent.currentDraftVersionId,
+          id: versionId,
           businessId,
           agentId,
         },
@@ -278,7 +396,7 @@ export class VoiceAiAgentsService {
     ) {
       throw new AppException(
         VOICE_ERROR_CODES.AI_AGENT_TEMPLATE_UNAVAILABLE,
-        'Quality Analyst is an offline template only; offline analysis is not implemented in this slice.',
+        'Quality Analyst does not answer live calls. Use Call Quality to run evidence-based review suggestions on a recorded call.',
         HttpStatus.CONFLICT,
       );
     }
@@ -287,30 +405,76 @@ export class VoiceAiAgentsService {
     let response: string | null = null;
     let errorCode: string | null = null;
     let errorMessage: string | null = null;
+    let actualIntent: (typeof VOICE_AI_TEST_INTENTS)[number] | null = null;
+    let outcomeFormatInvalid = false;
     let inputTokens = 0;
     let outputTokens = 0;
     try {
-      const result = await this.aiInfra.createMessage(
-        businessId,
-        'voice_entry',
-        {
-          system: this.systemPrompt(agent.name, agent.template, config),
-          messages: [
-            {
-              role: 'user',
-              content: `Sandbox scenario (not a live call): ${this.cleanText(scenario, 1000)}`,
-            },
-          ],
-          maxTokens: config.maxTokensPerResponse ?? 320,
-          temperature: 0.2,
-        },
-      );
+      const result =
+        config.runtimeMode === 'realtime'
+          ? await this.testRealtime(
+              businessId,
+              version.id,
+              agent.name,
+              agent.template,
+              config,
+              scenario,
+              Boolean(checks?.expectedIntent),
+            )
+          : await this.aiInfra.createMessage(
+              businessId,
+              'voice_entry',
+              {
+                system: [
+                  this.systemPrompt(agent.name, agent.template, config),
+                  checks?.expectedIntent ? this.outcomeTestInstruction() : '',
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
+                messages: [
+                  {
+                    role: 'user',
+                    content: voicePromptData('Sandbox caller scenario', {
+                      liveCall: false,
+                      text: this.cleanText(scenario, 1000),
+                    }),
+                  },
+                ],
+                maxTokens: config.maxTokensPerResponse ?? 320,
+                temperature: 0.2,
+              },
+              undefined,
+              version.id,
+            );
       response = result.content
         .filter((block) => block.type === 'text')
         .map((block) => block.text ?? '')
         .join('\n')
         .trim()
         .slice(0, 2000);
+      if (response && checks?.expectedIntent) {
+        try {
+          const parsed = JSON.parse(response) as {
+            reply?: unknown;
+            intent?: unknown;
+          };
+          if (
+            typeof parsed.reply !== 'string' ||
+            typeof parsed.intent !== 'string' ||
+            !(VOICE_AI_TEST_INTENTS as readonly string[]).includes(
+              parsed.intent,
+            )
+          ) {
+            outcomeFormatInvalid = true;
+          } else {
+            response = parsed.reply.trim().slice(0, 2000);
+            actualIntent =
+              parsed.intent as (typeof VOICE_AI_TEST_INTENTS)[number];
+          }
+        } catch {
+          outcomeFormatInvalid = true;
+        }
+      }
       inputTokens = result.inputTokens;
       outputTokens = result.outputTokens;
       if (!response) {
@@ -319,12 +483,56 @@ export class VoiceAiAgentsService {
           'The AI provider returned no text for this sandbox test.';
       }
     } catch (error) {
-      const safe = this.safeAiError(error);
+      const safe = describeAiProviderFailure(error);
       errorCode = safe.code;
       errorMessage = safe.message;
     }
 
+    const assertionFailures: string[] = [];
+    if (outcomeFormatInvalid) {
+      assertionFailures.push(
+        'Expected a JSON reply with an allowed self-reported intent.',
+      );
+    }
+    if (
+      checks?.expectedIntent &&
+      actualIntent &&
+      actualIntent !== checks.expectedIntent
+    ) {
+      assertionFailures.push(
+        `Expected outcome: ${checks.expectedIntent}; model reported: ${actualIntent}`,
+      );
+    }
+    const mustInclude = (checks?.mustInclude ?? [])
+      .map((phrase) => this.cleanText(phrase, 120))
+      .filter(Boolean);
+    const mustNotInclude = (checks?.mustNotInclude ?? [])
+      .map((phrase) => this.cleanText(phrase, 120))
+      .filter(Boolean);
+    if (response) {
+      const normalizedResponse = response.toLocaleLowerCase();
+      for (const phrase of mustInclude) {
+        if (!normalizedResponse.includes(phrase.toLocaleLowerCase())) {
+          assertionFailures.push(`Required phrase not found: ${phrase}`);
+        }
+      }
+      for (const phrase of mustNotInclude) {
+        if (normalizedResponse.includes(phrase.toLocaleLowerCase())) {
+          assertionFailures.push(`Forbidden phrase found: ${phrase}`);
+        }
+      }
+    }
+    if (assertionFailures.length && !errorCode) {
+      errorCode = 'AI_SCENARIO_ASSERTION_FAILED';
+      errorMessage = assertionFailures.join('; ').slice(0, 500);
+    }
     const passed = Boolean(response && !errorCode);
+    const evaluationStatus =
+      mustInclude.length || mustNotInclude.length || checks?.expectedIntent
+        ? passed
+          ? 'passed'
+          : 'failed'
+        : 'not_evaluated';
     const previousTest =
       await this.tenantPrisma.client.voiceAiAgentTestRun.findFirst({
         where: { businessId, versionId: version.id },
@@ -343,6 +551,8 @@ export class VoiceAiAgentsService {
         versionId: version.id,
         scenario: this.cleanText(scenario, 1000),
         response,
+        expectedIntent: checks?.expectedIntent ?? null,
+        actualIntent,
         passed,
         errorCode,
         errorMessage,
@@ -360,6 +570,12 @@ export class VoiceAiAgentsService {
         agentId,
         version: version.version,
         passed,
+        evaluationStatus,
+        requiredPhraseCount: mustInclude.length,
+        forbiddenPhraseCount: mustNotInclude.length,
+        expectedIntent: checks?.expectedIntent ?? null,
+        actualIntent,
+        assertionFailureCount: assertionFailures.length,
         errorCode,
         inputTokens,
         outputTokens,
@@ -369,6 +585,10 @@ export class VoiceAiAgentsService {
       id: testRun.id,
       version: version.version,
       passed,
+      evaluationStatus,
+      assertionFailures,
+      expectedIntent: checks?.expectedIntent ?? null,
+      actualIntent,
       response,
       errorCode,
       errorMessage,
@@ -376,6 +596,153 @@ export class VoiceAiAgentsService {
       outputTokens,
       createdAt: testRun.createdAt.toISOString(),
     };
+  }
+
+  async testScenarioSuite(
+    businessId: string,
+    actorUserId: string,
+    agentId: string,
+    scenarios: string[],
+    checks?: AgentScenarioChecks[],
+  ) {
+    const normalized = [...new Set(scenarios.map((value) => value.trim()))];
+    if (
+      normalized.length < 2 ||
+      normalized.length > 8 ||
+      normalized.some((value) => value.length < 3 || value.length > 1000) ||
+      (checks !== undefined && checks.length !== normalized.length) ||
+      (checks ?? []).some((check) => {
+        const phrases = [
+          ...(check.mustInclude ?? []),
+          ...(check.mustNotInclude ?? []),
+        ];
+        return (
+          (check.mustInclude?.length ?? 0) > 8 ||
+          (check.mustNotInclude?.length ?? 0) > 8 ||
+          phrases.some(
+            (phrase) =>
+              typeof phrase !== 'string' ||
+              !phrase.trim() ||
+              phrase.trim().length > 120,
+          ) ||
+          (check.expectedIntent !== undefined &&
+            !(VOICE_AI_TEST_INTENTS as readonly string[]).includes(
+              check.expectedIntent,
+            ))
+        );
+      })
+    ) {
+      throw new AppException(
+        'VOICE_AI_AGENT_SCENARIO_SUITE_INVALID',
+        'Provide 2–8 distinct scenarios, each between 3 and 1000 characters.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const agent = await this.getAgent(businessId, agentId);
+    if (!agent.currentDraftVersionId) {
+      throw new AppException(
+        VOICE_ERROR_CODES.AI_AGENT_DRAFT_REQUIRED,
+        'Save a draft before testing this agent.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const versionId = agent.currentDraftVersionId;
+
+    const results: AgentTestResult[] = [];
+    for (const scenario of normalized) {
+      const result = await this.testDraft(
+        businessId,
+        actorUserId,
+        agentId,
+        scenario,
+        versionId,
+        checks?.[results.length],
+      );
+      results.push(result);
+      // A provider/config/budget failure is shared across the suite; do not
+      // make more requests that are likely to fail or consume further budget.
+      if (
+        result.errorCode &&
+        result.errorCode !== 'AI_SCENARIO_ASSERTION_FAILED'
+      )
+        break;
+    }
+    const answered = results.filter(
+      (result) => result.response !== null,
+    ).length;
+    const evaluated = results.filter(
+      (result) => result.evaluationStatus !== 'not_evaluated',
+    );
+    const assertionPassed = evaluated.filter(
+      (result) => result.evaluationStatus === 'passed',
+    ).length;
+    await this.audit.log({
+      entity: 'VoiceAiAgent',
+      entityId: agentId,
+      action: 'voice.ai_agent_scenario_suite_tested',
+      after: {
+        requestedScenarioCount: normalized.length,
+        scenarioCount: results.length,
+        stoppedEarly: results.length < normalized.length,
+        nonEmptyResponses: answered,
+        evaluatedScenarioCount: evaluated.length,
+        assertionPassedCount: assertionPassed,
+        assertionFailedCount: evaluated.length - assertionPassed,
+        version: results[0]?.version ?? null,
+        testRunIds: results.map((result) => result.id),
+      },
+    });
+    return {
+      version: results[0]?.version ?? null,
+      requestedScenarioCount: normalized.length,
+      scenarioCount: results.length,
+      stoppedEarly: results.length < normalized.length,
+      nonEmptyResponses: answered,
+      evaluatedScenarioCount: evaluated.length,
+      assertionPassedCount: assertionPassed,
+      assertionFailedCount: evaluated.length - assertionPassed,
+      results,
+    };
+  }
+
+  private testRealtime(
+    businessId: string,
+    versionId: string,
+    name: string,
+    template: string,
+    config: AgentConfig,
+    scenario: string,
+    requestOutcome: boolean,
+  ) {
+    if (!this.realtimeSandbox)
+      throw new AppException(
+        'VOICE_REALTIME_NOT_CONFIGURED',
+        'OpenAI Realtime sandbox is not configured.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    return this.realtimeSandbox.test(
+      businessId,
+      versionId,
+      [
+        this.systemPrompt(name, template, config),
+        requestOutcome ? this.outcomeTestInstruction() : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      this.cleanText(scenario, 1000),
+      config.maxTokensPerResponse ?? 320,
+      config.monthlyBudgetUsd,
+    );
+  }
+
+  private outcomeTestInstruction(): string {
+    return [
+      'Sandbox evaluation output requirement: do not call tools or perform any action.',
+      'Return exactly one JSON object and no markdown with keys "reply" and "intent".',
+      'The intent must be one of: continue, book, message, transfer, end.',
+      'Choose the next intended outcome for the supplied scenario. This is a self-reported test label only; no action is being executed.',
+    ].join(' ');
   }
 
   async publish(
@@ -417,7 +784,7 @@ export class VoiceAiAgentsService {
     ) {
       throw new AppException(
         VOICE_ERROR_CODES.AI_AGENT_TEMPLATE_UNAVAILABLE,
-        'Quality Analyst is an offline template only; offline analysis is not implemented in this slice.',
+        'Quality Analyst does not answer live calls. Use Call Quality to run evidence-based review suggestions on a recorded call.',
         HttpStatus.CONFLICT,
       );
     }
@@ -662,19 +1029,83 @@ export class VoiceAiAgentsService {
     businessId: string,
     dto: SaveVoiceAiAgentDraftDto,
   ): Promise<AgentConfig> {
+    const business = await this.tenantPrisma.client.business.findUnique({
+      where: { id: businessId },
+      select: { timezone: true },
+    });
+    const timeZone = dto.timeZone?.trim() || business?.timezone || 'UTC';
+    try {
+      new Intl.DateTimeFormat('en', { timeZone }).format();
+    } catch {
+      throw new AppException(
+        'VOICE_AGENT_TIMEZONE_INVALID',
+        'Choose a valid IANA time zone.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (
+      dto.weeklyHours?.some((h) => h.opens >= h.closes) ||
+      dto.holidays?.some(
+        (date) =>
+          Number.isNaN(Date.parse(date)) ||
+          new Date(date).toISOString().slice(0, 10) !== date,
+      )
+    ) {
+      throw new AppException(
+        'VOICE_AGENT_HOURS_INVALID',
+        'Use valid holiday dates and same-day opening ranges whose end is after their start.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (
+      dto.realtimeVoice &&
+      !(VOICE_REALTIME_VOICES as readonly string[]).includes(dto.realtimeVoice)
+    ) {
+      throw new AppException(
+        'VOICE_AGENT_REALTIME_VOICE_INVALID',
+        'Choose a supported realtime voice.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const knowledgeSourceIds = [...new Set(dto.knowledgeSourceIds ?? [])];
-    if (knowledgeSourceIds.length > 0) {
-      const matchingSources =
-        await this.tenantPrisma.client.voiceKnowledgeEntry.count({
-          where: { businessId, active: true, id: { in: knowledgeSourceIds } },
-        });
-      if (matchingSources !== knowledgeSourceIds.length) {
+    const assignedOwnerBusinessUserId =
+      dto.assignedOwnerBusinessUserId?.trim() || null;
+    if (assignedOwnerBusinessUserId) {
+      const owner = await this.tenantPrisma.client.businessUser.findFirst({
+        where: {
+          id: assignedOwnerBusinessUserId,
+          businessId,
+          active: true,
+        },
+        select: { id: true },
+      });
+      if (!owner) {
         throw new AppException(
-          VOICE_ERROR_CODES.AI_AGENT_KNOWLEDGE_SOURCE_INVALID,
-          'Choose active knowledge sources that belong to this business.',
+          'VOICE_AGENT_OWNER_INVALID',
+          'Choose an active internal owner from this business branch.',
           HttpStatus.BAD_REQUEST,
         );
       }
+    }
+    const matchingSources = knowledgeSourceIds.length
+      ? await this.tenantPrisma.client.voiceKnowledgeEntry.findMany({
+          where: { businessId, active: true, id: { in: knowledgeSourceIds } },
+          orderBy: { id: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            kind: true,
+            content: true,
+            updatedAt: true,
+          },
+        })
+      : [];
+    if (matchingSources.length !== knowledgeSourceIds.length) {
+      throw new AppException(
+        VOICE_ERROR_CODES.AI_AGENT_KNOWLEDGE_SOURCE_INVALID,
+        'Choose active knowledge sources that belong to this business.',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return {
       agentName: this.cleanText(dto.name, 120),
@@ -682,6 +1113,47 @@ export class VoiceAiAgentsService {
       purpose: this.cleanText(dto.purpose, 240),
       voiceStyle: this.cleanText(dto.voiceStyle, 160),
       instructions: this.cleanText(dto.instructions, 2000),
+      exclusions: [
+        ...new Set(
+          (dto.exclusions ?? [])
+            .map((item) => this.cleanText(item, 240))
+            .filter(Boolean),
+        ),
+      ],
+      dialogue: {
+        greeting: dto.dialogue?.greeting
+          ? this.cleanText(dto.dialogue.greeting, 400)
+          : '',
+        disclosures: [
+          ...new Set(
+            (dto.dialogue?.disclosures ?? [])
+              .map((item) => this.cleanText(item, 300))
+              .filter(Boolean),
+          ),
+        ],
+        requiredQuestions: [
+          ...new Set(
+            (dto.dialogue?.requiredQuestions ?? [])
+              .map((item) => this.cleanText(item, 300))
+              .filter(Boolean),
+          ),
+        ],
+        clarificationPrompt: dto.dialogue?.clarificationPrompt
+          ? this.cleanText(dto.dialogue.clarificationPrompt, 400)
+          : '',
+        edgeCases: [
+          ...new Set(
+            (dto.dialogue?.edgeCases ?? [])
+              .map((item) => this.cleanText(item, 300))
+              .filter(Boolean),
+          ),
+        ],
+      },
+      realtimeVoice: (VOICE_REALTIME_VOICES as readonly string[]).includes(
+        dto.realtimeVoice ?? '',
+      )
+        ? dto.realtimeVoice
+        : 'marin',
       escalationGuidance: this.cleanText(dto.escalationGuidance, 500),
       languages: [
         ...new Set(
@@ -692,14 +1164,32 @@ export class VoiceAiAgentsService {
       ],
       toolPermissions: [
         ...new Set(
-          (dto.toolPermissions ?? [...VOICE_AI_AGENT_TOOLS]).filter((tool) =>
+          (
+            dto.toolPermissions ?? ['book', 'message', 'transfer', 'end']
+          ).filter((tool) =>
             (VOICE_AI_AGENT_TOOLS as readonly string[]).includes(tool),
           ),
         ),
       ],
       knowledgeSourceIds,
+      knowledgeSnapshots: matchingSources.map(snapshotKnowledge),
+      assignedOwnerBusinessUserId,
       maxTokensPerResponse: dto.maxTokensPerResponse ?? 320,
       monthlyBudgetUsd: dto.monthlyBudgetUsd ?? null,
+      runtimeMode: dto.runtimeMode ?? 'recorded_turns',
+      inboundEnabled: dto.inboundEnabled ?? true,
+      outboundEnabled: dto.outboundEnabled ?? true,
+      timeZone,
+      weeklyHours: (dto.weeklyHours ?? []).map((h) => ({
+        day: h.day,
+        opens: h.opens,
+        closes: h.closes,
+      })),
+      holidays: [...new Set(dto.holidays ?? [])].sort(),
+      rolloutPercent: dto.rolloutPercent ?? 100,
+      maxConcurrentCalls: dto.maxConcurrentCalls ?? 10,
+      maxCallSeconds: dto.maxCallSeconds ?? 600,
+      maxToolCalls: dto.maxToolCalls ?? 10,
     };
   }
 
@@ -714,12 +1204,31 @@ export class VoiceAiAgentsService {
       purpose: config.purpose,
       voiceStyle: config.voiceStyle,
       instructions: config.instructions,
+      exclusions: [...(config.exclusions ?? [])],
+      dialogue: config.dialogue ?? {},
+      realtimeVoice: config.realtimeVoice ?? 'marin',
       escalationGuidance: config.escalationGuidance,
       languages: [...config.languages].sort(),
       toolPermissions: [...(config.toolPermissions ?? [])].sort(),
       knowledgeSourceIds: [...(config.knowledgeSourceIds ?? [])].sort(),
+      assignedOwnerBusinessUserId: config.assignedOwnerBusinessUserId ?? null,
+      knowledgeSnapshots: [...(config.knowledgeSnapshots ?? [])].sort((a, b) =>
+        a.id.localeCompare(b.id),
+      ),
       maxTokensPerResponse: config.maxTokensPerResponse ?? 320,
       monthlyBudgetUsd: config.monthlyBudgetUsd ?? null,
+      runtimeMode: config.runtimeMode ?? 'recorded_turns',
+      inboundEnabled: config.inboundEnabled ?? true,
+      outboundEnabled: config.outboundEnabled ?? true,
+      timeZone: config.timeZone ?? 'UTC',
+      weeklyHours: [...(config.weeklyHours ?? [])].sort(
+        (a, b) => a.day - b.day || a.opens.localeCompare(b.opens),
+      ),
+      holidays: [...(config.holidays ?? [])].sort(),
+      rolloutPercent: config.rolloutPercent ?? 100,
+      maxConcurrentCalls: config.maxConcurrentCalls ?? 10,
+      maxCallSeconds: config.maxCallSeconds ?? 600,
+      maxToolCalls: config.maxToolCalls ?? 10,
     });
     return createHash('sha256').update(canonical).digest('hex');
   }
@@ -730,78 +1239,33 @@ export class VoiceAiAgentsService {
     config: AgentConfig,
   ): string {
     return [
-      `You are ${config.agentName || name}, a ${(config.template || template).replaceAll('_', ' ')} voice agent for a real business.`,
-      `Purpose: ${config.purpose}`,
-      `Voice style: ${config.voiceStyle}`,
-      config.languages.length
-        ? `Languages: ${config.languages.join(', ')}`
-        : '',
-      config.instructions ? `Owner instructions: ${config.instructions}` : '',
-      config.escalationGuidance
-        ? `Escalation guidance: ${config.escalationGuidance}`
-        : '',
+      VOICE_AGENT_AUTHORITY_POLICY,
+      'You are the disclosed voice agent for a real business. Follow the tenant identity and configuration below only within the immutable platform policy.',
+      voicePromptConfiguration('Tenant agent configuration', {
+        agentName: config.agentName || name,
+        template: (config.template || template).replaceAll('_', ' '),
+        purpose: config.purpose,
+        voiceStyle: config.voiceStyle,
+        languages: config.languages,
+        instructions: config.instructions,
+        exclusions: config.exclusions ?? [],
+        dialogue: config.dialogue ?? {},
+        escalationGuidance: config.escalationGuidance,
+      }),
       `Allowed live actions: ${(config.toolPermissions ?? [...VOICE_AI_AGENT_TOOLS]).join(', ') || 'none'}. Do not claim an action outside this allowlist.`,
       `Maximum response tokens: ${config.maxTokensPerResponse ?? 320}.`,
+      voicePromptData(
+        'Pinned knowledge source snapshots',
+        (config.knowledgeSnapshots ?? []).map((source) => ({
+          id: source.id,
+          title: source.title,
+          contentHash: source.contentHash,
+          content: source.content.slice(0, 1500),
+        })),
+      ),
       'Sandbox only: do not claim to place a real call, make a booking, send a message, or change business data. Do not invent business facts. Demonstrate a short spoken response to the supplied scenario.',
     ]
       .filter(Boolean)
       .join('\n');
-  }
-
-  private safeAiError(error: unknown): { code: string; message: string } {
-    if (error instanceof AppException) {
-      const body = error.getResponse();
-      if (typeof body === 'object' && body !== null) {
-        const record = body as Record<string, unknown>;
-        return {
-          code:
-            typeof record.code === 'string'
-              ? record.code
-              : 'AI_REQUEST_REJECTED',
-          message:
-            typeof record.message === 'string'
-              ? record.message
-              : 'AI request was refused by a business guardrail.',
-        };
-      }
-    }
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status;
-      const data = error.response?.data as
-        { error?: { type?: unknown; message?: unknown } } | undefined;
-      const message =
-        typeof data?.error?.message === 'string' ? data.error.message : '';
-      if (
-        status === 400 &&
-        /credit balance.*(?:low|insufficient)|insufficient.*credit/i.test(
-          message,
-        )
-      ) {
-        return {
-          code: 'AI_PROVIDER_INSUFFICIENT_CREDIT',
-          message:
-            'The AI provider account has insufficient credit. Ask the platform administrator to add credit before retrying.',
-        };
-      }
-      if (status === 401 || status === 403) {
-        return {
-          code: 'AI_PROVIDER_ACCESS_DENIED',
-          message:
-            'The AI provider rejected server access. Ask the platform administrator to check the API key and permissions.',
-        };
-      }
-      if (status === 404 && data?.error?.type === 'not_found_error') {
-        return {
-          code: 'AI_PROVIDER_MODEL_UNAVAILABLE',
-          message:
-            'The configured AI model is not available to this provider account. Ask the platform administrator to check model access.',
-        };
-      }
-    }
-    return {
-      code: 'AI_PROVIDER_REQUEST_FAILED',
-      message:
-        'The AI provider could not complete this test. Check provider configuration, model access, and available credit.',
-    };
   }
 }

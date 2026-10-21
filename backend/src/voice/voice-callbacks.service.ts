@@ -9,6 +9,7 @@ import axios from 'axios';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
+import { voiceSpendState } from './voice-usage-metering.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -165,6 +166,13 @@ export class VoiceCallbacksService {
     phoneCallId: string,
     dto: PlaceVoiceCallbackDto,
   ) {
+    if ((await voiceSpendState(this.prisma, businessId)).reached) {
+      throw new AppException(
+        'VOICE_SPEND_CAP_REACHED',
+        'This business has reached its monthly phone spending cap.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     const call = await this.tenantPrisma.client.phoneCall.findFirst({
       where: { id: phoneCallId, businessId },
     });

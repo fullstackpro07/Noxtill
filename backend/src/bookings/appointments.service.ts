@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { ReviewRequestsService } from '../reviews/review-requests.service';
@@ -15,6 +16,10 @@ import { DeclineAppointmentRequestDto } from './dto/decline-appointment-request.
 import { SuggestAlternativeDto } from './dto/suggest-alternative.dto';
 import { assertSlotAvailable } from './booking-lock.util';
 import { nextBookingNo } from './booking-number.util';
+import { assertBufferAvailable } from './booking-buffer.util';
+import { resolvePolicies } from '../common/policies/policies.service';
+import { assertBookingWindow, assertDayNotFull } from './booking-policy.util';
+import { assertPhoneBookingSlot } from './phone-booking-policy.util';
 import {
   APPOINTMENT_STATUS_TRANSITIONS,
   BOOKING_ERROR_CODES,
@@ -45,96 +50,6 @@ function assertEligibleStaff(
       `The selected staff member isn't configured to perform "${service.name}"`,
       HttpStatus.BAD_REQUEST,
     );
-  }
-}
-
-function widen(
-  startsAt: Date,
-  endsAt: Date,
-  bufferBeforeMin: number | null | undefined,
-  bufferAfterMin: number | null | undefined,
-): { start: Date; end: Date } {
-  return {
-    start: new Date(startsAt.getTime() - (bufferBeforeMin ?? 0) * 60 * 1000),
-    end: new Date(endsAt.getTime() + (bufferAfterMin ?? 0) * 60 * 1000),
-  };
-}
-
-interface BufferCheckTx {
-  appointment: {
-    findMany(args: {
-      where: Record<string, unknown>;
-      include: { service: true };
-    }): Promise<
-      {
-        startsAt: Date;
-        endsAt: Date;
-        service: {
-          bufferBeforeMin: number | null;
-          bufferAfterMin: number | null;
-        } | null;
-      }[]
-    >;
-  };
-}
-
-/**
- * Services, formal fields (UPD-BE-087) — a real, symmetric buffer check: an appointment's buffer
- * belongs to it wherever it's stored, so a later booking that would land inside an EARLIER
- * appointment's buffer-after zone (or vice versa) is blocked too, not just the reverse. Widens
- * both the incoming request's window (by its own service's buffer) AND every real nearby
- * appointment's window (by *that* appointment's own service's buffer) before comparing them.
- */
-async function assertBufferAvailable(
-  tx: BufferCheckTx,
-  params: {
-    businessId: string;
-    staffId?: string | null;
-    startsAt: Date;
-    endsAt: Date;
-    bufferBeforeMin?: number | null;
-    bufferAfterMin?: number | null;
-    excludeAppointmentId?: string;
-  },
-): Promise<void> {
-  if (!params.staffId) return;
-  const mine = widen(
-    params.startsAt,
-    params.endsAt,
-    params.bufferBeforeMin,
-    params.bufferAfterMin,
-  );
-
-  const nearby = await tx.appointment.findMany({
-    where: {
-      businessId: params.businessId,
-      staffUserId: params.staffId,
-      status: { notIn: [AppointmentStatus.cancelled] },
-      ...(params.excludeAppointmentId
-        ? { id: { not: params.excludeAppointmentId } }
-        : {}),
-      // A generous real bound so this stays a cheap indexed lookup, not a full table scan —
-      // no buffer this app would ever configure ranges further than a day either side.
-      startsAt: { lt: new Date(params.endsAt.getTime() + 24 * 60 * 60 * 1000) },
-      endsAt: { gt: new Date(params.startsAt.getTime() - 24 * 60 * 60 * 1000) },
-    },
-    include: { service: true },
-  });
-
-  for (const candidate of nearby) {
-    const theirs = widen(
-      candidate.startsAt,
-      candidate.endsAt,
-      candidate.service?.bufferBeforeMin,
-      candidate.service?.bufferAfterMin,
-    );
-    if (mine.start < theirs.end && mine.end > theirs.start) {
-      throw new AppException(
-        BOOKING_ERROR_CODES.SLOT_UNAVAILABLE,
-        'That slot is too close to another appointment for this staff member',
-        HttpStatus.CONFLICT,
-      );
-    }
   }
 }
 
@@ -318,14 +233,22 @@ export class AppointmentsService {
 
   /** Walk-in booking (internal only — no public counterpart) — customer is already present, so it
    * skips straight to "confirmed" and doesn't send a booking_confirm message. */
-  /** `source` defaults to `walk_in`; the AI Phone Receptionist (UPD-BE-058) passes `phone` to reuse this exact slot-locked create path for calls that end in a real booking. */
+  /** Phone bookings share the canonical transaction, but never pretend the caller is physically
+   * present or that a cash deposit was collected. They enforce remote booking rules and can
+   * create a real requested (not confirmed) booking for staff review. */
   async createWalkIn(
     businessId: string,
     dto: CreateWalkInAppointmentDto,
     source: AppointmentSource = AppointmentSource.walk_in,
   ) {
+    const isPhone = source === AppointmentSource.phone;
     const service = await this.tenantPrisma.client.product.findFirst({
-      where: { id: dto.serviceId, kind: ProductKind.service },
+      where: {
+        id: dto.serviceId,
+        businessId,
+        kind: ProductKind.service,
+        ...(isPhone ? { active: true } : {}),
+      },
     });
     if (!service) {
       throw new AppException(
@@ -336,10 +259,25 @@ export class AppointmentsService {
     }
 
     assertEligibleStaff(service, dto.staffId);
+    if (isPhone && (service.durationMin ?? 30) <= 0) {
+      throw new AppException(
+        'INVALID_SERVICE_DURATION',
+        'This service has no valid booking duration. Contact staff.',
+      );
+    }
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(
       startsAt.getTime() + (service.durationMin ?? 30) * 60 * 1000,
     );
+    if (
+      isPhone &&
+      (!Number.isFinite(startsAt.getTime()) || startsAt <= new Date())
+    ) {
+      throw new AppException(
+        'INVALID_BOOKING_TIME',
+        'Choose a future booking time',
+      );
+    }
 
     // Services, formal fields depth fix (UPD-INT-004) — the customer is physically present for a
     // walk-in, so a required deposit must be collected (cash) in this same request rather than
@@ -347,7 +285,11 @@ export class AppointmentsService {
     const requiredDeposit = service.depositRequired
       ? Number(service.depositAmount ?? 0)
       : 0;
-    if (requiredDeposit > 0 && (dto.depositAmount ?? 0) < requiredDeposit) {
+    if (
+      !isPhone &&
+      requiredDeposit > 0 &&
+      (dto.depositAmount ?? 0) < requiredDeposit
+    ) {
       throw new AppException(
         BOOKING_ERROR_CODES.DEPOSIT_REQUIRED,
         `"${service.name}" requires a deposit of at least ${requiredDeposit} (cash) to book — ${dto.depositAmount ?? 0} given.`,
@@ -363,6 +305,46 @@ export class AppointmentsService {
         startsAt,
         endsAt,
       });
+      let requiresReview = false;
+      if (isPhone) {
+        const business = await tx.business.findFirst({
+          where: { id: businessId },
+        });
+        if (!business) {
+          throw new AppException(
+            'BUSINESS_NOT_FOUND',
+            'Business not found',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const policies = resolvePolicies(business);
+        assertBookingWindow(policies, startsAt, new Date());
+        assertPhoneBookingSlot(business, startsAt, service.durationMin ?? 30);
+        if (dto.staffId) {
+          const staff = await tx.businessUser.findFirst({
+            where: { id: dto.staffId, businessId, active: true },
+          });
+          if (!staff) {
+            throw new AppException(
+              BOOKING_ERROR_CODES.STAFF_NOT_ELIGIBLE,
+              'The selected staff member is not active in this business',
+            );
+          }
+        }
+        await assertDayNotFull(
+          tx,
+          policies,
+          businessId,
+          startsAt,
+          business.timezone,
+        );
+        requiresReview =
+          policies.bool('voice.bookingsRequireStaffApproval') ||
+          service.depositRequired ||
+          (!dto.staffId &&
+            Array.isArray(service.eligibleStaffIds) &&
+            service.eligibleStaffIds.length > 0);
+      }
       await assertBufferAvailable(tx, {
         businessId,
         staffId: dto.staffId,
@@ -370,6 +352,7 @@ export class AppointmentsService {
         endsAt,
         bufferBeforeMin: service.bufferBeforeMin,
         bufferAfterMin: service.bufferAfterMin,
+        checkUnassigned: isPhone,
       });
 
       const customer = await tx.customer.upsert({
@@ -392,13 +375,18 @@ export class AppointmentsService {
           customerId: customer.id,
           startsAt,
           endsAt,
-          status: AppointmentStatus.confirmed,
+          status: requiresReview
+            ? AppointmentStatus.requested
+            : AppointmentStatus.confirmed,
           source,
+          ...(isPhone
+            ? { rescheduleToken: randomBytes(16).toString('hex') }
+            : {}),
           bookingNo: await nextBookingNo(tx, businessId),
         },
       });
 
-      if (requiredDeposit > 0) {
+      if (!isPhone && requiredDeposit > 0) {
         await tx.deposit.create({
           data: {
             businessId,

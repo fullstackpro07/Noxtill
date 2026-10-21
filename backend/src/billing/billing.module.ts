@@ -15,6 +15,8 @@ import { TrialExpiryProcessor } from './jobs/trial-expiry.processor';
 import { QuotaResetScheduler } from './jobs/quota-reset.scheduler';
 import { QuotaResetProcessor } from './jobs/quota-reset.processor';
 import { TRIAL_EXPIRY_QUEUE, QUOTA_RESET_QUEUE } from './billing.constants';
+import { VoiceUsageBillingService } from './voice-usage-billing.service';
+import { VoiceUsageBillingController } from './voice-usage-billing.controller';
 
 @Module({
   imports: [
@@ -24,11 +26,16 @@ import { TRIAL_EXPIRY_QUEUE, QUOTA_RESET_QUEUE } from './billing.constants';
       { name: QUOTA_RESET_QUEUE },
     ),
   ],
-  controllers: [BillingController, StripeWebhookController],
+  controllers: [
+    BillingController,
+    StripeWebhookController,
+    VoiceUsageBillingController,
+  ],
   providers: [
     PlansSeedService,
     StripeSyncService,
     BillingService,
+    VoiceUsageBillingService,
     PlanAssignmentService,
     StripeGatewayAdapter,
     JazzCashGatewayAdapter,

@@ -1,7 +1,9 @@
 import {
   IsDateString,
+  IsBoolean,
   IsEmail,
   IsInt,
+  IsIn,
   IsOptional,
   IsString,
   Max,
@@ -39,6 +41,10 @@ export class CreateVoiceMeetingDto {
   @IsOptional()
   @IsString()
   appointmentId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  recordingPolicyVersionId?: string | null;
 }
 
 export class RescheduleVoiceMeetingDto {
@@ -67,4 +73,19 @@ export class VoiceMeetingReasonDto {
   @MinLength(8)
   @MaxLength(500)
   reason!: string;
+}
+
+export class VoiceMeetingAdmissionDto extends VoiceMeetingReasonDto {
+  @IsIn(['admitted', 'denied'])
+  admission!: 'admitted' | 'denied';
+}
+
+export class VoiceMeetingModerationDto extends VoiceMeetingReasonDto {
+  @IsIn(['mute', 'remove'])
+  action!: 'mute' | 'remove';
+}
+
+export class VoiceMeetingRecordingConsentDto {
+  @IsBoolean()
+  accepted!: boolean;
 }
