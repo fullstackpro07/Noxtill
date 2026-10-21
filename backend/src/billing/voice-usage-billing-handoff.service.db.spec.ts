@@ -94,6 +94,7 @@ describe('VoiceUsageBillingHandoffService (real MySQL)', () => {
   afterAll(async () => {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+      await tx.voiceBillingAdjustment.deleteMany({ where: { businessId } });
       await tx.voiceBillingDraft.deleteMany({ where: { businessId } });
       await tx.voiceBillingRateVersion.deleteMany({ where: { businessId } });
       await tx.businessUser.deleteMany({ where: { businessId } });
@@ -168,5 +169,99 @@ describe('VoiceUsageBillingHandoffService (real MySQL)', () => {
       postError: 'card_declined',
       providerInvoiceItemId: null,
     });
+  });
+
+  it('credits posted usage as negative invoice items, never beyond the billed total', async () => {
+    create.mockImplementation((params: { amount: number }) =>
+      Promise.resolve({ id: `ii_credit_${params.amount}` }),
+    );
+    const posted = await draft('posted', '12.35');
+    await expect(
+      service.credit(
+        businessId,
+        ownerId,
+        posted.id,
+        '5.00',
+        'Duplicate test calls billed',
+      ),
+    ).resolves.toMatchObject({
+      status: 'posted',
+      amount: '5',
+    });
+    expect(create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        amount: -500,
+        currency: 'usd',
+        customer: `cus_${suffix}`,
+      }),
+      expect.objectContaining({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        idempotencyKey: expect.stringMatching(/^voice-usage-credit-/),
+      }),
+    );
+    await expect(
+      service.credit(
+        businessId,
+        ownerId,
+        posted.id,
+        '8.00',
+        'Second credit too large',
+      ),
+    ).rejects.toBeInstanceOf(AppException);
+
+    // A rejected credit keeps its amount reserved; retrying posts it once.
+    create.mockRejectedValueOnce(new Error('stripe_down'));
+    await expect(
+      service.credit(
+        businessId,
+        ownerId,
+        posted.id,
+        '7.35',
+        'Rest of the period refunded',
+      ),
+    ).rejects.toBeInstanceOf(AppException);
+    await expect(
+      service.credit(
+        businessId,
+        ownerId,
+        posted.id,
+        '0.01',
+        'Over the remaining amount',
+      ),
+    ).rejects.toBeInstanceOf(AppException);
+    const failed = (await service.adjustments(businessId, posted.id)).find(
+      (a) => a.status === 'failed',
+    )!;
+    await expect(
+      service.postCredit(businessId, ownerId, failed.id),
+    ).resolves.toMatchObject({ status: 'posted' });
+    expect(
+      (await service.adjustments(businessId, posted.id)).every(
+        (a) => a.status === 'posted',
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses credits on unsent drafts and from non-owners', async () => {
+    const approved = await draft('approved');
+    await expect(
+      service.credit(
+        businessId,
+        ownerId,
+        approved.id,
+        '1.00',
+        'Not yet billed usage',
+      ),
+    ).rejects.toBeInstanceOf(AppException);
+    const posted = await draft('posted');
+    await expect(
+      service.credit(
+        businessId,
+        staffId,
+        posted.id,
+        '1.00',
+        'Manager tries to credit',
+      ),
+    ).rejects.toBeInstanceOf(AppException);
   });
 });

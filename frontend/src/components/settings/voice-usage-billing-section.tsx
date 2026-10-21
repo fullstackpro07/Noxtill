@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { askText } from "@/lib/ask-dialog";
 import { Button } from "@/components/ui/button";
+import { VoiceUsageBillingCredits } from "./voice-usage-billing-credits";
 import { useBranchContextStore } from "@/store/branch-context-store";
 import {
   approveVoiceBillingRate,
@@ -450,6 +451,9 @@ function VoiceUsageBillingContent({ branchId }: { branchId: string | null }) {
                       <p className="text-xs text-fg-muted">
                         Sent to Stripe{detail.data.postedAt ? ` on ${new Date(detail.data.postedAt).toLocaleString()}` : ""} · item {detail.data.providerInvoiceItemId}
                       </p>
+                    )}
+                    {detail.data.status === "posted" && (
+                      <VoiceUsageBillingCredits draftId={detail.data.id} currency={detail.data.currency} />
                     )}
                     {detail.data.status === "draft" && (
                       <div className="flex flex-wrap gap-2">

@@ -226,8 +226,10 @@ handoff is a reviewed local Billing record; it does not create, send or pay a pr
   invoice); the Stripe idempotency key is the draft id, so it can never be added twice. It refuses
   when `STRIPE_SECRET_KEY` is missing or the business has no Stripe customer. If Stripe rejects
   it, the draft returns to `approved` with the provider message and can be retried. A draft stuck
-  in `posting` (process crash) can be retried safely. Billing adjustments and complete
-  invoice-cost reconciliation remain unfinished.
+  in `posting` (process crash) can be retried safely.
+- **Credits:** for a draft already sent, an owner can issue a credit (amount + reason). It is sent
+  once to Stripe as a negative invoice item (next invoice). Credits — including failed ones, which
+  keep their amount reserved until retried — can never exceed the billed total; each is audited.
 
 ## Monitoring and acceptance evidence
 

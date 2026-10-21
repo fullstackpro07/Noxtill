@@ -4149,6 +4149,26 @@ model VoiceBillingDraft {
   @@map("voice_billing_drafts")
 }
 
+/// Credit against a usage draft already sent to Stripe: posted once as a negative invoice item.
+/// Total credits for a draft can never exceed its billed total.
+model VoiceBillingAdjustment {
+  id                    String    @id @default(uuid())
+  businessId            String    @map("business_id")
+  draftId               String    @map("draft_id")
+  amount                Decimal   @db.Decimal(18, 6)
+  currency              String    @db.VarChar(3)
+  reason                String    @db.VarChar(500)
+  status                String    @default("pending") @db.VarChar(16)
+  providerInvoiceItemId String?   @map("provider_invoice_item_id") @db.VarChar(64)
+  postError             String?   @map("post_error") @db.VarChar(300)
+  createdByUserId       String    @map("created_by_user_id")
+  postedAt              DateTime? @map("posted_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  @@index([businessId, draftId, createdAt], map: "voice_billing_adjustments_draft_idx")
+  @@map("voice_billing_adjustments")
+}
+
 /// A usage row can be approved for billing once. Keeps the reviewed source evidence immutable.
 model VoiceBillingUsageClaim {
   id            String            @id @default(uuid())

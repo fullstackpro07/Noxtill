@@ -96,3 +96,28 @@ export const decideVoiceBillingDraft = (
 /** Sends an approved draft to Stripe once, as a pending item on the business's next invoice. */
 export const postVoiceBillingDraft = (id: string) =>
   apiFetch<{ id: string; status: string; providerInvoiceItemId: string | null }>(`${base}/drafts/${id}/post`, { method: "POST" });
+
+export interface VoiceBillingCredit {
+  id: string;
+  draftId: string;
+  amount: string;
+  currency: string;
+  reason: string;
+  status: "pending" | "posted" | "failed";
+  providerInvoiceItemId: string | null;
+  postError: string | null;
+  postedAt: string | null;
+  createdAt: string;
+}
+
+export const listVoiceBillingCredits = (draftId: string) =>
+  apiFetch<VoiceBillingCredit[]>(`${base}/drafts/${draftId}/credits`);
+
+export const issueVoiceBillingCredit = (draftId: string, amount: string, reason: string) =>
+  apiFetch<VoiceBillingCredit>(`${base}/drafts/${draftId}/credits`, {
+    method: "POST",
+    body: JSON.stringify({ amount, reason }),
+  });
+
+export const retryVoiceBillingCredit = (creditId: string) =>
+  apiFetch<VoiceBillingCredit>(`${base}/credits/${creditId}/post`, { method: "POST" });
