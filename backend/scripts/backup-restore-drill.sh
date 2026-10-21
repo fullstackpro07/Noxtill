@@ -30,8 +30,30 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> Inserting a canary row into '${MYSQL_DATABASE}.businesses' (slug=${CANARY_SLUG})"
-"${MYSQL[@]}" -D "$MYSQL_DATABASE" -e \
-  "INSERT INTO businesses (id, name, slug, branding, dashboard_config, working_hours, referral_settings, health_score_weights, created_at, updated_at) VALUES (UUID(), 'Backup Drill Canary', '${CANARY_SLUG}', CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), CAST('{}' AS JSON), NOW(), NOW());"
+# Prisma's @default on a Json column is applied by the client, not the database, so every required
+# column without a database default must be given here. They are read from the live schema rather than
+# listed by hand: a hard-coded list broke once already when a migration added `enabled_modules`.
+REQUIRED=$("${MYSQL[@]}" -N -e "
+  SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = '${MYSQL_DATABASE}' AND TABLE_NAME = 'businesses'
+    AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL
+    AND COLUMN_NAME NOT IN ('id', 'name', 'slug', 'created_at', 'updated_at')
+  ORDER BY ORDINAL_POSITION;")
+COLS="id, name, slug, created_at, updated_at"
+VALS="UUID(), 'Backup Drill Canary', '${CANARY_SLUG}', NOW(3), NOW(3)"
+while read -r col type; do
+  [ -z "$col" ] && continue
+  case "$type" in
+    json) v="CAST('{}' AS JSON)" ;;
+    varchar|char|text|mediumtext|longtext) v="''" ;;
+    int|bigint|smallint|tinyint|decimal|double|float) v="0" ;;
+    datetime|timestamp) v="NOW(3)" ;;
+    *) echo "FAIL: businesses.${col} (${type}) is required with no default; the drill doesn't know a value for it"; exit 1 ;;
+  esac
+  COLS="${COLS}, \`${col}\`"
+  VALS="${VALS}, ${v}"
+done <<<"$REQUIRED"
+"${MYSQL[@]}" -D "$MYSQL_DATABASE" -e "INSERT INTO businesses (${COLS}) VALUES (${VALS});"
 
 echo "==> mysqldump ${MYSQL_DATABASE} -> ${DUMP_FILE}"
 mysqldump --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --single-transaction --routines "$MYSQL_DATABASE" >"$DUMP_FILE"
