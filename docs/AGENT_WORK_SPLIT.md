@@ -1552,3 +1552,18 @@ is `docs/MODULE21_COMPLETION_CHECKLIST.md`; the overall goal is still active, no
   acceptance remain open. The original `calllll.docx` is missing from Downloads and was not found
   in the available task attachments; final source-spec acceptance needs it restored. The goal
   remains active and implementation can continue from the tracked requirements.
+
+## Module 21 — Claude Code takeover after Codex's limit (2026-10-21)
+
+- Committed Codex's uncommitted batch (178 files, 12 migrations) as `8f41a14` (backend), `d4feea3`
+  (frontend), `b6c8cdd` (docs) after a full Jest run (391/392; the one failing suite passed alone).
+- Added: Stripe hand-off for approved usage drafts (`572c643`); readiness probe and request-id
+  correlation (`ccfb591`, `971e67c`, request-id commit); Playwright + axe suite for all 17 screens
+  with the WCAG AA fixes it found, 35/35 (`97f456d`); GET-only load script (`971e67c`); Test Lab
+  safety attack pack (`a9bc57b`); webhook inbox for dialer/voicemail/call-back status (`a8ce86c`);
+  phone-number fee metering and a read-only Twilio reconciliation script (`e4d84d9`).
+- Load testing found and fixed two real issues: health probes were rate-limited, and concurrent
+  readiness checks raced on Redis and falsely returned 503.
+- Verification: full backend Jest 397/397 suites, 2,415 tests; backend and frontend tsc clean;
+  browser suite 35/35. No live provider call, video room, message or invoice was made.
+- Status and go-live list: `docs/MODULE21_RELEASE_REPORT.md`.

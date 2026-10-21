@@ -42,6 +42,22 @@ Screens existing does not imply every engine requirement is implemented or teste
 
 ## Remaining code and operational requirements — do not call these done
 
+> **Update 2026-10-21 (Claude Code, after Codex's batch was committed):** the following items below
+> are now partly or fully addressed — see `MODULE21_RELEASE_REPORT.md` for the current
+> supported/partial/not-supported table:
+> - Webhook inbox now also covers power-dialer agent-leg status, voicemail (AMD) results and
+>   call-back agent-leg status (`a8ce86c`). TwiML-returning callbacks remain excluded by design.
+> - Approved usage drafts can be sent to Stripe once as a pending invoice item (`572c643`);
+>   adjustments/credit notes are still not implemented.
+> - Phone-number recurring fees are metered and billable; a read-only script reconciles Twilio's
+>   account usage with the ledger (`e4d84d9`). OpenAI/LiveKit/storage invoices are not reconciled.
+> - Readiness probe `/health/ready` (DB + Redis, unthrottled, single-flight) and `X-Request-Id`
+>   correlation on every response and error body (`ccfb591`, `971e67c`, request-id commit).
+> - Browser end-to-end + axe WCAG 2.2 AA scan on all 17 screens, 35/35 passing (`97f456d`);
+>   a GET-only load-check script (`971e67c`); a one-click adversarial Test Lab pack (`a9bc57b`).
+>   Manual accessibility audit, production-scale soak tests and model-backed semantic safety
+>   evaluation are still not done.
+
 - Agent owner and branch scope are implemented for this checkout: branches are child `Business` rows; the AI-agent API follows the authenticated `X-Branch` context, lists that branch's active owners, validates the selected owner belongs to that exact branch, and snapshots the assignment in the immutable version. The inbound called number resolves to its owning business/branch, and only that branch's published agent version is pinned. A configured owner is a preference for an AI-to-human handoff, never a bypass of live availability, capacity or attempt rules. One agent is not shared across branches; configure one per branch.
 - Remaining detailed wizard gaps: independent semantic and model-backed adversarial multi-scenario evaluation. The Test Lab now optionally compares an expected `continue`/`book`/`message`/`transfer`/`end` outcome with the model's structured self-report; this is not an independent semantic or safety check. The OpenAI Realtime voice sample is generated on explicit operator action and metered; it is not the same as a live telephone call and does not prove acoustic quality on the carrier path. Exclusions, structured dialogue, selectable Realtime voice, literal phrase assertions, expected-outcome labels and text scenarios do not prove semantic correctness, safety or live speech behavior. New versions include published knowledge-corpus snapshots/provenance.
 - Complete funded cross-runtime booking acceptance and operational recovery of uncertain writes. Local MySQL coverage now enforces hours, service/staff eligibility, notice/deposit/cap/approval rules and guarded phone rescheduling; this is not proof of a successful real call or the full domain audit.
