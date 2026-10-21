@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../../common/storage/s3.service';
 import { VoiceHumanAgentDispatchService } from '../voice-human-agent-dispatch.service';
 import { VoiceTranscriptRedactionService } from '../voice-transcript-redaction.service';
+import { VoiceNumberFeesService } from '../voice-number-fees.service';
 import { VoiceOutboundDialerService } from '../voice-outbound-dialer.service';
 import { VoiceCallReconciliationService } from '../voice-call-reconciliation.service';
 import { VoiceRealtimeService } from '../voice-realtime.service';
@@ -54,11 +55,16 @@ export class VoiceRetentionProcessor extends WorkerHost {
     private readonly usageMetering?: VoiceUsageMeteringService,
     @Optional()
     private readonly providerWebhookEvents?: VoiceProviderWebhookEventsService,
+    @Optional() private readonly numberFees?: VoiceNumberFeesService,
   ) {
     super();
   }
 
   async process(job: Job): Promise<void> {
+    if (job.name === 'record-number-fees') {
+      await this.numberFees?.recordMonth();
+      return;
+    }
     if (job.name === 'generate-video-ai-artifacts') {
       const data = job.data as { businessId: string; recordingId: string };
       if (!this.meetingArtifacts)

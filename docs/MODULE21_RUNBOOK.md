@@ -211,6 +211,16 @@ handoff is a reviewed local Billing record; it does not create, send or pay a pr
   for a selected month and the latest 30 captured rate versions. Every decision has an audit record.
   Legacy `voice_text_tokens` is not billable yet because its current source records combine live
   replies and sandbox requests without a call-bound distinction.
+- **Phone-number fees:** a daily job records one `twilio:phone_number_months` row per business
+  line and active tracking number per UTC month (idempotent). Cost is Twilio's published local
+  list price (`estimated`), or `unpriced` without credentials/price. The unit is billable on the
+  rate card.
+- **Platform reconciliation (read-only):**
+  `node --env-file=.env scripts/billing/reconcile-twilio-usage.mjs --month YYYY-MM` compares
+  Twilio's account-wide usage records (inbound/outbound minutes, SMS segments, phone numbers)
+  with the ledger sum across all businesses. Investigate any gap before sending usage to billing.
+  First run (2026-09): Twilio showed 1 phone number ($1.15) with no ledger row — the gap the
+  number-fee meter now closes. Twilio usage is account-wide, so this is not a per-business invoice.
 - **Send to billing (Stripe):** after approval an owner can press "Send to billing". It creates
   ONE pending Stripe invoice item on the business's Stripe customer (it appears on their next
   invoice); the Stripe idempotency key is the draft id, so it can never be added twice. It refuses

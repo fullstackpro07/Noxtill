@@ -74,6 +74,22 @@ export class VoiceRetentionScheduler implements OnModuleInit {
       );
 
     // Post-call transcript redaction for businesses that enabled `voice.redactTranscripts`.
+    // Phone-number recurring fees: idempotent per number per UTC month, so a daily run is safe.
+    this.queue
+      .add(
+        'record-number-fees',
+        {},
+        {
+          repeat: { pattern: '40 0 * * *' },
+          jobId: 'voice-number-fees-daily',
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register phone-number fee metering: ${error.message}`,
+        ),
+      );
+
     this.queue
       .add(
         'redact-transcripts',

@@ -4,6 +4,7 @@ export const VOICE_BILLABLE_UNITS = [
   'twilio:outbound_provider_seconds',
   'twilio:conference_participant_seconds',
   'twilio:outbound_sms_segments',
+  'twilio:phone_number_months',
   'openai:transcription_audio_seconds',
   'openai:realtime_tokens',
   'livekit:video_participant_seconds',
