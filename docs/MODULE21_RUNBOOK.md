@@ -210,11 +210,21 @@ handoff is a reviewed local Billing record; it does not create, send or pay a pr
 - Further unclaimed records can be prepared in another batch. The page shows the latest 50 drafts
   for a selected month and the latest 30 captured rate versions. Every decision has an audit record.
   Legacy `voice_text_tokens` is not billable yet because its current source records combine live
-  replies and sandbox requests without a call-bound distinction. Provider invoice preparation,
-  billing adjustments and complete invoice-cost reconciliation remain unfinished.
+  replies and sandbox requests without a call-bound distinction.
+- **Send to billing (Stripe):** after approval an owner can press "Send to billing". It creates
+  ONE pending Stripe invoice item on the business's Stripe customer (it appears on their next
+  invoice); the Stripe idempotency key is the draft id, so it can never be added twice. It refuses
+  when `STRIPE_SECRET_KEY` is missing or the business has no Stripe customer. If Stripe rejects
+  it, the draft returns to `approved` with the provider message and can be retried. A draft stuck
+  in `posting` (process crash) can be retried safely. Billing adjustments and complete
+  invoice-cost reconciliation remain unfinished.
 
 ## Monitoring and acceptance evidence
 
+- Probes: `GET /health` (liveness, no I/O) and `GET /health/ready` (readiness). Readiness returns
+  200 only when the database answers within 2 s and Redis answers when `REDIS_URL`/`REDIS_HOST` is
+  set; otherwise 503 with component status only (`database`, `redis`). Point the load balancer
+  and an external uptime monitor at `/health/ready`; paging on 503 must be configured externally.
 - Supervisor reports actual saved audio latency samples, interruptions, failure counts and API
   latency. “Not tracked” is correct when there is no audio sample. Instance uptime is not historic
   availability and does not establish carrier uptime.

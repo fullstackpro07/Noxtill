@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ClsModule } from 'nestjs-cls';
 import { AppController } from './app.controller';
+import { ReadinessService } from './common/health/readiness.service';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -153,6 +154,6 @@ import { ProcurementModule } from './procurement/procurement.module';
     ProcurementModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, ReadinessService],
 })
 export class AppModule {}
