@@ -24,7 +24,16 @@ import { PoliciesService } from './policies/policies.service';
  */
 @Global()
 @Module({
-  imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
+  // Per business (or IP when anonymous). API_RATE_LIMIT_PER_MINUTE overrides the default 120,
+  // e.g. for a capacity test environment; unset keeps the existing limit.
+  imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: Number(process.env.API_RATE_LIMIT_PER_MINUTE) || 120,
+      },
+    ]),
+  ],
   providers: [
     AuditService,
     WebhookIdempotencyService,

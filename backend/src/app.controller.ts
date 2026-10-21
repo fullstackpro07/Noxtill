@@ -1,4 +1,5 @@
 import { Controller, Get, Res } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AppService } from './app.service';
 import { Public } from './common/decorators/public.decorator';
@@ -26,6 +27,7 @@ export class AppController {
    * Returns 200 immediately without any DB/Redis I/O so it always responds fast.
    */
   @Public()
+  @SkipThrottle()
   @Get(['health', 'api/v1/health'])
   health(): object {
     return {
@@ -40,6 +42,7 @@ export class AppController {
    * Redis, when configured); otherwise 503. Component status only — no error details.
    */
   @Public()
+  @SkipThrottle()
   @Get(['health/ready', 'api/v1/health/ready'])
   async ready(@Res() res: Response) {
     const result = await this.readiness.check();

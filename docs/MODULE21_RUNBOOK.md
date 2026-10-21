@@ -225,6 +225,17 @@ handoff is a reviewed local Billing record; it does not create, send or pay a pr
   200 only when the database answers within 2 s and Redis answers when `REDIS_URL`/`REDIS_HOST` is
   set; otherwise 503 with component status only (`database`, `redis`). Point the load balancer
   and an external uptime monitor at `/health/ready`; paging on 503 must be configured externally.
+  Both probes are exempt from the API rate limit; readiness results are shared by concurrent
+  probes and reused for 1 s, so frequent probing does not load the database.
+- Rate limit: 120 requests/minute per business (per IP when anonymous). The phone screens poll
+  several endpoints every few seconds, so many staff of one business on phone screens at once
+  can hit this limit (HTTP 429). `API_RATE_LIMIT_PER_MINUTE` raises it per environment; choose
+  a value from measured traffic.
+- Load check: `node backend/scripts/load/voice-api-load.mjs --api <url> --users 20 --seconds 30`
+  creates a throw-away QA business and issues GET requests only (no calls, no messages). It
+  reports p50/p95/p99, 5xx errors and 429s separately. Local result (2026-10-21, 10 users, dev
+  server): 0 server errors, p95 under 70 ms for allowed requests; the default limit throttled
+  the single QA business as designed. Do not run it against production without approval.
 - Supervisor reports actual saved audio latency samples, interruptions, failure counts and API
   latency. “Not tracked” is correct when there is no audio sample. Instance uptime is not historic
   availability and does not establish carrier uptime.
