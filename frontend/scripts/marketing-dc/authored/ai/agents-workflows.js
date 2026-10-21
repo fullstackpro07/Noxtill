@@ -104,7 +104,7 @@ const log = `
           </table>
         </div>
         <div style="${CARD} border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;">
-          ${img("hb/slots/outcome-screen-auto.webp", "The Noxtill automation screen with workflow cards", "width: 100%; aspect-ratio: 16 / 9; object-fit: cover; object-position: top;")}
+          ${img("hb/slots/outcome-screen-auto.png", "The Noxtill automation screen with workflow cards", "width: 100%; aspect-ratio: 16 / 9; object-fit: cover; object-position: top;")}
           <div style="padding: 20px 22px;">
             ${eyebrow("Versions & testing")}
             <h2 data-h2="1" style="margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -0.02em; color: #10201A;">Change a workflow without breaking it.</h2>

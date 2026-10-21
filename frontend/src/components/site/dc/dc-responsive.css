@@ -90,6 +90,8 @@
 @media (max-width: 640px) {
   .dcx .r-g2, .dcx .r-g3, .dcx .r-g4, .dcx .r-g5, .dcx .r-g6 { grid-template-columns: minmax(0, 1fr) !important; }
   .dcx .r-g2s, .dcx .r-g3s, .dcx .r-g4s, .dcx .r-g5s, .dcx .r-g6s { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  /* Charts / week strips (7+ tracks) keep their columns; tighten them so axis labels fit. */
+  .dcx .r-gn { gap: 3px !important; font-size: 10px !important; letter-spacing: -0.02em; }
   .dcx .r-gap { gap: 20px !important; }
   .dcx .r-px { padding-left: 20px !important; padding-right: 20px !important; }
   .dcx .r-pt { padding-top: 48px !important; }

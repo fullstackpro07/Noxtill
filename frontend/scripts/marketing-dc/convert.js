@@ -386,7 +386,10 @@ function responsiveFor(node, inMock, parentStyle = "") {
   // Page-layout grids: every track is a content column.
   else if (d["grid-template-columns"] && !d["grid-template-columns"].includes("{{")) {
     const tracks = splitTracks(d["grid-template-columns"]);
-    if (tracks.length >= 2 && tracks.every(bigTrack) && !/auto-fit|auto-fill/.test(d["grid-template-columns"])) {
+    // 7+ equal tracks are a chart / week strip / axis row, not content columns: stacking them on a
+    // phone turns each bar into a full-width block, so they keep their columns.
+    if (tracks.length >= 7 && tracks.every(bigTrack)) cls.push("r-gn");
+    else if (tracks.length >= 2 && tracks.every(bigTrack) && !/auto-fit|auto-fill/.test(d["grid-template-columns"])) {
       const short = elKids.length >= 4 && elKids.every((k) => textLen(k) <= 60 && !hasTag(k, ["img", "image-slot", "p"]));
       cls.push("r-g" + Math.min(tracks.length, 6) + (short ? "s" : ""));
     }
@@ -797,8 +800,10 @@ function emitLogic(key, src) {
     const entry = { ...view };
     const m = u && /^data:image\/(\w+);base64,(.*)$/.exec(u);
     if (m) {
-      const ext = m[1] === "jpeg" ? "jpg" : m[1];
-      fs.writeFileSync(path.join(OUT_PUBLIC, "slots", id + "." + ext), Buffer.from(m[2], "base64"));
+      let ext = m[1] === "jpeg" ? "jpg" : m[1];
+      // The design stores slot pictures as small webp files; a super-resolution PNG beside one replaces it.
+      if (ext === "webp" && fs.existsSync(path.join(OUT_PUBLIC, "slots", id + ".png"))) ext = "png";
+      else fs.writeFileSync(path.join(OUT_PUBLIC, "slots", id + "." + ext), Buffer.from(m[2], "base64"));
       entry.u = PUBLIC_BASE + "slots/" + id + "." + ext;
     }
     if (entry.u || entry.s !== 1 || entry.x || entry.y) slots[id] = entry;

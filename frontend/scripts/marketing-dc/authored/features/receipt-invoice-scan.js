@@ -64,7 +64,7 @@ const where = sec(
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 36px;">
           ${[["receipt", "Receipts", "Shop and fuel receipts become expenses with their date and amount."], ["invoice", "Supplier invoices", "Line items, the supplier and the invoice total, checked against each other."], ["id-card", "Business cards", "New suppliers with their phone and email."], ["file-check", "The original", "The photo stays with the expense for your records."]].map(([ic, t, d]) => `<div style="${CARD} padding: 20px;">${icon(ic, 22, "#0B6B3F")}<p style="margin: 12px 0 4px; font-size: 15.5px; font-weight: 700;">${t}</p><p style="margin: 0; font-size: 13.5px; line-height: 1.6; color: #4B5A52;">${d}</p></div>`).join("")}
         </div>
-        <div style="margin-top: 40px;">${img("hb/slots/ai-card-ai-photo-digitizer.webp", "Scanning a paper receipt with a phone", "width: 100%; aspect-ratio: 21 / 8; object-fit: cover; border-radius: 22px;")}</div>`,
+        <div style="margin-top: 40px;">${img("hb/slots/ai-card-ai-photo-digitizer.png", "Scanning a paper receipt with a phone", "width: 100%; aspect-ratio: 21 / 8; object-fit: cover; border-radius: 22px;")}</div>`,
 );
 
 const body = `${hero}${check}${where}${faq(

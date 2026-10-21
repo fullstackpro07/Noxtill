@@ -95,6 +95,135 @@ function swapPhotos(nodes, map) {
     swapPhotos(n[2], map);
   }
 }
+// Pixel size of a public PNG/JPEG, read from its header (sync, no dependencies).
+const PUBLIC_DIR = require("path").join(__dirname, "../../../public");
+function imageSize(src) {
+  try {
+    const b = require("fs").readFileSync(require("path").join(PUBLIC_DIR, decodeURIComponent(src.split("?")[0])));
+    if (b.readUInt32BE(0) === 0x89504e47) return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    if (b[0] === 0xff && b[1] === 0xd8) {
+      for (let i = 2; i < b.length; ) {
+        const m = b[i + 1], len = b.readUInt16BE(i + 2);
+        if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+        i += 2 + len;
+      }
+    }
+  } catch { /* not a local file */ }
+  return null;
+}
+// A framed picture (not a background photo) shows the whole image: the frame takes the image's own
+// shape instead of the design's, which cropped the screenshots and photos swapped in for it.
+// Portrait pictures are capped at 600px tall, no picture is shown wider than its own pixels, and a
+// capped picture is centred in its column.
+// pictures that read too large at their own size (owner review): src → max width in px
+const PHOTO_MAX = {
+  "/marketing/np/assets/noshows/flow.jpg": 420,
+  "/marketing/np/pasted-1788938231140-0-mttrmtf3-kst3.png": 460, // Recent Activity card
+  "/marketing/np/pasted-1789016303005-0-mtv24620-5wdr.png": 380, // inquiry → invoice timeline
+};
+function fitPhotos(nodes) {
+  for (const n of nodes) {
+    if (!isEl(n)) continue;
+    if (n[0] === "img" && n[1].src && n[1].src.startsWith("/") && !abs(n)) {
+      const m = st(n);
+      const size = /cover/.test(m.get("object-fit") || "") && m.has("aspect-ratio") && imageSize(n[1].src);
+      if (size) {
+        const [w, h] = size;
+        m.set("aspect-ratio", `${w} / ${h}`);
+        m.delete("height");
+        // never wider than the file itself (an enlarged picture looks oversized and soft)
+        // no framed picture taller than 600px (a full-width slot would otherwise fill the screen)
+        const cap = Math.min(w, Math.round((600 * w) / h), PHOTO_MAX[n[1].src] || Infinity);
+        m.set("width", `min(100%, ${cap}px)`);
+        m.set("margin-left", "auto");
+        m.set("margin-right", "auto");
+        n[1] = { ...n[1], width: String(w), height: String(h) };
+        setSt(n, m);
+      }
+    }
+    fitPhotos(n[2]);
+  }
+}
+// Hero visuals redrawn where the design's own art didn't explain the feature (owner review).
+// Each tells the page's business scenario in the product's own terms.
+const el = (tag, style, kids = [], attrs = {}) => [tag, { ...attrs, ...(style ? { style } : {}) }, kids];
+const pill = (label, fg, bg) => el("span", `display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: ${fg}; background: ${bg}; white-space: nowrap;`, [label]);
+const jobRow = (time, title, area, tag) =>
+  el("div", "display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid #e6eae8; border-radius: 14px; background: #fff;", [
+    el("span", "font-size: 13px; font-weight: 600; color: #40514a;", [time]),
+    el("div", "min-width: 0;", [el("p", "margin: 0; font-size: 14.5px; font-weight: 600; color: #0b1620;", [title]), el("p", "margin: 2px 0 0; font-size: 12.5px; color: #7b8a83;", [area])]),
+    tag,
+  ]);
+const techRow = (initials, name, detail, status, highlight) =>
+  el("div", `display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 14px; border: 1px solid ${highlight ? "#07784c" : "#e6eae8"}; background: ${highlight ? "#f2f9f6" : "#fff"};`, [
+    el("span", "display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: #053b2a; color: #fff; font-size: 13px; font-weight: 700;", [initials]),
+    el("div", "min-width: 0;", [el("p", "margin: 0; font-size: 14.5px; font-weight: 600; color: #0b1620;", [name]), el("p", "margin: 2px 0 0; font-size: 12.5px; color: #7b8a83;", [detail])]),
+    status,
+  ]);
+const option = (name, lines, verdict, chosen) =>
+  el("div", `padding: 14px 16px; border-radius: 14px; border: ${chosen ? "2px solid #07784c" : "1px solid #e6eae8"}; background: ${chosen ? "#f2f9f6" : "#fff"}; display: grid; gap: 8px;`, [
+    el("div", "display: flex; align-items: center; justify-content: space-between; gap: 10px;", [el("p", "margin: 0; font-size: 15px; font-weight: 700; color: #0b1620;", [name]), verdict]),
+    el("div", "display: grid; gap: 4px;", lines.map(([ok, t]) => el("p", `margin: 0; font-size: 13px; color: ${ok ? "#0b1620" : "#9a3a26"};`, [(ok ? "✓ " : "✕ ") + t]))),
+  ]);
+const VISUAL = {
+  "order-optimization": () =>
+    el("div", "width: 100%; max-width: 560px; margin-left: auto; background: #fff; border: 1px solid #e6eae8; border-radius: 22px; box-shadow: 0 30px 60px -36px rgba(5,59,42,.45); overflow: hidden; text-align: left;", [
+      el("div", "display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #e6eae8;", [
+        el("div", "", [el("p", "margin: 0; font-size: 16px; font-weight: 700; color: #0b1620;", ["New order #1046"]), el("p", "margin: 2px 0 0; font-size: 12.5px; color: #7b8a83;", ["Ceramic planter × 1 · Linen cushion × 1 · ships to Eastside"])]),
+        pill("Routing", "#1d5fa8", "#e6f0fb"),
+      ]),
+      el("div", "padding: 16px 20px 20px; display: grid; gap: 10px;", [
+        el("p", "margin: 0; font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #7b8a83;", ["Where should it ship from?"]),
+        option("Warehouse", [[true, "Has both items in stock"], [true, "4.2 mi from customer"], [true, "Shipping $6.40"]], pill("Chosen", "#fff", "#07784c"), true),
+        option("Downtown store", [[false, "Linen cushion out of stock"], [true, "2.1 mi from customer"], [true, "Shipping $5.10"]], pill("Would split order", "#a15c07", "#fdf1dc"), false),
+        el("p", "margin: 4px 0 0; font-size: 13px; color: #40514a;", ["Added to the warehouse pick list · picked with 3 other orders"]),
+      ]),
+    ]),
+  "dispatch-board": () =>
+    el("div", "width: 100%; max-width: 560px; margin-left: auto; background: #fff; border: 1px solid #e6eae8; border-radius: 22px; box-shadow: 0 30px 60px -36px rgba(5,59,42,.45); overflow: hidden; text-align: left;", [
+      el("div", "display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #e6eae8;", [
+        el("div", "", [el("p", "margin: 0; font-size: 16px; font-weight: 700; color: #0b1620;", ["Dispatch board"]), el("p", "margin: 2px 0 0; font-size: 12.5px; color: #7b8a83;", ["Arrow Appliance Repair · Today"])]),
+        pill("5 vans", "#07784c", "#e3f6ec"),
+      ]),
+      el("div", "padding: 16px 20px 6px;", [
+        el("p", "margin: 0 0 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #7b8a83;", ["Unassigned"]),
+        jobRow("8:05 AM", "Dryer repair", "Broad Ripple · Gas dryer won’t heat", pill("New", "#a15c07", "#fdf1dc")),
+      ]),
+      el("div", "padding: 14px 20px 20px; display: grid; gap: 8px;", [
+        el("p", "margin: 0 0 2px; font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #7b8a83;", ["Technicians"]),
+        techRow("LH", "Luis Herrera · Van 2", "12 min away (est.) · next job 11:00", el("span", "display: inline-flex; padding: 8px 14px; border-radius: 10px; background: #07784c; color: #fff; font-size: 13px; font-weight: 600;", ["Assign"]), true),
+        techRow("TB", "Tom Becker · Van 4", "On site · running 25 min long", pill("On site", "#1d5fa8", "#e6f0fb")),
+        techRow("AL", "Ana Lopez · Van 5", "Back from lunch at 12:30", pill("Break", "#40514a", "#eef1ef")),
+      ]),
+    ]),
+};
+// half-circle gauges never need the long way round; a large-arc flag drew one outside its track
+function fixArcs(nodes) {
+  for (const n of nodes) {
+    if (!isEl(n)) continue;
+    if (n[0] === "path" && /^M16 70 A54 54 0 1 1 /.test(n[1].d || "")) n[1] = { ...n[1], d: n[1].d.replace("A54 54 0 1 1 ", "A54 54 0 0 1 ") };
+    fixArcs(n[2]);
+  }
+}
+function replaceVisual(tree, slug) {
+  const make = VISUAL[slug];
+  if (!make) return;
+  // the visual is the [data-fvis] column, or — for heroes kept as designed — the hero grid's second column
+  const walk = (nodes) => nodes.forEach((n) => {
+    if (!isEl(n)) return;
+    if (n[1]["data-fvis"]) n[2] = [make()];
+    else if (Object.keys(n[1]).some((k) => /^data-\w+hero$/.test(k) && k !== "data-fhero")) {
+      const cols = n[2].filter(isEl);
+      if (cols[1]) cols[1][2] = [make()];
+    } else walk(n[2]);
+  });
+  walk(tree);
+  // the design's legend under the buttons described the old map
+  if (slug === "order-optimization") {
+    const drop = (nodes) => { for (let i = nodes.length - 1; i >= 0; i--) { const n = nodes[i]; if (!isEl(n)) continue; if (n[0] === "p" && /Downtown store · 3/.test(JSON.stringify(n[2]))) nodes.splice(i, 1); else drop(n[2]); } };
+    drop(tree);
+  }
+}
 const FIX = (() => { try { return require("./np-feature-hero-fix.json"); } catch { return []; } })();
 const PAL_RE = new RegExp(Object.keys(PALETTE).join("|"), "gi");
 const recolor = (s) => s.replace(/(background(?:-color)?\s*:[^;"]*?)#10201A/gi, "$1#053b2a").replace(PAL_RE, (m) => PALETTE[m.toUpperCase()]);
@@ -341,8 +470,37 @@ const SIZE = {
 };
 // calendar chips: one line, never wrapped inside their fixed-height slot
 const CHIP = (sel) => `${HERO} ${sel} { padding: 0 5px !important; display: flex; align-items: center; font-size: 11px !important; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }`;
-SIZE["appointment-calendar"] = `${HERO} .r-g6s { gap: 8px !important; margin-top: 0 !important; } ${HERO} .r-g6s > div { padding: 8px !important; } ${CHIP(".r-g6s > div > span:not(:first-child)")}`;
-const sizeCss = (slug) => (SIZE[slug] ? `@media (min-width: 1101px) { ${SIZE[slug]} }` : "");
+// (the week grid's responsive class is r-g6s or r-gn depending on the converter run)
+const WEEK = ":is(.r-g6s, .r-gn)";
+SIZE["appointment-calendar"] = `${HERO} ${WEEK} { gap: 8px !important; margin-top: 0 !important; } ${HERO} ${WEEK} > div { padding: 8px !important; }`;
+// rules that hold at every width (the chips wrap on tablets and phones too)
+// webhook flow: three cards drawn for a 1100px row don't fit a half-width hero — run it top to bottom
+const FLOW = `${HERO} div:has(> div > pre)`;
+const ALWAYS = {
+  "appointment-calendar": CHIP(`${WEEK} > div > span:not(:first-child)`),
+  "webhook-automation": `${FLOW} { grid-template-columns: minmax(0, 1fr) !important; max-width: 440px !important; margin: 8px auto 0 !important; gap: 10px !important; }
+${FLOW} > span { width: 0 !important; height: 26px; border-top: 0 !important; border-left: 2px dashed #07784c; justify-self: center; }
+${FLOW} > div { padding: 18px 22px !important; }
+${FLOW} pre { white-space: pre !important; overflow-x: auto; }
+${FLOW} .r-sbw { align-items: center; } ${FLOW} .r-sbw > * { white-space: nowrap; }`,
+  // the heading's glass panel kept only its border: give it its padding, tint and corners back, and
+  // keep the photo's subject (his face) in frame
+  "customer-feedback": `${HERO} > img { object-position: 50% 22% !important; }
+${HERO} div:has(> h1) { padding: 36px 40px !important; border-radius: 24px !important; background: rgba(5, 59, 42, .55); backdrop-filter: blur(14px); }
+@media (max-width: 760px) { ${HERO} div:has(> h1) { padding: 24px 20px !important; } }`,
+  // order board: a no-wrap status pill pushed cards past their column — let the header wrap instead
+  "automated-fulfillment": `.dcx p:has(> b + span) { flex-wrap: wrap; row-gap: 6px; align-items: center; }
+.dcx div:has(> div > div > p > b + span), .dcx div:has(> div > p > b + span), .dcx div:has(> p > b + span) { min-width: 0; }`,
+  // four gauges squeezed into a half-width column wrapped their names and clipped the arcs: two by two
+  "smart-inventory": `${HERO} [data-fvis] div:has(> div > svg) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; max-width: 520px; margin-left: auto !important; margin-right: auto !important; }
+${HERO} [data-fvis] div:has(> svg) { display: grid; justify-items: center; align-content: start; padding: 22px 18px !important; }
+${HERO} [data-fvis] svg { overflow: visible; max-width: 150px !important; }
+${HERO} [data-fvis] div:has(> svg) > b { white-space: nowrap; }`,
+  // the AI draft was pinned over the review's bottom edge and covered a review that wraps to two lines
+  "ai-review-replies": `${HERO} [data-fvis] div:has(> .r-abs) { padding-bottom: 0 !important; }
+${HERO} [data-fvis] .r-abs { position: relative !important; left: auto !important; right: auto !important; bottom: auto !important; margin: -14px 0 0 40px !important; }`,
+};
+const sizeCss = (slug) => (SIZE[slug] ? `@media (min-width: 1101px) { ${SIZE[slug]} }` : "") + (ALWAYS[slug] || "");
 
 function recolorTree(nodes) {
   for (const n of nodes) {
@@ -360,13 +518,19 @@ module.exports = {
     stripDisclaimers(tree);
     const slug = key.slice("features--".length);
     if (PHOTOS[slug]) swapPhotos(tree, PHOTOS[slug]);
+    fitPhotos(tree);
     // Only heroes that are not already text-left / visual-right (np-feature-hero-fix.json, measured from
     // the rendered designs) are rearranged; the rest keep the design's hero as drawn.
     if (process.env.NP_HERO_MEASURE !== "1" && FIX.includes(key.slice("features--".length))) restructure(tree);
     else untallHero(tree);
+    replaceVisual(tree, slug);
+    fixArcs(tree);
     return tree;
   },
   recolor,
+  fitPhotos,
+  replaceVisual,
+  fixArcs,
   scaleCss: (slug) => scaleCss(slug) + sizeCss(slug),
   // Feature-page small-screen rules (already scoped to .dcx).
   FEATURE_CSS: `

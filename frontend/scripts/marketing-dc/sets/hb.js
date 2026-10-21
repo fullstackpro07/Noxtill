@@ -38,6 +38,17 @@ module.exports = {
       /* AI cards keep their two short "understands / can do" columns. */
       section[aria-labelledby="ai-h"] article .r-g2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
     }`,
+    // The coded storefront mockup is empty (the storefront picture replaced it); its frame alone drew a
+    // thin line across the picture.
+    "platform--website-commerce": `[aria-label^="Willow & Pine demo storefront"] > div:has(> [data-nx-scale]) { display: none !important; }`,
+  },
+  transform: {
+    // The design's sticky "On this page" bar followed the reader down over the content (owner review).
+    "platform--finance-accounting": (tree) => {
+      const drop = (nodes) => { for (let i = nodes.length - 1; i >= 0; i--) { const n = nodes[i]; if (!Array.isArray(n)) continue; if (n[0] === "nav" && n[1]["aria-label"] === "On this page") nodes.splice(i, 1); else drop(n[2]); } };
+      drop(tree);
+      return tree;
+    },
   },
   // Image slots the designs left empty (they rendered as blank grey frames): filled with fitting
   // pictures that already exist under public/marketing.
@@ -45,8 +56,8 @@ module.exports = {
     "blog-card-ai-receptionist-for-small-business": "/marketing/np/ai-phone-receptionist-for-businesses-24--muiymuyy-79tq.png",
     "b1-hero": "/marketing/np/ai-phone-receptionist-for-businesses-24--muiymuyy-79tq.png",
     "b1-compliance": "/marketing/np/3a69923f-05cf-4f11-8277-9cac4fba205a-mulq83zq-81kw.png",
-    "blog-card-small-business-automation-ideas": "/marketing/hb/slots/outcome-screen-auto.webp",
-    "b2-hero": "/marketing/hb/slots/outcome-screen-auto.webp",
+    "blog-card-small-business-automation-ideas": "/marketing/hb/slots/outcome-screen-auto.png",
+    "b2-hero": "/marketing/hb/slots/outcome-screen-auto.png",
     "b2-split": "/marketing/np/assets/noshows/flow.jpg",
     "blog-card-all-in-one-business-software-small-business": "/marketing/np/business-software-integrations-mu5yrgs8-5hgf.png",
     "b3-hero": "/marketing/np/business-software-integrations-mu5yrgs8-5hgf.png",
