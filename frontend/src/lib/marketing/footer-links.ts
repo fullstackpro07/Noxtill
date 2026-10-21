@@ -256,37 +256,37 @@ export const AI_AGENTS_LIST: AIAgentItem[] = [
   {
     title: "AI Receptionist",
     subtitle: "Calls · Bookings · Leads",
-    href: "/ai/phone-receptionist",
+    href: "/agents/phone-receptionist",
   },
   {
     title: "AI Sales Agent",
     subtitle: "Lead Follow-ups · CRM",
-    href: "/platform/fast-sale",
+    href: "/agents/sales-agent",
   },
   {
     title: "AI Booking Agent",
     subtitle: "Appointments · Reminders",
-    href: "/platform/bookings",
+    href: "/agents/booking-agent",
   },
   {
     title: "AI Support Agent",
     subtitle: "Customer Support · FAQs",
-    href: "/platform/unified-inbox",
+    href: "/agents/support-agent",
   },
   {
     title: "AI Marketing Agent",
     subtitle: "Campaigns · Content",
-    href: "/platform/marketing-campaigns",
+    href: "/agents/marketing-agent",
   },
   {
     title: "AI SEO Agent",
     subtitle: "SEO Audits · Optimization",
-    href: "/platform/marketing-campaigns",
+    href: "/agents/seo-agent",
   },
   {
     title: "AI Business Assistant",
     subtitle: "Insights · Recommendations",
-    href: "/ai/assistant",
+    href: "/agents/business-assistant",
   },
 ];
 
