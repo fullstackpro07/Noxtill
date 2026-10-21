@@ -1,6 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The build outgrew Vercel's 8 GB build container (the compile worker was OOM-killed). Lower peak
+  // memory, per Next's memory-usage guide (node_modules/next/dist/docs/01-app/02-guides/memory-usage.md).
+  experimental: {
+    webpackMemoryOptimizations: true,
+    // a custom `webpack` function below turns the separate build worker off unless it is asked for
+    webpackBuildWorker: true,
+    serverSourceMaps: false,
+  },
+  enablePrerenderSourceMaps: false,
+  productionBrowserSourceMaps: false,
+  webpack: (config, { dev }) => {
+    // Keep webpack's module cache out of memory in production builds.
+    if (!dev) config.cache = false;
+    return config;
+  },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }],
   },
