@@ -1,7 +1,7 @@
 {
  "ai-agents-workflows": {
   "https://images.pexels.com/photos/6592684/pexels-photo-6592684.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/outcome-screen-auto.webp",
+   "/marketing/hb/slots/outcome-screen-auto.png",
    "Noxtill automations turning messages into tasks"
   ],
   "https://images.pexels.com/photos/9034719/pexels-photo-9034719.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -11,7 +11,7 @@
  },
  "ai-call-answering": {
   "https://images.pexels.com/photos/8691834/pexels-photo-8691834.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/ai-card-ai-phone-receptionist.webp",
+   "/marketing/hb/slots/ai-card-ai-phone-receptionist.png",
    "Receptionist with a headset beside Noxtill AI call screens"
   ],
   "https://images.pexels.com/photos/5685959/pexels-photo-5685959.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -27,6 +27,10 @@
   "https://images.pexels.com/photos/36733313/pexels-photo-36733313.jpeg?auto=compress&cs=tinysrgb&w=1600": [
    "/marketing/np/features/px-7948006.jpg",
    "Business owner reviewing figures on a laptop"
+  ],
+  "/marketing/np/7973c6d0-055a-4fea-9ea9-472b0118cd0e-mul91i2p-kkcp.png": [
+   "/marketing/np/features/ai-insights-laptop.png",
+   "Noxtill AI Insights dashboard on a laptop"
   ]
  },
  "ai-powered-operations": {
@@ -37,11 +41,11 @@
  },
  "ai-reply-drafting": {
   "https://images.pexels.com/photos/5455010/pexels-photo-5455010.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/ai-card-ai-assistant.webp",
+   "/marketing/hb/slots/ai-card-ai-assistant.png",
    "Noxtill AI drafting replies in the inbox"
   ],
   "https://images.pexels.com/photos/8204356/pexels-photo-8204356.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/stack-img-2.webp",
+   "/marketing/hb/slots/stack-img-2.png",
    "Unified Inbox on a laptop"
   ]
  },
@@ -51,13 +55,13 @@
    "Pediatric dentist talking with a girl and her father"
   ],
   "https://images.pexels.com/photos/39204813/pexels-photo-39204813.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/review-response-generator-for-small-busi-muloc3ew-foui.png",
+   "/marketing/agents/support-review-replies.png",
    "AI-drafted reply to a Google review"
   ]
  },
  "appointment-calendar": {
   "https://images.pexels.com/photos/3993308/pexels-photo-3993308.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/rec-photo-1.webp",
+   "/marketing/hb/slots/rec-photo-1.png",
    "Noxtill appointment calendar for the team"
   ],
   "https://images.pexels.com/photos/6599030/pexels-photo-6599030.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -71,8 +75,8 @@
    "Store employee reviewing a request on a tablet"
   ],
   "https://images.pexels.com/photos/4473093/pexels-photo-4473093.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/features/px-15066939.jpg",
-   "Close-up of a hardwood floor"
+   "/marketing/np/features/pexels-4263067-w1600.jpeg",
+   "A flooring installer laying wood planks on a customer job"
   ]
  },
  "auto-dialer-power-dialer": {
@@ -113,7 +117,7 @@
  },
  "booking-management": {
   "https://images.pexels.com/photos/36730228/pexels-photo-36730228.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/stack-img-3.webp",
+   "/marketing/hb/slots/stack-img-3.png",
    "Bookings & appointments in Noxtill"
   ],
   "https://images.pexels.com/photos/5466242/pexels-photo-5466242.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -133,13 +137,13 @@
    "Furniture store showroom with sofas and coffee tables"
   ],
   "https://images.pexels.com/photos/7658369/pexels-photo-7658369.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/ai-card-business-intelligence.webp",
+   "/marketing/hb/slots/ai-card-business-intelligence.png",
    "Call and business analytics on a Noxtill laptop dashboard"
   ]
  },
  "call-transfer-routing": {
   "https://images.pexels.com/photos/5453859/pexels-photo-5453859.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/rec-photo-2.webp",
+   "/marketing/hb/slots/rec-photo-2.png",
    "Incoming call routed to the right team with Noxtill"
   ],
   "https://images.pexels.com/photos/8204312/pexels-photo-8204312.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -203,7 +207,7 @@
    "Shared conversations in the Noxtill Unified Inbox"
   ],
   "https://images.pexels.com/photos/8204317/pexels-photo-8204317.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/ecommerce-dropshipping-business-manageme-mtsy0s8o-o0xf.png",
+   "/marketing/np/features/online-store-packing.png",
    "Online store packing an order in a Noxtill box"
   ]
  },
@@ -275,7 +279,7 @@
  },
  "local-seo": {
   "https://images.pexels.com/photos/5920774/pexels-photo-5920774.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/outcome-screen-multi.webp",
+   "/marketing/hb/slots/outcome-screen-multi.png",
    "Business listings and map locations in Noxtill"
   ],
   "https://images.pexels.com/photos/8475169/pexels-photo-8475169.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -295,7 +299,7 @@
  },
  "missed-call-recovery": {
   "https://images.pexels.com/photos/7580908/pexels-photo-7580908.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/build-better-communities-smarter-propert-mtu88k8l-1tca.png",
+   "/marketing/np/features/plumber-van.png",
    "Plumber with his tools beside the service van"
   ],
   "https://images.pexels.com/photos/38190070/pexels-photo-38190070.jpeg?auto=compress&cs=tinysrgb&w=2000": [
@@ -325,17 +329,17 @@
  },
  "quick-checkout": {
   "https://images.pexels.com/photos/12935081/pexels-photo-12935081.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/outcome-screen-sell.webp",
+   "/marketing/hb/slots/outcome-screen-sell.png",
    "Customer paying by card at a café counter"
   ],
   "https://images.pexels.com/photos/6684788/pexels-photo-6684788.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/82b13828-1753-479d-93fb-cd90ae8f67d9-mu6uo45g-5lsa.png",
+   "/marketing/np/features/quick-checkout-pos.png",
    "Noxtill point of sale with card terminal"
   ]
  },
  "receipts-invoices": {
   "https://images.pexels.com/photos/5239882/pexels-photo-5239882.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/noxtill-ai-business-operating-system-ai--mud6npke-dybm.png",
+   "/marketing/np/features/electrician-panel.png",
    "Electrician at a customer's panel"
   ],
   "https://images.pexels.com/photos/3570241/pexels-photo-3570241.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -349,7 +353,7 @@
    "Recent review activity across sources"
   ],
   "https://images.pexels.com/photos/13062477/pexels-photo-13062477.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/smarter-auto-business-operations--mu3rc8nr-ytaq.png",
+   "/marketing/np/features/auto-care-mechanic.png",
    "Auto shop technician with today's appointments"
   ]
  },
@@ -375,7 +379,7 @@
  },
  "review-management": {
   "https://images.pexels.com/photos/39204828/pexels-photo-39204828.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/stack-img-6.webp",
+   "/marketing/hb/slots/stack-img-6.png",
    "Reviews & reputation dashboard in Noxtill"
   ],
   "https://images.pexels.com/photos/7255766/pexels-photo-7255766.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -395,11 +399,11 @@
  },
  "sales-history": {
   "https://images.pexels.com/photos/4921264/pexels-photo-4921264.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/features/px-7667454.jpg",
-   "Cashier handing a shopping bag to a customer"
+   "/marketing/np/features/pexels-35082910-bookstore-4x3.jpeg",
+   "A customer choosing a book from a bookstore shelf"
   ],
   "https://images.pexels.com/photos/9755391/pexels-photo-9755391.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/stack-img-1.webp",
+   "/marketing/hb/slots/stack-img-1.png",
    "Sales and transactions on the Noxtill register"
   ]
  },
@@ -429,13 +433,13 @@
    "Bakery display of fresh pastries"
   ],
   "https://images.pexels.com/photos/4473496/pexels-photo-4473496.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/outcome-screen-grow.webp",
+   "/marketing/hb/slots/outcome-screen-grow.png",
    "Marketing audiences and channels in Noxtill"
   ]
  },
  "seo-audits": {
   "https://images.pexels.com/photos/8422729/pexels-photo-8422729.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/ai-card-seo-autopilot.webp",
+   "/marketing/hb/slots/ai-card-seo-autopilot.jpeg",
    "SEO Autopilot audit on a laptop"
   ],
   "https://images.pexels.com/photos/7255320/pexels-photo-7255320.jpeg?auto=compress&cs=tinysrgb&w=1600": [
@@ -471,6 +475,10 @@
   "https://images.pexels.com/photos/8475204/pexels-photo-8475204.jpeg?auto=compress&cs=tinysrgb&w=1600": [
    "/marketing/np/features/px-4481256.jpg",
    "Staff checking stock in a warehouse"
+  ],
+  "/marketing/np/32a8b871-dd45-48c7-84c4-e2bf0de926ed-mu61degt-4xz8.png": [
+   "/marketing/np/features/inventory-overview.png",
+   "Noxtill inventory overview with stock value and status"
   ]
  },
  "sms-inbox": {
@@ -479,7 +487,7 @@
    "Technician texting the customer from site via Noxtill"
   ],
   "https://images.pexels.com/photos/8872415/pexels-photo-8872415.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/home-field-services-software-more-jobs-s-mtv3fxci-ppbb.png",
+   "/marketing/np/features/heating-tech-outdoor.png",
    "Heating and plumbing technician at work"
   ]
  },
@@ -493,7 +501,7 @@
    "Massage therapist with a client"
   ],
   "https://images.pexels.com/photos/7750144/pexels-photo-7750144.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/outcome-screen-noshow.webp",
+   "/marketing/hb/slots/outcome-screen-noshow.png",
    "Staff calendar and booking screens in Noxtill"
   ]
  },
@@ -533,11 +541,11 @@
  },
  "triggers-actions": {
   "https://images.pexels.com/photos/7876662/pexels-photo-7876662.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/hb/slots/ai-card-ai-agents-workflows.webp",
+   "/marketing/hb/slots/ai-card-ai-agents-workflows.png",
    "Workflow builder with triggers and actions in Noxtill"
   ],
   "https://images.pexels.com/photos/4240534/pexels-photo-4240534.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/landscaping-business-software-less-admin-mtv2iq1v-eh4g.png",
+   "/marketing/np/features/landscaper-at-work.png",
    "Landscaping crew with mower and branded truck"
   ]
  },
@@ -547,7 +555,7 @@
    "Fitness studio class reminder in Noxtill"
   ],
   "https://images.pexels.com/photos/39204830/pexels-photo-39204830.jpeg?auto=compress&cs=tinysrgb&w=1600": [
-   "/marketing/np/7dd75263-3047-4272-b8cb-89668466c21f-mulorxkw-jqv7.png",
+   "/marketing/np/features/webhook-code-panel.png",
    "Webhook payload and event log"
   ]
  },
@@ -571,6 +579,12 @@
   "https://images.pexels.com/photos/35290669/pexels-photo-35290669.jpeg?auto=compress&cs=tinysrgb&w=1600": [
    "/marketing/np/pasted-1789019351715-0-mtv3xigh-alw3.png",
    "Technician and homeowner after the job is signed off"
+  ]
+ },
+ "inspections-checklists": {
+  "/marketing/np/features/pexels-34054470-w2000.jpeg": [
+   "/marketing/np/features/pexels-8293680-checklist.jpeg",
+   "An inspector holding a paper inspection checklist on a clipboard"
   ]
  }
 }

@@ -64,7 +64,7 @@ const after = sec(
   "#fff",
   `
         <div data-alias="1" style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center;">
-          ${img("hb/slots/stack-img-1.webp", "Products ready to sell on the Noxtill register", "width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 22px;")}
+          ${img("hb/slots/stack-img-1.png", "Products ready to sell on the Noxtill register", "width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 22px;")}
           <div>${h2("After approval", "Ready to sell the same day.", "Approved products appear in Products and Services with their category and price, so you can ring them up at the counter and list them online without typing a single line.")}
             <ul style="margin: 24px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; font-size: 14.5px; color: #4B5A52;">
               ${["New products are created; matched lines use the product you already have", "Prices and categories are editable before you approve", "Nothing changes in your catalogue until you approve"].map((x) => `<li style="display: flex; gap: 10px;">${icon("check-circle", 18, "#16A85F")}${esc(x)}</li>`).join("")}
