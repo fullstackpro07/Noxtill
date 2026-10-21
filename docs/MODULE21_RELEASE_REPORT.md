@@ -39,16 +39,16 @@ documented limit. **Not supported** = not built; stated honestly in the product 
 | --- | --- | --- |
 | Realtime AI audio + caller interruption | Supported · needs live acceptance | OpenAI Realtime over signed Twilio Media Streams; socket tests use simulated providers |
 | AI tool calling and authorization | Supported | Pinned allowlist; catalog, slots, caller match, verified reschedule, ticket, unsent draft; no refund/payment tools |
-| AI agent safety | Partial | Platform authority policy, untrusted-data framing, one-click attack pack with phrase tripwires; **no model-backed semantic safety evaluation** |
+| AI agent safety | Supported · needs live acceptance | Platform authority policy, untrusted-data framing, one-click attack pack with phrase tripwires, and an optional independent-model safety review per reply (pass/fail/uncertain; malformed or failed reviews are never a pass). Not a substitute for a human red-team review |
 | ACD / human dispatch | Supported | Row-locked reservation, next-agent retry, dialer/call-back agents counted busy |
-| Provider event durability | Partial | Inbox with dedupe/retry/dead-letter/replay for call status, transfers, agent legs, conference usage, realtime recording, dialer/voicemail/call-back status; TwiML-returning callbacks intentionally excluded |
+| Provider event durability | Supported | Inbox with dedupe/retry/dead-letter/replay for call status, transfers, agent legs, conference usage, realtime recording, dialer/voicemail/call-back status; TwiML-returning callbacks intentionally excluded (replaying them could repeat provider side effects) |
 | Metering | Partial | Call, SMS, conference, video, realtime tokens, transcription seconds, storage bytes/byte-days, phone-number months; signed user downloads/local disk reads are not observed as egress |
-| Billing handoff | Partial | Owner-approved rate versions and usage drafts; approved drafts sent to Stripe once as an invoice item; **no billing adjustments/credit notes**; selling prices must be supplied by the operator |
+| Billing handoff | Supported · needs live acceptance | Owner-approved rate versions and usage drafts; approved drafts sent to Stripe once as an invoice item; credits posted once as negative items and never above the billed total; selling prices must be supplied by the operator |
 | Cost reconciliation | Partial | Read-only script compares Twilio account usage with the ledger per month; OpenAI/LiveKit/storage invoices are not reconciled automatically |
 | Budget guardrails | Supported | Monthly phone cap with 70/90% alerts, per-version AI budgets, inbound automated-call cap (test calls excluded) |
 | Security and tenancy | Supported | Global auth/tenancy guards, signed webhooks, HMAC storage URLs, audit logs |
-| Observability | Partial | Liveness `/health`, readiness `/health/ready` (DB + Redis), `X-Request-Id` on every request and error, in-app operations metrics and alert; **no external paging, tracing backend or historic SLO reporting** |
-| Accessibility (WCAG 2.2 AA) | Partial | Automated axe scan passes on all 17 screens (no serious/critical); **no manual screen-reader/keyboard audit** |
+| Observability | Supported · needs deployment | Liveness `/health`, readiness `/health/ready` (DB + Redis), `X-Request-Id` on every request and error, in-app operations metrics, and external alert forwarding to `OPS_ALERT_WEBHOOK_URL` (failure bursts, budget warnings, dead-lettered callbacks). A tracing backend and historic SLO dashboards are deployment tools, not app code |
+| Accessibility (WCAG 2.2 AA) | Supported · needs a human audit | Automated axe scan and keyboard-only check (focus keeps moving, focus always visible) pass on all 17 screens; a person with a screen reader has not reviewed it |
 
 ## 3. QA evidence (section 15)
 
@@ -56,10 +56,11 @@ documented limit. **Not supported** = not built; stated honestly in the product 
   `docs/AGENT_WORK_SPLIT.md` for each batch.
 - Browser: `cd frontend && npm run test:e2e` with both dev servers running — signs up a fresh QA
   business, logs in through the real form, loads all 17 screens and runs the axe scan.
-  Last run 2026-10-21: **35/35 passed**.
+  Includes a keyboard-only check. Last run 2026-10-21: **52/52 passed** (load, axe, keyboard).
 - Load: `backend/scripts/load/voice-api-load.mjs` (GET-only). Local 10-user run: 0 server errors,
   p95 under 70 ms; the default 120 requests/minute per business limit throttled one business.
-- Not done: soak tests at production scale, red-team review by a person, live provider acceptance.
+- Not done (needs production or people): soak tests at production scale, human red-team and
+  screen-reader review, live provider acceptance.
 
 ## 4. Required before go-live (cannot be done in code)
 

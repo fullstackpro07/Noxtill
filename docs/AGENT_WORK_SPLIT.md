@@ -1567,3 +1567,8 @@ is `docs/MODULE21_COMPLETION_CHECKLIST.md`; the overall goal is still active, no
 - Verification: full backend Jest 397/397 suites, 2,415 tests; backend and frontend tsc clean;
   browser suite 35/35. No live provider call, video room, message or invoice was made.
 - Status and go-live list: `docs/MODULE21_RELEASE_REPORT.md`.
+- Follow-up (same day): external alert forwarding to OPS_ALERT_WEBHOOK_URL (`55fddfe`), Stripe credits
+  for posted usage (`cacd7a0`), independent AI safety review in the Test Lab (`600014e`, `94d3cb8`),
+  keyboard-only browser check with a date-picker focus fix (`618fa5f`). Final verification: backend
+  Jest 399/399 suites, 2,422 tests; backend and frontend tsc clean; migrations up to date; browser
+  suite 52/52.
