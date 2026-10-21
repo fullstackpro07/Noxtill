@@ -357,7 +357,7 @@ export function ReceptionistShell({ children }: { children: ReactNode }) {
       className="flex h-[38px] w-full min-w-0 max-w-[440px] cursor-text items-center gap-[9px] rounded-[10px] border border-[#E6E8EC] bg-[#F5F6F8] px-3 transition-colors hover:border-[#CBD5E1] hover:bg-white"
     >
       <Ico name="sparkles" size={15} className="text-[#6D28D9]" />
-      <span className="min-w-0 flex-1 truncate text-[13px] text-[#8B97A6]">
+      <span className="min-w-0 flex-1 truncate text-[13px] text-[#5B6675]">
         Ask — “which missed calls need follow-up?”
       </span>
       <span className="rounded-[5px] border border-[#E6E8EC] border-b-2 bg-white px-1.5 py-0.5 font-mono text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">

@@ -203,7 +203,7 @@ export function OutboundDialersScreen() {
           <h1 className="text-[21px] font-extrabold tracking-[-.02em]">
             Outbound Dialers
           </h1>
-          <p className="mt-1 max-w-[790px] text-[12px] leading-[1.6] text-[#697586]">
+          <p className="mt-1 max-w-[790px] text-[12px] leading-[1.6] text-[#5B6675]">
             Prepare a callback or service campaign, check each selected customer
             against this business&apos;s saved consent, policy, opt-out and
             suppression evidence, then start approved AI calls one at a time or

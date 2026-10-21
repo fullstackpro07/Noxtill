@@ -303,7 +303,7 @@ export function VoiceIvrStudioScreen() {
           <h1 className="text-[21px] font-extrabold tracking-[-.02em]">
             IVR &amp; Routing Studio
           </h1>
-          <p className="mt-1 max-w-[780px] text-[12px] leading-[1.6] text-[#697586]">
+          <p className="mt-1 max-w-[780px] text-[12px] leading-[1.6] text-[#5B6675]">
             Build and test your call flow, then publish it for new inbound
             calls. Each live call stays pinned to the version it started with.
           </p>

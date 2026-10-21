@@ -137,9 +137,10 @@ function HelpCard() {
       <Link
         href="/assistant/help"
         className="block w-full rounded-lg py-2 text-center text-[11.5px] font-bold text-white transition-colors"
-        style={{ background: "var(--app-primary)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--app-primary-hover)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--app-primary)")}
+        // Small bold text: the darker theme green keeps white text above the 4.5:1 WCAG AA ratio.
+        style={{ background: "var(--app-primary-hover)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(0.9)")}
+        onMouseLeave={(e) => (e.currentTarget.style.filter = "")}
       >
         Go to Help Center
       </Link>

@@ -258,7 +258,7 @@ export function QualityReviewWorkflow() {
       <Card overflow>
         <CardHead title="Review queue" sub="Manual reviewer scoring · every below-maximum score needs a transcript citation" />
         <div className="flex flex-wrap items-center gap-2 p-4">
-          <select className={`${inputClass} max-w-[480px]`} value={selectedCallId} onChange={(event) => setSelectedCallId(event.target.value)}>
+          <select aria-label="Completed call to review" className={`${inputClass} max-w-[480px]`} value={selectedCallId} onChange={(event) => setSelectedCallId(event.target.value)}>
             <option value="">Select a completed call with transcript</option>
             {eligibleCalls.map((call) => <option key={call.id} value={call.id}>{call.localDay} · {maskedNumber(call.fromNumber)} · {call.outcome}</option>)}
           </select>

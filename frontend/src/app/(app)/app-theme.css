@@ -52,7 +52,7 @@
   --app-orange: #f97316;
 
   --app-new-badge-bg: #0e8442;
-  --app-new-badge-fg: #8ff0bb;
+  --app-new-badge-fg: #ffffff; /* 4.8:1 on the badge green (WCAG AA for 9px text) */
 }
 
 /* Exact match for the design's thin scrollbar spec (`::-webkit-scrollbar{width:8px;height:8px}`,
