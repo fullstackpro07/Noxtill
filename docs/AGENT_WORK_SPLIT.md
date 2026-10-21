@@ -1004,3 +1004,551 @@ never `git add -A`, never push. Report bugs for the other agent under Requests.
   screenshots saved locally as `/tmp/noxtill-number-routing-verified.png` and
   `/tmp/noxtill-ai-credit-blocker.png`. These prove status/error UI only, not live audio quality.
   No migration. No push. Real AI audio, booking, transfer and recording QA remains outstanding.
+
+## Module 21 progress — provider-outage handling and offline verification (Codex, 2026-10-18)
+
+- Continuing development without buying credit or silently switching providers. No live AI,
+  speech transcription or new telephone call was requested in this batch. Previously observed
+  insufficient Anthropic credit is still a live-conversation QA dependency, not evidence that
+  the whole module is production-ready.
+- Extracted sanitized AI failure classification shared by agent sandbox tests and live call
+  handling. Insufficient credit, denied access, missing configuration, unavailable models and
+  rate limits now produce operator-safe reasons rather than persisting raw provider errors.
+  A failed inbound conversation saves a message/follow-up outcome and ends the call instead of
+  asking for more recordings. Transcription failures retain the consented recording and a reason.
+  Late callbacks for ended calls and sequential callbacks after a saved service failure do not
+  request transcription/AI again. Model output cannot assert the server-only failure/budget flags.
+- An AI outbound provider failure pauses its running campaign and audits the reason, preventing
+  the next contact from being dialed by the sequential campaign. Pinned versions and existing
+  tool/compliance checks remain intact. Inbound caps and inbound usage now explicitly exclude
+  outbound calls (as well as the existing test-call exclusion).
+- Provider health separates OpenAI transcription from Anthropic replies. Saved test/call evidence
+  is distinguished from present availability; key presence alone is not a successful provider
+  check, and no paid AI probe is made. Call workspace displays saved service failures. Settings
+  and workspace copy no longer claim unconditional transcription or missed-call message delivery.
+- Updated the default Haiku 4.5 token-cost estimate to USD 1 input / USD 5 output per million
+  tokens, matching the already-selected default model. These remain estimates, not the provider
+  invoice; historical usage rows were not rewritten. No model was changed in this batch.
+- Verification: baseline 373 suites / 2,278 tests; full backend Jest `--maxWorkers=2` now passes
+  373/373 suites and 2,288/2,288 tests. Focused five-suite run passes 77 tests, using real MySQL
+  and mocked external providers for outage cases. Backend/frontend `tsc --noEmit`, backend build,
+  touched-file ESLint and `git diff --check` pass. Fabrication/stale-claim grep completed.
+- Browser QA used the existing signed-in `QA Test Business Voice 20261016`, not the main account.
+  Settings, Agents and Call History/workspace load; captured Settings API/network responses are HTTP 200
+  and browser console has no warning/error entries. Provider-dependent copy and saved-test
+  availability disclosures are visible. Screenshot: `/tmp/noxtill-offline-phone-settings-20261018.jpg`.
+  The new failure banner is database/API/type-tested, but no new live failed call was created to
+  exercise it in the browser. The referenced `.dc.html` design folder is absent in this checkout;
+  existing layout was retained, not claimed as a newly verified pixel match.
+- Found one historical QA call still locally `in_progress` after its terminal callback was lost.
+  Twilio's read-only Call resource confirmed it completed on 2026-10-16. Reconciled only that
+  QA row and reservations from provider evidence, with a `voice.qa.provider_status_reconciled`
+  audit entry. Browser QA confirms zero live calls afterwards; its unresolved follow-up was
+  preserved. This is a one-off QA correction, not a
+  newly implemented automatic status reconciler.
+- No migration, credential-file change, commit or push in this batch. Existing uncommitted
+  default-model and transfer caller-ID changes were preserved. Real conversation quality,
+  end-to-end recording/booking/transfers and production deployment still require provider-backed
+  QA; the suite passing does not substitute for those tests.
+- Replaced the Supervisor Center's unsupported AI-errors placeholder with a tenant-scoped count of
+  non-test calls started in the last 24 hours that contain a saved transcription/AI-reply failure.
+  The MySQL query counts distinct calls; it does not infer failures from provider availability.
+  A real-MySQL spec verifies saved failures count while test calls, another business, and calls
+  older than 24 hours do not. The QA business currently shows 0 eligible calls.
+- Verification: backend/frontend `tsc --noEmit`, ESLint on touched files, backend production
+  build, and the focused Supervisor MySQL spec pass. Full backend Jest with `--runInBand` passes
+  373/373 suites and 2,289/2,289 tests. The `--maxWorkers=2` run had a Customer Portal cleanup
+  foreign-key failure; that suite passed 5/5 when rerun alone, and the sequential full rerun was
+  clean. Browser QA at `/phone/supervisor` showed the real 0 count; its API returned 200 and no
+  browser exceptions, console errors, or failed network requests were observed. No AI/provider
+  request or telephone call was made. No migration, credential-file change, commit or push.
+
+## Module 21 progress — automatic provider call-status reconciliation (Codex, 2026-10-18)
+
+- Added a bounded, read-only Twilio status reconciliation job for stale `in_progress` calls.
+  It checks at most 50 calls per run, every five minutes, with a two-minute age threshold,
+  five-minute retry cooldown and concurrency limit of five. It never originates calls. Provider
+  terminal status is applied through the existing inbound/outbound lifecycle handlers.
+- Added an atomic claim timestamp and index to avoid two workers reconciling the same call at
+  once. Duplicate terminal callbacks now cannot duplicate reservation release or missed-call
+  side effects; outbound no-answer calls are no longer misclassified as inbound missed calls.
+- Added real-MySQL coverage for terminal/active/cooldown/concurrent/missing-provider-key cases,
+  duplicate callback handling, outbound no-answer, scheduler dispatch and processor dispatch.
+- Added and locally applied migration `20261018231830_voice_call_status_reconciliation` (one
+  nullable timestamp column and one composite index). `prisma generate` and `prisma migrate status`
+  succeeded; status reports 189 migrations and a clean schema.
+- Verification: backend and frontend `tsc --noEmit` pass; ESLint passes on touched backend and
+  frontend files; focused tests pass (4 suites / 63 tests); full backend Jest `--maxWorkers=2`
+  passes (375 suites / 2,297 tests); `git diff --check` is clean. No frontend UI changed in this
+  batch, so no new visual check was needed. No paid AI request or telephone call was made.
+- This is not the end-to-end production signoff: live AI speech/conversation, real PSTN audio,
+  recording/transcription consent behavior and country-specific compliance still need funded
+  provider QA and business/legal approval. Changes are uncommitted and not pushed.
+
+## Module 21 progress — remaining runtime requirements (Codex, 2026-10-20)
+
+This batch corrects the earlier over-broad completion claim. Screens alone do not fulfill the
+later engine, metering, operations and acceptance sections. The detailed remaining-work ledger
+is `docs/MODULE21_COMPLETION_CHECKLIST.md`; the overall goal is still active, not finished.
+
+- Added an opt-in Twilio Media Streams / OpenAI Realtime GA PCMU bridge. Admission requires
+  Twilio's signed upgrade plus a single-use, call-bound nonce; the server retains model keys.
+  Audio forwarding has bounded buffers, start/provider/idle/duration timers and safe fallback.
+  Caller speech clears pending Twilio playback and truncates unheard model audio. Playback
+  acknowledgements distinguish completed playback from interruption. Local socket tests use a
+  simulated provider, **not real OpenAI speech or a carrier call**.
+- Agent versions now pin inbound/outbound availability, IANA time zone, weekly hours, holidays,
+  deterministic pilot percentage, concurrency, maximum call duration and tool count, alongside
+  existing tool permissions, knowledge IDs, response tokens and version budget. Existing agents
+  remain recorded-turn by default. The builder has twelve navigation stages over the available
+  controls; the checklist explicitly identifies the detailed wizard sub-contracts still pending.
+- New drafts snapshot selected knowledge content, hashes and timestamps. Later document edits
+  do not rewrite that tested corpus; new drafts capture edits. Runtime filters revoked sources,
+  checks them again before new realtime responses/tools and saves source-provenance audit
+  evidence. Recorded-turn snapshot retrieval is deterministic and tenant-scoped. Older versions
+  without corpus snapshots retain legacy behavior until replaced. Retrieval counters are
+  described as retrievals, not invented distinct call counts.
+- Added allowlisted service/slot lookup, minimal caller matching, verified booking changes,
+  support tickets and unsent message drafts. Write tools require caller keypad confirmation;
+  sensitive changes require the existing private booking-management reference and matching
+  caller. Tickets/drafts live in canonical Messaging-owned tables, not fabricated reviews.
+  The call workspace shows their actual state; drafts never send a message automatically.
+- Closed a separate legacy privacy gap: caller-ID matching alone no longer unlocks order or
+  balance data. Recorded-turn replies require enabled sharing and the matching customer's
+  private reference to a non-canceled upcoming/recent (90-day) booking, supplied with the
+  question; otherwise account details/existence are withheld and staff help offered. Reference
+  text is masked before model history and persisted transcript. Relevant Forms, Knowledge,
+  Assistant and workspace copy was updated. Other identity-verification channels are not claimed.
+- Recorded-turn booking writes now require a server-generated read-back and signed provider
+  keypad callback. The call-bound request expires, supersedes older pending requests, is claimed
+  atomically, refuses missing/declined/expired choices and caches the confirmed result for
+  duplicate callbacks. Service identity is pinned and revalidated. Past/invalid times are refused.
+  Uncertain post-write failures become review-needed rather than blindly retrying a booking.
+- Added durable realtime recording import through the existing retention queue. It verifies
+  provider recording ownership/completion, checks consent/deletion/expiry/legal hold, persists
+  private storage before removing the extra provider copy, retries failed imports and meters
+  actual uploaded bytes. MySQL tests cover duplicates, wrong call, no consent, deletion races
+  and legal hold with simulated Twilio/storage. No new real recording was imported in this batch.
+- Added an idempotent usage ledger: provider duration/price/currency, realtime token evidence,
+  legacy voice text tokens, upload bytes, signed conference timestamps and signed LiveKit
+  participant duration. Missing usage stays pending; unconfigured rates stay unpriced. Token
+  list-price estimates are explicitly not invoices. Actual provider-billed QA calls still count.
+- Added nullable `voice.monthlySpendCapUsd` (default no cap), a real policy Settings row,
+  shared admission/turn checks and deduplicated owner in-app 70/90% warnings. Version budget
+  enforcement also covers sandbox requests. No customer invoice/card charge was introduced;
+  complete invoice reconciliation, selling-rate configuration and billing handoff remain open.
+- Realtime sandbox uses the selected realtime provider in text-only/no-tools mode, with the
+  common AI toggle/rate/cost guardrails and returned token counts. It cannot prove live audio,
+  carrier quality or tool execution. No paid provider sandbox was run from the QA browser.
+- Added actual first-audio p95 samples, interruption/error counts, control API latency samples
+  and a bounded operational view in Supervisor. Owners receive an in-app failure-burst alert
+  (3 non-test realtime failures/10 minutes, at most once/hour). External paging, historical
+  availability probes and production SLO/load/accessibility acceptance remain open. Settings
+  no longer claims there are no alerts, no verified rescheduling, or no billable test usage.
+- Added direct `ws`/`@types/ws` dependencies. npm reported existing vulnerabilities; no broad
+  unrelated audit-fix/upgrade was applied. Fixed a test fixture's four-digit clock-based phone
+  number collision; the dialer MySQL suite passes alone with a high-entropy test number.
+- New migrations, **applied locally**: `20261020120000_voice_realtime_usage` (2 tables) and
+  `20261020140000_voice_customer_followups` (2 tables). Verified all six new foreign keys in
+  `information_schema`, generated Prisma and confirmed 191 migrations with clean migration status.
+- Verification checkpoint: both type checks pass; focused safety run passes 5 suites/81 tests;
+  full backend `jest --maxWorkers=2` passes 384 suites/2,325 tests. A final frozen-code rerun is
+  in progress and will be recorded below after it finishes. Backend production build succeeded
+  before the latest safety additions; it needs refresh before those additions are browser-tested.
+- Browser QA used a new isolated `QA Test Business Module21 20261020`, not the main account.
+  Its non-live draft persists realtime mode, 5% pilot and 90-second limit. Twelve-step navigation
+  loads and untested approval/publish buttons remain disabled; no agent was activated. Settings
+  and Supervisor data/empty states load, with no captured browser warning/error entries. Screenshot:
+  `/tmp/noxtill-module21-agent-publish-20261020.png`. This is targeted UI QA, not the complete
+  browser end-to-end/load/red-team/accessibility or live provider signoff.
+- Dev watch compiler exhausted its heap; it was replaced with a successful production build
+  running on the existing local port 5001 (frontend's configured target). No credentials changed,
+  no new telephone call/customer message/paid AI probe, no commit and no push in this batch.
+- Frozen-code full rerun update: the process completed with 375 passed/9 failed suites,
+  2,289 passed/36 failed tests. The failures are setup-hook timeouts across Credit, Reviews,
+  Campaigns, Customers, AI Settings, Dashboard, Bookings Queue and the new realtime-booking
+  fixture; this run took 2,757 seconds. It is **not green** and is not a replacement for the
+  earlier 384-suite/2,325-test pass. The nine suites are being rerun serially to establish whether
+  the failures are environmental or regressions; do not assert the cause before that evidence.
+- Backend ESLint caught an unsafe matcher assignment in the new corpus-snapshot DB spec; it
+  was changed to a scalar assertion and that file now passes lint. No production code changed
+  for that lint correction. Remaining full done-check and latest production-build/browser refresh
+  are still pending. The overall module is not ready to call complete or production-approved.
+- The nine timeout suites pass when rerun serially: 9/9 suites, 36/36 tests, 4.682 seconds.
+  A complete serial full-suite run is now checking the frozen code. This does not erase the
+  failed parallel-run evidence or establish a production load/SLO result.
+- The complete frozen-code serial rerun is green: **384/384 suites and 2,325/2,325 tests**,
+  205.349 seconds. Backend `tsc --noEmit` passed before that run; frontend type/lint checks
+  also passed. A fresh production build is now refreshing the running backend for browser QA.
+- Added `MODULE21_RUNBOOK.md` describing actual rollout/rollback, reauthorization, signed webhook
+  configuration, recording retry/deletion/legal-hold handling, uncertain booking outcomes,
+  budget/provider incidents and acceptance evidence boundaries. It is not a production certificate.
+- Accessibility spot check in the isolated QA Supervisor page found no visibly unnamed controls,
+  but identified 26 low-contrast text samples using computed solid foreground/background colors.
+  Examples: light gray `#94A3B8` on white is 2.56:1; `#7A8798` on the metric-card background is
+  3.46:1. This is a real outstanding UI issue, not an AA pass. Use the existing app text tokens
+  for remediation; retain the full keyboard/screen-reader/zoom audit as a separate requirement.
+- Remediated the repeated low-contrast gray text/icon declarations in the Receptionist-owned
+  components using the existing `--app-text-faintest` token with its existing `#667085` fallback,
+  not a new palette or layout. The same computed solid-color Supervisor spot check now reports
+  **0 contrast failures** (previously 26). Other screens/states and the full WCAG audit still need
+  verification; do not extrapolate this spot check into whole-product conformance.
+- Latest production build succeeds and the backend is being refreshed on local port 5001.
+  Before restart, the only non-test `in_progress` row was the old orphan fixture
+  `c9ee790f-8c64-4888-b506-aa5750e93c5b`: no owning Business and not a real Twilio SID shape.
+  It was not deleted or represented as a real connected call. Runtime reconciliation had already
+  recorded provider 404s for it. Preserve that diagnostic rather than guessing a real outcome.
+- Agent-builder contrast check found the shared white-on-green primary button at 3.30:1.
+  Receptionist primary-button backgrounds now use the existing `--app-primary-hover` token
+  (`#0e8442` fallback), preserving the green theme while correcting that small-text contrast.
+  This is scoped to Receptionist components, not a global rebrand. Final frontend checks and
+  a rendered re-check follow; no data/API behavior was changed by this color-only correction.
+- Current checkpoint verified: fresh backend build is running on port 5001; frontend typecheck
+  and lint pass across the Receptionist files using the updated text/button tokens. Agent-builder
+  step 12 now has zero failures in the same limited solid-color DOM contrast check; untested
+  approve/publish actions remain disabled, console warnings/errors are empty, and the proof
+  screenshot was refreshed at `/tmp/noxtill-module21-agent-publish-20261020.png`.
+  The full frozen backend serial result remains 384 suites/2,325 tests green. No backend source
+  changed during the later color-only UI pass. This closes this implementation checkpoint, **not**
+  the full Module 21 goal; the requirement checklist and runbook retain the remaining code,
+  broader accessibility, deployment and real-provider acceptance work. Nothing committed or pushed.
+
+### Module 21 continuation — canonical phone booking rules (2026-10-20)
+
+- Both recorded-turn and realtime phone creation still use `AppointmentsService`, not a second
+  booking engine. Remote phone requests now enforce active services, configured business slots,
+  hours, minimum notice, maximum advance, daily capacity, active same-business assigned staff
+  and symmetric service buffers, including bookings without an assigned staff member.
+- Added `voice.bookingsRequireStaffApproval` (default false) and its real `policyRow` under
+  Settings → AI & Governance. Required deposits or missing service-specific staff assignment
+  leave a real `requested` appointment; phone AI never creates an uncollected cash Deposit.
+  The existing in-person walk-in cash behavior remains unchanged. Phone appointments receive
+  real private management tokens, which are not spoken or exposed as tool output.
+- Verified phone rescheduling reuses `PublicBookingService` with an explicit phone policy path:
+  real hours/slot duration, existing notice/change-window and daily-cap rules, canonical buffers,
+  active staff/service checks and a current locking read reject cancelled/completed or concurrently
+  changed bookings. Required owner review leaves the change requested. Existing non-phone public
+  behavior was not silently rewritten. Shared buffer logic was extracted, not duplicated.
+- Canonical booking writers now acquire a tenant-wide SlotLock before exact-start locks. This
+  closes races between different overlapping starts and between different services competing for
+  the same daily allowance; lock acquisition stays transaction-scoped. No migration is needed.
+- Recorded speech and realtime tool results distinguish requested from confirmed. The call
+  workspace now asks for pending-booking review; outcome chips distinguish pending/cancelled/
+  no-show/missing records, and pending/cancelled appointments are not counted as booked successes.
+  Bookings from Calls explicitly labels number matching as **not verified identity**.
+- Real MySQL coverage added for remote policies, deposit/approval pending states, existing walk-in
+  behavior, closed/unconfigured hours, zero duration, notice/advance rules, foreign staff, buffers,
+  concurrent daily-cap and overlapping requests, guarded rescheduling and cancelled bookings.
+  Real realtime-tool tests cover private-reference verification and pending outcomes; recorded-turn
+  response tests prove pending requests are not announced as confirmed.
+- Final focused checkpoint: **5 suites / 109 tests passed**. Final frozen full backend
+  `jest --maxWorkers=2`: **385/385 suites / 2,342/2,342 tests passed**, 127.218 seconds
+  (`/tmp/noxtill-module21-booking-release-jest.log`). Both `tsc --noEmit` checks and touched-file
+  ESLint pass. Existing unrelated Prettier formatting noise in `intelligence.ts` is excluded,
+  as before; its actual lint rules pass. `git diff --check` is clean. A fresh backend build passes.
+- One earlier full run was invalidated by my concurrent build regenerating Prisma: 3 suites
+  could not load `.prisma/client/default.js`. Generation completed before the clean reruns; do
+  not run generation/build scripts that mutate Prisma while Jest is loading it. The subsequent
+  intermediate full run passed 385 suites/2,339 tests, then final reschedule additions passed
+  the complete 2,342-test run above. A missing-name test fixture was also corrected; only its two
+  empty QA businesses and two test HealthScoreSnapshot rows were cleaned up, not real user data.
+- Executed 11 isolated CLI presentation assertions against the actual frontend derivation source
+  for pending/confirmed/completed/cancelled/no-show/missing appointment states. This is not a
+  new frontend E2E harness or a claim that every workspace branch was browser-exercised.
+- Browser QA stayed in `QA Test Business Module21 20261020`. Staff approval was enabled there,
+  saved and verified after reload; it is intentionally left on in this isolated QA business only.
+  Bookings from Calls loads its honest empty state and updated disclosure. No warning/error
+  console entries were captured. Evidence screenshot:
+  `/tmp/noxtill-module21-booking-policy-20261020.png`. No live booking call was initiated.
+- No new migration, credential edit, real phone call, paid AI probe, customer message, commit or
+  push. The full Module 21 goal remains active. Remaining billing/selling-rate handoff, detailed
+  wizard, immutable event recovery, video controls, broader QA/accessibility and funded live
+  acceptance are still listed in `MODULE21_COMPLETION_CHECKLIST.md`; this checkpoint is not 100%.
+
+### Module 21 continuation — agent configuration and verification (2026-10-21)
+
+- Extended immutable AI-agent versions with explicit exclusions, structured greetings/disclosures/
+  required questions/clarification/edge-case guidance, and a selectable OpenAI Realtime voice.
+  The selected voice is included in the version checksum and live Realtime session setup; the
+  builder now exposes these fields in the existing wizard.
+- Added an owner-authorized scripted text test suite (2–8 scenarios), pinned to one immutable
+  version, sequential and fail-fast on provider/budget errors. Each scenario makes an AI request
+  only after the operator clicks Run; it does not place calls, run tools or write customer data.
+  The UI explicitly says that a non-empty answer is not proof of correctness. Adversarial and
+  structured pass/fail evaluation remain outstanding.
+- Added database coverage for agent configuration/version behavior; focused real-MySQL tests
+  passed (13/13). Browser inspection in the isolated QA business confirmed the wizard loads and
+  reflects the selected voice; no agent was saved, published, or activated and no paid request
+  or call was triggered.
+- Corrected the Meetings integration-test expectation: an empty recording relation means
+  `not_started`; provider unavailability is separately disclosed as `media: not_configured`.
+  Made the workflow integration fixture's customer explicitly recently visited so the independent
+  CRM lapsed-tag scheduler cannot mutate it during parallel full-suite runs.
+- Final checks: backend and frontend `tsc --noEmit` pass; touched-file backend ESLint passes;
+  full backend `npx jest --maxWorkers=2` passes **388/388 suites and 2,366/2,366 tests**; `git diff
+  --check` passes. The two focused MySQL suites passed 34/34 after the fixture corrections.
+- No new migration, real provider call, paid AI request, credential change, commit or push. Module
+  21 remains incomplete and is not production-approved. See
+  `docs/MODULE21_COMPLETION_CHECKLIST.md` for the remaining real-time provider, operations,
+  billing, reliability, full end-to-end and funded live acceptance requirements.
+
+### Module 21 follow-up — literal scenario checks (2026-10-21)
+
+- Scripted AI-agent scenarios now accept optional per-scenario “must include” and “must not
+  include” phrase assertions. Matching is case-insensitive and literal; failed assertions are
+  saved on the real test-run row with an actionable reason, and a provider failure still stops
+  the suite. Results separate received responses from evaluated/pass/fail counts.
+- Both the single text sandbox and scenario suite disclose when correctness was not evaluated.
+  The UI states that exact phrase checks are not semantic correctness, safety, or adversarial
+  proof. Test evidence uses the configured AI budget only after an explicit Run action; this QA
+  pass did not click either AI test button.
+- Real-MySQL AI-agent tests pass 9/9, including an asserted pass and a deliberate assertion
+  failure. Backend/frontend type checks and touched-file ESLint pass. Final full backend
+  `npx jest --maxWorkers=2` passes **388/388 suites and 2,366/2,366 tests**. Browser QA confirmed
+  the Test Lab exposes both assertion fields and their limitations; browser dev-console access
+  was unavailable for this tab, and no test request was sent.
+- No schema migration, real provider call, paid model request, commit, or push. Broader model
+  evaluation, real speech/telephony acceptance, operations, billing, accessibility and deployment
+  requirements remain open as listed in `MODULE21_COMPLETION_CHECKLIST.md`.
+
+### Module 21 follow-up — branch-scoped AI agent handoff (2026-10-21)
+
+- AI agents are branch-scoped using the existing child-`Business` model. The builder lists active
+  owners from the selected business/branch, validates that a saved owner belongs to that exact
+  scope, and snapshots the chosen owner into the immutable agent version. Calls resolve the branch
+  from their dialed number and pin only that branch's published agent version.
+- At AI-to-human handoff, the assigned owner is only a preference. The existing eligibility,
+  active voice profile, fresh presence, capacity and retry rules still apply; if the owner is not
+  available, normal dispatch may offer the call to another eligible agent.
+- Real-MySQL tests cover main/child branch scope, rejection of foreign owner IDs, selected-owner
+  preference under normal dispatch constraints, and child-branch version pinning. Focused tests
+  passed **3 suites / 79 tests**. No migration was needed.
+- Browser inspection stayed in the isolated Module21 QA business and confirmed branch label and
+  selectable owner appear in the wizard; no agent was saved, published or activated and no call
+  was placed.
+
+### Module 21 follow-up — OpenAI Realtime voice sample (2026-10-21)
+
+- Added an explicit AI-agent wizard action that generates a short audio sample using the chosen
+  OpenAI Realtime voice. It is a provider request only after the operator clicks; no phone call or
+  business write occurs. The UI says credits may be used, the sample is not stored, and the saved
+  version's budget applies.
+- The backend validates the selected voice and tenant-owned agent version, checks the AI toggle,
+  rate/cost guardrail and version budget, rejects incomplete audio/token usage, then records the
+  returned tokens and an estimated USD cost in voice usage and AI logs and writes an audit event.
+  Audio is returned as transient PCM for browser playback and is not persisted.
+- Real-MySQL tests with a local simulated Realtime provider pass **2 suites / 14 tests**, covering
+  PCM receipt, measured token/cost records, audit evidence and tenant/version scoping. No live
+  provider request was made.
+- Browser QA in the isolated Module21 QA business confirmed the wizard and voice-preview control
+  render; reload returned HTTP 200 and the page's API requests returned successfully, with no
+  console exceptions or failed network requests observed. The paid preview button was not clicked.
+- Updated stale Settings API documentation to distinguish the Twilio voice picker/Polly preview
+  from the AI-agent OpenAI Realtime sample.
+- Backend and frontend `tsc --noEmit`, ESLint on touched backend/frontend files, and the full
+  backend `npx jest --maxWorkers=2` pass (**388 suites / 2,371 tests**). The generated audio itself
+  still needs a funded-provider check. No migration, commit or push. Remaining evaluation,
+  operations, billing, accessibility, deployment and live-provider acceptance are still open.
+
+### Module 21 follow-up — transcription and retention usage units (2026-10-21)
+
+- OpenAI Whisper transcription now requests `verbose_json` and returns provider-reported input
+  duration when present, without changing the existing text-only `transcribe()` contract. Phone
+  recordings and consented meeting transcription save idempotent `transcription_audio_seconds`
+  usage evidence. Missing provider duration stays missing; no cost is inferred.
+- On successful retention deletion, uploaded phone recordings now record `recording_storage_byte_days`
+  from the existing successful-upload byte measurement through confirmed deletion. Meeting recording
+  cleanup records the same unit from finalized byte size through confirmed deletion. Legacy rows
+  without reliable upload/finalization evidence are not backfilled. Prices remain unconfigured.
+- Added real-MySQL coverage for transcription unit persistence, duplicate-proof metering, meeting
+  transcription usage, call retention deletion and meeting recording cleanup; added Speech-to-Text
+  response parsing tests. Focused final run: **6 suites / 77 tests passed**. Full backend
+  `npx jest --maxWorkers=2`: **389 suites / 2,375 tests passed**. Backend/frontend `tsc --noEmit`
+  and touched-file ESLint passed. No migration needed.
+- The usage screen now clarifies that byte-days appear only after retention cleanup. No live OpenAI,
+  Twilio, or S3 request was made; this is provider-shaped test evidence, not invoice reconciliation.
+  No commit or push. Billing for audio, egress, phone/SMS and provider invoice reconciliation remain
+  incomplete, along with broader production acceptance listed in `MODULE21_COMPLETION_CHECKLIST.md`.
+
+### Module 21 follow-up — provider SMS and measured S3 reads (2026-10-21)
+
+- The scheduled Twilio provider-cost worker now reads actual Message resources for sent missed-call
+  text-backs attached to non-test calls. It stores the provider-reported message charge/currency and
+  segment count as separate idempotent usage rows, retries a delayed price, and leaves it pending or
+  unpriced rather than estimating. Other SMS and phone-number recurring fees are not covered.
+- Bounded Twilio call-cost polling now uses oldest-first ordering with a stable ID tie-breaker so a
+  queue larger than one batch cannot indefinitely starve older calls.
+- Consented meeting transcription records the exact successful private S3 read bytes as an unpriced
+  storage-egress measurement. It does not label local-disk reads or signed end-user downloads as
+  S3 egress. The settings usage copy and completion checklist disclose these boundaries.
+- Real-MySQL tests cover actual-shaped SMS message price/segments, price retry, duplicate protection,
+  deterministic Twilio batch ordering, S3 read-byte measurement, and exclusion of local storage from
+  cloud egress. Focused tests: **3 suites / 14 tests passed**. Backend/frontend `tsc --noEmit` and
+  touched-file ESLint passed. Full backend `npx jest --maxWorkers=2`: **389 suites / 2,379 tests
+  passed**. `git diff --check` passed.
+- Browser QA opened Receptionist Settings in the isolated Module21 QA business: the page loaded,
+  provider/usage data resolved, Twilio account and public webhook checks reported OK, and the screen
+  honestly showed no provisioned business number, local-disk recording storage, no monthly metered
+  rows, and no configured phone spend cap. The browser console capability was unavailable, so no
+  console-error claim is made. No data was changed and no live call or paid AI request was made.
+- No migration, commit or push. Full SMS billing, signed-download egress, phone-number recurring
+  fees, approved selling rates and Billing handoff, event projector/replay/dead-letter coverage,
+  external deployment/monitoring, semantic/adversarial QA, WCAG and funded live-provider acceptance
+  remain open. See `MODULE21_COMPLETION_CHECKLIST.md`; this does not complete the module.
+
+### Module 21 follow-up — callback sequencing and durable status inbox (2026-10-21)
+
+- Added monotonic Twilio SequenceNumber handling for call and transfer status callbacks so stale
+  deliveries cannot roll back a newer call state or provider-confirmed transfer. Added two real-
+  MySQL cases for reversed call and transfer callback order.
+- Added a tenant-scoped durable inbox for signed `call.status` and `transfer.status` events: stable
+  idempotency hashes, sanitized payload allowlist, processing leases, bounded retries, dead-letter
+  after five consecutive failures, and audited operator replay from Supervisor Center. This is
+  intentionally only these two event types; other callback endpoints are not yet part of the inbox.
+- Applied migrations `20261021140000_voice_callback_sequences` and
+  `20261021160000_voice_provider_webhook_events`; verified the columns/table/Business foreign key
+  and `prisma migrate status` reports the local database up to date (196 migrations). `prisma
+  generate` completed.
+- Verification: backend and frontend `tsc --noEmit` passed; ESLint passed for touched backend and
+  frontend files; full backend `npx jest --maxWorkers=2` passed **390/390 suites and 2,386/2,386
+  tests**; `git diff --check` passed. Browser QA in the already isolated QA business loaded all 21
+  Receptionist/Phone routes without a login redirect, visually inspected Supervisor Center, and
+  confirmed the callback recovery empty state (“No failed provider callbacks”) with no active
+  calls. Browser console/network inspection was unavailable, so no clean-console claim is made;
+  no live call or paid AI request was made.
+- No commit or push. Provider/live acceptance, broader callback projection/replay, and all other
+  remaining items in `MODULE21_COMPLETION_CHECKLIST.md` are still outstanding.
+
+### Module 21 follow-up — agent-leg callback ordering (2026-10-21)
+
+- Twilio human-agent dial callbacks now use `SequenceNumber` as a compare-and-set guard on the
+  assignment. An older `no-answer` delivered after a newer `in-progress` cannot release the
+  connected agent or start another transfer attempt. Newer terminal status still releases capacity.
+- Added real-MySQL coverage: `in-progress` sequence 8, stale `no-answer` sequence 7, then completed
+  sequence 9. Focused `voice-call.service.spec.ts`: **1 suite / 60 tests passed**.
+- Applied `20261021180000_voice_agent_status_sequence`; verified the new nullable column and clean
+  migration status (197 local migrations). Regenerated Prisma Client.
+- Backend and frontend `tsc --noEmit` passed, touched-file backend ESLint passed, `git diff --check`
+  passed, and the post-change full backend `npx jest --maxWorkers=2` passed **390/390 suites and
+  2,386/2,386 tests**. No live provider calls or paid AI requests were made.
+- No commit or push. The dial-status event is sequence-protected but not yet part of the durable
+  callback inbox. Funded provider acceptance, broad event projector coverage, reliability, billing,
+  accessibility, deployment and final requirement audit remain open.
+
+### Module 21 follow-up — explicit voice prompt trust boundary (2026-10-21)
+
+- Recorded-turn calls now pass the immutable platform voice safety rules and subordinate agent
+  guidance in the provider's actual `system` field through `AiInfraService.createMessage`; caller
+  transcripts and matched business records are serialized separately as explicitly untrusted user
+  input. The realtime and agent-sandbox paths use the same trust hierarchy. Server-side tool
+  allowlists and confirmation checks remain authoritative.
+- Updated the real-MySQL outbound AI spec to mock `createMessage` deterministically, so its approved-
+  action and provider-outage cases exercise the current provider adapter without calling a paid
+  model. Focused outbound suite: **1 suite / 3 tests passed**.
+- Verification: backend/frontend `tsc --noEmit` passed; ESLint passed for touched backend files;
+  full backend `npx jest --maxWorkers=2` passed **391/391 suites and 2,389/2,389 tests**;
+  `git diff --check` passed. No migration, browser QA, live provider request, commit or push.
+- Prompt construction is not proof of model resistance. Funded speech/provider acceptance, semantic
+  and adversarial evaluations, deployment/reliability, billing reconciliation, accessibility, and
+  the final requirement-by-requirement release audit remain open as listed in
+  `MODULE21_COMPLETION_CHECKLIST.md`.
+
+### Module 21 follow-up — replay-safe provider callbacks (2026-10-21)
+
+- Extended the tenant-scoped callback inbox with signed Twilio conference-usage and completed
+  realtime-recording events. Only allowlisted fields are persisted; duplicate events are deduped;
+  conference metering is idempotent and recording import reuses its stable queue job/storage key.
+  Failed projections use the existing bounded retry, dead-letter and audited replay flow. Command-
+  bearing TwiML routes remain out of blind replay.
+- Added real-MySQL coverage for duplicate conference callbacks, omission of an unneeded provider
+  field, recording queue failure, operator replay and audit. Focused suite: **1 suite / 6 tests
+  passed**. No schema or migration change.
+- Verification: backend and frontend `tsc --noEmit` passed; ESLint passed for the touched backend
+  files; full backend `npx jest --maxWorkers=2` passed **391/391 suites and 2,391/2,391 tests**;
+  `git diff --check` passed. Read-only browser QA in the QA business loaded Supervisor Center and
+  showed the updated four callback types with the honest empty state; no test events or business
+  data were created. Browser console/network were not inspected. No live provider calls, commit or
+  push.
+- Other callback types still require per-event idempotency/replay analysis before joining this inbox;
+  live provider delivery, funding, external deployment, operational billing and acceptance remain
+  open in `MODULE21_COMPLETION_CHECKLIST.md`.
+
+### Module 21 follow-up — hostile caller boundary test (2026-10-21)
+
+- Extended the real-MySQL recorded-turn tool-permission case with an adversarial caller utterance
+  asking the agent to ignore policy, disclose business knowledge and transfer to the owner. The
+  test confirms caller text stays in the untrusted user payload, not the system policy; an
+  unselected knowledge canary is not supplied; and a model-proposed transfer with no pinned tools
+  produces no transfer row, appointment or `<Dial>` action. This is deterministic server/prompt
+  boundary evidence, not a live-model resistance or red-team test.
+- A trial to place human-agent dial-status callbacks in the durable retry inbox was rejected before
+  keeping it: the existing projector can persist a Twilio sequence before finishing follow-on
+  dispatch, so a retry after partial failure could no-op rather than resume. The route remains on
+  its existing direct path until that transition can be made genuinely replay-safe.
+- Fixed a parallel integration-test cleanup race in
+  `customer-portal.service.db.spec.ts`: background processors can attach activity events to that
+  spec's unique temporary business, so cleanup now removes those test-owned activity rows before
+  deleting the business. The portal DB suite passed alone (1 suite / 5 tests).
+- Verification on the final working tree: backend and frontend `tsc --noEmit` passed; ESLint passed
+  for the changed backend specs; full backend `npx jest --maxWorkers=2` passed **391/391 suites and
+  2,391/2,391 tests**. `git diff --check` passed. Read-only browser QA loaded Supervisor Center
+  in the existing QA session and confirmed the callback-recovery disclosure and empty state; browser
+  console/network were not inspected. No real call, paid AI request, migration, commit or push.
+- Independent semantic and model-backed adversarial evaluation, funded live provider acceptance,
+  external operations, full billing reconciliation, accessibility review and final release audit
+  remain open; see `MODULE21_COMPLETION_CHECKLIST.md`.
+
+### Module 21 follow-up — expected sandbox outcome assertions (2026-10-21)
+
+- Added an optional expected-outcome assertion to the AI Agent Test Lab for `continue`, `book`,
+  `message`, `transfer` or `end`. The text-only sandbox asks the model for `{reply, intent}`, saves
+  both the owner's expectation and model-reported label with the test record, and records a typed
+  assertion failure when they differ or the response is malformed. The UI explicitly labels this a
+  model self-report; it does not execute tools or prove semantic correctness, safety or live-call
+  behavior.
+- Added nullable `expected_intent` / `actual_intent` fields to
+  `VoiceAiAgentTestRun`. Applied
+  `20261021200000_voice_ai_agent_test_outcomes` via `prisma db execute` (exit 0), marked it applied,
+  regenerated Prisma Client, verified both columns through `information_schema`, and confirmed all
+  198 migrations are applied.
+- Real-MySQL coverage proves matching and mismatching outcomes are stored and the mismatch is
+  reported. Focused test: **1 passed**. Backend and frontend `tsc --noEmit` passed; ESLint passed
+  for touched files; full backend `npx jest --maxWorkers=2` passed **391/391 suites and 2,392/2,392
+  tests**. `git diff --check` passed. Read-only browser QA opened `/phone/agents` → Test Lab and
+  visually confirmed the expected-outcome field and self-report disclaimer; the paid suite was not
+  run and browser console/network logs were not inspected. No live call or paid AI request was made;
+  no commit or push.
+- Module 21 remains not production-accepted: funded Twilio/OpenAI/LiveKit tests, model-backed red-team
+  evaluation, external deployment/monitoring, complete provider billing reconciliation, accessibility
+  review, and a final spec acceptance audit remain open in `MODULE21_COMPLETION_CHECKLIST.md`.
+
+### Module 21 follow-up — recoverable human-agent callbacks (2026-10-21)
+
+- Added signed human-agent `dial-status` events to the existing durable callback inbox. The
+  assignment's pending action is persisted in the same state update as the observed sequence/status.
+  A replay resumes an interrupted connection-outcome update, next-agent reservation or call-close
+  step. It can recover a reservation committed before the original callback finished. The earlier
+  rejected trial is superseded by these persistent checkpoints.
+- Added a persisted provider-dispatch claim and timestamp before originating an internal agent leg.
+  Known provider rejection can move to the next agent. Lost responses, timeouts, missing identifiers
+  or duplicate-label uncertainty remain unresolved and cannot originate the same reservation again.
+  A signed callback can supply the leg SID and resume the waiting projection. Unknown dispatches retain
+  capacity past their offer timer, including in inbound routing, the human dialer and Agents counts.
+  Call-close errors now remain retryable instead of being swallowed.
+- Applied `20261021210000_voice_agent_callback_recovery` with `prisma db execute` (exit 0), resolved
+  it as applied, regenerated Prisma Client and verified its three nullable columns in
+  `information_schema`. All 199 local migrations are applied; no new foreign key or tenant model
+  registration was required.
+- Real-MySQL cases cover duplicate inbox events, a failure after consuming a callback sequence,
+  recovery of the next reservation, a lost originate response, repeat replay without another provider
+  call, reconciliation by a later signed callback, a failed close request, and uncertain-capacity
+  protection. Focused checks: **4 suites / 86 tests passed**. Provider responses are simulated.
+- Backend and frontend `tsc --noEmit` and touched-file ESLint passed. Full backend
+  `npx jest --maxWorkers=2`: **391/391 suites and 2,394/2,394 tests passed**. `git diff --check` passed.
+  Read-only browser QA in the isolated Module21 QA business verified the Supervisor recovery copy
+  and empty state; captured console error logs were empty. A separate network trace was not captured.
+  No real call, paid AI request, commit or push.
+- Other asynchronous callbacks, complete billing/selling-rate handoff, deployment and funded
+  acceptance remain open. The original `calllll.docx` is missing from Downloads and was not found
+  in the available task attachments; final source-spec acceptance needs it restored. The goal
+  remains active and implementation can continue from the tracked requirements.
