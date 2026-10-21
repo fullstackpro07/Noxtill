@@ -140,3 +140,15 @@ html[data-nx-font="large"] .nx-app .h-dvh:not(.nx-app),
 html[data-nx-font="xlarge"] .nx-app .h-dvh:not(.nx-app) {
   height: 100%;
 }
+
+/* WCAG 2.4.7: native date/time pickers move focus into internal segments, so border-only focus
+   styles were not visible. Give them the same green focus indication as other controls. */
+.nx-app input[type="date"]:focus,
+.nx-app input[type="date"]:focus-within,
+.nx-app input[type="datetime-local"]:focus,
+.nx-app input[type="datetime-local"]:focus-within,
+.nx-app input[type="time"]:focus,
+.nx-app input[type="time"]:focus-within {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 1px;
+}
