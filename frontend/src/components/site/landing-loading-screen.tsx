@@ -38,8 +38,8 @@ export function LandingLoadingScreen({ minDuration = 850 }: LandingLoadingScreen
       <Image
         src="/brand/noxtill-logo1.png"
         alt="Noxtill"
-        width={824}
-        height={802}
+        width={1159}
+        height={798}
         priority
         className="w-16 h-auto sm:w-20 motion-safe:animate-[noxtill-splash_1.4s_ease-in-out_infinite]"
       />

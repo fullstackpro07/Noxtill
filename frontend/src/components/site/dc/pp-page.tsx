@@ -62,7 +62,7 @@ export function legalMetadata(doc: LegalDoc): Metadata {
       url,
       images: [
         {
-          url: "https://noxtill.com/brand/og-image.png",
+          url: "https://noxtill.com/brand/og-image.png?v=2",
           width: 1200,
           height: 630,
           alt: legalTitle(doc.title),
@@ -73,7 +73,7 @@ export function legalMetadata(doc: LegalDoc): Metadata {
       card: "summary_large_image",
       title: `${doc.title} | Noxtill`,
       description: doc.desc,
-      images: ["https://noxtill.com/brand/og-image.png"],
+      images: ["https://noxtill.com/brand/og-image.png?v=2"],
     },
   };
 }

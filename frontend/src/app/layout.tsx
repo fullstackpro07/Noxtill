@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     description: "Run sales, customers, bookings, inventory, payments, marketing, staff and AI workflows in one connected business management platform with Noxtill.",
     images: [
       {
-        url: "https://noxtill.com/brand/og-image.png",
+        url: "https://noxtill.com/brand/og-image.png?v=2",
         width: 1200,
         height: 630,
         alt: "Noxtill — AI-Powered Business Operating System",
@@ -27,17 +27,17 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Noxtill — AI-Powered Business Operating System",
     description: "Run sales, customers, bookings, inventory, payments, marketing, staff and AI workflows in one connected business management platform with Noxtill.",
-    images: ["https://noxtill.com/brand/og-image.png"],
+    images: ["https://noxtill.com/brand/og-image.png?v=2"],
   },
-  // "?v=2": the ribbon-N logo replaced the old mark under the same file names — the version
+  // "?v=3": the new N mark replaced the old ribbon-N under the same file names — the version
   // query makes browsers that cached the old favicon fetch the new one.
   icons: {
     icon: [
-      { url: "/favicon.png?v=2", type: "image/png", sizes: "48x48" },
-      { url: "/icon.png?v=2", type: "image/png" },
+      { url: "/favicon.png?v=3", type: "image/png", sizes: "48x48" },
+      { url: "/icon.png?v=3", type: "image/png" },
     ],
-    shortcut: "/favicon.png?v=2",
-    apple: "/apple-icon.png?v=2",
+    shortcut: "/favicon.png?v=3",
+    apple: "/apple-icon.png?v=3",
   },
 };
 
