@@ -336,7 +336,7 @@ export const FOOTER_LINKS = {
     { label: "Documentation", href: "#" },
     { label: "Blog", href: "#" },
     { label: "Help center", href: "#" },
-    { label: "Status page", href: "#" },
+    { label: "Status page", href: "/status" },
     { label: "API", href: "#" },
   ],
   company: [
