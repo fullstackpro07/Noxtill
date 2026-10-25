@@ -7,6 +7,10 @@ import { CHATBOT_KNOWLEDGE_BASE } from "@/lib/marketing/chatbot-knowledge";
 const DEFAULT_MODEL = "gemini-flash-lite-latest";
 const FALLBACK_MODEL = "gemini-3.5-flash-lite";
 const ATTEMPT_TIMEOUT_MS = 9_000;
+
+// Vercel: room for both time-boxed attempts (2 x 9s). Some plans otherwise stop a function at 10s,
+// which would kill the fallback attempt.
+export const maxDuration = 30;
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_HISTORY_TURNS = 8;
 const MAX_TURN_LENGTH = 2000;
