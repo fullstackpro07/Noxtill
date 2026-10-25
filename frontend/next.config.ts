@@ -16,6 +16,9 @@ const nextConfig: NextConfig = {
     if (!dev) config.cache = false;
     return config;
   },
+  // `next build` runs with --webpack (the hook above); `next dev` stays on Turbopack, Next 16's
+  // default. Without this, Next refuses to start dev because a webpack config is present.
+  turbopack: {},
   images: {
     remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }],
   },
