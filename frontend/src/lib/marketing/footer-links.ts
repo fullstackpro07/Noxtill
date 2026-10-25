@@ -294,7 +294,7 @@ export const FOOTER_BOTTOM: FooterLink[] = [
   { label: "Privacy", href: "/legal/privacy" },
   { label: "Terms of Service", href: "/legal/terms" },
   { label: "Refunds", href: "/legal/refunds" },
-  { label: "Cookie Settings", href: "/legal/cookies" },
+  { label: "Cookie Settings", href: "/privacy/cookie-settings" },
   { label: "Privacy Choices", href: "/privacy/choices" },
   { label: "Do Not Sell or Share My Personal Information", href: "/privacy/do-not-sell-or-share" },
   { label: "Security", href: "/trust/security" },

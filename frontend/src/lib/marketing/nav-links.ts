@@ -127,7 +127,7 @@ export const RESOURCES_TOOLS: NavLinkItem[] = [
 export const RESOURCES_SUPPORT: NavLinkItem[] = [
   { label: "Contact Support", href: "/resources/contact-support" },
   { label: "Book a Demo", href: "/book-a-demo" },
-  { label: "System Status", href: "/resources" },
+  { label: "System Status", href: "/status" },
   { label: "Community", href: "/resources" },
   { label: "Developer Docs", href: "/resources" },
   { label: "API Reference", href: "/resources" },
@@ -166,5 +166,5 @@ export const RESOURCES_DRAWER_LINKS: NavLinkItem[] = [
   { label: "No-Show Cost Calculator", href: "/resources/no-show-cost-calculator" },
   { label: "Business Health Check", href: "/resources/business-health-check" },
   { label: "Contact Support", href: "/resources/contact-support" },
-  { label: "System Status", href: "/resources" },
+  { label: "System Status", href: "/status" },
 ];

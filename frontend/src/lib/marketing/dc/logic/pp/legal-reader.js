@@ -13,9 +13,9 @@ export class Logic extends DcLogic {
   componentDidMount() {
     const today = new Date().toISOString().slice(0, 10);
     this.setState(s => ({ rf: { ...s.rf, requested: today } }));
-    try { const c = JSON.parse(localStorage.getItem('noxtill-consent') || 'null'); if (c) this.setState(s => ({ consent: { ...s.consent, ...c.choices }, hist: c.history || [] })); } catch (e) {}
+    try { const c = JSON.parse(localStorage.getItem('noxtill-consent') || 'null'); if (c && !(c.ts && Date.now() - c.ts > 365 * 864e5)) this.setState(s => ({ consent: { ...s.consent, ...c.choices }, hist: c.history || [] })); } catch (e) {}
     this.gpc = typeof navigator !== 'undefined' && !!navigator.globalPrivacyControl;
-    if (this.gpc) this.setState(s => ({ consent: { ...s.consent, sale: true, marketing: false } }));
+    if (this.gpc) this.setState(s => ({ consent: { ...s.consent, sale: true, functional: false, analytics: false, marketing: false } }));
     const wait = () => { if (NOX_LEGAL) { this.setState({ ready: true, tocOpen: window.innerWidth >= 900 }, () => this.afterReady()); } else this.wt = setTimeout(wait, 60); };
     wait();
     this.onScroll = () => { if (this.raf) return; this.raf = requestAnimationFrame(() => { this.raf = 0; this.measure(); }); };
@@ -56,27 +56,29 @@ export class Logic extends DcLogic {
   }
   refundOutcome(L) {
     const r = this.state.rf, u = r.usage, notes = [];
-    const consumerEU = r.cust === 'individual' && (L.eea.includes(r.country) || r.country === 'GB' || r.country === 'CH');
+    const consumerEU = r.cust === 'individual' && r.country === 'GB';
     const days = r.charged && r.requested ? Math.round((new Date(r.requested) - new Date(r.charged)) / 864e5) : null;
-    const used = ['integrations', 'imports', 'ai', 'live', 'api'].filter(k => u[k]);
     const G = { bg: '#E8F6EE', fg: '#0B6B43' }, A = { bg: '#FFF1D6', fg: '#6B3F00' }, B = { bg: '#EAF0FF', fg: '#1E3A8A' }, X = { bg: '#F4F6F5', fg: '#3E4F47' };
-    if (['unauthorized', 'billing', 'defect'].includes(r.reason)) return { ...B, title: 'Mandatory legal rights may apply', text: 'Unauthorized charges, billing errors and services that do not work as described are reviewed under your legal rights, not the voluntary policy. Contact support@noxtill.com with the charge details.', notes: ['Requires manual review by our billing team.', 'The 7-day voluntary window does not limit these rights.'] };
-    if (u.dispute) return { ...A, title: 'Payment verification required', text: 'There is an open dispute or chargeback on this payment. We review it with the payment record before any refund.', notes: ['A refund and a chargeback cannot both be paid for the same charge.'] };
-    if (days === null) return { ...X, title: 'More information required', text: 'Add the date you were charged so we can check the 7-day window.', notes: [] };
+    if (r.reason === 'unauthorized') return { ...B, title: 'Mandatory legal rights may apply', text: 'Unauthorized charges are reviewed under your legal rights, not the money-back guarantee. Contact support@noxtill.com with the charge date and amount.', notes: ['Requires manual review by our billing team.', 'The 30-day guarantee does not limit these rights.'] };
+    if (r.reason === 'billing') return { ...G, title: 'Full refund of the incorrect charge', text: 'A charge made after you cancelled, a billing error on our side or a duplicate payment is refunded in full, promptly. Email support@noxtill.com with the charge date and amount.', notes: ['The 30-day window does not apply to these.', 'We confirm the payment record before refunding.'] };
+    if (r.reason === 'defect') return { ...B, title: 'Pro-rata refund may apply', text: 'If we cannot fix a defect within 30 days of your written notice, you get a pro-rata refund of prepaid fees for the unused remainder. Report it to support@noxtill.com.', notes: ['The 30-day guarantee on your first payment applies separately.'] };
+    if (u.dispute) return { ...A, title: 'Payment verification required', text: 'There is an open dispute or chargeback on this payment. We review it with the payment record before any refund.', notes: ['A refund and a chargeback cannot both be paid for the same charge.', 'An account with an unresolved chargeback may be suspended until it is settled.'] };
+    if (u.aup) return { ...A, title: 'Not eligible for a refund', text: 'Fees are not refunded when an account is suspended or terminated for breach of the Acceptable Use Policy.', notes: ['If you believe the suspension is wrong, reply to the notice and a different person will review it.'] };
+    if (days === null) return { ...X, title: 'More information required', text: `Add the date you were charged so we can check the ${L.trial.refundDays}-day window.`, notes: [] };
     if (days < 0) return { ...X, title: 'More information required', text: 'The request date is before the charge date. Check both dates.', notes: [] };
-    if (consumerEU && days <= 14) notes.push('As a consumer in the EEA, UK or Switzerland you may have a statutory withdrawal right for digital services. We review this separately.');
+    if (consumerEU && days <= 14) notes.push('As a consumer in the UK you may have a statutory right to cancel digital services within 14 days. We review this separately.');
     const legal = consumerEU && days <= 14;
-    if (r.kind === 'renewal') return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Voluntary refund conditions not met', text: 'The voluntary refund covers your first paid activation only. You can cancel a renewal at any time to stop the next charge.', notes: notes.concat(['Cancelling stops future renewals; access continues to the end of the paid period.']) };
-    if (days > L.trial.refundDays) return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Voluntary refund conditions not met', text: `This request is ${days} days after the charge. The voluntary window is ${L.trial.refundDays} calendar days.`, notes };
-    if (used.length) return { ...A, title: 'Voluntary refund conditions not met', text: 'The paid product appears to have been materially used, for example connected integrations, imported data, AI or API usage, or live transactions.', notes: notes.concat(['Viewing settings, billing pages or contacting support does not count as material use.', 'If you think this is wrong, ask for a manual review.']) };
-    return { ...G, title: 'Appears eligible for a voluntary refund', text: `First paid activation, requested ${days} day${days === 1 ? '' : 's'} after the charge, with no material use. Submit the request from billing settings or email support@noxtill.com.`, notes: notes.concat(['We confirm the payment record before approving.', 'A refund is only complete once Stripe confirms it.']) };
+    if (days > 365) return { ...(legal ? B : A), title: 'Outside the Refund Policy', text: 'The charge is more than 12 months old, so the Refund Policy does not cover it.', notes };
+    if (r.kind === 'renewal') return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Money-back guarantee does not apply', text: 'The 30-day money-back guarantee covers your first subscription payment only. Fees for a period already begun are not refundable; when you cancel, your subscription runs to the end of the paid period.', notes: notes.concat(['You keep full access until the end of the period you paid for.']) };
+    if (days > L.trial.refundDays) return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Money-back guarantee does not apply', text: `This request is ${days} days after your first payment. The money-back guarantee window is ${L.trial.refundDays} days.`, notes };
+    return { ...G, title: 'Appears eligible for the money-back guarantee', text: `First subscription payment, requested ${days} day${days === 1 ? '' : 's'} after the charge. Email support@noxtill.com and we refund it in full. You do not need to give a reason.`, notes: notes.concat(['The guarantee applies once per customer.', 'Stripe refunds the original payment method within 10 business days of approval.']) };
   }
   saveConsent(choices, label) {
     const ts = new Date().toLocaleString();
     const hist = [`${ts} — ${label}: ${Object.entries(choices).filter(([, v]) => v).map(([k]) => k).join(', ') || 'necessary only'}`].concat(this.state.hist).slice(0, 20);
     try { localStorage.setItem('noxtill-consent', JSON.stringify({ choices, history: hist, version: '1.0', ts: Date.now() })); } catch (e) {}
     window.dispatchEvent(new CustomEvent('noxtill:consent', { detail: choices }));
-    try { const dns = this.props.doc === 'do-not-sell'; recordConsent({ consentId: browserConsentId(), kind: dns ? 'do_not_sell_or_share' : 'cookie_preferences', policyVersion: '1.0', categories: dns ? undefined : { necessary: true, functional: !!choices.functional, analytics: !!choices.analytics, advertising: !!choices.marketing }, optedOut: dns ? !!choices.sale : undefined, language: navigator.language, source: location.pathname, gpc: !!this.gpc }).catch(() => {}); } catch (e) {}
+    try { const dns = this.props.doc === 'do-not-sell'; recordConsent({ consentId: browserConsentId(), kind: dns ? 'do_not_sell_or_share' : 'cookie_preferences', policyVersion: (this.doc() || {}).version || '1.0', categories: dns ? undefined : { necessary: true, functional: !!choices.functional, analytics: !!choices.analytics, advertising: !!choices.marketing }, optedOut: dns ? !!choices.sale : undefined, language: navigator.language, source: location.pathname, gpc: !!this.gpc }).catch(() => {}); } catch (e) {}
     this.setState({ consent: choices, hist }); this.flash('Choices saved');
   }
 
@@ -108,10 +110,10 @@ export class Logic extends DcLogic {
     const fmt = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const catIcons = { Legal: 'scale', Privacy: 'shield', Security: 'lock', AI: 'sparkles', Billing: 'credit-card', Communications: 'message-square', Compliance: 'globe', Enterprise: 'building-2', 'Product-specific': 'boxes' };
     const heroBgs = { Legal: '#F4FBF7', Privacy: 'linear-gradient(180deg,#EEF8F2,#fff)', Security: 'linear-gradient(180deg,#E9F2EE,#fff)', AI: 'linear-gradient(180deg,#F1F8EE,#fff)', Billing: '#F7FAF8', Communications: 'linear-gradient(180deg,#EDF7F4,#fff)', Compliance: '#F4F8F6', Enterprise: 'linear-gradient(180deg,#EEF3F1,#fff)', 'Product-specific': '#F6FAF7' };
-    const tool = { refund: d.key === 'refunds', timeline: d.key === 'billing-terms' || d.key === 'data-retention', privacy: ['privacy-choices', 'cookies', 'do-not-sell'].includes(d.key), versions: d.key === 'changes', subprocessors: d.key === 'subprocessors' };
+    const tool = { refund: d.key === 'refunds', timeline: d.key === 'billing-terms', privacy: ['privacy-choices', 'cookies', 'cookie-settings', 'do-not-sell'].includes(d.key), versions: d.key === 'changes', subprocessors: d.key === 'subprocessors' };
     const rf = st.rf, setRf = (k, v) => this.setState(s => ({ rf: { ...s.rf, [k]: v } }));
     const seg = (key, opts) => opts.map(([v, l]) => ({ l, on: rf[key] === v, bg: rf[key] === v ? '#fff' : 'transparent', fg: rf[key] === v ? '#0B3B2A' : '#4B5B53', pick: () => setRf(key, v) }));
-    const usageDefs = [['integrations', 'Connected an integration (payments, messaging, calendar…)'], ['imports', 'Imported business data'], ['ai', 'Used paid AI, calling or workflows'], ['live', 'Processed live sales or payments'], ['api', 'Used paid API calls'], ['dispute', 'Opened a dispute or chargeback with your bank']];
+    const usageDefs = [['dispute', 'Opened a dispute or chargeback with your bank'], ['aup', 'Had the account suspended for breaching the Acceptable Use Policy']];
     const T = L.trial, graceD = T.graceHours / 24, tlMax = T.days + graceD + T.exportDays + 2, day = st.tl;
     const stages = [
       { name: 'Free trial', when: `Day 1–${T.days}`, from: 0, to: T.days, can: ['Use plan features within trial limits', `Use up to ${T.aiCredits} AI credits`, 'Upgrade at any time'], cannot: ['Paid calling, paid SMS and marketing campaigns'] },
@@ -124,8 +126,8 @@ export class Logic extends DcLogic {
     const c = st.consent;
     const crow = (k, l, dsc, locked) => { const on = locked ? true : !!c[k]; return { l, d: dsc, on, locked, track: on ? (locked ? '#7FB79A' : '#0E7C4F') : '#C9D6CF', knob: on ? '25px' : '3px', cursor: locked ? 'not-allowed' : 'pointer', toggle: () => { if (!locked) this.setState(s => ({ consent: { ...s.consent, [k]: !s.consent[k] } })); } }; };
     const consentRows = d.key === 'do-not-sell'
-      ? [crow('sale', 'Opt out of sale or sharing', 'Stops personal information being sold or shared for cross-context advertising, where state law defines it that way.', false), crow('marketing', 'Advertising cookies', 'Used to measure and target ads.', false)]
-      : [crow('necessary', 'Strictly necessary', 'Sign-in, security, fraud prevention and storing these choices. Always on.', true), crow('functional', 'Functional', 'Language and interface preferences.', false), crow('analytics', 'Analytics', 'Website and product measurement.', false), crow('marketing', 'Marketing and advertising', 'Attribution and ad audiences.', false), crow('sale', 'Opt out of sale or sharing', 'Applies where U.S. state privacy law defines this.', false)];
+      ? [crow('sale', 'Opt out of sale or sharing', 'Stops personal information being sold or shared for cross-context advertising, where state law defines it that way.', false), ]
+      : [crow('necessary', 'Strictly necessary', 'Sign-in, security, fraud prevention and storing these choices. Always on.', true), crow('functional', 'Preferences', 'Language, theme, collapsed sidebar groups and saved filters.', false), crow('analytics', 'Analytics', 'Which features you used. Turning it off has no effect on the Service.', false), crow('sale', 'Opt out of sale or sharing', 'Applies where U.S. state privacy law defines this.', false)];
     const req = st.req, setReq = k => e => { const v = e.target.value; this.setState(s => ({ req: { ...s.req, [k]: v }, reqErr: false, reqDone: '' })); };
     const groups = L.categories.map(cat => ({ name: cat, links: L.docs.filter(x => x.category === cat).map(x => ({ file: x.file, title: x.title })) })).filter(g => g.links.length);
     return {
@@ -144,7 +146,7 @@ export class Logic extends DcLogic {
       hasNotes: d.reviewNotes.length > 0, notesCount: d.reviewNotes.length, notes: d.reviewNotes,
       related: d.related.map(byKey).filter(Boolean).map(r => ({ file: r.file, title: r.title, category: r.category, desc: r.desc })),
       prev: prevP, next: nextP, footerGroups: groups,
-      rf, rfOut: this.refundOutcome(L), rfCountries: [{ v: 'US', l: 'United States' }].concat(Object.entries(L.regions).filter(([k]) => k !== 'US').map(([v, l]) => ({ v, l })), [{ v: 'DE', l: 'Germany (EEA)' }, { v: 'FR', l: 'France (EEA)' }, { v: 'OTHER', l: 'Another country' }]),
+      rf, rfOut: this.refundOutcome(L), rfCountries: [{ v: 'US', l: 'United States' }].concat(Object.entries(L.regions).filter(([k]) => k !== 'US').map(([v, l]) => ({ v, l })), [{ v: 'OTHER', l: 'Another country' }]),
       rfSet: { country: e => setRf('country', e.target.value), plan: e => setRf('plan', e.target.value), charged: e => setRf('charged', e.target.value), requested: e => setRf('requested', e.target.value), reason: e => setRf('reason', e.target.value) },
       rfCustOpts: seg('cust', [['business', 'Business'], ['individual', 'Individual']]), rfKindOpts: seg('kind', [['first', 'First purchase'], ['renewal', 'Renewal']]),
       rfUsage: usageDefs.map(([k, l]) => ({ l, on: !!rf.usage[k], toggle: () => this.setState(s => ({ rf: { ...s.rf, usage: { ...s.rf.usage, [k]: !s.rf.usage[k] } } })) })),
