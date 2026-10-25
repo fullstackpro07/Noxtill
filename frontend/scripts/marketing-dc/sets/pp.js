@@ -85,6 +85,93 @@ function retext(tree, from, to) {
 
 const SIGNUP = "/login?tab=signup";
 
+// ── 2026-10-25 policy pack (docs/policies/*.docx → pp-policies.json, see ../policies-docx.py) ──────
+// The owner's updated documents replace the registry text of the 16 documents they cover and add five
+// new ones (Cookie Settings, HIPAA BAA, Law Enforcement Guidelines, Support Policy, Trust Center
+// overview). Documents the pack does not cover keep their text.
+const POLICY_PACK_DATE = "2026-10-25";
+function applyPolicyPack(L) {
+  const pack = JSON.parse(fs.readFileSync(path.join(__dirname, "pp-policies.json"), "utf8"));
+  for (const p of pack) {
+    const text = { title: p.title, desc: p.desc, keyPoints: p.keyPoints, version: p.version, updated: POLICY_PACK_DATE, effective: p.effective, readMin: p.readMin, sections: p.sections };
+    const d = L.docs.find((x) => x.key === p.key);
+    if (d) {
+      Object.assign(d, text);
+      const page = L.pages.find((x) => x.key === p.key);
+      if (page) page.title = p.title;
+      continue;
+    }
+    if (!p.route) throw new Error("policy pack: new document " + p.key + " needs a route in policies-docx.py");
+    L.docs.splice(L.docs.findIndex((x) => x.key === "changes"), 0, { key: p.key, file: p.route, route: p.route, ...text, title: p.title, category: p.category, audiences: p.audiences, related: p.related, status: "", reviewNotes: [] });
+    L.pages.splice(L.pages.findIndex((x) => x.key === "changes"), 0, { key: p.key, file: p.route, route: p.route, title: p.title });
+  }
+  L.company.emails.security = "security@noxtill.com";
+  L.company.emails.legal = "legal@noxtill.com";
+  // Refund Policy 2.0: a 30-day money-back guarantee on the first subscription payment (was 7 days).
+  L.trial.refundDays = 30;
+  const faq = (id, patch) => {
+    const f = L.faqs.find((x) => x.id === id);
+    if (!f) throw new Error("policy pack: FAQ " + id + " not found");
+    Object.assign(f, patch);
+  };
+  faq("faq-5", { doc: "billing-terms" }); // the trial export window; Data Retention now covers termination
+  faq("faq-8", { a: "Yes. Your first subscription payment is covered by a 30-day money-back guarantee: email support@noxtill.com within 30 days and we refund it in full. You do not need to give a reason. It applies once per customer." });
+  faq("faq-9", { a: "Yes. The Refund Policy sits alongside your legal rights and does not replace them. Charges after cancelling, billing errors and duplicate payments are refunded in full, and where your local law is more generous, that law applies." });
+  faq("faq-14", { a: "Open Cookie Settings and switch preference or analytics cookies on or off. Strictly necessary cookies cannot be switched off, and we do not use advertising or cross-site tracking cookies at all.", doc: "cookie-settings" });
+  faq("faq-19", { a: "Follow the Vulnerability Disclosure Policy and email security@noxtill.com with details. Good-faith research within the policy is covered by our safe harbour. Please do not access other customers’ data." });
+  L.updates.unshift({ date: POLICY_PACK_DATE, title: "Policy pack 2.0 published, with new Cookie Settings, HIPAA BAA, Law Enforcement and Support pages", docs: ["privacy", "cookies", "refunds", "dpa", "security", "cookie-settings", "hipaa-baa", "law-enforcement", "support-policy"] });
+  for (const d of L.docs) {
+    for (const section of d.sections || []) {
+      if (d.key === "privacy" && section.id === "where-information-is-held-and-international-transfers") {
+        section.blocks = section.blocks.filter((b) => !/representative in the UK|Article 27 of the UK GDPR|UK representative/i.test(b.x || "") && !(b.t === "table" && JSON.stringify(b).includes("UK representative")));
+      }
+      if (d.key === "privacy" && section.id === "contact") section.blocks = section.blocks.map((b) => b.t === "table" ? { ...b, rows: b.rows.filter((r) => !/UK representative/i.test(r[0] || "")) } : b);
+      if (d.key === "privacy" && section.id === "annex-jurisdiction-specific-information") section.blocks = section.blocks.map((b) => b.t === "ul" ? { ...b, items: b.items.filter((item) => !/UK Article 27 representative/i.test(item)) } : b);
+      if (d.key === "dpa" && section.id === "international-transfers") section.blocks = section.blocks.filter((b) => !/Article 27 representative/i.test(b.x || "") && !(b.t === "table" && JSON.stringify(b).includes("Article 27 UK GDPR")));
+      for (const block of section.blocks) {
+        if (block.t === "table" && block.rows) block.rows = block.rows.map((row) => row.map((cell) => typeof cell === "string" ? cell.replace(/\ba Arizona\b/g, "an Arizona") : cell));
+        if (block.x) block.x = block.x.replace(/\ba Arizona\b/g, "an Arizona");
+        if (block.items) block.items = block.items.map((item) => item.replace(/\ba Arizona\b/g, "an Arizona"));
+      }
+    }
+    d.keyPoints = (d.keyPoints || []).map((point) => ({ ...point, x: (point.x || "").replace(/\ba Arizona\b/g, "an Arizona") }));
+  }
+  const overview = L.docs.find((d) => d.key === "trust-overview");
+  for (const section of (overview && overview.sections) || []) for (const block of section.blocks) if (block.t === "table" && block.rows) block.rows = block.rows.filter((row) => !/UK representative/i.test(row[0] || ""));
+}
+// The Legal Reader's tools follow the same pack: the refund checker applies Refund Policy 2.0 (30-day
+// guarantee on the first payment, no usage condition; full refunds for billing errors; none after an
+// AUP suspension or for a charge over 12 months old), the cookie panel shows Cookie Settings' categories
+// (no advertising cookies exist, so no advertising switch; GPC refuses non-essential cookies; a choice is
+// remembered for 12 months), Cookie Settings gets the panel, and the trial timeline stays on the
+// billing terms (the retention schedule's own post-termination clock is 60 days, not the trial's).
+const POLICY_READER_PATCHES = [
+  ["if (c) this.setState(s => ({ consent: { ...s.consent, ...c.choices }, hist: c.history || [] }));", "if (c && !(c.ts && Date.now() - c.ts > 365 * 864e5)) this.setState(s => ({ consent: { ...s.consent, ...c.choices }, hist: c.history || [] }));"],
+  ["if (this.gpc) this.setState(s => ({ consent: { ...s.consent, sale: true, marketing: false } }));", "if (this.gpc) this.setState(s => ({ consent: { ...s.consent, sale: true, functional: false, analytics: false, marketing: false } }));"],
+  [
+    "    if (['unauthorized', 'billing', 'defect'].includes(r.reason)) return { ...B, title: 'Mandatory legal rights may apply', text: 'Unauthorized charges, billing errors and services that do not work as described are reviewed under your legal rights, not the voluntary policy. Contact support@noxtill.com with the charge details.', notes: ['Requires manual review by our billing team.', 'The 7-day voluntary window does not limit these rights.'] };\n    if (u.dispute) return { ...A, title: 'Payment verification required', text: 'There is an open dispute or chargeback on this payment. We review it with the payment record before any refund.', notes: ['A refund and a chargeback cannot both be paid for the same charge.'] };\n    if (days === null) return { ...X, title: 'More information required', text: 'Add the date you were charged so we can check the 7-day window.', notes: [] };",
+    "    if (r.reason === 'unauthorized') return { ...B, title: 'Mandatory legal rights may apply', text: 'Unauthorized charges are reviewed under your legal rights, not the money-back guarantee. Contact support@noxtill.com with the charge date and amount.', notes: ['Requires manual review by our billing team.', 'The 30-day guarantee does not limit these rights.'] };\n    if (r.reason === 'billing') return { ...G, title: 'Full refund of the incorrect charge', text: 'A charge made after you cancelled, a billing error on our side or a duplicate payment is refunded in full, promptly. Email support@noxtill.com with the charge date and amount.', notes: ['The 30-day window does not apply to these.', 'We confirm the payment record before refunding.'] };\n    if (r.reason === 'defect') return { ...B, title: 'Pro-rata refund may apply', text: 'If we cannot fix a defect within 30 days of your written notice, you get a pro-rata refund of prepaid fees for the unused remainder. Report it to support@noxtill.com.', notes: ['The 30-day guarantee on your first payment applies separately.'] };\n    if (u.dispute) return { ...A, title: 'Payment verification required', text: 'There is an open dispute or chargeback on this payment. We review it with the payment record before any refund.', notes: ['A refund and a chargeback cannot both be paid for the same charge.', 'An account with an unresolved chargeback may be suspended until it is settled.'] };\n    if (u.aup) return { ...A, title: 'Not eligible for a refund', text: 'Fees are not refunded when an account is suspended or terminated for breach of the Acceptable Use Policy.', notes: ['If you believe the suspension is wrong, reply to the notice and a different person will review it.'] };\n    if (days === null) return { ...X, title: 'More information required', text: `Add the date you were charged so we can check the ${L.trial.refundDays}-day window.`, notes: [] };",
+  ],
+  [
+    "    if (r.kind === 'renewal') return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Voluntary refund conditions not met', text: 'The voluntary refund covers your first paid activation only. You can cancel a renewal at any time to stop the next charge.', notes: notes.concat(['Cancelling stops future renewals; access continues to the end of the paid period.']) };\n    if (days > L.trial.refundDays) return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Voluntary refund conditions not met', text: `This request is ${days} days after the charge. The voluntary window is ${L.trial.refundDays} calendar days.`, notes };\n    if (used.length) return { ...A, title: 'Voluntary refund conditions not met', text: 'The paid product appears to have been materially used, for example connected integrations, imported data, AI or API usage, or live transactions.', notes: notes.concat(['Viewing settings, billing pages or contacting support does not count as material use.', 'If you think this is wrong, ask for a manual review.']) };\n    return { ...G, title: 'Appears eligible for a voluntary refund', text: `First paid activation, requested ${days} day${days === 1 ? '' : 's'} after the charge, with no material use. Submit the request from billing settings or email support@noxtill.com.`, notes: notes.concat(['We confirm the payment record before approving.', 'A refund is only complete once Stripe confirms it.']) };",
+    "    if (days > 365) return { ...(legal ? B : A), title: 'Outside the Refund Policy', text: 'The charge is more than 12 months old, so the Refund Policy does not cover it.', notes };\n    if (r.kind === 'renewal') return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Money-back guarantee does not apply', text: 'The 30-day money-back guarantee covers your first subscription payment only. Fees for a period already begun are not refundable; when you cancel, your subscription runs to the end of the paid period.', notes: notes.concat(['You keep full access until the end of the period you paid for.']) };\n    if (days > L.trial.refundDays) return { ...(legal ? B : A), title: legal ? 'Mandatory legal rights may apply' : 'Money-back guarantee does not apply', text: `This request is ${days} days after your first payment. The money-back guarantee window is ${L.trial.refundDays} days.`, notes };\n    return { ...G, title: 'Appears eligible for the money-back guarantee', text: `First subscription payment, requested ${days} day${days === 1 ? '' : 's'} after the charge. Email support@noxtill.com and we refund it in full. You do not need to give a reason.`, notes: notes.concat(['The guarantee applies once per customer.', 'Stripe refunds the original payment method within 10 business days of approval.']) };",
+  ],
+  ["    const used = ['integrations', 'imports', 'ai', 'live', 'api'].filter(k => u[k]);\n", ""],
+  ["timeline: d.key === 'billing-terms' || d.key === 'data-retention', privacy: ['privacy-choices', 'cookies', 'do-not-sell'].includes(d.key)", "timeline: d.key === 'billing-terms', privacy: ['privacy-choices', 'cookies', 'cookie-settings', 'do-not-sell'].includes(d.key)"],
+  [
+    "const usageDefs = [['integrations', 'Connected an integration (payments, messaging, calendar…)'], ['imports', 'Imported business data'], ['ai', 'Used paid AI, calling or workflows'], ['live', 'Processed live sales or payments'], ['api', 'Used paid API calls'], ['dispute', 'Opened a dispute or chargeback with your bank']];",
+    "const usageDefs = [['dispute', 'Opened a dispute or chargeback with your bank'], ['aup', 'Had the account suspended for breaching the Acceptable Use Policy']];",
+  ],
+  [
+    "crow('marketing', 'Advertising cookies', 'Used to measure and target ads.', false)]",
+    "]",
+  ],
+  [
+    "crow('functional', 'Functional', 'Language and interface preferences.', false), crow('analytics', 'Analytics', 'Website and product measurement.', false), crow('marketing', 'Marketing and advertising', 'Attribution and ad audiences.', false),",
+    "crow('functional', 'Preferences', 'Language, theme, collapsed sidebar groups and saved filters.', false), crow('analytics', 'Analytics', 'Which features you used. Turning it off has no effect on the Service.', false),",
+  ],
+];
+
 module.exports = {
   src: "docs/Noxtill pricing page built",
   stripChrome: true,
@@ -122,6 +209,7 @@ module.exports = {
           "website-commerce": "Terms for Noxtill websites, storefronts, checkout, domains and the customer portal: what you publish, your domain duties and customer self-service.",
         };
         for (const d of L.docs) if (desc[d.key]) d.desc = desc[d.key];
+        applyPolicyPack(L);
       },
     },
   ],
@@ -217,6 +305,10 @@ module.exports = {
       ["const countries = L.iso.map(c => ({ code: c, name: cname(c) })).sort((a, b) => a.name.localeCompare(b.name));", "const countries = !st.mounted ? [] : L.iso.map(c => ({ code: c, name: cname(c) })).sort((a, b) => a.name.localeCompare(b.name));"],
       // document links are site routes now (not files next to this one)
       ["copy: () => this.copy(base + d.file, 'Link copied')", "copy: () => this.copy(location.origin + d.file, 'Link copied')"],
+      // 2026-10-25 policy pack: Refund Policy 2.0, the retention schedule, and the pack's security / legal inboxes
+      ["'Stripe processes payments. First activations may get a voluntary 7-day refund, and your legal rights always apply.'", "'Stripe processes payments. Your first payment has a 30-day money-back guarantee, and your legal rights always apply.'"],
+      ["['Data retention timeline', 'How long workspace data is kept after suspension.',", "['Data retention schedule', 'How long each category is kept, and what deletion actually means.',"],
+      ["['Sales', 'Enterprise terms, DPA and SLA', 'sales'], ['General', 'Anything else', 'contact']]", "['Sales', 'Enterprise terms, DPA and SLA', 'sales'], ['Security', 'Vulnerability reports and incidents', 'security'], ['Legal', 'Legal notices, DMCA and law enforcement', 'legal'], ['General', 'Anything else', 'contact']]"],
     ],
     "legal-reader": [
       ["window.NOX_LEGAL", "NOX_LEGAL"],
@@ -234,8 +326,9 @@ module.exports = {
       // Saved choices are also recorded on Noxtill's servers (consent record), as the earlier cookie page did.
       [
         "    window.dispatchEvent(new CustomEvent('noxtill:consent', { detail: choices }));",
-        "    window.dispatchEvent(new CustomEvent('noxtill:consent', { detail: choices }));\n    try { const dns = this.props.doc === 'do-not-sell'; recordConsent({ consentId: browserConsentId(), kind: dns ? 'do_not_sell_or_share' : 'cookie_preferences', policyVersion: '1.0', categories: dns ? undefined : { necessary: true, functional: !!choices.functional, analytics: !!choices.analytics, advertising: !!choices.marketing }, optedOut: dns ? !!choices.sale : undefined, language: navigator.language, source: location.pathname, gpc: !!this.gpc }).catch(() => {}); } catch (e) {}",
+        "    window.dispatchEvent(new CustomEvent('noxtill:consent', { detail: choices }));\n    try { const dns = this.props.doc === 'do-not-sell'; recordConsent({ consentId: browserConsentId(), kind: dns ? 'do_not_sell_or_share' : 'cookie_preferences', policyVersion: (this.doc() || {}).version || '1.0', categories: dns ? undefined : { necessary: true, functional: !!choices.functional, analytics: !!choices.analytics, advertising: !!choices.marketing }, optedOut: dns ? !!choices.sale : undefined, language: navigator.language, source: location.pathname, gpc: !!this.gpc }).catch(() => {}); } catch (e) {}",
       ],
+      ...POLICY_READER_PATCHES,
     ],
   },
 };
@@ -243,7 +336,7 @@ module.exports = {
 // ── "final and approved" (owner, 2026-10-10): no draft / pending wording on the pages ──────────────
 /** Trust hub: hero chip and each library card lose their draft status. */
 function approvedTrust(tree) {
-  let out = retext(tree, "Legal version 1.0 · updated October 10, 2026 · draft pending legal review", "Legal version 1.0 · updated October 10, 2026");
+  let out = retext(tree, "Legal version 1.0 · updated October 10, 2026 · draft pending legal review", "Legal version 2.0 · updated October 25, 2026");
   out = retext(out, "v{{ d.version }} · Updated {{ d.updated }} · ", "v{{ d.version }} · Updated {{ d.updated }}");
   const status = find(out, (n) => n[0] === "span" && text(n).trim() === "{{ d.status }}");
   if (!status) throw new Error("trust card status not found");
