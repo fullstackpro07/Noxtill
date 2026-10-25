@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     ...dcMetadata(PAGE).openGraph,
     images: [
       {
-        url: "https://noxtill.com/brand/og-image.png",
+        url: "https://noxtill.com/brand/og-image.png?v=2",
         width: 1200,
         height: 630,
         alt: "Noxtill — AI-Powered Business Operating System",
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     ...dcMetadata(PAGE).twitter,
-    images: ["https://noxtill.com/brand/og-image.png"],
+    images: ["https://noxtill.com/brand/og-image.png?v=2"],
   },
 };
 

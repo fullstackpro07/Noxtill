@@ -20,7 +20,7 @@ export const metadata: Metadata = {
       "Simple, transparent pricing for Noxtill. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no card required.",
     images: [
       {
-        url: "https://noxtill.com/brand/og-image.png",
+        url: "https://noxtill.com/brand/og-image.png?v=2",
         width: 1200,
         height: 630,
         alt: "Noxtill Pricing — Business Management Software Plans",
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     title: "Noxtill Pricing — Business Management Software Plans",
     description:
       "Simple, transparent pricing for Noxtill. Starter $29/mo, Growth $59/mo, Professional $119/mo, Business $239/mo. 14-day free trial, no card required.",
-    images: ["https://noxtill.com/brand/og-image.png"],
+    images: ["https://noxtill.com/brand/og-image.png?v=2"],
   },
 };
 

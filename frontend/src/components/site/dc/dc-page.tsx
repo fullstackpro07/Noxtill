@@ -8,7 +8,7 @@ import { renderDc, type DcContext, type DcNode, type DcPageData } from "./dc-ren
 import "./dc.css";
 import "./dc-responsive.css";
 
-const DEFAULT_OG_IMAGE = "https://noxtill.com/brand/og-image.png";
+const DEFAULT_OG_IMAGE = "https://noxtill.com/brand/og-image.png?v=2";
 
 function resolveOgImageUrl(rawUrl?: string): string {
   if (!rawUrl) return DEFAULT_OG_IMAGE;
