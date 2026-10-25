@@ -13,6 +13,8 @@ export async function sendMarketingChatMessage(message: string, history: ChatTur
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, history }),
+    // The route time-boxes each model attempt (2 x 9s); never leave the widget spinning past that.
+    signal: AbortSignal.timeout(22_000),
   });
 
   if (!res.ok) {

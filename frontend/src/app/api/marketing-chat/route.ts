@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { CHATBOT_KNOWLEDGE_BASE } from "@/lib/marketing/chatbot-knowledge";
 
-const DEFAULT_MODEL = "gemini-flash-latest";
+// flash-lite answers in ~1-2s with the knowledge base; gemini-flash-latest regularly hung for 60s+
+// or returned 503 "high demand". Each attempt is time-boxed and a second model is tried on failure,
+// so a slow or overloaded model can never leave the visitor waiting.
+const DEFAULT_MODEL = "gemini-flash-lite-latest";
+const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+const ATTEMPT_TIMEOUT_MS = 9_000;
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_HISTORY_TURNS = 8;
 const MAX_TURN_LENGTH = 2000;
@@ -81,8 +86,31 @@ export async function POST(request: Request) {
     console.error("marketing-chat: GEMINI_API_KEY is not configured");
     return NextResponse.json({ reply: fallbackReply() }, { status: 200 });
   }
-  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+  const models = [...new Set([process.env.GEMINI_MODEL || DEFAULT_MODEL, FALLBACK_MODEL])];
+  const requestBody = JSON.stringify({
+    contents: [...history, { role: "user", content: message }].map((turn) => ({
+      role: turn.role,
+      parts: [{ text: turn.content }],
+    })),
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    generationConfig: {
+      temperature: 0.4,
+      maxOutputTokens: 350,
+      // These are "thinking" models whose reasoning tokens add latency and count against
+      // maxOutputTokens — keep it minimal (newer models reject thinkingBudget: 0 with a 400).
+      thinkingConfig: { thinkingLevel: "minimal" },
+    },
+  });
 
+  for (const model of models) {
+    const text = await generate(model, apiKey, requestBody);
+    if (text) return NextResponse.json({ reply: text });
+  }
+  return NextResponse.json({ reply: fallbackReply() }, { status: 200 });
+}
+
+/** One time-boxed Gemini call. Returns the reply text, or null so the caller can try the next model. */
+async function generate(model: string, apiKey: string, body: string): Promise<string | null> {
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST",
@@ -90,43 +118,27 @@ export async function POST(request: Request) {
         "x-goog-api-key": apiKey,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        contents: [...history, { role: "user", content: message }].map((turn) => ({
-          role: turn.role,
-          parts: [{ text: turn.content }],
-        })),
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 350,
-          // gemini-flash-latest resolves to a "thinking" model whose internal reasoning tokens
-          // count against maxOutputTokens — disable it so the whole budget goes to visible text.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
+      body,
+      signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
     });
 
     if (!res.ok) {
-      console.error("marketing-chat: Gemini call failed", res.status, await res.text().catch(() => ""));
-      return NextResponse.json({ reply: fallbackReply() }, { status: 200 });
+      console.error(`marketing-chat: Gemini ${model} failed`, res.status, await res.text().catch(() => ""));
+      return null;
     }
 
     const data = (await res.json()) as GeminiResponseBody;
     if (data.promptFeedback?.blockReason) {
-      console.warn("marketing-chat: Gemini blocked the prompt", data.promptFeedback.blockReason);
-      return NextResponse.json({ reply: fallbackReply() }, { status: 200 });
+      console.warn(`marketing-chat: Gemini ${model} blocked the prompt`, data.promptFeedback.blockReason);
+      return null;
     }
 
     const parts = data.candidates?.[0]?.content?.parts ?? [];
     const text = parts.map((part) => part.text ?? "").join("").trim();
-    if (!text) {
-      console.warn("marketing-chat: Gemini response had no text");
-      return NextResponse.json({ reply: fallbackReply() }, { status: 200 });
-    }
-
-    return NextResponse.json({ reply: text });
+    if (!text) console.warn(`marketing-chat: Gemini ${model} response had no text`);
+    return text || null;
   } catch (err) {
-    console.error("marketing-chat: Gemini call threw", err);
-    return NextResponse.json({ reply: fallbackReply() }, { status: 200 });
+    console.error(`marketing-chat: Gemini ${model} call threw`, err instanceof Error ? err.name : err);
+    return null;
   }
 }
