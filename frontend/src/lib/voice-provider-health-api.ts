@@ -1,0 +1,58 @@
+import { apiFetch } from "@/lib/api-client";
+
+export type HealthStatus = "ok" | "warning" | "error" | "not_configured";
+
+export interface VoiceProviderHealth {
+  checkedAt: string;
+  overall: "ok" | "warning" | "error";
+  checks: Array<{
+    key: string;
+    label: string;
+    status: HealthStatus;
+    detail: string;
+  }>;
+  activeTrackingNumbers: number;
+  lastCallAt: string | null;
+}
+
+export interface VoiceUsage {
+  periodStart: string;
+  inboundCalls: number;
+  missedCalls: number;
+  callsWithAiAgent: number;
+  callsWithHumanConnected: number;
+  inboundMinutes: number;
+  outboundDials: number;
+  callbackDials: number;
+  providerCharges: Array<{ unit: string; amount: string }>;
+  limits: {
+    usageCaps: "not_configured" | "inbound_calls_enforced";
+    maxInboundCallsPerMonth: number | null;
+    automatedCalls: number;
+    quotaRejectedCalls: number;
+    note: string;
+  };
+}
+
+export function fetchVoiceProviderHealth(): Promise<VoiceProviderHealth> {
+  return apiFetch("/voice/settings/provider-health");
+}
+
+export function fetchVoiceUsage(): Promise<VoiceUsage> {
+  return apiFetch("/voice/settings/usage");
+}
+
+export interface VoiceMetering {
+  measuredAt: string;
+  units: { unit: string; state: string; quantity: number; records: number }[];
+  costs: { currency: string; state: string; amount: number }[];
+  pendingOrUnpriced: number;
+  spendCapUsd: number | null;
+  spendAgainstCapUsd: number;
+  warnings: number[];
+  pricing: { reason: string };
+}
+
+export function fetchVoiceMetering(): Promise<VoiceMetering> {
+  return apiFetch("/voice/settings/metering");
+}

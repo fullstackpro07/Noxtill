@@ -14,6 +14,7 @@ import {
   summariseCallAnalysis,
   TOPICS,
   type CallQuestion,
+  type CallServiceFailure,
   type TopicKey,
   type TurnAnalysis,
 } from './voice-analysis';
@@ -40,6 +41,7 @@ export interface CallTurn {
   at: string;
   recordingKey?: string;
   analysis?: TurnAnalysis;
+  serviceFailure?: CallServiceFailure;
 }
 
 /** `Business.workingHours` — `{ mon: [["09:00","17:00"]], … }`. An absent or empty day means closed. */
@@ -169,6 +171,18 @@ export class VoiceInsightsService {
                 customer: { select: { name: true } },
               },
             },
+            voiceAgentVersion: {
+              select: {
+                id: true,
+                version: true,
+                agent: { select: { name: true } },
+              },
+            },
+            _count: {
+              select: {
+                humanAgentAssignments: { where: { status: 'connected' } },
+              },
+            },
           },
         }),
         this.tenantPrisma.client.phoneCallNote.groupBy({
@@ -225,10 +239,26 @@ export class VoiceInsightsService {
         id: c.id,
         callSid: c.callSid,
         fromNumber: c.fromNumber,
+        direction: c.direction,
+        isTestCall: c.isTestCall,
         status: c.status,
         outcome: c.outcome,
+        bookingAttempts: Array.isArray(c.bookingAttempts)
+          ? c.bookingAttempts
+          : [],
+        quotaRejectedReason: c.quotaRejectedReason,
         customIntentName: c.customIntentName,
         handledBy: handledBy(c),
+        /** The pinned AI agent version that answered, when one was published at call time. */
+        aiAgentVersion: c.voiceAgentVersion
+          ? {
+              id: c.voiceAgentVersion.id,
+              version: c.voiceAgentVersion.version,
+              agentName: c.voiceAgentVersion.agent.name,
+            }
+          : null,
+        /** A dispatched human agent's leg was provider-confirmed connected. */
+        humanAgentConnected: c._count.humanAgentAssignments > 0,
         startedAt: c.startedAt.toISOString(),
         endedAt: c.endedAt ? c.endedAt.toISOString() : null,
         durationSeconds: c.endedAt
@@ -241,9 +271,16 @@ export class VoiceInsightsService {
         localHour: parts.hour,
         afterHours: isAfterHours(parts, hours),
         hasRecording: !!c.recordingKey,
+        recordingConsentStatus: c.recordingConsentStatus,
+        recordingConsentAt: c.recordingConsentAt?.toISOString() ?? null,
+        recordingRetentionDays: c.recordingRetentionDays,
+        recordingExpiresAt: c.recordingExpiresAt?.toISOString() ?? null,
         recordingDeletedAt: c.recordingDeletedAt
           ? c.recordingDeletedAt.toISOString()
           : null,
+        legalHoldAt: c.legalHoldAt ? c.legalHoldAt.toISOString() : null,
+        legalHoldReason: c.legalHoldReason,
+        transcriptRedactedAt: c.transcriptRedactedAt?.toISOString() ?? null,
         transcript,
         analysis: summariseCallAnalysis(transcript),
         callerName: c.callerName,

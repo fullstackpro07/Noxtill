@@ -15,9 +15,9 @@ import { useRxStore } from "./rx-store";
 
 export const inputCls =
   "h-[38px] w-full rounded-[10px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-semibold text-[#0F172A] outline-none focus:border-[#16A34A] focus:ring-[3px] focus:ring-[rgba(22,163,74,.14)]";
-export const labelCls = "mb-1.5 block text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]";
+export const labelCls = "mb-1.5 block text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]";
 export const saveCls =
-  "mt-3 flex h-[34px] cursor-pointer items-center rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-55";
+  "mt-3 flex h-[34px] cursor-pointer items-center rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-55";
 
 /** Saves Receptionist Settings for real; the very next call uses them. */
 export function useSaveSettings() {
@@ -90,7 +90,7 @@ export function VoiceForm() {
         </button>
       </div>
       {preview ? <audio controls autoPlay src={preview} className="mt-2.5 h-9 w-full" /> : null}
-      {noPreview ? <div className="mt-2 text-[11px] leading-[1.5] text-[#94A3B8]">No preview exists for this voice — it is one of Twilio&apos;s legacy names. Every “Polly” voice previews with the same engine used on a real call.</div> : null}
+      {noPreview ? <div className="mt-2 text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">No preview exists for this voice — it is one of Twilio&apos;s legacy names. Every “Polly” voice previews with the same engine used on a real call.</div> : null}
       <button
         type="button"
         disabled={busy || voice === (rx.settings?.voiceId ?? "")}
@@ -147,7 +147,7 @@ export function HoldMessageForm() {
         Hold message
       </label>
       <textarea id="rx-hold" rows={4} value={v} onChange={(e) => setV(e.target.value)} placeholder="e.g. Thanks — I've taken your details and someone will call you back today." className={`${inputCls} h-auto py-2.5 leading-[1.5]`} />
-      <div className="mt-1.5 text-[11px] text-[#94A3B8]">The AI phrases its reply around this when it takes a message, and speaks it if a call hits the turn limit. Leave it blank to use no set wording.</div>
+      <div className="mt-1.5 text-[11px] text-[color:var(--app-text-faintest,#667085)]">The AI phrases its reply around this when it takes a message, and speaks it if a call hits the turn limit. Leave it blank to use no set wording.</div>
       <button
         type="button"
         disabled={busy || v.trim() === (rx.settings?.queueHoldMessage ?? "")}
@@ -180,13 +180,13 @@ export function CustomIntentsForm() {
     <FormBox>
       <div className={labelCls}>Your situations ({list.length} of 10)</div>
       {list.length === 0 ? (
-        <div className="mb-3 text-[12px] text-[#94A3B8]">None yet. Add one and the AI will use its exact name when a conversation clearly matches it.</div>
+        <div className="mb-3 text-[12px] text-[color:var(--app-text-faintest,#667085)]">None yet. Add one and the AI will use its exact name when a conversation clearly matches it.</div>
       ) : (
         <div className="mb-3 overflow-hidden rounded-[10px] border border-[#E6E8EC]">
           {list.map((c, i) => (
             <div key={c.name} className="flex items-center gap-3 px-3 py-2.5" style={{ borderTop: i ? "1px solid #EEF0F3" : "none" }}>
               <div className="min-w-0 flex-1 text-[12.5px] font-bold">{c.name}</div>
-              <div className="text-[11px] text-[#94A3B8]">priority {c.priority}</div>
+              <div className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">priority {c.priority}</div>
               <button
                 type="button"
                 disabled={busy}

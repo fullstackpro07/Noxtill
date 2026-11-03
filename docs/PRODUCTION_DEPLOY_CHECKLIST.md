@@ -45,7 +45,7 @@ to. A production deploy must replace every placeholder row before going live.
 | `META_WA_TOKEN` / `META_WA_PHONE_ID` / `META_APP_SECRET` | **Disclosed placeholder (empty)** | WhatsApp send + webhook signature verification both real; webhook now fails closed (503) without `META_APP_SECRET`, matching this ticket's security fix. |
 | `META_WA_VERIFY_TOKEN` | Populated (dev value) | Rotate for production. |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | **Disclosed placeholder (empty)** | SMS fallback channel + webhook; same fail-closed behavior as Meta. |
-| `EMAIL_PROVIDER_KEY` | **Disclosed placeholder (empty)** | Postmark transactional + campaign sends both real, reach the actual API call. |
+| `EMAIL_PROVIDER_KEY` | Set locally (2026-10-03) | **Resend** API key (the code calls `api.resend.com`, not Postmark). Transactional + campaign sends both real. |
 | `EMAIL_FROM_ADDRESS` | Populated (dev value) | Rotate to a real verified sending domain. |
 | `EMAIL_WEBHOOK_SECRET` | Populated (dev value) | Shared-secret check now uses constant-time comparison (`safeEqual`) and fails closed if unset — rotate for production. |
 
@@ -141,7 +141,7 @@ Everything below is real, working code that just needs a real credential, accoun
 4	AWS S3 (or S3-compatible) access key + secret	Every generated file: invoices, statements, reports, exports, QR posters	AWS IAM, or R2/MinIO if avoiding AWS
 5	Meta WhatsApp Cloud API token + phone number ID + app secret	Primary messaging channel	developers.facebook.com (WhatsApp Business Platform)
 6	Twilio account SID + auth token + from-number	SMS fallback channel	twilio.com
-7	Postmark (or SES) API key	Transactional email + email marketing campaigns	postmarkapp.com
+7	Resend API key (code uses Resend, not Postmark)	Transactional email + email marketing campaigns	resend.com
 8	Google Places API key	Competitor rating snapshots	Google Cloud Console
 9	SerpApi key	Keyword rank tracking	serpapi.com
 2. OAuth app registrations needed (Module 18 — Integrations Hub)
@@ -151,7 +151,7 @@ These 5 connectors have real, correctly-written OAuth code, but each needs an ac
  Google Ads developer token — separate approval process on top of the OAuth app, required for every Ads API call
  Meta developer app (app ID + secret, distinct from the WhatsApp app above) — powers Meta Ads connector
  TikTok for Business developer app (app ID + secret) — powers TikTok Ads connector
-Only Email is fully deep and live-ready today — it just needs the Postmark key from the table above, no OAuth app required.
+Only Email is fully deep and live-ready today — it just needs the Resend key from the table above, no OAuth app required.
 
 3. Infrastructure to provision
  Managed Redis, version ≥5.0 — confirmed this week the wrong version silently breaks BullMQ; don't reuse an old/legacy Redis instance
@@ -175,4 +175,83 @@ Only Email is fully deep and live-ready today — it just needs the Postmark key
  Decide whether/when to build the deferred deep features for the 5 non-Email connectors (GMB posts, Google Ads campaign creation, Merchant feed sync, Meta creative rendering, TikTok slideshow generation) — their screens exist but stay mocked until each OAuth app is real
 Not blocking launch, but worth knowing
 Help-doc article URLs (HelpArticle.url, used by the AI assistant's citations) point at /help/[slug] pages that don't exist yet — citations render as plain text, not broken links, so this is cosmetic only.
-Postmark webhook → real open/click tracking for email campaigns was deliberately deferred (funnel numbers will read 0 until this exists).
+Email open/click/bounce tracking: built 2026-10-03. In Resend, add a webhook to `https://<api-origin>/api/v1/webhooks/email?token=<EMAIL_WEBHOOK_SECRET>` for delivered, opened, clicked and bounced events, and turn on open/click tracking for the sending domain. Until then the funnel reads 0.
+
+---
+
+## 7. Update — 2026-10-03 audit (after SEO Autopilot, Autonomous Commerce and Automations)
+
+Compared every env var the backend reads (`process.env.*` / `ConfigService.get`) with this file.
+Status here is this dev machine's `backend/.env` (names checked, values never printed).
+
+### 7.1 Status changes since §1 / §6
+
+| Item | Now |
+|---|---|
+| `ANTHROPIC_API_KEY` | Set locally (2026-10-03). Workflow AI drafts, the AI agent step and SEO AI actions use it. |
+| `SERPAPI_KEY` | Set locally; SEO rank tracking provider reports configured. |
+| `EMAIL_PROVIDER_KEY` | Set locally. |
+| Redis | Reachable locally (Redis 8.10.2 built from source, running as a foreground process — not a service). Production still needs managed Redis ≥5. Full backend suite incl. `queue.integration.spec` passes against it. |
+| AI model | `backend/src/ai/claude.client.ts` hard-codes `DEFAULT_MODEL = 'claude-3-5-haiku-20241022'`. **Confirm Anthropic still serves this model before launch** — if not, every AI feature fails. |
+
+### 7.2 Env vars used by code but not listed above (all unset locally)
+
+| Var(s) | Powers | Needed for launch? |
+|---|---|---|
+| `REDIS_URL`, `REDIS_USERNAME`, `REDIS_PASSWORD`, `REDIS_TLS` | Managed-Redis connection (`common/queue/redis-connection.util.ts`) | **Yes** — use these for a managed/TLS Redis instead of host/port. |
+| `PLATFORM_ADMIN_KEY` | Platform admin routes guard | **Yes** — set a fresh random value. |
+| `LOCAL_STORAGE_ROOT` | Local file storage fallback when S3 isn't set | Only if not using S3. |
+| `OPENAI_API_KEY` | AI image generation, voice transcription | If those features launch. |
+| `SHOPIFY_CLIENT_ID` / `_SECRET` | Shopify connector (Commerce channel listings publish/sync) | If Shopify launches. WooCommerce uses per-store keys, no env var. |
+| `FACEBOOK_APP_SECRET` | Social inbox webhook + Instagram connector | If social inbox launches. |
+| `TELNYX_PUBLIC_KEY`, `VOICE_TRANSFER_NUMBER`, `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` (Polly) | AI Phone / voice | If AI Phone launches. |
+| `MAPS_PROVIDER_API_KEY` | Delivery geocoding and routing | If Deliveries launches. |
+| `META_AD_LIBRARY_ACCESS_TOKEN` | Competitive ads lookup | Optional. |
+| `ADS_LEADS_WEBHOOK_SECRET` | Ad lead-form webhook | If ad lead capture launches. |
+| `META_WA_API_VERSION` | WhatsApp Graph API version override | Optional (has a default). |
+| `AMAZON_ADS_*`, `MICROSOFT_ADS_*` (+ developer token), `LINKEDIN_ADS_*`, `PINTEREST_ADS_*`, `REDDIT_ADS_*`, `SNAPCHAT_ADS_*` | Ad-platform connectors | Each needs a registered developer app (account step, not code). |
+| `QUICKBOOKS_*`, `XERO_*` | Accounting connectors | Same — registered app per provider. |
+| `BING_PLACES_*`, `YELP_*`, `APPLE_BUSINESS_CONNECT_API_KEY` | Business listings connectors | Same. |
+
+### 7.3 New go-live checks from the recent modules
+
+- `npx prisma migrate deploy` must apply all migrations in order on a fresh DB (local `migrate status`: up to date; the SEO link-building order issue was fixed by renaming its migration).
+- Public inbound-webhook route `POST /api/v1/public/workflow-hooks/:token` must be reachable from the internet through the proxy / load balancer (the URL shown in Automations → Webhooks is built from the site origin + `/api/v1`).
+- Workflow schedules, waits and retries run on the BullMQ schedule queue — they need Redis and a running backend worker.
+- External data still not connected (screens say so): storefront traffic/conversion, supplier sourcing provider, payment fraud/chargeback feed, marketplace publishing beyond Shopify/WooCommerce.
+- Local QA data lives in the "QA Test Business" in the dev DB only; nothing to clean up in production.
+- Verified 2026-10-03: backend + frontend `tsc --noEmit` clean, `prisma migrate status` up to date, backend Jest 335 suites / 2114 tests passing.
+
+## 8. Update — 2026-10-07 handover review (after Business Intelligence, Customer Portal, Procurement, Website & Commerce)
+
+Verified for this update: `tsc --noEmit` clean for backend and frontend on a clean checkout of HEAD,
+`next build` succeeds, full backend Jest green, every GET route in the new/changed modules answers
+200 for an owner on an empty business, and the write flows were exercised over real HTTP. **Not**
+verified: a from-scratch `prisma migrate deploy` on an empty MySQL (the dev DB user has no
+CREATE DATABASE right), live AI answers (Anthropic key had no credit), and click-through browser QA of
+the Business Intelligence, Customer Portal, Website and Procurement screens with real data.
+
+### 8.1 Must be set up for the new modules
+| Item | Why |
+|---|---|
+| `INTERNAL_BACKEND_URL` on the **frontend server** (e.g. `http://backend:5000/api/v1`) | The hosted site `/site/<slug>` is rendered on the Next server, which fetches the live deployment from the backend. Without it the page falls back to `http://127.0.0.1:5000` and every hosted site shows "not found". |
+| `FRONTEND_URL` on the backend | Shown as the hosted-site address in Domains & Publishing; also used in portal/Website links. |
+| Redis + a running backend worker | New BullMQ queues: `website-scheduled-publish` (every 5 min), `procurement-contract-alerts` (daily 08:00 UTC), plus the earlier workflow retention queue. Without Redis, scheduled pages never publish and contract renewal alerts never send. |
+| Email provider (Resend) | Customer Portal invites and password-reset emails. |
+| Express `trust proxy` behind the load balancer | Throttling keys on the client IP. Without it every visitor shares the balancer's IP, so the public-form limit (10/min) and portal-login limit (5/min) would lock out real users together. |
+| Real `prisma migrate deploy` on an empty database in CI/staging | 160 migrations; ordering was checked statically only. |
+
+### 8.2 Behaviour to know before go-live
+- **Custom domains are verified (real DNS TXT lookup + TLS certificate check) but traffic is not routed
+  to them.** Visitors use `/site/<slug>` until the hosting proxy is configured to map a domain to a
+  site. The UI says this plainly.
+- **Online payment is not available.** Storefront and portal orders are created unpaid; there is no
+  Payments & Billing module in this workspace.
+- **No analytics source:** website sessions and conversion are shown as "Not tracked".
+- **No Finance & Accounting module:** vendor bills, budgets, billed/paid spend and 3-way-match invoice
+  comparison are shown as "Not available" in Procurement.
+- **No Documents & eSign module:** supplier contracts and website media link to files hosted elsewhere.
+- Public form submissions: 10 per minute per IP; spam trap + idempotency keys; marketing consent only
+  when the visitor ticks the box.
+- New capability `website.manage` (owner + manager). Procurement sourcing, 3-way match, contracts and
+  analytics require `purchases.manage`.

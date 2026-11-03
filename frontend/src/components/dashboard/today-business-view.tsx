@@ -12,6 +12,7 @@ import { fetchStaffList } from "@/lib/staff-api";
 import { formatCurrency, formatTime } from "@/lib/format";
 import { fetchTodayBusiness, type TodayBusinessFilters, type LiveTodayBusiness } from "@/lib/today-business-api";
 import type { LivePaymentMethod } from "@/lib/orders-api";
+import { useDisabledModules } from "@/components/layout/module-gate";
 
 const PAYMENT_METHODS: LivePaymentMethod[] = ["cash", "card", "online", "credit"];
 const ORDER_TYPES = ["counter", "online", "dine_in", "takeaway", "delivery"] as const;
@@ -72,6 +73,7 @@ const selectStyle: React.CSSProperties = {
 
 export function TodayBusinessView() {
   const session = useSession();
+  const disabledModules = useDisabledModules();
   const [filters, setFilters] = useState<TodayBusinessFilters>({});
   const now = useNow(60_000);
 
@@ -86,15 +88,15 @@ export function TodayBusinessView() {
     () =>
       data
         ? [
-            { label: "Sales count", value: String(data.cards.salesCount) },
-            { label: "Revenue", value: formatCurrency(data.cards.revenue, session.business.currency) },
-            { label: "Average ticket", value: formatCurrency(data.cards.avgTicket, session.business.currency) },
-            { label: "Customers served", value: String(data.cards.customersServed) },
-            { label: "Staff on duty", value: String(data.cards.staffOnDuty) },
-            { label: "Open orders", value: String(data.cards.openOrders) },
-          ]
+            { label: "Sales count", value: String(data.cards.salesCount), module: "sales" },
+            { label: "Revenue", value: formatCurrency(data.cards.revenue, session.business.currency), module: "sales" },
+            { label: "Average ticket", value: formatCurrency(data.cards.avgTicket, session.business.currency), module: "sales" },
+            { label: "Customers served", value: String(data.cards.customersServed), module: "customers" },
+            { label: "Staff on duty", value: String(data.cards.staffOnDuty), module: "staff" },
+            { label: "Open orders", value: String(data.cards.openOrders), module: "orders" },
+          ].filter((card) => !disabledModules.has(card.module)).map(({ label, value }) => ({ label, value }))
         : [],
-    [data, session.business.currency],
+    [data, session.business.currency, disabledModules],
   );
 
   return (
@@ -123,14 +125,14 @@ export function TodayBusinessView() {
             <Printer className="h-3.5 w-3.5" aria-hidden />
             Print day sheet
           </button>
-          <Link
+          {!disabledModules.has("sales") && <Link
             href="/sales"
             className="flex items-center gap-1.5 rounded-[10px] px-4 py-[9px] text-[12.5px] font-bold text-white"
             style={{ background: "var(--app-primary)" }}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden />
             New sale
-          </Link>
+          </Link>}
         </div>
       </div>
 

@@ -16,8 +16,29 @@ export function useCallActions() {
   const rx = useRx();
   const openConfirm = useRxStore((s) => s.openConfirm);
   const openPanel = useRxStore((s) => s.openPanel);
+  const closeOverlays = useRxStore((s) => s.closeOverlays);
   const router = useRouter();
   const transferConfigured = !!rx.insights?.transferConfigured;
+
+  const confirmTransfer = (c: EnrichedCall, mode: "cold" | "warm") => {
+    const warm = mode === "warm";
+    openConfirm({
+      title: `${warm ? "Warm" : "Cold"} transfer this call?`,
+      tone: "amber",
+      icon: "phone-forwarded",
+      body: warm
+        ? "The person you call will hear a private caller-context briefing before Twilio connects them. The caller stays on the line during that briefing."
+        : "Twilio will call the destination and connect it to the caller without a private context briefing.",
+      rows: [
+        { label: "Caller", value: `${callerName(c)} · ${c.fromNumber}` },
+        { label: "Rings", value: rx.settings?.transferNumber ?? "Your server's transfer number" },
+        { label: "State after request", value: "Pending provider confirmation" },
+      ],
+      primary: `Start ${mode} transfer`,
+      cancel: "Keep the call",
+      onConfirm: () => rx.actions.transfer(c.id, mode),
+    });
+  };
 
   /** Put a LIVE call through to a person — a real telephony-provider action. */
   const transfer = (c: EnrichedCall) => {
@@ -37,18 +58,32 @@ export function useCallActions() {
       });
       return;
     }
-    openConfirm({
-      title: "Transfer this call to a person?",
-      tone: "amber",
-      icon: "phone-forwarded",
-      body: "The telephony provider is asked to put the caller through to your transfer number. The AI stops handling the call, and the call is recorded as a transfer.",
+    openPanel({
+      kicker: "Transfer mode",
+      title: `Choose how to transfer ${callerName(c)}`,
+      badge: "Live call",
+      badgeTone: "blue",
       rows: [
-        { label: "Caller", value: `${callerName(c)} · ${c.fromNumber}` },
-        { label: "Rings", value: rx.settings?.transferNumber ?? "Your server's transfer number" },
+        { label: "Caller", value: c.fromNumber },
+        { label: "Destination", value: rx.settings?.transferNumber ?? "Your server's transfer number" },
       ],
-      primary: "Transfer now",
-      cancel: "Keep with the AI",
-      onConfirm: () => rx.actions.transfer(c.id),
+      body: (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => { closeOverlays(); confirmTransfer(c, "cold"); }} className="h-9 rounded-[9px] border border-[#D5DAE2] bg-white px-3 text-[12px] font-bold hover:bg-[#F1F3F6]">
+            Cold transfer
+          </button>
+          <button type="button" onClick={() => { closeOverlays(); confirmTransfer(c, "warm"); }} className="h-9 rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12px] font-bold text-white hover:bg-[#15803D]">
+            Warm transfer with briefing
+          </button>
+        </div>
+      ),
+      bulletsTitle: "What happens",
+      bullets: [
+        "Both options use the configured transfer number and are executed by Twilio.",
+        "Warm transfer plays the latest saved caller context privately to the called party before connection.",
+        "The live-call legs show Pending until Twilio's final transfer callback confirms the result.",
+      ],
+      secondary: "Close",
     });
   };
 
@@ -105,7 +140,7 @@ export function useCallActions() {
       title: "Call back this number?",
       tone: "green",
       icon: "phone-outgoing",
-      body: `Your phone's dialler opens with this number, and Noxtill records that a callback was offered. ${
+      body: `Noxtill records that a callback was offered and opens Missed Calls, where the number is checked against consent, opt-out, suppression and calling hours before anything is dialed. ${
         hasTranscript ? "The transcript is in the call workspace if you want the context first." : "There is no transcript for this call, so you are starting without context — that is genuinely all that is known."
       }`,
       rows: [
@@ -114,11 +149,11 @@ export function useCallActions() {
         { label: "Customer match", value: c.customer ? c.customer.name : "None found", tone: c.customer ? undefined : "muted" },
         { label: "Known intent", value: missed ? "None — not inferred" : intentLabel(c), tone: missed ? "muted" : undefined },
       ],
-      primary: "Open dialler",
+      primary: "Go to call-back",
       cancel: "Cancel",
       onConfirm: async () => {
         if (!c.resolvedAt && !c.callbackRequestedAt) await rx.actions.offerCallback(c.id);
-        window.location.href = `tel:${c.fromNumber}`;
+        router.push("/receptionist/missed-calls");
       },
     });
   };
@@ -147,12 +182,12 @@ export function useCallActions() {
       icon: mode === "listen" ? "audio-lines" : "user-round",
       body:
         mode === "listen"
-          ? "Noxtill rings YOUR phone and joins you to the live call, muted — you hear the caller and the AI, and they can't hear you."
+          ? "Noxtill rings YOUR phone and bridges it into a Twilio conference with the caller, muted. This is not a silent background tap; moving the caller into the conference stops the AI's turn-based call loop."
           : "Noxtill rings YOUR phone and joins you to the live call, unmuted. You speak with the caller directly and the AI stops handling the call.",
       rows: [
         { label: "Caller", value: `${callerName(c)} · ${c.fromNumber}` },
         { label: "Your phone", value: "The number saved on your Noxtill account" },
-        { label: "Anything the AI was about to do", value: mode === "takeover" ? "Will not happen — you are on the call" : "Carries on", tone: mode === "takeover" ? "neg" : undefined },
+        { label: "AI turn-based handling", value: "Stops when the caller leg moves to the conference", tone: "neg" },
       ],
       primary: mode === "listen" ? "Ring my phone" : "Take over",
       cancel: "Cancel",
@@ -170,7 +205,7 @@ export function AssignPicker({ callId, current }: { callId: string; current: str
   const staff = rx.staff.filter((s) => s.active);
   return (
     <div className="flex-none rounded-[12px] border border-[#E6E8EC] p-3.5">
-      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]" htmlFor="assign-staff">
+      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]" htmlFor="assign-staff">
         Owner
       </label>
       <select id="assign-staff" value={pick} onChange={(e) => setPick(e.target.value)} className="h-[38px] w-full rounded-[10px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-semibold">
@@ -190,7 +225,7 @@ export function AssignPicker({ callId, current }: { callId: string; current: str
           setBusy(false);
           closeOverlays();
         }}
-        className="mt-3 flex h-[34px] cursor-pointer items-center rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-55"
+        className="mt-3 flex h-[34px] cursor-pointer items-center rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-55"
       >
         {busy ? "Saving…" : "Save owner"}
       </button>

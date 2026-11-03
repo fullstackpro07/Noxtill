@@ -25,6 +25,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { useTranslation } from "@/hooks/use-translation";
+import { VoiceUsageBillingSection } from './voice-usage-billing-section';
 
 function UsageMeter({
   icon: Icon,
@@ -106,6 +107,8 @@ export function BillingPlanSection() {
         title={t("settings.section.billing.label")}
         description={t("settings.section.billing.description")}
       />
+
+      <VoiceUsageBillingSection />
 
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <UsageMeter

@@ -143,6 +143,7 @@ export class CrmJobsProcessor extends WorkerHost {
             });
             void this.workflowTrigger
               .dispatch(business.id, event.type, {
+                eventId: event.id,
                 description: event.description,
                 entityType: event.entityType,
                 entityId: event.entityId,
@@ -237,6 +238,7 @@ export class CrmJobsProcessor extends WorkerHost {
           });
           void this.workflowTrigger
             .dispatch(business.id, event.type, {
+              eventId: event.id,
               description: event.description,
               entityType: event.entityType,
               entityId: event.entityId,

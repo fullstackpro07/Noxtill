@@ -18,6 +18,14 @@ import {
   updateBusiness,
 } from './hub.deps';
 import { policyRow } from './policy-rows';
+import { assertAutomationGovernance } from '../../marketing/automations/automation-governance.util';
+import {
+  workflowGraphActions,
+  type WorkflowGraph,
+} from '../../marketing/automations/workflow-graph.util';
+import { BI_OVERVIEW_WIDGETS } from '../../business-intelligence/business-intelligence.constants';
+import { WIDGET_REGISTRY } from '../../widgets/widget-registry';
+import { WIDGET_CACHE_TTL_MS } from '../../widgets/widgets.constants';
 
 const bad = (message: string) =>
   new AppException('SETTING_INVALID', message, HttpStatus.BAD_REQUEST);
@@ -67,6 +75,7 @@ const AI_FEATURES: { key: string; label: string; description: string }[] = [
     description:
       'Drafts, translates and summarises Unified Inbox replies for a person to send.',
   },
+  { key: 'workflowAgents', label: 'Workflow AI drafts & agents', description: 'AI-draft and read-only AI agent workflow steps. Their output appears in run history and is not sent automatically.' },
 ];
 
 /** Provider display names — one source, the Integrations catalog, so this screen never lags the directory. */
@@ -112,6 +121,221 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
 
   return [
     {
+      key: 'business-intelligence',
+      label: 'Intelligence Settings',
+      title: 'Intelligence Settings',
+      icon: 'brain',
+      group: 'Intelligence',
+      description:
+        'Set on-screen confidence and impact thresholds and optional starting assumptions for BI simulations.',
+      affects: ['BI Overview', 'Opportunity Radar', 'Business Simulator'],
+      affectsNote:
+        'Thresholds label source records; simulation defaults prefill hypothetical inputs only. Nothing here edits source business records or sends alerts.',
+      help: [
+        'BI reads the canonical Dashboard widget registry. These settings do not redefine metric formulas.',
+        'Confidence values are source-recorded Product Radar values, not calibrated probabilities. Thresholds add labels only and do not change ranking.',
+        'Impact thresholds add an on-screen marker to recorded insight amounts; BI threshold notifications are not available.',
+        'Simulation defaults prefill assumptions for review. Saving a scenario never writes to live products, prices, staff or campaigns.',
+        'AI provider setup and feature permissions stay in AI & Governance; BI does not store provider credentials or override those controls.',
+      ],
+      notice: {
+        text: 'Metric definitions remain owned by their source modules. BI thresholds are guidance markers, not causal claims or automated actions.',
+        icon: 'shield-check',
+      },
+      actions: [
+        {
+          label: 'Open BI Overview',
+          icon: 'external-link',
+          href: '/business-intelligence',
+          kind: 'link',
+        },
+        {
+          label: 'Open AI & Governance',
+          icon: 'external-link',
+          href: '/settings/ai',
+          kind: 'link',
+        },
+        { label: 'Reset section', icon: 'rotate-ccw', kind: 'reset' },
+        { label: 'View history', icon: 'history', kind: 'history' },
+      ],
+      groups: [
+        {
+          title: 'Canonical sources',
+          hint: 'Read-only references',
+          rows: [
+            row({
+              key: 'bi-ai-governance',
+              label: 'AI models and permissions',
+              description:
+                'Provider configuration, monthly limits and AI feature access remain in the existing AI & Governance controls. BI has no separate per-business model allowlist.',
+              link: { label: 'Open AI settings', href: '/settings/ai' },
+              state: () => ({ value: 'Managed in AI & Governance' }),
+            }),
+            row({
+              key: 'bi-approval-policy',
+              label: 'Approval policy',
+              description:
+                'BI does not execute source-module changes. Permissions and any required approvals are enforced by the owning module.',
+              state: () => ({ value: 'Owned by source modules' }),
+            }),
+            row({
+              key: 'bi-retention-policy',
+              label: 'BI record retention',
+              description:
+                'A separate BI retention setting is not configured here. This view does not change how source records are retained.',
+              state: () => ({ value: 'No BI-specific policy' }),
+            }),
+            row({
+              key: 'bi-freshness-policy',
+              label: 'Dashboard metric freshness',
+              description:
+                'The BI Overview uses the Dashboard widget cache. This freshness interval is set by the Dashboard service, not configurable here.',
+              state: () => ({
+                value: `Dashboard cache · ${WIDGET_CACHE_TTL_MS / 1000} seconds`,
+              }),
+            }),
+            row({
+              key: 'bi-notifications',
+              label: 'Threshold notifications',
+              description:
+                'BI does not currently send notifications when a threshold is crossed. Thresholds are shown as on-screen markers only.',
+              state: () => ({ value: 'Not available', tone: 'neutral' }),
+            }),
+          ],
+          dynamicRows: () => {
+            const registered = new Set(
+              WIDGET_REGISTRY.map((widget) => widget.key),
+            );
+            const unresolved = BI_OVERVIEW_WIDGETS.filter(
+              (key) => !registered.has(key),
+            );
+            return Promise.resolve([
+              row({
+                key: 'bi-metric-registry',
+                label: 'Metric definitions',
+                description: `BI checks its Dashboard metric references against the canonical widget registry when this screen loads: ${BI_OVERVIEW_WIDGETS.join(', ')}. Formulas remain owned by Dashboard.`,
+                link: {
+                  label: 'Open BI Overview',
+                  href: '/business-intelligence',
+                },
+                state: () =>
+                  unresolved.length
+                    ? {
+                        value: `Unresolved: ${unresolved.join(', ')}`,
+                        tone: 'red',
+                      }
+                    : {
+                        value: 'All BI references resolve',
+                        tone: 'green',
+                      },
+              }),
+            ]);
+          },
+        },
+        {
+          title: 'Confidence and impact markers',
+          hint: 'Labels only · no ranking or notification changes',
+          rows: [
+            policyRow(d, {
+              key: 'bi-confidence-review-below',
+              policy: 'bi.confidenceReviewBelow',
+              kind: 'number',
+              label: 'Flag source confidence below',
+              description:
+                'Adds a review label to Product Radar candidates below this recorded confidence score (0–100). Empty means no review threshold.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n} / 100`,
+              emptyLabel: 'No threshold',
+            }),
+            policyRow(d, {
+              key: 'bi-confidence-high-at',
+              policy: 'bi.confidenceHighAtOrAbove',
+              kind: 'number',
+              label: 'Mark source confidence high at',
+              description:
+                'Adds a high-confidence label at or above this recorded Product Radar score (0–100). Empty means no high-confidence threshold.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n} / 100`,
+              emptyLabel: 'No threshold',
+            }),
+            policyRow(d, {
+              key: 'bi-impact-alert-threshold',
+              policy: 'bi.insightImpactAlertThreshold',
+              kind: 'number',
+              label: 'Insight impact alert threshold',
+              description:
+                'Marks recorded AI Insight impact at or above this amount in the business currency. This is an on-screen marker only; no notification is sent.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n.toLocaleString('en-US')} (business currency)`,
+              emptyLabel: 'No threshold',
+              step: 0.01,
+            }),
+          ],
+        },
+        {
+          title: 'Simulation defaults',
+          hint: 'Optional starting assumptions · never applied live',
+          footer:
+            'These values prefill a new what-if form. Review them before saving; scenarios do not alter operational records.',
+          rows: [
+            policyRow(d, {
+              key: 'bi-simulation-price-default',
+              policy: 'bi.simulationPriceChangePercent',
+              kind: 'number',
+              label: 'Default hypothetical price change',
+              description:
+                'Prefills the price-change assumption for a new scenario. Empty leaves the input blank.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n}%`,
+              emptyLabel: 'No default',
+              step: 0.01,
+            }),
+            policyRow(d, {
+              key: 'bi-simulation-stock-default',
+              policy: 'bi.simulationAdditionalStockUnits',
+              kind: 'number',
+              label: 'Default additional stock units',
+              description:
+                'Prefills the hypothetical additional units input. Empty leaves the input blank.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n} units`,
+              emptyLabel: 'No default',
+            }),
+            policyRow(d, {
+              key: 'bi-simulation-staff-default',
+              policy: 'bi.simulationStaffCountChange',
+              kind: 'number',
+              label: 'Default staff-size change',
+              description:
+                'Prefills the hypothetical headcount change. Empty leaves the input blank.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n > 0 ? '+' : ''}${n} people`,
+              emptyLabel: 'No default',
+            }),
+            policyRow(d, {
+              key: 'bi-simulation-marketing-default',
+              policy: 'bi.simulationMarketingBudgetChange',
+              kind: 'number',
+              label: 'Default marketing budget change',
+              description:
+                'Prefills a hypothetical amount in the business currency. Empty leaves the input blank; no marketing ROI is estimated.',
+              requires: CAPABILITIES.PROFIT_VIEW,
+              risk: 'Low',
+              format: (n) => `${n.toLocaleString('en-US')} (business currency)`,
+              emptyLabel: 'No default',
+              step: 0.01,
+            }),
+          ],
+        },
+      ],
+    },
+    {
       key: 'automations',
       label: 'Automations',
       title: 'Automations',
@@ -123,9 +347,9 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       affectsNote:
         'Turning a workflow off stops it firing for new events; past runs are kept.',
       help: [
-        'A failed run is recorded with its reason. Failures are not retried automatically.',
-        'Workflows are event-driven: they run when the event happens, not on their own schedule.',
-        'Workflow actions are limited to messaging a customer or notifying you.',
+        'A failed run is recorded with its reason. You can manually retry eligible failed actions within the retry limit.',
+        'Workflows can run from matching events or from a configured schedule. Durable waits and schedule recovery require Redis.',
+        'Workflow actions can message customers, update customer tags and fields, wait, request approval, and create AI drafts saved to run history.',
       ],
       actions: [
         {
@@ -224,24 +448,127 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                 description: `Runs when: ${w.triggerKey.replace(/_/g, ' ')}.`,
                 risk: 'Medium',
                 requires: CAPABILITIES.AUTOMATIONS_MANAGE,
-                link: {
-                  label: 'Edit workflow',
-                  href: '/marketing/automations',
-                },
-                state: () => ({
-                  value: w.active ? 'On' : 'Off',
-                  tone: w.active ? 'green' : 'neutral',
-                  control: { type: 'toggle', on: w.active },
-                }),
-                write: async (_ctx, v) => {
-                  await d.prisma.workflow.update({
-                    where: { id: w.id },
-                    data: { active: Boolean(v) },
-                  });
+                link: { label: 'Edit workflow', href: '/marketing/automations' },
+                state: () => ({ value: w.active ? 'On' : 'Off', tone: w.active ? 'green' : 'neutral', control: { type: 'toggle', on: w.active } }),
+                write: async (ctx, v) => {
+                  const on = Boolean(v);
+                  if (on && !w.active) {
+                    const graph =
+                      (w.graph as unknown as WorkflowGraph | null) ?? null;
+                    const steps = graph
+                      ? workflowGraphActions(graph)
+                      : (w.actions as unknown as { type: string }[]);
+                    await assertAutomationGovernance(d.prisma, {
+                      businessId: ctx.businessId,
+                      workflowId: w.id,
+                      activating: true,
+                      activeAfter: true,
+                      actions: steps,
+                      graph,
+                    });
+                  }
+                  await d.prisma.workflow.update({ where: { id: w.id }, data: { active: on } });
                 },
               }),
             );
           },
+        },
+        {
+          title: 'Governance',
+          hint: 'Enforced when a workflow is switched on or changed',
+          rows: [
+            policyRow(d, {
+              key: 'wf-max-active',
+              policy: 'automations.maxActiveWorkflows',
+              kind: 'number',
+              label: 'Maximum active workflows',
+              description:
+                'Switching on a workflow is refused once this many are active. Empty means no limit.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              format: (n) => `${n} active`,
+              emptyLabel: 'No limit',
+            }),
+            policyRow(d, {
+              key: 'wf-max-runs-month',
+              policy: 'automations.maxRunsPerMonth',
+              kind: 'number',
+              label: 'Maximum workflow runs per month',
+              description:
+                'After this many workflow runs in a calendar month (UTC), later triggers are recorded as skipped. Skipped runs, such as conditions not met, do not count. Empty means no limit.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              format: (n) => `${n} runs per month`,
+              emptyLabel: 'No limit',
+            }),
+            policyRow(d, {
+              key: 'wf-run-retention-days',
+              policy: 'automations.runRetentionDays',
+              kind: 'number',
+              label: 'Run-history retention',
+              description:
+                'Delete finished workflow runs older than this many days. Running, waiting, approval-pending and open Recovery runs are kept. Empty means keep forever.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              format: (n) => `${n} days`,
+              emptyLabel: 'Keep forever',
+            }),
+            policyRow(d, {
+              key: 'wf-approval-before-message',
+              policy: 'automations.requireApprovalBeforeCustomerMessages',
+              kind: 'toggle',
+              label: 'Require approval before customer messages',
+              description:
+                'An active workflow must pass a "Request approval" step before any step that messages a customer.',
+              risk: 'Medium',
+              requires: CAPABILITIES.AUTOMATIONS_MANAGE,
+              impact:
+                'Turning on a workflow, or saving changes to an active workflow, is refused if a customer message can run without a prior approval step. Existing active workflows keep running until changed.',
+              on: { text: 'Required', tone: 'blue' },
+              off: { text: 'Not required', tone: 'neutral' },
+            }),
+          ],
+        },
+        {
+          title: 'Autonomous Commerce',
+          hint: 'Kill switch',
+          rows: [
+            policyRow(d, {
+              key: 'commerce-paused',
+              policy: 'commerce.actionsPaused',
+              kind: 'toggle',
+              label: 'Pause all commerce actions',
+              description:
+                'Stops Autonomous Commerce from sending listings to sales channels, generating AI listings and running subscription renewals (which create orders). Viewing, reviewing and manual record keeping keep working.',
+              risk: 'Medium',
+              requires: CAPABILITIES.COMMERCE_MANAGE,
+              impact:
+                'While paused, subscriptions that come due stay due — none are skipped or lost, and they can be renewed after you resume.',
+              link: {
+                label: 'Open Autonomous Commerce',
+                href: '/autonomous-commerce/product-radar',
+              },
+              on: { text: 'Paused', tone: 'red' },
+              off: { text: 'Running', tone: 'green' },
+            }),
+            policyRow(d, {
+              key: 'commerce-autonomy',
+              policy: 'commerce.autonomyLevel',
+              kind: 'number',
+              label: 'Commerce agent autonomy level',
+              description:
+                '0 disabled · 1 observe (read tools) · 2 recommend (drafts) · 3 approval-gated · 4 limited · 5 full configured autonomy. Medium-risk and higher tools always need approval.',
+              risk: 'High',
+              requires: CAPABILITIES.COMMERCE_MANAGE,
+              impact:
+                'Controls which registered commerce tools an agent may use. Higher levels never skip approval for high-risk, financial or irreversible actions.',
+              link: {
+                label: 'Open Agents & Tools',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              format: (n) => `Level ${n}`,
+            }),
+          ],
         },
         {
           title: 'Safety',
@@ -250,14 +577,18 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'wf-retry',
               label: 'Failed runs',
-              description: 'A failed run is recorded and is not retried.',
-              state: () => ({ value: 'Recorded, not retried' }),
+              description:
+                'Eligible failed actions can be retried manually within a limit; actions are not retried automatically.',
+              state: () => ({ value: 'Manual retry · limited' }),
             }),
             row({
               key: 'wf-actions',
               label: 'What a workflow can do',
-              description: 'The actions a workflow may take.',
-              state: () => ({ value: 'Message a customer · Notify you' }),
+              description: 'The actions currently supported by the workflow engine.',
+              state: () => ({
+                value:
+                  'Message · notify · tag · custom field · wait · approval · AI draft',
+              }),
             }),
           ],
         },
@@ -294,6 +625,152 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
         },
       ],
       groups: [
+        {
+          title: 'Voice usage limits',
+          hint: 'Applied to every new inbound call',
+          rows: [
+            policyRow(d, {
+              key: 'voice-max-inbound-calls-month',
+              policy: 'voice.maxInboundCallsPerMonth',
+              kind: 'number',
+              label: 'Monthly automated inbound calls',
+              description:
+                'Counts inbound calls admitted to the automated receptionist in the UTC calendar month. Once reached, later calls are logged for follow-up and routed to a human when available; AI and IVR handling are skipped. Empty means no limit.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              impact:
+                'When the cap is reached, callers will not enter the automated assistant or IVR. No caller audio is recorded on a capped call.',
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+              format: (n) => `${n.toLocaleString('en-US')} calls per month`,
+              emptyLabel: 'No limit',
+            }),
+            policyRow(d, {
+              key: 'voice-bookings-staff-approval',
+              policy: 'voice.bookingsRequireStaffApproval',
+              kind: 'toggle',
+              label: 'Staff approval for phone bookings',
+              description:
+                'AI phone bookings stay requested until staff approves them. Required deposits or an unassigned service-specific staff member also need review, even with this switch off. AI never records an uncollected cash deposit.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              link: { label: 'Booking requests', href: '/bookings' },
+              on: { text: 'Staff approval required', tone: 'amber' },
+              off: { text: 'Confirm eligible bookings', tone: 'green' },
+            }),
+            policyRow(d, {
+              key: 'voice-meeting-guest-limit',
+              policy: 'voice.meetingGuestLimit',
+              kind: 'number',
+              label: 'Admitted guests per video meeting',
+              description:
+                'Limits personal invitations admitted by the assigned host. Waiting requests do not take a seat. This is an application seat limit, not a measured count of connected participants.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              format: (n) => `${n} admitted guests`,
+              link: { label: 'Video Meetings', href: '/phone/meetings' },
+            }),
+            policyRow(d, {
+              key: 'voice-monthly-spend-cap-usd',
+              policy: 'voice.monthlySpendCapUsd',
+              kind: 'number',
+              label: 'Monthly phone spending cap (USD)',
+              description:
+                'Confirmed USD provider charges plus conservative realtime AI estimates. Sends in-app owner warnings at 70% and 90%. At the cap, new AI calls and outbound jobs are refused; active calls can reach the safe handoff path. Unpriced usage and other currencies are shown separately.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              format: (n) => `$${n.toFixed(2)} per UTC month`,
+              emptyLabel: 'No phone spending cap',
+              link: { label: 'Phone usage', href: '/receptionist/settings' },
+            }),
+            policyRow(d, {
+              key: 'voice-hold-queue-max-wait',
+              policy: 'voice.holdQueueMaxWaitSeconds',
+              kind: 'number',
+              label: 'Caller hold-queue wait limit',
+              description:
+                'When set, calls that request a person and cannot connect enter Twilio’s real hold queue. At this many seconds, the configured overflow action runs. Empty keeps the current immediate follow-up behavior.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              format: (n) => `${n} seconds`,
+              emptyLabel: 'Hold queue off',
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+            }),
+            policyRow(d, {
+              key: 'voice-hold-queue-overflow-ai',
+              policy: 'voice.holdQueueOverflowToAi',
+              kind: 'toggle',
+              label: 'Return callers to the AI at the wait limit',
+              description:
+                'If enabled, the caller returns to the pinned AI receptionist flow when the hold limit is reached. If disabled, the next enabled overflow option is used, or a callback follow-up.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              on: { text: 'AI overflow on', tone: 'blue' },
+              off: { text: 'Off', tone: 'neutral' },
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+            }),
+            policyRow(d, {
+              key: 'voice-hold-queue-overflow-human',
+              policy: 'voice.holdQueueOverflowToHuman',
+              kind: 'toggle',
+              label: 'Offer callers to another person at the wait limit',
+              description:
+                'If AI overflow is off, this offers the caller to the next available human. If no person is available or this is off, a callback follow-up is created.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              on: { text: 'Human overflow on', tone: 'green' },
+              off: { text: 'Off', tone: 'neutral' },
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+            }),
+            policyRow(d, {
+              key: 'voice-missed-call-text-back',
+              policy: 'voice.missedCallTextBack',
+              kind: 'toggle',
+              label: 'Text missed callers',
+              description:
+                'After a missed call, send the caller a short "sorry we missed you" message through your messaging channel. Numbers on the suppression list and customers who opted out are never texted.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              impact:
+                'Callers who are not saved customers are texted too; check this fits your local messaging rules. Each send counts against the monthly message quota.',
+              link: {
+                label: 'Open Missed Calls',
+                href: '/receptionist/missed-calls',
+              },
+              on: { text: 'Texting', tone: 'blue' },
+              off: { text: 'Off', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'voice-redact-transcripts',
+              policy: 'voice.redactTranscripts',
+              kind: 'toggle',
+              label: 'Redact call transcripts',
+              description:
+                'After a call ends, card numbers, ID numbers, phone numbers and email addresses in its transcript and AI summary are replaced with placeholders. Calls on legal hold are skipped.',
+              risk: 'Medium',
+              requires: CAPABILITIES.VOICE_MANAGE,
+              impact:
+                'Redaction is permanent for each processed call; the original words cannot be recovered. Live calls are never changed.',
+              link: {
+                label: 'Open Phone settings',
+                href: '/receptionist/settings',
+              },
+              on: { text: 'Redacting', tone: 'blue' },
+              off: { text: 'Off', tone: 'neutral' },
+            }),
+          ],
+        },
         {
           title: 'AI status',
           hint: 'Honest about its limits',

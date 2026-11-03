@@ -29,6 +29,8 @@ const SOURCE_LABEL: Record<ActionItemType, string> = {
   contract_expiring: "Contracts",
   contract_obligation_overdue: "Contracts",
   contract_signature_issue: "Contracts",
+  commerce: "Autonomous Commerce",
+  procurement_request: "Procurement",
 };
 const PRIORITY_LABEL: Record<LiveActionItem["priority"], string> = { urgent: "High", normal: "Normal", low: "Low" };
 

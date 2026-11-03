@@ -37,6 +37,12 @@ export async function assertSlotAvailable(
     excludeAppointmentId?: string;
   },
 ): Promise<void> {
+  // Exact-start locks alone miss overlapping starts and a business-wide daily cap across
+  // different services. Every canonical writer takes this tenant mutex first, so the first
+  // consistent read happens after the previous writer committed (including on MySQL RR).
+  const businessLock = `${params.businessId}:booking-write`;
+  await tx.$executeRaw`INSERT INTO slot_locks (lock_key) VALUES (${businessLock}) ON DUPLICATE KEY UPDATE lock_key = lock_key`;
+  await tx.$executeRaw`SELECT lock_key FROM slot_locks WHERE lock_key = ${businessLock} FOR UPDATE`;
   const lockKey = `${params.businessId}:${params.staffId ?? params.serviceId}:${params.startsAt.toISOString()}`;
   await tx.$executeRaw`INSERT INTO slot_locks (lock_key) VALUES (${lockKey}) ON DUPLICATE KEY UPDATE lock_key = lock_key`;
   await tx.$executeRaw`SELECT lock_key FROM slot_locks WHERE lock_key = ${lockKey} FOR UPDATE`;

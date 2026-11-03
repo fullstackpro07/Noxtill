@@ -32,7 +32,7 @@ export function fetchInventory(): Promise<LiveInventoryItem[]> {
 /** UPD-BE-110 fix-it: the real `StockMovementKind` enum has 7 values — this used to only list 3,
  * so a Stock Count adjustment or a Stock Transfer row silently fell through `describeMovement()`'s
  * catch-all "Sold via POS" branch and had no icon/tone in `MOVEMENT_ICON`/`MOVEMENT_TONE`. */
-export type MovementKind = "purchase" | "sale" | "wastage" | "adjustment" | "return" | "transfer_out" | "transfer_in" | "maintenance" | "field_service";
+export type MovementKind = "purchase" | "sale" | "wastage" | "adjustment" | "return" | "transfer_out" | "transfer_in" | "maintenance" | "field_service" | "production_consume" | "production_output";
 
 interface RawMovement {
   id: string;
@@ -76,6 +76,10 @@ function describeMovement(m: RawMovement): string {
       return m.reason ?? (m.qty < 0 ? "Issued to a maintenance work order" : "Returned from a maintenance work order");
     case "field_service":
       return m.reason ?? (m.qty < 0 ? "Issued to a field service job" : "Returned from a field service job");
+    case "production_consume":
+      return m.reason ?? "Used in production";
+    case "production_output":
+      return m.reason ?? "Produced";
   }
 }
 

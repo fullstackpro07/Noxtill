@@ -2,6 +2,13 @@ import type { LucideIcon } from "lucide-react";
 import {
   Box,
   LayoutDashboard,
+  Globe,
+  Newspaper,
+  Store,
+  Palette,
+  PanelTop,
+  TextCursorInput,
+  Rocket,
   Clock3,
   HeartPulse,
   Radio,
@@ -21,6 +28,7 @@ import {
   FileText,
   Undo2,
   FileSpreadsheet,
+  Database,
   Receipt,
   Package,
   Boxes,
@@ -88,8 +96,6 @@ import {
   RefreshCw,
   Sliders,
   Share2,
-  PenSquare,
-  Rocket,
   Images,
   Wand2,
   MessageCircle,
@@ -105,6 +111,8 @@ import {
   Table2,
   FileInput,
   Route,
+  Factory,
+  Repeat,
   Target,
   Calculator,
   Stamp,
@@ -295,6 +303,20 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    key: "customer-portal",
+    labelKey: "nav.customerPortal",
+    href: "/customer-portal",
+    icon: UserCircle,
+    roles: ["owner", "manager"],
+    isNew: true,
+    children: [
+      { key: "customer-portal-overview", labelKey: "nav.customerPortalOverview", href: "/customer-portal", icon: LayoutDashboard },
+      { key: "customer-portal-builder", labelKey: "nav.customerPortalBuilder", href: "/customer-portal/home-builder", icon: Layers },
+      { key: "customer-portal-accounts", labelKey: "nav.customerPortalAccounts", href: "/customer-portal/accounts", icon: Users },
+      { key: "customer-portal-settings", labelKey: "nav.customerPortalSettings", href: "/customer-portal/settings", icon: Settings },
+    ],
+  },
+  {
     key: "reviews",
     labelKey: "nav.reviews",
     href: "/reviews",
@@ -321,16 +343,76 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["owner", "manager"],
     children: [
       { key: "marketing-overview", labelKey: "nav.marketingOverview", href: "/marketing", icon: LayoutDashboard },
+      { key: "seo-autopilot", labelKey: "nav.seoAutopilot", href: "/marketing/seo-autopilot", icon: TrendingUp },
       { key: "campaigns", labelKey: "nav.campaigns", href: "/marketing/campaigns", icon: Send },
       { key: "campaign-builder", labelKey: "nav.campaignBuilder", href: "/marketing/builder", icon: Wand2 },
       { key: "audiences", labelKey: "nav.audiences", href: "/marketing/audiences", icon: Filter },
       { key: "content-planner", labelKey: "nav.contentPlanner", href: "/marketing/content", icon: CalendarRange },
       { key: "automations", labelKey: "nav.automations", href: "/marketing/automations", icon: Zap },
+      { key: "workflow-command-center", labelKey: "nav.workflowCommandCenter", href: "/marketing/automations/command-center", icon: Gauge },
+      { key: "workflow-builder", labelKey: "nav.workflowBuilder", href: "/marketing/automations/builder", icon: Share2 },
+      { key: "workflow-approvals", labelKey: "nav.workflowApprovals", href: "/marketing/automations/approvals", icon: ClipboardCheck },
+      { key: "workflow-schedules", labelKey: "nav.workflowSchedules", href: "/marketing/automations/schedules", icon: CalendarClock },
+      { key: "workflow-versions", labelKey: "nav.workflowVersions", href: "/marketing/automations/versions", icon: History },
+      { key: "workflow-governance", labelKey: "nav.workflowGovernance", href: "/marketing/automations/governance", icon: ShieldCheck },
+      { key: "workflow-webhooks", labelKey: "nav.workflowWebhooks", href: "/marketing/automations/webhooks", icon: Plug },
+      { key: "workflow-agents", labelKey: "nav.workflowAgents", href: "/marketing/automations/agents", icon: Bot },
+      { key: "workflow-executions", labelKey: "nav.workflowExecutions", href: "/marketing/automations/executions", icon: History },
+      { key: "workflow-recovery", labelKey: "nav.workflowRecovery", href: "/marketing/automations/recovery", icon: AlertTriangle },
+      { key: "workflow-triggers", labelKey: "nav.workflowTriggers", href: "/marketing/automations/triggers", icon: Radio },
+      { key: "workflow-actions", labelKey: "nav.workflowActions", href: "/marketing/automations/actions", icon: Code2 },
+      { key: "workflow-templates", labelKey: "nav.workflowTemplates", href: "/marketing/automations/templates", icon: FileText },
+      { key: "workflow-data-mapper", labelKey: "nav.workflowDataMapper", href: "/marketing/automations/data-mapper", icon: FileSpreadsheet },
+      { key: "workflow-variables", labelKey: "nav.workflowVariables", href: "/marketing/automations/variables", icon: Database },
       { key: "offers", labelKey: "nav.offers", href: "/marketing/offers", icon: Tag },
       { key: "channels", labelKey: "nav.channels", href: "/marketing/channels", icon: Share2 },
       { key: "marketing-analytics", labelKey: "nav.marketingAnalytics", href: "/marketing/analytics", icon: BarChart3 },
       { key: "marketing-tasks", labelKey: "nav.marketingTasks", href: "/marketing/tasks", icon: ListChecks },
       { key: "marketing-settings", labelKey: "nav.marketingSettings", href: "/marketing/settings", icon: Settings },
+    ],
+  },
+  {
+    key: "autonomous-commerce",
+    labelKey: "nav.autonomousCommerce",
+    href: "/autonomous-commerce/product-radar",
+    icon: Radar,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "commerce-product-radar", labelKey: "nav.productRadar", href: "/autonomous-commerce/product-radar", icon: Radar },
+      { key: "commerce-product-validation", labelKey: "nav.productValidation", href: "/autonomous-commerce/product-validation", icon: ClipboardCheck },
+      { key: "commerce-rfqs", labelKey: "nav.commerceRfqs", href: "/autonomous-commerce/rfqs", icon: ClipboardList },
+      { key: "commerce-listing-builder", labelKey: "nav.listingBuilder", href: "/autonomous-commerce/listing-builder", icon: FileEdit },
+      { key: "commerce-channel-listings", labelKey: "nav.channelListings", href: "/autonomous-commerce/channel-listings", icon: Share2 },
+      { key: "commerce-fulfillment-network", labelKey: "nav.fulfillmentNetwork", href: "/autonomous-commerce/fulfillment-network", icon: Truck },
+      { key: "commerce-fulfillment-router", labelKey: "nav.fulfillmentRouter", href: "/autonomous-commerce/fulfillment-router", icon: Route },
+      { key: "commerce-production", labelKey: "nav.production", href: "/autonomous-commerce/production", icon: Factory },
+      { key: "commerce-supplier-claims", labelKey: "nav.supplierClaims", href: "/autonomous-commerce/supplier-claims", icon: ShieldCheck },
+      { key: "commerce-risk-compliance", labelKey: "nav.riskCompliance", href: "/autonomous-commerce/risk-compliance", icon: ShieldCheck },
+      { key: "commerce-b2b", labelKey: "nav.b2bWholesale", href: "/autonomous-commerce/b2b", icon: Building2 },
+      { key: "commerce-subscriptions", labelKey: "nav.subscriptionsPreorders", href: "/autonomous-commerce/subscriptions-preorders", icon: Repeat },
+      { key: "commerce-store-optimizer", labelKey: "nav.storeOptimizer", href: "/autonomous-commerce/store-optimizer", icon: Sparkles },
+      { key: "commerce-experiment-lab", labelKey: "nav.experimentLab", href: "/autonomous-commerce/experiment-lab", icon: FlaskConical },
+      { key: "commerce-agent-tools", labelKey: "nav.agentTools", href: "/autonomous-commerce/agent-tools", icon: Bot },
+    ],
+  },
+  {
+    key: "website",
+    labelKey: "nav.website",
+    href: "/website",
+    icon: Globe,
+    roles: ["owner", "manager"],
+    children: [
+      { key: "website-overview", labelKey: "nav.websiteOverview", href: "/website", icon: LayoutDashboard },
+      { key: "website-builder", labelKey: "nav.websiteBuilder", href: "/website/builder", icon: Wand2 },
+      { key: "website-pages", labelKey: "nav.websitePages", href: "/website/pages", icon: FileText },
+      { key: "website-navigation", labelKey: "nav.websiteNavigation", href: "/website/navigation", icon: PanelTop },
+      { key: "website-landing-pages", labelKey: "nav.websiteLandingPages", href: "/website/landing-pages", icon: Rocket },
+      { key: "website-blog", labelKey: "nav.websiteBlog", href: "/website/blog", icon: Newspaper },
+      { key: "website-forms", labelKey: "nav.websiteForms", href: "/website/forms", icon: TextCursorInput },
+      { key: "website-storefront", labelKey: "nav.websiteStorefront", href: "/website/storefront", icon: Store },
+      { key: "website-themes", labelKey: "nav.websiteThemes", href: "/website/themes", icon: Palette },
+      { key: "website-domains", labelKey: "nav.websiteDomains", href: "/website/domains", icon: Globe },
+      { key: "website-settings", labelKey: "nav.websiteSettings", href: "/website/settings", icon: Settings },
     ],
   },
   {
@@ -462,6 +544,23 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "wastage", labelKey: "nav.wastage", href: "/inventory/wastage", icon: Trash2 },
       { key: "stock-count", labelKey: "nav.stockCount", href: "/inventory/stock-count", icon: ClipboardCheck },
       { key: "reorder", labelKey: "nav.reorderSuggestions", href: "/inventory/reorder-suggestions", icon: Sparkles },
+    ],
+  },
+  {
+    key: "procurement",
+    labelKey: "nav.procurement",
+    href: "/procurement",
+    icon: PackageCheck,
+    roles: ["owner", "manager", "staff"],
+    children: [
+      { key: "procurement-overview", labelKey: "nav.procurementOverview", href: "/procurement", icon: LayoutDashboard },
+      { key: "purchase-requests", labelKey: "nav.purchaseRequests", href: "/procurement/requests", icon: ClipboardList },
+      { key: "procurement-sourcing", labelKey: "nav.procurementSourcing", href: "/procurement/sourcing", icon: Share2 },
+      { key: "procurement-match", labelKey: "nav.procurementMatch", href: "/procurement/three-way-match", icon: ClipboardCheck },
+      { key: "procurement-spend-control", labelKey: "nav.procurementSpendControl", href: "/procurement/spend-control", icon: Wallet },
+      { key: "procurement-contracts", labelKey: "nav.supplierContracts", href: "/procurement/contracts", icon: FileText },
+      { key: "procurement-analytics", labelKey: "nav.procurementAnalytics", href: "/procurement/analytics", icon: TrendingUp },
+      { key: "procurement-settings", labelKey: "nav.procurementSettings", href: "/settings/procurement", icon: Settings },
     ],
   },
   {
@@ -678,12 +777,20 @@ export const NAV_ITEMS: NavItem[] = [
 
   // ---- Group 3 (all new AI modules) ----
   {
+    key: "business-intelligence",
+    labelKey: "nav.businessIntelligence",
+    href: "/business-intelligence",
+    icon: Brain,
+    roles: ["owner", "manager"],
+    sectionLabel: "Business intelligence",
+    isNew: true,
+  },
+  {
     key: "business-brain",
     labelKey: "nav.businessBrain",
     href: "/business-brain",
     icon: Brain,
     roles: ["owner", "manager"],
-    sectionLabel: "Business intelligence",
     isNew: true,
   },
   {
@@ -693,7 +800,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Radar,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
   },
   {
     key: "business-simulator",
@@ -702,7 +808,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: FlaskConical,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
   },
   {
     key: "diagnosis-center",
@@ -711,7 +816,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Stethoscope,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
   },
   {
     key: "digital-twin",
@@ -720,10 +824,54 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Cpu,
     roles: ["owner", "manager"],
     isNew: true,
-    disabled: true,
+  },
+  {
+    key: "intelligence-settings",
+    labelKey: "nav.intelligenceSettings",
+    href: "/settings/business-intelligence",
+    icon: Sliders,
+    roles: ["owner", "manager"],
+    isNew: true,
   },
 ];
 
 export function navItemsForRole(role: Role): NavItem[] {
   return NAV_ITEMS.filter((item) => item.roles.includes(role));
+}
+
+/**
+ * Drops modules the business turned off (Settings → Modules). A hidden item's divider or section
+ * label moves to the next visible item so the sidebar's grouping survives.
+ */
+export function visibleNavItems(items: NavItem[], disabled: ReadonlySet<string>): NavItem[] {
+  const visible: NavItem[] = [];
+  let carryDivider = false;
+  let carryLabel: string | undefined;
+  for (const item of items) {
+    if (disabled.has(item.key)) {
+      carryDivider ||= Boolean(item.dividerBefore);
+      carryLabel ??= item.sectionLabel;
+      continue;
+    }
+    visible.push(
+      carryDivider || carryLabel
+        ? { ...item, dividerBefore: item.dividerBefore || carryDivider, sectionLabel: item.sectionLabel ?? carryLabel }
+        : item,
+    );
+    carryDivider = false;
+    carryLabel = undefined;
+  }
+  return visible;
+}
+
+/** The top-level module a route belongs to — longest matching href across items and their tabs. */
+export function navItemForPath(pathname: string): NavItem | undefined {
+  let best: { item: NavItem; length: number } | undefined;
+  for (const item of NAV_ITEMS) {
+    for (const href of [item.href, ...(item.children ?? []).map((child) => child.href)]) {
+      const matches = pathname === href || pathname.startsWith(`${href}/`);
+      if (matches && (!best || href.length > best.length)) best = { item, length: href.length };
+    }
+  }
+  return best?.item;
 }

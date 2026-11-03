@@ -1,3 +1,5 @@
+import { WorkflowConditionMode } from '@prisma/client';
+
 export interface WorkflowCondition {
   field: string;
   operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains';
@@ -17,8 +19,9 @@ function toComparableString(value: unknown): string {
 export function evaluateConditions(
   conditions: WorkflowCondition[],
   context: Record<string, unknown>,
+  mode: WorkflowConditionMode = WorkflowConditionMode.all,
 ): boolean {
-  return conditions.every((condition) => {
+  const matches = (condition: WorkflowCondition): boolean => {
     const actual = context[condition.field];
     if (actual === undefined || actual === null) return false;
 
@@ -42,5 +45,9 @@ export function evaluateConditions(
       default:
         return false;
     }
-  });
+  };
+
+  return mode === WorkflowConditionMode.any
+    ? conditions.some(matches)
+    : conditions.every(matches);
 }

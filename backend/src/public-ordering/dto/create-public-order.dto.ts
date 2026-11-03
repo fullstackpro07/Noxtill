@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
   IsArray,
   IsIn,
   IsNumber,
@@ -14,6 +15,7 @@ import { SaleItemDto } from '../../orders/dto/create-sale.dto';
 
 export class CreatePublicOrderDto {
   @IsArray()
+  @ArrayNotEmpty()
   @ValidateNested({ each: true })
   @Type(() => SaleItemDto)
   items!: SaleItemDto[];
@@ -28,15 +30,18 @@ export class CreatePublicOrderDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   customerPhone?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(191)
   customerName?: string;
 
   /** Delivery orders only — where to deliver, and which of the business's zones it falls in. */
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   deliveryAddress?: string;
 
   @IsOptional()

@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api-client";
 
-export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "finance_approval" | "payment_approval" | "payment_dispute_due" | "payment_failed" | "asset_pm_overdue" | "asset_down_critical" | "asset_wo_approval" | "field_approval" | "field_sla_breach" | "field_unassigned_urgent" | "contract_approval" | "contract_expiring" | "contract_obligation_overdue" | "contract_signature_issue";
+export type ActionItemType = "complaint" | "low_stock" | "overdue_credit" | "unreplied_review" | "finance_approval" | "payment_approval" | "payment_dispute_due" | "payment_failed" | "asset_pm_overdue" | "asset_down_critical" | "asset_wo_approval" | "field_approval" | "field_sla_breach" | "field_unassigned_urgent" | "contract_approval" | "contract_expiring" | "contract_obligation_overdue" | "contract_signature_issue" | "commerce" | "procurement_request";
 export type ActionItemPriority = "urgent" | "normal" | "low";
 export type SnoozeDuration = "1h" | "tomorrow" | "next_week";
 
@@ -43,6 +43,8 @@ export const ACTION_ITEM_TYPE_LABEL: Record<ActionItemType, string> = {
   contract_expiring: "Contract expiring",
   contract_obligation_overdue: "Obligation overdue",
   contract_signature_issue: "Signature issue",
+  commerce: "Commerce",
+  procurement_request: "Purchase approval",
 };
 
 /** GET /actions — staff see only complaints assigned to them (server-enforced); owners/managers see everything. */
@@ -66,5 +68,16 @@ export function snoozeAction(id: string, duration: SnoozeDuration): Promise<unkn
   return apiFetch(`/actions/${encodeURIComponent(id)}/snooze`, {
     method: "POST",
     body: JSON.stringify({ duration }),
+  });
+}
+
+export function approveProcurementAction(id: string): Promise<unknown> {
+  return apiFetch(`/actions/${encodeURIComponent(id)}/approve`, { method: "POST" });
+}
+
+export function rejectProcurementAction(id: string, reason: string): Promise<unknown> {
+  return apiFetch(`/actions/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
   });
 }

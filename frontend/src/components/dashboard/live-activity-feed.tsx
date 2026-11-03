@@ -13,6 +13,11 @@ import {
   UserMinus,
   AlertOctagon,
   Cake,
+  BadgeCheck,
+  ClipboardList,
+  ShieldCheck,
+  Truck,
+  Search,
   Pause,
   Play,
   ArrowDown,
@@ -40,6 +45,14 @@ export const TYPE_ICON: Record<ActivityEventType, LucideIcon> = {
   customer_lapsed: UserMinus,
   credit_overdue: AlertOctagon,
   birthday: Cake,
+  commerce_validation: BadgeCheck,
+  commerce_rfq_created: ClipboardList,
+  commerce_rfq_response_received: ClipboardList,
+  commerce_rfq_awarded: ClipboardList,
+  commerce_supplier_claim_created: ShieldCheck,
+  commerce_supplier_claim_settled: ShieldCheck,
+  delivery: Truck,
+  seo_issue_detected: Search,
 };
 
 export const TYPE_TINT: Record<ActivityEventType, string> = {
@@ -53,6 +66,14 @@ export const TYPE_TINT: Record<ActivityEventType, string> = {
   customer_lapsed: "bg-surface-2 text-fg-muted",
   credit_overdue: "bg-destructive/12 text-destructive",
   birthday: "bg-accent/20 text-accent-foreground",
+  commerce_validation: "bg-primary/10 text-primary",
+  commerce_rfq_created: "bg-primary/10 text-primary",
+  commerce_rfq_response_received: "bg-primary/10 text-primary",
+  commerce_rfq_awarded: "bg-primary/10 text-primary",
+  commerce_supplier_claim_created: "bg-accent/20 text-accent-foreground",
+  commerce_supplier_claim_settled: "bg-whatsapp/12 text-whatsapp",
+  delivery: "bg-primary/10 text-primary",
+  seo_issue_detected: "bg-destructive/12 text-destructive",
 };
 
 const HOUR_MS = 60 * 60 * 1000;

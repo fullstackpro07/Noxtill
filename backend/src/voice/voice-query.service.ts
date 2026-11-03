@@ -13,12 +13,36 @@ export class VoiceQueryService {
     private readonly audit: AuditService,
   ) {}
 
-  listCalls() {
-    return this.tenantPrisma.client.phoneCall.findMany({
+  async listCalls() {
+    const calls = await this.tenantPrisma.client.phoneCall.findMany({
       orderBy: { startedAt: 'desc' },
       take: 200,
-      include: { appointment: true },
+      include: { appointment: true, wrapUp: true },
     });
+    const callerNumbers = [...new Set(calls.map((call) => call.fromNumber))];
+    const customers = callerNumbers.length
+      ? await this.tenantPrisma.client.customer.findMany({
+          where: { phone: { in: callerNumbers } },
+          select: { id: true, name: true, phone: true },
+        })
+      : [];
+    const customerByPhone = new Map<
+      string,
+      { id: string; name: string } | null
+    >();
+    for (const customer of customers) {
+      customerByPhone.set(
+        customer.phone,
+        customerByPhone.has(customer.phone)
+          ? null
+          : { id: customer.id, name: customer.name },
+      );
+    }
+
+    return calls.map((call) => ({
+      ...call,
+      matchedCustomer: customerByPhone.get(call.fromNumber) ?? null,
+    }));
   }
 
   /** Transcripts & Recordings depth fix — a real signed S3 URL (24h TTL, same convention as every other file in this app), not the raw `recordingKey`. */

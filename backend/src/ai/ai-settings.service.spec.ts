@@ -34,6 +34,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
     const settings = await service.getSettings(businessId);
     expect(settings.featureToggles).toEqual({
       voiceEntry: true,
+      voiceQualityAssist: true,
       photoDigitizer: true,
       reviewReplies: true,
       campaignCopy: true,
@@ -41,6 +42,8 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       whatIf: true,
       assistant: true,
       inboxReplies: true,
+      workflowAgents: true,
+      voiceMeetingSummary: true,
     });
     expect(settings.disclosureText).toContain('AI');
   });
@@ -76,6 +79,13 @@ describe('AiSettingsService (UPD-BE-115)', () => {
           outputTokens: 50,
           estimatedCostUsd: 0.04,
         },
+        {
+          businessId,
+          kind: 'workflow_agent',
+          inputTokens: 100,
+          outputTokens: 50,
+          estimatedCostUsd: 0.02,
+        },
       ],
     });
 
@@ -90,10 +100,14 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       0.03,
       4,
     );
+    expect(settings.usageThisMonth.byFeature.workflowAgents.calls).toBe(1);
+    expect(
+      settings.usageThisMonth.byFeature.workflowAgents.costUsd,
+    ).toBeCloseTo(0.02, 4);
     expect(settings.usageThisMonth.other.calls).toBe(1);
     expect(settings.usageThisMonth.other.costUsd).toBeCloseTo(0.04, 4);
-    expect(settings.usageThisMonth.totalCostUsd).toBeCloseTo(0.1, 4);
-    expect(settings.usageThisMonth.totalCalls).toBe(4);
+    expect(settings.usageThisMonth.totalCostUsd).toBeCloseTo(0.12, 4);
+    expect(settings.usageThisMonth.totalCalls).toBe(5);
     expect(settings.aiQueryQuota).toBe(500);
     expect(settings.usageThisMonth.queryQuotaUsedPercent).toBe(1);
     expect(new Date(settings.usageThisMonth.limitResetsAt).getUTCDate()).toBe(
@@ -110,7 +124,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       'Sun',
     ]);
     expect(settings.queriesThisWeek.reduce((sum, d) => sum + d.count, 0)).toBe(
-      4,
+      5,
     );
   });
 

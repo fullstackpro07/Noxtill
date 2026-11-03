@@ -1,10 +1,27 @@
 import { apiFetch } from "@/lib/api-client";
 
 export const MAX_TRACKED_KEYWORDS = 10;
+export const KEYWORD_INTENTS = [
+  "informational",
+  "navigational",
+  "commercial",
+  "transactional",
+  "local",
+] as const;
+export type KeywordIntent = (typeof KEYWORD_INTENTS)[number];
 
 export interface TrackedKeywordRow {
   id: string;
   keyword: string;
+  intent: KeywordIntent | null;
+  targetPageUrl: string | null;
+  mappedKeywordCount: number;
+  /** Multiple tracked terms are assigned to this same URL; this is not a verified GSC conflict. */
+  mappingOverlap: boolean;
+  /** Distinct pages from the business domain returned in the same latest organic-results snapshot. */
+  businessResultUrls: string[];
+  /** Null means there is no saved SERP URL evidence yet; false only means a check found <=1 page. */
+  cannibalizationFlag: boolean | null;
   latestRank: number | null;
   previousRank: number | null;
   /** The #1 organic result's title at last check — real, not a fabricated "top competitor" guess. */
@@ -22,6 +39,16 @@ export function addKeyword(keyword: string): Promise<TrackedKeywordRow> {
   return apiFetch<TrackedKeywordRow>("/keywords", {
     method: "POST",
     body: JSON.stringify({ keyword }),
+  });
+}
+
+export function updateTrackedKeyword(
+  id: string,
+  patch: { intent?: KeywordIntent | null; targetPageUrl?: string | null },
+): Promise<TrackedKeywordRow> {
+  return apiFetch<TrackedKeywordRow>(`/keywords/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
   });
 }
 

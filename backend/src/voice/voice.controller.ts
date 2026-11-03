@@ -5,14 +5,18 @@ import {
   Get,
   Headers,
   HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
   ServiceUnavailableException,
+  UseInterceptors,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { TelephonyService } from './telephony.service';
@@ -20,7 +24,11 @@ import { VoiceCallService } from './voice-call.service';
 import { VoiceQueryService } from './voice-query.service';
 import { VoiceSettingsService } from './voice-settings.service';
 import { VoiceQueueService } from './voice-queue.service';
-import { VoiceLiveJoinService, type JoinRole } from './voice-live-join.service';
+import {
+  VoiceLiveJoinService,
+  type JoinRole,
+  type SupervisorCoachMode,
+} from './voice-live-join.service';
 import { VoiceCallWorkspaceService } from './voice-call-workspace.service';
 import { VoiceRoutingRulesService } from './voice-routing-rules.service';
 import { VoiceKnowledgeService } from './voice-knowledge.service';
@@ -43,14 +51,125 @@ import {
 import { Public } from '../common/decorators/public.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AppException } from '../common/filters/app.exception';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { VoiceInsightsService } from './voice-insights.service';
+import { VoiceAgentsService } from './voice-agents.service';
+import { VoiceAiAgentsService } from './voice-ai-agents.service';
+import { VoiceCallWrapUpService } from './voice-call-wrap-up.service';
+import {
+  SaveVoiceHumanAgentProfileDto,
+  VoicePresenceHeartbeatDto,
+} from './dto/voice-agent.dto';
+import {
+  RollbackVoiceAiAgentDto,
+  PreviewVoiceAiAgentVoiceDto,
+  SaveVoiceAiAgentDraftDto,
+  TestVoiceAiAgentDto,
+  TestVoiceAiAgentScenariosDto,
+} from './dto/voice-ai-agent.dto';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
+import { SubmitVoiceCallWrapUpDto } from './dto/voice-call-wrap-up.dto';
 import { verifyTwilioSignature } from '../common/webhooks/signature.util';
+import { voiceWebhookRequestUrl } from './voice-webhook-url.util';
+import { VoiceCopilotService } from './voice-copilot.service';
+import { VoiceQualityService } from './voice-quality.service';
+import {
+  AssignVoiceQualityReviewDto,
+  OverrideVoiceQualityReviewDto,
+  SaveVoiceQualityReviewDto,
+  SaveVoiceQualityRubricDto,
+} from './dto/voice-quality.dto';
+import { VoiceComplianceService } from './voice-compliance.service';
+import { VoiceMeetingsService } from './voice-meetings.service';
+import { VoiceVideoRoomService } from './voice-video-room.service';
+import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service';
+import { VoiceIvrService } from './voice-ivr.service';
+import { VoiceSupervisorService } from './voice-supervisor.service';
+import { VoiceCallQueueService } from './voice-call-queue.service';
+import { VoiceQueueSlaDto } from './dto/voice-queue-sla.dto';
+import { VoiceSoftphoneService } from './voice-softphone.service';
+import { VoiceSoftphoneHoldDto } from './dto/voice-softphone.dto';
+import { VoiceTrackingService } from './voice-tracking.service';
+import {
+  AddVoiceTrackingNumberDto,
+  AssignVoiceTrackingNumberDto,
+  DeactivateVoiceTrackingNumberDto,
+  OverrideVoiceCallAttributionDto,
+} from './dto/voice-tracking.dto';
+import { VoiceTrackingNumbersService } from './voice-tracking-numbers.service';
+import { VoiceCallbacksService } from './voice-callbacks.service';
+import { VoiceLegalHoldService } from './voice-legal-hold.service';
+import { VoiceAnalyticsExportService } from './voice-analytics-export.service';
+import { VoiceAnalyticsTrendsService } from './voice-analytics-trends.service';
+import { VoicePhoneSystemService } from './voice-phone-system.service';
+import { VoiceProviderHealthService } from './voice-provider-health.service';
+import { VoiceProviderWebhookEventsService } from './voice-provider-webhook-events.service';
+import { VoiceOutboundSummaryService } from './voice-outbound-summary.service';
+import { VoiceTranscriptRedactionService } from './voice-transcript-redaction.service';
+import {
+  VoiceLegalHoldDto,
+  VoiceSipTrunkDto,
+  VoiceTestNumbersDto,
+} from './dto/voice-callback.dto';
+import {
+  CompleteVoiceCallbackDto,
+  PlaceVoiceCallbackDto,
+} from './dto/voice-callback.dto';
+import {
+  CreateVoiceIvrFlowDto,
+  PublishVoiceIvrFlowDto,
+  RollbackVoiceIvrFlowDto,
+  SaveVoiceIvrDraftDto,
+  SimulateVoiceIvrFlowDto,
+} from './dto/voice-ivr.dto';
+import {
+  CreateVoiceOutboundCampaignDto,
+  UpdateVoiceOutboundCampaignDto,
+  VoiceCampaignImportDto,
+  VoiceDialerAttemptDto,
+  VoiceDialerDispositionDto,
+} from './dto/voice-outbound.dto';
+import { VoiceOutboundDialerService } from './voice-outbound-dialer.service';
+import { VoiceAiOutboundService } from './voice-ai-outbound.service';
+import { VoiceRealtimeService } from './voice-realtime.service';
+import { VoiceUsageMeteringService } from './voice-usage-metering.service';
+import { CustomerCommunicationsService } from '../messaging/customer-communications.service';
+import { VoiceOperationsService } from './voice-operations.service';
+import { VoiceMediaMeteringService } from './voice-media-metering.service';
+import { VoiceControlMetricsInterceptor } from './voice-control-metrics.interceptor';
+import {
+  CreateVoiceMeetingDto,
+  CreateVoiceMeetingInviteDto,
+  RescheduleVoiceMeetingDto,
+  VoiceMeetingReasonDto,
+  VoiceMeetingAdmissionDto,
+  VoiceMeetingModerationDto,
+  VoiceMeetingRecordingConsentDto,
+} from './dto/voice-meeting.dto';
+import { VoiceVideoRecordingService } from './voice-video-recording.service';
+import { VoiceMeetingArtifactsService } from './voice-meeting-artifacts.service';
+import {
+  CheckVoiceEligibilityDto,
+  CreateVoiceCompliancePolicyDto,
+  CreateVoiceCompliancePolicyVersionDto,
+  CreateVoiceConsentEvidenceDto,
+  CreateVoiceSuppressionDto,
+  DisableVoiceCompliancePolicyDto,
+  PublishVoiceCompliancePolicyDto,
+  RevokeVoiceConsentDto,
+  RevokeVoiceSuppressionDto,
+} from './dto/voice-compliance.dto';
 
 @Controller()
+@UseInterceptors(VoiceControlMetricsInterceptor)
 export class VoiceController {
   constructor(
+    private readonly realtimeVoice: VoiceRealtimeService,
+    private readonly voiceMetering: VoiceUsageMeteringService,
+    private readonly voiceCommunications: CustomerCommunicationsService,
+    private readonly voiceOperations: VoiceOperationsService,
+    private readonly mediaMetering: VoiceMediaMeteringService,
     private readonly telephony: TelephonyService,
     private readonly voiceCall: VoiceCallService,
     private readonly voiceQuery: VoiceQueryService,
@@ -63,7 +182,1096 @@ export class VoiceController {
     private readonly voiceKnowledge: VoiceKnowledgeService,
     private readonly pollyVoice: PollyVoiceService,
     private readonly config: ConfigService,
+    private readonly voiceAgents: VoiceAgentsService,
+    private readonly voiceAiAgents: VoiceAiAgentsService,
+    private readonly voiceCallWrapUp: VoiceCallWrapUpService,
+    private readonly voiceCopilot: VoiceCopilotService,
+    private readonly voiceQuality: VoiceQualityService,
+    private readonly voiceCompliance: VoiceComplianceService,
+    private readonly voiceMeetings: VoiceMeetingsService,
+    private readonly voiceVideoRooms: VoiceVideoRoomService,
+    private readonly voiceOutboundCampaigns: VoiceOutboundCampaignService,
+    private readonly voiceDialer: VoiceOutboundDialerService,
+    private readonly voiceAiOutbound: VoiceAiOutboundService,
+    private readonly voiceIvr: VoiceIvrService,
+    private readonly voiceSupervisor: VoiceSupervisorService,
+    private readonly voiceCallQueue: VoiceCallQueueService,
+    private readonly voiceSoftphone: VoiceSoftphoneService,
+    private readonly voiceTracking: VoiceTrackingService,
+    private readonly voiceTrackingNumbers: VoiceTrackingNumbersService,
+    private readonly voiceCallbacks: VoiceCallbacksService,
+    private readonly voiceLegalHold: VoiceLegalHoldService,
+    private readonly voiceAnalyticsExport: VoiceAnalyticsExportService,
+    private readonly voiceAnalyticsTrends: VoiceAnalyticsTrendsService,
+    private readonly voicePhoneSystem: VoicePhoneSystemService,
+    private readonly voiceProviderHealth: VoiceProviderHealthService,
+    private readonly voiceOutboundSummary: VoiceOutboundSummaryService,
+    private readonly voiceRedaction: VoiceTranscriptRedactionService,
+    private readonly voiceVideoRecordings: VoiceVideoRecordingService,
+    private readonly voiceMeetingArtifactService: VoiceMeetingArtifactsService,
+    private readonly voiceWebhookEvents: VoiceProviderWebhookEventsService,
   ) {}
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/compliance/overview')
+  voiceComplianceOverview(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceCompliance.overview(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/compliance/policy-packs')
+  voiceCompliancePolicies(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceCompliance.listPolicies(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/policy-packs')
+  createVoiceCompliancePolicy(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateVoiceCompliancePolicyDto,
+  ) {
+    return this.voiceCompliance.createPolicy(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/policy-packs/:id/versions')
+  createVoiceCompliancePolicyVersion(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: CreateVoiceCompliancePolicyVersionDto,
+  ) {
+    return this.voiceCompliance.createPolicyVersion(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/policy-versions/:id/publish')
+  publishVoiceCompliancePolicy(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PublishVoiceCompliancePolicyDto,
+  ) {
+    return this.voiceCompliance.publishPolicyVersion(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/policy-packs/:id/disable')
+  disableVoiceCompliancePolicy(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: DisableVoiceCompliancePolicyDto,
+  ) {
+    return this.voiceCompliance.disablePolicy(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/compliance/consents')
+  listVoiceConsentEvidence(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceCompliance.listConsents(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/consents')
+  recordVoiceConsent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateVoiceConsentEvidenceDto,
+  ) {
+    return this.voiceCompliance.recordConsent(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/consents/:id/revoke')
+  revokeVoiceConsent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RevokeVoiceConsentDto,
+  ) {
+    return this.voiceCompliance.revokeConsent(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/compliance/suppressions')
+  listVoiceSuppressions(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceCompliance.listSuppressions(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/suppressions')
+  addVoiceSuppression(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateVoiceSuppressionDto,
+  ) {
+    return this.voiceCompliance.addSuppression(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/suppressions/:id/revoke')
+  revokeVoiceSuppression(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RevokeVoiceSuppressionDto,
+  ) {
+    return this.voiceCompliance.revokeSuppression(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/compliance/eligibility/check')
+  checkVoiceEligibility(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CheckVoiceEligibilityDto,
+  ) {
+    return this.voiceCompliance.checkEligibility(
+      user.businessId,
+      user.sub,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/compliance/audit')
+  voiceComplianceAudit(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceCompliance.listAudit(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/configuration')
+  voiceMeetingConfiguration() {
+    return this.voiceMeetings.configuration();
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/recording-policies')
+  voiceMeetingRecordingPolicies(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceVideoRecordings.recordingPolicies(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/hosts')
+  voiceMeetingHosts(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceMeetings.listHosts(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings')
+  listVoiceMeetings(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceMeetings.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings')
+  createVoiceMeeting(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateVoiceMeetingDto,
+  ) {
+    return this.voiceMeetings.create(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/meetings/:id')
+  rescheduleVoiceMeeting(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RescheduleVoiceMeetingDto,
+  ) {
+    return this.voiceMeetings.reschedule(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/cancel')
+  cancelVoiceMeeting(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceMeetingReasonDto,
+  ) {
+    return this.voiceMeetings.cancel(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/invites')
+  createVoiceMeetingInvite(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: CreateVoiceMeetingInviteDto,
+  ) {
+    return this.voiceMeetings.createInvite(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/invites/:inviteId/revoke')
+  revokeVoiceMeetingInvite(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('inviteId') inviteId: string,
+    @Body() dto: VoiceMeetingReasonDto,
+  ) {
+    return this.voiceMeetings.revokeInvite(
+      user.businessId,
+      user.sub,
+      id,
+      inviteId,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/join-token')
+  voiceMeetingHostJoinToken(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceMeetings.hostJoinToken(user.businessId, user.sub, id);
+  }
+
+  @Public()
+  @Post('voice/meeting-invites/:token/join-token')
+  voiceMeetingGuestJoinToken(@Param('token') token: string) {
+    return this.voiceMeetings.guestJoinToken(token);
+  }
+
+  @Public()
+  @Get('voice/meeting-invites/:token/lobby')
+  voiceMeetingGuestLobby(@Param('token') token: string) {
+    return this.voiceVideoRooms.guestLobby(token);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/:id/lobby')
+  voiceMeetingHostLobby(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceVideoRooms.hostLobby(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/participants/:participantId/admission')
+  voiceMeetingAdmit(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+    @Body() dto: VoiceMeetingAdmissionDto,
+  ) {
+    return this.voiceVideoRooms.decide(
+      user.businessId,
+      user.sub,
+      id,
+      participantId,
+      dto.admission,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/participants/:participantId/moderate')
+  voiceMeetingModerate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('participantId') participantId: string,
+    @Body() dto: VoiceMeetingModerationDto,
+  ) {
+    return this.voiceVideoRooms.moderate(
+      user.businessId,
+      user.sub,
+      id,
+      participantId,
+      dto.action,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/end')
+  voiceMeetingEnd(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceMeetingReasonDto,
+  ) {
+    return this.voiceVideoRooms.end(user.businessId, user.sub, id, dto.reason);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/consent')
+  prepareVoiceMeetingRecording(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceMeetingRecordingConsentDto,
+  ) {
+    return this.voiceVideoRecordings.startConsent(
+      user.businessId,
+      user.sub,
+      id,
+      dto.accepted,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/start')
+  startVoiceMeetingRecording(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceVideoRecordings.start(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/stop')
+  stopVoiceMeetingRecording(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceMeetingReasonDto,
+  ) {
+    return this.voiceVideoRecordings.stop(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/meetings/:id/recordings')
+  voiceMeetingArtifacts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceVideoRecordings.artifacts(user.businessId, id, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/:recordingId/ai-artifacts')
+  requestVoiceMeetingAiArtifacts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('recordingId') recordingId: string,
+  ) {
+    return this.voiceMeetingArtifactService.request(
+      user.businessId,
+      user.sub,
+      id,
+      recordingId,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/meetings/:id/recordings/:recordingId/follow-up-draft')
+  createVoiceMeetingFollowUpDraft(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('recordingId') recordingId: string,
+  ) {
+    return this.voiceMeetingArtifactService.createFollowUpDraft(
+      user.businessId,
+      user.sub,
+      id,
+      recordingId,
+    );
+  }
+
+  @Public()
+  @Post('voice/meeting-invites/:token/recordings/:recordingId/consent')
+  guestVoiceMeetingRecordingConsent(
+    @Param('token') token: string,
+    @Param('recordingId') recordingId: string,
+    @Body() dto: VoiceMeetingRecordingConsentDto,
+  ) {
+    return this.voiceVideoRecordings.guestConsent(
+      token,
+      recordingId,
+      dto.accepted,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/outbound/audience')
+  outboundAudience(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceOutboundCampaigns.audience(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/outbound/agents')
+  outboundAgents(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceOutboundCampaigns.agents(user.businessId);
+  }
+
+  /** Call Overview outbound card: counts only (no numbers), same audience as the call log. */
+  @Get('voice/outbound/summary')
+  voiceOutboundSummaryRoute(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('from') from?: string,
+  ) {
+    return this.voiceOutboundSummary.since(user.businessId, from);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/campaigns')
+  listVoiceOutboundCampaigns(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceOutboundCampaigns.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns')
+  createVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateVoiceOutboundCampaignDto,
+  ) {
+    return this.voiceOutboundCampaigns.create(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/campaigns/:id')
+  updateVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateVoiceOutboundCampaignDto,
+  ) {
+    return this.voiceOutboundCampaigns.updateDraft(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/eligibility-preview')
+  previewVoiceOutboundCampaignEligibility(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceOutboundCampaigns.eligibilityPreview(
+      user.businessId,
+      user.sub,
+      id,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/import')
+  importVoiceCampaignContacts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceCampaignImportDto,
+  ) {
+    return this.voiceOutboundCampaigns.importContacts(
+      user.businessId,
+      user.sub,
+      id,
+      dto.rows,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/request-approval')
+  requestVoiceCampaignApproval(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.requestApproval(user.businessId, user.sub, id);
+  }
+
+  /** A second manager approves; only the owner may approve their own request. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/approve')
+  approveVoiceCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.approve(
+      user.businessId,
+      user.sub,
+      user.role === Role.owner,
+      id,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/send-back')
+  sendBackVoiceCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.sendBack(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/campaigns/:id/report')
+  async voiceCampaignReport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return (
+      (await this.voiceAiOutbound.report(user.businessId, id)) ??
+      this.voiceDialer.report(user.businessId, id)
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/start')
+  async startVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return (
+      (await this.voiceAiOutbound.start(user.businessId, user.sub, id)) ??
+      this.voiceDialer.start(user.businessId, user.sub, id)
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/pause')
+  async pauseVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return (
+      (await this.voiceAiOutbound.pause(user.businessId, user.sub, id)) ??
+      this.voiceDialer.pause(user.businessId, user.sub, id)
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/campaigns/:id/stop')
+  async stopVoiceOutboundCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return (
+      (await this.voiceAiOutbound.stop(user.businessId, user.sub, id)) ??
+      this.voiceDialer.stop(user.businessId, user.sub, id)
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/campaigns/:id/attempts')
+  async voiceOutboundCampaignAttempts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return (
+      (await this.voiceAiOutbound.status(user.businessId, id)) ??
+      this.voiceDialer.status(user.businessId, id)
+    );
+  }
+
+  /** Power dialer: ungated like presence, but every call is scoped to the campaign's assigned agent. */
+  @Get('voice/campaigns/:id/dialer/next')
+  voiceDialerNext(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceDialer.next(user.businessId, user.sub, id);
+  }
+
+  @Post('voice/campaigns/:id/dialer/attempt')
+  voiceDialerAttempt(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceDialerAttemptDto,
+  ) {
+    return this.voiceDialer.attempt(
+      user.businessId,
+      user.sub,
+      id,
+      dto.memberId,
+    );
+  }
+
+  @Post('voice/campaigns/:id/dialer/skip')
+  voiceDialerSkip(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceDialerAttemptDto,
+  ) {
+    return this.voiceDialer.skip(user.businessId, user.sub, id, dto.memberId);
+  }
+
+  @Post('voice/dialer/attempts/:id/disposition')
+  voiceDialerDisposition(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceDialerDispositionDto,
+  ) {
+    return this.voiceDialer.disposition(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/ivr/flows')
+  listVoiceIvrFlows(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceIvr.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/ivr/flows')
+  createVoiceIvrFlow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateVoiceIvrFlowDto,
+  ) {
+    return this.voiceIvr.create(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/ivr/flows/:id')
+  getVoiceIvrFlow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceIvr.detail(user.businessId, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Put('voice/ivr/flows/:id/draft')
+  saveVoiceIvrDraft(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SaveVoiceIvrDraftDto,
+  ) {
+    return this.voiceIvr.saveDraft(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/ivr/flows/:id/validate')
+  validateVoiceIvrFlow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceIvr.validate(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/ivr/flows/:id/simulate')
+  simulateVoiceIvrFlow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SimulateVoiceIvrFlowDto,
+  ) {
+    return this.voiceIvr.simulate(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/ivr/flows/:id/publish')
+  publishVoiceIvrFlow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PublishVoiceIvrFlowDto,
+  ) {
+    return this.voiceIvr.publish(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/ivr/flows/:id/rollback')
+  rollbackVoiceIvrFlow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RollbackVoiceIvrFlowDto,
+  ) {
+    return this.voiceIvr.rollback(user.businessId, user.sub, id, dto);
+  }
+
+  @Public()
+  @Get('voice/meeting-invites/:token')
+  previewVoiceMeetingInvite(@Param('token') token: string) {
+    return this.voiceMeetings.previewInvite(token);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/quality/overview')
+  voiceQualityOverview(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceQuality.overview(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/quality/rubrics')
+  voiceQualityRubrics(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceQuality.listRubrics(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/rubrics')
+  createVoiceQualityRubric(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SaveVoiceQualityRubricDto,
+  ) {
+    return this.voiceQuality.createRubric(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/rubrics/:id/versions')
+  createVoiceQualityRubricVersion(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SaveVoiceQualityRubricDto,
+  ) {
+    return this.voiceQuality.createDraftVersion(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/rubric-versions/:id/publish')
+  publishVoiceQualityRubricVersion(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceQuality.publishVersion(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/quality/reviews')
+  voiceQualityReviews(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceQuality.listReviews(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/reviews/:id/ai-suggestions')
+  suggestVoiceQualityReviewScores(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceQuality.suggestReviewScores(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/calls/:callId/reviews')
+  startVoiceQualityReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('callId') callId: string,
+  ) {
+    return this.voiceQuality.startReview(user.businessId, user.sub, callId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/quality/reviews/:id')
+  saveVoiceQualityReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SaveVoiceQualityReviewDto,
+  ) {
+    return this.voiceQuality.saveReview(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/reviews/:id/submit')
+  submitVoiceQualityReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceQuality.submitReview(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/reviews/:id/override')
+  overrideVoiceQualityReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: OverrideVoiceQualityReviewDto,
+  ) {
+    return this.voiceQuality.overrideReview(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/quality/reviews/:id/assign')
+  assignVoiceQualityReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: AssignVoiceQualityReviewDto,
+  ) {
+    return this.voiceQuality.assignReview(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/agents')
+  listVoiceAgents(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceAgents.list(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/softphone/status')
+  voiceSoftphoneStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceSoftphone.status(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/softphone/token')
+  issueVoiceSoftphoneToken(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceSoftphone.issueToken(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/softphone/calls/:providerCallSid')
+  voiceSoftphoneCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('providerCallSid') providerCallSid: string,
+  ) {
+    return this.voiceSoftphone.callForProviderSid(
+      user.businessId,
+      user.sub,
+      providerCallSid,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/softphone/calls/:id/hold')
+  setVoiceSoftphoneHold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceSoftphoneHoldDto,
+  ) {
+    return this.voiceSoftphone.setHold(user.businessId, user.sub, id, dto.hold);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/softphone/calls/:id/end')
+  endVoiceSoftphoneCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceSoftphone.hangUp(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)
+  @Get('voice/supervisor/live')
+  liveSupervisorCenter(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceSupervisor.live(user.businessId, user.sub);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Patch('voice/supervisor/queues/:queueKey/sla')
+  updateVoiceQueueSla(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('queueKey') queueKey: string,
+    @Body() dto: VoiceQueueSlaDto,
+  ) {
+    return this.voiceSupervisor.setQueueSlaTarget(
+      user.businessId,
+      user.sub,
+      queueKey,
+      dto.slaTargetSeconds,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/tracking/overview')
+  voiceTrackingOverview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('days') days?: string,
+  ) {
+    return this.voiceTracking.overview(user.businessId, days);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/tracking/calls/:id/override')
+  overrideVoiceCallAttribution(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: OverrideVoiceCallAttributionDto,
+  ) {
+    return this.voiceTracking.overrideAttribution(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/tracking/numbers')
+  listVoiceTrackingNumbers(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceTrackingNumbers.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/tracking/numbers')
+  addVoiceTrackingNumber(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AddVoiceTrackingNumberDto,
+  ) {
+    return this.voiceTrackingNumbers.add(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/tracking/numbers/:id/assign')
+  assignVoiceTrackingNumber(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: AssignVoiceTrackingNumberDto,
+  ) {
+    return this.voiceTrackingNumbers.assign(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/tracking/numbers/:id/deactivate')
+  deactivateVoiceTrackingNumber(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: DeactivateVoiceTrackingNumberDto,
+  ) {
+    return this.voiceTrackingNumbers.deactivate(
+      user.businessId,
+      user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/agents/ai')
+  listVoiceAiAgents(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceAiAgents.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai')
+  createVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SaveVoiceAiAgentDraftDto,
+  ) {
+    return this.voiceAiAgents.create(user.businessId, user.sub, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Put('voice/agents/ai/:id/draft')
+  saveVoiceAiAgentDraft(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SaveVoiceAiAgentDraftDto,
+  ) {
+    return this.voiceAiAgents.saveDraft(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/test')
+  testVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: TestVoiceAiAgentDto,
+  ) {
+    return this.voiceAiAgents.testDraft(
+      user.businessId,
+      user.sub,
+      id,
+      dto.scenario,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/voice-preview')
+  previewVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PreviewVoiceAiAgentVoiceDto,
+  ) {
+    return this.voiceAiAgents.previewVoice(
+      user.businessId,
+      user.sub,
+      id,
+      dto.voice,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/test-suite')
+  testVoiceAiAgentScenarios(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: TestVoiceAiAgentScenariosDto,
+  ) {
+    return this.voiceAiAgents.testScenarioSuite(
+      user.businessId,
+      user.sub,
+      id,
+      dto.scenarios,
+      dto.checks,
+      dto.safetyReview === true,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/approve')
+  approveVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceAiAgents.approve(user.businessId, user.sub, user.role, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/publish')
+  publishVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceAiAgents.publish(user.businessId, user.sub, user.role, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/rollback')
+  rollbackVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RollbackVoiceAiAgentDto,
+  ) {
+    return this.voiceAiAgents.rollback(
+      user.businessId,
+      user.sub,
+      user.role,
+      id,
+      dto,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/agents/ai/:id/pause')
+  pauseVoiceAiAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceAiAgents.pause(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Put('voice/agents/human/:staffUserId')
+  saveHumanAgentProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('staffUserId') staffUserId: string,
+    @Body() dto: SaveVoiceHumanAgentProfileDto,
+  ) {
+    return this.voiceAgents.saveProfile(user.businessId, staffUserId, dto);
+  }
+
+  @Post('voice/agents/presence/heartbeat')
+  updateVoicePresence(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VoicePresenceHeartbeatDto,
+  ) {
+    return this.voiceAgents.heartbeat(user.businessId, user.sub, dto);
+  }
 
   @Get('voice/number')
   getNumber(@CurrentUser() user: AuthenticatedUser) {
@@ -135,9 +1343,54 @@ export class VoiceController {
     return this.voiceQuery.listMissedCalls();
   }
 
+  /** Missed Calls recovery: same audience as the call log; each try is compliance-checked. */
+  @Get('voice/callbacks')
+  listVoiceCallbacks(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceCallbacks.list(user.businessId);
+  }
+
+  @Post('voice/calls/:id/callback')
+  placeVoiceCallback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: PlaceVoiceCallbackDto,
+  ) {
+    return this.voiceCallbacks.place(user.businessId, user.sub, id, dto);
+  }
+
+  @Post('voice/callbacks/:id/complete')
+  completeVoiceCallback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: CompleteVoiceCallbackDto,
+  ) {
+    return this.voiceCallbacks.complete(user.businessId, user.sub, id, dto);
+  }
+
   @Get('voice/analytics')
   analytics() {
     return this.voiceQuery.analytics();
+  }
+
+  /** Daily trends computed from stored call, review and eligibility facts, with a metric glossary. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/analytics/trends')
+  voiceAnalyticsTrendsRoute(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('days') days?: string,
+  ) {
+    return this.voiceAnalyticsTrends.trends(user.businessId, days);
+  }
+
+  /** CSV of saved call facts for a date range (max 92 days); caller numbers masked. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/analytics/export')
+  exportVoiceAnalytics(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.voiceAnalyticsExport.exportCalls(user.businessId, from, to);
   }
 
   /** Registered before nothing dynamic collides — `:id` here is scoped under `voice/calls/`, distinct from the other top-level `voice/*` static routes. */
@@ -160,6 +1413,85 @@ export class VoiceController {
     return this.voiceSettings.update(user.businessId, dto);
   }
 
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/settings/phone-system')
+  getVoicePhoneSystem(@CurrentUser() user: AuthenticatedUser) {
+    return this.voicePhoneSystem.get(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Put('voice/settings/test-numbers')
+  setVoiceTestNumbers(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VoiceTestNumbersDto,
+  ) {
+    return this.voicePhoneSystem.setTestNumbers(user.businessId, dto.numbers);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/settings/sip-trunk')
+  connectVoiceSipTrunk(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VoiceSipTrunkDto,
+  ) {
+    return this.voicePhoneSystem.connectTrunk(user.businessId, dto.sid);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/settings/sip-trunk/disconnect')
+  disconnectVoiceSipTrunk(@CurrentUser() user: AuthenticatedUser) {
+    return this.voicePhoneSystem.disconnectTrunk(user.businessId);
+  }
+
+  /** Live provider checks + configuration facts; nothing is assumed healthy. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/settings/provider-health')
+  getVoiceProviderHealth(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceProviderHealth.health(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Get('voice/settings/usage')
+  voiceUsage(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceProviderHealth.usage(user.businessId);
+  }
+
+  @Get('voice/settings/metering')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  voiceMeteredUsage(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceMetering.summary(user.businessId);
+  }
+
+  @Get('voice/operations')
+  @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)
+  voiceOperationSnapshot(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceOperations.snapshot(user.businessId);
+  }
+
+  @Get('voice/provider-webhooks/failures')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  voiceProviderWebhookFailures(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceWebhookEvents.listFailures(user.businessId);
+  }
+
+  @Post('voice/provider-webhooks/:id/replay')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  replayVoiceProviderWebhook(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceWebhookEvents.replay(user.businessId, user.sub, id);
+  }
+
+  @Get('voice/calls/:id/follow-ups')
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  voiceCallFollowUps(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceCommunications.forCall(user.businessId, id);
+  }
+
   /** Receptionist Settings depth fix — a real Polly-synthesized preview clip, not fabricated/approximated. Registered before nothing dynamic collides (static path segment). */
   @Get('voice/settings/voice-preview')
   async voicePreview(@Query('voiceId') voiceId: string) {
@@ -168,7 +1500,7 @@ export class VoiceController {
   }
 
   /** Live Calls listen/take-over depth fix. */
-  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)
   @Post('voice/calls/:id/listen')
   listenToCall(
     @CurrentUser() user: AuthenticatedUser,
@@ -177,13 +1509,23 @@ export class VoiceController {
     return this.voiceLiveJoin.listen(user.businessId, user.sub, id);
   }
 
-  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)
   @Post('voice/calls/:id/take-over')
   takeOverCall(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
   ) {
     return this.voiceLiveJoin.takeOver(user.businessId, user.sub, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_SUPERVISE)
+  @Post('voice/calls/:id/supervisor/:mode')
+  superviseCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('mode') mode: SupervisorCoachMode,
+  ) {
+    return this.voiceLiveJoin.coach(user.businessId, user.sub, id, mode);
   }
 
   /** AI Phone, full — transfers a call that is genuinely still live to a person. */
@@ -194,7 +1536,12 @@ export class VoiceController {
     @Param('id') id: string,
     @Body() dto: TransferLiveCallDto,
   ) {
-    return this.voiceWorkspace.transfer(user.businessId, id, dto);
+    return this.voiceWorkspace.transfer(user.businessId, user.sub, id, dto);
+  }
+
+  @Get('voice/calls/:id/legs')
+  callLegs(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.voiceWorkspace.listLegs(user.businessId, id);
   }
 
   /** AI Phone, full — ends a call that is genuinely still live. */
@@ -207,6 +1554,33 @@ export class VoiceController {
   @Get('voice/calls/:id/notes')
   listCallNotes(@Param('id') id: string) {
     return this.voiceWorkspace.listNotes(id);
+  }
+
+  @Get('voice/calls/:id/wrap-up')
+  getCallWrapUp(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceCallWrapUp.get(user.businessId, id);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/wrap-up')
+  submitCallWrapUp(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SubmitVoiceCallWrapUpDto,
+  ) {
+    return this.voiceCallWrapUp.submit(user.businessId, user.sub, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/copilot-suggestion')
+  suggestForLiveCall(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceCopilot.suggest(user.businessId, user.sub, id);
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -227,6 +1601,42 @@ export class VoiceController {
     @Param('id') id: string,
   ) {
     return this.voiceWorkspace.deleteRecording(user.businessId, id);
+  }
+
+  /** Replaces card/ID/phone/email details in a finished call's transcript and summary (permanent). */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/redact-transcript')
+  redactTranscript(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.voiceRedaction.redactCall(user.businessId, id);
+  }
+
+  /** Legal hold: blocks recording deletion and retention purge until released. */
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/legal-hold')
+  placeLegalHold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceLegalHoldDto,
+  ) {
+    return this.voiceLegalHold.place(user.businessId, user.sub, id, dto.reason);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/calls/:id/legal-hold/release')
+  releaseLegalHold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: VoiceLegalHoldDto,
+  ) {
+    return this.voiceLegalHold.release(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
   }
 
   @Get('voice/routing-rules')
@@ -306,8 +1716,17 @@ export class VoiceController {
 
   /** Call Queue (UPD-BE-129) — registered before nothing dynamic collides; every segment here is static. */
   @Get('voice/queue')
-  listQueue() {
-    return this.voiceQueue.list();
+  listQueue(@CurrentUser() user: AuthenticatedUser) {
+    return this.voiceQueue.list(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.VOICE_MANAGE)
+  @Post('voice/queues/:id/take-next')
+  takeNextQueueItem(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') queueId: string,
+  ) {
+    return this.voiceQueue.takeNext(user.businessId, queueId, user.sub);
   }
 
   @RequireCapability(CAPABILITIES.VOICE_MANAGE)
@@ -353,6 +1772,26 @@ export class VoiceController {
   }
 
   @Public()
+  @Post('voice/webhook/booking-confirm')
+  @HttpCode(200)
+  async bookingConfirm(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string; Digits?: string };
+    const requestId =
+      typeof req.query.requestId === 'string' ? req.query.requestId : '';
+    const xml = await this.voiceCall.confirmRecordedBooking(
+      body.CallSid ?? '',
+      requestId,
+      body.Digits,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
   @Post('voice/webhook/recording')
   @HttpCode(200)
   async recording(
@@ -362,7 +1801,247 @@ export class VoiceController {
   ) {
     this.verifySignature(req, signature);
     const body = req.body as { CallSid: string; RecordingUrl: string };
+    const ivrNodeId =
+      typeof req.query.ivrNodeId === 'string' ? req.query.ivrNodeId : undefined;
     const xml = await this.voiceCall.handleRecording(
+      body.CallSid,
+      body.RecordingUrl,
+      ivrNodeId,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/queue-wait')
+  @HttpCode(200)
+  async voiceQueueWait(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const body = req.body as { QueueTime?: string };
+    const queueTime = Math.max(
+      0,
+      Number.parseInt(body.QueueTime ?? '0', 10) || 0,
+    );
+    const xml = await this.voiceCallQueue.waitTwiMl(callId, queueTime);
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/queue-exit')
+  @HttpCode(200)
+  async voiceQueueExit(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const body = req.body as {
+      QueueSid?: string;
+      QueueTime?: string;
+      QueueResult?: string;
+    };
+    const queueTime = Math.max(
+      0,
+      Number.parseInt(body.QueueTime ?? '0', 10) || 0,
+    );
+    const xml = await this.voiceCall.handleQueueExit(
+      callId,
+      body.QueueSid,
+      queueTime,
+      body.QueueResult ?? '',
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** Caller choice for recording; the callback is accepted only from Twilio. */
+  @Public()
+  @Post('voice/webhook/recording-consent')
+  @HttpCode(200)
+  async recordingConsent(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid: string; Digits?: string };
+    const xml = await this.voiceCall.handleRecordingConsent(
+      body.CallSid,
+      body.Digits ?? '',
+    );
+    res
+      .type('text/xml')
+      .send(await this.realtimeVoice.maybeConnect(xml, body.CallSid));
+  }
+
+  /** Caller keypad input resumes the exact published IVR snapshot pinned to this call. */
+  @Public()
+  @Post('voice/webhook/ivr-input')
+  @HttpCode(200)
+  async ivrInput(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid: string; Digits?: string };
+    const nodeId =
+      typeof req.query.nodeId === 'string' ? req.query.nodeId : undefined;
+    const xml = await this.voiceCall.handleIvrInput(
+      body.CallSid,
+      body.Digits ?? '',
+      nodeId,
+    );
+    res
+      .type('text/xml')
+      .send(await this.realtimeVoice.maybeConnect(xml, body.CallSid));
+  }
+
+  /** Twilio's <Dial action> callback reports whether a human actually answered. */
+  @Public()
+  @Post('voice/webhook/transfer-result')
+  @HttpCode(200)
+  async transferResult(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      CallSid: string;
+      DialCallSid?: string;
+      DialCallStatus: string;
+    };
+    const rawAttemptNumber = req.query.attemptNumber;
+    const attemptNumber =
+      typeof rawAttemptNumber === 'string' && /^\d+$/.test(rawAttemptNumber)
+        ? Number(rawAttemptNumber)
+        : undefined;
+    const rawTransferAttemptNumber = req.query.transferAttemptNumber;
+    const transferAttemptNumber =
+      typeof rawTransferAttemptNumber === 'string' &&
+      /^\d+$/.test(rawTransferAttemptNumber)
+        ? Number(rawTransferAttemptNumber)
+        : undefined;
+    const xml = await this.voiceCall.handleTransferResult(
+      body.CallSid,
+      body.DialCallStatus,
+      attemptNumber,
+      transferAttemptNumber,
+      body.DialCallSid,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** Called by Twilio on the called party leg before a warm transfer is bridged. */
+  @Public()
+  @Post('voice/webhook/transfer-screening')
+  @HttpCode(200)
+  async transferScreening(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const rawAttempt =
+      typeof req.query.attemptNumber === 'string'
+        ? req.query.attemptNumber
+        : '';
+    const attemptNumber = /^\d+$/.test(rawAttempt) ? Number(rawAttempt) : 0;
+    const body = req.body as { CallSid?: string };
+    const xml = await this.voiceCall.transferScreening(
+      callId,
+      attemptNumber,
+      body.CallSid,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** Stores Twilio progress for the transfer destination leg. */
+  @Public()
+  @Post('voice/webhook/transfer-status')
+  @HttpCode(200)
+  async transferStatus(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const callId = typeof req.query.callId === 'string' ? req.query.callId : '';
+    const rawAttempt =
+      typeof req.query.attemptNumber === 'string'
+        ? req.query.attemptNumber
+        : '';
+    const attemptNumber = /^\d+$/.test(rawAttempt) ? Number(rawAttempt) : 0;
+    const body = req.body as {
+      CallStatus?: string;
+      CallSid?: string;
+      SequenceNumber?: string;
+    };
+    const sequenceNumber =
+      body.SequenceNumber && /^\d+$/.test(body.SequenceNumber)
+        ? Number(body.SequenceNumber)
+        : undefined;
+    await this.voiceWebhookEvents.receiveTransferStatus(
+      callId,
+      attemptNumber,
+      body.CallStatus ?? '',
+      body.CallSid,
+      sequenceNumber,
+    );
+    res.status(200).send('received');
+  }
+
+  /** Capacity signal from the human callee leg; parentCallSid is bound into the signed callback URL. */
+  @Public()
+  @Post('voice/webhook/dial-status')
+  @HttpCode(200)
+  dialStatus(
+    @Req() req: Request,
+    @Query('parentCallSid') parentCallSid: string,
+    @Query('attemptNumber') rawAttemptNumber: string | undefined,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      CallStatus?: string;
+      CallSid?: string;
+      SequenceNumber?: string;
+    };
+    const attemptNumber =
+      rawAttemptNumber && /^\d+$/.test(rawAttemptNumber)
+        ? Number(rawAttemptNumber)
+        : undefined;
+    return this.voiceWebhookEvents
+      .receiveAgentStatus(
+        parentCallSid,
+        body.CallStatus ?? '',
+        attemptNumber,
+        body.CallSid,
+        body.SequenceNumber && /^\d+$/.test(body.SequenceNumber)
+          ? Number(body.SequenceNumber)
+          : undefined,
+      )
+      .then(() => ({ received: true }));
+  }
+
+  /** Records a follow-up message when a human transfer could not connect. */
+  @Public()
+  @Post('voice/webhook/transfer-message')
+  @HttpCode(200)
+  async transferMessage(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid: string; RecordingUrl?: string };
+    const xml = await this.voiceCall.handleTransferMessage(
       body.CallSid,
       body.RecordingUrl,
     );
@@ -370,6 +2049,37 @@ export class VoiceController {
   }
 
   /** Live Calls listen/take-over depth fix — both the redirected caller leg and the outbound staff leg land here. */
+  @Public()
+  @Post('voice/webhook/livekit')
+  @HttpCode(200)
+  async livekitUsage(
+    @Req() req: Request & { rawBody?: Buffer },
+    @Headers('authorization') authorization?: string,
+  ) {
+    const body = req.rawBody ?? (Buffer.isBuffer(req.body) ? req.body : null);
+    if (!body)
+      throw new AppException(
+        'VOICE_VIDEO_WEBHOOK_INVALID',
+        'An unmodified webhook body is required.',
+        HttpStatus.BAD_REQUEST,
+      );
+    return this.mediaMetering.livekit(body, authorization);
+  }
+
+  @Public()
+  @Post('voice/webhook/conference-usage')
+  @HttpCode(200)
+  async conferenceUsage(
+    @Req() req: Request,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    await this.voiceWebhookEvents.receiveConferenceUsage(
+      req.body as Record<string, string>,
+    );
+    return { accepted: true };
+  }
+
   @Public()
   @Post('voice/webhook/conference')
   @HttpCode(200)
@@ -398,9 +2108,253 @@ export class VoiceController {
     @Headers('x-twilio-signature') signature?: string,
   ) {
     this.verifySignature(req, signature);
-    const body = req.body as { CallSid: string; CallStatus: string };
-    await this.voiceCall.handleStatus(body.CallSid, body.CallStatus);
+    const body = req.body as {
+      CallSid: string;
+      CallStatus: string;
+      SequenceNumber?: string;
+    };
+    const sequenceNumber =
+      body.SequenceNumber && /^\d+$/.test(body.SequenceNumber)
+        ? Number(body.SequenceNumber)
+        : undefined;
+    await this.voiceWebhookEvents.receiveCallStatus(
+      body.CallSid,
+      body.CallStatus,
+      sequenceNumber,
+    );
     return { received: true };
+  }
+
+  @Public()
+  @Post('voice/webhook/callback/agent-answered')
+  @HttpCode(200)
+  async callbackAgentAnswered(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const xml = await this.voiceCallbacks.agentAnsweredTwiml(attemptId);
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/callback/agent-status')
+  @HttpCode(200)
+  async callbackAgentStatus(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallStatus?: string };
+    await this.voiceWebhookEvents.receiveCallbackAgentStatus(
+      attemptId,
+      body.CallStatus ?? '',
+    );
+    return { received: true };
+  }
+
+  @Public()
+  @Post('voice/webhook/callback/customer-result')
+  @HttpCode(200)
+  async callbackCustomerResult(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      DialCallStatus?: string;
+      DialCallDuration?: string;
+    };
+    const xml = await this.voiceCallbacks.customerResult(
+      attemptId,
+      body.DialCallStatus ?? '',
+      body.DialCallDuration ? Number(body.DialCallDuration) : undefined,
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** Power dialer: the agent answered their own phone; TwiML bridges to the customer if still allowed. */
+  @Public()
+  @Post('voice/webhook/outbound/agent-answered')
+  @HttpCode(200)
+  async outboundAgentAnswered(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const xml = await this.voiceDialer.agentAnsweredTwiml(attemptId);
+    res.type('text/xml').send(xml);
+  }
+
+  /** Asynchronous answering-machine result for a power-dialer customer leg. */
+  @Public()
+  @Post('voice/webhook/outbound/amd')
+  @HttpCode(200)
+  async outboundAnsweringMachine(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { AnsweredBy?: string };
+    await this.voiceWebhookEvents.receiveDialerAnsweringMachine(
+      attemptId,
+      body.AnsweredBy ?? 'unknown',
+    );
+    return { received: true };
+  }
+
+  /** AI outbound: Twilio calls this when an approved campaign contact answers. */
+  @Public()
+  @Post('voice/webhook/outbound/ai-answer')
+  @HttpCode(200)
+  async outboundAiAnswer(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string };
+    const xml = await this.voiceCall.handleOutboundAiAnswer(
+      attemptId,
+      body.CallSid ?? '',
+    );
+    res
+      .type('text/xml')
+      .send(await this.realtimeVoice.maybeConnect(xml, body.CallSid ?? ''));
+  }
+
+  @Public()
+  @Post('voice/webhook/realtime-ended')
+  @HttpCode(200)
+  async realtimeEnded(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string; CallStatus?: string };
+    const xml =
+      body.CallStatus === 'completed'
+        ? '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+        : await this.voiceCall.realtimeTransition(
+            body.CallSid ?? '',
+            'fallback',
+          );
+    res.type('text/xml').send(xml);
+  }
+
+  @Public()
+  @Post('voice/webhook/realtime-recording')
+  @HttpCode(200)
+  async realtimeRecording(
+    @Req() req: Request,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      CallSid?: string;
+      RecordingSid?: string;
+      RecordingStatus?: string;
+    };
+    if (body.RecordingStatus === 'completed')
+      await this.voiceWebhookEvents.receiveRealtimeRecording(
+        body.CallSid ?? '',
+        body.RecordingSid ?? '',
+      );
+    return { received: true };
+  }
+
+  /** AI outbound speech is gathered by Twilio; the application does not record this call. */
+  @Public()
+  @Post('voice/webhook/outbound/ai-speech')
+  @HttpCode(200)
+  async outboundAiSpeech(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallSid?: string; SpeechResult?: string };
+    const xml = await this.voiceCall.handleOutboundAiSpeech(
+      attemptId,
+      body.CallSid ?? '',
+      body.SpeechResult ?? '',
+    );
+    res.type('text/xml').send(xml);
+  }
+
+  /** Twilio status callback advances an AI campaign only after its current call is terminal. */
+  @Public()
+  @Post('voice/webhook/outbound/ai-status')
+  @HttpCode(200)
+  async outboundAiStatus(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      CallSid?: string;
+      CallStatus?: string;
+      CallDuration?: string;
+    };
+    const duration = body.CallDuration ? Number(body.CallDuration) : undefined;
+    await this.voiceAiOutbound.providerStatus(
+      attemptId,
+      body.CallSid ?? '',
+      body.CallStatus ?? '',
+      duration,
+    );
+    return { received: true };
+  }
+
+  @Public()
+  @Post('voice/webhook/outbound/agent-status')
+  @HttpCode(200)
+  async outboundAgentStatus(
+    @Req() req: Request,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as { CallStatus?: string };
+    await this.voiceWebhookEvents.receiveDialerAgentStatus(
+      attemptId,
+      body.CallStatus ?? '',
+    );
+    return { received: true };
+  }
+
+  @Public()
+  @Post('voice/webhook/outbound/customer-result')
+  @HttpCode(200)
+  async outboundCustomerResult(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('attemptId') attemptId: string,
+    @Headers('x-twilio-signature') signature?: string,
+  ) {
+    this.verifySignature(req, signature);
+    const body = req.body as {
+      DialCallStatus?: string;
+      DialCallDuration?: string;
+    };
+    const xml = await this.voiceDialer.customerResult(
+      attemptId,
+      body.DialCallStatus ?? '',
+      body.DialCallDuration ? Number(body.DialCallDuration) : undefined,
+    );
+    res.type('text/xml').send(xml);
   }
 
   private verifySignature(req: Request, signature: string | undefined) {
@@ -408,7 +2362,14 @@ export class VoiceController {
     if (!authToken) {
       throw new ServiceUnavailableException('Voice webhook is not configured');
     }
-    const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    const fullUrl = voiceWebhookRequestUrl(
+      this.config.get<string>('BACKEND_URL'),
+      {
+        protocol: req.protocol,
+        host: req.get('host'),
+        originalUrl: req.originalUrl,
+      },
+    );
     if (
       !verifyTwilioSignature(
         fullUrl,

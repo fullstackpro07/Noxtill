@@ -19,6 +19,8 @@ import {
   reorderRoutingRules,
   summariseCall,
   takeOverCall,
+  setSupervisorCoachMode,
+  type SupervisorCoachMode,
   transferLiveCall,
   updateKnowledgeEntry,
   updateRoutingRule,
@@ -30,7 +32,7 @@ import {
   type RoutingRuleInput,
   type VoiceInsights,
 } from "@/lib/voice-calls-api";
-import { clearVoiceQueue, fetchVoiceQueue, offerQueueCallback, takeQueueItem, type VoiceQueueResult } from "@/lib/voice-queue-api";
+import { clearVoiceQueue, fetchVoiceQueue, offerQueueCallback, takeNextVoiceQueueCall, takeQueueItem, type VoiceQueueResult } from "@/lib/voice-queue-api";
 import { fetchVoiceSettings, type VoiceSettings } from "@/lib/voice-settings-api";
 import { fetchStaffList, type LiveStaffMember } from "@/lib/staff-api";
 import { fetchProducts } from "@/lib/products-api";
@@ -44,12 +46,14 @@ export interface RxActions {
   markHandled: (callId: string) => Promise<void>;
   offerCallback: (callId: string) => Promise<void>;
   clearQueue: () => Promise<void>;
+  takeNext: (queueId: string) => Promise<string | null>;
   assign: (callId: string, userId: string | null) => Promise<void>;
   listen: (callId: string) => Promise<void>;
   takeOver: (callId: string) => Promise<void>;
+  supervise: (callId: string, mode: SupervisorCoachMode) => Promise<void>;
   summarise: (callId: string) => Promise<void>;
   /** Live call controls — real telephony-provider actions. */
-  transfer: (callId: string, toNumber?: string) => Promise<void>;
+  transfer: (callId: string, mode: "cold" | "warm") => Promise<void>;
   endCall: (callId: string) => Promise<void>;
   addNote: (callId: string, body: string) => Promise<boolean>;
   deleteRecording: (callId: string) => Promise<void>;
@@ -149,12 +153,29 @@ export function RxDataProvider({ children }: { children: ReactNode }) {
       markHandled: async (id) => void (await run(() => takeQueueItem(id), ["Marked as handled", "It has left the follow-up queue."], "Couldn't mark it handled")),
       offerCallback: async (id) => void (await run(() => offerQueueCallback(id), ["Callback recorded", "The queue now shows a callback has been offered."], "Couldn't record the callback")),
       clearQueue: async () => void (await run(() => clearVoiceQueue(), ["Queue cleared", "Every waiting follow-up was marked handled."], "Couldn't clear the queue")),
+      takeNext: async (queueId) => {
+        try {
+          const result = await takeNextVoiceQueueCall(queueId);
+          refresh();
+          notify("Next follow-up assigned", "The call is now assigned to you.");
+          return result.id;
+        } catch (e) {
+          notify("Couldn't take the next call", errMsg(e, "Set your voice-agent status to Available and try again."), "error");
+          return null;
+        }
+      },
       assign: async (id, userId) =>
         void (await run(() => assignCall(id, userId), [userId ? "Follow-up assigned" : "Assignment cleared", userId ? "The call now has an owner." : undefined], "Couldn't assign that")),
       listen: async (id) => void (await run(() => listenToCall(id), ["Your phone is ringing", "Answer it to hear the call, muted."], "Couldn't join the call")),
       takeOver: async (id) => void (await run(() => takeOverCall(id), ["Your phone is ringing", "Answer it to speak with the caller — the AI steps aside."], "Couldn't take over the call")),
+      supervise: async (id, mode) =>
+        void (await run(
+          () => setSupervisorCoachMode(id, mode),
+          ["Supervisor connection requested", mode === "listen" ? "Answer your phone to listen muted." : mode === "whisper" ? "Answer your phone; only the assigned agent can hear you." : "Answer your phone to speak to everyone in the call."],
+          "Couldn't update supervisor control",
+        )),
       summarise: async (id) => void (await run(() => summariseCall(id), ["Summary written", "Generated from the transcript alone and saved on the call."], "No summary was generated")),
-      transfer: async (id, toNumber) => void (await run(() => transferLiveCall(id, toNumber), ["Transferring the call", "The caller is being put through to a person."], "Couldn't transfer the call")),
+      transfer: async (id, mode) => void (await run(() => transferLiveCall(id, mode), ["Transfer started", "Status stays pending until Twilio confirms the destination connected."], "Couldn't transfer the call")),
       endCall: async (id) => void (await run(() => endLiveCall(id), ["Ending the call", "The telephony provider has been asked to hang up."], "Couldn't end the call")),
       addNote: (id, body) => run(() => addCallNote(id, body), ["Note added", "Saved on the call and recorded in its audit trail."], "Couldn't save the note"),
       deleteRecording: async (id) =>
@@ -188,7 +209,13 @@ export function RxDataProvider({ children }: { children: ReactNode }) {
       calls,
       today: insights?.today ?? "",
       timezone: insights?.timezone ?? "UTC",
-      followUps: calls.filter(needsFollowUp).sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
+      followUps: calls
+        .filter(needsFollowUp)
+        .sort(
+          (a, b) =>
+            Number(b.status === "missed") - Number(a.status === "missed") ||
+            a.startedAt.localeCompare(b.startedAt),
+        ),
       live: calls.filter((c) => c.status === "in_progress"),
       queue: queueQ.data,
       settings: settingsQ.data,

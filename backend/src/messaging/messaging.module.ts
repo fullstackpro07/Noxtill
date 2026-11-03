@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { SendGateService } from './send-gate.service';
+import { CustomerCommunicationsService } from './customer-communications.service';
 import { TemplateRegistryService } from './templates/template-registry.service';
 import { SmsService } from './channels/sms.service';
 import { EmailService } from './channels/email.service';
@@ -27,6 +28,7 @@ import { dlqName } from '../common/queue/queue.constants';
   controllers: [MessagesController, MessagingChannelsController],
   providers: [
     SendGateService,
+    CustomerCommunicationsService,
     TemplateRegistryService,
     SmsService,
     EmailService,
@@ -35,6 +37,11 @@ import { dlqName } from '../common/queue/queue.constants';
     MessagesService,
     MessagingChannelsService,
   ],
-  exports: [SendGateService, TemplateRegistryService, EmailService],
+  exports: [
+    SendGateService,
+    TemplateRegistryService,
+    EmailService,
+    CustomerCommunicationsService,
+  ],
 })
 export class MessagingModule {}

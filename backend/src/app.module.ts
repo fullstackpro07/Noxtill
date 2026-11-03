@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ClsModule } from 'nestjs-cls';
 import { AppController } from './app.controller';
+import { ReadinessService } from './common/health/readiness.service';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
@@ -39,6 +40,8 @@ import { BillingModule } from './billing/billing.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { BusinessTypesModule } from './business-types/business-types.module';
+import { BusinessModulesModule } from './business-modules/business-modules.module';
+import { SeoWorkspaceModule } from './seo-workspace/seo-workspace.module';
 import { SearchModule } from './search/search.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
@@ -68,6 +71,8 @@ import { VoiceModule } from './voice/voice.module';
 import { DigitizerModule } from './digitizer/digitizer.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { AdsModule } from './ads/ads.module';
+import { WebsiteModule } from './website/website.module';
+import { ProcurementContractsModule } from './procurement/contracts/procurement-contracts.module';
 import { BookDemoModule } from './book-demo/book-demo.module';
 import { LegalPublicModule } from './legal-public/legal-public.module';
 import { AccountingModule } from './integrations/accounting/accounting.module';
@@ -80,6 +85,10 @@ import { IntegrationSyncModule } from './integrations/sync/integration-sync.modu
 import { DeveloperModule } from './developer/developer.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { ToolsModule } from './tools/tools.module';
+import { CommerceModule } from './commerce/commerce.module';
+import { BusinessIntelligenceModule } from './business-intelligence/business-intelligence.module';
+import { CustomerPortalModule } from './customer-portal/customer-portal.module';
+import { ProcurementModule } from './procurement/procurement.module';
 
 @Module({
   imports: [
@@ -125,6 +134,8 @@ import { ToolsModule } from './tools/tools.module';
     DashboardModule,
     ActivityModule,
     BusinessTypesModule,
+    BusinessModulesModule,
+    SeoWorkspaceModule,
     SearchModule,
     AnalyticsModule,
     PlatformAdminModule,
@@ -153,6 +164,8 @@ import { ToolsModule } from './tools/tools.module';
     DigitizerModule,
     DeliveryModule,
     AdsModule,
+    WebsiteModule,
+    ProcurementContractsModule,
     BookDemoModule,
     LegalPublicModule,
     AccountingModule,
@@ -165,8 +178,12 @@ import { ToolsModule } from './tools/tools.module';
     DeveloperModule,
     AuditLogModule,
     ToolsModule,
+    CommerceModule,
+    BusinessIntelligenceModule,
+    CustomerPortalModule,
+    ProcurementModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, ReadinessService],
 })
 export class AppModule {}

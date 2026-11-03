@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   aiResolved,
@@ -19,6 +19,7 @@ import { BarRow, Card, CardHead, Chip, EmptyState, KpiCard, kpiGrid } from "../r
 import { useRx } from "../rx-data";
 import { useRxStore } from "../rx-store";
 import { RxGate } from "../rx-gate";
+import { DEFAULT_OVERVIEW_FILTERS, MinutesSpendCard, OutboundTodayCard, OverviewFilterBar, filterCalls } from "../rx-overview-filters";
 
 export function OverviewScreen() {
   return (
@@ -35,9 +36,12 @@ function Overview() {
   const openCall = useRxStore((s) => s.openCall);
   const whc = !!rx.insights?.workingHoursConfigured;
 
-  const kpis = useMemo(() => buildOverviewKpis(rx.calls, rx.today, whc), [rx.calls, rx.today, whc]);
+  const [filters, setFilters] = useState(DEFAULT_OVERVIEW_FILTERS);
+  // The brief and live list stay unfiltered; the KPI cards and outcomes follow the filters.
+  const calls = useMemo(() => filterCalls(rx.calls, filters), [rx.calls, filters]);
+  const kpis = useMemo(() => buildOverviewKpis(calls, rx.today, whc), [calls, rx.today, whc]);
   const brief = useMemo(() => buildBrief(rx.calls, rx.today, rx.now, whc), [rx.calls, rx.today, rx.now, whc]);
-  const t = useMemo(() => sliceDay(rx.calls, rx.today), [rx.calls, rx.today]);
+  const t = useMemo(() => sliceDay(calls, rx.today), [calls, rx.today]);
 
   const oldestMissed = rx.followUps.find((c) => c.status === "missed");
   const unassigned = rx.followUps.filter((c) => !c.assignedToUserId);
@@ -91,7 +95,7 @@ function Overview() {
             <Ico name="sparkles" size={15} />
           </div>
           <div className="text-[11px] font-bold uppercase tracking-[.09em] text-[#6D28D9]">Today&apos;s phone brief</div>
-          <div className="ml-auto text-[10.5px] text-[#94A3B8]">{brief.meta}</div>
+          <div className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{brief.meta}</div>
         </div>
         <div className="mt-[11px] text-[14px] font-extrabold" style={{ textWrap: "pretty" }}>
           {brief.headline}
@@ -106,7 +110,7 @@ function Overview() {
               type="button"
               onClick={n.go}
               className="flex h-8 flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[9px] px-3 text-[12.5px] font-bold"
-              style={{ background: n.primary ? "#16A34A" : "#fff", color: n.primary ? "#fff" : "#45505F", border: `1px solid ${n.primary ? "#16A34A" : "#D5DAE2"}` }}
+              style={{ background: n.primary ? "var(--app-primary-hover, #0e8442)" : "#fff", color: n.primary ? "#fff" : "#45505F", border: `1px solid ${n.primary ? "var(--app-primary-hover, #0e8442)" : "#D5DAE2"}` }}
             >
               <Ico name={n.icon} size={14} />
               {n.label}
@@ -114,6 +118,8 @@ function Overview() {
           ))}
         </div>
       </Card>
+
+      <OverviewFilterBar calls={rx.calls} filters={filters} onChange={setFilters} />
 
       <div style={kpiGrid(150)}>
         {kpis.map((k) => (
@@ -150,7 +156,7 @@ function Overview() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[12px] font-bold">{callerName(c)}</div>
-                    <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
+                    <div className="mt-0.5 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
                       {intentLabel(c)} · {fmtShortDuration(secs)} so far
                     </div>
                   </div>
@@ -164,10 +170,10 @@ function Overview() {
         </Card>
 
         <Card overflow>
-          <CardHead icon="chart-no-axes-combined" title="Today's outcomes" right={<span className="text-[11px] text-[#94A3B8]">{t.calls.length} call{t.calls.length === 1 ? "" : "s"}</span>} />
+          <CardHead icon="chart-no-axes-combined" title="Today's outcomes" right={<span className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">{t.calls.length} call{t.calls.length === 1 ? "" : "s"}</span>} />
           <div className="flex flex-col gap-[11px] px-[18px] py-[15px]">
             {t.calls.length === 0 ? (
-              <div className="py-4 text-center text-[12px] text-[#94A3B8]">No calls yet today.</div>
+              <div className="py-4 text-center text-[12px] text-[color:var(--app-text-faintest,#667085)]">No calls yet today.</div>
             ) : (
               buckets.map((b) => (
                 <BarRow key={b.label} label={b.label} value={String(b.n)} widthPct={(b.n / maxBucket) * 100} color={b.color} onClick={() => router.push("/receptionist/history")} />
@@ -175,6 +181,9 @@ function Overview() {
             )}
           </div>
         </Card>
+
+        <OutboundTodayCard now={rx.now} timeZone={rx.timezone} />
+        <MinutesSpendCard />
       </div>
     </div>
   );

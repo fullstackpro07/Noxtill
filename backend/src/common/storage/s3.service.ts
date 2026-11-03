@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -25,8 +27,8 @@ interface LocalFile {
  *
  * Local-disk fallback: when no real `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` are configured
  * (e.g. a fresh dev checkout with no AWS account set up), every method here transparently writes
- * to/reads from local disk instead, served back through `LocalFilesController`
- * (`GET local-files?key=`). Every one of this app's ~15 upload call sites goes through this one
+ * to/reads from local disk instead, served back through `LocalFilesController` with an expiring
+ * HMAC-signed URL. Every one of this app's ~15 upload call sites goes through this one
  * class, so they all get the fallback for free — nothing else needed to change. This path is
  * dev-only by construction (real S3 credentials always win when present) and never signs a real
  * S3 URL, so it can never be mistaken for production behavior.
@@ -39,6 +41,7 @@ export class S3Service {
   private readonly useLocalStorage: boolean;
   private readonly localRoot: string;
   private readonly backendUrl: string;
+  private readonly localSigningSecret: Buffer;
 
   constructor(private readonly config: ConfigService) {
     this.bucket = this.config.get<string>('S3_BUCKET', 'noxtill-dev');
@@ -52,6 +55,14 @@ export class S3Service {
     );
     this.backendUrl =
       this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
+    const signingSecret =
+      this.config.get<string>('LOCAL_STORAGE_SIGNING_SECRET') ??
+      this.config.get<string>('JWT_SECRET');
+    // Local storage is a dev-only fallback. Prefer a stable configured secret, then the app's
+    // required JWT secret. A process-local secret is safer than a hard-coded fallback for tests.
+    this.localSigningSecret = signingSecret
+      ? Buffer.from(signingSecret, 'utf8')
+      : randomBytes(32);
 
     if (this.useLocalStorage) {
       this.logger.warn(
@@ -92,18 +103,73 @@ export class S3Service {
     );
   }
 
-  /** Signed GET URL, expiring in 24h by default per the files rule. In local mode this is a plain
-   * (unsigned) URL to `LocalFilesController` — there's nothing to sign against a filesystem, and
-   * this path is never reachable in production since real credentials always take priority. */
+  /** Signed GET URL, expiring in 24h by default per the files rule. Local mode uses an HMAC
+   * capability URL with the same expiry semantics as S3 presigning. */
   async getSignedDownloadUrl(
     key: string,
     expiresInSeconds: number = SIGNED_URL_TTL_SECONDS,
   ): Promise<string> {
     if (this.useLocalStorage) {
-      return `${this.backendUrl}/local-files?key=${encodeURIComponent(key)}`;
+      const expires =
+        Math.floor(Date.now() / 1000) +
+        Math.max(1, Math.floor(expiresInSeconds));
+      const signature = this.localFileSignature(key, expires);
+      return `${this.backendUrl}/local-files?key=${encodeURIComponent(key)}&expires=${expires}&signature=${signature}`;
     }
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
     return getSignedUrl(this.client!, command, { expiresIn: expiresInSeconds });
+  }
+
+  /** Confirm a private object exists without downloading its contents. */
+  async headObject(
+    key: string,
+  ): Promise<{ sizeBytes: number; contentType: string | null } | null> {
+    if (this.useLocalStorage) return null;
+    try {
+      const out = await this.client!.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      if (!Number.isSafeInteger(out.ContentLength) || out.ContentLength! < 1)
+        return null;
+      return {
+        sizeBytes: out.ContentLength!,
+        contentType: out.ContentType ?? null,
+      };
+    } catch (error) {
+      const status = (error as { $metadata?: { httpStatusCode?: number } })
+        .$metadata?.httpStatusCode;
+      if (status === 404 || (error as { name?: string }).name === 'NotFound')
+        return null;
+      throw error;
+    }
+  }
+
+  /** Verify a local-file capability without revealing whether the requested object exists. */
+  verifyLocalDownloadSignature(
+    key: string,
+    expiresValue: string | undefined,
+    signature: string | undefined,
+    now = Date.now(),
+  ): boolean {
+    if (!expiresValue || !signature || !/^\d+$/.test(expiresValue)) {
+      return false;
+    }
+    const expires = Number(expiresValue);
+    if (!Number.isSafeInteger(expires) || expires <= Math.floor(now / 1000)) {
+      return false;
+    }
+    if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
+    const expected = Buffer.from(this.localFileSignature(key, expires), 'hex');
+    const provided = Buffer.from(signature, 'hex');
+    return (
+      provided.length === expected.length && timingSafeEqual(provided, expected)
+    );
+  }
+
+  private localFileSignature(key: string, expires: number): string {
+    return createHmac('sha256', this.localSigningSecret)
+      .update(`${expires}\n${key}`)
+      .digest('hex');
   }
 
   /** Convenience: upload then immediately return a 24h signed URL to it. */
@@ -219,17 +285,56 @@ export class S3Service {
   }
 
   /** Reads a stored object's bytes back in either storage mode. Returns null (never throws) when the key is missing. */
-  async readObject(key: string): Promise<Buffer | null> {
+  async readObject(key: string, maxBytes?: number): Promise<Buffer | null> {
     if (this.useLocalStorage) {
-      return (await this.readLocalFile(key))?.buffer ?? null;
+      try {
+        if (maxBytes !== undefined) {
+          const stat = await fs.stat(this.resolveLocalPath(key));
+          if (stat.size > maxBytes)
+            throw new Error('Stored object exceeds the allowed read size.');
+        }
+        return (await this.readLocalFile(key))?.buffer ?? null;
+      } catch (error) {
+        if ((error as Error).message.includes('exceeds the allowed read size'))
+          throw error;
+        return null;
+      }
     }
     try {
       const out = await this.client!.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       );
+      if (
+        maxBytes !== undefined &&
+        (!Number.isSafeInteger(maxBytes) ||
+          maxBytes < 1 ||
+          !Number.isSafeInteger(out.ContentLength) ||
+          out.ContentLength! > maxBytes)
+      )
+        throw new Error('Stored object exceeds the allowed read size.');
+      if (
+        maxBytes !== undefined &&
+        out.Body &&
+        Symbol.asyncIterator in out.Body
+      ) {
+        const chunks: Buffer[] = [];
+        let totalBytes = 0;
+        for await (const part of out.Body as AsyncIterable<Uint8Array>) {
+          const chunk = Buffer.from(part);
+          totalBytes += chunk.length;
+          if (totalBytes > maxBytes)
+            throw new Error('Stored object exceeds the allowed read size.');
+          chunks.push(chunk);
+        }
+        return Buffer.concat(chunks, totalBytes);
+      }
       const bytes = await out.Body?.transformToByteArray();
+      if (maxBytes !== undefined && bytes && bytes.byteLength > maxBytes)
+        throw new Error('Stored object exceeds the allowed read size.');
       return bytes ? Buffer.from(bytes) : null;
-    } catch {
+    } catch (error) {
+      if ((error as Error).message.includes('exceeds the allowed read size'))
+        throw error;
       return null;
     }
   }

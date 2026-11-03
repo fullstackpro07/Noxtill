@@ -20,6 +20,8 @@ const ROLE_ORDER: Role[] = ["owner", "manager", "staff"];
  * path genuinely lets that role use it. */
 const FEATURE_MODULE_KEYS: Record<keyof AiFeatureToggles, string[]> = {
   voiceEntry: ["ai-assistant"],
+  voiceQualityAssist: ["receptionist"],
+  voiceMeetingSummary: ["receptionist"],
   photoDigitizer: ["digitizer"],
   reviewReplies: ["reviews"],
   // Real call sites of the `campaign_copy` AI kind: Social's AI Studio and Profit's dead-hours offer.
@@ -28,6 +30,7 @@ const FEATURE_MODULE_KEYS: Record<keyof AiFeatureToggles, string[]> = {
   whatIf: ["profit", "products"],
   assistant: ["ai-assistant"],
   inboxReplies: ["unified-inbox"],
+  workflowAgents: ["marketing"],
 };
 
 function availableToLabel(featureKey: keyof AiFeatureToggles): string {
@@ -43,6 +46,8 @@ function availableToLabel(featureKey: keyof AiFeatureToggles): string {
 
 const FEATURE_LABELS: Record<keyof AiFeatureToggles, { name: string; note: string }> = {
   voiceEntry: { name: "Voice Entry", note: "Confirmation required before any write" },
+  voiceQualityAssist: { name: "Voice QA Suggestions", note: "Transcript-cited drafts; reviewer must verify before saving" },
+  voiceMeetingSummary: { name: "Meeting Transcripts & Summaries", note: "Only after a published policy and every attendee's explicit consent; human review required" },
   photoDigitizer: { name: "Photo Digitizer", note: "Extracts rows from a photo — staged for your review" },
   reviewReplies: { name: "Review Replies", note: "Drafts only — you approve before posting" },
   campaignCopy: { name: "Campaign Copy", note: "Never sends without approval" },
@@ -50,6 +55,7 @@ const FEATURE_LABELS: Record<keyof AiFeatureToggles, { name: string; note: strin
   whatIf: { name: "What-If Simulation", note: "Labelled as simulation, never as actual" },
   assistant: { name: "Assistant & Help", note: "Business Chat and Help Assistant, read-only" },
   inboxReplies: { name: "Inbox Replies", note: "Drafts only — a person presses send" },
+  workflowAgents: { name: "Workflow AI drafts & agents", note: "Drafts and read-only agent answers in run history — never sent by themselves" },
 };
 
 /** Derived from the real, fixed tool registry (`backend/src/assistant/assistant-tools.ts`) — every

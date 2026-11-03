@@ -5,6 +5,8 @@ import { AppException } from '../common/filters/app.exception';
 
 interface WhisperTranscriptionResponse {
   text: string;
+  duration?: number;
+  usage?: { type?: string; seconds?: number };
 }
 
 /**
@@ -27,6 +29,15 @@ export class SpeechToTextService {
     mimeType: string,
     filename: string,
   ): Promise<string> {
+    return (await this.transcribeWithMetrics(audioBuffer, mimeType, filename))
+      .text;
+  }
+
+  async transcribeWithMetrics(
+    audioBuffer: Buffer,
+    mimeType: string,
+    filename: string,
+  ): Promise<{ text: string; audioSeconds: number | null }> {
     const apiKey = this.config.get<string>('OPENAI_API_KEY');
     if (!apiKey) {
       throw new AppException(
@@ -43,6 +54,7 @@ export class SpeechToTextService {
       filename,
     );
     form.append('model', 'whisper-1');
+    form.append('response_format', 'verbose_json');
 
     try {
       const response = await axios.post<WhisperTranscriptionResponse>(
@@ -50,7 +62,22 @@ export class SpeechToTextService {
         form,
         { headers: { Authorization: `Bearer ${apiKey}` } },
       );
-      return response.data.text;
+      const text = response.data.text;
+      if (typeof text !== 'string')
+        throw new Error('Invalid transcription response');
+      const reportedSeconds = response.data.usage?.seconds;
+      const mediaDuration = response.data.duration;
+      const audioSeconds =
+        typeof reportedSeconds === 'number' &&
+        Number.isFinite(reportedSeconds) &&
+        reportedSeconds > 0
+          ? reportedSeconds
+          : typeof mediaDuration === 'number' &&
+              Number.isFinite(mediaDuration) &&
+              mediaDuration > 0
+            ? mediaDuration
+            : null;
+      return { text, audioSeconds };
     } catch (error) {
       this.logger.warn(
         `Whisper transcription failed: ${(error as Error).message}`,

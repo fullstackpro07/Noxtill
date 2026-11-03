@@ -69,14 +69,14 @@ export function CardHead({ icon, iconColor, title, right, sub }: { icon?: string
     <div className="flex flex-wrap items-center gap-[9px] border-b border-[#EEF0F3] px-[18px] py-3.5">
       {icon ? <Ico name={icon} size={15} style={{ color: iconColor ?? "#45505F" }} /> : null}
       <div className="text-[13.5px] font-extrabold">{title}</div>
-      {sub ? <div className="text-[11px] text-[#94A3B8]">{sub}</div> : null}
+      {sub ? <div className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">{sub}</div> : null}
       {right ? <div className="ml-auto">{right}</div> : null}
     </div>
   );
 }
 
 export function Footnote({ children }: { children: ReactNode }) {
-  return <div className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-[18px] py-3 text-[11px] text-[#94A3B8]">{children}</div>;
+  return <div className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-[18px] py-3 text-[11px] text-[color:var(--app-text-faintest,#667085)]">{children}</div>;
 }
 
 export function KpiCard({
@@ -106,7 +106,7 @@ export function KpiCard({
       <div className="mt-[7px] text-[19px] font-extrabold tabular-nums tracking-[-.03em]" style={{ color }}>
         {value}
       </div>
-      <div className="mt-1 text-[10.5px]" style={{ color: subColor ?? "#94A3B8", fontWeight: subColor ? 700 : 400 }}>
+      <div className="mt-1 text-[10.5px]" style={{ color: subColor ?? "var(--app-text-faintest, #667085)", fontWeight: subColor ? 700 : 400 }}>
         {sub}
       </div>
     </div>
@@ -117,7 +117,7 @@ export const kpiGrid = (min: number) => ({ display: "grid", gridTemplateColumns:
 
 export function Th({ children, align = "left" }: { children?: ReactNode; align?: "left" | "center" | "right" }) {
   return (
-    <th className="whitespace-nowrap px-3 py-[11px] text-[10.5px] font-extrabold uppercase tracking-[.07em] text-[#7A8798]" style={{ textAlign: align }}>
+    <th className="whitespace-nowrap px-3 py-[11px] text-[10.5px] font-extrabold uppercase tracking-[.07em] text-[color:var(--app-text-faintest,#667085)]" style={{ textAlign: align }}>
       {children}
     </th>
   );
@@ -157,7 +157,7 @@ export function PrimaryBtn({ children, onClick, disabled, height = 32, className
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
+      className={`flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       style={{ height }}
     >
       {children}
@@ -168,7 +168,7 @@ export function PrimaryBtn({ children, onClick, disabled, height = 32, className
 /** A compact green action used in table rows (Call back / Review / Assign). */
 export function RowAction({ children, onClick, primary }: { children: ReactNode; onClick: (e: React.MouseEvent) => void; primary?: boolean }) {
   return primary ? (
-    <button type="button" onClick={onClick} className="inline-flex h-[30px] cursor-pointer items-center rounded-[8px] border-0 bg-[#16A34A] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]">
+    <button type="button" onClick={onClick} className="inline-flex h-[30px] cursor-pointer items-center rounded-[8px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]">
       {children}
     </button>
   ) : (
@@ -199,7 +199,7 @@ export function BarRow({ label, value, sub, widthPct, color, onClick }: { label:
     <div onClick={onClick} className="cursor-pointer">
       <div className="mb-[5px] flex flex-wrap items-baseline gap-2 text-[12px]">
         <span className="font-bold">{label}</span>
-        {sub ? <span className="text-[#94A3B8]">{sub}</span> : null}
+        {sub ? <span className="text-[color:var(--app-text-faintest,#667085)]">{sub}</span> : null}
         <span className="ml-auto font-extrabold tabular-nums">{value}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-[5px] bg-[#F1F3F6]">
@@ -212,11 +212,11 @@ export function BarRow({ label, value, sub, widthPct, color, onClick }: { label:
 export function EmptyState({ icon, title, body }: { icon: string; title: string; body: string }) {
   return (
     <div className="flex flex-col items-center px-6 py-10 text-center">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[11px] bg-[#F1F3F6] text-[#7A8798]">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[11px] bg-[#F1F3F6] text-[color:var(--app-text-faintest,#667085)]">
         <Ico name={icon} size={18} />
       </div>
       <div className="text-[13px] font-extrabold">{title}</div>
-      <div className="mt-1 max-w-[52ch] text-[11.5px] leading-[1.55] text-[#94A3B8]">{body}</div>
+      <div className="mt-1 max-w-[52ch] text-[11.5px] leading-[1.55] text-[color:var(--app-text-faintest,#667085)]">{body}</div>
     </div>
   );
 }

@@ -100,7 +100,7 @@ export class LowStockScanProcessor extends WorkerHost {
       },
     });
     void this.workflowTrigger
-      .dispatch(businessId, event.type, { description })
+      .dispatch(businessId, event.type, { eventId: event.id, description })
       .catch((error: Error) =>
         this.logger.warn(
           `Workflow dispatch failed for low_stock event ${event.id}: ${error.message}`,

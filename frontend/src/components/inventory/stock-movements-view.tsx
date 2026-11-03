@@ -18,6 +18,8 @@ const KIND_LABEL: Record<MovementKind, string> = {
   transfer_in: "Transfer in",
   maintenance: "Maintenance",
   field_service: "Field service",
+  production_consume: "Used in production",
+  production_output: "Produced",
 };
 const KIND_TONE: Record<MovementKind, Tone> = {
   purchase: "green",
@@ -29,6 +31,8 @@ const KIND_TONE: Record<MovementKind, Tone> = {
   transfer_in: "purple",
   maintenance: "blue",
   field_service: "blue",
+  production_consume: "amber",
+  production_output: "green",
 };
 const BAR_COLORS: Record<MovementKind, string> = {
   purchase: "#0E8442",
@@ -40,6 +44,8 @@ const BAR_COLORS: Record<MovementKind, string> = {
   transfer_in: "#7E22CE",
   maintenance: "#175CD3",
   field_service: "#175CD3",
+  production_consume: "#DC6803",
+  production_output: "#067647",
 };
 const RANGE_DAYS: Record<string, number> = { "Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90 };
 
@@ -47,6 +53,7 @@ function referenceFor(row: StockMovementRow): string {
   const raw = row.description;
   if (raw.startsWith("Purchase order")) return raw;
   if (row.kind === "adjustment") return "Stock count";
+  if (row.kind === "production_consume" || row.kind === "production_output") return raw.split(":")[0];
   return "—";
 }
 

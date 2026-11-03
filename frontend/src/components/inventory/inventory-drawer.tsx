@@ -32,6 +32,8 @@ const KIND_TONE: Record<MovementKind, Tone> = {
   transfer_in: "purple",
   maintenance: "blue",
   field_service: "blue",
+  production_consume: "amber",
+  production_output: "green",
 };
 const KIND_LABEL: Record<MovementKind, string> = {
   purchase: "Purchase",
@@ -43,6 +45,8 @@ const KIND_LABEL: Record<MovementKind, string> = {
   transfer_in: "Transfer in",
   maintenance: "Maintenance",
   field_service: "Field service",
+  production_consume: "Used in production",
+  production_output: "Produced",
 };
 
 export function InventoryDrawer() {

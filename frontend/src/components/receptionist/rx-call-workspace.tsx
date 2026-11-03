@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { TOPIC_LABELS, fetchCallContext, fetchRecordingUrl, type CallContext, type EnrichedCall } from "@/lib/voice-calls-api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api-client";
+import { TOPIC_LABELS, fetchCallContext, fetchCallWrapUp, fetchRecordingUrl, submitCallWrapUp, type CallContext, type EnrichedCall, type VoiceCallWrapUpDisposition } from "@/lib/voice-calls-api";
 import { formatCurrency } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import {
@@ -31,6 +32,9 @@ import { CALL_SECTIONS, useRxStore, type CallSection, type PanelRow } from "./rx
 import { useRx } from "./rx-data";
 import { Bullets, NoteBox, RowTable } from "./rx-overlays";
 import { useCallActions } from "./rx-call-actions";
+import { LegalHoldForm, type LegalHoldFields } from "./rx-legal-hold";
+import { redactTranscript } from "@/lib/voice-legal-hold-api";
+import { CallFollowUps } from "./rx-call-follow-ups";
 
 interface SectionData {
   lineage: string;
@@ -61,6 +65,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
   const closeOverlays = useRxStore((s) => s.closeOverlays);
   const setSection = useRxStore((s) => s.setSection);
   const openPanel = useRxStore((s) => s.openPanel);
+  const qc = useQueryClient();
   const notify = useRxStore((s) => s.notify);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(false);
@@ -73,6 +78,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
   const when = fmtWhen(call.startedAt, tz, rx.today, call.localDay);
   const status = statusChip(call);
   const hasTranscript = call.transcript.length > 0;
+  const serviceFailure = [...call.transcript].reverse().find((turn) => turn.serviceFailure)?.serviceFailure;
   const data = sectionFor(section, call, ctx, { tz, money, businessName: rx.insights?.businessName ?? "your business", maxTurns: rx.insights?.limits.maxCallTurns ?? 8, retentionDays: rx.insights?.limits.retentionDays ?? 90, transferConfigured: !!rx.insights?.transferConfigured, customIntents: rx.settings?.customIntents.length ?? 0, holdMessage: !!rx.settings?.queueHoldMessage, shareCatalog: rx.settings?.shareCatalog ?? true, shareOrderStatus: rx.settings?.shareOrderStatus ?? false, shareCreditBalance: rx.settings?.shareCreditBalance ?? false, today: rx.today });
 
   const playRecording = async () => {
@@ -127,6 +133,30 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
     });
 
   const next = nextStep(call);
+  const hold = call as typeof call & LegalHoldFields;
+  const doRedact = async () => {
+    try {
+      const { redactions } = await redactTranscript(call.id);
+      await qc.invalidateQueries({ queryKey: ["rx-insights"] });
+      notify("Transcript redacted", redactions ? `${redactions} personal detail${redactions === 1 ? "" : "s"} replaced. This cannot be undone.` : "No card, ID, phone or email details were found.");
+    } catch (error) {
+      notify("Couldn't redact the transcript", error instanceof Error ? error.message : "Please try again.", "error");
+    }
+  };
+  const openHold = () =>
+    openPanel({
+      kicker: "Legal hold",
+      title: hold.legalHoldAt ? "Release the legal hold?" : "Place this call on legal hold?",
+      badge: hold.legalHoldAt ? `Held since ${fmtDateTime(hold.legalHoldAt, tz)}` : "Not held",
+      badgeTone: hold.legalHoldAt ? "amber" : "neutral",
+      body: <LegalHoldForm callId={call.id} held={!!hold.legalHoldAt} />,
+      bullets: [
+        "While held, nobody can delete the recording or transcript",
+        "The automatic retention purge skips this call",
+        ...(hold.legalHoldReason ? [`Current reason: ${hold.legalHoldReason}`] : []),
+      ],
+      secondary: "Close",
+    });
   const actions: { label: string; icon: string; risky?: boolean; disabled?: boolean; onClick: () => void }[] = [
     { label: "Call back", icon: "phone-outgoing", onClick: doCallBack },
     { label: loadingAudio ? "Loading…" : "Play recording", icon: "play", disabled: !call.hasRecording, onClick: () => void playRecording() },
@@ -142,7 +172,11 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
           { label: "End call", icon: "phone-off", risky: true, onClick: () => ca.endCall(call) },
         ]
       : []),
-    { label: "Delete recording", icon: "trash-2", risky: true, disabled: !call.hasRecording && call.transcript.length === 0, onClick: () => ca.deleteRecording(call) },
+    { label: hold.legalHoldAt ? "Release legal hold" : "Place legal hold", icon: "shield-check", onClick: openHold },
+    ...(!hold.transcriptRedactedAt && call.status !== "in_progress" && call.transcript.length > 0
+      ? [{ label: "Redact transcript", icon: "shield-check", disabled: !!hold.legalHoldAt, onClick: () => void doRedact() }]
+      : []),
+    { label: hold.legalHoldAt ? "Delete blocked · legal hold" : "Delete recording", icon: "trash-2", risky: true, disabled: !!hold.legalHoldAt || (!call.hasRecording && call.transcript.length === 0), onClick: () => ca.deleteRecording(call) },
   ];
 
   return (
@@ -164,7 +198,7 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
             <div className="text-[17px] font-extrabold tracking-[-.015em]" style={{ textWrap: "pretty" }}>
               {callerName(call)}
             </div>
-            <div className="mt-[3px] font-mono text-[11.5px] text-[#7A8798]">
+            <div className="mt-[3px] font-mono text-[11.5px] text-[color:var(--app-text-faintest,#667085)]">
               {call.fromNumber} · {when} · {fmtDuration(call.durationSeconds)} · {rx.insights?.businessName ?? "Your business"}
             </div>
             <div className="mt-[9px] flex flex-wrap items-center gap-[7px]">
@@ -173,21 +207,33 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
               <ChipFor spec={matchChip(call)} h={23} fontSize={10.5} />
               <ChipFor spec={{ label: intentLabel(call), tone: "neutral" }} h={23} fontSize={10.5} />
               <ChipFor spec={outcomeChip(call)} h={23} fontSize={10.5} />
+              {call.quotaRejectedReason ? <ChipFor spec={{ label: call.quotaRejectedReason, tone: "amber", icon: "shield-alert" }} h={23} fontSize={10.5} /> : null}
+              <ChipFor
+                spec={{
+                  label: `Recording consent: ${call.recordingConsentStatus.replaceAll("_", " ")}`,
+                  tone: call.recordingConsentStatus === "granted" ? "green" : call.recordingConsentStatus === "declined" || call.recordingConsentStatus === "not_allowed" ? "amber" : "neutral",
+                }}
+                h={23}
+                fontSize={10.5}
+              />
+              {hold.legalHoldAt ? <ChipFor spec={{ label: "Legal hold", tone: "amber", icon: "shield-check" }} h={23} fontSize={10.5} /> : null}
+              {hold.transcriptRedactedAt ? <ChipFor spec={{ label: "Transcript redacted", tone: "neutral", icon: "shield-check" }} h={23} fontSize={10.5} /> : null}
               {confidenceChip(call.analysis?.confidence ?? null) ? <ChipFor spec={confidenceChip(call.analysis?.confidence ?? null)!} h={23} fontSize={10.5} /> : null}
               {sentimentChip(call.analysis?.sentiment ?? null) ? <ChipFor spec={sentimentChip(call.analysis?.sentiment ?? null)!} h={23} fontSize={10.5} /> : null}
               {call.routedRuleName ? <ChipFor spec={{ label: `Rule: ${call.routedRuleName}`, tone: "blue", icon: "list-ordered" }} h={23} fontSize={10.5} /> : null}
             </div>
           </div>
-          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
+          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] flex-none cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[color:var(--app-text-faintest,#667085)] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
             <Ico name="x" size={16} strokeWidth={2.25} />
           </button>
         </div>
 
+        <CallFollowUps callId={call.id} />
         {/* summary */}
         <div className="border-b border-[#EEF0F3] bg-[#FAFBFC] px-5 py-3.5">
           <div className="flex flex-wrap items-center gap-[9px]">
             <Ico name="audio-lines" size={15} className="text-[#45505F]" />
-            <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]">Call summary</div>
+            <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]">Call summary</div>
             <div className="ml-auto flex flex-wrap gap-[7px]">
               <button
                 type="button"
@@ -208,6 +254,8 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
           <div className="mt-[9px] text-[12.5px] leading-[1.6] text-[#0F172A]" style={{ textWrap: "pretty" }}>
             {call.summary ? (
               call.summary
+            ) : call.quotaRejectedReason ? (
+              `${call.quotaRejectedReason} The call skipped AI and IVR handling. No caller audio was recorded; the team can still follow up.`
             ) : missed ? (
               `Missed call from ${call.fromNumber} at ${fmtClock(call.startedAt, tz)}. It was never answered, so there is no transcript or recording, and Noxtill doesn't guess why they rang.`
             ) : hasTranscript ? (
@@ -230,8 +278,16 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
               "This call has no transcript, so there is nothing to summarise."
             )}
           </div>
-          {call.summary ? <div className="mt-1.5 text-[10.5px] text-[#94A3B8]">Written by AI from the transcript alone{call.summaryGeneratedAt ? ` · ${fmtDateTime(call.summaryGeneratedAt, tz)}` : ""}</div> : null}
+          {call.summary ? <div className="mt-1.5 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">Written by AI from the transcript alone{call.summaryGeneratedAt ? ` · ${fmtDateTime(call.summaryGeneratedAt, tz)}` : ""}</div> : null}
         </div>
+
+        {serviceFailure ? (
+          <div role="status" className="border-b border-[#EEF0F3] bg-[#FFFBEB] px-5 py-3 text-[12px] leading-[1.6] text-[#92400E]">
+            <div className="font-bold">{serviceFailure.stage === "ai_reply" ? "AI reply unavailable" : "Speech transcription unavailable"}</div>
+            <div>{serviceFailure.message}</div>
+            <div className="mt-1 text-[10.5px]">Recorded service issue · {serviceFailure.code}</div>
+          </div>
+        ) : null}
 
         {/* what should I do */}
         <div className="border-b border-[#EEF0F3] bg-[#FBFAFF] px-5 py-3.5">
@@ -254,14 +310,14 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
             <button
               type="button"
               onClick={next.actionable ? doCallBack : () => setSection("Summary")}
-              className="flex h-8 cursor-pointer items-center rounded-[9px] border-0 bg-[#16A34A] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D]"
+              className="flex h-8 cursor-pointer items-center rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[12.5px] font-bold text-white hover:bg-[#15803D]"
             >
               {next.actionable ? "Take action" : "Open call"}
             </button>
             <button type="button" onClick={openTrace} className="flex h-8 cursor-pointer items-center rounded-[9px] border border-[#D5DAE2] bg-white px-3 text-[12.5px] font-bold text-[#45505F] hover:bg-[#F1F3F6]">
               Answer trace
             </button>
-            <div className="ml-auto text-[10.5px] text-[#94A3B8]">{next.evidence}</div>
+            <div className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{next.evidence}</div>
           </div>
         </div>
 
@@ -297,15 +353,15 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
                   <div className="min-w-0 flex-1 text-[12.5px] leading-[1.55] text-[#0F172A]" style={{ textWrap: "pretty" }}>
                     {t.text}
                   </div>
-                  <div className="flex-none font-mono text-[10px] text-[#94A3B8]">{t.time}</div>
+                  <div className="flex-none font-mono text-[10px] text-[color:var(--app-text-faintest,#667085)]">{t.time}</div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="flex-none overflow-hidden rounded-[12px] border border-[#E6E8EC]">
               <div className="flex items-center gap-[9px] border-b border-[#EEF0F3] bg-[#FAFBFC] px-[13px] py-[11px]">
-                <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[#7A8798]">{section}</div>
-                <div className="ml-auto text-[10.5px] text-[#94A3B8]">{data.lineage}</div>
+                <div className="text-[11px] font-bold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]">{section}</div>
+                <div className="ml-auto text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">{data.lineage}</div>
               </div>
               <RowTable rows={data.rows} />
             </div>
@@ -313,6 +369,8 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
           <Bullets title={data.title} items={data.bullets} />
           <NoteBox>{data.note}</NoteBox>
         </div>
+
+        <CallWrapUpPanel call={call} />
 
         {/* actions */}
         <div className="flex gap-[7px] overflow-x-auto border-t border-[#EEF0F3] bg-[#FCFCFD] py-3 pl-5 pr-[76px]">
@@ -335,9 +393,127 @@ function Workspace({ call, section }: { call: EnrichedCall; section: CallSection
   );
 }
 
+function CallWrapUpPanel({ call }: { call: EnrichedCall }) {
+  const queryClient = useQueryClient();
+  const rx = useRx();
+  const notify = useRxStore((s) => s.notify);
+  const wrapUpQuery = useQuery({
+    queryKey: ["rx-call-wrap-up", call.id],
+    queryFn: () => fetchCallWrapUp(call.id),
+    enabled: call.status !== "in_progress",
+    staleTime: 30_000,
+  });
+  const [disposition, setDisposition] = useState<VoiceCallWrapUpDisposition | "">("");
+  const [tagsText, setTagsText] = useState("");
+  const [notes, setNotes] = useState("");
+  const submit = useMutation({
+    mutationFn: () => {
+      if (!disposition) throw new Error("Choose a disposition first");
+      return submitCallWrapUp(call.id, {
+        disposition,
+        tags: tagsText.split(",").map((tag) => tag.trim()).filter(Boolean),
+        notes: notes.trim() || undefined,
+      });
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData(["rx-call-wrap-up", call.id], result);
+      notify("After-call wrap-up saved", "It is attached to this call and cannot be submitted twice.");
+      await queryClient.invalidateQueries({ queryKey: ["rx-call-context", call.id] });
+    },
+    onError: (error) => notify(
+      "Could not save the wrap-up",
+      error instanceof ApiError || error instanceof Error ? error.message : "Please try again.",
+      "error",
+    ),
+  });
+
+  if (call.status === "in_progress") return null;
+
+  return (
+    <section className="border-t border-[#EEF0F3] bg-[#FCFCFD] px-5 py-4" aria-label="After-call wrap-up">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-[12px] font-extrabold text-[#0F172A]">After-call wrap-up</h3>
+          <p className="mt-1 text-[11px] text-[color:var(--app-text-faintest,#667085)]">A final operator disposition, separate from what the AI classified.</p>
+        </div>
+        {wrapUpQuery.data ? <ChipFor spec={{ label: "Submitted", tone: "green" }} h={22} fontSize={10} /> : null}
+      </div>
+
+      {wrapUpQuery.isPending ? <p className="mt-3 text-[11px] text-[color:var(--app-text-faintest,#667085)]">Checking this call’s wrap-up…</p> : null}
+      {wrapUpQuery.isError ? <p role="alert" className="mt-3 text-[11px] text-[#B42318]">Wrap-up status could not be loaded.</p> : null}
+      {wrapUpQuery.data ? (
+        <div className="mt-3 rounded-[10px] border border-[#BBF0CB] bg-white p-3 text-[11px] text-[#334155]">
+          <div className="font-bold">{wrapUpQuery.data.disposition.replaceAll("_", " ")}</div>
+          {wrapUpQuery.data.tags.length ? <div className="mt-1">Tags: {wrapUpQuery.data.tags.join(" · ")}</div> : null}
+          {wrapUpQuery.data.notes ? <p className="mt-1 whitespace-pre-wrap">{wrapUpQuery.data.notes}</p> : null}
+          <div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">Saved {fmtDateTime(wrapUpQuery.data.createdAt, rx.timezone)}</div>
+        </div>
+      ) : null}
+      {!wrapUpQuery.isPending && !wrapUpQuery.isError && !wrapUpQuery.data ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="text-[10.5px] font-bold text-[#5B6675]">Disposition
+            <select
+              aria-label="Call disposition"
+              className="mt-1 h-[34px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2 text-[11px] text-[#0F172A]"
+              value={disposition}
+              onChange={(event) => setDisposition(event.target.value as VoiceCallWrapUpDisposition | "")}
+              disabled={submit.isPending}
+            >
+              <option value="">Choose one</option>
+              <option value="resolved">Resolved</option>
+              <option value="callback_requested">Callback requested</option>
+              <option value="booked">Booking completed</option>
+              <option value="escalated">Escalated</option>
+              <option value="not_interested">Not interested</option>
+              <option value="wrong_number">Wrong number</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label className="text-[10.5px] font-bold text-[#5B6675]">Tags
+            <input
+              aria-label="Call wrap-up tags"
+              className="mt-1 h-[34px] w-full rounded-[8px] border border-[#D5DAE2] bg-white px-2 text-[11px] text-[#0F172A]"
+              placeholder="Comma-separated"
+              maxLength={400}
+              value={tagsText}
+              onChange={(event) => setTagsText(event.target.value)}
+              disabled={submit.isPending}
+            />
+          </label>
+          <label className="text-[10.5px] font-bold text-[#5B6675] sm:col-span-2">Operator notes
+            <textarea
+              aria-label="Call wrap-up notes"
+              className="mt-1 min-h-[68px] w-full resize-y rounded-[8px] border border-[#D5DAE2] bg-white p-2 text-[11px] text-[#0F172A]"
+              maxLength={2000}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              disabled={submit.isPending}
+            />
+          </label>
+          <div className="flex items-center justify-between gap-3 sm:col-span-2">
+            <span className="text-[10px] text-[color:var(--app-text-faintest,#667085)]">Submit once after the call ends; this does not change the AI outcome.</span>
+            <button
+              type="button"
+              onClick={() => submit.mutate()}
+              disabled={!disposition || submit.isPending}
+              className="h-[32px] rounded-[8px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submit.isPending ? "Saving…" : "Submit wrap-up"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 /* ─────────────────────────────── next step (rule-based, from the record) ─────────────────────────────── */
 
 function nextStep(c: EnrichedCall): { title: string; why: string; evidence: string; actionable: boolean } {
+  if (c.appointment?.status === "requested")
+    return { title: "Review the booking request — it is not confirmed.", why: "Staff must review the request, assign eligible staff and arrange any required deposit in Bookings.", evidence: "Based on the requested booking status", actionable: true };
+  if (c.appointment?.status === "cancelled")
+    return { title: "The booking was cancelled.", why: "Check the Bookings record before arranging another time with the caller.", evidence: "Based on the booking status", actionable: true };
   if (c.status === "missed" && !c.resolvedAt)
     return { title: "Call back — this call was never answered.", why: "There is no transcript or recording, and Noxtill doesn't guess why they rang. The number and the time are all that is known.", evidence: "Based on the call status", actionable: true };
   if (needsFollowUp(c)) {
@@ -345,7 +521,7 @@ function nextStep(c: EnrichedCall): { title: string; why: string; evidence: stri
     return { title: c.outcome === "custom" ? `Follow up — matched “${c.customIntentName}”.` : "Return this caller's message.", why: said ? `They said: “${said}”` : "They asked for a callback.", evidence: "Based on the transcript", actionable: true };
   }
   if (c.outcome === "transfer") return { title: "Review the transfer — the AI handed this call to a person.", why: "The AI chose to transfer. Whether the person answered isn't recorded, so check that the caller was helped.", evidence: "Based on the call outcome", actionable: false };
-  if (c.outcome === "booking" && c.appointment) return { title: "No action needed — a booking was created.", why: `${c.appointment.serviceName}${c.appointment.staffName ? ` with ${c.appointment.staffName}` : ""} — it now lives in Bookings.`, evidence: "Based on the booking record", actionable: false };
+  if (c.outcome === "booking" && c.appointment) return { title: c.appointment.status === "no_show" ? "Review the missed appointment." : "A booking exists — check its current status below.", why: `${c.appointment.serviceName}${c.appointment.staffName ? ` with ${c.appointment.staffName}` : ""} — status: ${c.appointment.status.replace("_", " ")}.`, evidence: "Based on the booking record", actionable: c.appointment.status === "no_show" };
   if (c.status === "in_progress") return { title: "This call is live right now.", why: "Open Live Calls to listen in or take over.", evidence: "Based on the call status", actionable: false };
   return { title: "No action needed.", why: c.resolvedAt ? "This follow-up has been marked handled." : "The call completed and nothing was left waiting for a person.", evidence: "Based on the call record", actionable: false };
 }
@@ -370,6 +546,9 @@ interface Helpers {
 const AUDIT_LABELS: Record<string, string> = {
   "call.recording_played": "Played the recording",
   "call.recording_deleted": "Deleted the recording and transcript",
+  "call.legal_hold_placed": "Placed a legal hold",
+  "call.legal_hold_released": "Released the legal hold",
+  "call.transcript_redacted": "Redacted personal details from the transcript",
   "call.note_added": "Added a note",
   "call.assigned": "Changed the follow-up owner",
   "call.summary_generated": "Wrote an AI summary",
@@ -378,6 +557,7 @@ const AUDIT_LABELS: Record<string, string> = {
   "call.listened_in": "Listened in live",
   "call.taken_over": "Took over the call",
   "call.transferred_by_staff": "Transferred the call to a person",
+  "call.transfer_requested_by_staff": "Requested a transfer to a person",
   "call.ended_by_staff": "Ended the call",
 };
 
@@ -428,14 +608,14 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           ]
         : turns.length
           ? turns
-          : [{ speaker: "System", text: c.recordingDeletedAt ? `The transcript was deleted on ${fmtDateTime(c.recordingDeletedAt, h.tz)}.` : "This call has no transcript.", time: "—" }];
+          : [{ speaker: "System", text: c.recordingDeletedAt ? `The transcript was deleted on ${fmtDateTime(c.recordingDeletedAt, h.tz)}.` : c.recordingConsentStatus === "declined" ? "The caller declined recording; no caller audio or transcript was kept." : c.recordingConsentStatus === "no_response" ? "No consent response was received; no caller audio or transcript was kept." : c.recordingConsentStatus === "not_allowed" || c.recordingConsentStatus === "not_configured" ? "Recording was not allowed or configured for this call; no caller audio was captured." : c.recordingConsentStatus === "pending" ? "Waiting for the caller's choice; no caller audio has been captured." : "This call has no transcript.", time: "—" }];
       if (c.joinedAt) out.push({ speaker: "System", text: `${c.joinedByName ?? "A staff member"} joined the call live.`, time: offset(c.joinedAt, c.startedAt) });
       return {
         lineage: missed ? "No transcript exists" : "Speaker-separated, timed from the start of the call",
         rows: [],
         transcript: out,
         title: "What a transcript shows",
-        bullets: ["Caller speech and the AI's spoken replies, timed from the start of the call", "It never shows private model reasoning — only what was said", missed ? "For a missed call there is no speech to show" : "The AI opens every call with the recording and automated-assistant disclosure, which is not part of the transcript"],
+        bullets: ["Caller speech and the AI's spoken replies, timed from the start of the call", "It never shows private model reasoning — only what was said", missed ? "For a missed call there is no speech to show" : "The assistant identifies itself as automated; recording notices are policy-specific and caller audio is captured only after consent"],
         note: "The AI identifies itself as an automated assistant rather than implying it is a person.",
       };
     }
@@ -503,7 +683,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           row("Marked handled", c.resolvedAt ? fmtDateTime(c.resolvedAt, h.tz) : "No"),
           row("Assigned to", c.assignedToName ?? "Unassigned", c.assignedToName ? undefined : "muted"),
           row("Staff joined live", c.joinedByName ? `${c.joinedByName}${c.joinedAt ? ` · ${fmtClock(c.joinedAt, h.tz)}` : ""}` : "No"),
-          row("Message to caller", missed ? "Missed-call message attempted automatically · delivery not recorded" : "None", missed ? "muted" : undefined),
+          row("Message to caller", missed ? "See Missed Calls for the send outcome and provider delivery status" : "None", missed ? "muted" : undefined),
         ],
         title: "What the AI is able to write",
         bullets: ["Bookings (through the booking engine), messages left for follow-up, and a transfer", "It can read your records but cannot refund, change credit, adjust stock, change a price or alter permissions — it has no way to write to any of those", "Every write is attached to this call"],
@@ -520,7 +700,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
               row("Created by", "AI receptionist · phone"),
             ],
             title: "How it was created",
-            bullets: ["The AI passes the service and time to the booking engine, which rejects a time that isn't free", "The booking lives in Bookings — this is a reference to it", "A failed attempt isn't logged on the call, so it doesn't appear here"],
+            bullets: ["The AI passes the service and time to the booking engine, which rejects a time that isn't free", "The booking lives in Bookings — this is a reference to it", "Failed booking attempts are saved on the call and listed separately in Bookings from Calls"],
             note: "Bookings owns the record; changes made there are reflected here.",
           }
         : {
@@ -542,7 +722,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
         ],
         title: gave ? "What the AI was shown" : "Nothing to show",
         bullets: [
-          "The AI can read a caller's own most recent order — status and total — but only when sharing is on and the calling number exactly matches a saved customer",
+          "Recorded-turn order replies require enabled sharing, a matching caller number and a valid private booking-management reference; matching a phone number alone never verifies identity",
           h.shareOrderStatus ? "Sharing is on, and it only looks when the caller mentions an order" : "Sharing is off, so the AI is never shown an order — turn it on in Assistant → Records the AI may read",
           "It cannot change an order, promise a delivery date or refund one",
         ],
@@ -602,7 +782,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           ...(ctx?.notes ?? []).map((n) => row(`${n.authorName ?? "Someone"} · ${fmtDateTime(n.createdAt, h.tz)}`, n.body)),
         ],
         title: "What sends automatically",
-        bullets: ["A missed call triggers a message to the caller on your preferred messaging channel — delivery isn't recorded here", "Nothing else is sent to the caller automatically", "The follow-up stays in the queue until someone marks it handled", "Notes are for your team only; add one from the action bar"],
+        bullets: ["Missed-call messages depend on the business's text-back policy and contact eligibility — see Missed Calls for the send outcome and provider delivery status", "Nothing else is sent to the caller automatically", "The follow-up stays in the queue until someone marks it handled", "Notes are for your team only; add one from the action bar"],
         note: "The AI never messages a customer on a channel you haven't connected.",
       };
 
@@ -613,10 +793,10 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
           row("Handled by", handlerChip(c.handledBy).label), row("Recorded intent", intentLabel(c)), row("Confidence", confText, conf ? undefined : "muted"), row("Answers declined", String(a?.declinedCount ?? 0), a?.declinedCount ? "neg" : undefined),
           row("Routing rule applied", c.routedRuleName ?? "None", c.routedRuleName ? undefined : "muted"),
           row("Escalation", c.outcome === "transfer" ? (c.routedRuleName ? "A rule of yours transferred it" : "AI chose to transfer") : "Not triggered"), row("Length cap", `${h.maxTurns} spoken lines, then it arranges a callback`),
-          row("Transfer number", h.transferConfigured ? "Configured" : "Not configured — a transfer request is recorded as a message", h.transferConfigured ? "pos" : "neg"),
+          row("Transfer number", h.transferConfigured ? "Configured" : "No fixed number — eligible staff may be rung for AI handoffs; otherwise a follow-up is queued; audio needs consent", h.transferConfigured ? "pos" : "neg"),
         ],
         title: "The rules that applied",
-        bullets: ["Every call opens with the recording and automated-assistant disclosure — it cannot be switched off", `A conversation is capped at ${h.maxTurns} spoken lines (caller and AI combined); then the AI says someone will call back and the call is recorded as a message`, "Your routing rules are checked on every turn and override the AI's own choice", "A booking goes through the booking engine, so a time that isn't free is rejected", "The AI can read some records but has no access to change refunds, credit, stock, prices or permissions"],
+        bullets: ["Every call identifies the assistant as automated; a regional policy notice asks for recording consent before audio is captured", `A consented conversation is capped at ${h.maxTurns} spoken lines (caller and AI combined); then the AI arranges a callback`, "Your routing rules are checked on every turn and override the AI's own choice", "A booking goes through the booking engine, so a time that isn't free is rejected", "The AI can read some records but has no access to change refunds, credit, stock, prices or permissions"],
         note: "Every one of these boundaries is fixed behaviour you can read, not a claim you have to trust.",
       };
 
@@ -626,7 +806,7 @@ function sectionFor(name: CallSection, c: EnrichedCall, ctx: CallContext | undef
         lineage: "The append-only audit trail",
         rows: [
           row("Call recorded", c.recordingDeletedAt ? "Deleted" : c.hasRecording ? "Yes" : "No", c.hasRecording ? undefined : "muted"),
-          row("Recording kept for", `${h.retentionDays} days, then deleted automatically`),
+          row("Recording kept for", `${c.recordingRetentionDays ?? h.retentionDays} days, then deleted automatically`),
           ...(c.recordingDeletedAt ? [row("Recording deleted", fmtDateTime(c.recordingDeletedAt, h.tz), "neg")] : []),
           row("Customer matched", c.customer ? "Yes · saved phone number" : "No match found"), row("Staff joined", c.joinedByName ?? "No"),
           row("Assigned to", c.assignedToName ?? "—"), row("Marked handled", c.resolvedAt ? fmtDateTime(c.resolvedAt, h.tz) : "No"),

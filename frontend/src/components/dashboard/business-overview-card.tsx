@@ -21,11 +21,23 @@ const OVERLAY_LABEL: Record<Overlay, string> = { orders: "Orders", bookings: "Bo
  * Bookings from the new /analytics/bookings-series. Orders/Bookings are drawn on their own
  * independently-normalized scale (each line spans the chart on its own real min/max) since their
  * units (counts) have nothing to do with Sales' currency scale — the left axis stays Sales-only. */
-export function BusinessOverviewCard({ currency }: { currency: string }) {
+export function BusinessOverviewCard({
+  currency,
+  ordersEnabled,
+  bookingsEnabled,
+}: {
+  currency: string;
+  ordersEnabled: boolean;
+  bookingsEnabled: boolean;
+}) {
   const [mode, setMode] = useState<Mode>("trend");
   const [range, setRange] = useState<Range>(30);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [overlays, setOverlays] = useState<Set<Overlay>>(new Set(["orders", "bookings"]));
+  const availableOverlays: Overlay[] = [
+    ...(ordersEnabled ? ["orders" as const] : []),
+    ...(bookingsEnabled ? ["bookings" as const] : []),
+  ];
 
   const { data: series, isPending: seriesPending } = useQuery({
     queryKey: ["revenue-series", range],
@@ -35,7 +47,7 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
   const { data: bookingsSeries } = useQuery({
     queryKey: ["bookings-series", range],
     queryFn: () => fetchBookingsSeries(range),
-    enabled: mode === "trend",
+    enabled: mode === "trend" && bookingsEnabled,
   });
   const { data: hourly, isPending: hourlyPending } = useQuery({
     queryKey: ["profit-by-time"],
@@ -96,6 +108,16 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
 
   const total = series?.reduce((sum, d) => sum + d.revenue, 0) ?? 0;
   const isPending = mode === "trend" ? seriesPending : hourlyPending;
+  const hoverDetails = hoverIdx === null || !chart
+    ? []
+    : [
+        ordersEnabled && overlays.has("orders")
+          ? `${formatNumber(chart.ordersValues[hoverIdx])} order(s)`
+          : null,
+        bookingsEnabled && overlays.has("bookings")
+          ? `${formatNumber(chart.bookingsValues[hoverIdx])} booking(s)`
+          : null,
+      ].filter((detail): detail is string => detail !== null);
 
   return (
     <div className="rounded-[14px] p-[18px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}>
@@ -125,7 +147,7 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
           Sales ({currency})
         </span>
         {mode === "trend" &&
-          (["orders", "bookings"] as Overlay[]).map((key) => (
+          availableOverlays.map((key) => (
             <button
               key={key}
               type="button"
@@ -164,10 +186,10 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
               </g>
             ))}
             <path d={chart.area} fill="var(--app-primary)" opacity={0.1} />
-            {overlays.has("orders") && (
+            {ordersEnabled && overlays.has("orders") && (
               <path d={chart.ordersLine} fill="none" stroke={OVERLAY_COLOR.orders} strokeWidth={1.6} strokeDasharray="4 3" strokeLinejoin="round" opacity={0.85} />
             )}
-            {overlays.has("bookings") && (
+            {bookingsEnabled && overlays.has("bookings") && (
               <path d={chart.bookingsLine} fill="none" stroke={OVERLAY_COLOR.bookings} strokeWidth={1.6} strokeDasharray="4 3" strokeLinejoin="round" opacity={0.85} />
             )}
             <path d={chart.line} fill="none" stroke="var(--app-primary)" strokeWidth={2} strokeLinejoin="round" />
@@ -192,9 +214,11 @@ export function BusinessOverviewCard({ currency }: { currency: string }) {
                 <text x={Math.min(chart.W - 70, Math.max(70, chart.pts[hoverIdx].x))} y={26} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="var(--app-text)">
                   {formatCurrency(series[hoverIdx].revenue, currency)}
                 </text>
-                <text x={Math.min(chart.W - 70, Math.max(70, chart.pts[hoverIdx].x))} y={40} textAnchor="middle" fontSize={10} fontWeight={600} fill="var(--app-text-faint)">
-                  {formatNumber(chart.ordersValues[hoverIdx])} order(s) · {formatNumber(chart.bookingsValues[hoverIdx])} booking(s)
-                </text>
+                {hoverDetails.length > 0 && (
+                  <text x={Math.min(chart.W - 70, Math.max(70, chart.pts[hoverIdx].x))} y={40} textAnchor="middle" fontSize={10} fontWeight={600} fill="var(--app-text-faint)">
+                    {hoverDetails.join(" · ")}
+                  </text>
+                )}
               </>
             )}
           </svg>

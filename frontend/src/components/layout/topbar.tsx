@@ -11,6 +11,7 @@ import { NAV_ITEMS } from "@/lib/nav-items";
 import type { Session } from "@/lib/session";
 import { useTranslation } from "@/hooks/use-translation";
 import { useModuleHeaderContent } from "./module-header-context";
+import { useDisabledModules } from "./module-gate";
 
 /** Page title matches whichever top-level nav item owns the current route (design's `<h1>Dashboard</h1>`
  * pattern) — falls back to the business name for routes with no sidebar entry (e.g. /settings/*). */
@@ -28,6 +29,7 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   const firstName = session.user.name.split(" ")[0];
   const moduleHeader = useModuleHeaderContent();
+  const disabledModules = useDisabledModules();
   const isCustom = moduleHeader.title !== undefined;
 
   return (
@@ -78,7 +80,7 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
           </>
         ) : (
           <>
-            <Link
+            {!disabledModules.has("sales") && <Link
               href="/sales"
               aria-label="Quick add"
               className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-white transition-colors"
@@ -87,16 +89,16 @@ export function Topbar({ session, onMenuClick }: { session: Session; onMenuClick
               onMouseLeave={(e) => (e.currentTarget.style.background = "var(--app-primary)")}
             >
               <Plus className="h-4 w-4" aria-hidden />
-            </Link>
+            </Link>}
 
-            <Link
+            {!disabledModules.has("social") && <Link
               href="/social/inbox"
               aria-label="Messages"
               className="hidden h-[34px] w-[34px] items-center justify-center rounded-[9px] sm:flex"
               style={{ border: "1px solid var(--app-border)", color: "var(--app-text-faint)" }}
             >
               <Mail className="h-4 w-4" aria-hidden />
-            </Link>
+            </Link>}
 
             <DataStatusPill />
           </>

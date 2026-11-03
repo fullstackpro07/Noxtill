@@ -2,6 +2,8 @@ import { apiFetch } from "@/lib/api-client";
 
 export interface AiFeatureToggles {
   voiceEntry: boolean;
+  voiceQualityAssist: boolean;
+  voiceMeetingSummary: boolean;
   photoDigitizer: boolean;
   reviewReplies: boolean;
   campaignCopy: boolean;
@@ -9,6 +11,7 @@ export interface AiFeatureToggles {
   whatIf: boolean;
   assistant: boolean;
   inboxReplies: boolean;
+  workflowAgents: boolean;
 }
 
 export interface AiFeatureUsage {

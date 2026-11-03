@@ -142,6 +142,10 @@ function Queue() {
   const maxTurns = rx.insights?.limits.maxCallTurns ?? 8;
 
   const followUps = rx.followUps;
+  const queueItemsById = useMemo(
+    () => new Map((rx.queue?.items ?? []).map((item) => [item.id, item])),
+    [rx.queue?.items],
+  );
   const oldest = followUps[0];
   const unassigned = followUps.filter((c) => !c.assignedToUserId);
   const offered = followUps.filter((c) => c.callbackRequestedAt);
@@ -178,7 +182,7 @@ function Queue() {
             bullets: [
               "Rules are checked top to bottom on every thing the caller says; the first one that matches decides the call",
               "A rule overrides what the AI itself would have done that turn",
-              r.action === "transfer" ? (needsNumber ? "There is no number to ring yet — add one to this rule or set your transfer number in Settings, otherwise the call is recorded as a message" : "The caller is put through to the number shown") : "The call ends and joins the follow-up queue",
+              r.action === "transfer" ? (needsNumber ? "There is no number to ring yet — add one to this rule or set your transfer number in Settings; otherwise follow-up is queued and audio is saved only with consent" : "The caller is put through to the number shown") : "The call ends and joins the follow-up queue",
               "The call is recorded against this rule's name, so you can always see which rule fired",
             ],
             note: r.triggerKind === "sentiment" || r.triggerKind === "topic" || r.triggerKind === "low_confidence" ? "This trigger uses the AI's own reading of the call, which is an estimate — not a certainty." : "Changes apply from the very next call.",
@@ -188,7 +192,7 @@ function Queue() {
       // 3. Built-in handling — fixed.
       {
         when: "Caller asks for a person, or the AI can't help",
-        then: transferOk ? "Dial the transfer number" : "Tell the caller a message is noted, and record it as a message",
+        then: transferOk ? "Dial the transfer number" : "Queue a follow-up; record audio only if the caller consented",
         scope: "All calls",
         status: transferOk ? "Built-in" : "Needs a transfer number",
         tone: transferOk ? "neutral" : "amber",
@@ -196,7 +200,7 @@ function Queue() {
         source: "builtin",
         panel: {
           canAi: "Yes — the AI decides",
-          bullets: ["The AI chooses “transfer” when the caller asks for a person or it cannot help", transferOk ? "It then rings your transfer number" : "No transfer number is set, so the AI tells the caller their message is noted and the call is recorded as a message in the follow-up queue — set one in Settings to enable real transfers", "The transfer is recorded on the call as the outcome"],
+          bullets: ["The AI chooses “transfer” when the caller asks for a person or it cannot help", transferOk ? "It then rings your transfer number" : "No transfer number is set, so a follow-up is queued; caller audio is not kept unless recording consent was granted", "The transfer is recorded on the call as the outcome"],
           note: "Routing decisions are recorded per call, so you can see which rule fired.",
         },
       },
@@ -218,7 +222,7 @@ function Queue() {
         tone: "neutral",
         calls: t.calls.filter((c) => c.outcome === "message" && !c.routedRuleId).length,
         source: "builtin",
-        panel: { canAi: "Yes", bullets: ["The call joins the follow-up queue until someone marks it handled", "If you've set a hold message, the AI phrases its reply around it", "The transcript is kept so whoever calls back has the context"], note: "Nothing is promised to the caller beyond a callback." },
+        panel: { canAi: "Yes", bullets: ["The call joins the follow-up queue until someone marks it handled", "If you've set a hold message, the AI phrases its reply around it", "Caller audio and transcript are retained only if recording consent was granted; otherwise the call log has no caller transcript"], note: "Nothing is promised to the caller beyond a callback." },
       },
       {
         when: "Conversation ends naturally",
@@ -232,13 +236,13 @@ function Queue() {
       },
       {
         when: "Anything else",
-        then: `Keep talking — after ${maxTurns} spoken lines, arrange a callback and record a message`,
+        then: `Keep talking — after ${maxTurns} consented conversation lines, arrange a callback`,
         scope: "All calls",
         status: "Built-in",
         tone: "neutral",
         calls: t.calls.filter((c) => c.transcript.length >= maxTurns).length,
         source: "builtin",
-        panel: { canAi: "Yes", bullets: [`A conversation is capped at ${maxTurns} spoken lines (caller and AI combined) so a runaway call still ends`, "At the cap the AI says someone will call back, and the call is recorded as a message so it reaches the follow-up queue"], note: "The count is calls today that reached the cap." },
+        panel: { canAi: "Yes", bullets: [`A consented conversation is capped at ${maxTurns} spoken lines (caller and AI combined) so a runaway call still ends`, "At the cap the AI arranges a callback; caller audio is retained only when consent was granted"], note: "The count is calls today that reached the cap." },
       },
     ];
     return list.map((r, i) => ({ ...r, order: i + 1 }));
@@ -331,7 +335,7 @@ function Queue() {
       <Card pad={18}>
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="text-[14px] font-extrabold">Routing flow</div>
-          <div className="ml-auto text-[11px] text-[#94A3B8]">What happens to every call, in order</div>
+          <div className="ml-auto text-[11px] text-[color:var(--app-text-faintest,#667085)]">What happens to every call, in order</div>
         </div>
         <div className="mt-[15px] flex flex-wrap items-center gap-2">
           {FLOW.map(([label, icon], i) => (
@@ -347,6 +351,9 @@ function Queue() {
             </button>
           ))}
         </div>
+        <div className="mt-3 rounded-[10px] border border-[#E6E8EC] bg-[#FCFCFD] px-3 py-2.5 text-[11.5px] leading-5 text-[#667085]">
+          Inbound calls use the configured AI or IVR path. When a caller needs a person, routing tries an available human; if nobody can take it, the call becomes a human follow-up. This queue is for follow-up work, not callers waiting live on hold.
+        </div>
       </Card>
 
       <Card overflow>
@@ -358,7 +365,7 @@ function Queue() {
               <button type="button" onClick={addSituation} className="flex h-8 cursor-pointer items-center rounded-[9px] border border-[#D5DAE2] bg-white px-[11px] text-[12px] font-bold hover:bg-[#F1F3F6]">
                 Add situation
               </button>
-              <button type="button" onClick={addRule} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-[9px] border-0 bg-[#16A34A] px-[11px] text-[12px] font-bold text-white hover:bg-[#15803D]">
+              <button type="button" onClick={addRule} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-[9px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-[11px] text-[12px] font-bold text-white hover:bg-[#15803D]">
                 <Ico name="plus" size={13} strokeWidth={2.25} />
                 Add rule
               </button>
@@ -384,7 +391,7 @@ function Queue() {
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#F1F3F6] text-[11px] font-extrabold text-[#45505F]">{r.order}</span>
               </td>
               <td className="px-3 py-[11px] text-[12px] font-bold">
-                {r.rule ? <div className="text-[10.5px] font-semibold text-[#7A8798]">{r.rule.name}</div> : null}
+                {r.rule ? <div className="text-[10.5px] font-semibold text-[color:var(--app-text-faintest,#667085)]">{r.rule.name}</div> : null}
                 {r.when}
               </td>
               <td className="px-3 py-[11px] text-[11.5px] text-[#45505F]">{r.then}</td>
@@ -404,26 +411,40 @@ function Queue() {
           title="Awaiting follow-up"
           sub={est != null ? `Calls like these have typically been handled in about ${est} min` : "No estimate yet — it needs a few handled calls to average"}
           right={
-            followUps.length > 0 ? (
-              <button
-                type="button"
-                onClick={() =>
-                  openConfirm({
-                    title: `Mark all ${followUps.length} as handled?`,
-                    tone: "amber",
-                    icon: "circle-check",
-                    body: "Every waiting call leaves the queue and is marked handled. The calls, transcripts and recordings stay in Call History.",
-                    rows: [{ label: "Calls affected", value: String(followUps.length) }],
-                    primary: "Mark all handled",
-                    cancel: "Keep them",
-                    onConfirm: () => rx.actions.clearQueue(),
-                  })
-                }
-                className="flex h-[30px] cursor-pointer items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold hover:bg-[#F1F3F6]"
-              >
-                Clear queue
-              </button>
-            ) : undefined
+            <div className="flex items-center gap-2">
+              {rx.queue?.queueId ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const callId = await rx.actions.takeNext(rx.queue!.queueId!);
+                    if (callId) openCall(callId);
+                  }}
+                  className="flex h-[30px] cursor-pointer items-center rounded-[8px] border-0 bg-[color:var(--app-primary-hover,#0e8442)] px-2.5 text-[12px] font-bold text-white hover:bg-[#15803D]"
+                >
+                  Take next
+                </button>
+              ) : null}
+              {followUps.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openConfirm({
+                      title: `Mark all ${followUps.length} as handled?`,
+                      tone: "amber",
+                      icon: "circle-check",
+                      body: "Every waiting call leaves the queue and is marked handled. The calls, transcripts and recordings stay in Call History.",
+                      rows: [{ label: "Calls affected", value: String(followUps.length) }],
+                      primary: "Mark all handled",
+                      cancel: "Keep them",
+                      onConfirm: () => rx.actions.clearQueue(),
+                    })
+                  }
+                  className="flex h-[30px] cursor-pointer items-center rounded-[8px] border border-[#D5DAE2] bg-white px-2.5 text-[12px] font-bold hover:bg-[#F1F3F6]"
+                >
+                  Clear queue
+                </button>
+              ) : null}
+            </div>
           }
         />
         {followUps.length === 0 ? (
@@ -431,22 +452,26 @@ function Queue() {
         ) : (
           followUps.map((c, i) => {
             const said = firstCallerLine(c);
+            const queueItem = queueItemsById.get(c.id);
             return (
               <div key={c.id} onClick={() => openCall(c.id)} className="flex cursor-pointer flex-wrap items-center gap-3 px-[18px] py-3.5 hover:bg-[#FAFBFC]" style={{ borderTop: i === 0 ? "none" : "1px solid #F3F4F7" }}>
                 <div className="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-[#FEF3C7] text-[12.5px] font-extrabold text-[#B45309]">{i + 1}</div>
                 <div className="min-w-[180px] flex-[1_1_200px]">
                   <div className="text-[12.5px] font-bold">{callerName(c)}</div>
-                  <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
+                  <div className="mt-0.5 text-[10.5px] text-[color:var(--app-text-faintest,#667085)]">
                     {c.fromNumber} · {fmtWhen(c.startedAt, rx.timezone, rx.today, c.localDay)} · {c.assignedToName ? `owner ${c.assignedToName}` : "unassigned"}
+                  </div>
+                  <div className="mt-1 text-[10px] text-[color:var(--app-text-faintest,#667085)]">
+                    Priority {queueItem?.priority === "high" ? "High · missed call" : "Normal"} · Skill {queueItem?.requiredSkill ?? "Not classified"} · Language {queueItem?.language ?? "Not captured"}
                   </div>
                 </div>
                 <div className="min-w-[140px] flex-[1_1_160px] text-[11.5px] text-[#45505F]">
                   <ChipFor spec={outcomeChip(c)} />
-                  {said ? <div className="mt-1 line-clamp-2 text-[11px] text-[#7A8798]">“{said}”</div> : null}
+                  {said ? <div className="mt-1 line-clamp-2 text-[11px] text-[color:var(--app-text-faintest,#667085)]">“{said}”</div> : null}
                 </div>
                 <div className="w-[96px] flex-none text-right">
                   <div className="text-[13px] font-extrabold tabular-nums">{waitedFor(c, rx.now)}</div>
-                  <div className="mt-0.5 text-[10px] text-[#94A3B8]">waiting</div>
+                  <div className="mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">waiting</div>
                 </div>
                 <div className="flex min-w-[214px] flex-none justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <RowAction primary onClick={() => ca.callBack(c)}>
