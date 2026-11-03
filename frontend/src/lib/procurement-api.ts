@@ -190,12 +190,80 @@ export interface ProcurementThreeWayMatchResponse {
       qtyReceived: number;
       outstanding: number;
       unitCost: number;
+      /** Billed on Finance bills against this PO line; null when no bill line references it. */
+      billed: { qty: number; unitCost: number } | null;
+    }>;
+    /** Vendor bills recorded in Finance › Bills against this PO (voided bills excluded). */
+    bills: Array<{
+      id: string;
+      number: string;
+      vendorInvoiceNo: string | null;
+      billDate: string;
+      status: string;
+      currency: string;
+      total: number;
+      amountPaid: number;
+      /** Finance's stored 3-way match label, e.g. "3-Way Matched", "Qty Exception". */
+      matchResult: string;
     }>;
   }>;
-  summary: { purchaseOrders: number; awaitingReceipt: number; fullyReceived: number };
+  summary: {
+    purchaseOrders: number;
+    awaitingReceipt: number;
+    fullyReceived: number;
+    billed: number;
+    matched: number;
+    exceptions: number;
+  };
   listLimit: number;
-  invoiceAvailability: "not_available";
+  invoiceAvailability: "available";
   invoiceDetail: string;
+}
+
+export type ProcurementBudgetVersion = {
+  name: string;
+  version: number;
+  status: string;
+  fiscalYear: number;
+};
+
+/** Budget check for one request against Finance › Budgets (budget code = Finance account code). */
+export type ProcurementRequestBudget =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      budgetVersion: ProcurementBudgetVersion;
+      period: { from: string; to: string };
+      currency: string;
+      code: string;
+      account: { code: string; name: string };
+      budget: number;
+      actual: number;
+      remaining: number;
+      estimate: number;
+      estimateCurrency: string;
+      /** null when the request is in another currency (no FX conversion). */
+      fits: boolean | null;
+    };
+
+export type ProcurementBudgetSummary =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      budgetVersion: ProcurementBudgetVersion;
+      period: { from: string; to: string };
+      currency: string;
+      totals: { budget: number; actual: number; remaining: number; percentUsed: number | null };
+      lines: { code: string; account: { code: string; name: string } | null; budget: number; actual: number; remaining: number }[];
+      unmatchedCodes: string[];
+    };
+
+export function fetchProcurementRequestBudget(id: string): Promise<ProcurementRequestBudget> {
+  return apiFetch<ProcurementRequestBudget>(`/procurement/requests/${encodeURIComponent(id)}/budget`);
+}
+
+export function fetchProcurementBudgetSummary(): Promise<ProcurementBudgetSummary> {
+  return apiFetch<ProcurementBudgetSummary>("/procurement/budget");
 }
 
 export function fetchProcurementOverview(): Promise<ProcurementOverview> {

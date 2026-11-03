@@ -1,5 +1,5 @@
 import { ClsService } from 'nestjs-cls';
-import { PurchaseOrderStatus } from '@prisma/client';
+import { Prisma, PurchaseOrderStatus } from '@prisma/client';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -70,6 +70,7 @@ describe('Procurement spend-control data source (real MySQL)', () => {
 
   afterAll(async () => {
     if (!prisma) return;
+    await prisma.finBill.deleteMany({ where: { businessId } });
     await prisma.purchaseOrderItem.deleteMany({
       where: { purchaseOrder: { businessId } },
     });
@@ -93,9 +94,97 @@ describe('Procurement spend-control data source (real MySQL)', () => {
       underContract: 0,
       percent: 0,
     });
+    // No Finance bills are linked to these POs, so there is no rate yet (not "not available").
     expect(result.kpis.matchExceptionRate).toMatchObject({
       value: null,
-      availability: 'not_available',
+      availability: 'available',
+      billedPurchaseOrders: 0,
+    });
+    expect(result.exceptionTrend).toEqual([]);
+    expect(result.kpis.billedSpend).toEqual({ bills: 0, billed: 0, paid: 0 });
+  });
+
+  it('reads Finance bills on the period’s POs for the exception rate and billed / paid spend', async () => {
+    const po = await prisma.purchaseOrder.create({
+      data: {
+        businessId,
+        supplierId,
+        status: PurchaseOrderStatus.received,
+        items: {
+          create: [{ productId, qtyOrdered: 2, qtyReceived: 2, unitCost: 7 }],
+        },
+      },
+    });
+    const firstPo = await prisma.purchaseOrder.findFirstOrThrow({
+      where: { businessId, id: { not: po.id } },
+    });
+    const bill = (
+      over: Omit<
+        Prisma.FinBillCreateManyInput,
+        | 'businessId'
+        | 'vendorName'
+        | 'billDate'
+        | 'dueDate'
+        | 'currency'
+        | 'status'
+      > & { status?: string },
+    ): Prisma.FinBillCreateManyInput => ({
+      businessId,
+      vendorName: 'Spend Control Uncontracted Supplier',
+      billDate: new Date(),
+      dueDate: new Date(),
+      currency: 'EUR',
+      fxRate: 2,
+      status: 'Posted',
+      ...over,
+    });
+    // One matched bill, one with a price exception, and a voided bill that must be ignored.
+    await prisma.finBill.createMany({
+      data: [
+        bill({
+          number: 'SC-1',
+          purchaseOrderId: po.id,
+          total: 14,
+          amountPaid: 14,
+          matchStatus: 'Matched',
+        }),
+        bill({
+          number: 'SC-2',
+          purchaseOrderId: firstPo.id,
+          total: 50,
+          amountPaid: 10,
+          matchStatus: 'Variance',
+          matchDetail: { rows: [{ result: 'Price Exception' }] },
+        }),
+        bill({
+          number: 'SC-3',
+          purchaseOrderId: firstPo.id,
+          total: 999,
+          status: 'Voided',
+          matchStatus: 'Variance',
+        }),
+      ],
+    });
+
+    const result = await analytics.analytics(businessId, { days: 90 });
+    expect(result.kpis.matchExceptionRate).toMatchObject({
+      value: 50,
+      availability: 'available',
+      billedPurchaseOrders: 2,
+    });
+    expect(result.exceptionTrend).toEqual([
+      {
+        month: new Date().toISOString().slice(0, 7),
+        billedPurchaseOrders: 2,
+        withException: 1,
+        rate: 50,
+      },
+    ]);
+    // Base currency = bill amount × Finance FX rate (2).
+    expect(result.kpis.billedSpend).toEqual({
+      bills: 2,
+      billed: 128,
+      paid: 48,
     });
   });
 });

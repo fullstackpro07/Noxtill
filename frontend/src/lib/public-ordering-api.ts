@@ -16,8 +16,9 @@ export interface PublicOrderingMenu {
     locale: string;
     branding: unknown;
     acceptedPaymentMethods: string[];
+    /** "available" when the owner turned on online payment and Payments has a payment-link method. */
     onlinePayment: {
-      availability: "not_configured";
+      availability: "available" | "not_configured";
       detail: string;
     };
   };
@@ -55,6 +56,10 @@ export interface PublicOrderResult {
   total: number;
   currency: string;
   paymentStatus: "unpaid";
+  /** Present when the store asks for online payment: a Payments link, or why there isn't one. */
+  payment?:
+    | { status: "requested"; payUrl: string }
+    | { status: "not_requested"; reason: string };
 }
 
 export function fetchPublicOrderingMenu(slug: string) {

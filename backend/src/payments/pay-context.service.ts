@@ -20,6 +20,9 @@ export type Tx = Prisma.TransactionClient;
 export type Level =
   'request' | 'recover' | 'refund' | 'dispute' | 'recon' | 'approve' | 'admin';
 
+/** `PayRequest.createdById` for requests the online store's checkout creates (no staff member). */
+export const STOREFRONT_CREATOR = 'storefront';
+
 export interface PayActor {
   userId: string;
   name: string;
@@ -327,12 +330,19 @@ export class PayContextService {
     const uniq = [
       ...new Set(ids.filter((x): x is string => !!x && x !== 'System')),
     ];
-    if (!uniq.length) return new Map<string, string>();
+    const named = new Map<string, string>(
+      uniq.includes(STOREFRONT_CREATOR)
+        ? [[STOREFRONT_CREATOR, 'Online store checkout']]
+        : [],
+    );
+    const users = uniq.filter((x) => x !== STOREFRONT_CREATOR);
+    if (!users.length) return named;
     const rows = await this.prisma.user.findMany({
-      where: { id: { in: uniq } },
+      where: { id: { in: users } },
       select: { id: true, name: true },
     });
-    return new Map(rows.map((r) => [r.id, r.name]));
+    for (const r of rows) named.set(r.id, r.name);
+    return named;
   }
 
   async members(rootId: string) {

@@ -39,6 +39,7 @@ import {
   fetchPortalOrders,
   fetchPortalReturns,
   fetchPortalSupport,
+  createPortalSupportRequest,
   joinPortalQueue,
   joinPortalWaitlist,
   portalAcceptInvite,
@@ -1105,10 +1106,43 @@ function BillingScreen({
   );
   return (
     <div className="flex flex-col gap-5">
-      <section
-        className={`${card} border-[var(--app-warning-border)] p-4 text-sm text-[var(--app-warning-text)]`}
-      >
-        {billing.onlineInvoicePayment.reason}
+      <section className={`${card} overflow-hidden`}>
+        <div className="border-b border-[var(--app-border)] p-5">
+          <h2 className="font-semibold text-[var(--app-text)]">
+            Payment requests
+          </h2>
+          <p className="mt-1 text-sm text-[var(--app-text-muted)]">
+            {billing.onlineInvoicePayment.reason}
+          </p>
+        </div>
+        {billing.paymentRequests.length ? (
+          <ul className="divide-y divide-[var(--app-border)]">
+            {billing.paymentRequests.map((request) => (
+              <li
+                key={request.number}
+                className="flex flex-wrap items-center justify-between gap-3 p-5 text-sm"
+              >
+                <div>
+                  <p className="font-medium text-[var(--app-text)]">
+                    {request.description}
+                    {request.testMode ? " · Test mode" : ""}
+                  </p>
+                  <p className="mt-1 text-[var(--app-text-muted)]">
+                    {request.number} · {request.status}
+                    {request.amount !== null
+                      ? ` · ${formatMoney(Math.max(0, request.amount - request.amountPaid), request.currency, locale)} to pay`
+                      : " · you choose the amount"}
+                    {request.dueOn ? ` · due ${new Date(request.dueOn).toLocaleDateString()}` : ""}
+                  </p>
+                </div>
+                <a className={button} href={request.payUrl}>
+                  <CreditCard className="h-4 w-4" aria-hidden />
+                  Pay now
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
       <p className="text-sm text-[var(--app-text-muted)]">{billing.note}</p>
       {quotes.length ? (
@@ -1237,7 +1271,15 @@ function BillingScreen({
                     No payment is recorded for this order.
                   </p>
                 )}
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-4">
+                  {order.payUrl ? (
+                    <a
+                      className="text-sm font-semibold text-[var(--app-primary)] hover:underline"
+                      href={order.payUrl}
+                    >
+                      Pay online
+                    </a>
+                  ) : null}
                   {receiptLinks[order.id] ? (
                     <a
                       className="text-sm font-semibold text-[var(--app-primary)] hover:underline"
@@ -1891,6 +1933,140 @@ function LoyaltyScreen({
   );
 }
 
+function SupportScreen({ token }: { token: string }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["portal", "support"],
+    queryFn: () => fetchPortalSupport(token),
+  });
+  const [subject, setSubject] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const requestMutation = useMutation({
+    mutationFn: () =>
+      createPortalSupportRequest(token, {
+        subject,
+        description,
+        ...(category ? { category } : {}),
+      }),
+    onSuccess: async (ticket) => {
+      toast.success(`Request ${ticket.number} sent to the support team`);
+      setSubject("");
+      setDescription("");
+      await queryClient.invalidateQueries({ queryKey: ["portal", "support"] });
+      await queryClient.invalidateQueries({ queryKey: ["portal", "home"] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  if (query.isLoading) return <Empty>Loading your support requests…</Empty>;
+  if (query.isError) return <ErrorBox message={query.error.message} />;
+  if (!query.data) return null;
+  const tickets = query.data.tickets;
+  return (
+    <div className="flex flex-col gap-5">
+      <section className={`${card} p-5`}>
+        <h2 className="font-semibold text-[var(--app-text)]">
+          Ask for help
+        </h2>
+        <p className="mt-1 text-sm text-[var(--app-text-muted)]">
+          Your request goes to the support team. You can follow it, reply and
+          add files from the request page.
+        </p>
+        <form
+          className="mt-5 grid gap-3 md:grid-cols-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            requestMutation.mutate();
+          }}
+        >
+          <label className="text-sm font-medium text-[var(--app-text)]">
+            Subject
+            <input
+              className={`${input} mt-2`}
+              required
+              maxLength={300}
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+            />
+          </label>
+          <label className="text-sm font-medium text-[var(--app-text)]">
+            Topic
+            <select
+              className={`${input} mt-2`}
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">Choose a topic</option>
+              {query.data.categories.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-medium text-[var(--app-text)] md:col-span-2">
+            How can we help?
+            <textarea
+              className={`${input} mt-2 min-h-28`}
+              required
+              maxLength={10000}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </label>
+          <button
+            className={`${button} md:col-span-2 md:justify-self-start`}
+            type="submit"
+            disabled={
+              requestMutation.isPending ||
+              !subject.trim() ||
+              !description.trim()
+            }
+          >
+            {requestMutation.isPending ? "Sending…" : "Send request"}
+          </button>
+        </form>
+      </section>
+      <section className={`${card} overflow-hidden`}>
+        <h2 className="border-b border-[var(--app-border)] p-5 font-semibold text-[var(--app-text)]">
+          Your requests
+        </h2>
+        {tickets.length ? (
+          <ul className="divide-y divide-[var(--app-border)]">
+            {tickets.map((ticket) => (
+              <li
+                key={ticket.number}
+                className="flex flex-wrap items-center justify-between gap-3 p-5 text-sm"
+              >
+                <div>
+                  <p className="font-medium text-[var(--app-text)]">
+                    {ticket.subject}
+                  </p>
+                  <p className="mt-1 text-[var(--app-text-muted)]">
+                    {ticket.number} · {ticket.status} · updated{" "}
+                    {new Date(ticket.lastActivityAt).toLocaleString()}
+                  </p>
+                </div>
+                <a
+                  className="inline-flex items-center gap-1 font-medium text-[var(--app-primary)]"
+                  href={ticket.url}
+                >
+                  {ticket.open ? "View & reply" : "View"}
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="p-5 text-sm text-[var(--app-text-muted)]">
+            You haven&apos;t sent any support requests yet.
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function DataScreen({
   screen,
   token,
@@ -1909,11 +2085,6 @@ function DataScreen({
     queryFn: () => fetchPortalHome(token),
     enabled: screen === "home",
   });
-  const support = useQuery({
-    queryKey: ["portal", "support"],
-    queryFn: () => fetchPortalSupport(token),
-    enabled: screen === "support",
-  });
   if (screen === "account") return <ProfileScreen token={token} />;
   if (screen === "orders")
     return <OrdersScreen token={token} currency={currency} locale={locale} />;
@@ -1923,26 +2094,7 @@ function DataScreen({
   if (screen === "returns") return <ReturnsScreen token={token} />;
   if (screen === "loyalty")
     return <LoyaltyScreen token={token} currency={currency} locale={locale} />;
-  if (screen === "support") {
-    if (support.isLoading) return <Empty>Loading support availability…</Empty>;
-    if (support.isError) return <ErrorBox message={support.error.message} />;
-    return (
-      <section className={`${card} flex items-start gap-3 p-5`}>
-        <CircleHelp
-          className="mt-0.5 h-5 w-5 text-[var(--app-text-muted)]"
-          aria-hidden
-        />
-        <div>
-          <h2 className="font-semibold text-[var(--app-text)]">
-            Support availability
-          </h2>
-          <p className="mt-2 text-sm text-[var(--app-text-muted)]">
-            {support.data?.reason ?? "Not available"}
-          </p>
-        </div>
-      </section>
-    );
-  }
+  if (screen === "support") return <SupportScreen token={token} />;
   if (home.isLoading) return <Empty>Loading your portal…</Empty>;
   if (home.isError) return <ErrorBox message={home.error.message} />;
   if (!home.data) return null;
@@ -2083,13 +2235,15 @@ function DataScreen({
                     {labelFor(section)}
                   </h3>
                   <p className="mt-2 text-sm text-[var(--app-text-muted)]">
-                    {home.data.support.reason}
+                    {home.data.support.openRequests
+                      ? `${home.data.support.openRequests} open request${home.data.support.openRequests === 1 ? "" : "s"}`
+                      : "No open requests."}
                   </p>
                   <Link
                     className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[var(--app-primary)]"
                     href={`/portal/${businessSlug}/support`}
                   >
-                    Support status{" "}
+                    Ask for help{" "}
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </Link>
                 </article>
@@ -2117,16 +2271,21 @@ function DataScreen({
       )}
       <section className={`${card} p-5`}>
         <h3 className="font-semibold text-[var(--app-text)]">
-          Service availability
+          Online payments
         </h3>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <p className="rounded-lg bg-[var(--app-surface-muted)] p-3 text-sm text-[var(--app-text-muted)]">
-            {home.data.support.reason}
-          </p>
-          <p className="rounded-lg bg-[var(--app-surface-muted)] p-3 text-sm text-[var(--app-text-muted)]">
-            {home.data.billing.reason}
-          </p>
-        </div>
+        <p className="mt-2 text-sm text-[var(--app-text-muted)]">
+          {home.data.billing.openRequests
+            ? `${home.data.billing.openRequests} payment request${home.data.billing.openRequests === 1 ? "" : "s"} ready to pay online.`
+            : "Nothing to pay online right now."}
+        </p>
+        {home.data.enabledFeatures.includes("billing") && (
+          <Link
+            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[var(--app-primary)]"
+            href={`/portal/${businessSlug}/billing`}
+          >
+            Quotes & payments <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
+        )}
       </section>
       <section className="grid gap-3 sm:grid-cols-2">
         {home.data.legal.termsUrl && (

@@ -117,9 +117,20 @@ export function PublicCheckoutView({ businessSlug }: { businessSlug: string }) {
           <h1 className="mt-2 text-2xl font-bold text-fg">{menu.business.name}</h1>
           <p className="mt-3 text-sm text-fg-muted">Order #{submittedOrder.orderNo} is pending business confirmation.</p>
           <p className="mt-2 text-xl font-bold text-fg">{formatMoney(submittedOrder.total, submittedOrder.currency, menu.business.locale)}</p>
-          <p className="mt-4 rounded-xl bg-surface-muted p-3 text-sm text-fg-muted">
-            No online payment was collected. The business will confirm the payment arrangement with you.
-          </p>
+          {submittedOrder.payment?.status === "requested" ? (
+            <>
+              <a href={submittedOrder.payment.payUrl} className="mt-5 inline-flex items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white hover:opacity-90">
+                Pay now
+              </a>
+              <p className="mt-3 text-xs text-fg-muted">Your order stays unpaid until the business receives your payment.</p>
+            </>
+          ) : (
+            <p className="mt-4 rounded-xl bg-surface-muted p-3 text-sm text-fg-muted">
+              {submittedOrder.payment?.status === "not_requested"
+                ? submittedOrder.payment.reason
+                : "No online payment was collected. The business will confirm the payment arrangement with you."}
+            </p>
+          )}
         </section>
       </main>
     );
@@ -212,11 +223,11 @@ export function PublicCheckoutView({ businessSlug }: { businessSlug: string }) {
             <input required type="tel" maxLength={50} value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg" />
           </label>
           <div className="rounded-xl bg-surface-muted p-3 text-xs leading-5 text-fg-muted">
-            Online payment is not configured. This submits an unpaid order request; the business will confirm payment with you.
+            {menu.business.onlinePayment.detail}
           </div>
           {orderMutation.isError && <p role="alert" className="text-sm text-danger">{orderMutation.error instanceof Error ? orderMutation.error.message : "Your order could not be submitted. Please try again."}</p>}
           <button type="submit" disabled={selectedItems.length === 0 || orderMutation.isPending || (fulfillment === "delivery" && menu.checkout.deliveryRequiresZone && !deliveryZoneId)} className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
-            {orderMutation.isPending ? "Submitting…" : "Submit unpaid order request"}
+            {orderMutation.isPending ? "Submitting…" : menu.business.onlinePayment.availability === "available" ? "Place order" : "Submit unpaid order request"}
           </button>
         </form>
       </aside>

@@ -1,3 +1,4 @@
+import { PRICE_TOL, QTY_TOL } from './finance-match.util';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { FinBill, FinBillLine, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -43,9 +44,6 @@ export interface BillInput {
 }
 
 export type BillWithLines = FinBill & { lines: FinBillLine[] };
-
-const QTY_TOL = 0.02;
-const PRICE_TOL = 0.01;
 
 /** Vendor bills (A/P). Every bill is reviewed and approved before it posts; payments are recorded here. */
 @Injectable()

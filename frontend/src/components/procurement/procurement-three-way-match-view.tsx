@@ -27,7 +27,7 @@ export function ProcurementThreeWayMatchView() {
 
   useModuleHeader({
     title: "3-Way Match",
-    subtitle: "Compare purchase orders with recorded goods receipts; invoice matching needs Finance/AP",
+    subtitle: "Purchase orders against goods received and the vendor bills recorded in Finance",
     actions: (
       <Btn onClick={() => void query.refetch()} disabled={query.isFetching}>
         <RefreshCw className={`h-3.5 w-3.5 ${query.isFetching ? "animate-spin" : ""}`} aria-hidden />
@@ -38,19 +38,20 @@ export function ProcurementThreeWayMatchView() {
 
   return (
     <Page>
-      <Notice tone="warn">
-        {query.data?.invoiceDetail ?? "Vendor bills are not recorded in this workspace, so invoice comparison and 3-way match results are not available."}
-      </Notice>
+      {query.data?.invoiceDetail ? <Notice>{query.data.invoiceDetail}</Notice> : null}
       {query.isPending ? (
         <p className="m-0 text-sm" style={{ color: "var(--app-text-faint)" }}>Loading purchase orders…</p>
       ) : query.isError || !query.data ? (
         <Notice tone="danger">{errorText(query.error, "Couldn't load purchase-order receipt data.")}</Notice>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <Kpi label="Purchase orders" value={query.data.summary.purchaseOrders} hint="Non-cancelled records" />
             <Kpi label="Awaiting receipt" value={query.data.summary.awaitingReceipt} hint="At least one ordered line remains outstanding" />
             <Kpi label="Fully received" value={query.data.summary.fullyReceived} hint="All recorded PO lines received" />
+            <Kpi label="Billed" value={query.data.summary.billed} hint="At least one vendor bill in Finance" />
+            <Kpi label="3-way matched" value={query.data.summary.matched} hint="Every bill matched PO and receipt" />
+            <Kpi label="Exceptions" value={query.data.summary.exceptions} hint="A bill with a quantity or price exception" />
           </div>
 
           <Card title="Recorded order and receipt quantities" actions={
@@ -86,7 +87,7 @@ export function ProcurementThreeWayMatchView() {
                     </header>
                     <div className="mt-3 overflow-x-auto">
                       <table className="w-full min-w-[620px] text-left text-xs">
-                        <thead style={{ color: "var(--app-text-faint)" }}><tr><th className="py-1 pr-2">Item</th><th className="py-1 pr-2">PO quantity</th><th className="py-1 pr-2">Received</th><th className="py-1 pr-2">Outstanding</th><th className="py-1 pr-2">PO unit cost</th><th className="py-1">Vendor bill</th></tr></thead>
+                        <thead style={{ color: "var(--app-text-faint)" }}><tr><th className="py-1 pr-2">Item</th><th className="py-1 pr-2">PO quantity</th><th className="py-1 pr-2">Received</th><th className="py-1 pr-2">Outstanding</th><th className="py-1 pr-2">PO unit cost</th><th className="py-1">Billed (qty · unit cost)</th></tr></thead>
                         <tbody>
                           {order.items.map((item) => (
                             <tr key={item.id} className="border-t" style={{ borderColor: "var(--app-border)" }}>
@@ -95,22 +96,38 @@ export function ProcurementThreeWayMatchView() {
                               <td className="py-2 pr-2">{item.qtyReceived}</td>
                               <td className="py-2 pr-2">{item.outstanding}</td>
                               <td className="py-2 pr-2">{money(item.unitCost, session.business.currency || "USD")}</td>
-                              <td className="py-2" style={{ color: "var(--app-text-faint)" }}>Not available</td>
+                              <td className="py-2" style={item.billed ? undefined : { color: "var(--app-text-faint)" }}>
+                                {item.billed ? `${item.billed.qty} · ${money(item.billed.unitCost, session.business.currency || "USD")}` : "Not billed"}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    <p className="m-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
-                      Match result: Not available without a recorded supplier invoice. Receiving remains in Inventory → Purchases.
-                    </p>
+                    {order.bills.length ? (
+                      <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0 text-xs">
+                        {order.bills.map((bill) => (
+                          <li key={bill.id} className="flex flex-wrap items-center gap-2">
+                            <Link href="/finance/bills" className="font-semibold text-[var(--app-primary)] hover:underline">{bill.number}</Link>
+                            {bill.vendorInvoiceNo ? <span style={{ color: "var(--app-text-faint)" }}>Invoice {bill.vendorInvoiceNo}</span> : null}
+                            <span>{money(bill.total, bill.currency)} · paid {money(bill.amountPaid, bill.currency)}</span>
+                            <StatusBadge status={bill.status} />
+                            <span>Match: <StatusBadge status={bill.matchResult} /></span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="m-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+                        No vendor bill recorded for this purchase order yet. Record it in Finance › Bills to see the match result.
+                      </p>
+                    )}
                   </article>
                 ))}
               </div>
             )}
           </Card>
           <p className="m-0 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
-            Showing up to the latest {query.data.listLimit} non-cancelled purchase orders. Receipt data comes from recorded Inventory receipts, not an inferred invoice match.
+            Showing up to the latest {query.data.listLimit} non-cancelled purchase orders. Receipt data comes from recorded Inventory receipts; match results are Finance&apos;s own.
           </p>
         </>
       )}

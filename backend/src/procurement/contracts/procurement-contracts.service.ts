@@ -140,7 +140,7 @@ export function effectiveStatus(
  * Supplier Contracts & Terms. Supplier identity stays in Products → Suppliers; purchase orders stay
  * in Inventory → Purchases. This service stores procurement metadata about agreements and measures
  * purchase-order spend against them. Spend figures are purchase-order commitments (qty × unit cost),
- * not billed or paid amounts: there is no Finance/AP module to read bills from.
+ * alongside billed and paid amounts from Finance › Bills for the same supplier and contract period.
  */
 @Injectable()
 export class ProcurementContractsService {
@@ -617,12 +617,29 @@ export class ProcurementContractsService {
       }),
       this.prisma.business.findUniqueOrThrow({
         where: { id: businessId },
-        select: { currency: true },
+        select: { currency: true, parentId: true },
       }),
     ]);
-    const pos = await this.purchaseOrders(businessId, [
-      ...new Set(contracts.map((c) => c.supplierId)),
-    ]);
+    const supplierIds = [...new Set(contracts.map((c) => c.supplierId))];
+    const pos = await this.purchaseOrders(businessId, supplierIds);
+    // Vendor bills from Finance › Bills (keyed by the group root) for these suppliers.
+    const bills = supplierIds.length
+      ? await this.prisma.finBill.findMany({
+          where: {
+            businessId: business.parentId ?? businessId,
+            supplierId: { in: supplierIds },
+            status: { notIn: ['Voided', 'Rejected'] },
+          },
+          select: {
+            supplierId: true,
+            billDate: true,
+            total: true,
+            amountPaid: true,
+            fxRate: true,
+          },
+        })
+      : [];
+    const cents = (n: number) => Math.round(n * 100) / 100;
     const names = await this.userNames(
       contracts.flatMap((c) => [c.ownerUserId, c.termsConfirmedByUserId]),
     );
@@ -659,6 +676,9 @@ export class ProcurementContractsService {
       )
         issues.push('Price schedule has expired');
       const deadline = noticeDeadline(c);
+      const billed = bills.filter(
+        (b) => b.supplierId === c.supplierId && this.covers(c, b.billDate),
+      );
       return {
         id: c.id,
         reference: c.reference,
@@ -699,6 +719,16 @@ export class ProcurementContractsService {
         spendUnderContract:
           Math.round(covered.reduce((s, p) => s + p.value, 0) * 100) / 100,
         posUnderContract: covered.length,
+        billsUnderContract: billed.length,
+        billedUnderContract: cents(
+          billed.reduce((s, b) => s + Number(b.total) * Number(b.fxRate), 0),
+        ),
+        paidUnderContract: cents(
+          billed.reduce(
+            (s, b) => s + Number(b.amountPaid) * Number(b.fxRate),
+            0,
+          ),
+        ),
         posAfterExpiry: afterExpiry.length,
         issues,
       };
@@ -728,13 +758,19 @@ export class ProcurementContractsService {
         spendUnderContract:
           Math.round(rows.reduce((s, r) => s + r.spendUnderContract, 0) * 100) /
           100,
+        billedUnderContract: cents(
+          rows.reduce((s, r) => s + r.billedUnderContract, 0),
+        ),
+        paidUnderContract: cents(
+          rows.reduce((s, r) => s + r.paidUnderContract, 0),
+        ),
         nonCompliant: rows.filter(
           (r) => r.issues.length > 0 && r.effectiveStatus !== 'terminated',
         ).length,
       },
       contracts: rows,
       spendNote:
-        'Spend = purchase-order commitments (qty × unit cost) placed with the supplier during the contract period, in the business currency. Billed and paid amounts are not available (no Finance/AP module).',
+        'Spend = purchase-order commitments (qty × unit cost) placed with the supplier during the contract period, in the business currency. Billed and paid = vendor bills in Finance › Bills for the supplier dated within the contract period (voided and rejected bills excluded), converted at each bill’s Finance FX rate.',
     };
   }
 

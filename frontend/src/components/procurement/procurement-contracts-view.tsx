@@ -102,11 +102,12 @@ export function ProcurementContractsView() {
   return (
     <Page>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Kpi label="Active contracts" value={d.kpis.active} />
         <Kpi label="Expiring 30 / 60 / 90 days" value={`${d.kpis.expiring30} / ${d.kpis.expiring60} / ${d.kpis.expiring90}`} tone={d.kpis.expiring30 ? "warn" : undefined} />
         <Kpi label="Auto-renewing" value={d.kpis.autoRenewing} />
         <Kpi label="Spend under contract" value={money(d.kpis.spendUnderContract, d.currency)} hint="PO commitments, not billed" />
+        <Kpi label="Billed / paid under contract" value={money(d.kpis.billedUnderContract, d.currency)} hint={`${money(d.kpis.paidUnderContract, d.currency)} paid · from Finance › Bills`} />
         <Kpi label="Non-compliant" value={d.kpis.nonCompliant} tone={d.kpis.nonCompliant ? "danger" : "ok"} hint="Unconfirmed terms or POs after expiry" />
       </div>
 
@@ -131,7 +132,7 @@ export function ProcurementContractsView() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-xs">
               <thead style={{ color: "var(--app-text-faint)" }}>
-                <tr><th className="py-2 pr-2">Contract</th><th className="py-2 pr-2">Supplier</th><th className="py-2 pr-2">Status</th><th className="py-2 pr-2">Term</th><th className="py-2 pr-2">Key terms</th><th className="py-2 pr-2">Spend under contract</th><th className="py-2 pr-2">Owner</th><th /></tr>
+                <tr><th className="py-2 pr-2">Contract</th><th className="py-2 pr-2">Supplier</th><th className="py-2 pr-2">Status</th><th className="py-2 pr-2">Term</th><th className="py-2 pr-2">Key terms</th><th className="py-2 pr-2">Spend under contract</th><th className="py-2 pr-2">Billed / paid</th><th className="py-2 pr-2">Owner</th><th /></tr>
               </thead>
               <tbody>
                 {rows.map((c) => (
@@ -148,6 +149,7 @@ export function ProcurementContractsView() {
                       {[c.paymentTerms && `Pay: ${c.paymentTerms}`, c.minimumOrderQty && `MOQ ${c.minimumOrderQty}`, c.discountTiers.length && `${c.discountTiers.length} discount tier(s)`, c.incoterms, c.priceValidUntil && `Prices valid to ${c.priceValidUntil}`].filter(Boolean).join(" · ") || "—"}
                     </td>
                     <td className="py-2 pr-2">{money(c.spendUnderContract, d.currency)}<br /><span style={{ color: "var(--app-text-faint)" }}>{c.posUnderContract} PO(s)</span></td>
+                    <td className="py-2 pr-2">{money(c.billedUnderContract, d.currency)}<br /><span style={{ color: "var(--app-text-faint)" }}>{money(c.paidUnderContract, d.currency)} paid · {c.billsUnderContract} bill(s)</span></td>
                     <td className="py-2 pr-2">{c.ownerName ?? "Business owners"}</td>
                     <td className="py-2 pr-2">
                       <div className="flex flex-col items-end gap-1">

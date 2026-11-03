@@ -152,6 +152,7 @@ export class StorefrontOptionsDto {
   @IsOptional() @IsIn(['hide', 'show_unavailable']) outOfStockBehavior?:
     'hide' | 'show_unavailable';
   @IsOptional() @IsBoolean() checkoutEnabled?: boolean;
+  @IsOptional() @IsBoolean() onlinePayment?: boolean;
 }
 
 export class CollectionDto {

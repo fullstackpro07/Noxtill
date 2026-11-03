@@ -44,7 +44,7 @@ describe('ActionCenterService — Autonomous Commerce items (MySQL)', () => {
     service = new ActionCenterService(
       tenantPrisma,
       prisma,
-      new ProcurementService(tenantPrisma),
+      new ProcurementService(tenantPrisma, prisma),
     );
     businessId = (
       await prisma.business.create({

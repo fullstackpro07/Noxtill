@@ -1,3 +1,4 @@
+import { billMatchLabel } from './finance-match.util';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { FinAccount, FinJournal } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -2572,19 +2573,7 @@ export class FinanceViewsService {
     matchDetail: unknown;
     status: string;
   }) {
-    const d = (b.matchDetail ?? {}) as {
-      duplicateOf?: string[];
-      rows?: { result: string }[];
-      reviewedBy?: string;
-    };
-    if (d.duplicateOf?.length && b.status === 'Review Required')
-      return 'Possible Duplicate';
-    if (b.matchStatus === 'Matched') return '3-Way Matched';
-    if (b.matchStatus === 'Variance')
-      return (
-        d.rows?.find((r) => r.result !== 'Match')?.result ?? 'Qty Exception'
-      );
-    return 'No PO';
+    return billMatchLabel(b);
   }
 
   async billsScreen(c: Ctx) {

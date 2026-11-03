@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { billMatchLabel } from '../../finance/finance-match.util';
 
 const DAY = 86_400_000;
 const round = (n: number, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
@@ -26,8 +27,8 @@ export interface AnalyticsQuery {
 /**
  * Procurement Analytics (module 38.7): procurement-domain measures computed from canonical
  * Purchase Requests, shared RFQs/quotes, Inventory purchase orders and supplier contracts. Spend
- * is purchase-order commitment; billed/paid spend and 3-way match rates need vendor bills, which
- * are not recorded anywhere in this workspace, so they are reported as not available.
+ * is purchase-order commitment. The 3-way match exception rate reads the match result Finance
+ * recorded on each vendor bill (Finance › Bills) linked to a purchase order in the period.
  */
 @Injectable()
 export class ProcurementAnalyticsService {
@@ -40,11 +41,88 @@ export class ProcurementAnalyticsService {
     return this.tenantPrisma.client;
   }
 
+  /**
+   * Finance bills linked to these purchase orders: the share of billed POs with a quantity or price
+   * exception, and billed / paid totals in the base currency (bill amount × its Finance FX rate).
+   */
+  private async financeBills(rootId: string, purchaseOrderIds: string[]) {
+    const bills = purchaseOrderIds.length
+      ? await this.prisma.finBill.findMany({
+          where: {
+            businessId: rootId,
+            purchaseOrderId: { in: purchaseOrderIds },
+            status: { not: 'Voided' },
+          },
+          select: {
+            purchaseOrderId: true,
+            status: true,
+            matchStatus: true,
+            matchDetail: true,
+            total: true,
+            amountPaid: true,
+            fxRate: true,
+            billDate: true,
+          },
+        })
+      : [];
+    const isException = (b: (typeof bills)[number]) => {
+      const label = billMatchLabel(b);
+      return label !== '3-Way Matched' && label !== 'No PO';
+    };
+    const billed = new Set(bills.map((b) => b.purchaseOrderId));
+    const withException = new Set(
+      bills.filter(isException).map((b) => b.purchaseOrderId),
+    );
+    // Month by month (bill date): purchase orders billed that month and how many had an exception.
+    const byMonth = new Map<
+      string,
+      { billed: Set<string>; exceptions: Set<string> }
+    >();
+    for (const b of bills) {
+      const month = b.billDate.toISOString().slice(0, 7);
+      const m = byMonth.get(month) ?? {
+        billed: new Set(),
+        exceptions: new Set(),
+      };
+      m.billed.add(b.purchaseOrderId!);
+      if (isException(b)) m.exceptions.add(b.purchaseOrderId!);
+      byMonth.set(month, m);
+    }
+    const exceptionTrend = [...byMonth.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, m]) => ({
+        month,
+        billedPurchaseOrders: m.billed.size,
+        withException: m.exceptions.size,
+        rate: round((m.exceptions.size / m.billed.size) * 100, 1),
+      }));
+    const base = (amount: unknown, b: { fxRate: unknown }) =>
+      Number(amount) * Number(b.fxRate);
+    return {
+      matchExceptionRate: {
+        value: billed.size
+          ? round((withException.size / billed.size) * 100, 1)
+          : null,
+        availability: 'available' as const,
+        billedPurchaseOrders: billed.size,
+        detail: billed.size
+          ? `${withException.size} of ${billed.size} billed purchase order(s) have a quantity or price exception on their Finance bill.`
+          : 'No vendor bills are recorded in Finance › Bills for purchase orders in this period.',
+      },
+      exceptionTrend,
+      billedSpend: {
+        bills: bills.length,
+        billed: round(bills.reduce((s, b) => s + base(b.total, b), 0)),
+        paid: round(bills.reduce((s, b) => s + base(b.amountPaid, b), 0)),
+      },
+    };
+  }
+
   async analytics(businessId: string, q: AnalyticsQuery) {
     const since = new Date(Date.now() - q.days * DAY);
     const business = await this.prisma.business.findUniqueOrThrow({
       where: { id: businessId },
-      select: { currency: true },
+      select: { currency: true, parentId: true },
     });
 
     const [requests, rfqs, pos, contracts, suppliers] = await Promise.all([
@@ -132,6 +210,10 @@ export class ProcurementAnalyticsService {
         select: { id: true, name: true },
       }),
     ]);
+    const finance = await this.financeBills(
+      business.parentId ?? businessId,
+      pos.map((po) => po.id),
+    );
     const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
 
     // Request funnel and cycle time (submitted → purchase order created).
@@ -363,12 +445,8 @@ export class ProcurementAnalyticsService {
           shareOfCommitted:
             committed > 0 ? round((offContract / committed) * 100, 1) : null,
         },
-        matchExceptionRate: {
-          value: null,
-          availability: 'not_available',
-          detail:
-            'Needs vendor bills; there is no Finance/AP module recording them.',
-        },
+        matchExceptionRate: finance.matchExceptionRate,
+        billedSpend: finance.billedSpend,
         supplierResponseHours: {
           median: responseHours.length
             ? round(median(responseHours)!, 1)
@@ -381,6 +459,7 @@ export class ProcurementAnalyticsService {
           purchaseOrders: pos.length,
         },
       },
+      exceptionTrend: finance.exceptionTrend,
       spendByCategory: [...byCategory.entries()]
         .map(([category, amount]) => ({ category, committed: round(amount) }))
         .sort((a, b) => b.committed - a.committed),

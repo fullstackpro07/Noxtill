@@ -395,8 +395,8 @@ export function fetchPortalHome(token: string) {
     }[];
     enabledFeatures: CustomerPortalFeature[];
     layout: CustomerPortalLayout;
-    support: { available: boolean; reason: string };
-    billing: { onlinePayment: boolean; reason: string };
+    support: { available: boolean; openRequests: number };
+    billing: { onlinePayment: boolean; openRequests: number };
     legal: { termsUrl: string | null; privacyUrl: string | null };
   }>("/me/home", token);
 }
@@ -559,6 +559,24 @@ export function downloadPortalReceipt(token: string, orderId: string) {
   );
 }
 
+export type PortalPaymentRequest = {
+  number: string;
+  description: string;
+  status: string;
+  currency: string;
+  /** null when the customer chooses the amount (a flexible request). */
+  amount: number | null;
+  amountPaid: number;
+  allowPartial: boolean;
+  dueOn: string | null;
+  expiresAt: string;
+  linkType: string | null;
+  linkId: string | null;
+  testMode: boolean;
+  /** Payments' own checkout page. */
+  payUrl: string;
+};
+
 export function fetchPortalBilling(
   token: string,
   cursors: CustomerPortalCursorParams = {},
@@ -582,6 +600,7 @@ export function fetchPortalBilling(
         method: string;
         createdAt: string;
       }[];
+      payUrl: string | null;
     }[];
     ordersAndReceipts: {
       id: string;
@@ -599,8 +618,11 @@ export function fetchPortalBilling(
         method: string;
         createdAt: string;
       }[];
+      /** Open Payments request for this order, if the business sent one. */
+      payUrl: string | null;
     }[];
     pagination: Record<"quotes" | "ordersAndReceipts", CustomerPortalPageInfo>;
+    paymentRequests: PortalPaymentRequest[];
     onlineInvoicePayment: { available: boolean; reason: string };
     note: string;
   }>(`/me/billing?${portalPageQuery(cursors)}`, token);
@@ -666,11 +688,35 @@ export function requestPortalReturn(
   return customerRequest("/me/returns", token, { method: "POST", body });
 }
 
+export type PortalSupportTicket = {
+  number: string;
+  subject: string;
+  status: string;
+  open: boolean;
+  createdAt: string;
+  lastActivityAt: string;
+  /** Helpdesk's customer ticket page (replies, attachments, rating). */
+  url: string;
+};
+
 export function fetchPortalSupport(token: string) {
-  return customerRequest<{ available: boolean; reason: string }>(
-    "/me/support",
-    token,
-  );
+  return customerRequest<{
+    available: boolean;
+    categories: string[];
+    tickets: PortalSupportTicket[];
+  }>("/me/support", token);
+}
+
+export function createPortalSupportRequest(
+  token: string,
+  body: { subject: string; description: string; category?: string },
+) {
+  return customerRequest<{
+    number: string;
+    subject: string;
+    status: string;
+    url: string;
+  }>("/me/support", token, { method: "POST", body });
 }
 
 export function fetchPortalLoyalty(

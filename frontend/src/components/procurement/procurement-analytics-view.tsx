@@ -77,7 +77,7 @@ export function ProcurementAnalyticsView() {
             <Kpi label="RFQ participation" value={d.kpis.rfqParticipation.rate === null ? "No data" : `${d.kpis.rfqParticipation.rate}%`} hint={`${d.kpis.rfqParticipation.responded}/${d.kpis.rfqParticipation.invited} invites answered`} />
             <Kpi label="Savings vs baseline" value={d.kpis.savingsVsBaseline.amount === null ? "No comparable RFQs" : money(d.kpis.savingsVsBaseline.amount, d.currency)} hint={d.kpis.savingsVsBaseline.percent !== null ? `${d.kpis.savingsVsBaseline.percent}% across ${d.kpis.savingsVsBaseline.comparedRfqs} RFQ(s)` : "See methodology"} tone={d.kpis.savingsVsBaseline.amount !== null && d.kpis.savingsVsBaseline.amount < 0 ? "danger" : undefined} />
             <Kpi label="Off-contract spend" value={money(d.kpis.offContractSpend.amount, d.currency)} hint={d.kpis.offContractSpend.shareOfCommitted === null ? "No PO spend" : `${d.kpis.offContractSpend.shareOfCommitted}% of committed`} tone={d.kpis.offContractSpend.amount > 0 ? "warn" : undefined} />
-            <Kpi label="Match exception rate" value="Not available" hint={d.kpis.matchExceptionRate.detail} />
+            <Kpi label="Match exception rate" value={d.kpis.matchExceptionRate.value === null ? "No bills" : `${d.kpis.matchExceptionRate.value}%`} hint={d.kpis.matchExceptionRate.detail} tone={d.kpis.matchExceptionRate.value ? "warn" : undefined} />
             <Kpi label="Supplier response time" value={d.kpis.supplierResponseHours.median === null ? "No data" : `${d.kpis.supplierResponseHours.median} h`} hint={`median of ${d.kpis.supplierResponseHours.sample}`} />
             <Kpi label="Throughput" value={`${d.kpis.throughput.requestsConverted} converted`} hint={`${d.kpis.throughput.requestsCreated} requests · ${d.kpis.throughput.purchaseOrders} POs`} />
           </div>
@@ -139,7 +139,13 @@ export function ProcurementAnalyticsView() {
                 )}
               </Card>
               <Card title="Exception trend">
-                <p className="m-0 text-xs" style={{ color: "var(--app-text-muted)" }}>Not available: 3-way match exceptions need vendor bills, which are not recorded in this workspace (no Finance &amp; Accounting module).</p>
+                {d.exceptionTrend.length ? (
+                  <table className="w-full text-left text-xs">
+                    <thead style={{ color: "var(--app-text-faint)" }}><tr><th className="py-1">Bill month</th><th className="py-1">Billed POs</th><th className="py-1">With exception</th><th className="py-1">Rate</th></tr></thead>
+                    <tbody>{d.exceptionTrend.map((m) => <tr key={m.month} className="border-t" style={{ borderColor: "var(--app-border)" }}><td className="py-1">{new Date(`${m.month}-01T00:00:00Z`).toLocaleDateString(undefined, { month: "short", year: "numeric", timeZone: "UTC" })}</td><td className="py-1">{m.billedPurchaseOrders}</td><td className="py-1">{m.withException}</td><td className="py-1" style={m.withException ? { color: "var(--app-danger)" } : undefined}>{m.rate}%</td></tr>)}</tbody>
+                  </table>
+                ) : null}
+                <p className="m-0 mt-2 text-xs" style={{ color: "var(--app-text-muted)" }}>{d.kpis.matchExceptionRate.detail} Match results come from Finance › Bills; see <Link href="/procurement/three-way-match" className="underline">3-Way Match</Link> for each purchase order.</p>
               </Card>
             </div>
           </div>

@@ -38,6 +38,7 @@ describe('ProcurementService (real MySQL)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     service = new ProcurementService(
       new TenantPrismaService(prisma, cls as unknown as ClsService),
+      prisma,
     );
 
     const otherBusiness = await prisma.business.create({

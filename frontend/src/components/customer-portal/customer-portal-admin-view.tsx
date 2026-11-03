@@ -47,7 +47,8 @@ const featureLabels: Record<
   },
   billing: {
     title: "Quotes, invoices & payments",
-    description: "Canonical quotes, orders and recorded payments.",
+    description:
+      "Quotes, orders and recorded payments, plus a Pay now link for each open payment request.",
   },
   returns: {
     title: "Returns & refunds",
@@ -57,7 +58,7 @@ const featureLabels: Record<
   support: {
     title: "Support & messages",
     description:
-      "The page will clearly disclose that ticketing is not available yet.",
+      "Customers send requests that open Helpdesk tickets, then follow and reply to them.",
   },
   loyalty: {
     title: "Loyalty & memberships",
