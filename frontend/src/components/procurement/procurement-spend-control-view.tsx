@@ -7,6 +7,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useModuleHeader } from "@/components/layout/module-header-context";
 import { Card, Empty, Kpi, Notice, Page, errorText, money } from "@/components/website/website-ui";
 import { procurementContractsApi } from "@/lib/procurement-contracts-api";
+import { fetchProcurementBudgetSummary } from "@/lib/procurement-api";
 
 export function ProcurementSpendControlView() {
   const [days, setDays] = useState(90);
@@ -15,6 +16,11 @@ export function ProcurementSpendControlView() {
     queryFn: () => procurementContractsApi.analytics({ days }),
   });
   const data = query.data;
+  const budgetQuery = useQuery({
+    queryKey: ["procurement", "budget-summary"],
+    queryFn: fetchProcurementBudgetSummary,
+  });
+  const budget = budgetQuery.data;
 
   useModuleHeader({
     title: "Spend Control",
@@ -48,7 +54,12 @@ export function ProcurementSpendControlView() {
             <Kpi label="Committed spend" value={money(data.contractUtilization.committed, data.currency)} hint={`Purchase orders created in the last ${data.periodDays} days`} />
             <Kpi label="Under contract" value={money(data.contractUtilization.underContract, data.currency)} hint={data.contractUtilization.percent === null ? "No PO spend to compare" : `${data.contractUtilization.percent}% of recorded commitment`} tone="ok" />
             <Kpi label="Off-contract spend" value={money(data.kpis.offContractSpend.amount, data.currency)} hint={data.kpis.offContractSpend.shareOfCommitted === null ? "No PO spend to compare" : `${data.kpis.offContractSpend.shareOfCommitted}% of commitment`} tone={data.kpis.offContractSpend.amount > 0 ? "warn" : undefined} />
-            <Kpi label="Procurement budget" value="Not available" hint="No budget source is configured in this workspace." />
+            <Kpi
+              label="Procurement budget"
+              value={!budget ? "…" : budget.available ? (budget.totals.percentUsed === null ? "No budget" : `${budget.totals.percentUsed}% used`) : "Not available"}
+              hint={!budget ? "Checking Finance › Budgets" : budget.available ? `${money(budget.totals.remaining, budget.currency)} left of ${money(budget.totals.budget, budget.currency)}, fiscal year to date` : budget.reason}
+              tone={budget?.available && budget.totals.remaining < 0 ? "danger" : undefined}
+            />
           </div>
 
           {data.kpis.offContractSpend.amount > 0 && (
@@ -95,8 +106,8 @@ export function ProcurementSpendControlView() {
           <Card title="Control coverage">
             <dl className="m-0 grid gap-3 text-xs sm:grid-cols-3">
               <div><dt className="font-semibold">Recorded basis</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Purchase orders from the selected period, excluding cancelled orders.</dd></div>
-              <div><dt className="font-semibold">Budget tracking</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Not available — budgets and budget enforcement need a Finance/AP source.</dd></div>
-              <div><dt className="font-semibold">Vendor bills and paid spend</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Not available — supplier bills and payment records are not tracked here.</dd></div>
+              <div><dt className="font-semibold">Budget tracking</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Budget codes on purchase requests are Finance account codes, checked against Finance › Budgets (approved version, fiscal year to date).{budget?.available && budget.unmatchedCodes.length ? ` Not a Finance account: ${budget.unmatchedCodes.join(", ")}.` : ""}</dd></div>
+              <div><dt className="font-semibold">Vendor bills and paid spend</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>{data.kpis.billedSpend.bills ? `${money(data.kpis.billedSpend.billed, data.currency)} billed and ${money(data.kpis.billedSpend.paid, data.currency)} paid on ${data.kpis.billedSpend.bills} Finance bill(s) for these purchase orders.` : "No Finance bills are recorded for these purchase orders yet."}</dd></div>
             </dl>
             <p className="m-0 mt-3 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
               The off-contract amount and contract coverage above come directly from the existing ProcurementAnalyticsService; this page does not recalculate them. See <Link href="/procurement/analytics" className="underline">Procurement Analytics</Link> or <Link href="/settings/procurement" className="underline">Procurement Settings</Link>.

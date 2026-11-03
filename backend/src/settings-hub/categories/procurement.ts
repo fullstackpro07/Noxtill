@@ -1,3 +1,4 @@
+import { PRICE_TOL, QTY_TOL } from '../../finance/finance-match.util';
 import { CAPABILITIES } from '../../common/capabilities/capabilities.constants';
 import { CategoryDef, plural, row } from '../hub.core';
 import { HubDeps } from './hub.deps';
@@ -26,7 +27,7 @@ export function procurementCategories(d: HubDeps): CategoryDef[] {
       help: [
         'Submitted purchase requests are approved or rejected from the Action Center.',
         'Contract renewal alerts go to the contract owner (or every business owner when no owner is set) as in-app notifications.',
-        'Budgets, vendor bills and 3-way match tolerances need a Finance & Accounting module, which this workspace does not have.',
+        'Vendor bills and their 3-way match results come from Finance › Bills and show on Procurement › 3-Way Match. A purchase request’s budget code is a Finance account code, checked against Finance › Budgets.',
       ],
       actions: [
         {
@@ -149,21 +150,24 @@ export function procurementCategories(d: HubDeps): CategoryDef[] {
         },
         {
           title: 'Finance-dependent controls',
-          hint: 'Not in this workspace',
+          hint: 'Read from Finance & Accounting',
           rows: [
             row({
               key: 'procurement-budgets',
               label: 'Budgets',
               description:
-                'Budget availability is read from Finance & Accounting, which this workspace does not have, so budget figures are not available.',
-              state: () => ({ value: 'Not available', tone: 'neutral' }),
+                'A purchase request’s budget code is a Finance account code. Its budget check reads Finance › Budgets (the approved version for the fiscal year) against posted actuals, fiscal year to date. It warns; it does not block a request.',
+              state: () => ({ value: 'Read from Finance', tone: 'green' }),
             }),
             row({
               key: 'procurement-tolerances',
               label: '3-way match tolerances',
               description:
-                'Price and quantity tolerances apply to vendor bills, which are not recorded without Finance & Accounting.',
-              state: () => ({ value: 'Not available', tone: 'neutral' }),
+                'Finance checks each vendor bill line against the purchase order and goods received with these fixed tolerances; they are not configurable.',
+              state: () => ({
+                value: `Quantity ±${QTY_TOL * 100}% · price ±${PRICE_TOL * 100}%`,
+                tone: 'green',
+              }),
             }),
           ],
         },

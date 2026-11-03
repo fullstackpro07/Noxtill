@@ -229,6 +229,8 @@ export interface StorefrontOptions {
   showPrices: boolean;
   outOfStockBehavior: "hide" | "show_unavailable";
   checkoutEnabled: boolean;
+  /** Ask online-order customers to pay through Payments & Billing. */
+  onlinePayment: boolean;
 }
 
 export interface StorefrontOverview {

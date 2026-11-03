@@ -249,12 +249,21 @@ the Business Intelligence, Customer Portal, Website and Procurement screens with
 - **Custom domains are verified (real DNS TXT lookup + TLS certificate check) but traffic is not routed
   to them.** Visitors use `/site/<slug>` until the hosting proxy is configured to map a domain to a
   site. The UI says this plainly.
-- **Storefront and portal orders are created unpaid.** These modules were built before Payments &
-  Billing existed on `main` and are not yet connected to it.
+- **Customer Portal payments use Payments & Billing requests.** Orders are still created unpaid; staff
+  send a payment request (Payments › Requests) and the portal's Quotes & payments screen shows it with
+  a Pay now link to Payments' own `/pay/<token>` checkout. The portal never marks anything paid.
+  The online store can do the same at checkout when the owner turns on "Ask customers to pay online"
+  (Website › Store options) and Payments has a payment-link method (by default, Bank transfer): each
+  order gets a Payments request for its total and the confirmation screen shows Pay now.
+- **Customer Portal support requests are Helpdesk tickets** (channel "Portal"); replies, files and
+  ratings happen on Helpdesk's own `/support/t/<token>` page.
 - **No analytics source:** website sessions and conversion are shown as "Not tracked".
-- **Procurement does not read Finance yet:** vendor bills, budgets, billed/paid spend and 3-way-match
-  invoice comparison are shown as "Not available" in Procurement, although Finance (bills) now exists on
-  `main`. Connecting them is open work.
+- **Procurement reads Finance bills:** 3-Way Match lists the bills recorded against each purchase
+  order with the match result Finance stored on the bill (quantity ±2%, price ±1%); Analytics and
+  Spend Control show the exception rate (with a month-by-month trend) and billed / paid totals from
+  the same bills. Supplier Contracts show billed / paid per contract (bills for the supplier dated in
+  the contract period). A purchase request's budget code is a Finance account code; its budget check
+  reads Finance › Budgets (approved version, fiscal year to date) and warns but does not block.
 - **Supplier contracts are not linked to Contracts eSign yet:** supplier contracts and website media link
   to files hosted elsewhere.
 - Public form submissions: 10 per minute per IP; spam trap + idempotency keys; marketing consent only

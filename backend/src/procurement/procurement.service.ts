@@ -7,6 +7,8 @@ import {
   Prisma,
 } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { billMatchLabel } from '../finance/finance-match.util';
 import { AppException } from '../common/filters/app.exception';
 import {
   CreateProcurementRequestDto,
@@ -54,7 +56,44 @@ const COMMITTED_STATUSES: PurchaseOrderStatus[] = [
 
 @Injectable()
 export class ProcurementService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    /** Finance bills are keyed by the group root, which the tenant client would re-scope to this branch. */
+    private readonly prisma: PrismaService,
+  ) {}
+
+  /** Purchase orders whose Finance bill (keyed by the group root) recorded a match exception. */
+  private async openOrderMatchExceptions(
+    businessId: string,
+    purchaseOrderIds: string[],
+  ) {
+    if (!purchaseOrderIds.length) return 0;
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { id: true, parentId: true },
+    });
+    const bills = await this.prisma.finBill.findMany({
+      where: {
+        businessId: business.parentId ?? business.id,
+        purchaseOrderId: { in: purchaseOrderIds },
+        status: { not: 'Voided' },
+      },
+      select: {
+        purchaseOrderId: true,
+        status: true,
+        matchStatus: true,
+        matchDetail: true,
+      },
+    });
+    return new Set(
+      bills
+        .filter((bill) => {
+          const label = billMatchLabel(bill);
+          return label !== '3-Way Matched' && label !== 'No PO';
+        })
+        .map((bill) => bill.purchaseOrderId),
+    ).size;
+  }
 
   async overview(businessId: string) {
     // PurchaseOrder is an older model that was not originally added to the tenant extension.
@@ -120,6 +159,10 @@ export class ProcurementService {
       (a, b) => b.committedValue - a.committedValue,
     );
     const topSupplier = supplierCommitments[0] ?? null;
+    const matchExceptions = await this.openOrderMatchExceptions(
+      businessId,
+      orders.map((order) => order.id),
+    );
     const recentOrders = await this.tenantPrisma.client.purchaseOrder.findMany({
       where: { businessId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -222,15 +265,16 @@ export class ProcurementService {
             'Confirmed or partially received purchase orders with outstanding quantities.',
         },
         matchExceptions: {
-          value: null,
-          availability: 'not_available' as const,
+          value: matchExceptions,
+          availability: 'tracked' as const,
           detail:
-            'Supplier bills are not recorded, so 3-way match exceptions cannot be computed.',
+            'Open purchase orders whose vendor bill in Finance › Bills has a quantity or price exception.',
         },
         spendVsBudget: {
           value: null,
           availability: 'not_available' as const,
-          detail: 'No procurement budget source is configured.',
+          detail:
+            'Read from Finance › Budgets by ProcurementBudgetsService (the overview endpoint fills this in).',
         },
         supplierConcentration: {
           value:
@@ -266,7 +310,7 @@ export class ProcurementService {
         procurementBudgets: 'not_available',
         branchOnPurchaseOrders: 'not_tracked',
         perOrderCurrency: 'not_tracked',
-        financeMatch: 'not_available',
+        financeMatch: 'tracked',
       },
     };
   }
@@ -377,8 +421,8 @@ export class ProcurementService {
   }
 
   /**
-   * The recorded PO and goods-receipt quantities are available here. Vendor bills are not
-   * recorded in this product, so no three-way match verdict or exception count is inferred.
+   * Recorded PO and goods-receipt quantities, with the vendor bills recorded against each PO in
+   * Finance › Bills and the 3-way match result Finance stored on each bill (never recomputed here).
    */
   async threeWayMatch(businessId: string) {
     const purchaseOrders =
@@ -408,7 +452,34 @@ export class ProcurementService {
         },
       });
 
+    // Vendor bills recorded in Finance › Bills against these purchase orders (read-only here).
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { id: true, parentId: true },
+    });
+    const bills = purchaseOrders.length
+      ? await this.prisma.finBill.findMany({
+          where: {
+            businessId: business.parentId ?? business.id,
+            purchaseOrderId: { in: purchaseOrders.map((order) => order.id) },
+            status: { not: 'Voided' },
+          },
+          orderBy: [{ billDate: 'desc' }, { id: 'asc' }],
+          include: {
+            lines: { select: { poItemId: true, qty: true, unitCost: true } },
+          },
+        })
+      : [];
+    const billsByOrder = new Map<string, typeof bills>();
+    for (const bill of bills)
+      billsByOrder.set(bill.purchaseOrderId!, [
+        ...(billsByOrder.get(bill.purchaseOrderId!) ?? []),
+        bill,
+      ]);
+
     const orders = purchaseOrders.map((order) => {
+      const orderBills = billsByOrder.get(order.id) ?? [];
+      const billedLines = orderBills.flatMap((bill) => bill.lines);
       const receivedLines = order.items.filter(
         (item) => item.qtyReceived >= item.qtyOrdered,
       ).length;
@@ -430,13 +501,35 @@ export class ProcurementService {
         receivedAt: order.receivedAt,
         supplier: order.supplier,
         receiptStatus,
-        items: order.items.map((item) => ({
-          id: item.id,
-          product: item.product,
-          qtyOrdered: item.qtyOrdered,
-          qtyReceived: item.qtyReceived,
-          outstanding: Math.max(0, item.qtyOrdered - item.qtyReceived),
-          unitCost: Number(item.unitCost),
+        items: order.items.map((item) => {
+          const billed = billedLines.filter(
+            (line) => line.poItemId === item.id,
+          );
+          return {
+            id: item.id,
+            product: item.product,
+            qtyOrdered: item.qtyOrdered,
+            qtyReceived: item.qtyReceived,
+            outstanding: Math.max(0, item.qtyOrdered - item.qtyReceived),
+            unitCost: Number(item.unitCost),
+            billed: billed.length
+              ? {
+                  qty: billed.reduce((sum, line) => sum + Number(line.qty), 0),
+                  unitCost: Number(billed[0].unitCost),
+                }
+              : null,
+          };
+        }),
+        bills: orderBills.map((bill) => ({
+          id: bill.id,
+          number: bill.number,
+          vendorInvoiceNo: bill.vendorInvoiceNo,
+          billDate: bill.billDate,
+          status: bill.status,
+          currency: bill.currency,
+          total: Number(bill.total),
+          amountPaid: Number(bill.amountPaid),
+          matchResult: billMatchLabel(bill),
         })),
       };
     });
@@ -454,11 +547,24 @@ export class ProcurementService {
         fullyReceived: orders.filter(
           (order) => order.receiptStatus === 'received',
         ).length,
+        billed: orders.filter((order) => order.bills.length).length,
+        matched: orders.filter(
+          (order) =>
+            order.bills.length &&
+            order.bills.every((bill) => bill.matchResult === '3-Way Matched'),
+        ).length,
+        exceptions: orders.filter((order) =>
+          order.bills.some(
+            (bill) =>
+              bill.matchResult !== '3-Way Matched' &&
+              bill.matchResult !== 'No PO',
+          ),
+        ).length,
       },
       listLimit: 100,
-      invoiceAvailability: 'not_available' as const,
+      invoiceAvailability: 'available' as const,
       invoiceDetail:
-        'Vendor bills are not recorded in this workspace, so invoice comparison and 3-way match results are not available.',
+        'Vendor bills come from Finance › Bills. Each match result is the 3-way match Finance recorded when the bill was saved: billed quantity and price against this purchase order and the goods received.',
     };
   }
 

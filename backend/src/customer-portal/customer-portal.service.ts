@@ -28,6 +28,8 @@ import { CommerceSubscriptionsService } from '../commerce/commerce-subscriptions
 import { LoyaltyService } from '../customers/loyalty.service';
 import { MembershipsService } from '../customers/memberships.service';
 import { EmailService } from '../messaging/channels/email.service';
+import { isOpenStatus } from '../helpdesk/helpdesk.constants';
+import { REQUEST_OPEN } from '../payments/payments.constants';
 import { CreateReturnDto } from '../orders/dto/create-return.dto';
 import {
   CUSTOMER_PORTAL_FEATURES,
@@ -374,10 +376,8 @@ export class CustomerPortalService {
       recentActivity,
       customerPortalEventsLast7Days: eventsThisWeek,
       unsupported: {
-        supportTickets:
-          'Not available — no customer support ticket service exists yet.',
-        onlineInvoicePayments:
-          'Not configured — the billing module has no customer one-off invoice checkout flow.',
+        supportTickets: await this.supportSummary(businessId),
+        onlineInvoicePayments: await this.paymentsSummary(businessId),
         warrantyClaims:
           'Not tracked — no warranty claim records exist in the system.',
       },
@@ -1364,14 +1364,17 @@ export class CustomerPortalService {
       enabledFeatures: identity.enabledFeatures,
       layout,
       support: {
-        available: false,
-        reason:
-          'Not available — this business has no customer support ticket service in Noxtill yet.',
+        available: true,
+        openRequests: await this.openSupportRequests(
+          identity.businessId,
+          identity.customerId,
+        ),
       },
       billing: {
-        onlinePayment: false,
-        reason:
-          'Not configured — customer one-off invoice payments are not available.',
+        onlinePayment: true,
+        openRequests: (
+          await this.openPayRequests(identity.businessId, identity.customerId)
+        ).length,
       },
       legal: {
         termsUrl: settings?.termsUrl ?? null,
@@ -1993,9 +1996,8 @@ export class CustomerPortalService {
         ordersAndReceipts: this.pageInfo(receiptsPage),
       },
       onlineInvoicePayment: {
-        available: false,
-        reason:
-          'Not configured — Noxtill has no customer one-off invoice checkout flow.',
+        available: true,
+        reason: 'Pay online from a payment request sent by the business.',
       },
       note: 'Order and payment rows are canonical. Invoice PDFs are generated from order records by staff; a customer download link is not stored here.',
     };
@@ -2190,15 +2192,6 @@ export class CustomerPortalService {
       refundAmount: result.refundAmount,
       status: result.status,
       items: result.items,
-    };
-  }
-
-  async getSupport(authorization?: string) {
-    await this.requireIdentity(authorization, 'support');
-    return {
-      available: false,
-      reason:
-        'Not available — the existing messaging service sends business-initiated notifications and does not store customer support conversations or tickets.',
     };
   }
 
@@ -2591,7 +2584,7 @@ export class CustomerPortalService {
     });
   }
 
-  private async requireIdentity(
+  async requireIdentity(
     authorization?: string,
     requiredFeature?: CustomerPortalFeature,
   ): Promise<PortalIdentity> {
@@ -2659,7 +2652,67 @@ export class CustomerPortalService {
     return { accessToken: token, tokenType: 'Bearer', expiresAt };
   }
 
-  private async recordActivity(
+  /** Support requests are Helpdesk tickets, kept under the group root. */
+  private async portalTickets(businessId: string, customerId?: string) {
+    const b = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { id: true, parentId: true },
+    });
+    return this.prisma.helpdeskTicket.findMany({
+      where: {
+        businessId: b.parentId ?? b.id,
+        mergedIntoId: null,
+        ...(customerId
+          ? { customerId }
+          : { channel: 'Portal', branchId: businessId }),
+      },
+      select: { status: true },
+    });
+  }
+
+  private async openSupportRequests(businessId: string, customerId: string) {
+    const rows = await this.portalTickets(businessId, customerId);
+    return rows.filter((r) => isOpenStatus(r.status)).length;
+  }
+
+  /** Open Payments requests (keyed by the group root) for one customer, or for every portal account here. */
+  private async openPayRequests(businessId: string, customerId?: string) {
+    const b = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { id: true, parentId: true },
+    });
+    const customerIds = customerId
+      ? [customerId]
+      : (
+          await this.prisma.customerPortalAccount.findMany({
+            where: { businessId, active: true },
+            select: { customerId: true },
+          })
+        ).map((a) => a.customerId);
+    if (!customerIds.length) return [];
+    return this.prisma.payRequest.findMany({
+      where: {
+        businessId: b.parentId ?? b.id,
+        customerId: { in: customerIds },
+        status: { in: REQUEST_OPEN },
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+  }
+
+  private async paymentsSummary(businessId: string) {
+    const open = (await this.openPayRequests(businessId)).length;
+    return `Handled in Payments — ${open} open payment request(s) for portal customers, payable online from the portal.`;
+  }
+
+  private async supportSummary(businessId: string) {
+    const rows = await this.portalTickets(businessId);
+    const open = rows.filter((r) => isOpenStatus(r.status)).length;
+    return `Handled in Helpdesk — ${open} open of ${rows.length} request(s) sent from the portal.`;
+  }
+
+  async recordActivity(
     businessId: string,
     customerId: string,
     accountId: string | null,

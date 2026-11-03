@@ -21,6 +21,7 @@ import {
   convertProcurementRequest,
   createProcurementRequest,
   fetchProcurementRequests,
+  fetchProcurementRequestBudget,
   submitProcurementRequest,
   updateProcurementRequest,
   withdrawProcurementRequest,
@@ -34,6 +35,61 @@ import { useSession } from "@/lib/session";
 import { useModuleHeader } from "@/components/layout/module-header-context";
 import { formatDate } from "@/lib/format";
 import { askConfirm } from "@/lib/ask-dialog";
+
+function RequestBudgetCheck({ requestId }: { requestId: string }) {
+  const [open, setOpen] = useState(false);
+  const query = useQuery({
+    queryKey: ["procurement", "request-budget", requestId],
+    queryFn: () => fetchProcurementRequestBudget(requestId),
+    enabled: open,
+  });
+  if (!open)
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 text-sm font-medium text-[var(--app-primary)] hover:underline"
+      >
+        Check budget
+      </button>
+    );
+  const data = query.data;
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-muted)] p-3 text-sm">
+      {query.isLoading ? (
+        <p className="text-[var(--app-text-muted)]">Checking Finance › Budgets…</p>
+      ) : query.isError ? (
+        <p className="text-[var(--app-danger)]">{query.error.message}</p>
+      ) : !data ? null : !data.available ? (
+        <p className="text-[var(--app-text-muted)]">{data.reason}</p>
+      ) : (
+        <>
+          <p className="font-medium text-[var(--app-text)]">
+            {data.account.code} · {data.account.name}:{" "}
+            {formatRequestCurrency(data.remaining, data.currency)} left of{" "}
+            {formatRequestCurrency(data.budget, data.currency)}
+          </p>
+          <p className="mt-1 text-[var(--app-text-muted)]">
+            Spent {formatRequestCurrency(data.actual, data.currency)} fiscal year to date ·{" "}
+            {data.budgetVersion.name} v{data.budgetVersion.version} ({data.budgetVersion.status})
+          </p>
+          <p
+            className={`mt-1 font-medium ${data.fits === false ? "text-[var(--app-danger)]" : data.fits ? "text-[var(--app-success)]" : "text-[var(--app-text-muted)]"}`}
+          >
+            {data.fits === null
+              ? `This request is in ${data.estimateCurrency}; it can't be compared with a ${data.currency} budget without FX conversion.`
+              : data.fits
+                ? "This request fits within the remaining budget."
+                : `This request is ${formatRequestCurrency(data.estimate - data.remaining, data.currency)} over the remaining budget.`}
+          </p>
+          <Link href="/finance/budgets" className="mt-1 inline-block text-xs text-[var(--app-primary)] hover:underline">
+            Open Finance › Budgets
+          </Link>
+        </>
+      )}
+    </div>
+  );
+}
 
 function formatRequestCurrency(value: number, currency: string) {
   try {
@@ -414,7 +470,7 @@ export function ProcurementRequestsView() {
               />
             </label>
             <label className="grid gap-1.5 text-sm text-[var(--app-text-muted)]">
-              Budget code
+              Budget code (Finance account code)
               <input
                 value={budgetCode}
                 onChange={(event) => setBudgetCode(event.target.value)}
@@ -846,6 +902,9 @@ export function ProcurementRequestsView() {
                     </tbody>
                   </table>
                 </div>
+                {request.budgetCode ? (
+                  <RequestBudgetCheck requestId={request.id} />
+                ) : null}
                 {request.decisionReason && (
                   <p className="mt-3 rounded-lg bg-[var(--app-surface-muted)] p-3 text-sm text-[var(--app-text-muted)]">
                     Decision note: {request.decisionReason}

@@ -42,13 +42,17 @@ export interface SupplierContract {
   spendUnderContract: number;
   posUnderContract: number;
   posAfterExpiry: number;
+  /** Finance › Bills for this supplier dated within the contract period (base currency). */
+  billsUnderContract: number;
+  billedUnderContract: number;
+  paidUnderContract: number;
   issues: string[];
 }
 
 export interface ContractsResponse {
   currency: string;
   alertLeadDays: number;
-  kpis: { active: number; expiring30: number; expiring60: number; expiring90: number; autoRenewing: number; spendUnderContract: number; nonCompliant: number };
+  kpis: { active: number; expiring30: number; expiring60: number; expiring90: number; autoRenewing: number; spendUnderContract: number; billedUnderContract: number; paidUnderContract: number; nonCompliant: number };
   contracts: SupplierContract[];
   spendNote: string;
 }
@@ -96,10 +100,15 @@ export interface ProcurementAnalytics {
     rfqParticipation: { invited: number; responded: number; rate: number | null };
     savingsVsBaseline: { amount: number | null; percent: number | null; comparedRfqs: number };
     offContractSpend: { amount: number; shareOfCommitted: number | null };
-    matchExceptionRate: { value: null; availability: "not_available"; detail: string };
+    /** Read from the match result Finance recorded on each vendor bill; null when no PO in the period is billed. */
+    matchExceptionRate: { value: number | null; availability: "available"; billedPurchaseOrders: number; detail: string };
+    /** Finance bills on the period's POs, in the base currency (amount × Finance FX rate). */
+    billedSpend: { bills: number; billed: number; paid: number };
     supplierResponseHours: { median: number | null; sample: number };
     throughput: { requestsCreated: number; requestsConverted: number; purchaseOrders: number };
   };
+  /** By bill month: purchase orders billed in Finance and how many had a quantity or price exception. */
+  exceptionTrend: { month: string; billedPurchaseOrders: number; withException: number; rate: number }[];
   spendByCategory: { category: string; committed: number }[];
   savings: { rows: { rfqId: string; supplier: string | null; baseline: number; awarded: number; savings: number }[]; exclusions: Record<string, number>; methodology: string };
   funnel: Record<string, number>;

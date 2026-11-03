@@ -6,6 +6,7 @@ import { AppException } from '../common/filters/app.exception';
 import {
   PayActor,
   PayContextService,
+  STOREFRONT_CREATOR,
   corrId,
   dec,
   num,
@@ -230,13 +231,71 @@ export class PayRequestsService {
 
   async create(a: PayActor, d: CreateRequest) {
     this.ctx.need(a, 'request', 'Creating a payment request');
-    const pol = await this.ctx.policy(a.rootId);
-    const biz = await this.ctx.business(a.rootId);
+    const req = await this.insert(a.rootId, a, a.userId, d);
+    if (d.contact !== 'none') await this.send(a, req.id, d.contact);
+    return this.db.payRequest.findUniqueOrThrow({ where: { id: req.id } });
+  }
+
+  /** Whether the online store can ask for payment: a payment-link method with a working live provider. */
+  async storefrontReady(rootId: string, currency: string) {
+    return (await this.allowedMethods(rootId, 'live', currency)).length > 0;
+  }
+
+  /** The open request for an order, if any (the storefront's "Pay now" link on a repeat submit). */
+  async openForOrder(rootId: string, orderId: string) {
+    return this.db.payRequest.findFirst({
+      where: {
+        businessId: rootId,
+        env: 'live',
+        linkType: 'Order',
+        linkId: orderId,
+        status: { in: REQUEST_OPEN },
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Online store checkout: asks for the order total through the same validation as a staff request
+   * (collection limits, one open request per order, enabled live methods). Never messages anyone —
+   * the customer gets the link on the confirmation screen.
+   */
+  async createForStorefrontOrder(
+    rootId: string,
+    o: { id: string; orderNo: number; customerId: string; total: number },
+    currency: string,
+  ) {
+    return (
+      (await this.openForOrder(rootId, o.id)) ??
+      this.insert(rootId, 'System', STOREFRONT_CREATOR, {
+        env: 'live',
+        customerId: o.customerId,
+        contact: 'none',
+        linkType: 'Order',
+        linkId: o.id,
+        amountType: 'Fixed',
+        amount: o.total,
+        currency,
+        description: `Online order #${o.orderNo}`,
+      })
+    );
+  }
+
+  /** Validates and stores a request; shared by staff requests and the online store's checkout. */
+  private async insert(
+    rootId: string,
+    who: PayActor | 'System',
+    createdById: string,
+    d: CreateRequest,
+  ) {
+    const pol = await this.ctx.policy(rootId);
+    const biz = await this.ctx.business(rootId);
     const customer = await this.db.customer.findFirst({
       where: {
         id: d.customerId,
         businessId: {
-          in: (await this.ctx.branches(a.rootId)).map((b) => b.id),
+          in: (await this.ctx.branches(rootId)).map((b) => b.id),
         },
       },
     });
@@ -258,11 +317,11 @@ export class PayRequestsService {
         'Partial payments are off in Payments › Settings › Collection policies.',
         HttpStatus.BAD_REQUEST,
       );
-    const link = await this.resolveLink(a.rootId, d);
+    const link = await this.resolveLink(rootId, d);
     if (d.linkType) {
       const dup = await this.db.payRequest.findFirst({
         where: {
-          businessId: a.rootId,
+          businessId: rootId,
           env: d.env,
           linkType: d.linkType,
           linkId: d.linkId,
@@ -301,7 +360,7 @@ export class PayRequestsService {
           HttpStatus.BAD_REQUEST,
         );
     }
-    const methods = await this.allowedMethods(a.rootId, d.env, d.currency);
+    const methods = await this.allowedMethods(rootId, d.env, d.currency);
     const chosen = (
       d.methods?.length ? d.methods : methods.map((m) => m.method)
     ).filter((m) => methods.some((x) => x.method === m));
@@ -317,11 +376,11 @@ export class PayRequestsService {
     );
     const nonce = randomBytes(12).toString('hex');
     const id = randomUUID();
-    const number = await this.ctx.number(a.rootId, 'request');
+    const number = await this.ctx.number(rootId, 'request');
     const req = await this.db.payRequest.create({
       data: {
         id,
-        businessId: a.rootId,
+        businessId: rootId,
         branchId: link.branchId ?? customer.businessId,
         env: d.env,
         number,
@@ -346,19 +405,18 @@ export class PayRequestsService {
         tokenHash: PayRequestsService.hashToken(this.token(id, nonce)),
         tokenNonce: nonce,
         template: d.template ?? null,
-        createdById: a.userId,
+        createdById,
       },
     });
     await this.ctx.audit(
-      a.rootId,
-      a,
+      rootId,
+      who,
       'Payment request created',
       'request',
       req.id,
       `${req.number} · ${amount == null ? 'flexible' : amount.toFixed(2)} ${req.currency}${link.linkRef ? ` · ${d.linkType} ${link.linkRef}` : ''}`,
     );
-    if (d.contact !== 'none') await this.send(a, req.id, d.contact);
-    return this.db.payRequest.findUniqueOrThrow({ where: { id: req.id } });
+    return req;
   }
 
   /** Methods the business has enabled on payment links whose primary provider can take this currency in this env. */

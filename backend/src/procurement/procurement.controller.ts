@@ -18,17 +18,48 @@ import {
 } from './procurement.dto';
 import { ProcurementService } from './procurement.service';
 import { CommerceRfqsService } from '../commerce/commerce-rfqs.service';
+import { ProcurementBudgetsService } from './procurement-budgets.service';
 
 @Controller('procurement')
 export class ProcurementController {
   constructor(
     private readonly procurement: ProcurementService,
     private readonly commerceRfqs: CommerceRfqsService,
+    private readonly budgets: ProcurementBudgetsService,
   ) {}
 
   @Get('overview')
-  overview(@CurrentUser() user: AuthenticatedUser) {
-    return this.procurement.overview(user.businessId);
+  async overview(@CurrentUser() user: AuthenticatedUser) {
+    const [overview, budget] = await Promise.all([
+      this.procurement.overview(user.businessId),
+      this.budgets.summary(user.businessId),
+    ]);
+    return {
+      ...overview,
+      metrics: {
+        ...overview.metrics,
+        spendVsBudget: budget.available
+          ? {
+              value: budget.totals!.percentUsed,
+              availability: 'tracked' as const,
+              detail: `${budget.totals!.actual} of ${budget.totals!.budget} ${budget.currency} used, fiscal year to date, across the Finance accounts used as budget codes (${budget.budgetVersion!.name} v${budget.budgetVersion!.version}).`,
+            }
+          : {
+              value: null,
+              availability: 'not_available' as const,
+              detail: budget.reason!,
+            },
+      },
+      dataCompleteness: {
+        ...overview.dataCompleteness,
+        procurementBudgets: budget.available ? 'tracked' : 'not_available',
+      },
+    };
+  }
+
+  @Get('budget')
+  budgetSummary(@CurrentUser() user: AuthenticatedUser) {
+    return this.budgets.summary(user.businessId);
   }
 
   @RequireCapability(CAPABILITIES.PURCHASES_MANAGE)
@@ -54,6 +85,14 @@ export class ProcurementController {
   @Get('requests/:id')
   getRequest(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.procurement.getRequest(user.businessId, id);
+  }
+
+  @Get('requests/:id/budget')
+  getRequestBudget(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.budgets.forRequest(user.businessId, id);
   }
 
   @Post('requests')

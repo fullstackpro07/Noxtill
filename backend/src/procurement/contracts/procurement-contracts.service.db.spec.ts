@@ -105,6 +105,7 @@ describe('Procurement contracts & analytics (MySQL)', () => {
 
   afterAll(async () => {
     const ids = [businessId, otherBusinessId];
+    await prisma.finBill.deleteMany({ where: { businessId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { businessId: { in: ids } } });
     await prisma.notification.deleteMany({
       where: { businessId: { in: ids } },
@@ -167,6 +168,31 @@ describe('Procurement contracts & analytics (MySQL)', () => {
     await contracts.confirmTerms(businessId, userId, c.id);
     await po(day(-30), 10, 2); // inside: 20
     await po(day(-2), 5, 4); // after expiry: 20
+    // Finance bills for this supplier: inside the term, after expiry, and a voided one.
+    const finBill = (
+      number: string,
+      billDate: Date,
+      total: number,
+      paid: number,
+      status = 'Posted',
+    ) =>
+      prisma.finBill.create({
+        data: {
+          businessId,
+          number: `${number}-${stamp}`.slice(0, 24),
+          supplierId,
+          vendorName: 'Spec supplier',
+          billDate,
+          dueDate: billDate,
+          currency: 'USD',
+          total,
+          amountPaid: paid,
+          status,
+        },
+      });
+    await finBill('B-IN', day(-20), 30, 10);
+    await finBill('B-LATE', day(-2), 50, 0);
+    await finBill('B-VOID', day(-20), 999, 999, 'Voided');
 
     let list = await contracts.list(businessId);
     let row = list.contracts[0];
@@ -175,6 +201,13 @@ describe('Procurement contracts & analytics (MySQL)', () => {
       spendUnderContract: 20,
       posUnderContract: 1,
       posAfterExpiry: 1,
+      billsUnderContract: 1,
+      billedUnderContract: 30,
+      paidUnderContract: 10,
+    });
+    expect(list.kpis).toMatchObject({
+      billedUnderContract: 30,
+      paidUnderContract: 10,
     });
     expect(row.issues).toEqual(['1 PO(s) placed after expiry']);
     expect(list.kpis.nonCompliant).toBe(1);
@@ -191,6 +224,9 @@ describe('Procurement contracts & analytics (MySQL)', () => {
       effectiveStatus: 'active',
       spendUnderContract: 40,
       posAfterExpiry: 0,
+      billsUnderContract: 2,
+      billedUnderContract: 80,
+      paidUnderContract: 10,
     });
     expect(row.issues).toEqual([
       'Terms not confirmed against the source document',
@@ -347,10 +383,13 @@ describe('Procurement contracts & analytics (MySQL)', () => {
     });
     expect(a.kpis.supplierResponseHours).toMatchObject({ median: 6 });
     expect(a.kpis.requestToPoCycleDays).toMatchObject({ median: 2, sample: 1 });
+    // No Finance bills are linked to these POs, so there is no rate yet (not "not available").
     expect(a.kpis.matchExceptionRate).toMatchObject({
       value: null,
-      availability: 'not_available',
+      availability: 'available',
+      billedPurchaseOrders: 0,
     });
+    expect(a.kpis.billedSpend).toEqual({ bills: 0, billed: 0, paid: 0 });
     expect(a.spendByCategory).toEqual([{ category: 'Baking', committed: 65 }]);
     // All three POs fall inside the (now extended) Flour contract or the active packaging contract.
     expect(a.kpis.offContractSpend.amount).toBe(0);

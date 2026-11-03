@@ -14,6 +14,11 @@ import { computeDeliveryPricing } from '../delivery/delivery-pricing.util';
 import { DELIVERY_ERROR_CODES } from '../delivery/delivery.constants';
 import { ActivityService } from '../activity/activity.service';
 import { readStorefront } from '../website/website-content.util';
+import { PayRequestsService } from '../payments/pay-requests.service';
+
+type PublicPayment =
+  | { status: 'requested'; payUrl: string }
+  | { status: 'not_requested'; reason: string };
 
 /**
  * Public online-ordering / dine-in endpoints (BE-029). No auth — the
@@ -25,7 +30,88 @@ export class PublicOrderingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
+    /** Payments & Billing; absent where Payments isn't wired (online payment then reads as not set up). */
+    private readonly payRequests?: PayRequestsService,
   ) {}
+
+  /** Whether this store asks for online payment: the owner's switch plus a live payment-link method. */
+  private async onlinePaymentStatus(
+    business: { id: string; parentId: string | null; currency: string },
+    enabled: boolean,
+  ) {
+    if (!enabled)
+      return {
+        availability: 'not_configured' as const,
+        detail:
+          'Online payment is off for this store. Orders submitted here are unpaid until the business confirms payment.',
+      };
+    if (
+      !this.payRequests ||
+      !(await this.payRequests.storefrontReady(
+        business.parentId ?? business.id,
+        business.currency,
+      ))
+    )
+      return {
+        availability: 'not_configured' as const,
+        detail:
+          'Online payment is not set up yet (no payment method is enabled for payment links in Payments). Orders submitted here are unpaid until the business confirms payment.',
+      };
+    return {
+      availability: 'available' as const,
+      detail:
+        'After you place your order you get a link to pay the business online.',
+    };
+  }
+
+  /** Asks Payments for the order total. The order already exists, so a failure here never undoes it. */
+  private async requestPayment(
+    business: { id: string; parentId: string | null; currency: string },
+    order: Pick<Order, 'id' | 'orderNo' | 'total' | 'customerId'>,
+  ): Promise<PublicPayment> {
+    if (!order.customerId)
+      return {
+        status: 'not_requested',
+        reason:
+          'Online payment needs a phone number on the order. Pay the business directly.',
+      };
+    try {
+      const req = await this.payRequests!.createForStorefrontOrder(
+        business.parentId ?? business.id,
+        {
+          id: order.id,
+          orderNo: order.orderNo,
+          customerId: order.customerId,
+          total: Number(order.total),
+        },
+        business.currency,
+      );
+      return { status: 'requested', payUrl: this.payRequests!.url(req) };
+    } catch (error) {
+      return {
+        status: 'not_requested',
+        reason:
+          error instanceof AppException
+            ? `Online payment isn't available for this order: ${(error.getResponse() as { message?: string }).message ?? 'payment request refused'}. Pay the business directly.`
+            : 'Online payment could not be started for this order. Pay the business directly.',
+      };
+    }
+  }
+
+  /** The open payment link for an order already placed (a repeated submit of the same checkout). */
+  private async existingPayment(
+    business: { id: string; parentId: string | null },
+    orderId: string,
+  ): Promise<PublicPayment | undefined> {
+    if (!this.payRequests) return undefined;
+    const req = await this.payRequests.openForOrder(
+      business.parentId ?? business.id,
+      orderId,
+    );
+    return req
+      ? { status: 'requested', payUrl: this.payRequests.url(req) }
+      : undefined;
+  }
 
   private async resolveBusiness(slug: string) {
     const business = await this.prisma.business.findUnique({ where: { slug } });
@@ -111,11 +197,10 @@ export class PublicOrderingService {
               (method): method is string => typeof method === 'string',
             )
           : [],
-        onlinePayment: {
-          availability: 'not_configured' as const,
-          detail:
-            'Online payment processing is not connected. Orders submitted here are unpaid until the business confirms payment.',
-        },
+        onlinePayment: await this.onlinePaymentStatus(
+          business,
+          storefront.onlinePayment,
+        ),
       },
       // Website & Commerce storefront presentation: hidden products are left out, the owner's
       // out-of-stock rule applies, and web-only wording replaces the display name only.
@@ -195,8 +280,7 @@ export class PublicOrderingService {
       .update(JSON.stringify(requestFingerprint))
       .digest('hex');
     const priorResponse = await this.findIdempotentResponse(
-      business.id,
-      business.currency,
+      business,
       idempotencyKeyHash,
       requestHash,
     );
@@ -459,8 +543,7 @@ export class PublicOrderingService {
         error.code === 'P2002'
       ) {
         const racedResponse = await this.findIdempotentResponse(
-          business.id,
-          business.currency,
+          business,
           idempotencyKeyHash,
           requestHash,
         );
@@ -487,19 +570,25 @@ export class PublicOrderingService {
       });
     }
 
-    return this.serializePublicOrder(order, business.currency);
+    const payment =
+      this.payRequests && readStorefront(site?.settings).onlinePayment
+        ? (await this.onlinePaymentStatus(business, true)).availability ===
+          'available'
+          ? await this.requestPayment(business, order)
+          : undefined
+        : undefined;
+    return this.serializePublicOrder(order, business.currency, payment);
   }
 
   private async findIdempotentResponse(
-    businessId: string,
-    currency: string,
+    business: { id: string; parentId: string | null; currency: string },
     keyHash: string,
     requestHash: string,
   ) {
     const order = await this.prisma.order.findUnique({
       where: {
         businessId_publicIdempotencyKeyHash: {
-          businessId,
+          businessId: business.id,
           publicIdempotencyKeyHash: keyHash,
         },
       },
@@ -514,12 +603,17 @@ export class PublicOrderingService {
     if (order.publicIdempotencyRequestHash !== requestHash) {
       throw this.idempotencyConflict();
     }
-    return this.serializePublicOrder(order, currency);
+    return this.serializePublicOrder(
+      order,
+      business.currency,
+      await this.existingPayment(business, order.id),
+    );
   }
 
   private serializePublicOrder(
     order: Pick<Order, 'id' | 'orderNo' | 'total'>,
     currency: string,
+    payment?: PublicPayment,
   ) {
     return {
       id: order.id,
@@ -527,7 +621,9 @@ export class PublicOrderingService {
       status: OrderStatus.pending,
       total: Number(order.total),
       currency,
+      // Paid only once Payments confirms it; the link starts a checkout, it doesn't mark anything paid.
       paymentStatus: 'unpaid' as const,
+      ...(payment ? { payment } : {}),
     };
   }
 

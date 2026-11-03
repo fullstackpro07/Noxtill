@@ -686,12 +686,15 @@ export interface StorefrontOptions {
   showPrices: boolean;
   outOfStockBehavior: 'hide' | 'show_unavailable';
   checkoutEnabled: boolean;
+  /** Ask online-order customers to pay through Payments & Billing (off = orders stay unpaid). */
+  onlinePayment: boolean;
 }
 
 export const DEFAULT_STOREFRONT: StorefrontOptions = {
   showPrices: true,
   outOfStockBehavior: 'show_unavailable',
   checkoutEnabled: true,
+  onlinePayment: false,
 };
 
 export function readStorefront(stored: unknown): StorefrontOptions {
@@ -712,6 +715,10 @@ export function readStorefront(stored: unknown): StorefrontOptions {
       typeof s.checkoutEnabled === 'boolean'
         ? s.checkoutEnabled
         : DEFAULT_STOREFRONT.checkoutEnabled,
+    onlinePayment:
+      typeof s.onlinePayment === 'boolean'
+        ? s.onlinePayment
+        : DEFAULT_STOREFRONT.onlinePayment,
   };
 }
 
@@ -741,5 +748,6 @@ export function normalizeStorefront(
     showPrices: bool('showPrices', 'Show prices'),
     outOfStockBehavior,
     checkoutEnabled: bool('checkoutEnabled', 'Online checkout'),
+    onlinePayment: bool('onlinePayment', 'Online payment'),
   };
 }

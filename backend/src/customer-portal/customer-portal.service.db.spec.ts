@@ -38,6 +38,24 @@ import { PoliciesService } from '../common/policies/policies.service';
 import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { CUSTOMER_PORTAL_FEATURES } from './customer-portal.constants';
 import { CustomerPortalService } from './customer-portal.service';
+import { CustomerPortalSupportService } from './customer-portal-support.service';
+import { CustomerPortalPaymentsService } from './customer-portal-payments.service';
+import { PayRequestsService } from '../payments/pay-requests.service';
+import type { PayContextService } from '../payments/pay-context.service';
+import type { PayStripeService } from '../payments/pay-stripe.service';
+import type { PayMessagingService } from '../payments/pay-messaging.service';
+import { randomUUID } from 'crypto';
+import type { ConfigService } from '@nestjs/config';
+import type { S3Service } from '../common/storage/s3.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import type { InboxSendService } from '../unified-inbox/inbox-send.service';
+import type { InboxChannelsService } from '../unified-inbox/inbox-channels.service';
+import { InboxHooksService } from '../unified-inbox/inbox-hooks.service';
+import { HelpdeskContextService } from '../helpdesk/helpdesk-context.service';
+import { HelpdeskLoaderService } from '../helpdesk/helpdesk-loader.service';
+import { HelpdeskOpsService } from '../helpdesk/helpdesk-ops.service';
+import { HelpdeskDeliveryService } from '../helpdesk/helpdesk-delivery.service';
+import { HelpdeskTicketsService } from '../helpdesk/helpdesk-tickets.service';
 
 class FakeClsService {
   private values: Record<string, unknown> = {};
@@ -132,10 +150,13 @@ describe('CustomerPortalService (real MySQL)', () => {
       new AuditService(tenant, cls as unknown as ClsService),
       new CommerceSubscriptionsService(tenant, orders),
       new LoyaltyService(tenant),
-      new MembershipsService(tenant, {
-        cancelSubscription: billingCancelSubscription,
-      } as unknown as BillingService,
-      noModules),
+      new MembershipsService(
+        tenant,
+        {
+          cancelSubscription: billingCancelSubscription,
+        } as unknown as BillingService,
+        noModules,
+      ),
       { send: emailSend } as unknown as EmailService,
     );
 
@@ -292,6 +313,29 @@ describe('CustomerPortalService (real MySQL)', () => {
 
   afterAll(async () => {
     if (businessId) {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
+        for (const t of [
+          'helpdesk_messages',
+          'helpdesk_links',
+          'helpdesk_tickets',
+          'helpdesk_settings',
+          'helpdesk_agents',
+          'helpdesk_queues',
+          'helpdesk_audit',
+          'helpdesk_sla_policies',
+          'helpdesk_escalation_rules',
+          'helpdesk_escalations',
+          'helpdesk_csat',
+        ])
+          await tx.$executeRawUnsafe(
+            `DELETE FROM ${t} WHERE business_id = ?`,
+            businessId,
+          );
+        await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
+      });
+      await prisma.notification.deleteMany({ where: { businessId } });
+      await prisma.payRequest.deleteMany({ where: { businessId } });
       await prisma.activityEvent.deleteMany({ where: { businessId } });
       await prisma.customerPortalPasswordReset.deleteMany({
         where: { businessId },
@@ -726,6 +770,183 @@ describe('CustomerPortalService (real MySQL)', () => {
         password: 'safe-portal-password-1',
       }),
     ).rejects.toMatchObject({ response: { code: 'PORTAL_INVITE_INVALID' } });
+  });
+
+  it('sends portal support requests into Helpdesk and lists only the signed-in customer’s tickets', async () => {
+    const env = {
+      get: (k: string) => ({ FRONTEND_URL: 'http://localhost:3000' })[k],
+    } as unknown as ConfigService;
+    const ctx = new HelpdeskContextService(
+      prisma,
+      new CapabilitiesService(prisma),
+      new AuditService(tenant, cls as unknown as ClsService),
+      new NotificationsService(tenant),
+      {
+        send: jest.fn(() => Promise.resolve({ providerRef: 'x' })),
+      } as unknown as EmailService,
+      env,
+    );
+    const loader = new HelpdeskLoaderService(prisma, ctx);
+    const ops = new HelpdeskOpsService(prisma, ctx, loader);
+    const delivery = new HelpdeskDeliveryService(
+      prisma,
+      cls as unknown as ClsService,
+      {
+        cannotSendReason: jest.fn(() => Promise.resolve(null)),
+        send: jest.fn(() => Promise.resolve({ id: `im-${Date.now()}` })),
+      } as unknown as InboxSendService,
+      {
+        states: jest.fn(() => Promise.resolve(new Map())),
+      } as unknown as InboxChannelsService,
+      env,
+    );
+    const tickets = new HelpdeskTicketsService(
+      prisma,
+      ctx,
+      loader,
+      ops,
+      delivery,
+      {} as S3Service,
+      new InboxHooksService(),
+    );
+    const support = new CustomerPortalSupportService(
+      prisma,
+      service,
+      tickets,
+      ctx,
+    );
+
+    const before = await support.list(portalAuthorization);
+    expect(before).toMatchObject({ available: true, tickets: [] });
+    expect(before.categories.length).toBeGreaterThan(0);
+
+    const created = await support.create(portalAuthorization, {
+      subject: 'Where is my parcel?',
+      description: 'It was due yesterday.',
+      category: 'Not a configured category',
+    });
+    expect(created.url).toMatch(/^\/support\/t\/\S{20,}$/);
+    const row = await prisma.helpdeskTicket.findFirstOrThrow({
+      where: { businessId, number: created.number },
+    });
+    expect(row).toMatchObject({
+      customerId,
+      channel: 'Portal',
+      branchId: businessId,
+      category: before.categories[0],
+    });
+
+    // Another customer's ticket in the same Helpdesk never shows up for this customer.
+    await tickets.create(null, businessId, {
+      customerId: otherCustomerId,
+      subject: 'Someone else',
+      description: 'Not yours',
+      channel: 'Phone',
+      category: before.categories[0],
+      priority: 'Normal',
+    });
+    const after = await support.list(portalAuthorization);
+    expect(after.tickets.map((t) => t.number)).toEqual([created.number]);
+    expect(after.tickets[0]).toMatchObject({
+      subject: 'Where is my parcel?',
+      open: true,
+      url: created.url,
+    });
+
+    const home = await service.getHome(portalAuthorization);
+    expect(home.support).toEqual({ available: true, openRequests: 1 });
+    const overview = await service.getAdminOverview(businessId);
+    expect(overview.unsupported.supportTickets).toBe(
+      'Handled in Helpdesk — 1 open of 1 request(s) sent from the portal.',
+    );
+    await expect(support.list(undefined)).rejects.toMatchObject({
+      response: { code: 'PORTAL_SESSION_INVALID' },
+    });
+  });
+
+  it('lists only the customer’s open Payments requests and links each to the real /pay checkout', async () => {
+    const config = {
+      get: (k: string) =>
+        ({
+          FRONTEND_URL: 'https://app.example',
+          PAY_LINK_SECRET: 'portal-spec-secret',
+        })[k],
+    } as unknown as ConfigService;
+    const requests = new PayRequestsService(
+      { db: prisma } as unknown as PayContextService,
+      config,
+      {} as PayStripeService,
+      {} as PayMessagingService,
+    );
+    const payments = new CustomerPortalPaymentsService(
+      prisma,
+      service,
+      requests,
+    );
+    const seed = async (
+      over: Partial<{
+        customerId: string;
+        status: string;
+        expiresAt: Date;
+        linkId: string | null;
+      }>,
+    ) => {
+      const id = randomUUID();
+      const nonce = randomUUID().replace(/-/g, '');
+      await prisma.payRequest.create({
+        data: {
+          id,
+          businessId,
+          env: 'test',
+          number: `PR-${id.slice(0, 8)}`,
+          customerId: over.customerId ?? customerId,
+          recipientName: 'Portal Spec',
+          contact: 'none',
+          linkType: 'Order',
+          linkId: over.linkId === undefined ? customerOrderId : over.linkId,
+          amountType: 'Fixed',
+          amount: 40,
+          currency: 'USD',
+          description: 'Balance for your order',
+          expiresAt: over.expiresAt ?? new Date(Date.now() + 7 * 86_400_000),
+          methods: [],
+          status: over.status ?? 'Sent',
+          tokenHash: PayRequestsService.hashToken(requests.token(id, nonce)),
+          tokenNonce: nonce,
+          createdById: userId,
+        },
+      });
+      return id;
+    };
+    const openId = await seed({});
+    await seed({ status: 'Paid' });
+    await seed({ expiresAt: new Date(Date.now() - 86_400_000) });
+    await seed({ customerId: otherCustomerId, linkId: otherOrderId });
+
+    const billing = await payments.billing(portalAuthorization);
+    expect(billing.paymentRequests).toHaveLength(1);
+    const [request] = billing.paymentRequests;
+    expect(request).toMatchObject({
+      status: 'Sent',
+      amount: 40,
+      testMode: true,
+      linkId: customerOrderId,
+    });
+    expect(request.payUrl).toMatch(/^https:\/\/app\.example\/pay\/\S+$/);
+    // The link opens this exact request on Payments' own /pay page.
+    const token = request.payUrl.split('/pay/')[1];
+    expect((await requests.byToken(token)).id).toBe(openId);
+    expect(
+      billing.ordersAndReceipts.find((o) => o.id === customerOrderId)?.payUrl,
+    ).toBe(request.payUrl);
+    expect(billing.onlineInvoicePayment.available).toBe(true);
+
+    const home = await service.getHome(portalAuthorization);
+    expect(home.billing).toEqual({ onlinePayment: true, openRequests: 1 });
+    const overview = await service.getAdminOverview(businessId);
+    expect(overview.unsupported.onlineInvoicePayments).toBe(
+      'Handled in Payments — 1 open payment request(s) for portal customers, payable online from the portal.',
+    );
   });
 
   it('allows only the signed-in customer to redeem loyalty and manage recurring records', async () => {

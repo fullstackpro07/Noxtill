@@ -78,7 +78,7 @@ describe('Procurement sourcing and receipt ledger (real MySQL)', () => {
     const cls = new FakeClsService();
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     tenant = new TenantPrismaService(prisma, cls as unknown as ClsService);
-    procurement = new ProcurementService(tenant);
+    procurement = new ProcurementService(tenant, prisma);
     commerceRfqs = new CommerceRfqsService(tenant, {
       record: jest.fn().mockResolvedValue(undefined),
     } as unknown as ActivityService);
@@ -92,6 +92,8 @@ describe('Procurement sourcing and receipt ledger (real MySQL)', () => {
       select: { id: true },
     });
     const rfqIds = rfqs.map((rfq) => rfq.id);
+    // Lines cascade with their bill.
+    await prisma.finBill.deleteMany({ where: { businessId: { in: ids } } });
     if (rfqIds.length) {
       await prisma.commerceRfqAudit.deleteMany({
         where: { rfqId: { in: rfqIds } },
@@ -179,7 +181,7 @@ describe('Procurement sourcing and receipt ledger (real MySQL)', () => {
     });
   });
 
-  it('shows recorded PO and receipt quantities without inventing an invoice match', async () => {
+  it('shows PO and receipt quantities with the vendor bills and match results Finance recorded', async () => {
     const po = await prisma.purchaseOrder.create({
       data: {
         businessId,
@@ -189,6 +191,49 @@ describe('Procurement sourcing and receipt ledger (real MySQL)', () => {
           create: [{ productId, qtyOrdered: 5, qtyReceived: 2, unitCost: 4 }],
         },
       },
+      include: { items: true },
+    });
+    const bill = (over: { businessId: string; number: string }) => ({
+      ...over,
+      vendorName: 'Spec Supplier',
+      vendorInvoiceNo: 'INV-77',
+      billDate: new Date('2026-10-20'),
+      dueDate: new Date('2026-11-20'),
+      purchaseOrderId: po.id,
+      currency: 'USD',
+      total: 12,
+      amountPaid: 5,
+      status: 'Review Required',
+      matchStatus: 'Variance',
+      matchDetail: { rows: [{ item: 'x', result: 'Qty Exception' }] },
+    });
+    await prisma.finBill.create({
+      data: {
+        ...bill({ businessId, number: 'BILL-SPEC-1' }),
+        lines: {
+          create: [
+            {
+              businessId,
+              description: 'Spec product',
+              accountId: 'spec-account',
+              qty: 3,
+              unitCost: 4,
+              amount: 12,
+              poItemId: po.items[0].id,
+            },
+          ],
+        },
+      },
+    });
+    // A voided bill and another business's bill never count.
+    await prisma.finBill.create({
+      data: {
+        ...bill({ businessId, number: 'BILL-SPEC-V' }),
+        status: 'Voided',
+      },
+    });
+    await prisma.finBill.create({
+      data: bill({ businessId: otherBusinessId, number: 'BILL-SPEC-O' }),
     });
     const otherSupplier = await prisma.supplier.create({
       data: { businessId: otherBusinessId, name: 'Other Tenant Supplier' },
@@ -217,14 +262,34 @@ describe('Procurement sourcing and receipt ledger (real MySQL)', () => {
     expect(result.purchaseOrders[0]).toMatchObject({
       id: po.id,
       receiptStatus: 'partially_received',
-      items: [{ qtyOrdered: 5, qtyReceived: 2, outstanding: 3, unitCost: 4 }],
+      items: [
+        {
+          qtyOrdered: 5,
+          qtyReceived: 2,
+          outstanding: 3,
+          unitCost: 4,
+          billed: { qty: 3, unitCost: 4 },
+        },
+      ],
+      bills: [
+        {
+          number: 'BILL-SPEC-1',
+          vendorInvoiceNo: 'INV-77',
+          total: 12,
+          amountPaid: 5,
+          matchResult: 'Qty Exception',
+        },
+      ],
     });
     expect(result.summary).toEqual({
       purchaseOrders: 1,
       awaitingReceipt: 1,
       fullyReceived: 0,
+      billed: 1,
+      matched: 0,
+      exceptions: 1,
     });
-    expect(result.invoiceAvailability).toBe('not_available');
-    expect(result.invoiceDetail).toContain('Vendor bills are not recorded');
+    expect(result.invoiceAvailability).toBe('available');
+    expect(result.invoiceDetail).toContain('Finance › Bills');
   });
 });

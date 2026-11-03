@@ -11,6 +11,9 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CustomerPortalService } from './customer-portal.service';
+import { CustomerPortalSupportService } from './customer-portal-support.service';
+import { CustomerPortalPaymentsService } from './customer-portal-payments.service';
+import { PortalRequestDto } from '../helpdesk/dto/helpdesk.dto';
 import {
   CustomerPortalAcceptInviteDto,
   CustomerPortalAccountStatusDto,
@@ -39,7 +42,11 @@ import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('customer-portal')
 export class CustomerPortalController {
-  constructor(private readonly portal: CustomerPortalService) {}
+  constructor(
+    private readonly portal: CustomerPortalService,
+    private readonly support: CustomerPortalSupportService,
+    private readonly payments: CustomerPortalPaymentsService,
+  ) {}
 
   @Public()
   @Get('business/:slug')
@@ -289,7 +296,7 @@ export class CustomerPortalController {
     @Headers('authorization') authorization: string | undefined,
     @Query() pagination: CustomerPortalPaginationDto,
   ) {
-    return this.portal.getBilling(authorization, pagination);
+    return this.payments.billing(authorization, pagination);
   }
 
   @Public()
@@ -339,7 +346,26 @@ export class CustomerPortalController {
   @Public()
   @Get('me/support')
   getSupport(@Headers('authorization') authorization?: string) {
-    return this.portal.getSupport(authorization);
+    return this.support.list(authorization);
+  }
+
+  // Each request opens a Helpdesk ticket and notifies agents, so keep this well under the global limit.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Public()
+  @Post('me/support')
+  createSupportRequest(
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() dto: PortalRequestDto,
+  ) {
+    return this.portal.executeCustomerMutation(
+      authorization,
+      'support',
+      idempotencyKey,
+      'support:create',
+      dto,
+      () => this.support.create(authorization, dto),
+    );
   }
 
   @Public()

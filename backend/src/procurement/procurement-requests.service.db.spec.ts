@@ -84,7 +84,7 @@ describe('Procurement requests (real MySQL)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new ProcurementService(tenantPrisma);
+    service = new ProcurementService(tenantPrisma, prisma);
     commerceRfqs = new CommerceRfqsService(tenantPrisma, {
       record: jest.fn().mockResolvedValue(undefined),
     } as unknown as ActivityService);
