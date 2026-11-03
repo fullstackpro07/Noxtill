@@ -227,9 +227,13 @@ Status here is this dev machine's `backend/.env` (names checked, values never pr
 Verified for this update: `tsc --noEmit` clean for backend and frontend on a clean checkout of HEAD,
 `next build` succeeds, full backend Jest green, every GET route in the new/changed modules answers
 200 for an owner on an empty business, and the write flows were exercised over real HTTP. **Not**
-verified: a from-scratch `prisma migrate deploy` on an empty MySQL (the dev DB user has no
-CREATE DATABASE right), live AI answers (Anthropic key had no credit), and click-through browser QA of
+verified: live AI answers (Anthropic key had no credit), and click-through browser QA of
 the Business Intelligence, Customer Portal, Website and Procurement screens with real data.
+
+> **2026-11-03, after merging `module21-contact-center` into `main`:** a from-scratch
+> `prisma migrate deploy` (222 migrations) on an empty MySQL database and an upgrade of a copy of the
+> dev database both complete and end in the same schema. See migration
+> `20261103100000_merge_module21_enum_reconcile` for the ENUM fixes that merge needed.
 
 ### 8.1 Must be set up for the new modules
 | Item | Why |
@@ -239,18 +243,20 @@ the Business Intelligence, Customer Portal, Website and Procurement screens with
 | Redis + a running backend worker | New BullMQ queues: `website-scheduled-publish` (every 5 min), `procurement-contract-alerts` (daily 08:00 UTC), plus the earlier workflow retention queue. Without Redis, scheduled pages never publish and contract renewal alerts never send. |
 | Email provider (Resend) | Customer Portal invites and password-reset emails. |
 | Express `trust proxy` behind the load balancer | Throttling keys on the client IP. Without it every visitor shares the balancer's IP, so the public-form limit (10/min) and portal-login limit (5/min) would lock out real users together. |
-| Real `prisma migrate deploy` on an empty database in CI/staging | 160 migrations; ordering was checked statically only. |
+| Real `prisma migrate deploy` on an empty database in CI/staging | Run it in CI as well; it was verified locally on 2026-11-03 (see above). |
 
 ### 8.2 Behaviour to know before go-live
 - **Custom domains are verified (real DNS TXT lookup + TLS certificate check) but traffic is not routed
   to them.** Visitors use `/site/<slug>` until the hosting proxy is configured to map a domain to a
   site. The UI says this plainly.
-- **Online payment is not available.** Storefront and portal orders are created unpaid; there is no
-  Payments & Billing module in this workspace.
+- **Storefront and portal orders are created unpaid.** These modules were built before Payments &
+  Billing existed on `main` and are not yet connected to it.
 - **No analytics source:** website sessions and conversion are shown as "Not tracked".
-- **No Finance & Accounting module:** vendor bills, budgets, billed/paid spend and 3-way-match invoice
-  comparison are shown as "Not available" in Procurement.
-- **No Documents & eSign module:** supplier contracts and website media link to files hosted elsewhere.
+- **Procurement does not read Finance yet:** vendor bills, budgets, billed/paid spend and 3-way-match
+  invoice comparison are shown as "Not available" in Procurement, although Finance (bills) now exists on
+  `main`. Connecting them is open work.
+- **Supplier contracts are not linked to Contracts eSign yet:** supplier contracts and website media link
+  to files hosted elsewhere.
 - Public form submissions: 10 per minute per IP; spam trap + idempotency keys; marketing consent only
   when the visitor ticks the box.
 - New capability `website.manage` (owner + manager). Procurement sourcing, 3-way match, contracts and
