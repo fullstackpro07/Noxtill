@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Connector } from './connector.interface';
 import { GmbConnector } from './connectors/gmb.connector';
 import { GoogleAdsConnector } from './connectors/google-ads.connector';
+import { GoogleSearchConsoleConnector } from './connectors/google-search-console.connector';
+import { GoogleAnalyticsConnector } from './connectors/google-analytics.connector';
 import { MerchantCenterConnector } from './connectors/merchant-center.connector';
 import { MetaAdsConnector } from './connectors/meta-ads.connector';
 import { TikTokAdsConnector } from './connectors/tiktok-ads.connector';
@@ -33,6 +35,8 @@ export class ConnectorRegistry {
   constructor(
     gmb: GmbConnector,
     googleAds: GoogleAdsConnector,
+    googleSearchConsole: GoogleSearchConsoleConnector,
+    googleAnalytics: GoogleAnalyticsConnector,
     merchant: MerchantCenterConnector,
     metaAds: MetaAdsConnector,
     tiktokAds: TikTokAdsConnector,
@@ -54,6 +58,8 @@ export class ConnectorRegistry {
     this.byProvider = {
       [IntegrationProvider.gmb]: gmb,
       [IntegrationProvider.google_ads]: googleAds,
+      [IntegrationProvider.google_search_console]: googleSearchConsole,
+      [IntegrationProvider.google_analytics]: googleAnalytics,
       [IntegrationProvider.merchant]: merchant,
       [IntegrationProvider.meta_ads]: metaAds,
       [IntegrationProvider.tiktok_ads]: tiktokAds,

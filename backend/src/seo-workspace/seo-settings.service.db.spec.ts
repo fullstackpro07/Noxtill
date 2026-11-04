@@ -1,5 +1,9 @@
 import { ClsService } from 'nestjs-cls';
-import type { Prisma } from '@prisma/client';
+import {
+  IntegrationProvider,
+  IntegrationStatus,
+  type Prisma,
+} from '@prisma/client';
 import type { ConfigService } from '@nestjs/config';
 import type { AiInfraService } from '../ai/ai-infra.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
@@ -79,6 +83,7 @@ describe('SEO settings and the rules they control (MySQL)', () => {
   });
 
   afterAll(async () => {
+    await prisma.integration.deleteMany({ where: { businessId } });
     await prisma.trackedKeyword.deleteMany({ where: { businessId } });
     await prisma.seoAuditRun.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
@@ -105,6 +110,57 @@ describe('SEO settings and the rules they control (MySQL)', () => {
     });
     expect(summary.checks.find((row) => row.key === 'rank_provider')?.ok).toBe(
       true,
+    );
+  });
+
+  it('reports GA4 only while its property or saved Organic Search snapshot is missing', async () => {
+    const service = new SeoSettingsService(tenant, {
+      get: () => undefined,
+    } as unknown as ConfigService);
+    await prisma.integration.create({
+      data: {
+        businessId,
+        provider: IntegrationProvider.google_analytics,
+        status: IntegrationStatus.connected,
+        meta: {},
+      },
+    });
+
+    const noProperty = await service.summary(businessId);
+    expect(noProperty.notConnected).toContainEqual({
+      label: 'Google Analytics 4',
+      reason:
+        'Select a Google Analytics 4 property in SEO Settings to sync Organic Search totals and page-path metrics.',
+    });
+
+    await prisma.integration.update({
+      where: {
+        businessId_provider: {
+          businessId,
+          provider: IntegrationProvider.google_analytics,
+        },
+      },
+      data: {
+        meta: {
+          analyticsSelectedProperty: 'properties/123456',
+          analyticsOrganicSearchSnapshot: {
+            current: {
+              sessions: '10',
+              landingPages: {
+                dataState: 'no_data_returned',
+                rows: [],
+                totalRows: 0,
+                truncated: false,
+                reason: null,
+              },
+            },
+          },
+        },
+      },
+    });
+    const synced = await service.summary(businessId);
+    expect(synced.notConnected.map((row) => row.label)).not.toContain(
+      'Google Analytics 4',
     );
   });
 

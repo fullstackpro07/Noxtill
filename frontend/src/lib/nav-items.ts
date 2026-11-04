@@ -426,6 +426,9 @@ export const NAV_ITEMS: NavItem[] = [
       { key: "customer-analytics", labelKey: "nav.customerAnalytics", href: "/profit/customer-analytics", icon: Users },
       { key: "staff-analytics", labelKey: "nav.staffAnalytics", href: "/profit/staff-analytics", icon: BarChart3 },
       { key: "health-score", labelKey: "nav.businessHealthScore", href: "/profit/health-score", icon: HeartPulse },
+      { key: "period-close", labelKey: "nav.periodClose", href: "/profit/period-close", icon: ClipboardCheck },
+      { key: "finance-journals", labelKey: "nav.financeJournals", href: "/profit/journals", icon: FileSpreadsheet },
+      { key: "finance-reconciliation", labelKey: "nav.financeReconciliation", href: "/profit/reconciliation", icon: ClipboardCheck },
     ],
   },
   {

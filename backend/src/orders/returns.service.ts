@@ -1,4 +1,12 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
@@ -8,6 +16,10 @@ import { CashRegisterService } from '../cash-register/cash-register.service';
 import { BillingService } from '../billing/billing.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { RETURN_ERROR_CODES } from './returns.constants';
+import {
+  FINANCE_RETURN_APPROVED_EVENT_JOB,
+  SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import {
   Prisma,
   ProductKind,
@@ -25,11 +37,16 @@ import {
  */
 @Injectable()
 export class ReturnsService {
+  private readonly logger = new Logger(ReturnsService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly cls: ClsService,
     private readonly cashRegister: CashRegisterService,
     private readonly billing: BillingService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE)
+    private readonly financeAgentEvents?: Queue,
   ) {}
 
   async create(businessId: string, dto: CreateReturnDto) {
@@ -241,6 +258,10 @@ export class ReturnsService {
       return row;
     });
 
+    // This is a read-only follow-up to the canonical approval. The worker uses the approved
+    // Return row and never claims that approval alone proves settlement or cash payout.
+    await this.queueApprovedReturnFinanceReview(updated);
+
     // Best-effort, outside the transaction — same convention as OrdersService.createSale's
     // post-commit cash-register hook: not every business runs a cash register at all.
     if (ret.refundMethod === 'cash') {
@@ -252,6 +273,47 @@ export class ReturnsService {
     }
 
     return updated;
+  }
+
+  private async queueApprovedReturnFinanceReview(returned: {
+    id: string;
+    businessId: string;
+    updatedAt: Date;
+  }): Promise<void> {
+    if (!this.financeAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: returned.businessId },
+        select: { id: true, policies: true },
+      });
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.financeEnabled') ||
+        !policies.bool('agents.financeApprovedReturnEventReviewEnabled')
+      ) {
+        return;
+      }
+      await this.financeAgentEvents.add(
+        FINANCE_RETURN_APPROVED_EVENT_JOB,
+        {
+          businessId: returned.businessId,
+          returnId: returned.id,
+          approvedAt: returned.updatedAt.toISOString(),
+        },
+        {
+          jobId: `finance-return-approved-${returned.businessId}-${returned.id}-${returned.updatedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      // Queue failure must never roll back a completed return/refund approval.
+      this.logger.warn(
+        `Could not queue Finance review for approved return ${returned.id}: ${(error as Error).message}`,
+      );
+    }
   }
 
   async reject(businessId: string, id: string, reason?: string) {

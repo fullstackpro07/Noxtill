@@ -102,3 +102,13 @@ export function rulesToWhere(rules: SegmentRules): Prisma.CustomerWhereInput {
   const clauses = rules.conditions.map(conditionToWhere);
   return rules.combinator === 'OR' ? { OR: clauses } : { AND: clauses };
 }
+
+/** Erased profiles remain only as anonymized records for retention purposes. They must never
+ * reappear in live customer lookup, audiences, counts, exports, or previews. */
+export function excludeErasedCustomers(
+  where: Prisma.CustomerWhereInput,
+): Prisma.CustomerWhereInput {
+  return {
+    AND: [where, { NOT: { phone: { startsWith: 'erased-' } } }],
+  };
+}

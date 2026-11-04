@@ -134,6 +134,12 @@ export class DecideProcurementRequestDto {
   decision!: 'approve' | 'reject';
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
+
+  @IsOptional()
   @IsString()
   @MaxLength(4000)
   reason?: string;

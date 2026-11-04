@@ -14,6 +14,10 @@ interface RawProduct {
   sellingPrice: string;
   stockQty: number;
   lowStockThreshold: number;
+  stockUnitLabel: string | null;
+  purchaseUnitLabel: string | null;
+  purchasePackSize: number | null;
+  minimumReorderQty: number | null;
   durationMin: number | null;
   active: boolean;
   eligibleStaffIds: string[];
@@ -42,6 +46,10 @@ function toProduct(raw: RawProduct): Product {
     costPrice: Number(raw.costPrice),
     stockOnHand: raw.kind === "product" ? raw.stockQty : undefined,
     lowStockThreshold: raw.kind === "product" ? raw.lowStockThreshold : undefined,
+    stockUnitLabel: raw.stockUnitLabel,
+    purchaseUnitLabel: raw.purchaseUnitLabel,
+    purchasePackSize: raw.purchasePackSize,
+    minimumReorderQty: raw.minimumReorderQty,
     durationMinutes: raw.kind === "service" ? (raw.durationMin ?? undefined) : undefined,
     variations: raw.variations.map((v) => ({
       name: v.label,
@@ -74,6 +82,10 @@ export interface ProductDraft {
   costPrice: number;
   stockOnHand?: number;
   lowStockThreshold?: number;
+  stockUnitLabel?: string | null;
+  purchaseUnitLabel?: string | null;
+  purchasePackSize?: number | null;
+  minimumReorderQty?: number | null;
   durationMinutes?: number;
   variations: ProductVariation[];
   active?: boolean;
@@ -96,6 +108,10 @@ function toPayload(draft: ProductDraft) {
     sellingPrice: draft.price,
     stockQty: draft.kind === "product" ? (draft.stockOnHand ?? 0) : undefined,
     lowStockThreshold: draft.kind === "product" ? draft.lowStockThreshold : undefined,
+    stockUnitLabel: draft.kind === "product" ? draft.stockUnitLabel?.trim() || null : null,
+    purchaseUnitLabel: draft.kind === "product" ? draft.purchaseUnitLabel?.trim() || null : null,
+    purchasePackSize: draft.kind === "product" ? draft.purchasePackSize ?? null : null,
+    minimumReorderQty: draft.kind === "product" ? draft.minimumReorderQty ?? null : null,
     eligibleStaffIds: draft.kind === "service" ? draft.eligibleStaffIds : undefined,
     bufferBeforeMin: draft.kind === "service" ? draft.bufferBeforeMin : undefined,
     bufferAfterMin: draft.kind === "service" ? draft.bufferAfterMin : undefined,

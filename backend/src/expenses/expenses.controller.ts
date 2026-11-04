@@ -12,6 +12,7 @@ import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
+import { QueryExpenseDuplicateCandidatesDto } from './dto/query-expense-duplicate-candidates.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
@@ -30,6 +31,13 @@ export class ExpensesController {
   @Get()
   findAll(@Query() query: QueryExpensesDto) {
     return this.expensesService.findAll(query);
+  }
+
+  @Get('duplicate-candidates')
+  findPotentialDuplicateCandidates(
+    @Query() query: QueryExpenseDuplicateCandidatesDto,
+  ) {
+    return this.expensesService.findPotentialDuplicateIds(query.month);
   }
 
   @Get(':id')

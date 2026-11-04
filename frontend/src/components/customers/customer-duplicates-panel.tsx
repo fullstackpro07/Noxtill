@@ -12,7 +12,11 @@ const primaryBtn: React.CSSProperties = { border: 0, background: "var(--app-prim
 
 export function CustomerDuplicatesPanel() {
   const queryClient = useQueryClient();
-  const { data: pairs = [], isPending } = useQuery({ queryKey: ["customer-duplicates"], queryFn: fetchCustomerDuplicates });
+  const { data: pairs = [], isPending } = useQuery({
+    queryKey: ["customer-duplicates"],
+    queryFn: fetchCustomerDuplicates,
+    refetchOnMount: "always",
+  });
   const [merging, setMerging] = useState<DuplicatePair | null>(null);
 
   const dismissMutation = useMutation({
@@ -54,16 +58,31 @@ export function CustomerDuplicatesPanel() {
                 <tr style={{ background: "var(--app-surface-2)" }}>
                   <th className="p-[10px_17px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Record A</th>
                   <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Record B</th>
-                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Match reason</th>
+                  <th className="p-[10px] text-start text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Match evidence &amp; differences</th>
                   <th className="p-[10px_17px] text-end text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {pairs.map((p) => (
                   <tr key={`${p.a.id}-${p.b.id}`} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
-                    <td className="p-[12px_17px] text-[12.5px] font-extrabold" style={{ color: "var(--app-primary)" }}>{p.a.name}</td>
-                    <td className="p-[12px] text-[12.5px]" style={{ color: "var(--app-text-muted)" }}>{p.b.name}</td>
-                    <td className="p-[12px] text-[12px]" style={{ color: "var(--app-text-disabled)" }}>{p.reason}</td>
+                    <td className="p-[12px_17px] text-[12px]" style={{ color: "var(--app-text-muted)" }}>
+                      <strong className="block text-[12.5px]" style={{ color: "var(--app-primary)" }}>{p.a.name}</strong>
+                      <span className="mt-1 block">Phone · {p.a.phone}</span>
+                      <span className="block">Email · {p.a.email || "Not recorded"}</span>
+                      <span className="block">Address · {p.a.address || "Not recorded"}</span>
+                    </td>
+                    <td className="p-[12px] text-[12px]" style={{ color: "var(--app-text-muted)" }}>
+                      <strong className="block text-[12.5px]" style={{ color: "var(--app-text)" }}>{p.b.name}</strong>
+                      <span className="mt-1 block">Phone · {p.b.phone}</span>
+                      <span className="block">Email · {p.b.email || "Not recorded"}</span>
+                      <span className="block">Address · {p.b.address || "Not recorded"}</span>
+                    </td>
+                    <td className="p-[12px] text-[11px]" style={{ color: "var(--app-text-disabled)" }}>
+                      <strong className="block" style={{ color: "var(--app-text-muted)" }}>Matched on</strong>
+                      <span>{p.matchEvidence?.map((evidence) => evidence.label).join(" · ") || "Match evidence unavailable"}</span>
+                      <strong className="mt-2 block" style={{ color: "var(--app-text-muted)" }}>Different compared fields</strong>
+                      <span>{p.conflictingFields?.length ? p.conflictingFields.join(", ") : p.conflictingFields ? "No differences in name, phone, email or address" : "Comparison details unavailable"}</span>
+                    </td>
                     <td className="p-[12px_17px] text-end">
                       <span className="inline-flex gap-[7px]">
                         <button type="button" onClick={() => dismissMutation.mutate(p)} disabled={dismissMutation.isPending} style={outlineBtn}>Not a duplicate</button>
@@ -115,9 +134,11 @@ function MergeReviewDialog({ pair, onClose, onMerged }: { pair: DuplicatePair; o
           {[pair.a, pair.b].map((c) => (
             <label key={c.id} className="flex items-center gap-3 rounded-[12px] p-3" style={{ border: `1.5px solid ${primaryId === c.id ? "var(--app-primary)" : "var(--app-border)"}` }}>
               <input type="radio" checked={primaryId === c.id} onChange={() => setPrimaryId(c.id)} style={{ accentColor: "var(--app-primary)" }} />
-              <span>
+              <span className="min-w-0 flex-1">
                 <span className="block text-[12.5px] font-bold" style={{ color: "var(--app-text)" }}>{c.name}{primaryId === c.id ? " (keep)" : ""}</span>
-                <span className="block text-[11px]" style={{ color: "var(--app-text-disabled)" }}>{c.phone}</span>
+                <span className="block text-[11px]" style={{ color: "var(--app-text-disabled)" }}>Phone · {c.phone}</span>
+                <span className="block text-[11px]" style={{ color: "var(--app-text-disabled)" }}>Email · {c.email || "Not recorded"}</span>
+                <span className="block text-[11px]" style={{ color: "var(--app-text-disabled)" }}>Address · {c.address || "Not recorded"}</span>
               </span>
             </label>
           ))}

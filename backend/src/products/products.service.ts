@@ -24,6 +24,78 @@ const PRODUCT_ERROR_CODES = {
 const MAX_PHOTO_SIZE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_PHOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
+interface PurchasePackInput {
+  kind: ProductKind;
+  stockUnitLabel: string | null | undefined;
+  purchaseUnitLabel: string | null | undefined;
+  purchasePackSize: number | null | undefined;
+}
+
+function normalizePurchasePack(input: PurchasePackInput) {
+  const stockUnitLabel = input.stockUnitLabel?.trim() || null;
+  const purchaseUnitLabel = input.purchaseUnitLabel?.trim() || null;
+  const purchasePackSize = input.purchasePackSize ?? null;
+  const configured =
+    stockUnitLabel !== null ||
+    purchaseUnitLabel !== null ||
+    purchasePackSize !== null;
+
+  if (!configured) {
+    return {
+      stockUnitLabel: null,
+      purchaseUnitLabel: null,
+      purchasePackSize: null,
+    };
+  }
+
+  if (input.kind !== ProductKind.product) {
+    throw new AppException(
+      'PRODUCT_PURCHASE_PACK_PRODUCT_ONLY',
+      'Purchase pack settings can only be used for products.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  if (
+    !stockUnitLabel ||
+    !purchaseUnitLabel ||
+    !Number.isInteger(purchasePackSize) ||
+    purchasePackSize === null ||
+    purchasePackSize < 2
+  ) {
+    throw new AppException(
+      'PRODUCT_PURCHASE_PACK_INCOMPLETE',
+      'Set the stock unit, purchase unit and an integer pack size of at least 2, or clear all three.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  return { stockUnitLabel, purchaseUnitLabel, purchasePackSize };
+}
+
+function normalizeMinimumReorderQty(
+  kind: ProductKind,
+  value: number | null | undefined,
+) {
+  const minimumReorderQty = value ?? null;
+  if (minimumReorderQty === null) return null;
+  if (kind !== ProductKind.product) {
+    throw new AppException(
+      'PRODUCT_MINIMUM_REORDER_PRODUCT_ONLY',
+      'Minimum reorder quantity can only be used for products.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  if (!Number.isInteger(minimumReorderQty) || minimumReorderQty < 1) {
+    throw new AppException(
+      'PRODUCT_MINIMUM_REORDER_INVALID',
+      'Minimum reorder quantity must be a whole number of at least 1 stock unit.',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return minimumReorderQty;
+}
+
 /** Products CRUD (BE-023). All queries go through TenantPrismaService, so business_id scoping is automatic. */
 @Injectable()
 export class ProductsService {
@@ -48,6 +120,16 @@ export class ProductsService {
 
   async create(dto: CreateProductDto) {
     try {
+      const purchasePack = normalizePurchasePack({
+        kind: dto.kind,
+        stockUnitLabel: dto.stockUnitLabel,
+        purchaseUnitLabel: dto.purchaseUnitLabel,
+        purchasePackSize: dto.purchasePackSize,
+      });
+      const minimumReorderQty = normalizeMinimumReorderQty(
+        dto.kind,
+        dto.minimumReorderQty,
+      );
       const product = await this.tenantPrisma.client.product.create({
         data: {
           kind: dto.kind,
@@ -64,6 +146,8 @@ export class ProductsService {
             dto.lowStockThreshold ??
             (await this.policies.current()).num('catalog.defaultLowStockThreshold') ??
             5,
+          ...purchasePack,
+          minimumReorderQty,
           durationMin: dto.kind === 'service' ? dto.durationMin : undefined,
           active: dto.active ?? true,
           // Needed for the outer `as Prisma.ProductUncheckedCreateInput` cast below to type-check —
@@ -116,8 +200,57 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
-    await this.findRaw(id);
+    const current = await this.findRaw(id);
     try {
+      const serviceKindClearsPack =
+        dto.kind === ProductKind.service &&
+        (current.stockUnitLabel !== null ||
+          current.purchaseUnitLabel !== null ||
+          current.purchasePackSize !== null) &&
+        dto.stockUnitLabel === undefined &&
+        dto.purchaseUnitLabel === undefined &&
+        dto.purchasePackSize === undefined;
+      const purchasePackChanged =
+        serviceKindClearsPack ||
+        dto.stockUnitLabel !== undefined ||
+        dto.purchaseUnitLabel !== undefined ||
+        dto.purchasePackSize !== undefined;
+      const purchasePack = purchasePackChanged
+        ? serviceKindClearsPack
+          ? {
+              stockUnitLabel: null,
+              purchaseUnitLabel: null,
+              purchasePackSize: null,
+            }
+          : normalizePurchasePack({
+            kind: dto.kind ?? current.kind,
+            stockUnitLabel:
+              dto.stockUnitLabel !== undefined
+                ? dto.stockUnitLabel
+                : current.stockUnitLabel,
+            purchaseUnitLabel:
+              dto.purchaseUnitLabel !== undefined
+                ? dto.purchaseUnitLabel
+                : current.purchaseUnitLabel,
+            purchasePackSize:
+              dto.purchasePackSize !== undefined
+                ? dto.purchasePackSize
+                : current.purchasePackSize,
+            })
+        : undefined;
+      const serviceKindClearsMinimumReorder =
+        dto.kind === ProductKind.service &&
+        current.minimumReorderQty !== null &&
+        dto.minimumReorderQty === undefined;
+      const minimumReorderQty =
+        dto.minimumReorderQty !== undefined || serviceKindClearsMinimumReorder
+          ? serviceKindClearsMinimumReorder
+            ? null
+            : normalizeMinimumReorderQty(
+                dto.kind ?? current.kind,
+                dto.minimumReorderQty,
+              )
+          : undefined;
       const product = await this.tenantPrisma.client.product.update({
         where: { id },
         data: {
@@ -133,6 +266,8 @@ export class ProductsService {
           sellingPrice: dto.sellingPrice,
           stockQty: dto.stockQty,
           lowStockThreshold: dto.lowStockThreshold,
+          ...(purchasePack ?? {}),
+          minimumReorderQty,
           durationMin: dto.durationMin,
           active: dto.active,
           eligibleStaffIds: dto.eligibleStaffIds

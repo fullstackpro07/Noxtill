@@ -15,6 +15,10 @@ import { ActivityService } from '../activity/activity.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { AppException } from '../common/filters/app.exception';
 import { ORDER_ERROR_CODES } from './orders.constants';
+import {
+  CUSTOMER_ORDER_COMPLETED_EVENT_JOB,
+  FINANCE_ORDER_COMPLETED_EVENT_JOB,
+} from '../common/agents/specialist-agent-events.constants';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -51,6 +55,8 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
   const cashRegister = {
     recordSaleMovement: jest.fn().mockResolvedValue(undefined),
   };
+  const customerAgentEvents = { add: jest.fn().mockResolvedValue(undefined) };
+  const financeAgentEvents = { add: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -77,6 +83,8 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
         cls as unknown as ClsService,
         {} as unknown as CapabilitiesService,
       ),
+      customerAgentEvents as never,
+      financeAgentEvents as never,
     );
 
     const business = await prisma.business.create({
@@ -84,6 +92,10 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
         name: 'Sales Test Biz',
         slug: `sales-test-${Date.now()}`,
         taxRate: 10,
+        policies: {
+          'agents.customerEnabled': true,
+          'agents.customerCompletedSaleEventReviewEnabled': true,
+        },
       },
     });
     businessId = business.id;
@@ -107,6 +119,8 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
     reviewRequests.scheduleSend.mockClear();
     coupons.validateAndApply.mockClear();
     vouchers.validateAndApply.mockClear();
+    customerAgentEvents.add.mockClear();
+    financeAgentEvents.add.mockClear();
   });
 
   afterAll(async () => {
@@ -160,6 +174,7 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
       where: { entityId: order.id, entity: 'Order' },
     });
     expect(audits).toHaveLength(1);
+    expect(customerAgentEvents.add).not.toHaveBeenCalled();
   });
 
   it('upserts a customer by phone and updates lifetime stats', async () => {
@@ -177,6 +192,18 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
     expect(customer.id).toBe(order.customerId);
     expect(Number(customer.lifetimeSpend)).toBe(110);
     expect(customer.visitCount).toBe(1);
+    expect(customerAgentEvents.add).toHaveBeenCalledWith(
+      CUSTOMER_ORDER_COMPLETED_EVENT_JOB,
+      {
+        businessId,
+        orderId: order.id,
+        occurredAt: order.createdAt.toISOString(),
+      },
+      expect.objectContaining({
+        jobId: `customer-sale-review-${businessId}-${order.id}`,
+        attempts: 3,
+      }),
+    );
 
     expect(reviewRequests.scheduleSend).toHaveBeenCalledWith(
       businessId,
@@ -193,6 +220,119 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
       order.id,
       expect.anything(),
     );
+  });
+
+  it('queues one optional Finance review after an opted-in completed POS order', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.customerEnabled': true,
+          'agents.customerCompletedSaleEventReviewEnabled': true,
+          'agents.financeEnabled': true,
+          'agents.financeCompletedOrderEventReviewEnabled': true,
+        },
+      },
+    });
+    const financeProduct = await prisma.product.create({
+      data: {
+        businessId,
+        kind: 'product',
+        name: `Finance Event Widget ${Date.now()}`,
+        costPrice: 4,
+        sellingPrice: 10,
+        stockQty: 3,
+      },
+    });
+    const financeCustomer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: 'Finance Event Customer',
+        phone: `+1${Date.now()}`,
+      },
+    });
+
+    let orderId: string | undefined;
+    let transitionedOrderId: string | undefined;
+    try {
+      const order = await ordersService.createSale(businessId, {
+        items: [{ productId: financeProduct.id, qty: 1 }],
+        customerId: financeCustomer.id,
+        payment: { method: 'credit' },
+      });
+      orderId = order.id;
+      expect(financeAgentEvents.add).toHaveBeenCalledWith(
+        FINANCE_ORDER_COMPLETED_EVENT_JOB,
+        {
+          businessId,
+          orderId: order.id,
+          completedAt: order.updatedAt.toISOString(),
+        },
+        expect.objectContaining({
+          jobId: `finance-order-completed-${businessId}-${order.id}-${order.updatedAt.getTime()}`,
+          attempts: 3,
+        }),
+      );
+      expect(order.status).toBe('completed');
+      expect(order.isQuotation).toBe(false);
+      expect(await prisma.payment.count({ where: { orderId: order.id } })).toBe(0);
+      expect(await prisma.creditEntry.count({ where: { orderId: order.id } })).toBe(1);
+
+      financeAgentEvents.add.mockClear();
+      const pendingOrder = await prisma.order.create({
+        data: {
+          businessId,
+          orderNo: 900_000_000 + (Date.now() % 100_000_000),
+          status: 'pending',
+          subtotal: 10,
+          total: 10,
+          cogs: 4,
+        },
+      });
+      transitionedOrderId = pendingOrder.id;
+      await ordersService.updateStatus(businessId, pendingOrder.id, 'confirmed');
+      await ordersService.updateStatus(businessId, pendingOrder.id, 'in_progress');
+      const completed = await ordersService.updateStatus(
+        businessId,
+        pendingOrder.id,
+        'completed',
+      );
+      expect(financeAgentEvents.add).toHaveBeenCalledTimes(1);
+      expect(financeAgentEvents.add).toHaveBeenCalledWith(
+        FINANCE_ORDER_COMPLETED_EVENT_JOB,
+        {
+          businessId,
+          orderId: completed.id,
+          completedAt: completed.updatedAt.toISOString(),
+        },
+        expect.objectContaining({ attempts: 3 }),
+      );
+    } finally {
+      if (orderId) {
+        await prisma.auditLog.deleteMany({ where: { entityId: orderId } });
+        await prisma.creditEntry.deleteMany({ where: { orderId: orderId } });
+        await prisma.stockMovement.deleteMany({ where: { productId: financeProduct.id } });
+        await prisma.reviewRequest.deleteMany({ where: { sourceId: orderId } });
+        await prisma.orderItem.deleteMany({ where: { orderId } });
+        await prisma.order.deleteMany({ where: { id: orderId } });
+      }
+      if (transitionedOrderId) {
+        await prisma.order.deleteMany({ where: { id: transitionedOrderId } });
+      }
+      await prisma.customer.deleteMany({ where: { id: financeCustomer.id } });
+      await prisma.product.deleteMany({ where: { id: financeProduct.id } });
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          policies: {
+            'agents.customerEnabled': true,
+            'agents.customerCompletedSaleEventReviewEnabled': true,
+            'agents.financeEnabled': false,
+            'agents.financeCompletedOrderEventReviewEnabled': false,
+          },
+        },
+      });
+    }
   });
 
   it('applies a coupon discount via CouponsService and stores couponId/couponDiscountAmount (UPD-BE-029 wiring)', async () => {
@@ -318,6 +458,32 @@ describe('OrdersService.createSale (BE-025 atomic transaction)', () => {
         payment: { method: 'credit' },
       }),
     ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('rejects an erased customer before creating a sale', async () => {
+    const erased = await prisma.customer.create({
+      data: {
+        businessId,
+        phone: `+1${Date.now()}66`,
+        name: 'POS Erasure Test',
+      },
+    });
+    await prisma.customer.update({
+      where: { id: erased.id },
+      data: { name: 'Erased Customer', phone: `erased-${erased.id}` },
+    });
+    const orderCount = await prisma.order.count({ where: { businessId } });
+
+    await expect(
+      ordersService.createSale(businessId, {
+        customerId: erased.id,
+        items: [{ productId, qty: 1 }],
+        payment: { method: 'cash' },
+      }),
+    ).rejects.toMatchObject({
+      response: { code: ORDER_ERROR_CODES.CUSTOMER_NOT_FOUND },
+    });
+    expect(await prisma.order.count({ where: { businessId } })).toBe(orderCount);
   });
 });
 

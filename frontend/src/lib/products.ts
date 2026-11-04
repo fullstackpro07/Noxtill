@@ -16,6 +16,13 @@ export interface Product {
   costPrice: number;
   stockOnHand?: number;
   lowStockThreshold?: number;
+  /** Unit tracked in Product.stockQty, such as bottle or each. */
+  stockUnitLabel?: string | null;
+  /** Supplier-facing purchase unit; purchasePackSize is stock units per purchase unit. */
+  purchaseUnitLabel?: string | null;
+  purchasePackSize?: number | null;
+  /** Product-wide floor in canonical stock units, not supplier-specific MOQ. */
+  minimumReorderQty?: number | null;
   durationMinutes?: number;
   variations: ProductVariation[];
   active: boolean;

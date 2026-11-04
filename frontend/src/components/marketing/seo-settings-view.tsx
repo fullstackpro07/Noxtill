@@ -7,6 +7,13 @@ import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { fetchHubCategory, saveHubChanges, type HubRow } from "@/lib/settings-hub-api";
 import { fetchSeoSettingsSummary } from "@/lib/seo-settings-api";
+import {
+  fetchSeoSearchConsoleSummary,
+  refreshSeoSearchConsoleProperties,
+  selectSeoSearchConsoleProperty,
+  syncSeoSearchConsolePerformance,
+} from "@/lib/seo-search-console-api";
+import { SeoAnalyticsAttributionCard } from "@/components/marketing/seo-analytics-attribution-card";
 
 const TONE_COLOR: Record<string, string> = {
   green: "var(--app-success-text)",
@@ -87,10 +94,38 @@ function SettingRow({ row }: { row: HubRow }) {
 }
 
 export function SeoSettingsView() {
+  const client = useQueryClient();
   const summary = useQuery({ queryKey: ["seo-settings-summary"], queryFn: fetchSeoSettingsSummary });
+  const searchConsole = useQuery({ queryKey: ["seo-search-console"], queryFn: fetchSeoSearchConsoleSummary });
   const category = useQuery({ queryKey: ["settings-hub", "category", "seo"], queryFn: () => fetchHubCategory("seo") });
   const data = summary.data;
   const loading = summary.isLoading;
+  const refreshProperties = useMutation({
+    mutationFn: refreshSeoSearchConsoleProperties,
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ["seo-search-console"] });
+      toast.success("Search Console properties refreshed.");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't refresh Search Console properties.")),
+  });
+  const selectProperty = useMutation({
+    mutationFn: selectSeoSearchConsoleProperty,
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ["seo-search-console"] });
+      await client.invalidateQueries({ queryKey: ["seo-search-console-keywords"] });
+      toast.success("Search Console property selected.");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't select that Search Console property.")),
+  });
+  const syncPerformance = useMutation({
+    mutationFn: syncSeoSearchConsolePerformance,
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ["seo-search-console"] });
+      await client.invalidateQueries({ queryKey: ["seo-search-console-keywords"] });
+      toast.success("Search Console performance refreshed.");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't load Search Console performance.")),
+  });
 
   return (
     <main className="flex flex-col gap-5 p-5 md:p-7" style={{ color: "var(--app-text)" }}>
@@ -123,6 +158,83 @@ export function SeoSettingsView() {
           </ul>
         </section>
       )}
+
+      <section className="rounded-2xl border p-4" style={{ background: "var(--app-surface)", borderColor: "var(--app-border)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="m-0 text-sm font-bold">Google Search Console</h2>
+            <p className="m-0 mt-1 max-w-3xl text-xs" style={{ color: "var(--app-text-muted)" }}>
+              Read-only property performance from Google. No query strings or page URLs are saved; Google may omit anonymized or low-volume queries.
+            </p>
+          </div>
+          <span className="text-xs font-semibold" style={{ color: searchConsole.data?.status === "connected" ? "var(--app-success-text)" : "var(--app-warning-text)" }}>
+            {searchConsole.isLoading ? "Checking…" : searchConsole.data?.status === "connected" ? "Connected" : searchConsole.data?.status === "needs_attention" ? "Needs attention" : "Not connected"}
+          </span>
+        </div>
+        {searchConsole.isError ? (
+          <div className="mt-3 flex items-center gap-3 text-xs" style={{ color: "var(--app-danger-strong)" }}>
+            {errorMessage(searchConsole.error, "Couldn't load Search Console status.")}
+            <button type="button" onClick={() => searchConsole.refetch()} className="font-bold underline">Retry</button>
+          </div>
+        ) : searchConsole.data?.status !== "connected" ? (
+          <p className="m-0 mt-3 text-xs" style={{ color: "var(--app-text-faint)" }}>
+            Connect the Google account that has access to your verified Search Console property from <Link href="/integrations" className="font-bold underline">Integrations</Link>.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="flex min-w-64 flex-col gap-1 text-xs font-semibold">
+                Search Console property
+                <select
+                  aria-label="Search Console property"
+                  value={searchConsole.data.selectedProperty ?? ""}
+                  onChange={(event) => {
+                    if (event.target.value) selectProperty.mutate(event.target.value);
+                  }}
+                  disabled={selectProperty.isPending || searchConsole.data.properties.length === 0}
+                  className="rounded-lg border px-3 py-2 text-sm font-normal"
+                  style={{ borderColor: "var(--app-border)", background: "var(--app-surface)", color: "var(--app-text)" }}
+                >
+                  <option value="">Select an accessible property</option>
+                  {searchConsole.data.properties.map((property) => (
+                    <option key={property.siteUrl} value={property.siteUrl}>{property.siteUrl} · {property.permissionLevel}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={() => refreshProperties.mutate()} disabled={refreshProperties.isPending} className="rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50" style={{ borderColor: "var(--app-border)" }}>
+                {refreshProperties.isPending ? "Refreshing…" : "Refresh properties"}
+              </button>
+              <button type="button" onClick={() => syncPerformance.mutate()} disabled={!searchConsole.data.selectedProperty || syncPerformance.isPending} className="rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50" style={{ borderColor: "var(--app-border)" }}>
+                {syncPerformance.isPending ? "Syncing…" : "Sync performance"}
+              </button>
+            </div>
+            {searchConsole.data.properties.length === 0 && (
+              <p className="m-0 mt-2 text-xs" style={{ color: "var(--app-text-faint)" }}>No properties loaded yet. Refresh to fetch properties the connected Google account can access.</p>
+            )}
+            {searchConsole.data.selectedProperty && (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {[...searchConsole.data.snapshots].sort((a, b) => b.endDate.localeCompare(a.endDate)).map((snapshot) => (
+                  <div key={snapshot.id} className="rounded-xl border p-3" style={{ borderColor: "var(--app-border)" }}>
+                    <p className="m-0 text-xs font-bold">{snapshot.startDate} to {snapshot.endDate} · {snapshot.dataState === "final" ? "Final data" : "No data returned"}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <span>Clicks <strong>{snapshot.clicks ?? "Not available"}</strong></span>
+                      <span>Impressions <strong>{snapshot.impressions ?? "Not available"}</strong></span>
+                      <span>CTR <strong>{snapshot.clickThroughRate === null ? "Not available" : `${(snapshot.clickThroughRate * 100).toFixed(2)}%`}</strong></span>
+                      <span>Average position <strong>{snapshot.averagePosition === null ? "Not available" : snapshot.averagePosition.toFixed(2)}</strong></span>
+                    </div>
+                  </div>
+                ))}
+                {searchConsole.data.snapshots.length === 0 && (
+                  <p className="m-0 text-xs" style={{ color: "var(--app-text-faint)" }}>No performance snapshots yet. Sync to fetch two real {searchConsole.data.windowDays}-day windows from Google.</p>
+                )}
+              </div>
+            )}
+            {searchConsole.data.lastSyncAt && <p className="m-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faintest)" }}>Last successful sync {new Date(searchConsole.data.lastSyncAt).toLocaleString()}</p>}
+          </>
+        )}
+      </section>
+
+      <SeoAnalyticsAttributionCard />
 
       {category.isLoading ? (
         <p className="m-0 text-sm" style={{ color: "var(--app-text-faint)" }}>Loading rules…</p>

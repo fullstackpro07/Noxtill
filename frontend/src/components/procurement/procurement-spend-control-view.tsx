@@ -48,7 +48,7 @@ export function ProcurementSpendControlView() {
             <Kpi label="Committed spend" value={money(data.contractUtilization.committed, data.currency)} hint={`Purchase orders created in the last ${data.periodDays} days`} />
             <Kpi label="Under contract" value={money(data.contractUtilization.underContract, data.currency)} hint={data.contractUtilization.percent === null ? "No PO spend to compare" : `${data.contractUtilization.percent}% of recorded commitment`} tone="ok" />
             <Kpi label="Off-contract spend" value={money(data.kpis.offContractSpend.amount, data.currency)} hint={data.kpis.offContractSpend.shareOfCommitted === null ? "No PO spend to compare" : `${data.kpis.offContractSpend.shareOfCommitted}% of commitment`} tone={data.kpis.offContractSpend.amount > 0 ? "warn" : undefined} />
-            <Kpi label="Procurement budget" value="Not available" hint="No budget source is configured in this workspace." />
+            <Kpi label="Procurement budget" value="Not available" hint="Finance expense budgets are not linked to purchase-order commitments." />
           </div>
 
           {data.kpis.offContractSpend.amount > 0 && (
@@ -95,7 +95,7 @@ export function ProcurementSpendControlView() {
           <Card title="Control coverage">
             <dl className="m-0 grid gap-3 text-xs sm:grid-cols-3">
               <div><dt className="font-semibold">Recorded basis</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Purchase orders from the selected period, excluding cancelled orders.</dd></div>
-              <div><dt className="font-semibold">Budget tracking</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Not available — budgets and budget enforcement need a Finance/AP source.</dd></div>
+              <div><dt className="font-semibold">Budget tracking</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Not available — Finance budgets cover Expense rows, but no approved budget is linked to purchase-order commitments here.</dd></div>
               <div><dt className="font-semibold">Vendor bills and paid spend</dt><dd className="m-0 mt-1" style={{ color: "var(--app-text-muted)" }}>Not available — supplier bills and payment records are not tracked here.</dd></div>
             </dl>
             <p className="m-0 mt-3 text-[11px]" style={{ color: "var(--app-text-faint)" }}>

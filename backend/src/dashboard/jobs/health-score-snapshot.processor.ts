@@ -30,8 +30,11 @@ export class HealthScoreSnapshotProcessor extends WorkerHost {
     return this.runSnapshot();
   }
 
-  async runSnapshot(): Promise<void> {
+  async runSnapshot(businessIds?: readonly string[]): Promise<void> {
+    const requestedIds =
+      businessIds === undefined ? undefined : [...new Set(businessIds)];
     const businesses = await this.prisma.business.findMany({
+      where: requestedIds ? { id: { in: requestedIds } } : undefined,
       select: { id: true },
     });
 

@@ -416,6 +416,78 @@ export class SeoTechnicalService {
     return action;
   }
 
+  /**
+   * Turn current crawler evidence into a review-only Technical SEO draft. The agent does not
+   * infer a server change from the finding; the merchant must choose and apply any real fix.
+   */
+  async createReviewFromAuditIssue(
+    businessId: string,
+    actorUserId: string,
+    issueId: string,
+  ) {
+    const issue = await this.db.seoAuditIssue.findFirst({
+      where: {
+        id: issueId,
+        businessId,
+        status: SeoAuditIssueStatus.open,
+        type: { in: TECHNICAL_ISSUE_TYPES },
+      },
+      select: {
+        type: true,
+        pageUrl: true,
+        evidence: true,
+        recommendation: true,
+        lastSeenAuditRunId: true,
+      },
+    });
+    if (!issue) {
+      throw new AppException(
+        'SEO_TECHNICAL_FINDING_NOT_ELIGIBLE',
+        'This finding is not an open Technical SEO issue in this business.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const run = await this.latestRun(businessId);
+    if (!run || issue.lastSeenAuditRunId !== run.id) {
+      throw new AppException(
+        'SEO_TECHNICAL_FINDING_STALE',
+        'This finding is not from the latest website audit. Run a fresh audit before preparing a review.',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const existing = await this.db.seoTechnicalAction.findFirst({
+      where: {
+        businessId,
+        issueId,
+        status: {
+          in: [
+            SeoTechnicalActionStatus.draft,
+            SeoTechnicalActionStatus.approval_required,
+            SeoTechnicalActionStatus.approved,
+            SeoTechnicalActionStatus.applied,
+          ],
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (existing) return existing;
+
+    const description = [
+      `Review the crawler finding “${issue.type}”.`,
+      `Recommendation: ${issue.recommendation.slice(0, 1200)}`,
+      `Evidence: ${issue.evidence.slice(0, 1200)}`,
+      'Review only: this draft does not change the website, server, DNS, robots.txt, sitemap, redirects, or canonicals.',
+    ].join(' ');
+    return this.create(businessId, actorUserId, {
+      type: SeoTechnicalActionType.other,
+      sourceUrl: issue.pageUrl,
+      description,
+      issueId,
+    });
+  }
+
   async transition(
     businessId: string,
     actorUserId: string,

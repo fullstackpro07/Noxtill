@@ -317,7 +317,7 @@ export class DigitalTwinService {
         'Scheduled staff hours show scheduled shifts overlapping the next seven days, not total capacity or productivity.',
         'Recorded expenses are shown per branch in that branch’s own currency; cross-currency totals are intentionally not combined.',
         'Product cost completeness is partial because a zero cost may be either an actual value or an unconfigured default.',
-        'Supplier lead times and physical equipment/assets are not tracked in the source schema.',
+        'A supplier lead-time/SLA field is not tracked. Inventory Intelligence can show historical sent-to-received timing when completed purchase orders exist; this Digital Twin view does not calculate that observation. Physical equipment/assets are not tracked in the source schema.',
       ],
     };
   }

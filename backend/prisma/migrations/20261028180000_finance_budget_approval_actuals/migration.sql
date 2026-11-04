@@ -1,0 +1,22 @@
+CREATE TABLE `finance_budgets` (
+  `id` VARCHAR(191) NOT NULL,
+  `business_id` VARCHAR(191) NOT NULL,
+  `month_start` DATE NOT NULL,
+  `category` VARCHAR(191) NOT NULL,
+  `currency_code` CHAR(3) NOT NULL,
+  `amount` DECIMAL(12,2) NOT NULL,
+  `version` INTEGER NOT NULL DEFAULT 1,
+  `status` VARCHAR(24) NOT NULL DEFAULT 'draft',
+  `created_by_user_id` VARCHAR(191) NOT NULL,
+  `note` TEXT NULL,
+  `submitted_at` DATETIME(3) NULL,
+  `reviewed_by_user_id` VARCHAR(191) NULL,
+  `review_reason` TEXT NULL,
+  `reviewed_at` DATETIME(3) NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `finance_budgets_business_month_category_version_uq` (`business_id`, `month_start`, `category`, `version`),
+  INDEX `finance_budgets_business_month_status_idx` (`business_id`, `month_start`, `status`),
+  CONSTRAINT `finance_budgets_business_fk` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

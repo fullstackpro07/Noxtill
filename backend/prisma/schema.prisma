@@ -329,6 +329,16 @@ enum ActionItemType {
   commerce
   /// Purchase requests awaiting owner or manager decision.
   procurement_request
+  /// Customer segment proposals awaiting exact-version review.
+  customer_segment
+  /// Human follow-up tasks created from the Customer Intelligence workflow.
+  customer_follow_up
+  /// Inventory Intelligence branch transfers awaiting the canonical stock-transfer decision.
+  inventory_transfer_approval
+  /// Manual double-entry journals awaiting a second-person Finance decision.
+  finance_journal
+  /// SEO Agent content drafts awaiting review through the canonical SEO workflow.
+  seo_content_brief
 }
 
 enum ActionItemPriority {
@@ -434,6 +444,11 @@ enum MessageStatus {
   failed
 }
 
+enum CustomerChannelConsentState {
+  granted
+  revoked
+}
+
 enum ReviewRoute {
   public
   private
@@ -531,6 +546,10 @@ enum IntegrationProvider {
   /// UPD-BE-081 Developer & API — a business's own outbound webhook subscriptions, reusing the
   /// exact same `OutboundWebhook`/delivery pipeline as the automation platforms above.
   developer
+  /// Read-only Google Search Console property and performance access for SEO Autopilot.
+  google_search_console
+  /// Read-only Google Analytics 4 property and Data API access for SEO Autopilot attribution evidence.
+  google_analytics
 }
 
 enum GmbPostStatus {
@@ -824,287 +843,308 @@ model Business {
   /// Last time msgUsed was reset to 0 for a new billing month (INT-014) — null until the first reset.
   msgQuotaResetAt      DateTime? @map("msg_quota_reset_at")
 
-  businessUsers                 BusinessUser[]
-  customers                     Customer[]
-  customerPortalSettings        CustomerPortalSettings?
-  customerPortalLayouts         CustomerPortalLayoutVersion[]
-  customerPortalAccounts        CustomerPortalAccount[]
-  customerPortalInvites         CustomerPortalInvite[]
-  customerPortalSessions        CustomerPortalSession[]
-  customerPortalActivities      CustomerPortalActivity[]
-  customerPortalIdempotency     CustomerPortalIdempotency[]
-  customerPortalPasswordResets  CustomerPortalPasswordReset[]
-  products                      Product[]
-  orders                        Order[]
-  creditEntries                 CreditEntry[]
-  appointments                  Appointment[]
-  messages                      Message[]
-  whatsappWindows               WhatsappWindow[]
-  reviewRequests                ReviewRequest[]
-  privateFeedback               PrivateFeedback[]
-  externalReviews               ExternalReview[]
-  reviewPlatformDestinations    ReviewPlatformDestination[]
-  reviewMetricsSnapshots        ReviewMetricsSnapshot[]
-  stockMovements                StockMovement[]
-  expenses                      Expense[]
-  attendance                    Attendance[]
-  campaigns                     Campaign[]
-  competitors                   Competitor[]
-  competitorObservations        CompetitorObservation[]
-  trackedKeywords               TrackedKeyword[]
-  auditLogs                     AuditLog[]
-  importBatches                 ImportBatch[]
-  integrations                  Integration[]
-  adCampaigns                   AdCampaign[]
-  emailCampaigns                EmailCampaign[]
-  productFeedItems              ProductFeedItem[]
-  gmbPosts                      GmbPost[]
-  notifications                 Notification[]
-  healthScoreSnapshots          HealthScoreSnapshot[]
-  creditBalanceSnapshots        CreditBalanceSnapshot[]
-  goal                          BusinessGoal?
-  activityEvents                ActivityEvent[]
-  aiInsights                    AiInsight[]
-  biBrainAnswers                BiBrainAnswer[]
-  biDiagnosisHypotheses         BiDiagnosisHypothesis[]
-  biScenarioVersions            BiScenarioVersion[]
-  biTwinAssumptionVersions      BiTwinAssumptionVersion[]
-  actionItemStates              ActionItemState[]
-  heldSales                     HeldSale[]
-  cashShifts                    CashShift[]
-  cashMovements                 CashMovement[]
-  voiceSaleDrafts               VoiceSaleDraft[]
-  tables                        Table[]
-  returns                       Return[]
-  receiptLogs                   ReceiptLog[]
-  variantSets                   VariantSet[]
-  bundles                       Bundle[]
-  suppliers                     Supplier[]
-  procurementRequests           ProcurementRequest[]
-  procurementRequestsAtBranch   ProcurementRequest[]                 @relation("ProcurementRequestBranch")
-  procurementRequestEvents      ProcurementRequestEvent[]
-  priceHistory                  PriceHistory[]
-  categories                    Category[]
-  scheduledExports              ScheduledExport[]
-  waitlistEntries               WaitlistEntry[]
-  purchaseOrders                PurchaseOrder[]
-  productWaitlistEntries        ProductWaitlistEntry[]
-  queueTokens                   QueueToken[]
-  deposits                      Deposit[]
-  depositSettings               DepositSettings?
-  bookingLinkSettings           BookingLinkSettings?
-  bookingLinkVisits             BookingLinkVisit[]
-  reminderRules                 ReminderRule[]
-  installmentPlans              InstallmentPlan[]
-  installments                  Installment[]
-  creditShareLinks              CreditShareLink[]
-  creditReminderRules           CreditReminderRule[]
-  creditReminderLogs            CreditReminderLog[]
-  segments                      Segment[]
-  loyaltyPrograms               LoyaltyProgram[]
-  loyaltyMembers                LoyaltyMember[]
-  membershipPlans               MembershipPlan[]
-  memberships                   Membership[]
-  memoryNotes                   MemoryNote[]
-  customerCustomFields          CustomerCustomField[]
-  customerTags                  CustomerTag[]
-  customerMergeSettings         CustomerMergeSettings?
-  customerPrivacySettings       CustomerPrivacySettings?
-  customerExportLogs            CustomerExportLog[]
-  customerDuplicateDismissals   CustomerDuplicateDismissal[]
-  videoTestimonials             VideoTestimonial[]
-  coupons                       Coupon[]
-  vouchers                      Voucher[]
-  workflows                     Workflow[]
-  workflowVersions              WorkflowVersion[]
-  workflowRuns                  WorkflowRun[]
-  workflowRunAttempts           WorkflowRunAttempt[]
-  workflowApprovals             WorkflowApproval[]
-  workflowVariables             WorkflowVariable[]
-  workflowDeadLetters           WorkflowDeadLetter[]
-  workflowDeadLetterDecisions   WorkflowDeadLetterDecision[]
-  workflowRetentionCleanups     WorkflowRetentionCleanup[]
-  productOpportunities          ProductOpportunity[]
-  productOpportunityAudits      ProductOpportunityAudit[]
-  productValidationRuns         ProductValidationRun[]
-  commerceRfqs                  CommerceRfq[]
-  commerceRfqAudits             CommerceRfqAudit[]
-  commerceSupplierClaims        CommerceSupplierClaim[]
-  commerceSupplierClaimAudits   CommerceSupplierClaimAudit[]
-  commerceQuotes                CommerceSupplierQuote[]
-  commerceListingDrafts         CommerceListingDraft[]
-  commerceChannelListings       CommerceChannelListing[]
-  commerceListingDraftVersions  CommerceListingDraftVersion[]
-  commerceListingDraftAudits    CommerceListingDraftAudit[]
-  commerceFulfillmentNodes      CommerceFulfillmentNode[]
-  commerceFulfillmentMappings   CommerceFulfillmentMapping[]
-  commerceFulfillmentAudits     CommerceFulfillmentAudit[]
-  commerceRoutingDecisions      CommerceRoutingDecision[]
-  commerceRoutingAllocations    CommerceRoutingAllocation[]
-  commerceBoms                  CommerceBom[]
-  commerceBomItems              CommerceBomItem[]
-  commerceWorkOrders            CommerceWorkOrder[]
-  commerceWorkOrderMaterials    CommerceWorkOrderMaterial[]
-  commerceWorkOrderAudits       CommerceWorkOrderAudit[]
-  commerceRiskRules             CommerceRiskRule[]
-  commerceRiskCases             CommerceRiskCase[]
-  commerceComplianceDocuments   CommerceComplianceDocument[]
-  commerceMarketEligibility     CommerceMarketEligibility[]
-  commerceRiskAudits            CommerceRiskAudit[]
-  commerceB2bTiers              CommerceB2bTier[]
-  commerceB2bPriceLists         CommerceB2bPriceList[]
-  commerceB2bPriceListItems     CommerceB2bPriceListItem[]
-  commerceB2bAccounts           CommerceB2bAccount[]
-  commerceB2bAudits             CommerceB2bAudit[]
-  commerceSubscriptionPlans     CommerceSubscriptionPlan[]
-  commerceSubscriptions         CommerceSubscription[]
-  commerceSubscriptionCycles    CommerceSubscriptionCycle[]
-  commercePreorderCampaigns     CommercePreorderCampaign[]
-  commercePreorders             CommercePreorder[]
-  commerceSubscriptionAudits    CommerceSubscriptionAudit[]
-  commerceStoreOpportunities    CommerceStoreOpportunity[]
-  commerceStoreAudits           CommerceStoreAudit[]
-  commerceExperiments           CommerceExperiment[]
-  commerceExperimentAudits      CommerceExperimentAudit[]
-  commerceAgentToolRuns         CommerceAgentToolRun[]
-  commerceReconciliationRuns    CommerceReconciliationRun[]
-  commerceReconciliationItems   CommerceReconciliationItem[]
-  workflowEndpoints             WorkflowEndpoint[]
-  workflowEndpointDeliveries    WorkflowEndpointDelivery[]
-  seoAuditRuns                  SeoAuditRun[]
-  seoContentRevisions           SeoContentRevision[]
-  seoContentRevisionAudits      SeoContentRevisionAudit[]
-  seoTechnicalActions           SeoTechnicalAction[]
-  seoTechnicalActionAudits      SeoTechnicalActionAudit[]
-  seoContentBriefs              SeoContentBrief[]
-  seoContentBriefAudits         SeoContentBriefAudit[]
-  seoContentDismissals          SeoContentDismissal[]
-  seoAuditSchedule              SeoAuditSchedule?
-  seoAuditIssues                SeoAuditIssue[]
-  seoAuditIssueAudits           SeoAuditIssueAudit[]
-  seoOffPageLinks               SeoOffPageLink[]
-  seoOffPageOpportunities       SeoOffPageOpportunity[]
-  seoOffPageAudits              SeoOffPageAudit[]
-  seoGuestPublications          SeoGuestPublication[]
-  seoGuestPitches               SeoGuestPitch[]
-  seoGuestPostingAudits         SeoGuestPostingAudit[]
-  seoCompetitorGaps             SeoCompetitorGap[]
-  seoCompetitorGapAudits        SeoCompetitorGapAudit[]
-  contentItems                  ContentItem[]
-  staffShifts                   StaffShift[]
-  timeOff                       TimeOff[]
-  timesheetApprovals            TimesheetApproval[]
-  commissionPayments            CommissionPayment[]
-  staffAdvances                 StaffAdvance[]
-  payrollLineItems              PayrollLineItem[]
-  schedulePublishes             SchedulePublish[]
-  stockTransfersOut             StockTransfer[]                      @relation("StockTransferSource")
-  stockTransfersIn              StockTransfer[]                      @relation("StockTransferDest")
-  stockCounts                   StockCount[]
-  customRoles                   CustomRole[]
-  roleCapabilityOverrides       RoleCapabilityOverride[]
-  labelOverrides                LabelOverride[]
-  optionSets                    OptionSet[]
-  sessions                      Session[]
-  masterListing                 MasterListing?
-  listingSyncLogs               ListingSyncLog[]
-  citations                     Citation[]
-  listingPhotos                 ListingPhoto[]
-  listingSettings               ListingSettings?
-  gmbPhotos                     GmbPhoto[]
-  gmbQnas                       GmbQna[]
-  gmbInsightsSnapshots          GmbInsightsSnapshot[]
-  socialAccounts                SocialAccount[]
-  mediaAssets                   MediaAsset[]
-  socialPosts                   SocialPost[]
-  socialInboxItems              SocialInboxItem[]
-  socialAnalyticsSnapshots      SocialAnalyticsSnapshot[]
-  socialSettings                SocialSettings?
-  socialPostAnalytics           SocialPostAnalytics[]
-  socialCaptionGenerations      SocialCaptionGeneration[]
-  visibilityScoreSnapshots      VisibilityScoreSnapshot[]
-  competitiveOpportunities      CompetitiveOpportunity[]
-  competitiveSettings           CompetitiveSettings?
-  voiceSettings                 VoiceSettings?
-  phoneNumber                   PhoneNumber?
-  phoneCalls                    PhoneCall[]
-  voiceHumanAgentProfiles       VoiceHumanAgentProfile[]
-  voiceHumanAgentAssignments    VoiceHumanAgentAssignment[]
-  voiceAiAgents                 VoiceAiAgent[]
-  voiceAiAgentVersions          VoiceAiAgentVersion[]
-  voiceAiAgentTestRuns          VoiceAiAgentTestRun[]
-  voiceAiOutboundAttempts       VoiceAiOutboundAttempt[]
-  voiceCallQueueEntries         VoiceCallQueueEntry[]
-  voiceCallQueueConfigs         VoiceCallQueueConfig[]
-  voiceCallWrapUps              VoiceCallWrapUp[]
-  voiceQualityRubrics           VoiceQualityRubric[]
-  voiceQualityRubricVersions    VoiceQualityRubricVersion[]
-  voiceQualityReviews           VoiceQualityReview[]
-  voiceCompliancePolicyPacks    VoiceCompliancePolicyPack[]
-  voiceCompliancePolicyVersions VoiceCompliancePolicyVersion[]
-  voiceConsentEvidence          VoiceConsentEvidence[]
-  voiceSuppressionEntries       VoiceSuppressionEntry[]
-  voiceEligibilityDecisions     VoiceOutboundEligibilityDecision[]
-  voiceOutboundCampaigns        VoiceOutboundCampaign[]
-  voiceOutboundCampaignMembers  VoiceOutboundCampaignMember[]
-  voiceOutboundDialAttempts     VoiceOutboundDialAttempt[]
-  voiceTrackingNumbers          VoiceTrackingNumber[]
-  voiceTrackingAssignments      VoiceTrackingNumberAssignment[]
-  voiceCallbacks                VoiceCallback[]
-  voiceCallbackAttempts         VoiceCallbackAttempt[]
-  voiceCallTransfers            VoiceCallTransfer[]
-  voiceProviderWebhookEvents    VoiceProviderWebhookEvent[]
-  voiceBillingRates             VoiceBillingRateVersion[]
-  voiceBillingDrafts            VoiceBillingDraft[]
-  voiceBillingUsageClaims       VoiceBillingUsageClaim[]
-  voiceVideoMeetings            VoiceVideoMeeting[]
-  voiceMeetingInvites           VoiceMeetingInvite[]
-  voiceMeetingParticipants      VoiceMeetingParticipant[]
-  voiceVideoRecordings          VoiceVideoRecording[]
-  voiceVideoRecordingConsents   VoiceVideoRecordingConsent[]
-  voiceIvrFlows                 VoiceIvrFlow[]
-  voiceIvrFlowVersions          VoiceIvrFlowVersion[]
-  voiceRoutingRules             VoiceRoutingRule[]
-  voiceKnowledgeEntries         VoiceKnowledgeEntry[]
-  digitizerAliases              DigitizerAlias[]
-  riders                        Rider[]
-  deliveries                    Delivery[]
-  routes                        Route[]
-  deliveryZones                 DeliveryZone[]
-  deliverySettings              DeliverySettings?
-  deliveryAutomationRuns        DeliveryAutomationRun[]
-  adCreatives                   AdCreative[]
-  adAudiences                   AdAudience[]
-  adLeads                       AdLead[]
-  adSettings                    AdSettings?
-  integrationSyncLogs           IntegrationSyncLog[]
-  ecommerceSyncConflicts        EcommerceSyncConflict[]
-  adCampaignStatsSnapshots      AdCampaignStatsSnapshot[]
-  accountingMappings            AccountingMapping[]
-  outboundWebhooks              OutboundWebhook[]
-  reviewSentimentThemes         ReviewSentimentTheme[]
-  recurringObligations          RecurringObligation[]
-  seoHeatmapPoints              SeoHeatmapPoint[]
-  apiKeys                       ApiKey[]
-  nightlyCloseLogs              NightlyCloseLog[]
-  healthScoreWeightChanges      HealthScoreWeightChange[]
-  voiceCommandDrafts            VoiceCommandDraft[]
-  assistantConversations        AssistantConversation[]
-  notificationPreferences       NotificationPreference[]
-  dataSubjectRequests           DataSubjectRequest[]
-  taxRules                      TaxRule[]
-  websiteSite                   WebsiteSite?
-  websitePages                  WebsitePage[]
-  websitePageVersions           WebsitePageVersion[]
-  websiteDeployments            WebsiteDeployment[]
-  websiteForms                  WebsiteForm[]
-  websiteFormSubmissions        WebsiteFormSubmission[]
-  websiteDomains                WebsiteDomain[]
-  websiteRedirects              WebsiteRedirect[]
-  websiteProductSettings        WebsiteProductSetting[]
-  websiteCollections            WebsiteCollection[]
-  procurementContracts          ProcurementSupplierContract[]
-  procurementContractVersions   ProcurementSupplierContractVersion[]
+  businessUsers                    BusinessUser[]
+  customers                        Customer[]
+  customerChannelConsents          CustomerChannelConsent[]
+  customerPortalSettings           CustomerPortalSettings?
+  customerPortalLayouts            CustomerPortalLayoutVersion[]
+  customerPortalAccounts           CustomerPortalAccount[]
+  customerPortalInvites            CustomerPortalInvite[]
+  customerPortalSessions           CustomerPortalSession[]
+  customerPortalActivities         CustomerPortalActivity[]
+  customerPortalIdempotency        CustomerPortalIdempotency[]
+  customerPortalPasswordResets     CustomerPortalPasswordReset[]
+  products                         Product[]
+  orders                           Order[]
+  creditEntries                    CreditEntry[]
+  appointments                     Appointment[]
+  messages                         Message[]
+  customerFollowUpTasks            CustomerFollowUpTask[]
+  whatsappWindows                  WhatsappWindow[]
+  reviewRequests                   ReviewRequest[]
+  privateFeedback                  PrivateFeedback[]
+  externalReviews                  ExternalReview[]
+  reviewPlatformDestinations       ReviewPlatformDestination[]
+  reviewMetricsSnapshots           ReviewMetricsSnapshot[]
+  stockMovements                   StockMovement[]
+  expenses                         Expense[]
+  financeBudgets                   FinanceBudget[]
+  financeAccounts                  FinanceAccount[]
+  financeAccountingPeriods         FinanceAccountingPeriod[]
+  financeJournalEntries             FinanceJournalEntry[]
+  financeJournalLines               FinanceJournalLine[]
+  financeBankStatementImports       FinanceBankStatementImport[]
+  financeBankStatementLines         FinanceBankStatementLine[]
+  attendance                       Attendance[]
+  campaigns                        Campaign[]
+  competitors                      Competitor[]
+  competitorObservations           CompetitorObservation[]
+  trackedKeywords                  TrackedKeyword[]
+  auditLogs                        AuditLog[]
+  importBatches                    ImportBatch[]
+  integrations                     Integration[]
+  adCampaigns                      AdCampaign[]
+  emailCampaigns                   EmailCampaign[]
+  productFeedItems                 ProductFeedItem[]
+  gmbPosts                         GmbPost[]
+  notifications                    Notification[]
+  healthScoreSnapshots             HealthScoreSnapshot[]
+  creditBalanceSnapshots           CreditBalanceSnapshot[]
+  goal                             BusinessGoal?
+  activityEvents                   ActivityEvent[]
+  aiInsights                       AiInsight[]
+  biBrainAnswers                   BiBrainAnswer[]
+  biDiagnosisHypotheses            BiDiagnosisHypothesis[]
+  biScenarioVersions               BiScenarioVersion[]
+  biTwinAssumptionVersions         BiTwinAssumptionVersion[]
+  actionItemStates                 ActionItemState[]
+  heldSales                        HeldSale[]
+  cashShifts                       CashShift[]
+  cashMovements                    CashMovement[]
+  voiceSaleDrafts                  VoiceSaleDraft[]
+  tables                           Table[]
+  returns                          Return[]
+  receiptLogs                      ReceiptLog[]
+  variantSets                      VariantSet[]
+  bundles                          Bundle[]
+  suppliers                        Supplier[]
+  procurementRequests              ProcurementRequest[]
+  procurementRequestsAtBranch      ProcurementRequest[]                 @relation("ProcurementRequestBranch")
+  procurementRequestEvents         ProcurementRequestEvent[]
+  priceHistory                     PriceHistory[]
+  categories                       Category[]
+  scheduledExports                 ScheduledExport[]
+  waitlistEntries                  WaitlistEntry[]
+  purchaseOrders                   PurchaseOrder[]
+  productWaitlistEntries           ProductWaitlistEntry[]
+  queueTokens                      QueueToken[]
+  deposits                         Deposit[]
+  depositSettings                  DepositSettings?
+  bookingLinkSettings              BookingLinkSettings?
+  bookingLinkVisits                BookingLinkVisit[]
+  reminderRules                    ReminderRule[]
+  installmentPlans                 InstallmentPlan[]
+  installments                     Installment[]
+  creditShareLinks                 CreditShareLink[]
+  creditReminderRules              CreditReminderRule[]
+  creditReminderLogs               CreditReminderLog[]
+  segments                         Segment[]
+  loyaltyPrograms                  LoyaltyProgram[]
+  loyaltyMembers                   LoyaltyMember[]
+  membershipPlans                  MembershipPlan[]
+  memberships                      Membership[]
+  memoryNotes                      MemoryNote[]
+  customerCustomFields             CustomerCustomField[]
+  customerTags                     CustomerTag[]
+  customerMergeSettings            CustomerMergeSettings?
+  customerPrivacySettings          CustomerPrivacySettings?
+  customerExportLogs               CustomerExportLog[]
+  customerDuplicateDismissals      CustomerDuplicateDismissal[]
+  videoTestimonials                VideoTestimonial[]
+  coupons                          Coupon[]
+  vouchers                         Voucher[]
+  workflows                        Workflow[]
+  workflowVersions                 WorkflowVersion[]
+  workflowRuns                     WorkflowRun[]
+  workflowRunAttempts              WorkflowRunAttempt[]
+  workflowApprovals                WorkflowApproval[]
+  workflowVariables                WorkflowVariable[]
+  workflowDeadLetters              WorkflowDeadLetter[]
+  workflowDeadLetterDecisions      WorkflowDeadLetterDecision[]
+  workflowRetentionCleanups        WorkflowRetentionCleanup[]
+  productOpportunities             ProductOpportunity[]
+  productOpportunityAudits         ProductOpportunityAudit[]
+  productValidationRuns            ProductValidationRun[]
+  commerceRfqs                     CommerceRfq[]
+  commerceRfqAudits                CommerceRfqAudit[]
+  commerceSupplierClaims           CommerceSupplierClaim[]
+  commerceSupplierClaimAudits      CommerceSupplierClaimAudit[]
+  commerceQuotes                   CommerceSupplierQuote[]
+  commerceListingDrafts            CommerceListingDraft[]
+  commerceChannelListings          CommerceChannelListing[]
+  commerceListingDraftVersions     CommerceListingDraftVersion[]
+  commerceListingDraftAudits       CommerceListingDraftAudit[]
+  commerceFulfillmentNodes         CommerceFulfillmentNode[]
+  commerceFulfillmentMappings      CommerceFulfillmentMapping[]
+  commerceFulfillmentAudits        CommerceFulfillmentAudit[]
+  commerceRoutingDecisions         CommerceRoutingDecision[]
+  commerceRoutingAllocations       CommerceRoutingAllocation[]
+  commerceBoms                     CommerceBom[]
+  commerceBomItems                 CommerceBomItem[]
+  commerceWorkOrders               CommerceWorkOrder[]
+  commerceWorkOrderMaterials       CommerceWorkOrderMaterial[]
+  commerceWorkOrderAudits          CommerceWorkOrderAudit[]
+  commerceRiskRules                CommerceRiskRule[]
+  commerceRiskCases                CommerceRiskCase[]
+  commerceComplianceDocuments      CommerceComplianceDocument[]
+  commerceMarketEligibility        CommerceMarketEligibility[]
+  commerceRiskAudits               CommerceRiskAudit[]
+  commerceB2bTiers                 CommerceB2bTier[]
+  commerceB2bPriceLists            CommerceB2bPriceList[]
+  commerceB2bPriceListItems        CommerceB2bPriceListItem[]
+  commerceB2bAccounts              CommerceB2bAccount[]
+  commerceB2bAudits                CommerceB2bAudit[]
+  commerceSubscriptionPlans        CommerceSubscriptionPlan[]
+  commerceSubscriptions            CommerceSubscription[]
+  commerceSubscriptionCycles       CommerceSubscriptionCycle[]
+  commercePreorderCampaigns        CommercePreorderCampaign[]
+  commercePreorders                CommercePreorder[]
+  commerceSubscriptionAudits       CommerceSubscriptionAudit[]
+  commerceStoreOpportunities       CommerceStoreOpportunity[]
+  commerceStoreAudits              CommerceStoreAudit[]
+  commerceExperiments              CommerceExperiment[]
+  commerceExperimentAudits         CommerceExperimentAudit[]
+  commerceAgentToolRuns            CommerceAgentToolRun[]
+  specialistAgentRuns              SpecialistAgentRun[]
+  specialistAgentConfigVersions     SpecialistAgentConfigVersion[]
+  specialistAgentToolCalls         SpecialistAgentToolCall[]
+  specialistAgentRecommendations   SpecialistAgentRecommendation[]
+  specialistAgentEvidence          SpecialistAgentEvidence[]
+  specialistAgentAiRequests        SpecialistAgentAiRequest[]
+  specialistAgentActions           SpecialistAgentAction[]
+  specialistAgentActionEvents      SpecialistAgentActionEvent[]
+  inventoryAgentCountTasks         InventoryAgentCountTask[]
+  inventoryAgentWastageReviewTasks InventoryAgentWastageReviewTask[]
+  commerceReconciliationRuns       CommerceReconciliationRun[]
+  commerceReconciliationItems      CommerceReconciliationItem[]
+  workflowEndpoints                WorkflowEndpoint[]
+  workflowEndpointDeliveries       WorkflowEndpointDelivery[]
+  seoAuditRuns                     SeoAuditRun[]
+  seoSearchConsoleSnapshots        SeoSearchConsoleSnapshot[]
+  seoSearchConsoleKeywordSnapshots SeoSearchConsoleKeywordSnapshot[]
+  seoContentRevisions              SeoContentRevision[]
+  seoContentRevisionAudits         SeoContentRevisionAudit[]
+  seoTechnicalActions              SeoTechnicalAction[]
+  seoTechnicalActionAudits         SeoTechnicalActionAudit[]
+  seoContentBriefs                 SeoContentBrief[]
+  seoContentBriefAudits            SeoContentBriefAudit[]
+  seoContentDismissals             SeoContentDismissal[]
+  seoAuditSchedule                 SeoAuditSchedule?
+  seoAuditIssues                   SeoAuditIssue[]
+  seoAuditIssueAudits              SeoAuditIssueAudit[]
+  seoOffPageLinks                  SeoOffPageLink[]
+  seoOffPageOpportunities          SeoOffPageOpportunity[]
+  seoOffPageAudits                 SeoOffPageAudit[]
+  seoGuestPublications             SeoGuestPublication[]
+  seoGuestPitches                  SeoGuestPitch[]
+  seoGuestPostingAudits            SeoGuestPostingAudit[]
+  seoCompetitorGaps                SeoCompetitorGap[]
+  seoCompetitorGapAudits           SeoCompetitorGapAudit[]
+  contentItems                     ContentItem[]
+  staffShifts                      StaffShift[]
+  timeOff                          TimeOff[]
+  timesheetApprovals               TimesheetApproval[]
+  commissionPayments               CommissionPayment[]
+  staffAdvances                    StaffAdvance[]
+  payrollLineItems                 PayrollLineItem[]
+  schedulePublishes                SchedulePublish[]
+  stockTransfersOut                StockTransfer[]                      @relation("StockTransferSource")
+  stockTransfersIn                 StockTransfer[]                      @relation("StockTransferDest")
+  stockCounts                      StockCount[]
+  customRoles                      CustomRole[]
+  roleCapabilityOverrides          RoleCapabilityOverride[]
+  labelOverrides                   LabelOverride[]
+  optionSets                       OptionSet[]
+  sessions                         Session[]
+  masterListing                    MasterListing?
+  listingSyncLogs                  ListingSyncLog[]
+  citations                        Citation[]
+  listingPhotos                    ListingPhoto[]
+  listingSettings                  ListingSettings?
+  gmbPhotos                        GmbPhoto[]
+  gmbQnas                          GmbQna[]
+  gmbInsightsSnapshots             GmbInsightsSnapshot[]
+  socialAccounts                   SocialAccount[]
+  mediaAssets                      MediaAsset[]
+  socialPosts                      SocialPost[]
+  socialInboxItems                 SocialInboxItem[]
+  socialAnalyticsSnapshots         SocialAnalyticsSnapshot[]
+  socialSettings                   SocialSettings?
+  socialPostAnalytics              SocialPostAnalytics[]
+  socialCaptionGenerations         SocialCaptionGeneration[]
+  visibilityScoreSnapshots         VisibilityScoreSnapshot[]
+  competitiveOpportunities         CompetitiveOpportunity[]
+  competitiveSettings              CompetitiveSettings?
+  voiceSettings                    VoiceSettings?
+  phoneNumber                      PhoneNumber?
+  phoneCalls                       PhoneCall[]
+  voiceHumanAgentProfiles          VoiceHumanAgentProfile[]
+  voiceHumanAgentAssignments       VoiceHumanAgentAssignment[]
+  voiceAiAgents                    VoiceAiAgent[]
+  voiceAiAgentVersions             VoiceAiAgentVersion[]
+  voiceAiAgentTestRuns             VoiceAiAgentTestRun[]
+  voiceAiOutboundAttempts          VoiceAiOutboundAttempt[]
+  voiceCallQueueEntries            VoiceCallQueueEntry[]
+  voiceCallQueueConfigs            VoiceCallQueueConfig[]
+  voiceCallWrapUps                 VoiceCallWrapUp[]
+  voiceQualityRubrics              VoiceQualityRubric[]
+  voiceQualityRubricVersions       VoiceQualityRubricVersion[]
+  voiceQualityReviews              VoiceQualityReview[]
+  voiceCompliancePolicyPacks       VoiceCompliancePolicyPack[]
+  voiceCompliancePolicyVersions    VoiceCompliancePolicyVersion[]
+  voiceConsentEvidence             VoiceConsentEvidence[]
+  voiceSuppressionEntries          VoiceSuppressionEntry[]
+  voiceEligibilityDecisions        VoiceOutboundEligibilityDecision[]
+  voiceOutboundCampaigns           VoiceOutboundCampaign[]
+  voiceOutboundCampaignMembers     VoiceOutboundCampaignMember[]
+  voiceOutboundDialAttempts        VoiceOutboundDialAttempt[]
+  voiceTrackingNumbers             VoiceTrackingNumber[]
+  voiceTrackingAssignments         VoiceTrackingNumberAssignment[]
+  voiceCallbacks                   VoiceCallback[]
+  voiceCallbackAttempts            VoiceCallbackAttempt[]
+  voiceCallTransfers               VoiceCallTransfer[]
+  voiceProviderWebhookEvents       VoiceProviderWebhookEvent[]
+  voiceBillingRates                VoiceBillingRateVersion[]
+  voiceBillingDrafts               VoiceBillingDraft[]
+  voiceBillingUsageClaims          VoiceBillingUsageClaim[]
+  voiceVideoMeetings               VoiceVideoMeeting[]
+  voiceMeetingInvites              VoiceMeetingInvite[]
+  voiceMeetingParticipants         VoiceMeetingParticipant[]
+  voiceVideoRecordings             VoiceVideoRecording[]
+  voiceVideoRecordingConsents      VoiceVideoRecordingConsent[]
+  voiceIvrFlows                    VoiceIvrFlow[]
+  voiceIvrFlowVersions             VoiceIvrFlowVersion[]
+  voiceRoutingRules                VoiceRoutingRule[]
+  voiceKnowledgeEntries            VoiceKnowledgeEntry[]
+  digitizerAliases                 DigitizerAlias[]
+  riders                           Rider[]
+  deliveries                       Delivery[]
+  routes                           Route[]
+  deliveryZones                    DeliveryZone[]
+  deliverySettings                 DeliverySettings?
+  deliveryAutomationRuns           DeliveryAutomationRun[]
+  adCreatives                      AdCreative[]
+  adAudiences                      AdAudience[]
+  adLeads                          AdLead[]
+  adSettings                       AdSettings?
+  integrationSyncLogs              IntegrationSyncLog[]
+  ecommerceSyncConflicts           EcommerceSyncConflict[]
+  adCampaignStatsSnapshots         AdCampaignStatsSnapshot[]
+  accountingMappings               AccountingMapping[]
+  outboundWebhooks                 OutboundWebhook[]
+  reviewSentimentThemes            ReviewSentimentTheme[]
+  recurringObligations             RecurringObligation[]
+  seoHeatmapPoints                 SeoHeatmapPoint[]
+  apiKeys                          ApiKey[]
+  nightlyCloseLogs                 NightlyCloseLog[]
+  healthScoreWeightChanges         HealthScoreWeightChange[]
+  voiceCommandDrafts               VoiceCommandDraft[]
+  assistantConversations           AssistantConversation[]
+  notificationPreferences          NotificationPreference[]
+  dataSubjectRequests              DataSubjectRequest[]
+  taxRules                         TaxRule[]
+  websiteSite                      WebsiteSite?
+  websitePages                     WebsitePage[]
+  websitePageVersions              WebsitePageVersion[]
+  websiteDeployments               WebsiteDeployment[]
+  websiteForms                     WebsiteForm[]
+  websiteFormSubmissions           WebsiteFormSubmission[]
+  websiteDomains                   WebsiteDomain[]
+  websiteRedirects                 WebsiteRedirect[]
+  websiteProductSettings           WebsiteProductSetting[]
+  websiteCollections               WebsiteCollection[]
+  procurementContracts             ProcurementSupplierContract[]
+  procurementContractVersions      ProcurementSupplierContractVersion[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1350,7 +1390,7 @@ model Customer {
   /// no scalar-list column type, so this is a JSON array instead. Read/written wholesale in JS
   /// (see `customers.service.ts`), not via Prisma's array `push`/`has` operators anymore.
   tags              Json           @default("[]")
-  consentMarketing  Boolean        @default(true) @map("consent_marketing")
+  consentMarketing  Boolean        @default(false) @map("consent_marketing")
   optedOut          Boolean        @default(false) @map("opted_out")
   lifetimeSpend     Decimal        @default(0) @map("lifetime_spend") @db.Decimal(12, 2)
   /// Most this customer may owe on credit; null means the business default applies (or none).
@@ -1396,6 +1436,8 @@ model Customer {
   voiceOutboundCampaignMembers VoiceOutboundCampaignMember[]
   supportTickets               CustomerSupportTicket[]
   messageDrafts                MessageDraft[]
+  followUpTasks                CustomerFollowUpTask[]
+  channelConsentHistory        CustomerChannelConsent[]
 
   b2bAccount            CommerceB2bAccount?
   commerceSubscriptions CommerceSubscription[]
@@ -1407,6 +1449,26 @@ model Customer {
   @@index([businessId, name])
   @@fulltext([name])
   @@map("customers")
+}
+
+/// Immutable, revisioned proof of a customer's channel-specific marketing choice.
+/// `evidenceReference` is an internal form/case reference only, never raw contact data.
+model CustomerChannelConsent {
+  id                 String                      @id @default(uuid())
+  businessId         String                      @map("business_id")
+  business           Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId         String                      @map("customer_id")
+  customer           Customer                    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  channel            MessageChannel
+  state              CustomerChannelConsentState
+  source             String                      @db.VarChar(40)
+  evidenceReference  String                      @map("evidence_reference") @db.VarChar(100)
+  revision           Int
+  recordedByUserId   String                      @map("recorded_by_user_id")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+
+  @@unique([businessId, customerId, channel, revision], map: "customer_channel_consent_revision_key")
+  @@map("customer_channel_consents")
 }
 
 /// Customer Portal configuration. The business's existing `branding` JSON remains canonical;
@@ -1566,12 +1628,17 @@ model CustomerPortalPasswordReset {
 /// `SegmentsService.getSegment` tries a real `Segment.id` first, then falls back to the old keys,
 /// so campaigns can target either kind of segment through the same one code path.
 model Segment {
-  id         String   @id @default(uuid())
-  businessId String   @map("business_id")
-  business   Business @relation(fields: [businessId], references: [id])
-  name       String
+  id                          String                         @id @default(uuid())
+  businessId                  String                         @map("business_id")
+  business                    Business                       @relation(fields: [businessId], references: [id])
+  name                        String
   /// `{ combinator: 'AND' | 'OR', conditions: [{ field, operator, value }] }` — see `segment-rules.util.ts`.
-  rules      Json
+  rules                       Json
+  version                     Int                            @default(1)
+  sourceAgentRecommendationId String?                        @unique @map("source_agent_recommendation_id")
+  sourceAgentRecommendation   SpecialistAgentRecommendation? @relation(fields: [sourceAgentRecommendationId], references: [id], onDelete: Restrict)
+  agentApprovedVersion        Int?                           @map("agent_approved_version")
+  agentApprovedDefinitionHash String?                        @map("agent_approved_definition_hash") @db.VarChar(64)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1878,6 +1945,10 @@ model Product {
   sellingPrice      Decimal     @default(0) @map("selling_price") @db.Decimal(12, 2)
   stockQty          Int         @default(0) @map("stock_qty")
   lowStockThreshold Int         @default(5) @map("low_stock_threshold")
+  stockUnitLabel    String?     @map("stock_unit_label") @db.VarChar(32)
+  purchaseUnitLabel String?     @map("purchase_unit_label") @db.VarChar(32)
+  purchasePackSize  Int?        @map("purchase_pack_size")
+  minimumReorderQty Int?        @map("minimum_reorder_qty")
   durationMin       Int?        @map("duration_min")
   active            Boolean     @default(true)
 
@@ -1901,39 +1972,41 @@ model Product {
   depositRequired  Boolean  @default(false) @map("deposit_required")
   depositAmount    Decimal? @map("deposit_amount") @db.Decimal(12, 2)
 
-  orderItems              OrderItem[]
-  stockMovements          StockMovement[]
-  appointments            Appointment[]
-  productFeedItems        ProductFeedItem[]
+  orderItems                       OrderItem[]
+  stockMovements                   StockMovement[]
+  appointments                     Appointment[]
+  productFeedItems                 ProductFeedItem[]
   /// Set only when this product is the sellable, catalog-facing "face" of a bundle (UPD-BE-013).
-  bundle                  Bundle?
-  bundleItems             BundleItem[]
-  priceHistory            PriceHistory[]
-  waitlistEntries         WaitlistEntry[]
-  purchaseOrderItems      PurchaseOrderItem[]
-  productWaitlistEntries  ProductWaitlistEntry[]
-  queueTokens             QueueToken[]
-  stockTransferItems      StockTransferItem[]
-  stockCountLines         StockCountLine[]
-  commerceRfqItems        CommerceRfqItem[]
-  commerceClaimItems      CommerceSupplierClaimItem[]
-  radarOpportunity        ProductOpportunity?
-  commerceListingDrafts   CommerceListingDraft[]
-  commerceChannelListings CommerceChannelListing[]
-  fulfillmentMappings     CommerceFulfillmentMapping[]
-  boms                    CommerceBom[]
-  bomComponentOf          CommerceBomItem[]
-  workOrders              CommerceWorkOrder[]
-  workOrderMaterials      CommerceWorkOrderMaterial[]
-  websiteSetting          WebsiteProductSetting?
-  complianceDocuments     CommerceComplianceDocument[]
-  marketEligibility       CommerceMarketEligibility[]
-  b2bPriceListItems       CommerceB2bPriceListItem[]
-  subscriptionPlans       CommerceSubscriptionPlan[]
-  preorderCampaigns       CommercePreorderCampaign[]
-  storeOpportunities      CommerceStoreOpportunity[]
-  commerceExperiments     CommerceExperiment[]
-  procurementRequestItems ProcurementRequestItem[]
+  bundle                           Bundle?
+  bundleItems                      BundleItem[]
+  priceHistory                     PriceHistory[]
+  waitlistEntries                  WaitlistEntry[]
+  purchaseOrderItems               PurchaseOrderItem[]
+  productWaitlistEntries           ProductWaitlistEntry[]
+  queueTokens                      QueueToken[]
+  stockTransferItems               StockTransferItem[]
+  stockCountLines                  StockCountLine[]
+  inventoryAgentCountTasks         InventoryAgentCountTask[]
+  inventoryAgentWastageReviewTasks InventoryAgentWastageReviewTask[]
+  commerceRfqItems                 CommerceRfqItem[]
+  commerceClaimItems               CommerceSupplierClaimItem[]
+  radarOpportunity                 ProductOpportunity?
+  commerceListingDrafts            CommerceListingDraft[]
+  commerceChannelListings          CommerceChannelListing[]
+  fulfillmentMappings              CommerceFulfillmentMapping[]
+  boms                             CommerceBom[]
+  bomComponentOf                   CommerceBomItem[]
+  workOrders                       CommerceWorkOrder[]
+  workOrderMaterials               CommerceWorkOrderMaterial[]
+  websiteSetting                   WebsiteProductSetting?
+  complianceDocuments              CommerceComplianceDocument[]
+  marketEligibility                CommerceMarketEligibility[]
+  b2bPriceListItems                CommerceB2bPriceListItem[]
+  subscriptionPlans                CommerceSubscriptionPlan[]
+  preorderCampaigns                CommercePreorderCampaign[]
+  storeOpportunities               CommerceStoreOpportunity[]
+  commerceExperiments              CommerceExperiment[]
+  procurementRequestItems          ProcurementRequestItem[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4228,6 +4301,8 @@ model MessageDraft {
   businessId      String             @map("business_id")
   customerId      String             @map("customer_id")
   customer        Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerFollowUpTaskId String?      @map("customer_follow_up_task_id")
+  customerFollowUpTask   CustomerFollowUpTask? @relation(fields: [customerFollowUpTaskId], references: [id], onDelete: SetNull)
   sourceCallId    String?            @map("source_call_id")
   sourceCall      PhoneCall?         @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
   sourceMeetingId String?            @map("source_meeting_id")
@@ -4240,8 +4315,42 @@ model MessageDraft {
 
   @@unique([businessId, sourceKey], map: "message_drafts_business_source_key")
   @@index([businessId, customerId, status], map: "message_drafts_business_customer_status_idx")
+  @@index([businessId, customerFollowUpTaskId], map: "message_drafts_business_follow_up_task_idx")
   @@index([businessId, sourceMeetingId, status], map: "message_drafts_business_meeting_status_idx")
   @@map("message_drafts")
+}
+
+/// Canonical CRM follow-up work created by a person or the Customer Intelligence workflow.
+/// It is surfaced in the existing Action Center/Staff Tasks views, not a duplicate task inbox.
+model CustomerFollowUpTask {
+  id                String             @id @default(uuid())
+  businessId        String             @map("business_id")
+  business          Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId        String             @map("customer_id")
+  customer          Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  title             String             @db.VarChar(191)
+  reason            String             @db.Text
+  priority          ActionItemPriority @default(normal)
+  status            String             @default("open") @db.VarChar(24)
+  dueAt             DateTime?          @map("due_at")
+  assigneeStaffId   String?            @map("assignee_staff_id") @db.VarChar(191)
+  idempotencyKey    String             @map("idempotency_key") @db.VarChar(96)
+  payloadHash       String             @map("payload_hash") @db.Char(64)
+  createdByUserId   String             @map("created_by_user_id") @db.VarChar(191)
+  completedByUserId String?            @map("completed_by_user_id") @db.VarChar(191)
+  completedAt       DateTime?          @map("completed_at")
+  /// Optional staff-recorded follow-up result; this is not provider-confirmed delivery evidence.
+  completionOutcome String?            @map("completion_outcome") @db.VarChar(40)
+  messageDrafts     MessageDraft[]
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  @@unique([businessId, idempotencyKey], map: "customer_follow_up_tasks_business_idempotency_key")
+  @@index([businessId, status, dueAt], map: "customer_follow_up_tasks_business_status_due_idx")
+  @@index([businessId, status, completedAt], map: "customer_follow_up_tasks_business_completed_idx")
+  @@index([businessId, customerId, createdAt], map: "customer_follow_up_tasks_business_customer_created_idx")
+  @@index([businessId, assigneeStaffId, status], map: "customer_follow_up_tasks_business_assignee_status_idx")
+  @@map("customer_follow_up_tasks")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -5836,6 +5945,53 @@ model SeoAuditRun {
   @@map("seo_audit_runs")
 }
 
+/// Aggregated, read-only Search Console evidence for a selected property and fixed date window.
+/// No individual search query strings are stored; Google limits and anonymizes query reporting.
+model SeoSearchConsoleSnapshot {
+  id              String   @id @default(uuid())
+  businessId      String   @map("business_id")
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  propertyUrl     String   @map("property_url") @db.VarChar(2048)
+  propertyHash    String   @map("property_hash") @db.Char(64)
+  startDate       String   @map("start_date") @db.Char(10)
+  endDate         String   @map("end_date") @db.Char(10)
+  clicks           BigInt?
+  impressions      BigInt?
+  clickThroughRate Decimal? @map("click_through_rate") @db.Decimal(12, 10)
+  averagePosition  Decimal? @map("average_position") @db.Decimal(12, 4)
+  dataState       String   @default("final") @map("data_state") @db.VarChar(16)
+  fetchedAt       DateTime @default(now()) @map("fetched_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, propertyHash, startDate, endDate], map: "seo_gsc_snapshots_window_uq")
+  @@index([businessId, fetchedAt], map: "seo_gsc_snapshots_business_fetched_idx")
+  @@map("seo_search_console_snapshots")
+}
+
+/// Search Console metrics retained only for exact matches to a business's own tracked keywords.
+/// Raw provider query strings and page URLs are discarded after the sync maps them in memory.
+model SeoSearchConsoleKeywordSnapshot {
+  id            String        @id @default(uuid())
+  businessId    String        @map("business_id")
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  keywordId     String        @map("keyword_id")
+  keyword       TrackedKeyword @relation(fields: [keywordId, businessId], references: [id, businessId], onDelete: Cascade)
+  propertyHash  String        @map("property_hash") @db.Char(64)
+  startDate     String        @map("start_date") @db.Char(10)
+  endDate       String        @map("end_date") @db.Char(10)
+  clicks        BigInt?
+  impressions   BigInt?
+  clickThroughRate Decimal?   @map("click_through_rate") @db.Decimal(12, 10)
+  averagePosition  Decimal?   @map("average_position") @db.Decimal(12, 4)
+  dataState     String        @default("final") @map("data_state") @db.VarChar(20)
+  fetchedAt     DateTime      @default(now()) @map("fetched_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  @@unique([businessId, keywordId, propertyHash, startDate, endDate], map: "seo_gsc_keyword_snapshots_window_uq")
+  @@index([businessId, keywordId, endDate, fetchedAt], map: "seo_gsc_keyword_snapshots_lookup_idx")
+  @@map("seo_search_console_keyword_snapshots")
+}
+
 /// Explicit, per-business cadence for the bounded website audit. Disabled until an owner enables it.
 model SeoAuditSchedule {
   id            String    @id @default(uuid())
@@ -6006,13 +6162,15 @@ model StockMovement {
 /// uses the raw `PrismaService` throughout with explicit `sourceBusinessId`/`destBusinessId`
 /// checks — same pattern as `RollupService`, the only other code that reads across branches.
 model StockTransfer {
-  id               String              @id @default(uuid())
-  sourceBusinessId String              @map("source_business_id")
-  sourceBusiness   Business            @relation("StockTransferSource", fields: [sourceBusinessId], references: [id])
-  destBusinessId   String              @map("dest_business_id")
-  destBusiness     Business            @relation("StockTransferDest", fields: [destBusinessId], references: [id])
-  status           StockTransferStatus @default(pending)
-  note             String?
+  id                                    String                         @id @default(uuid())
+  sourceBusinessId                      String                         @map("source_business_id")
+  sourceBusiness                        Business                       @relation("StockTransferSource", fields: [sourceBusinessId], references: [id])
+  destBusinessId                        String                         @map("dest_business_id")
+  destBusiness                          Business                       @relation("StockTransferDest", fields: [destBusinessId], references: [id])
+  status                                StockTransferStatus            @default(pending)
+  note                                  String?
+  sourceSpecialistAgentRecommendationId String?                        @unique(map: "stock_transfer_agent_rec_uq") @map("source_specialist_agent_recommendation_id")
+  sourceSpecialistAgentRecommendation   SpecialistAgentRecommendation? @relation(fields: [sourceSpecialistAgentRecommendationId], references: [id], onDelete: SetNull, map: "stock_transfer_agent_rec_fk")
 
   requestedByUserId String? @map("requested_by_user_id")
   approvedByUserId  String? @map("approved_by_user_id")
@@ -6074,7 +6232,8 @@ model StockCount {
   appliedByUserId String?   @map("applied_by_user_id")
   appliedAt       DateTime? @map("applied_at")
 
-  lines StockCountLine[]
+  lines                    StockCountLine[]
+  inventoryAgentCountTasks InventoryAgentCountTask[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -6291,37 +6450,40 @@ model PurchaseOrderItem {
 /// Procurement demand capture. This record is not inventory, a payable, or a supplier commitment;
 /// only an explicit conversion creates the canonical PurchaseOrder used by Inventory.
 model ProcurementRequest {
-  id                       String                    @id @default(uuid())
-  businessId               String                    @map("business_id")
-  business                 Business                  @relation(fields: [businessId], references: [id])
-  requesterUserId          String                    @map("requester_user_id")
-  requester                User                      @relation("ProcurementRequestRequester", fields: [requesterUserId], references: [id])
-  branchBusinessId         String?                   @map("branch_business_id")
-  branchBusiness           Business?                 @relation("ProcurementRequestBranch", fields: [branchBusinessId], references: [id], onDelete: SetNull)
-  department               String?
-  costCenter               String?                   @map("cost_center")
-  neededBy                 DateTime?                 @map("needed_by")
-  reason                   String                    @db.Text
-  urgency                  ProcurementRequestUrgency @default(normal)
-  budgetCode               String?                   @map("budget_code")
-  currency                 String
-  status                   ProcurementRequestStatus  @default(draft)
-  version                  Int                       @default(1)
-  submittedAt              DateTime?                 @map("submitted_at")
-  reviewedAt               DateTime?                 @map("reviewed_at")
-  reviewedByUserId         String?                   @map("reviewed_by_user_id")
-  reviewer                 User?                     @relation("ProcurementRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-  decisionReason           String?                   @map("decision_reason") @db.Text
-  supplierId               String?                   @map("supplier_id")
-  supplier                 Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  attachmentUrls           Json                      @default("[]") @map("attachment_urls")
-  convertedPurchaseOrderId String?                   @unique @map("converted_purchase_order_id")
-  convertedPurchaseOrder   PurchaseOrder?            @relation(fields: [convertedPurchaseOrderId], references: [id], onDelete: SetNull)
-  sourceRfqs               CommerceRfq[]
-  items                    ProcurementRequestItem[]
-  events                   ProcurementRequestEvent[]
-  createdAt                DateTime                  @default(now()) @map("created_at")
-  updatedAt                DateTime                  @updatedAt @map("updated_at")
+  id                          String                         @id @default(uuid())
+  businessId                  String                         @map("business_id")
+  business                    Business                       @relation(fields: [businessId], references: [id])
+  requesterUserId             String                         @map("requester_user_id")
+  requester                   User                           @relation("ProcurementRequestRequester", fields: [requesterUserId], references: [id])
+  branchBusinessId            String?                        @map("branch_business_id")
+  branchBusiness              Business?                      @relation("ProcurementRequestBranch", fields: [branchBusinessId], references: [id], onDelete: SetNull)
+  department                  String?
+  costCenter                  String?                        @map("cost_center")
+  neededBy                    DateTime?                      @map("needed_by")
+  reason                      String                         @db.Text
+  urgency                     ProcurementRequestUrgency      @default(normal)
+  budgetCode                  String?                        @map("budget_code")
+  currency                    String
+  status                      ProcurementRequestStatus       @default(draft)
+  version                     Int                            @default(1)
+  sourceAgentRecommendationId String?                        @unique @map("source_agent_recommendation_id")
+  sourceAgentRecommendation   SpecialistAgentRecommendation? @relation(fields: [sourceAgentRecommendationId], references: [id], onDelete: Restrict)
+  agentContext                Json?                          @map("agent_context")
+  submittedAt                 DateTime?                      @map("submitted_at")
+  reviewedAt                  DateTime?                      @map("reviewed_at")
+  reviewedByUserId            String?                        @map("reviewed_by_user_id")
+  reviewer                    User?                          @relation("ProcurementRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  decisionReason              String?                        @map("decision_reason") @db.Text
+  supplierId                  String?                        @map("supplier_id")
+  supplier                    Supplier?                      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  attachmentUrls              Json                           @default("[]") @map("attachment_urls")
+  convertedPurchaseOrderId    String?                        @unique @map("converted_purchase_order_id")
+  convertedPurchaseOrder      PurchaseOrder?                 @relation(fields: [convertedPurchaseOrderId], references: [id], onDelete: SetNull)
+  sourceRfqs                  CommerceRfq[]
+  items                       ProcurementRequestItem[]
+  events                      ProcurementRequestEvent[]
+  createdAt                   DateTime                       @default(now()) @map("created_at")
+  updatedAt                   DateTime                       @updatedAt @map("updated_at")
 
   @@index([businessId, status, createdAt])
   @@index([requesterUserId, createdAt])
@@ -6488,6 +6650,177 @@ model Expense {
 
   @@index([businessId, incurredOn])
   @@map("expenses")
+}
+
+/// Approved monthly operating budgets compared with real Expense rows. This is not a general
+/// ledger: expenses have no branch attribution, so budget actuals are business-wide.
+model FinanceBudget {
+  id              String   @id @default(uuid())
+  businessId      String   @map("business_id")
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "finance_budgets_business_fk")
+  monthStart      DateTime @map("month_start") @db.Date
+  category        String   @db.VarChar(191)
+  currencyCode    String   @map("currency_code") @db.Char(3)
+  amount          Decimal  @db.Decimal(12, 2)
+  version         Int      @default(1)
+  status          String   @default("draft") @db.VarChar(24)
+  createdByUserId String   @map("created_by_user_id") @db.VarChar(191)
+  note            String?  @db.Text
+  submittedAt     DateTime? @map("submitted_at")
+  reviewedByUserId String? @map("reviewed_by_user_id") @db.VarChar(191)
+  reviewReason    String?  @map("review_reason") @db.Text
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, monthStart, category, version], map: "finance_budgets_business_month_category_version_uq")
+  @@index([businessId, monthStart, status], map: "finance_budgets_business_month_status_idx")
+  @@map("finance_budgets")
+}
+
+/// Business-owned chart of accounts for manually prepared double-entry journals.
+/// No accounts are auto-seeded because their accounting meaning must be supplied by the business.
+model FinanceAccount {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "finance_accounts_business_fk")
+  code       String   @db.VarChar(64)
+  name       String   @db.VarChar(191)
+  type       String   @db.VarChar(24)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  journalLines FinanceJournalLine[]
+  bankStatementImports FinanceBankStatementImport[]
+
+  @@unique([businessId, code], map: "finance_accounts_business_code_uq")
+  @@unique([id, businessId], map: "finance_accounts_id_business_uq")
+  @@index([businessId, active, type], map: "finance_accounts_business_active_type_idx")
+  @@map("finance_accounts")
+}
+
+/// Explicit manual lock for a calendar accounting period. Closing this row only blocks
+/// Noxtill journal posting; it does not certify reconciliation or an external accounting close.
+model FinanceAccountingPeriod {
+  id               String   @id @default(uuid())
+  businessId       String   @map("business_id")
+  business         Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "finance_periods_business_fk")
+  monthStart       DateTime @map("month_start") @db.Date
+  status           String   @default("closed") @db.VarChar(16)
+  closeReason      String   @map("close_reason") @db.Text
+  closedByUserId   String   @map("closed_by_user_id") @db.VarChar(191)
+  closedAt         DateTime @default(now()) @map("closed_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, monthStart], map: "finance_periods_business_month_uq")
+  @@index([businessId, status, monthStart], map: "finance_periods_business_status_month_idx")
+  @@map("finance_accounting_periods")
+}
+
+/// A journal is append-only after posting. Only the Finance service may advance its state;
+/// line amounts are always expressed in one currency and must balance before approval/posting.
+model FinanceJournalEntry {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "finance_journals_business_fk")
+  reversalOfId      String?  @map("reversal_of_id")
+  reversalOf        FinanceJournalEntry? @relation("FinanceJournalReversal", fields: [reversalOfId, businessId], references: [id, businessId], onDelete: Restrict, map: "finance_journals_reversal_fk")
+  reversal          FinanceJournalEntry? @relation("FinanceJournalReversal")
+  reference         String   @db.VarChar(80)
+  entryDate         DateTime @map("entry_date") @db.Date
+  currencyCode      String   @map("currency_code") @db.Char(3)
+  description       String   @db.Text
+  status            String   @default("draft") @db.VarChar(24)
+  totalDebits       Decimal  @default(0) @map("total_debits") @db.Decimal(16, 2)
+  totalCredits      Decimal  @default(0) @map("total_credits") @db.Decimal(16, 2)
+  createdByUserId   String   @map("created_by_user_id") @db.VarChar(191)
+  submittedAt       DateTime? @map("submitted_at")
+  reviewedByUserId  String?  @map("reviewed_by_user_id") @db.VarChar(191)
+  reviewReason      String?  @map("review_reason") @db.Text
+  reviewedAt        DateTime? @map("reviewed_at")
+  postedByUserId    String?  @map("posted_by_user_id") @db.VarChar(191)
+  postedAt          DateTime? @map("posted_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  lines FinanceJournalLine[]
+
+  @@unique([businessId, reference], map: "finance_journals_business_reference_uq")
+  @@unique([id, businessId], map: "finance_journals_id_business_uq")
+  @@unique([reversalOfId, businessId], map: "finance_journals_reversal_business_uq")
+  @@index([businessId, status, entryDate], map: "finance_journals_business_status_date_idx")
+  @@map("finance_journal_entries")
+}
+
+model FinanceJournalLine {
+  id              String   @id @default(uuid())
+  businessId      String   @map("business_id")
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "finance_journal_lines_business_fk")
+  journalEntryId  String   @map("journal_entry_id")
+  journalEntry    FinanceJournalEntry @relation(fields: [journalEntryId, businessId], references: [id, businessId], onDelete: Cascade, map: "finance_journal_lines_entry_fk")
+  accountId       String   @map("account_id")
+  account         FinanceAccount @relation(fields: [accountId, businessId], references: [id, businessId], map: "finance_journal_lines_account_fk")
+  accountCode     String   @map("account_code") @db.VarChar(64)
+  accountName     String   @map("account_name") @db.VarChar(191)
+  memo            String?  @db.Text
+  debit           Decimal  @default(0) @db.Decimal(16, 2)
+  credit          Decimal  @default(0) @db.Decimal(16, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+  statementMatches FinanceBankStatementLine[]
+
+  @@index([businessId, journalEntryId], map: "finance_journal_lines_business_entry_idx")
+  @@index([businessId, accountId], map: "finance_journal_lines_business_account_idx")
+  @@unique([id, businessId], map: "finance_journal_lines_id_business_uq")
+  @@map("finance_journal_lines")
+}
+
+/// Imported statement metadata. The source file and free-text bank descriptions are never stored.
+model FinanceBankStatementImport {
+  id                 String   @id @default(uuid())
+  businessId         String   @map("business_id")
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "finance_bank_statement_imports_business_fk")
+  financeAccountId   String   @map("finance_account_id")
+  financeAccount     FinanceAccount @relation(fields: [financeAccountId, businessId], references: [id, businessId], onDelete: Restrict, map: "finance_bank_statement_imports_account_fk")
+  currencyCode       String   @map("currency_code") @db.Char(3)
+  periodStart        DateTime @map("period_start") @db.Date
+  periodEnd          DateTime @map("period_end") @db.Date
+  rowCount           Int      @map("row_count")
+  sourceHash         String   @map("source_hash") @db.Char(64)
+  importedByUserId   String   @map("imported_by_user_id") @db.VarChar(191)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  lines FinanceBankStatementLine[]
+
+  @@unique([id, businessId], map: "finance_bank_statement_imports_id_business_uq")
+  @@unique([businessId, financeAccountId, sourceHash], map: "finance_bank_statement_imports_source_uq")
+  @@index([businessId, periodEnd, createdAt], map: "finance_bank_statement_imports_business_period_idx")
+  @@map("finance_bank_statement_imports")
+}
+
+/// A statement amount and date only. Free-text bank descriptions are intentionally discarded.
+model FinanceBankStatementLine {
+  id                    String   @id @default(uuid())
+  businessId            String   @map("business_id")
+  business              Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "finance_bank_statement_lines_business_fk")
+  importId              String   @map("import_id")
+  statementImport       FinanceBankStatementImport @relation(fields: [importId, businessId], references: [id, businessId], onDelete: Cascade, map: "finance_bank_statement_lines_import_fk")
+  lineNumber            Int      @map("line_number")
+  statementDate         DateTime @map("statement_date") @db.Date
+  amount                Decimal  @db.Decimal(16, 2)
+  status                String   @default("unmatched") @db.VarChar(24)
+  matchedJournalLineId  String?  @map("matched_journal_line_id")
+  matchedJournalLine    FinanceJournalLine? @relation(fields: [matchedJournalLineId, businessId], references: [id, businessId], onDelete: Restrict, map: "finance_bank_statement_lines_match_fk")
+  decisionByUserId      String?  @map("decision_by_user_id") @db.VarChar(191)
+  decisionAt            DateTime? @map("decision_at")
+  decisionReason        String?  @map("decision_reason") @db.Text
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, importId, lineNumber], map: "finance_bank_statement_lines_import_line_uq")
+  @@unique([businessId, matchedJournalLineId], map: "finance_bank_statement_lines_match_uq")
+  @@index([businessId, status, statementDate], map: "finance_bank_statement_lines_business_status_date_idx")
+  @@index([businessId, importId, status], map: "finance_bank_statement_lines_business_import_status_idx")
+  @@map("finance_bank_statement_lines")
 }
 
 enum RecurringObligationFrequency {
@@ -7234,13 +7567,15 @@ model TrackedKeyword {
   intent        String?  @db.VarChar(24)
   targetPageUrl String?  @map("target_page_url") @db.VarChar(2048)
 
-  snapshots KeywordRankSnapshot[]
+  snapshots                KeywordRankSnapshot[]
+  searchConsoleSnapshots   SeoSearchConsoleKeywordSnapshot[]
 
   seoContentBriefs SeoContentBrief[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([businessId, keyword])
+  @@unique([id, businessId], map: "tracked_keywords_id_business_key")
   @@map("tracked_keywords")
 }
 
@@ -8461,10 +8796,20 @@ model AiCallLog {
   voiceAgentVersionId String?  @map("voice_agent_version_id")
   /// Which tools were invoked and what they returned — the audit trail behind "never fabricated" (BE-074).
   toolCalls           Json?    @map("tool_calls")
+  /// Successful external provider round-trip time, excluding policy checks and local persistence.
+  providerLatencyMs   Int?     @map("provider_latency_ms")
+  /// Null for historical rows; true/false marks the external provider outcome for new attempts.
+  providerCallSucceeded Boolean? @map("provider_call_succeeded")
+  /// Stable redacted category for failed provider calls; never raw provider text.
+  providerFailureCode   String?  @map("provider_failure_code") @db.VarChar(64)
+  /// Optional link from a specialist explanation to the persisted agent run that requested it.
+  specialistAgentRunId String?  @map("specialist_agent_run_id") @db.VarChar(191)
+  specialistAgentRun   SpecialistAgentRun? @relation(fields: [specialistAgentRunId], references: [id], onDelete: SetNull)
   createdAt           DateTime @default(now()) @map("created_at")
 
   @@index([businessId, createdAt])
   @@index([businessId, voiceAgentVersionId, createdAt], map: "ai_call_logs_voice_version_idx")
+  @@index([specialistAgentRunId, createdAt], map: "ai_call_logs_specialist_run_created_idx")
   @@map("ai_call_logs")
 }
 
@@ -9265,24 +9610,32 @@ model SeoCompetitorGapAudit {
 /// registered commerce tool — who asked, with what input, whether policy allowed it, and the result.
 /// Refusals are recorded too, so the audit shows what the autonomy level and kill switch stopped.
 model CommerceAgentToolRun {
-  id            String   @id @default(uuid())
-  businessId    String   @map("business_id")
-  business      Business @relation(fields: [businessId], references: [id])
-  toolKey       String   @map("tool_key") @db.VarChar(64)
-  riskClass     String   @map("risk_class") @db.VarChar(24)
+  id                    String   @id @default(uuid())
+  businessId            String   @map("business_id")
+  business              Business @relation(fields: [businessId], references: [id])
+  toolKey               String   @map("tool_key") @db.VarChar(64)
+  riskClass             String   @map("risk_class") @db.VarChar(24)
   /// `user` for a person testing a tool; an agent identifier once agents call tools themselves.
-  actorType     String   @default("user") @map("actor_type") @db.VarChar(16)
-  actorUserId   String?  @map("actor_user_id")
-  autonomyLevel Int      @map("autonomy_level")
-  input         Json
-  outcome       String   @db.VarChar(16)
-  refusalReason String?  @map("refusal_reason") @db.Text
-  resultSummary String?  @map("result_summary") @db.Text
-  correlationId String   @map("correlation_id") @db.VarChar(64)
-  durationMs    Int      @map("duration_ms")
-  createdAt     DateTime @default(now()) @map("created_at")
+  actorType             String   @default("user") @map("actor_type") @db.VarChar(16)
+  actorUserId           String?  @map("actor_user_id")
+  autonomyLevel         Int      @map("autonomy_level")
+  input                 Json
+  outcome               String   @db.VarChar(16)
+  refusalReason         String?  @map("refusal_reason") @db.Text
+  resultSummary         String?  @map("result_summary") @db.Text
+  correlationId         String   @map("correlation_id") @db.VarChar(64)
+  /// SHA-256 of the caller's Idempotency-Key. The raw key is never stored.
+  idempotencyKeyHash    String?  @map("idempotency_key_hash") @db.Char(64)
+  /// Hash of actor, tool and normalized input. Prevents reusing a key for a different request.
+  idempotencyRequestHash String? @map("idempotency_request_hash") @db.Char(64)
+  /// Canonical draft reference used to return the original result for a safe replay.
+  resultResourceType    String?  @map("result_resource_type") @db.VarChar(48)
+  resultResourceId      String?  @map("result_resource_id") @db.VarChar(191)
+  durationMs            Int      @map("duration_ms")
+  createdAt             DateTime @default(now()) @map("created_at")
 
   @@index([businessId, createdAt], map: "commerce_agent_tool_runs_business_created_idx")
+  @@unique([businessId, idempotencyKeyHash], map: "commerce_agent_tool_runs_idempotency_uq")
   @@map("commerce_agent_tool_runs")
 }
 
@@ -9774,4 +10127,333 @@ model VoiceProviderWebhookEvent {
   @@index([businessId, state, receivedAt], map: "voice_provider_webhook_business_state_idx")
   @@index([state, nextAttemptAt, processingUntil], map: "voice_provider_webhook_retry_idx")
   @@map("voice_provider_webhook_events")
+}
+
+/// Shared, tenant-scoped execution record for the five module-specialist agents. Domain records
+/// remain owned by their canonical modules; this row stores only run lifecycle and grounded output.
+model SpecialistAgentRun {
+  id                String                          @id @default(uuid())
+  businessId        String                          @map("business_id")
+  business          Business                        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  agentKey          String                          @map("agent_key") @db.VarChar(64)
+  agentVersion      String                          @map("agent_version") @db.VarChar(32)
+  agentConfigVersion Int?                           @map("agent_config_version")
+  moduleId          String                          @map("module_id") @db.VarChar(16)
+  triggerType       String                          @default("manual") @map("trigger_type") @db.VarChar(24)
+  /// SHA-256 of the caller's idempotency key; raw client keys are never persisted.
+  idempotencyKeyHash     String?                    @map("idempotency_key_hash") @db.Char(64)
+  /// Hash of the normalized request scope, used to reject key reuse for different inputs.
+  idempotencyRequestHash String?                    @map("idempotency_request_hash") @db.Char(64)
+  status            String                          @db.VarChar(20)
+  initiatedByUserId String?                         @map("initiated_by_user_id") @db.VarChar(191)
+  inputRefs         Json                            @default("[]") @map("input_refs")
+  output            Json                            @default("{}")
+  policyResult      Json                            @default("{}") @map("policy_result")
+  errorCode         String?                         @map("error_code") @db.VarChar(64)
+  errorMessage      String?                         @map("error_message") @db.Text
+  startedAt         DateTime                        @default(now()) @map("started_at")
+  /// First durable worker pickup for queued cross-agent orchestration; null means it has not started.
+  workerStartedAt   DateTime?                       @map("worker_started_at")
+  finishedAt        DateTime?                       @map("finished_at")
+  createdAt         DateTime                        @default(now()) @map("created_at")
+  recommendations   SpecialistAgentRecommendation[]
+  evidence          SpecialistAgentEvidence[]
+  actions           SpecialistAgentAction[]
+  aiCallLogs        AiCallLog[]
+  aiRequests        SpecialistAgentAiRequest[]
+  toolCalls         SpecialistAgentToolCall[]
+  lifecycleEvents   SpecialistAgentRunEvent[]
+
+  @@index([businessId, agentKey, createdAt], map: "specialist_agent_runs_business_agent_created_idx")
+  @@index([businessId, status, createdAt], map: "specialist_agent_runs_business_status_created_idx")
+  @@unique([businessId, agentKey, idempotencyKeyHash], map: "specialist_agent_runs_idempotency_uq")
+  @@index([businessId, agentKey, agentConfigVersion], map: "specialist_agent_runs_config_version_idx")
+  @@map("specialist_agent_runs")
+}
+
+/// Safe specialist lifecycle events. New run-created events are persisted with their source run;
+/// legacy run creation and terminal snapshots may be materialized from saved timestamps on read.
+model SpecialistAgentRunEvent {
+  id             String            @id @db.VarChar(191)
+  dedupeKey      String            @unique(map: "specialist_agent_run_events_dedupe_uq") @map("dedupe_key") @db.Char(64)
+  businessId     String            @map("business_id") @db.VarChar(191)
+  runId          String            @map("run_id") @db.VarChar(191)
+  eventName      String            @map("event_name") @db.VarChar(64)
+  occurredAt     DateTime          @map("occurred_at") @db.DateTime(3)
+  sourceModule   String            @map("source_module") @db.VarChar(16)
+  entityId       String            @map("entity_id") @db.VarChar(191)
+  entityVersion  String?           @map("entity_version") @db.VarChar(64)
+  schemaVersion  Int               @default(1) @map("schema_version")
+  correlationId  String            @map("correlation_id") @db.VarChar(191)
+  actorUserId    String?           @map("actor_user_id") @db.VarChar(191)
+  payload        Json
+  run            SpecialistAgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, runId, occurredAt], map: "specialist_agent_run_events_business_run_time_idx")
+  @@index([businessId, eventName, occurredAt], map: "specialist_agent_run_events_business_name_time_idx")
+  @@map("specialist_agent_run_events")
+}
+
+/// Immutable tenant-specific settings snapshot. Runs pin the snapshot version used at start;
+/// secrets and provider credentials are deliberately excluded from this record.
+model SpecialistAgentConfigVersion {
+  id              String   @id @default(uuid()) @db.VarChar(191)
+  businessId      String   @map("business_id") @db.VarChar(191)
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "specialist_agent_config_versions_business_fk")
+  agentKey        String   @map("agent_key") @db.VarChar(64)
+  version         Int
+  configHash      String   @map("config_hash") @db.Char(64)
+  configuration   Json
+  changedByUserId String?  @map("changed_by_user_id") @db.VarChar(191)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, agentKey, version], map: "specialist_agent_config_versions_business_agent_version_uq")
+  @@index([businessId, agentKey, createdAt], map: "specialist_agent_config_versions_business_agent_created_idx")
+  @@map("specialist_agent_config_versions")
+}
+
+/// Counts specialist-agent model requests before provider calls so configured monthly request
+/// caps remain effective under concurrent calls. Failed and abandoned reservations count too.
+model SpecialistAgentAiRequest {
+  id         String             @id @default(uuid())
+  businessId String             @map("business_id")
+  business   Business           @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "specialist_agent_ai_requests_business_fk")
+  runId      String?            @map("run_id") @db.VarChar(191)
+  run        SpecialistAgentRun? @relation(fields: [runId], references: [id], onDelete: SetNull, map: "specialist_agent_ai_requests_run_fk")
+  agentKey   String             @map("agent_key") @db.VarChar(64)
+  state      String             @default("reserved") @db.VarChar(24)
+  /// Conservative maximum estimated USD cost held while a provider request is pending or failed.
+  /// Successful requests are counted from AiCallLog using returned token counts.
+  reservedCostUsd Decimal          @default(0) @map("reserved_cost_usd") @db.Decimal(14, 6)
+  createdAt  DateTime           @default(now()) @map("created_at")
+  finishedAt DateTime?          @map("finished_at")
+
+  @@index([businessId, agentKey, createdAt], map: "specialist_agent_ai_requests_month_idx")
+  @@index([runId, createdAt], map: "specialist_agent_ai_requests_run_idx")
+  @@map("specialist_agent_ai_requests")
+}
+
+/// Redacted, tenant-scoped ledger of registered tool calls made during specialist runs.
+/// Inputs are hashed and only field names are retained; tool results remain in their canonical
+/// module records and are referenced here without copying business data into this table.
+model SpecialistAgentToolCall {
+  id                  String             @id @default(uuid())
+  businessId          String             @map("business_id")
+  business            Business           @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "specialist_agent_tool_calls_business_fk")
+  runId               String             @map("run_id") @db.VarChar(191)
+  run                 SpecialistAgentRun @relation(fields: [runId], references: [id], onDelete: Cascade, map: "specialist_agent_tool_calls_run_fk")
+  agentKey            String             @map("agent_key") @db.VarChar(64)
+  moduleId            String             @map("module_id") @db.VarChar(16)
+  toolKey             String             @map("tool_key") @db.VarChar(128)
+  toolVersion         Int                @default(1) @map("tool_version")
+  round               Int                @default(1)
+  sequence            Int
+  status              String             @db.VarChar(24)
+  inputSha256         String             @map("input_sha256") @db.Char(64)
+  inputFields         Json               @default("[]") @map("input_fields")
+  outputResourceType  String?            @map("output_resource_type") @db.VarChar(64)
+  outputResourceId    String?            @map("output_resource_id") @db.VarChar(191)
+  durationMs          Int?               @map("duration_ms")
+  retryable           Boolean            @default(false)
+  errorCode           String?            @map("error_code") @db.VarChar(64)
+  correlationId       String             @map("correlation_id") @db.VarChar(191)
+  createdAt           DateTime           @default(now()) @map("created_at")
+  finishedAt          DateTime?          @map("finished_at")
+
+  @@unique([runId, round, sequence], map: "specialist_agent_tool_calls_run_round_sequence_uq")
+  @@index([businessId, runId, createdAt], map: "specialist_agent_tool_calls_business_run_created_idx")
+  @@index([businessId, agentKey, createdAt], map: "specialist_agent_tool_calls_business_agent_created_idx")
+  @@index([businessId, status, createdAt], map: "specialist_agent_tool_calls_business_status_created_idx")
+  @@map("specialist_agent_tool_calls")
+}
+
+/// A review-only proposal produced by a specialist. Any material action must still be
+/// created and executed by the canonical Inventory/SEO/Commerce/Finance/CRM service.
+model SpecialistAgentRecommendation {
+  id                         String                           @id @default(uuid())
+  businessId                 String                           @map("business_id")
+  business                   Business                         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  runId                      String                           @map("run_id")
+  run                        SpecialistAgentRun               @relation(fields: [runId], references: [id], onDelete: Cascade)
+  agentKey                   String                           @map("agent_key") @db.VarChar(64)
+  title                      String                           @db.VarChar(191)
+  summary                    String                           @db.Text
+  classification             String                           @db.VarChar(24)
+  details                    Json                             @default("{}")
+  assumptions                Json                             @default("[]")
+  missingData                Json                             @default("[]") @map("missing_data")
+  confidenceValue            Float?                           @map("confidence_value")
+  confidenceMethod           String                           @map("confidence_method") @db.VarChar(32)
+  riskTier                   String                           @map("risk_tier") @db.VarChar(16)
+  approvalRequired           Boolean                          @default(false) @map("approval_required")
+  status                     String                           @default("proposed") @db.VarChar(20)
+  evidence                   SpecialistAgentEvidence[]
+  actions                    SpecialistAgentAction[]
+  procurementRequest         ProcurementRequest?
+  segment                    Segment?
+  inventoryCountTask         InventoryAgentCountTask?
+  inventoryWastageReviewTask InventoryAgentWastageReviewTask?
+  stockTransfer              StockTransfer?
+  createdAt                  DateTime                         @default(now()) @map("created_at")
+
+  @@index([businessId, runId, status], map: "specialist_agent_recommendations_business_run_status_idx")
+  @@map("specialist_agent_recommendations")
+}
+
+/// Separate, auditable action lifecycle. Canonical module services remain responsible for writes.
+model SpecialistAgentAction {
+  id                       String                          @id @default(uuid())
+  businessId               String                          @map("business_id")
+  business                 Business                        @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "specialist_agent_actions_business_fk")
+  runId                    String                          @map("run_id") @db.VarChar(191)
+  run                      SpecialistAgentRun              @relation(fields: [runId], references: [id], onDelete: Cascade, map: "specialist_agent_actions_run_fk")
+  recommendationId         String                          @map("recommendation_id") @db.VarChar(191)
+  recommendation           SpecialistAgentRecommendation   @relation(fields: [recommendationId], references: [id], onDelete: Cascade, map: "specialist_agent_actions_recommendation_fk")
+  agentKey                 String                          @map("agent_key") @db.VarChar(64)
+  moduleId                 String                          @map("module_id") @db.VarChar(16)
+  branchBusinessId         String?                         @map("branch_business_id") @db.VarChar(191)
+  actionType               String                          @map("action_type") @db.VarChar(64)
+  canonicalResourceType    String                          @map("canonical_resource_type") @db.VarChar(40)
+  canonicalResourceId      String                          @map("canonical_resource_id") @db.VarChar(191)
+  expectedVersion          Int?                            @map("expected_version")
+  expectedPostcondition    Json                            @map("expected_postcondition")
+  proposedPayload          Json                            @default("{}") @map("proposed_payload")
+  reason                   String                          @db.Text
+  evidenceRefs             Json                            @default("[]") @map("evidence_refs")
+  assumptions              Json                            @default("[]")
+  confidenceValue          Float?                          @map("confidence_value")
+  riskTier                 String                          @map("risk_tier") @db.VarChar(16)
+  riskDescription          String?                         @map("risk_description") @db.Text
+  expectedBenefit          Json?                           @map("expected_benefit")
+  expectedDownside         Json?                           @map("expected_downside")
+  policyResult             Json                            @default("{}") @map("policy_result")
+  permissionResult         Json                            @default("{}") @map("permission_result")
+  requiredApproval         Boolean                         @default(true) @map("required_approval")
+  requiredApproverRole     String?                         @map("required_approver_role") @db.VarChar(40)
+  approvalReason           String?                         @map("approval_reason") @db.Text
+  rejectionReason          String?                         @map("rejection_reason") @db.Text
+  idempotencyKeyHash       String                          @map("idempotency_key_hash") @db.Char(64)
+  correlationId            String                          @map("correlation_id") @db.VarChar(191)
+  executionAttemptCount    Int                             @default(0) @map("execution_attempt_count")
+  canonicalOperationId     String?                         @map("canonical_operation_id") @db.VarChar(191)
+  state                    String                          @db.VarChar(32)
+  actualResult             Json                            @default("{}") @map("actual_result")
+  verificationResult       Json                            @default("{}") @map("verification_result")
+  rollbackInstruction      String?                         @map("rollback_instruction") @db.Text
+  errorCode                String?                         @map("error_code") @db.VarChar(64)
+  errorMessage             String?                         @map("error_message") @db.Text
+  createdByUserId          String?                         @map("created_by_user_id") @db.VarChar(191)
+  approvedByUserId         String?                         @map("approved_by_user_id") @db.VarChar(191)
+  executedByUserId         String?                         @map("executed_by_user_id") @db.VarChar(191)
+  createdAt                DateTime                        @default(now()) @map("created_at")
+  updatedAt                DateTime                        @updatedAt @map("updated_at")
+  approvedAt               DateTime?                       @map("approved_at")
+  executedAt               DateTime?                       @map("executed_at")
+  verifiedAt               DateTime?                       @map("verified_at")
+  closedAt                 DateTime?                       @map("closed_at")
+  events                   SpecialistAgentActionEvent[]
+
+  @@unique([businessId, idempotencyKeyHash], map: "specialist_agent_actions_business_idempotency_uq")
+  @@index([businessId, state, createdAt], map: "specialist_agent_actions_business_state_created_idx")
+  @@index([businessId, agentKey, createdAt], map: "specialist_agent_actions_business_agent_created_idx")
+  @@index([businessId, canonicalResourceType, canonicalResourceId], map: "specialist_agent_actions_resource_idx")
+  @@index([runId, createdAt], map: "specialist_agent_actions_run_created_idx")
+  @@map("specialist_agent_actions")
+}
+
+/// Append-only action lifecycle history; state changes and proposal revisions are never overwritten.
+model SpecialistAgentActionEvent {
+  id          String                @id @default(uuid())
+  businessId  String                @map("business_id")
+  business    Business              @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "specialist_agent_action_events_business_fk")
+  actionId    String                @map("action_id") @db.VarChar(191)
+  action      SpecialistAgentAction  @relation(fields: [actionId], references: [id], onDelete: Cascade, map: "specialist_agent_action_events_action_fk")
+  eventType   String                @map("event_type") @db.VarChar(40)
+  sequence    Int                   @default(1)
+  fromState   String?               @map("from_state") @db.VarChar(32)
+  toState     String?               @map("to_state") @db.VarChar(32)
+  actorUserId String?               @map("actor_user_id") @db.VarChar(191)
+  reason      String?               @db.Text
+  metadata    Json                  @default("{}")
+  createdAt   DateTime              @default(now()) @map("created_at")
+
+  @@unique([actionId, sequence], map: "specialist_agent_action_events_action_sequence_uq")
+  @@index([businessId, actionId, createdAt], map: "specialist_agent_action_events_business_action_created_idx")
+  @@map("specialist_agent_action_events")
+}
+
+/// A review-only request for a human to recount one product flagged by the Inventory Agent.
+/// Recording a task never changes stock; only the existing StockCount apply path writes adjustments.
+model InventoryAgentCountTask {
+  id                     String                        @id @default(uuid())
+  businessId             String                        @map("business_id")
+  business               Business                      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  productId              String                        @map("product_id")
+  product                Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sourceRecommendationId String                        @unique @map("source_recommendation_id")
+  sourceRecommendation   SpecialistAgentRecommendation @relation(fields: [sourceRecommendationId], references: [id], onDelete: Cascade)
+  stockCountId           String?                       @map("stock_count_id")
+  stockCount             StockCount?                   @relation(fields: [stockCountId], references: [id], onDelete: SetNull)
+  requestedByUserId      String                        @map("requested_by_user_id") @db.VarChar(191)
+  reason                 String                        @db.Text
+  status                 String                        @default("open") @db.VarChar(24)
+  completedAt            DateTime?                     @map("completed_at")
+  dismissedByUserId      String?                       @map("dismissed_by_user_id") @db.VarChar(191)
+  dismissReason          String?                       @map("dismiss_reason") @db.Text
+  dismissedAt            DateTime?                     @map("dismissed_at")
+  createdAt              DateTime                      @default(now()) @map("created_at")
+
+  @@index([businessId, status, createdAt], map: "inventory_agent_count_tasks_business_status_created_idx")
+  @@map("inventory_agent_count_tasks")
+}
+
+/// Review-only follow-up for recorded wastage. Creating or resolving it never changes stock or wastage movements.
+model InventoryAgentWastageReviewTask {
+  id                     String                        @id @default(uuid())
+  businessId             String                        @map("business_id")
+  business               Business                      @relation(fields: [businessId], references: [id], onDelete: Cascade, map: "inv_agent_wastage_tasks_business_fk")
+  productId              String                        @map("product_id")
+  product                Product                       @relation(fields: [productId], references: [id], onDelete: Cascade, map: "inv_agent_wastage_tasks_product_fk")
+  sourceRecommendationId String                        @map("source_recommendation_id")
+  sourceRecommendation   SpecialistAgentRecommendation @relation(fields: [sourceRecommendationId], references: [id], onDelete: Cascade, map: "inv_agent_wastage_tasks_source_rec_fk")
+  requestedByUserId      String                        @map("requested_by_user_id") @db.VarChar(191)
+  reason                 String                        @db.Text
+  status                 String                        @default("open") @db.VarChar(24)
+  reviewedByUserId       String?                       @map("reviewed_by_user_id") @db.VarChar(191)
+  reviewNote             String?                       @map("review_note") @db.Text
+  reviewedAt             DateTime?                     @map("reviewed_at")
+  dismissedByUserId      String?                       @map("dismissed_by_user_id") @db.VarChar(191)
+  dismissReason          String?                       @map("dismiss_reason") @db.Text
+  dismissedAt            DateTime?                     @map("dismissed_at")
+  createdAt              DateTime                      @default(now()) @map("created_at")
+  updatedAt              DateTime                      @updatedAt @map("updated_at")
+
+  @@unique([sourceRecommendationId], map: "inv_agent_wastage_tasks_source_rec_uq")
+  @@index([businessId, status, createdAt], map: "inv_agent_wastage_tasks_business_status_idx")
+  @@map("inventory_agent_wastage_review_tasks")
+}
+
+/// Small, field-scoped proof for a run or recommendation; avoid copying source-of-truth records or
+/// customer data into the agent layer.
+model SpecialistAgentEvidence {
+  id               String                         @id @default(uuid())
+  businessId       String                         @map("business_id")
+  business         Business                       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  runId            String                         @map("run_id")
+  run              SpecialistAgentRun             @relation(fields: [runId], references: [id], onDelete: Cascade)
+  recommendationId String?                        @map("recommendation_id")
+  recommendation   SpecialistAgentRecommendation? @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  sourceType       String                         @map("source_type") @db.VarChar(40)
+  resourceType     String                         @map("resource_type") @db.VarChar(40)
+  resourceId       String                         @map("resource_id") @db.VarChar(191)
+  fieldRefs        Json                           @default("[]") @map("field_refs")
+  observedValues   Json                           @default("{}") @map("observed_values")
+  observedAt       DateTime                       @map("observed_at")
+  fetchedAt        DateTime                       @default(now()) @map("fetched_at")
+  freshness        String                         @db.VarChar(16)
+  calculation      String?                        @db.Text
+
+  @@index([businessId, runId], map: "specialist_agent_evidence_business_run_idx")
+  @@index([businessId, resourceType, resourceId], map: "specialist_agent_evidence_resource_idx")
+  @@map("specialist_agent_evidence")
 }

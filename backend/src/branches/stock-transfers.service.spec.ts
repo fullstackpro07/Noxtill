@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { Queue } from 'bullmq';
 import { StockTransfersService } from './stock-transfers.service';
 import { AppException } from '../common/filters/app.exception';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
@@ -475,6 +476,112 @@ describe('StockTransfersService (UPD-BE-036)', () => {
       await prisma.product.deleteMany({
         where: { id: { in: [source.id, dest.id] } },
       });
+    });
+
+    it('queues one Inventory review only after an opted-in branch confirms receipt', async () => {
+      const source = await prisma.product.create({
+        data: {
+          businessId: parentId,
+          kind: 'product',
+          name: 'Agent transfer source fixture',
+          sku: `AGENT-TRANSFER-${Date.now()}`,
+          stockQty: 5,
+        },
+      });
+      const dest = await prisma.product.create({
+        data: {
+          businessId: branchId,
+          kind: 'product',
+          name: 'Agent transfer destination fixture',
+          sku: source.sku,
+          stockQty: 0,
+        },
+      });
+      const add = jest.fn().mockResolvedValue(undefined);
+      const queueService = new StockTransfersService(
+        prisma,
+        { add } as unknown as Queue,
+      );
+
+      try {
+        await prisma.business.update({
+          where: { id: branchId },
+          data: {
+            policies: {
+              'agents.inventoryEnabled': true,
+              'agents.inventoryStockTransferReceivedEventReviewEnabled': true,
+            },
+          },
+        });
+        const transfer = await queueService.create(parentId, 'owner-1', {
+          destBusinessId: branchId,
+          items: [{ productId: source.id, qty: 2 }],
+        });
+        await queueService.approve(parentId, transfer.id, 'owner-1');
+        await queueService.ship(parentId, transfer.id, 'owner-1');
+        const received = await queueService.receive(
+          branchId,
+          transfer.id,
+          'branch-user-1',
+        );
+
+        expect(add).toHaveBeenCalledTimes(1);
+        expect(add).toHaveBeenCalledWith(
+          'inventory-stock-transfer-received',
+          {
+            transferId: transfer.id,
+            sourceBusinessId: parentId,
+            destBusinessId: branchId,
+            receivedAt: received.updatedAt.toISOString(),
+          },
+          expect.objectContaining({
+            jobId: `inventory-transfer-received-${transfer.id}-${received.updatedAt.getTime()}`,
+            attempts: 3,
+          }),
+        );
+
+        await prisma.business.update({
+          where: { id: branchId },
+          data: { policies: {} },
+        });
+        const noReviewTransfer = await queueService.create(
+          parentId,
+          'owner-1',
+          {
+            destBusinessId: branchId,
+            items: [{ productId: source.id, qty: 1 }],
+          },
+        );
+        await queueService.approve(parentId, noReviewTransfer.id, 'owner-1');
+        await queueService.ship(parentId, noReviewTransfer.id, 'owner-1');
+        await queueService.receive(
+          branchId,
+          noReviewTransfer.id,
+          'branch-user-1',
+        );
+        expect(add).toHaveBeenCalledTimes(1);
+      } finally {
+        await prisma.business.update({
+          where: { id: branchId },
+          data: { policies: {} },
+        });
+        await prisma.stockMovement.deleteMany({
+          where: { productId: { in: [source.id, dest.id] } },
+        });
+        const transfers = await prisma.stockTransfer.findMany({
+          where: { sourceBusinessId: parentId },
+          select: { id: true },
+        });
+        await prisma.stockTransferItem.deleteMany({
+          where: { transferId: { in: transfers.map(({ id }) => id) } },
+        });
+        await prisma.stockTransfer.deleteMany({
+          where: { id: { in: transfers.map(({ id }) => id) } },
+        });
+        await prisma.product.deleteMany({
+          where: { id: { in: [source.id, dest.id] } },
+        });
+      }
     });
   });
 });

@@ -1,4 +1,6 @@
 import type { AnthropicTool } from '../../ai/claude.client';
+import type { Prisma } from '@prisma/client';
+import { excludeErasedCustomers } from '../../customers/segment-rules.util';
 
 /**
  * AI agent workflow step: a goal-driven model call that may use a fixed set of READ-ONLY tools,
@@ -62,7 +64,7 @@ export function isWorkflowAgentTool(
 interface AgentReader {
   customer: {
     findFirst(args: {
-      where: { id: string; businessId: string };
+      where: Prisma.CustomerWhereInput;
       select: {
         name: true;
         tags: true;
@@ -116,24 +118,29 @@ export async function runWorkflowAgentTool(
     typeof context.customerId === 'string' && context.customerId
       ? context.customerId
       : null;
+  const customer = customerId
+    ? await reader.customer.findFirst({
+        where: excludeErasedCustomers({ id: customerId, businessId }),
+        select: { name: true, tags: true, lastVisitAt: true, createdAt: true },
+      })
+    : null;
   let result: unknown;
   if (tool === 'get_run_values') {
-    result = runScalars(context);
+    result =
+      customerId && !customer
+        ? { customer: null, note: 'Customer not found.' }
+        : runScalars(context);
   } else if (!customerId) {
     result = { customer: null, note: 'This run has no customer.' };
+  } else if (!customer) {
+    result = { customer: null, note: 'Customer not found.' };
   } else if (tool === 'get_customer_profile') {
-    const customer = await reader.customer.findFirst({
-      where: { id: customerId, businessId },
-      select: { name: true, tags: true, lastVisitAt: true, createdAt: true },
-    });
-    result = customer
-      ? {
-          name: customer.name,
-          tags: Array.isArray(customer.tags) ? customer.tags : [],
-          lastVisitAt: customer.lastVisitAt?.toISOString() ?? null,
-          joinedAt: customer.createdAt.toISOString(),
-        }
-      : { customer: null, note: 'Customer not found.' };
+    result = {
+      name: customer.name,
+      tags: Array.isArray(customer.tags) ? customer.tags : [],
+      lastVisitAt: customer.lastVisitAt?.toISOString() ?? null,
+      joinedAt: customer.createdAt.toISOString(),
+    };
   } else {
     const where = { businessId, customerId };
     const [orders, totals] = await Promise.all([

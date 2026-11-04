@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { ClsService } from 'nestjs-cls';
+import { randomInt } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -31,6 +32,7 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
   let service: VoiceCallWorkspaceService;
   let businessId: string;
   let userId: string;
+  let phoneNumber: string;
   let callCounter = 0;
 
   beforeAll(async () => {
@@ -59,11 +61,12 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
       },
     });
     businessId = business.id;
+    phoneNumber = `+1555${String(randomInt(0, 100_000_000_000)).padStart(11, '0')}`;
     await prisma.phoneNumber.create({
       data: {
         businessId,
         twilioSid: `PN-workspace-${Date.now()}`,
-        phoneNumber: '+15559990001',
+        phoneNumber,
       },
     });
     const user = await prisma.user.create({
@@ -229,7 +232,7 @@ describe('VoiceCallWorkspaceService (AI Phone, full — call workspace actions)'
     expect(url).toContain(`Calls/${call.callSid}.json`);
     expect(body.get('Twiml')).toContain('+15551234567');
     expect(body.get('Twiml')).toContain(
-      '<Dial action="https://voice-test.example/api/v1/voice/webhook/transfer-result?transferAttemptNumber=1" method="POST" answerOnBridge="true" callerId="+15559990001">',
+      `<Dial action="https://voice-test.example/api/v1/voice/webhook/transfer-result?transferAttemptNumber=1" method="POST" answerOnBridge="true" callerId="${phoneNumber}">`,
     );
     expect(body.get('Twiml')).toContain('<Number statusCallback=');
     expect(body.get('Twiml')).toContain(

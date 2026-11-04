@@ -5,6 +5,7 @@ import { WorkflowTriggerService } from '../../marketing/automations/workflow-tri
 import { OutboundWebhookDispatchService } from '../../integrations/automation/outbound-webhook-dispatch.service';
 import { CrmJobsProcessor } from './crm-jobs.processor';
 import { VIP_LIFETIME_SPEND_THRESHOLD } from './crm-jobs.constants';
+import { Queue } from 'bullmq';
 
 // Real database queries below are restricted to this suite's fixture. Global
 // processor scans otherwise race other suites' cleanup and mutate unrelated tenants.
@@ -18,6 +19,14 @@ describe('CrmJobsProcessor (BE-041)', () => {
   const workflowTrigger = { dispatch: jest.fn().mockResolvedValue(undefined) };
   const outboundWebhookDispatch = {
     dispatch: jest.fn().mockResolvedValue(undefined),
+  };
+  const specialistAgentEvents = {
+    add: jest
+      .fn<
+        Promise<unknown>,
+        [string, unknown, { jobId: string; [key: string]: unknown }]
+      >()
+      .mockResolvedValue(undefined),
   };
 
   // UTC business, so "local hour" == UTC hour — makes the fixed `now` below deterministic.
@@ -57,12 +66,14 @@ describe('CrmJobsProcessor (BE-041)', () => {
       sendGate as unknown as SendGateService,
       workflowTrigger as unknown as WorkflowTriggerService,
       outboundWebhookDispatch as unknown as OutboundWebhookDispatchService,
+      specialistAgentEvents as unknown as Queue,
     );
   });
 
   afterEach(() => {
     sendGate.send.mockClear();
     workflowTrigger.dispatch.mockClear();
+    specialistAgentEvents.add.mockClear();
   });
 
   afterAll(async () => {
@@ -79,6 +90,10 @@ describe('CrmJobsProcessor (BE-041)', () => {
   });
 
   it('tags a high-spend customer VIP and an inactive one Lapsed, only at the business local midnight', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: { 'agents.customerLapsedEventReviewEnabled': true } },
+    });
     const vip = await prisma.customer.create({
       data: {
         businessId,
@@ -95,6 +110,15 @@ describe('CrmJobsProcessor (BE-041)', () => {
         lastVisitAt: new Date('2025-01-01'),
       },
     });
+    const erased = await prisma.customer.create({
+      data: {
+        businessId,
+        phone: `erased-${Date.now()}`,
+        name: 'Erased Customer',
+        lifetimeSpend: VIP_LIFETIME_SPEND_THRESHOLD + 1,
+        tags: [],
+      },
+    });
 
     await processor.runTagRules(nineAmUtc); // wrong hour — should be a no-op
     let refreshedVip = await prisma.customer.findUniqueOrThrow({
@@ -109,9 +133,25 @@ describe('CrmJobsProcessor (BE-041)', () => {
     const refreshedLapsed = await prisma.customer.findUniqueOrThrow({
       where: { id: lapsed.id },
     });
+    const refreshedErased = await prisma.customer.findUniqueOrThrow({
+      where: { id: erased.id },
+    });
 
     expect(refreshedVip.tags).toContain('VIP');
     expect(refreshedLapsed.tags).toContain('Lapsed');
+    expect(refreshedErased.tags).toEqual([]);
+    expect(
+      await prisma.activityEvent.count({
+        where: { businessId, entityId: erased.id },
+      }),
+    ).toBe(0);
+    expect(specialistAgentEvents.add).toHaveBeenCalled();
+    const jobs = specialistAgentEvents.add.mock.calls;
+    expect(jobs.every(([name]) => name === 'customer-lapsed')).toBe(true);
+    expect(new Set(jobs.map(([, , options]) => options.jobId)).size).toBe(1);
+    expect(jobs[0]?.[2].jobId).toMatch(
+      new RegExp(`^customer-lapsed-${businessId}-`),
+    );
   });
 
   it('sends a birthday greeting only to customers whose birthday is today, only at the configured local hour', async () => {
@@ -121,6 +161,7 @@ describe('CrmJobsProcessor (BE-041)', () => {
         phone: `+1${Date.now()}3`,
         name: 'Birthday Person',
         birthday: new Date('1990-03-01'),
+        consentMarketing: true,
       },
     });
     await prisma.customer.create({

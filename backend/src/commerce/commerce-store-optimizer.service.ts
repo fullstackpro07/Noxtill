@@ -70,6 +70,43 @@ function round2(value: number): number {
 export class CommerceStoreOptimizerService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
+  /**
+   * Small, privacy-safe summary for the Commerce Agent. Reuses the same current rule scan as the
+   * Store Optimizer page, but sends only aggregate counts to the model (never product names,
+   * return reasons, or raw evidence).
+   */
+  async agentReview(businessId: string, now = new Date()) {
+    const findings = await this.detect(businessId, now);
+    const byRule = new Map<string, number>();
+    const byImpact = new Map<string, number>();
+    for (const finding of findings) {
+      byRule.set(finding.ruleKey, (byRule.get(finding.ruleKey) ?? 0) + 1);
+      byImpact.set(finding.impact, (byImpact.get(finding.impact) ?? 0) + 1);
+    }
+
+    const sortCounts = (counts: Map<string, number>) =>
+      Object.fromEntries(
+        [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)),
+      );
+
+    return {
+      state: findings.length > 0 ? 'findings_present' : 'no_current_findings',
+      source:
+        'Product + OrderItem + ReturnItem + ProductWaitlistEntry + CommerceListingDraft',
+      checkedAt: now.toISOString(),
+      findingCount: findings.length,
+      byRule: sortCounts(byRule),
+      byImpact: sortCounts(byImpact),
+      limitations: [
+        'Counts come from the same current rule scan used by Store Optimizer; they are findings, not proof of cause or guaranteed financial impact.',
+        `Sales and returns are evaluated over the configured ${RULES.lookbackDays}-day lookback; recent demand uses ${RULES.recentSalesDays} days.`,
+        'This summary omits product names, customer data, return reasons and raw evidence.',
+        'Storefront sessions, search impressions, checkout conversion and page drop-off are not available from these rules and are not estimated.',
+        'No opportunity status is changed and no live listing, price, stock or order is changed.',
+      ],
+    };
+  }
+
   async detect(businessId: string, now = new Date()): Promise<StoreFinding[]> {
     const lookback = new Date(now.getTime() - RULES.lookbackDays * DAY_MS);
     const recent = new Date(now.getTime() - RULES.recentSalesDays * DAY_MS);

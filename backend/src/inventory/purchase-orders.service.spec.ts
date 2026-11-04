@@ -34,6 +34,9 @@ describe('PurchaseOrdersService (UPD-BE-112)', () => {
   let supplierNoPhoneId: string;
   let productId: string;
   let sendGate: { send: jest.Mock<Promise<Message>, [SendGateParams]> };
+  const specialistAgentEvents = {
+    add: jest.fn().mockResolvedValue(null),
+  };
   let activity: {
     record: jest.Mock<Promise<void>, [string, RecordActivityEventInput]>;
   };
@@ -62,6 +65,7 @@ describe('PurchaseOrdersService (UPD-BE-112)', () => {
       activity as unknown as ActivityService,
       sendGate as unknown as SendGateService,
       new LocaleService(),
+      specialistAgentEvents as never,
     );
 
     const business = await prisma.business.create({
@@ -211,6 +215,72 @@ describe('PurchaseOrdersService (UPD-BE-112)', () => {
     });
     expect(rest.status).toBe('received');
     expect(rest.items[0].qtyReceived).toBe(10);
+  });
+
+  it('queues one read-only review only after the opted-in purchase order is fully received', async () => {
+    const po = await service.create(businessId, userId, {
+      supplierId,
+      items: [{ productId, qty: 10, unitCost: 2 }],
+    });
+    await service.send(businessId, po.id);
+    await service.confirm(po.id);
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.inventoryPurchaseOrderReceivedEventReviewEnabled': true,
+        },
+      },
+    });
+    specialistAgentEvents.add.mockClear();
+
+    const partial = await service.receive(businessId, po.id, {
+      items: [{ itemId: po.items[0].id, qtyReceived: 4 }],
+    });
+    expect(partial.status).toBe('partially_received');
+    expect(specialistAgentEvents.add).not.toHaveBeenCalled();
+
+    const received = await service.receive(businessId, po.id, {
+      items: [{ itemId: po.items[0].id, qtyReceived: 6 }],
+    });
+    expect(received.status).toBe('received');
+    expect(specialistAgentEvents.add).toHaveBeenCalledTimes(1);
+    expect(specialistAgentEvents.add).toHaveBeenCalledWith(
+      'inventory-purchase-order-received',
+      {
+        businessId,
+        purchaseOrderId: po.id,
+        receivedAt: received.receivedAt!.toISOString(),
+      },
+      expect.objectContaining({ attempts: 3 }),
+    );
+  });
+
+  it('keeps a confirmed receipt successful if the optional review queue is unavailable', async () => {
+    const po = await service.create(businessId, userId, {
+      supplierId,
+      items: [{ productId, qty: 2, unitCost: 1 }],
+    });
+    await service.send(businessId, po.id);
+    await service.confirm(po.id);
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.inventoryPurchaseOrderReceivedEventReviewEnabled': true,
+        },
+      },
+    });
+    specialistAgentEvents.add.mockRejectedValueOnce(new Error('queue offline'));
+
+    const received = await service.receive(businessId, po.id, {
+      items: [{ itemId: po.items[0].id, qtyReceived: 2 }],
+    });
+
+    expect(received.status).toBe('received');
+    expect(
+      await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: po.id } }),
+    ).toMatchObject({ status: 'received' });
   });
 
   it('rejects receiving more than what remains outstanding', async () => {

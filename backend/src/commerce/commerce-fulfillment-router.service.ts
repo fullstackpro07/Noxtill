@@ -400,16 +400,20 @@ export class CommerceFulfillmentRouterService {
     } satisfies Prisma.OrderInclude;
   }
 
+  private routableQueueWhere(businessId: string): Prisma.OrderWhereInput {
+    return {
+      businessId,
+      isQuotation: false,
+      orderType: { in: ROUTABLE_ORDER_TYPES },
+      status: { in: ROUTABLE_STATUSES },
+      items: { some: { product: { kind: ProductKind.product } } },
+    };
+  }
+
   /** Open shipping orders with physical lines, their current route and a live recommendation. */
   async queue(businessId: string) {
     const orders = await this.tenantPrisma.client.order.findMany({
-      where: {
-        businessId,
-        isQuotation: false,
-        orderType: { in: ROUTABLE_ORDER_TYPES },
-        status: { in: ROUTABLE_STATUSES },
-        items: { some: { product: { kind: ProductKind.product } } },
-      },
+      where: this.routableQueueWhere(businessId),
       include: this.orderInclude(),
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 200,
@@ -448,6 +452,48 @@ export class CommerceFulfillmentRouterService {
         unroutable: evaluation ? evaluation.recommendation === null : false,
       };
     });
+  }
+
+  /** Privacy-safe, read-only view used by the Commerce specialist agent. */
+  async specialistReview(businessId: string) {
+    const maximumOrdersReviewed = 20;
+    const where = this.routableQueueWhere(businessId);
+    const [totalOpenOrders, queue] = await Promise.all([
+      this.tenantPrisma.client.order.count({ where }),
+      this.queue(businessId),
+    ]);
+    const recentOrders = queue.slice(0, maximumOrdersReviewed).map((order) => ({
+      orderType: order.orderType,
+      status: order.status,
+      physicalLineCount: order.lines.length,
+      routingState: order.route
+        ? ('operator_route_recorded' as const)
+        : order.recommendation
+          ? ('recommendation_available' as const)
+          : ('no_route_candidate' as const),
+      routeMode: order.route?.mode ?? order.recommendation?.mode ?? null,
+      createdAt: order.createdAt.toISOString(),
+    }));
+
+    return {
+      state:
+        totalOpenOrders > 0
+          ? ('available' as const)
+          : ('no_open_orders' as const),
+      source:
+        totalOpenOrders > 0 ? ('CommerceFulfillmentRouter' as const) : null,
+      totalOpenOrders,
+      maximumOrdersReviewed,
+      reviewedOrderCount: recentOrders.length,
+      hasMore: totalOpenOrders > maximumOrdersReviewed,
+      orders: recentOrders,
+      limitations: [
+        'Uses the canonical Fulfillment Router queue: non-quotation online/delivery orders that are pending, confirmed or in progress and contain physical catalog products.',
+        'Without a destination country, the router market check is unknown. A candidate is not a market-eligibility result, customer promise or external-provider confirmation.',
+        'External-node stock, real-time capacity and carrier confirmation are not available from this review. It does not assign a route, reserve stock, or invoke Delivery & Riders.',
+        'Customer identity, order identifiers, item names, addresses and prices are omitted. Review and action remain on the Fulfillment Router screen.',
+      ],
+    };
   }
 
   private async loadRoutableOrder(businessId: string, orderId: string) {

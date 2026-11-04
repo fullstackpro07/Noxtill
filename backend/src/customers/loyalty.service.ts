@@ -5,6 +5,7 @@ import { CreateLoyaltyProgramDto } from './dto/create-loyalty-program.dto';
 import { EnrollLoyaltyMemberDto } from './dto/enroll-loyalty-member.dto';
 import { LOYALTY_ERROR_CODES } from './loyalty.constants';
 import { LoyaltyProgramType, Prisma } from '@prisma/client';
+import { excludeErasedCustomers } from './segment-rules.util';
 
 interface LoyaltyTier {
   name: string;
@@ -59,8 +60,8 @@ export class LoyaltyService {
 
   async enroll(programId: string, dto: EnrollLoyaltyMemberDto) {
     await this.findProgram(programId);
-    const customer = await this.tenantPrisma.client.customer.findUnique({
-      where: { id: dto.customerId },
+    const customer = await this.tenantPrisma.client.customer.findFirst({
+      where: excludeErasedCustomers({ id: dto.customerId }),
     });
     if (!customer) {
       throw new NotFoundException('Customer not found');

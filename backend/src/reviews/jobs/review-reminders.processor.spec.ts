@@ -5,8 +5,9 @@ import { ReviewRemindersProcessor } from './review-reminders.processor';
 import { generateReviewToken } from '../review-token.util';
 import { deleteCrossTestBusinessRows } from '../../common/testing/cleanup-test-business';
 
-// The processor's unscoped `business.findMany()` scans the whole shared test DB;
-// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+// The scheduled processor normally scans all businesses. These integration tests
+// use its targeted mode so unrelated shared-DB fixtures do not turn each simulated
+// tick into a whole-database scan.
 jest.setTimeout(20000);
 
 describe('ReviewRemindersProcessor (BE-045)', () => {
@@ -76,10 +77,10 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
       },
     });
 
-    await processor.runReminders(wrongHour); // wrong hour — no-op
+    await processor.runReminders(wrongHour, [businessId]); // wrong hour — no-op
     expect(sendGate.send).not.toHaveBeenCalled();
 
-    await processor.runReminders(rightHour); // day-3 reminder fires
+    await processor.runReminders(rightHour, [businessId]); // day-3 reminder fires
     expect(sendGate.send).toHaveBeenCalledTimes(1);
     let refreshed = await prisma.reviewRequest.findUniqueOrThrow({
       where: { id: request.id },
@@ -87,7 +88,7 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
     expect(refreshed.reminderCount).toBe(1);
 
     sendGate.send.mockClear();
-    await processor.runReminders(rightHour); // not yet day 7 — no-op
+    await processor.runReminders(rightHour, [businessId]); // not yet day 7 — no-op
     expect(sendGate.send).not.toHaveBeenCalled();
 
     // Fast-forward the request's createdAt to simulate day 7 having arrived.
@@ -99,7 +100,7 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
       data: { createdAt: sevenDaysAgo },
     });
 
-    await processor.runReminders(rightHour); // day-7 reminder fires
+    await processor.runReminders(rightHour, [businessId]); // day-7 reminder fires
     expect(sendGate.send).toHaveBeenCalledTimes(1);
     refreshed = await prisma.reviewRequest.findUniqueOrThrow({
       where: { id: request.id },
@@ -107,7 +108,7 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
     expect(refreshed.reminderCount).toBe(2);
 
     sendGate.send.mockClear();
-    await processor.runReminders(rightHour); // max reached — no-op forever
+    await processor.runReminders(rightHour, [businessId]); // max reached — no-op forever
     expect(sendGate.send).not.toHaveBeenCalled();
   });
 
@@ -128,7 +129,7 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
       },
     });
 
-    await processor.runReminders(rightHour); // day-1 override fires immediately, ahead of the day-3 default
+    await processor.runReminders(rightHour, [businessId]); // day-1 override fires immediately, ahead of the day-3 default
     expect(sendGate.send).toHaveBeenCalledTimes(1);
     const afterFirstTick = await prisma.reviewRequest.findUniqueOrThrow({
       where: { id: request.id },
@@ -136,7 +137,7 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
     expect(afterFirstTick.reminderCount).toBe(1);
 
     sendGate.send.mockClear();
-    await processor.runReminders(rightHour); // only 1 offset configured — max reached, no-op
+    await processor.runReminders(rightHour, [businessId]); // only 1 offset configured — max reached, no-op
     expect(sendGate.send).not.toHaveBeenCalled();
 
     await prisma.business.update({
@@ -157,7 +158,7 @@ describe('ReviewRemindersProcessor (BE-045)', () => {
       },
     });
 
-    await processor.runReminders(rightHour);
+    await processor.runReminders(rightHour, [businessId]);
     expect(sendGate.send).not.toHaveBeenCalled();
 
     const refreshed = await prisma.reviewRequest.findUniqueOrThrow({

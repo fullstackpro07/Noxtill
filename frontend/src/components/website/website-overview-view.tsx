@@ -154,7 +154,7 @@ export function WebsiteOverviewView() {
               ))}
             </ul>
           )}
-          <p className="m-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>Page views are not tracked, so pages are not ranked by traffic.</p>
+          <p className="m-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>This Website overview does not use page-view data, so its page list is not ranked by traffic.</p>
         </Card>
         <Card title="Recent changes">
           {d.recentChanges.length === 0 ? (

@@ -431,7 +431,7 @@ export function DigitalTwinView() {
               0,
             ),
           )}
-          hint="Lead times are not tracked"
+          hint="No SLA is recorded; historical PO timing is in Inventory Agent"
         />
       </section>
 

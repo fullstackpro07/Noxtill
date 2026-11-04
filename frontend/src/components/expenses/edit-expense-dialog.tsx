@@ -33,6 +33,7 @@ export function EditExpenseDialog({ expense, onClose }: { expense: LiveExpense; 
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["expense-duplicate-candidates"] });
       toast.success("Expense updated.");
       onClose();
     },

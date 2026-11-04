@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import {
   CommerceExperimentMetric,
   CommerceExperimentStatus,
@@ -9,6 +11,11 @@ import {
 } from '@prisma/client';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  COMMERCE_EXPERIMENT_DECISION_EVENT_JOB,
+  SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import {
   COMMERCE_EXPERIMENT_ERROR_CODES as CODES,
   COMMERCE_EXPERIMENT_RULES as RULES,
@@ -63,6 +70,32 @@ export interface ExperimentResults {
   } | null;
 }
 
+export interface CommerceExperimentSpecialistReview {
+  state: 'available' | 'no_experiments';
+  source: 'CommerceExperiment' | null;
+  maximumReviewed: number;
+  reviewedCount: number;
+  hasMore: boolean;
+  observedAt: string;
+  currency: string | null;
+  experiments: {
+    experimentId: string;
+    type: CommerceExperimentType;
+    status: CommerceExperimentStatus;
+    primaryMetric: CommerceExperimentMetric;
+    resultsAvailable: boolean;
+    sufficient: boolean | null;
+    baselineValue: number | null;
+    testValue: number | null;
+    change: number | null;
+    changeUnit: 'pct' | 'pts';
+    insufficientReasons: string[];
+    guardrail: ExperimentResults['guardrail'];
+    computedAt: string | null;
+  }[];
+  limitations: string[];
+}
+
 interface ProductSnapshot {
   name: string;
   sellingPrice: number;
@@ -93,8 +126,8 @@ function metricValue(
 }
 
 /**
- * Experiment Lab (Autonomous Commerce). Noxtill has no storefront traffic and cannot split visitors
- * between variants, so an experiment here is an honest before/after comparison for one product:
+ * Experiment Lab (Autonomous Commerce). This module does not receive storefront analytics or split
+ * visitors between variants, so an experiment here is an honest before/after comparison for one product:
  * the test window (start → stop/now) against an equal-length baseline window right before it,
  * measured on real orders and returns. Conversion is not tracked; seasonality is not controlled for;
  * a read is shown only once both windows meet a minimum sample, and it is never called significant.
@@ -102,7 +135,14 @@ function metricValue(
  */
 @Injectable()
 export class CommerceExperimentsService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  private readonly logger = new Logger(CommerceExperimentsService.name);
+
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE)
+    private readonly specialistEvents?: Queue,
+  ) {}
 
   private get db() {
     return this.tenantPrisma.client;
@@ -432,7 +472,51 @@ export class CommerceExperimentsService {
       actorUserId,
       trimmed,
     );
+    await this.queueDecisionReview(updated);
     return updated;
+  }
+
+  private async queueDecisionReview(
+    experiment: Prisma.CommerceExperimentGetPayload<object>,
+  ): Promise<void> {
+    if (!this.specialistEvents) return;
+    try {
+      const business = await this.db.business.findFirst({
+        where: { id: experiment.businessId },
+        select: { policies: true },
+      });
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.commerceEnabled') ||
+        !policies.bool(
+          'agents.commerceExperimentDecisionEventReviewEnabled',
+        ) ||
+        (policies.num('commerce.autonomyLevel') ?? 0) <= 0
+      ) {
+        return;
+      }
+
+      await this.specialistEvents.add(
+        COMMERCE_EXPERIMENT_DECISION_EVENT_JOB,
+        {
+          businessId: experiment.businessId,
+          experimentId: experiment.id,
+          decisionUpdatedAt: experiment.updatedAt.toISOString(),
+        },
+        {
+          jobId: `commerce-experiment-decision-${experiment.businessId}-${experiment.id}-${experiment.updatedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      // Recording the merchant's decision must not fail because an optional review queue is down.
+      this.logger.warn(
+        `Could not queue Commerce experiment review for ${experiment.id}: ${(error as Error).message}`,
+      );
+    }
   }
 
   async removeDraft(businessId: string, actorUserId: string, id: string) {
@@ -499,6 +583,100 @@ export class CommerceExperimentsService {
       reverted: count(CommerceExperimentStatus.reverted),
       inconclusive: count(CommerceExperimentStatus.inconclusive),
       rules: RULES,
+    };
+  }
+
+  /**
+   * Bounded, privacy-minimized result view for the Commerce specialist. It reuses the canonical
+   * result calculation and frozen decision snapshot; it neither changes experiments nor decides
+   * which variant a merchant should adopt.
+   */
+  async specialistReview(
+    businessId: string,
+  ): Promise<CommerceExperimentSpecialistReview> {
+    const maximumReviewed = 20;
+    const observedAt = new Date();
+    const [rows, business] = await Promise.all([
+      this.db.commerceExperiment.findMany({
+        where: {
+          businessId,
+          status: {
+            in: [
+              CommerceExperimentStatus.running,
+              CommerceExperimentStatus.stopped,
+              ...DECISIONS,
+            ],
+          },
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: maximumReviewed + 1,
+        select: {
+          id: true,
+          productId: true,
+          type: true,
+          status: true,
+          primaryMetric: true,
+          minMarginPct: true,
+          startedAt: true,
+          stoppedAt: true,
+          frozenResults: true,
+        },
+      }),
+      this.db.business.findFirst({
+        where: { id: businessId },
+        select: { currency: true },
+      }),
+    ]);
+    const reviewed = rows.slice(0, maximumReviewed);
+    const experiments = await Promise.all(
+      reviewed.map(async (row) => {
+        let results: ExperimentResults | null = null;
+        if (row.status === CommerceExperimentStatus.running && row.startedAt) {
+          results = await this.computeResults(
+            businessId,
+            { ...row, startedAt: row.startedAt },
+            observedAt,
+          );
+        } else if (row.frozenResults) {
+          results = row.frozenResults as unknown as ExperimentResults;
+        }
+        return {
+          experimentId: row.id,
+          type: row.type,
+          status: row.status,
+          primaryMetric: row.primaryMetric,
+          resultsAvailable: results !== null,
+          sufficient: results?.sufficient ?? null,
+          baselineValue: results?.primary.baselineValue ?? null,
+          testValue: results?.primary.testValue ?? null,
+          change: results?.primary.change ?? null,
+          changeUnit:
+            results?.primary.changeUnit ??
+            (row.primaryMetric === CommerceExperimentMetric.units ||
+            row.primaryMetric === CommerceExperimentMetric.revenue
+              ? 'pct'
+              : 'pts'),
+          insufficientReasons: results?.insufficientReasons ?? [],
+          guardrail: results?.guardrail ?? null,
+          computedAt: results?.computedAt ?? null,
+        };
+      }),
+    );
+    return {
+      state: experiments.length ? 'available' : 'no_experiments',
+      source: experiments.length ? 'CommerceExperiment' : null,
+      maximumReviewed,
+      reviewedCount: experiments.length,
+      hasMore: rows.length > maximumReviewed,
+      observedAt: observedAt.toISOString(),
+      currency: business?.currency ?? null,
+      experiments,
+      limitations: [
+        'Experiment Lab compares equal-length before/after windows from canonical orders and returns; Noxtill does not split storefront visitors or track conversion for this feature.',
+        'This observational comparison is not randomized or a causal result, does not control for seasonality and is not labeled statistically significant.',
+        'Only saved CommerceExperiment decisions and current running experiments are summarized, up to the 20 most recently updated records. Drafts are omitted.',
+        'The agent does not adopt, revert, edit prices, change listings or otherwise mutate an experiment.',
+      ],
     };
   }
 }

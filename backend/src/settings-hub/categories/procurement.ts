@@ -149,20 +149,20 @@ export function procurementCategories(d: HubDeps): CategoryDef[] {
         },
         {
           title: 'Finance-dependent controls',
-          hint: 'Not in this workspace',
+          hint: 'Not connected to Procurement',
           rows: [
             row({
               key: 'procurement-budgets',
               label: 'Budgets',
               description:
-                'Budget availability is read from Finance & Accounting, which this workspace does not have, so budget figures are not available.',
+                'Finance budgets compare Expense rows, but they are not linked to purchase-order commitments here, so procurement budget figures are not available.',
               state: () => ({ value: 'Not available', tone: 'neutral' }),
             }),
             row({
               key: 'procurement-tolerances',
               label: '3-way match tolerances',
               description:
-                'Price and quantity tolerances apply to vendor bills, which are not recorded without Finance & Accounting.',
+                'Price and quantity tolerances require canonical vendor invoice records; the read-only Xero open-item check does not feed this 3-way match.',
               state: () => ({ value: 'Not available', tone: 'neutral' }),
             }),
           ],

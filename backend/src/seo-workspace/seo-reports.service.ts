@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import {
+  IntegrationProvider,
+  IntegrationStatus,
   SeoContentBriefStatus,
   SeoTechnicalActionStatus,
 } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { SeoAnalyticsAttributionService } from './seo-analytics-attribution.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const REPORT_PERIODS = [7, 30, 90] as const;
@@ -35,13 +38,16 @@ export interface RankBuckets {
 /**
  * SEO Reports (SEO Autopilot screen 15). Compares the selected period with the one before it using
  * only records Noxtill holds: rank snapshots, site audits, content/technical/on-page actions,
- * external reviews and merchant-recorded links. Organic clicks/impressions and conversions are
- * reported as not tracked (no Search Console / analytics source). Changes are shown next to the
- * actions taken in the same period, never as proof that one caused the other.
+ * external reviews, merchant-recorded links, Search Console snapshots and saved GA4 aggregates.
+ * GA4 channel metrics do not reconcile to Noxtill orders or prove SEO causality. Changes are shown
+ * next to the actions taken in the same period, never as proof that one caused the other.
  */
 @Injectable()
 export class SeoReportsService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly analyticsAttribution: SeoAnalyticsAttributionService,
+  ) {}
 
   private get db() {
     return this.tenantPrisma.client;
@@ -76,68 +82,110 @@ export class SeoReportsService {
     const currentFrom = new Date(now.getTime() - period * DAY_MS);
     const baselineFrom = new Date(currentFrom.getTime() - period * DAY_MS);
 
-    const [keywords, runs, revisions, technical, briefs, reviews, links] =
-      await Promise.all([
-        this.db.trackedKeyword.findMany({
-          where: { businessId },
-          select: {
-            keyword: true,
-            snapshots: {
-              where: { capturedAt: { lte: now } },
-              orderBy: { capturedAt: 'desc' },
-              select: { rank: true, capturedAt: true },
-              take: 60,
+    const [
+      keywords,
+      runs,
+      revisions,
+      technical,
+      briefs,
+      reviews,
+      links,
+      searchConsoleConnection,
+      googleAnalytics,
+    ] = await Promise.all([
+      this.db.trackedKeyword.findMany({
+        where: { businessId },
+        select: {
+          keyword: true,
+          snapshots: {
+            where: { capturedAt: { lte: now } },
+            orderBy: { capturedAt: 'desc' },
+            select: { rank: true, capturedAt: true },
+            take: 60,
+          },
+        },
+      }),
+      this.db.seoAuditRun.findMany({
+        where: {
+          businessId,
+          status: { in: ['completed', 'partial'] },
+          finishedAt: { gte: baselineFrom, lte: now },
+        },
+        orderBy: { finishedAt: 'desc' },
+        select: {
+          finishedAt: true,
+          issuesFound: true,
+          pagesCrawled: true,
+          issues: true,
+        },
+      }),
+      this.db.seoContentRevision.findMany({
+        where: { businessId, verifiedAt: { gte: baselineFrom } },
+        select: { verifiedAt: true },
+      }),
+      this.db.seoTechnicalAction.findMany({
+        where: {
+          businessId,
+          OR: [
+            { verifiedAt: { gte: baselineFrom } },
+            {
+              status: SeoTechnicalActionStatus.applied,
+              appliedAt: { gte: baselineFrom },
             },
-          },
-        }),
-        this.db.seoAuditRun.findMany({
-          where: {
+          ],
+        },
+        select: { verifiedAt: true, appliedAt: true, status: true },
+      }),
+      this.db.seoContentBrief.findMany({
+        where: {
+          businessId,
+          status: SeoContentBriefStatus.published,
+          publishedAt: { gte: baselineFrom },
+        },
+        select: { publishedAt: true, liveConfirmedAt: true },
+      }),
+      this.db.externalReview.findMany({
+        where: { businessId, createdAt: { gte: baselineFrom, lte: now } },
+        select: { stars: true, createdAt: true },
+      }),
+      this.db.seoOffPageLink.findMany({
+        where: { businessId, createdAt: { gte: baselineFrom, lte: now } },
+        select: { createdAt: true },
+      }),
+      this.db.integration.findUnique({
+        where: {
+          businessId_provider: {
             businessId,
-            status: { in: ['completed', 'partial'] },
-            finishedAt: { gte: baselineFrom, lte: now },
+            provider: IntegrationProvider.google_search_console,
           },
-          orderBy: { finishedAt: 'desc' },
-          select: {
-            finishedAt: true,
-            issuesFound: true,
-            pagesCrawled: true,
-            issues: true,
-          },
-        }),
-        this.db.seoContentRevision.findMany({
-          where: { businessId, verifiedAt: { gte: baselineFrom } },
-          select: { verifiedAt: true },
-        }),
-        this.db.seoTechnicalAction.findMany({
-          where: {
-            businessId,
-            OR: [
-              { verifiedAt: { gte: baselineFrom } },
-              {
-                status: SeoTechnicalActionStatus.applied,
-                appliedAt: { gte: baselineFrom },
-              },
-            ],
-          },
-          select: { verifiedAt: true, appliedAt: true, status: true },
-        }),
-        this.db.seoContentBrief.findMany({
-          where: {
-            businessId,
-            status: SeoContentBriefStatus.published,
-            publishedAt: { gte: baselineFrom },
-          },
-          select: { publishedAt: true, liveConfirmedAt: true },
-        }),
-        this.db.externalReview.findMany({
-          where: { businessId, createdAt: { gte: baselineFrom, lte: now } },
-          select: { stars: true, createdAt: true },
-        }),
-        this.db.seoOffPageLink.findMany({
-          where: { businessId, createdAt: { gte: baselineFrom, lte: now } },
-          select: { createdAt: true },
-        }),
-      ]);
+        },
+        select: { status: true, meta: true },
+      }),
+      this.analyticsAttribution.summary(businessId),
+    ]);
+
+    const integrationMeta =
+      searchConsoleConnection?.meta &&
+      typeof searchConsoleConnection.meta === 'object' &&
+      !Array.isArray(searchConsoleConnection.meta)
+        ? (searchConsoleConnection.meta as Record<string, unknown>)
+        : {};
+    const selectedProperty =
+      typeof integrationMeta.searchConsoleSelectedProperty === 'string'
+        ? integrationMeta.searchConsoleSelectedProperty
+        : null;
+    const searchConsoleSnapshots =
+      searchConsoleConnection?.status === IntegrationStatus.connected &&
+      selectedProperty
+        ? await this.db.seoSearchConsoleSnapshot.findMany({
+            where: { businessId, propertyUrl: selectedProperty },
+            orderBy: [{ endDate: 'desc' }, { fetchedAt: 'desc' }],
+            take: 2,
+          })
+        : [];
+    const hasSearchConsoleCounts = searchConsoleSnapshots.some(
+      (snapshot) => snapshot.clicks !== null || snapshot.impressions !== null,
+    );
 
     const inCurrent = (date: Date | null | undefined) =>
       Boolean(date && date >= currentFrom && date <= now);
@@ -334,18 +382,80 @@ export class SeoReportsService {
         baselineTo: currentFrom,
       },
       metrics,
+      searchConsole: {
+        status:
+          searchConsoleConnection?.status ?? IntegrationStatus.not_connected,
+        selectedProperty,
+        snapshots: searchConsoleSnapshots.map((snapshot) => ({
+          id: snapshot.id,
+          propertyUrl: snapshot.propertyUrl,
+          startDate: snapshot.startDate,
+          endDate: snapshot.endDate,
+          clicks: snapshot.clicks?.toString() ?? null,
+          impressions: snapshot.impressions?.toString() ?? null,
+          clickThroughRate: snapshot.clickThroughRate?.toNumber() ?? null,
+          averagePosition: snapshot.averagePosition?.toNumber() ?? null,
+          dataState: snapshot.dataState,
+          fetchedAt: snapshot.fetchedAt,
+        })),
+        windowDays: 28,
+      },
+      googleAnalytics: {
+        status: googleAnalytics.status,
+        selectedProperty: googleAnalytics.selectedProperty,
+        snapshot: googleAnalytics.snapshot,
+        windowDays: googleAnalytics.windowDays,
+        disclosure: googleAnalytics.disclosure,
+      },
       rankDistribution: { baseline: baselineBuckets, current: currentBuckets },
       keywords: keywordRows,
       notTracked: [
+        ...(!searchConsoleConnection ||
+        searchConsoleConnection.status !== IntegrationStatus.connected ||
+        !hasSearchConsoleCounts
+          ? [
+              {
+                label: 'Organic clicks and impressions',
+                reason:
+                  searchConsoleConnection?.status ===
+                  IntegrationStatus.connected
+                    ? searchConsoleSnapshots.length > 0
+                      ? 'Google Search Console returned no clicks or impressions for the selected windows.'
+                      : 'Google Search Console is connected, but no performance snapshot is available yet. Select a property and sync it in SEO Settings.'
+                    : 'Connect Google Search Console, select a property and sync its performance in SEO Settings.',
+              },
+            ]
+          : []),
+        ...(!googleAnalytics.snapshot
+          ? [
+              {
+                label: 'GA4 Organic Search sessions, key events and revenue',
+                reason:
+                  googleAnalytics.status !== IntegrationStatus.connected
+                    ? 'Connect Google Analytics 4, select a property and sync the read-only Organic Search report in SEO Settings.'
+                    : !googleAnalytics.selectedProperty
+                      ? 'Select a Google Analytics 4 property and sync it in SEO Settings.'
+                      : 'Google Analytics 4 is connected, but no saved Organic Search snapshot is available yet. Sync it in SEO Settings.',
+              },
+            ]
+          : []),
+        ...(!googleAnalytics.snapshot?.current.landingPages ||
+        googleAnalytics.snapshot.current.landingPages.dataState ===
+          'not_available'
+          ? [
+              {
+                label: 'Landing-page traffic',
+                reason:
+                  googleAnalytics.snapshot?.current.landingPages?.reason ??
+                  'Sync Google Analytics in SEO Settings to request Organic Search metrics by landing page.',
+              },
+            ]
+          : []),
         {
-          label: 'Organic clicks and impressions',
-          reason: 'No Google Search Console connection.',
+          label: 'SEO-attributed Noxtill orders',
+          reason:
+            'GA4 key events and total revenue are not reconciled to Noxtill orders and do not establish that SEO caused a sale.',
         },
-        {
-          label: 'Organic conversions and revenue',
-          reason: 'No analytics or attribution source links visits to orders.',
-        },
-        { label: 'Landing-page traffic', reason: 'No analytics connection.' },
       ],
     };
   }

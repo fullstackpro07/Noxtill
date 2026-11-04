@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Copy, Send, Download, Sparkles, Pencil } from "lucide-react";
-import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,8 @@ import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
 import { createCampaign } from "@/lib/campaigns-api";
 import { VARIABLE_CHIPS } from "@/lib/campaigns";
+import { SegmentRuleBuilder } from "./segment-rule-builder";
+import { CustomerSegmentDraftsPanel } from "./customer-segment-drafts-panel";
 import {
   fetchSegments,
   createSegment,
@@ -21,15 +22,10 @@ import {
   previewSegmentCount,
   suggestSegmentPersona,
   fetchSegmentMembers,
-  SEGMENT_FIELDS,
-  SEGMENT_OPERATORS,
   SEGMENT_FIELD_LABELS,
   SEGMENT_OPERATOR_LABELS,
   type Segment,
   type SegmentRules,
-  type SegmentCondition,
-  type SegmentField,
-  type SegmentOperator,
 } from "@/lib/segments-api";
 
 function emptyRules(): SegmentRules {
@@ -48,6 +44,7 @@ export function SegmentsPanel() {
     mutationFn: (id: string) => deleteSegment(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["segments"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-segment-drafts"] });
       toast.success("Segment deleted.");
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't delete this segment."),
@@ -91,6 +88,7 @@ export function SegmentsPanel() {
 
   return (
     <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+      <CustomerSegmentDraftsPanel />
       <div className="flex flex-wrap items-center gap-[10px]">
         <h2 className="m-0 text-[19px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-.4px" }}>Segments</h2>
         <div className="ml-auto flex flex-wrap gap-[9px]">
@@ -159,8 +157,8 @@ export function SegmentsPanel() {
               </thead>
               <tbody>
                 {segList.map((segment) => (
-                  <tr key={segment.id} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
-                    <td className="p-[12px_17px]"><button type="button" onClick={() => setEditing(segment)} className="text-[12.5px] font-extrabold" style={{ color: "var(--app-primary)" }}>{segment.name}</button></td>
+                  <tr id={`canonical-segment-${segment.id}`} key={segment.id} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
+                    <td className="p-[12px_17px]"><button type="button" onClick={() => setEditing(segment)} className="text-[12.5px] font-extrabold" style={{ color: "var(--app-primary)" }}>{segment.name}</button>{segment.sourceAgentRecommendationId && <p className="mt-1 text-[11px]" style={{ color: "var(--app-text-muted)" }}>Agent approval: {segment.agentApprovalState} · v{segment.version} · <a className="underline" href={`#segment-draft-${segment.sourceAgentRecommendationId}`}>Review source proposal</a>{segment.agentApprovalState === "changed" && " · Audience use blocked pending reapproval"}</p>}</td>
                     <td className="max-w-[360px] p-[12px] text-[12px]" style={{ color: "var(--app-text-disabled)" }}>
                       {segment.rules.conditions.map((c) => `${SEGMENT_FIELD_LABELS[c.field]} ${SEGMENT_OPERATOR_LABELS[c.operator]} ${c.value}`).join(` ${segment.rules.combinator} `)}
                     </td>
@@ -168,10 +166,10 @@ export function SegmentsPanel() {
                     <td className="p-[12px_17px] text-end">
                       <span className="inline-flex flex-wrap justify-end gap-[7px]">
                         <button type="button" onClick={() => duplicateMutation.mutate(segment.id)} aria-label="Duplicate" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Copy className="h-3.5 w-3.5" aria-hidden /></button>
-                        <button type="button" onClick={() => exportMutation.mutate(segment)} aria-label="Export members" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Download className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" disabled={segment.agentApprovalState === "changed"} onClick={() => exportMutation.mutate(segment)} aria-label="Export members" className="flex h-10 w-10 items-center justify-center rounded-[9px] disabled:opacity-50" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Download className="h-3.5 w-3.5" aria-hidden /></button>
                         <button type="button" onClick={() => setEditing(segment)} aria-label="Edit" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}><Pencil className="h-3.5 w-3.5" aria-hidden /></button>
                         <button type="button" onClick={() => deleteMutation.mutate(segment.id)} aria-label="Delete" className="flex h-10 w-10 items-center justify-center rounded-[9px]" style={{ border: "1px solid var(--app-border)", color: "#B42318" }}><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
-                        <button type="button" onClick={() => setMessaging(segment)} className="flex h-10 items-center gap-1.5 rounded-[9px] px-[13px] text-[11.5px] font-extrabold text-white" style={{ background: "var(--app-primary)" }}><Send className="h-3.5 w-3.5" aria-hidden />Message</button>
+                        <button type="button" disabled={segment.agentApprovalState === "changed"} onClick={() => setMessaging(segment)} className="flex h-10 items-center gap-1.5 rounded-[9px] px-[13px] text-[11.5px] font-extrabold text-white disabled:opacity-50" style={{ background: "var(--app-primary)" }}><Send className="h-3.5 w-3.5" aria-hidden />Message</button>
                       </span>
                     </td>
                   </tr>
@@ -187,62 +185,6 @@ export function SegmentsPanel() {
       )}
       {messaging && <MessageSegmentDialog segment={messaging} onClose={() => setMessaging(null)} />}
     </main>
-  );
-}
-
-function RuleBuilder({ rules, onChange }: { rules: SegmentRules; onChange: (rules: SegmentRules) => void }) {
-  function updateCondition(index: number, patch: Partial<SegmentCondition>) {
-    const conditions = rules.conditions.map((c, i) => (i === index ? { ...c, ...patch } : c));
-    onChange({ ...rules, conditions });
-  }
-  function addCondition() {
-    onChange({ ...rules, conditions: [...rules.conditions, { field: "lifetimeSpend", operator: "gt", value: 0 }] });
-  }
-  function removeCondition(index: number) {
-    onChange({ ...rules, conditions: rules.conditions.filter((_, i) => i !== index) });
-  }
-
-  return (
-    <div className="flex flex-col gap-2.5">
-      {rules.conditions.length > 1 && (
-        <Select value={rules.combinator} onChange={(e) => onChange({ ...rules, combinator: e.target.value as "AND" | "OR" })} className="w-28">
-          <option value="AND">Match ALL</option>
-          <option value="OR">Match ANY</option>
-        </Select>
-      )}
-      {rules.conditions.map((condition, i) => (
-        <div key={i} className="flex flex-wrap items-center gap-1.5">
-          <Select value={condition.field} onChange={(e) => updateCondition(i, { field: e.target.value as SegmentField })} className="w-40">
-            {SEGMENT_FIELDS.map((f) => (
-              <option key={f} value={f}>
-                {SEGMENT_FIELD_LABELS[f]}
-              </option>
-            ))}
-          </Select>
-          <Select value={condition.operator} onChange={(e) => updateCondition(i, { operator: e.target.value as SegmentOperator })} className="w-40">
-            {SEGMENT_OPERATORS.map((op) => (
-              <option key={op} value={op}>
-                {SEGMENT_OPERATOR_LABELS[op]}
-              </option>
-            ))}
-          </Select>
-          <Input
-            value={String(condition.value)}
-            onChange={(e) => updateCondition(i, { value: e.target.value })}
-            className="w-32"
-          />
-          {rules.conditions.length > 1 && (
-            <Button variant="ghost" size="sm" onClick={() => removeCondition(i)} aria-label="Remove condition">
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-          )}
-        </div>
-      ))}
-      <Button variant="ghost" size="sm" className="self-start" onClick={addCondition}>
-        <Plus className="h-3.5 w-3.5" aria-hidden />
-        Add condition
-      </Button>
-    </div>
   );
 }
 
@@ -262,6 +204,7 @@ function SegmentFormDialog({ segment, onClose }: { segment?: Segment; onClose: (
     mutationFn: () => (segment ? updateSegment(segment.id, { name, rules }) : createSegment({ name, rules })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["segments"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-segment-drafts"] });
       toast.success(segment ? "Segment updated." : "Segment created.");
       onClose();
     },
@@ -290,6 +233,7 @@ function SegmentFormDialog({ segment, onClose }: { segment?: Segment; onClose: (
       }
     >
       <div className="flex flex-col gap-3.5">
+        {segment?.sourceAgentRecommendationId && <p className="text-[12px]" style={{ color: "var(--app-text-muted)" }}>Saving changes increments the canonical version and invalidates its agent approval. Audience use is blocked until the source proposal is reviewed and approved again.</p>}
         <div className="flex items-end gap-2">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} className="flex-1" />
           <Button variant="outline" size="sm" onClick={() => setPersonaOpen(true)}>
@@ -297,7 +241,7 @@ function SegmentFormDialog({ segment, onClose }: { segment?: Segment; onClose: (
             AI suggest
           </Button>
         </div>
-        <RuleBuilder rules={rules} onChange={handleRulesChange} />
+        <SegmentRuleBuilder rules={rules} onChange={handleRulesChange} />
         <div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-surface-2 px-3.5 py-2.5 text-sm">
           <span className="text-fg-muted">Matches</span>
           {liveCount != null ? (

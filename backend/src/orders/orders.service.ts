@@ -1,4 +1,12 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { ClsService } from 'nestjs-cls';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
@@ -28,6 +36,13 @@ import { OrderStatus, OrderType, PaymentMethod, Prisma, ProductKind } from '@pri
 import { withDeadlockRetry } from '../common/utils/prisma-transaction-retry.util';
 import { PoliciesService } from '../common/policies/policies.service';
 import { enforceCreditLimit, enforceSaleRules } from './order-policy.util';
+import { excludeErasedCustomers } from '../customers/segment-rules.util';
+import {
+  CUSTOMER_ORDER_COMPLETED_EVENT_JOB,
+  FINANCE_ORDER_COMPLETED_EVENT_JOB,
+  SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 /**
  * Narrow shape of the transaction client actually used by `resolveCustomerId` — the tenant-scoped
@@ -37,6 +52,10 @@ import { enforceCreditLimit, enforceSaleRules } from './order-policy.util';
  */
 interface CustomerUpsertTxClient {
   customer: {
+    findFirst(args: {
+      where: Prisma.CustomerWhereInput;
+      select: { id: true };
+    }): Promise<{ id: string } | null>;
     upsert(args: {
       where: { businessId_phone: { businessId: string; phone: string } };
       create: { businessId: string; phone: string; name: string };
@@ -52,6 +71,8 @@ interface CustomerUpsertTxClient {
  */
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly cls: ClsService,
@@ -64,6 +85,12 @@ export class OrdersService {
     private readonly activity: ActivityService,
     private readonly cashRegister: CashRegisterService,
     private readonly policies: PoliciesService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly customerAgentEvents?: Queue,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE)
+    private readonly financeAgentEvents?: Queue,
   ) {}
 
   /** Shared by createSale and createDraft — a draft's cart may also name a customer by phone. */
@@ -72,7 +99,20 @@ export class OrdersService {
     businessId: string,
     dto: { customerId?: string; customerPhone?: string; customerName?: string },
   ): Promise<string | undefined> {
-    if (dto.customerId) return dto.customerId;
+    if (dto.customerId) {
+      const customer = await tx.customer.findFirst({
+        where: excludeErasedCustomers({ id: dto.customerId, businessId }),
+        select: { id: true },
+      });
+      if (!customer) {
+        throw new AppException(
+          ORDER_ERROR_CODES.CUSTOMER_NOT_FOUND,
+          'Customer not found.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      return customer.id;
+    }
     if (!dto.customerPhone) return undefined;
     const customer = await tx.customer.upsert({
       where: { businessId_phone: { businessId, phone: dto.customerPhone } },
@@ -415,6 +455,9 @@ export class OrdersService {
       actorUserId,
     });
 
+    await this.queueCompletedSaleCustomerReview(order);
+    await this.queueCompletedOrderFinanceReview(order);
+
     // Cash Register (UPD-BE-006): best-effort — silently a no-op if no shift is currently open,
     // since not every business uses the cash register at all.
     if (dto.payment.method === 'cash') {
@@ -436,6 +479,100 @@ export class OrdersService {
     }
 
     return order;
+  }
+
+  private async queueCompletedSaleCustomerReview(order: {
+    id: string;
+    businessId: string;
+    customerId: string | null;
+    createdAt: Date;
+  }): Promise<void> {
+    if (!this.customerAgentEvents || !order.customerId) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: order.businessId },
+        select: { id: true, policies: true },
+      });
+      const policies = this.policies.resolve(business);
+      if (
+        !policies.bool('agents.customerEnabled') ||
+        !policies.bool('agents.customerCompletedSaleEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      await this.customerAgentEvents.add(
+        CUSTOMER_ORDER_COMPLETED_EVENT_JOB,
+        {
+          businessId: order.businessId,
+          orderId: order.id,
+          occurredAt: order.createdAt.toISOString(),
+        },
+        {
+          jobId: `customer-sale-review-${order.businessId}-${order.id}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      // Agent reviews are optional follow-up work; queue failures never turn a completed sale
+      // into a failed POS request.
+      this.logger.warn(
+        `Could not queue Customer review for completed sale ${order.id}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async queueCompletedOrderFinanceReview(order: {
+    id: string;
+    businessId: string;
+    status: OrderStatus;
+    isQuotation: boolean;
+    updatedAt: Date;
+  }): Promise<void> {
+    if (
+      !this.financeAgentEvents ||
+      order.status !== OrderStatus.completed ||
+      order.isQuotation
+    ) {
+      return;
+    }
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: order.businessId },
+        select: { id: true, policies: true },
+      });
+      const policies = this.policies.resolve(business);
+      if (
+        !policies.bool('agents.financeEnabled') ||
+        !policies.bool('agents.financeCompletedOrderEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      await this.financeAgentEvents.add(
+        FINANCE_ORDER_COMPLETED_EVENT_JOB,
+        {
+          businessId: order.businessId,
+          orderId: order.id,
+          completedAt: order.updatedAt.toISOString(),
+        },
+        {
+          jobId: `finance-order-completed-${order.businessId}-${order.id}-${order.updatedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      // A read-only review is optional follow-up work; queue failure cannot undo a completed order.
+      this.logger.warn(
+        `Could not queue Finance review for completed order ${order.id}: ${(error as Error).message}`,
+      );
+    }
   }
 
   /**
@@ -844,6 +981,8 @@ export class OrdersService {
         customer: true,
       },
     });
+
+    await this.queueCompletedOrderFinanceReview(updated);
 
     if (updated.customerId) {
       await this.sendGate

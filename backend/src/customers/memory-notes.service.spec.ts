@@ -91,6 +91,44 @@ describe('MemoryNotesService (UPD-BE-026)', () => {
     ).rejects.toThrow();
   });
 
+  it('hides historical notes for erased customers and refuses edits', async () => {
+    const erasedCustomer = await prisma.customer.create({
+      data: {
+        businessId,
+        phone: `+1${Date.now()}99`,
+        name: 'Erase Me',
+      },
+    });
+    const note = await prisma.memoryNote.create({
+      data: {
+        businessId,
+        subjectType: 'customer',
+        subjectId: erasedCustomer.id,
+        body: 'Private historic customer detail',
+      },
+    });
+    await prisma.customer.update({
+      where: { id: erasedCustomer.id },
+      data: { name: 'Erased Customer', phone: `erased-${erasedCustomer.id}` },
+    });
+
+    await expect(
+      memoryNotesService.create({
+        subjectType: 'customer',
+        subjectId: erasedCustomer.id,
+        body: 'Another private detail',
+      }),
+    ).rejects.toThrow();
+    await expect(memoryNotesService.list('customer', erasedCustomer.id)).resolves.toEqual([]);
+    expect((await memoryNotesService.listAll()).some(({ id }) => id === note.id)).toBe(false);
+    await expect(
+      memoryNotesService.update(note.id, { body: 'Expose it' }),
+    ).rejects.toThrow('Memory note not found');
+    await expect(memoryNotesService.remove(note.id)).rejects.toThrow(
+      'Memory note not found',
+    );
+  });
+
   it('supports non-customer subjects too (e.g. supplier)', async () => {
     const note = await memoryNotesService.create({
       subjectType: 'supplier',

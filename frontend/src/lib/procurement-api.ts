@@ -92,6 +92,17 @@ export interface ProcurementRequest {
     status: "draft" | "open" | "awarded" | "closed" | "cancelled";
     updatedAt: string;
   }>;
+  agentSource?: {
+    recommendationId: string;
+    agentKey: string;
+    expiresAt: string;
+    preparedAt: string;
+    productId: string;
+    stockUnitLabel: string | null;
+    purchaseUnitLabel: string | null;
+    purchasePackSize: number | null;
+    purchaseUnitCount: number | null;
+  } | null;
   totalEstimate: number;
   items: Array<{
     id: string;

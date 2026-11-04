@@ -20,7 +20,7 @@ export const ALLOWED_UPLOAD_MIME_TYPES = [
 
 /**
  * Claude Haiku 4.5 — the vision model used for extraction. Unlike the older Haiku the shared
- * `VISION_MODEL` points at, it reads PDF documents natively and is far better at handwriting.
+ * current configured Haiku vision model reads PDF documents natively and is far better at handwriting.
  */
 export const DIGITIZER_MODEL = 'claude-haiku-4-5-20251001';
 

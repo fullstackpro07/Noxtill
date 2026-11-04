@@ -10,6 +10,7 @@ import type { ConnectorRegistry } from '../integrations/connector-registry';
 import type { IntegrationsService } from '../integrations/integrations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CommerceReconciliationService } from './commerce-reconciliation.service';
+import { COMMERCE_RECONCILIATION_EVENT_JOB } from '../common/agents/specialist-agent-events.constants';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -28,6 +29,7 @@ describe('CommerceReconciliationService (MySQL)', () => {
   let service: CommerceReconciliationService;
   let businessId: string;
   const fetchProducts = jest.fn();
+  const queueAdd = jest.fn();
   const stamp = Date.now();
 
   beforeAll(async () => {
@@ -43,10 +45,19 @@ describe('CommerceReconciliationService (MySQL)', () => {
         get: (provider: IntegrationProvider) =>
           provider === IntegrationProvider.shopify ? { fetchProducts } : {},
       } as unknown as ConnectorRegistry,
+      { add: queueAdd } as never,
     );
     businessId = (
       await prisma.business.create({
-        data: { name: 'Recon Co', slug: `recon-${stamp}` },
+        data: {
+          name: 'Recon Co',
+          slug: `recon-${stamp}`,
+          policies: {
+            'agents.commerceEnabled': true,
+            'agents.commerceReconciliationEventReviewEnabled': true,
+            'commerce.autonomyLevel': 1,
+          },
+        },
       })
     ).id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
@@ -107,6 +118,8 @@ describe('CommerceReconciliationService (MySQL)', () => {
     await prisma.$disconnect();
   });
 
+  beforeEach(() => queueAdd.mockClear());
+
   it('records discrepancies per provider without touching canonical data', async () => {
     fetchProducts.mockResolvedValueOnce([
       { sku: `A-${stamp}`, quantity: 5, updatedAt: '' },
@@ -124,6 +137,19 @@ describe('CommerceReconciliationService (MySQL)', () => {
       listingsChecked: 4,
       discrepancies: 3,
     });
+    expect(queueAdd).toHaveBeenCalledTimes(1);
+    expect(queueAdd).toHaveBeenCalledWith(
+      COMMERCE_RECONCILIATION_EVENT_JOB,
+      expect.objectContaining({
+        businessId,
+        reconciliationRunId: shopify.id,
+        finishedAt: shopify.finishedAt?.toISOString(),
+      }),
+      expect.objectContaining({
+        jobId: `commerce-reconciliation-${businessId}-${shopify.id}`,
+        attempts: 3,
+      }),
+    );
     expect(woo).toMatchObject({ status: 'skipped', listingsChecked: 0 });
     expect(woo.detail).toMatch(/not connected/);
 
@@ -170,5 +196,19 @@ describe('CommerceReconciliationService (MySQL)', () => {
       status: 'failed',
       discrepancies: 0,
     });
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it('keeps a completed provider check when optional specialist queueing fails', async () => {
+    fetchProducts.mockResolvedValueOnce([]);
+    queueAdd.mockRejectedValueOnce(new Error('Redis is unavailable'));
+
+    const result = await service.run(businessId, 'owner');
+    expect(
+      result.runs.some(
+        (run) => run.status === 'completed' && run.discrepancies === 4,
+      ),
+    ).toBe(true);
+    expect(queueAdd).toHaveBeenCalledTimes(1);
   });
 });

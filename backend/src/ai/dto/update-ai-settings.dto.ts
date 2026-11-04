@@ -48,6 +48,26 @@ export class AiFeatureTogglesDto {
   @IsOptional()
   @IsBoolean()
   workflowAgents?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  inventoryAgent?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  financeAgent?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  customerAgent?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  seoAgent?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  commerceAgent?: boolean;
 }
 
 export class UpdateAiSettingsDto {

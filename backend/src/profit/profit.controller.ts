@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
 import { ProfitService } from './profit.service';
 import { DeadHoursOfferService } from './dead-hours-offer.service';
 import { QueryProfitProductsDto } from './dto/query-profit-products.dto';
@@ -8,6 +8,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
+import { FinancialIntelligenceService } from './financial-intelligence.service';
 
 /** UPD-BE-106 fix-it: this whole controller had no capability gate despite being real P&L/margin data. */
 @RequireCapability(CAPABILITIES.PROFIT_VIEW)
@@ -16,7 +17,50 @@ export class ProfitController {
   constructor(
     private readonly profitService: ProfitService,
     private readonly deadHoursOffer: DeadHoursOfferService,
+    private readonly financialIntelligence: FinancialIntelligenceService,
   ) {}
+
+  @Get('agent-runs')
+  listFinancialAgentRuns(@CurrentUser() user: AuthenticatedUser) {
+    return this.financialIntelligence.listRuns(user.businessId);
+  }
+
+  @Get('xero-open-items')
+  previewXeroOpenItems(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.financialIntelligence.previewXeroOpenItems(
+      user.businessId,
+      branchId,
+    );
+  }
+
+  @Get('xero-bank-transaction-status')
+  previewXeroBankTransactionStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.financialIntelligence.previewXeroBankTransactionStatus(
+      user.businessId,
+      branchId,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.FINANCE_AGENT_RUN)
+  @Post('agent-runs')
+  runFinancialAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() query: QueryPnlDto,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+  ) {
+    return this.financialIntelligence.run(
+      user.businessId,
+      user.sub,
+      query,
+      idempotencyKey,
+    );
+  }
 
   @Get('products')
   byProduct(

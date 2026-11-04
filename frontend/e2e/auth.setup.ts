@@ -22,7 +22,7 @@ setup("sign up a QA business and log in", async ({ page, request }) => {
   });
   expect(enable.ok(), await enable.text()).toBeTruthy();
 
-  await page.goto("/login");
+  await page.goto("/login", { waitUntil: "networkidle" });
   await page.getByLabel("Email or phone number").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();

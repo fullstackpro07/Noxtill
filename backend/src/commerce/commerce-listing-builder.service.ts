@@ -332,6 +332,7 @@ export class CommerceListingBuilderService {
     businessId: string,
     actorUserId: string,
     dto: GenerateCommerceListingDraftDto,
+    aiKind = 'complete',
   ) {
     await assertCommerceNotPaused(this.tenantPrisma, businessId);
     const product = await this.tenantPrisma.client.product.findFirst({
@@ -362,6 +363,7 @@ export class CommerceListingBuilderService {
       dto.language ?? 'en',
       dto.brandVoice?.trim() || null,
       sources,
+      aiKind,
     );
     const draft = await this.tenantPrisma.client.$transaction(async (tx) => {
       const created = await tx.commerceListingDraft.create({
@@ -563,6 +565,7 @@ export class CommerceListingBuilderService {
     language: string,
     brandVoice: string | null,
     sources: ListingSource[],
+    aiKind = 'complete',
   ): Promise<ListingContent> {
     const prompt = [
       'Create a channel listing content draft using only the supplied source records.',
@@ -577,7 +580,7 @@ export class CommerceListingBuilderService {
       `Brand voice direction (style only; not a product fact): ${brandVoice ?? 'not supplied'}`,
       `Available sources: ${JSON.stringify(sources)}`,
     ].join('\n\n');
-    const raw = await this.ai.complete(businessId, prompt, 0.1, 'complete');
+    const raw = await this.ai.complete(businessId, prompt, 0.1, aiKind);
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim());

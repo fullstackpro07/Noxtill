@@ -55,6 +55,7 @@ describe('CustomersService (BE-040)', () => {
   afterAll(async () => {
     await prisma.auditLog.deleteMany({ where: { businessId } });
     await prisma.creditEntry.deleteMany({ where: { businessId } });
+    await prisma.memoryNote.deleteMany({ where: { businessId } });
     await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
@@ -70,6 +71,7 @@ describe('CustomersService (BE-040)', () => {
       name: 'Alex',
     });
     expect(customer.phone).toBe('+14155550132');
+    expect(customer.consentMarketing).toBe(false);
   });
 
   it('rejects an unparseable phone number', async () => {
@@ -86,26 +88,160 @@ describe('CustomersService (BE-040)', () => {
     expect(results.some((c) => c.name === 'Alex')).toBe(true);
   });
 
-  it('erases a customer only when the confirm phone matches, wiping PII but keeping the row', async () => {
+  it('erases customer PII and customer-agent records without retaining PII in the audit log', async () => {
     const customer = await customersService.create(businessId, {
       phone: '+14155550199',
       name: 'To Erase',
       email: 'erase@example.com',
     });
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        address: '1 Private Street',
+        notes: 'Sensitive customer note',
+        tags: ['private-tag'],
+        customFieldValues: { privateField: 'private value' },
+      },
+    });
+    await prisma.messageDraft.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        sourceKey: `customer_agent:${customer.id}:manual:erase-test`,
+        body: 'Private agent draft',
+      },
+    });
+    const unrelatedDraft = await prisma.messageDraft.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        sourceKey: `voice:erase-test:${customer.id}`,
+        body: 'Keep the separate voice-domain draft',
+      },
+    });
+    await prisma.customerFollowUpTask.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        title: 'Private follow-up',
+        reason: 'Contains customer-specific context',
+        idempotencyKey: `erase-${customer.id}`,
+        payloadHash: 'a'.repeat(64),
+        createdByUserId: 'customer-erasure-test',
+      },
+    });
+    await prisma.memoryNote.create({
+      data: {
+        businessId,
+        subjectType: 'customer',
+        subjectId: customer.id,
+        body: 'Private note containing customer context',
+      },
+    });
+    await prisma.customerChannelConsent.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        channel: 'email',
+        state: 'granted',
+        source: 'website_form',
+        evidenceReference: 'erase-consent-form-1',
+        revision: 1,
+        recordedByUserId: 'customer-erasure-test',
+      },
+    });
 
     await expect(
       customersService.erase(customer.id, '+10000000000'),
     ).rejects.toBeInstanceOf(AppException);
+    expect(
+      await prisma.customerFollowUpTask.count({
+        where: { businessId, customerId: customer.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.messageDraft.count({
+        where: {
+          businessId,
+          customerId: customer.id,
+          sourceKey: { startsWith: `customer_agent:${customer.id}:` },
+        },
+      }),
+    ).toBe(1);
 
     const erased = await customersService.erase(customer.id, '+14155550199');
     expect(erased.name).toBe('Erased Customer');
     expect(erased.email).toBeNull();
     expect(erased.phone).not.toBe('+14155550199');
+    expect(erased.address).toBeNull();
+    expect(erased.notes).toBeNull();
+    expect(erased.tags).toEqual([]);
+    expect(erased.customFieldValues).toEqual({});
+    expect(erased.consentMarketing).toBe(false);
+    expect(erased.optedOut).toBe(true);
+
+    expect(
+      (await customersService.findAll({})).some(
+        (row) => row.id === customer.id,
+      ),
+    ).toBe(false);
+    await expect(customersService.findOne(customer.id)).rejects.toThrow(
+      'Customer not found',
+    );
+    await expect(customersService.export(customer.id)).rejects.toThrow(
+      'Customer not found',
+    );
+    await expect(
+      customersService.update(businessId, customer.id, { name: 'Restored' }),
+    ).rejects.toThrow('Customer not found');
+
+    expect(
+      await prisma.customerFollowUpTask.count({
+        where: { businessId, customerId: customer.id },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.memoryNote.count({
+        where: {
+          businessId,
+          subjectType: 'customer',
+          subjectId: customer.id,
+        },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.messageDraft.findMany({
+        where: {
+          businessId,
+          customerId: customer.id,
+          sourceKey: { startsWith: `customer_agent:${customer.id}:` },
+        },
+      }),
+    ).toHaveLength(0);
+    expect(
+      await prisma.customerChannelConsent.count({
+        where: { businessId, customerId: customer.id },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.messageDraft.findUnique({
+        where: { id: unrelatedDraft.id },
+      }),
+    ).not.toBeNull();
 
     const audits = await prisma.auditLog.findMany({
       where: { entityId: customer.id, action: 'customer.erase' },
+      select: { before: true, after: true },
     });
     expect(audits).toHaveLength(1);
+    expect(audits[0].before).toBeNull();
+    const auditAfter = JSON.stringify(audits[0].after);
+    expect(auditAfter).not.toContain('+14155550199');
+    expect(auditAfter).not.toContain('erase@example.com');
+    expect(auditAfter).not.toContain('To Erase');
+    expect(auditAfter).toContain('deletedCustomerAgentDrafts');
+    expect(auditAfter).toContain('deletedCustomerMemoryNotes');
+    expect(auditAfter).toContain('deletedCustomerChannelConsents');
   });
 
   describe('export (UPD-BE-097)', () => {
@@ -178,6 +314,80 @@ describe('CustomersService (BE-040)', () => {
         where: { entityId: canonical.id, action: 'customer.merge' },
       });
       expect(audits).toHaveLength(1);
+    });
+
+    it('carries a duplicate channel revocation forward but does not transfer a channel grant', async () => {
+      const canonical = await customersService.create(businessId, {
+        phone: '+14155550225',
+        name: 'Consent Canonical',
+      });
+      const duplicate = await customersService.create(businessId, {
+        phone: '+14155550226',
+        name: 'Consent Duplicate',
+      });
+      await prisma.customerChannelConsent.createMany({
+        data: [
+          {
+            businessId,
+            customerId: canonical.id,
+            channel: 'email',
+            state: 'granted',
+            source: 'website_form',
+            evidenceReference: 'canonical-email-form',
+            revision: 1,
+            recordedByUserId: 'merge-test',
+          },
+          {
+            businessId,
+            customerId: duplicate.id,
+            channel: 'email',
+            state: 'revoked',
+            source: 'customer_portal',
+            evidenceReference: 'duplicate-email-revoke',
+            revision: 1,
+            recordedByUserId: 'merge-test',
+          },
+          {
+            businessId,
+            customerId: duplicate.id,
+            channel: 'sms',
+            state: 'granted',
+            source: 'paper_form',
+            evidenceReference: 'duplicate-sms-form',
+            revision: 1,
+            recordedByUserId: 'merge-test',
+          },
+        ],
+      });
+
+      await customersService.merge(canonical.id, duplicate.id);
+
+      const emailConsent = await prisma.customerChannelConsent.findFirst({
+        where: { businessId, customerId: canonical.id, channel: 'email' },
+        orderBy: { revision: 'desc' },
+      });
+      expect(emailConsent).toMatchObject({
+        state: 'revoked',
+        source: 'profile_merge_suppression',
+        revision: 2,
+      });
+      expect(
+        await prisma.customerChannelConsent.findFirst({
+          where: { businessId, customerId: canonical.id, channel: 'sms' },
+        }),
+      ).toBeNull();
+      expect(
+        await prisma.customerChannelConsent.count({
+          where: { businessId, customerId: duplicate.id },
+        }),
+      ).toBe(0);
+      const audit = await prisma.auditLog.findFirst({
+        where: { businessId, entityId: canonical.id, action: 'customer.merge' },
+        select: { after: true },
+      });
+      expect(audit?.after).toMatchObject({
+        channelConsentSuppressedFromDuplicate: ['email'],
+      });
     });
 
     it('rejects merging a customer into itself', async () => {

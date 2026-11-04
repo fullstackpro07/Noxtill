@@ -34,9 +34,20 @@ import { CommerceAgentToolsController } from './commerce-agent-tools.controller'
 import { CommerceAgentToolsService } from './commerce-agent-tools.service';
 import { CommerceReconciliationController } from './commerce-reconciliation.controller';
 import { CommerceReconciliationService } from './commerce-reconciliation.service';
+import { CommerceSpecialistAgentService } from './commerce-specialist-agent.service';
+import { DeliveryModule } from '../delivery/delivery.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
+import { CommerceAgentEventProcessor } from './commerce-agent-event.processor';
 
 @Module({
-  imports: [ActivityModule, AiModule, IntegrationsModule, OrdersModule],
+  imports: [
+    ActivityModule,
+    AiModule,
+    IntegrationsModule,
+    OrdersModule,
+    DeliveryModule,
+    SpecialistAgentEventQueueModule,
+  ],
   controllers: [
     ProductRadarController,
     ProductValidationController,
@@ -71,7 +82,13 @@ import { CommerceReconciliationService } from './commerce-reconciliation.service
     CommerceExperimentsService,
     CommerceAgentToolsService,
     CommerceReconciliationService,
+    CommerceSpecialistAgentService,
+    CommerceAgentEventProcessor,
   ],
-  exports: [CommerceSubscriptionsService, CommerceRfqsService],
+  exports: [
+    CommerceSubscriptionsService,
+    CommerceRfqsService,
+    CommerceSpecialistAgentService,
+  ],
 })
 export class CommerceModule {}

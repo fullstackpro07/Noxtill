@@ -9,6 +9,10 @@ import { WaitlistService } from './waitlist.service';
 import { DepositsService } from './deposits.service';
 import { AppointmentsService } from './appointments.service';
 import { AppException } from '../common/filters/app.exception';
+import {
+  CUSTOMER_APPOINTMENT_CANCELLED_EVENT_JOB,
+  CUSTOMER_NO_SHOW_EVENT_JOB,
+} from '../common/agents/specialist-agent-events.constants';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -39,6 +43,9 @@ describe('AppointmentsService (BE-054)', () => {
   const deposits = {
     forfeitForAppointment: jest.fn().mockResolvedValue(undefined),
   };
+  const customerAgentEvents = {
+    add: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -56,6 +63,7 @@ describe('AppointmentsService (BE-054)', () => {
       sendGate as unknown as SendGateService,
       waitlist as unknown as WaitlistService,
       deposits as unknown as DepositsService,
+      customerAgentEvents as never,
     );
 
     const business = await prisma.business.create({
@@ -83,6 +91,7 @@ describe('AppointmentsService (BE-054)', () => {
     sendGate.send.mockClear();
     waitlist.tryAutoOffer.mockClear();
     deposits.forfeitForAppointment.mockClear();
+    customerAgentEvents.add.mockClear();
   });
 
   afterAll(async () => {
@@ -156,6 +165,96 @@ describe('AppointmentsService (BE-054)', () => {
       where: { id: customerId },
     });
     expect(customer.tags).toContain('No-show');
+  });
+
+  it('queues an opted-in, privacy-minimized customer review for a no-show', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.customerEnabled': true,
+          'agents.customerNoShowEventReviewEnabled': true,
+        },
+      },
+    });
+    const appointment = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        customerId,
+        startsAt: new Date('2026-08-04T10:00:00Z'),
+        endsAt: new Date('2026-08-04T11:00:00Z'),
+        status: 'booked',
+      },
+    });
+
+    const updated = await service.updateStatus(
+      businessId,
+      appointment.id,
+      'no_show',
+    );
+
+    expect(customerAgentEvents.add).toHaveBeenCalledWith(
+      CUSTOMER_NO_SHOW_EVENT_JOB,
+      {
+        businessId,
+        appointmentId: appointment.id,
+        noShowAt: updated.updatedAt.toISOString(),
+      },
+      expect.objectContaining({
+        jobId: `customer-no-show-${businessId}-${appointment.id}-${updated.updatedAt.getTime()}`,
+        attempts: 5,
+      }),
+    );
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: {} },
+    });
+  });
+
+  it('queues an opted-in, privacy-minimized customer review for a cancellation', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.customerEnabled': true,
+          'agents.customerAppointmentCancelledEventReviewEnabled': true,
+        },
+      },
+    });
+    const appointment = await prisma.appointment.create({
+      data: {
+        businessId,
+        serviceId: serviceProductId,
+        customerId,
+        startsAt: new Date('2026-08-05T10:00:00Z'),
+        endsAt: new Date('2026-08-05T11:00:00Z'),
+        status: 'booked',
+      },
+    });
+
+    const updated = await service.updateStatus(
+      businessId,
+      appointment.id,
+      'cancelled',
+    );
+
+    expect(customerAgentEvents.add).toHaveBeenCalledWith(
+      CUSTOMER_APPOINTMENT_CANCELLED_EVENT_JOB,
+      {
+        businessId,
+        appointmentId: appointment.id,
+        cancelledAt: updated.updatedAt.toISOString(),
+      },
+      expect.objectContaining({
+        jobId: `customer-appointment-cancelled-${businessId}-${appointment.id}-${updated.updatedAt.getTime()}`,
+        attempts: 5,
+      }),
+    );
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: {} },
+    });
   });
 
   it('rejects an illegal status transition', async () => {

@@ -1,11 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, PurchaseOrderStatus } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { calculateReorder } from './reorder-calculation.util';
+import {
+  applyMinimumReorderQty,
+  roundUpToPurchasePack,
+} from './purchase-pack.util';
+import { PoliciesService } from '../common/policies/policies.service';
 import {
   REORDER_LEAD_TIME_DAYS,
   REORDER_VELOCITY_WINDOW_DAYS,
   UNASSIGNED_SUPPLIER_KEY,
 } from './reorder-suggestions.constants';
+import { branchTransferAvailability } from './branch-transfer-availability.util';
 
 interface VelocityRow {
   id: string;
@@ -13,6 +21,10 @@ interface VelocityRow {
   sku: string | null;
   stock_qty: number;
   low_stock_threshold: number;
+  stock_unit_label: string | null;
+  purchase_unit_label: string | null;
+  purchase_pack_size: number | null;
+  minimum_reorder_qty: number | null;
   units_sold: bigint | number;
 }
 
@@ -26,8 +38,21 @@ export interface ReorderSuggestionItem {
   name: string;
   sku: string | null;
   currentStock: number;
+  lowStockThreshold: number;
   velocityPerDay: number;
+  baseSuggestedQty: number;
+  incomingPurchaseQty: number;
+  incomingTransferQty: number;
+  committedOutboundTransferQty: number;
+  availableStockAfterOutboundTransfers: number;
+  unroundedAdditionalQty: number;
+  minimumReorderQty: number | null;
   suggestedQty: number;
+  purchasePackSize: number | null;
+  purchasePackCount: number | null;
+  stockUnitLabel: string | null;
+  purchaseUnitLabel: string | null;
+  baselineLeadTimeDays: number;
 }
 
 export interface ReorderSuggestionGroup {
@@ -35,10 +60,6 @@ export interface ReorderSuggestionGroup {
   supplierName: string;
   items: ReorderSuggestionItem[];
   totalSuggestedQty: number;
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 /**
@@ -51,40 +72,141 @@ function round2(value: number): number {
  */
 @Injectable()
 export class ReorderSuggestionsService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly policies: PoliciesService,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  async list(businessId: string): Promise<ReorderSuggestionGroup[]> {
+  async list(
+    businessId: string,
+    configuredLeadTimeDays?: number,
+    options: { includeCovered?: boolean } = {},
+  ): Promise<ReorderSuggestionGroup[]> {
+    const leadTimeDays =
+      configuredLeadTimeDays ??
+      (await this.policies
+        .forBusiness(businessId)
+        .then((policy) => policy.num('inventory.agentReorderLeadTimeDays'))) ??
+      REORDER_LEAD_TIME_DAYS;
     const cutoff = new Date(
       Date.now() - REORDER_VELOCITY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     );
 
     const rows = await this.tenantPrisma.client.$queryRaw<VelocityRow[]>`
       SELECT p.id, p.name, p.sku, p.stock_qty, p.low_stock_threshold,
+        p.stock_unit_label, p.purchase_unit_label, p.purchase_pack_size,
+        p.minimum_reorder_qty,
         COALESCE(SUM(CASE WHEN sm.kind = 'sale' AND sm.created_at >= ${cutoff} THEN -sm.qty ELSE 0 END), 0) AS units_sold
       FROM products p
       LEFT JOIN stock_movements sm ON sm.product_id = p.id AND sm.business_id = p.business_id
       WHERE p.business_id = ${businessId} AND p.active = true AND p.kind = 'product'
-      GROUP BY p.id, p.name, p.sku, p.stock_qty, p.low_stock_threshold
+      GROUP BY p.id, p.name, p.sku, p.stock_qty, p.low_stock_threshold,
+        p.stock_unit_label, p.purchase_unit_label, p.purchase_pack_size,
+        p.minimum_reorder_qty
     `;
+
+    const productIds = rows.map((row) => row.id);
+    const incomingByProduct = new Map<string, number>();
+    const transferAvailability = await branchTransferAvailability(
+      this.prisma,
+      businessId,
+      rows.map(({ id, sku }) => ({ id, sku })),
+    );
+    if (productIds.length > 0) {
+      const openOrders = await this.tenantPrisma.client.purchaseOrder.findMany({
+        where: {
+          businessId,
+          status: {
+            in: [
+              PurchaseOrderStatus.sent,
+              PurchaseOrderStatus.confirmed,
+              PurchaseOrderStatus.partially_received,
+            ],
+          },
+          items: { some: { productId: { in: productIds } } },
+        },
+        orderBy: [{ id: 'asc' }],
+        select: {
+          items: {
+            where: { productId: { in: productIds } },
+            orderBy: [{ id: 'asc' }],
+            select: { productId: true, qtyOrdered: true, qtyReceived: true },
+          },
+        },
+      });
+      for (const order of openOrders) {
+        for (const item of order.items) {
+          if (!item.productId) continue;
+          const outstanding = Math.max(0, item.qtyOrdered - item.qtyReceived);
+          incomingByProduct.set(
+            item.productId,
+            (incomingByProduct.get(item.productId) ?? 0) + outstanding,
+          );
+        }
+      }
+    }
 
     const items: (ReorderSuggestionItem & { productId: string })[] = [];
     for (const row of rows) {
-      const velocityPerDay =
-        Number(row.units_sold) / REORDER_VELOCITY_WINDOW_DAYS;
-      const suggestedQty = Math.ceil(
-        velocityPerDay * REORDER_LEAD_TIME_DAYS +
-          row.low_stock_threshold -
-          row.stock_qty,
+      const {
+        velocityPerDay,
+        suggestedQty: calculatedSuggestedQty,
+      } = calculateReorder(
+        Number(row.units_sold),
+        Math.max(
+          0,
+          row.stock_qty -
+            (transferAvailability.get(row.id)?.committedOutboundQty ?? 0),
+        ),
+        row.low_stock_threshold,
+        leadTimeDays,
       );
-      if (suggestedQty <= 0) continue;
+      const baseSuggestedQty = Math.max(0, calculatedSuggestedQty);
+      if (baseSuggestedQty <= 0) continue;
+      const incomingPurchaseQty = incomingByProduct.get(row.id) ?? 0;
+      const incomingTransferQty =
+        transferAvailability.get(row.id)?.incomingQty ?? 0;
+      const committedOutboundTransferQty =
+        transferAvailability.get(row.id)?.committedOutboundQty ?? 0;
+      const availableStockAfterOutboundTransfers = Math.max(
+        0,
+        row.stock_qty - committedOutboundTransferQty,
+      );
+      const unroundedAdditionalQty = Math.max(
+        0,
+        baseSuggestedQty - incomingPurchaseQty - incomingTransferQty,
+      );
+      if (unroundedAdditionalQty <= 0 && !options.includeCovered) continue;
+      const minimumAdjustedQty = applyMinimumReorderQty(
+        unroundedAdditionalQty,
+        row.minimum_reorder_qty,
+      );
+      const rounded = roundUpToPurchasePack(
+        minimumAdjustedQty,
+        row.purchase_pack_size,
+      );
 
       items.push({
         productId: row.id,
         name: row.name,
         sku: row.sku,
         currentStock: row.stock_qty,
-        velocityPerDay: round2(velocityPerDay),
-        suggestedQty,
+        lowStockThreshold: row.low_stock_threshold,
+        velocityPerDay,
+        baseSuggestedQty,
+        incomingPurchaseQty,
+        incomingTransferQty,
+        committedOutboundTransferQty,
+        availableStockAfterOutboundTransfers,
+        unroundedAdditionalQty,
+        minimumReorderQty: row.minimum_reorder_qty,
+        suggestedQty: rounded.stockQuantity,
+        purchasePackSize: row.purchase_pack_size,
+        purchasePackCount: rounded.purchaseUnitCount,
+        stockUnitLabel: row.stock_unit_label,
+        purchaseUnitLabel: row.purchase_unit_label,
+        baselineLeadTimeDays: leadTimeDays,
       });
     }
     if (items.length === 0) return [];

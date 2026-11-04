@@ -25,6 +25,7 @@ import { AiModule } from '../ai/ai.module';
 import { BillingModule } from '../billing/billing.module';
 import { CustomersModule } from '../customers/customers.module';
 import { SettingsModule } from '../settings/settings.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { SettingsModule } from '../settings/settings.module';
     BillingModule,
     CustomersModule,
     SettingsModule,
+    SpecialistAgentEventQueueModule,
   ],
   controllers: [
     OrdersController,

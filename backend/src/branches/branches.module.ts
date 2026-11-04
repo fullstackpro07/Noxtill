@@ -6,9 +6,10 @@ import { BranchesController } from './branches.controller';
 import { StockTransfersService } from './stock-transfers.service';
 import { StockTransfersController } from './stock-transfers.controller';
 import { AiModule } from '../ai/ai.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
-  imports: [AiModule],
+  imports: [AiModule, SpecialistAgentEventQueueModule],
   controllers: [BranchesController, StockTransfersController],
   providers: [
     RollupService,
@@ -16,6 +17,6 @@ import { AiModule } from '../ai/ai.module';
     BranchManagementService,
     StockTransfersService,
   ],
-  exports: [RollupService],
+  exports: [RollupService, StockTransfersService],
 })
 export class BranchesModule {}

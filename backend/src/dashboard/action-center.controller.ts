@@ -31,6 +31,7 @@ export class ActionCenterController {
         priority,
         type,
       },
+      user.sub,
     );
   }
 
@@ -77,6 +78,96 @@ export class ActionCenterController {
       user.businessId,
       user.sub,
       id,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.STOCK_TRANSFERS_APPROVE)
+  @Post(':id/approve-inventory-transfer')
+  approveInventoryAgentTransfer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.actionCenterService.approveInventoryAgentTransferAction(
+      user.businessId,
+      user.sub,
+      id,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.STOCK_TRANSFERS_APPROVE)
+  @Post(':id/reject-inventory-transfer')
+  rejectInventoryAgentTransfer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RejectProcurementActionDto,
+  ) {
+    return this.actionCenterService.rejectInventoryAgentTransferAction(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.FINANCE_JOURNAL_MANAGE)
+  @Post(':id/approve-finance-journal')
+  approveFinanceJournal(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RejectProcurementActionDto,
+  ) {
+    return this.actionCenterService.approveFinanceJournalAction(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.FINANCE_JOURNAL_MANAGE)
+  @Post(':id/reject-finance-journal')
+  rejectFinanceJournal(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RejectProcurementActionDto,
+  ) {
+    return this.actionCenterService.rejectFinanceJournalAction(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.SEO_MANAGE)
+  @Post(':id/approve-seo-content')
+  approveSeoAgentContentBrief(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RejectProcurementActionDto,
+  ) {
+    return this.actionCenterService.decideSeoAgentContentBriefAction(
+      user.businessId,
+      user.sub,
+      id,
+      'approve',
+      dto.reason,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.SEO_MANAGE)
+  @Post(':id/send-back-seo-content')
+  sendBackSeoAgentContentBrief(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RejectProcurementActionDto,
+  ) {
+    return this.actionCenterService.decideSeoAgentContentBriefAction(
+      user.businessId,
+      user.sub,
+      id,
+      'send_back',
       dto.reason,
     );
   }

@@ -326,7 +326,7 @@ export class SeoContentService {
     businessId: string,
     actorUserId: string,
     input: BriefInput,
-    source: 'manual' | 'ai' = 'manual',
+    source: 'manual' | 'ai' | 'specialist_agent' = 'manual',
   ) {
     let keywordText: string | null = null;
     if (input.keywordId) {
@@ -408,6 +408,7 @@ export class SeoContentService {
     actorUserId: string,
     keywordId: string,
     strategyNote?: string,
+    source: 'ai' | 'specialist_agent' = 'ai',
   ) {
     await assertSeoAiDraftsAllowed(this.tenantPrisma, businessId);
     const [keyword, { pages }, business] = await Promise.all([
@@ -466,7 +467,7 @@ export class SeoContentService {
         internalLinks: strings(parsed.internalLinks, 20),
         strategyNote,
       },
-      'ai',
+      source,
     );
   }
 

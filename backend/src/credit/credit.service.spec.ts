@@ -378,6 +378,58 @@ describe('CreditService (BE-030)', () => {
   });
 
   describe('Overdue ageing (UPD-BE-094)', () => {
+    it('returns privacy-minimized current credit-aging aggregates for Finance', async () => {
+      const baseline = await creditService.financialAgingSummary();
+      const customer = await prisma.customer.create({
+        data: {
+          businessId,
+          phone: `+1${Date.now()}fa`,
+          name: 'Finance privacy fixture',
+        },
+      });
+      await prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: customer.id,
+          kind: 'credit',
+          amount: 500,
+          createdAt: new Date(Date.now() - 105 * 24 * 60 * 60 * 1000),
+        },
+      });
+      await prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: customer.id,
+          kind: 'payment',
+          amount: 125,
+        },
+      });
+
+      const summary = await creditService.financialAgingSummary();
+      const ninetyPlus = summary.buckets.find(
+        (bucket) => bucket.key === 'ninetyPlus',
+      );
+
+      expect(summary.totalBalance).toBe(
+        (Number(baseline.totalBalance) + 375).toFixed(2),
+      );
+      expect(ninetyPlus?.balance).toBe(
+        (
+          Number(
+            baseline.buckets.find((b) => b.key === 'ninetyPlus')?.balance,
+          ) + 375
+        ).toFixed(2),
+      );
+      expect(ninetyPlus?.debtorCount).toBe(
+        (baseline.buckets.find((b) => b.key === 'ninetyPlus')?.debtorCount ??
+          0) + 1,
+      );
+      expect(summary.basis).toContain('not invoice due-date aging');
+      expect(JSON.stringify(summary)).not.toContain(customer.id);
+      expect(JSON.stringify(summary)).not.toContain(customer.name);
+      expect(JSON.stringify(summary)).not.toContain(customer.phone);
+    });
+
     it('buckets a real debtor by days_outstanding and flags 90+-with-no-plan as at-risk', async () => {
       const atRiskCustomer = await prisma.customer.create({
         data: {

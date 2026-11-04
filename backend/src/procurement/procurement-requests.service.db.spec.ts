@@ -4,7 +4,10 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AppException } from '../common/filters/app.exception';
 import { ProcurementService } from './procurement.service';
+import { PoliciesService } from '../common/policies/policies.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { ActionCenterService } from '../dashboard/action-center.service';
+import { StockTransfersService } from '../branches/stock-transfers.service';
 import { ActionItemType, Role } from '@prisma/client';
 import { CommerceRfqsService } from '../commerce/commerce-rfqs.service';
 import { ActivityService } from '../activity/activity.service';
@@ -84,11 +87,22 @@ describe('Procurement requests (real MySQL)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new ProcurementService(tenantPrisma);
+    service = new ProcurementService(
+      tenantPrisma,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        new CapabilitiesService(prisma),
+      ),
+    );
     commerceRfqs = new CommerceRfqsService(tenantPrisma, {
       record: jest.fn().mockResolvedValue(undefined),
     } as unknown as ActivityService);
-    actionCenter = new ActionCenterService(tenantPrisma, service);
+    actionCenter = new ActionCenterService(
+      tenantPrisma,
+      service,
+      new StockTransfersService(prisma),
+    );
   });
 
   afterAll(async () => {
@@ -242,6 +256,118 @@ describe('Procurement requests (real MySQL)', () => {
     await prisma.procurementRequest.delete({ where: { id: otherTenant.id } });
   });
 
+  it('refuses stale reviewer versions on Procurement decisions and conversion', async () => {
+    const request = await service.createRequest(businessId, userId, {
+      reason: 'Version binding QA request',
+      currency: 'USD',
+      supplierId,
+      items: [
+        {
+          lineType: 'stock',
+          productId,
+          description: 'Version binding QA item',
+          quantity: 1,
+          estimatedUnitCost: 3,
+        },
+      ],
+    });
+    const submitted = await service.submitRequest(
+      businessId,
+      userId,
+      request.id,
+    );
+
+    await expect(
+      service.decideRequest(businessId, userId, request.id, {
+        decision: 'approve',
+        expectedVersion: submitted.version + 1,
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'PROCUREMENT_REQUEST_VERSION_CONFLICT' },
+    });
+    expect(
+      await prisma.procurementRequest.findUniqueOrThrow({
+        where: { id: request.id },
+        select: { status: true, version: true },
+      }),
+    ).toMatchObject({ status: 'submitted', version: submitted.version });
+
+    const approved = await service.decideRequest(
+      businessId,
+      userId,
+      request.id,
+      { decision: 'approve', expectedVersion: submitted.version },
+    );
+    expect(approved.status).toBe('approved');
+
+    await expect(
+      service.convertRequestToPurchaseOrder(
+        businessId,
+        userId,
+        request.id,
+        submitted.version + 1,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'PROCUREMENT_REQUEST_VERSION_CONFLICT' },
+    });
+    expect(
+      await prisma.procurementRequest.findUniqueOrThrow({
+        where: { id: request.id },
+        select: { status: true, convertedPurchaseOrderId: true },
+      }),
+    ).toMatchObject({ status: 'approved', convertedPurchaseOrderId: null });
+
+    const converted = await service.convertRequestToPurchaseOrder(
+      businessId,
+      userId,
+      request.id,
+      submitted.version,
+    );
+    expect(converted.request.status).toBe('converted');
+    expect(converted.request.convertedPurchaseOrder?.id).toBe(
+      converted.purchaseOrder.id,
+    );
+
+    const withdrawable = await service.createRequest(businessId, userId, {
+      reason: 'Version-bound withdrawal QA request',
+      currency: 'USD',
+      items: [
+        {
+          description: 'Withdrawal QA item',
+          quantity: 1,
+          estimatedUnitCost: 1,
+        },
+      ],
+    });
+    const awaitingReview = await service.submitRequest(
+      businessId,
+      userId,
+      withdrawable.id,
+    );
+    await expect(
+      service.withdrawRequest(
+        businessId,
+        userId,
+        withdrawable.id,
+        false,
+        'stale version must not withdraw',
+        awaitingReview.version + 1,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'PROCUREMENT_REQUEST_VERSION_CONFLICT' },
+    });
+    await expect(
+      service.withdrawRequest(
+        businessId,
+        userId,
+        withdrawable.id,
+        false,
+        'Reviewed exact submitted request version.',
+        awaitingReview.version,
+      ),
+    ).resolves.toMatchObject({ status: 'cancelled' });
+  });
+
   it('surfaces submitted requests in Action Center and approves them there', async () => {
     const request = await service.createRequest(businessId, userId, {
       reason: 'Action Center approval flow check',
@@ -280,7 +406,9 @@ describe('Procurement requests (real MySQL)', () => {
     );
     expect(action).toBeDefined();
     expect(action!.title).toContain('Purchase request from');
-    expect(action!.deepLink).toBe('/procurement/requests');
+    expect(action!.deepLink).toBe(
+      `/procurement/requests#request-${request.id}`,
+    );
     expect(action!.reason).toContain('80.00 USD');
 
     const approved = await actionCenter.approveProcurementRequestAction(

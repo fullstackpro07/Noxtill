@@ -1,4 +1,12 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { randomBytes } from 'crypto';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
@@ -20,6 +28,11 @@ import { assertBufferAvailable } from './booking-buffer.util';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { assertBookingWindow, assertDayNotFull } from './booking-policy.util';
 import { assertPhoneBookingSlot } from './phone-booking-policy.util';
+import {
+  CUSTOMER_APPOINTMENT_CANCELLED_EVENT_JOB,
+  CUSTOMER_NO_SHOW_EVENT_JOB,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import {
   APPOINTMENT_STATUS_TRANSITIONS,
   BOOKING_ERROR_CODES,
@@ -55,6 +68,8 @@ function assertEligibleStaff(
 
 @Injectable()
 export class AppointmentsService {
+  private readonly logger = new Logger(AppointmentsService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly reviewRequests: ReviewRequestsService,
@@ -62,6 +77,9 @@ export class AppointmentsService {
     private readonly sendGate: SendGateService,
     private readonly waitlist: WaitlistService,
     private readonly deposits: DepositsService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly customerAgentEvents?: Queue,
   ) {}
 
   findAll(query: QueryAppointmentsDto) {
@@ -160,6 +178,11 @@ export class AppointmentsService {
       }
       // Deposits (UPD-BE-019): forfeits any captured deposit tied to this appointment.
       await this.deposits.forfeitForAppointment(updated.id);
+      await this.queueCustomerNoShowReview(
+        businessId,
+        updated.id,
+        updated.updatedAt,
+      );
     }
 
     if (nextStatus === AppointmentStatus.cancelled) {
@@ -170,9 +193,90 @@ export class AppointmentsService {
         startsAt: updated.startsAt,
         endsAt: updated.endsAt,
       });
+      await this.queueCustomerAppointmentCancelledReview(
+        businessId,
+        updated.id,
+        updated.updatedAt,
+      );
     }
 
     return updated;
+  }
+
+  private async queueCustomerNoShowReview(
+    businessId: string,
+    appointmentId: string,
+    noShowAt: Date,
+  ): Promise<void> {
+    if (!this.customerAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, policies: true },
+      });
+      if (!business) return;
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.customerEnabled') ||
+        !policies.bool('agents.customerNoShowEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      await this.customerAgentEvents.add(
+        CUSTOMER_NO_SHOW_EVENT_JOB,
+        { businessId, appointmentId, noShowAt: noShowAt.toISOString() },
+        {
+          jobId: `customer-no-show-${businessId}-${appointmentId}-${noShowAt.getTime()}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: false,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Customer review for no-show appointment ${appointmentId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async queueCustomerAppointmentCancelledReview(
+    businessId: string,
+    appointmentId: string,
+    cancelledAt: Date,
+  ): Promise<void> {
+    if (!this.customerAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, policies: true },
+      });
+      if (!business) return;
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.customerEnabled') ||
+        !policies.bool('agents.customerAppointmentCancelledEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      await this.customerAgentEvents.add(
+        CUSTOMER_APPOINTMENT_CANCELLED_EVENT_JOB,
+        { businessId, appointmentId, cancelledAt: cancelledAt.toISOString() },
+        {
+          jobId: `customer-appointment-cancelled-${businessId}-${appointmentId}-${cancelledAt.getTime()}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: false,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Customer review for cancelled appointment ${appointmentId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   /** Internal, staff-initiated reschedule (e.g. drag-and-drop on the calendar) — distinct from the

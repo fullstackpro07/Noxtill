@@ -35,8 +35,9 @@ type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
  * which stages rows for a confirmed import.
  *
  * Real extraction per type: `pdf-parse` for PDFs, `mammoth` for .docx, a UTF-8 read for
- * text/CSV/JSON/Markdown, and Claude Vision (the same `VISION_MODEL` the digitizer uses) for
- * images. An unsupported type is rejected outright rather than silently attached as an empty file.
+ * text/CSV/JSON/Markdown, and the configured Claude vision model (the same model the digitizer
+ * uses) for images. An unsupported type is rejected outright rather than silently attached as an
+ * empty file.
  */
 @Injectable()
 export class AssistantAttachmentService {
@@ -88,7 +89,8 @@ export class AssistantAttachmentService {
   private kindFor(mimeType: string, filename: string): AttachmentKind {
     if (mimeType === PDF_MIME_TYPE) return 'pdf';
     if (mimeType === DOCX_MIME_TYPE) return 'docx';
-    if ((TEXT_MIME_TYPES as readonly string[]).includes(mimeType)) return 'text';
+    if ((TEXT_MIME_TYPES as readonly string[]).includes(mimeType))
+      return 'text';
     if ((IMAGE_MIME_TYPES as readonly string[]).includes(mimeType))
       return 'image';
 
@@ -110,7 +112,10 @@ export class AssistantAttachmentService {
     try {
       // Required lazily: pdf-parse's index reads a sample file from disk at import time in some
       // versions, which breaks under Jest module collection — the library entry point itself is fine.
-      const pdfParse = (await import('pdf-parse')).default;
+      const pdfParseModule = (await import('pdf-parse')) as unknown as {
+        default: (data: Buffer) => Promise<{ text?: string }>;
+      };
+      const pdfParse = pdfParseModule.default;
       const parsed = await pdfParse(buffer);
       return parsed.text ?? '';
     } catch (error) {

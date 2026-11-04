@@ -1,7 +1,20 @@
-import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { ActivityEventType, Prisma } from '@prisma/client';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { resolvePolicies } from '../common/policies/policies.service';
+import { specialistAgentIdempotencyHash } from '../common/agents/specialist-agent-run-idempotency.util';
+import {
+  SEO_AUDIT_COMPLETED_EVENT_JOB,
+  SPECIALIST_AGENT_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import { MasterListingService } from '../listings/master-listing.service';
 import {
   SeoSiteAuditCrawler,
@@ -24,6 +37,8 @@ const SEO_SITE_URL_INVALID = 'SEO_SITE_URL_INVALID';
 
 @Injectable()
 export class SeoSiteAuditService {
+  private readonly logger = new Logger(SeoSiteAuditService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly masterListing: MasterListingService,
@@ -33,6 +48,9 @@ export class SeoSiteAuditService {
     @Optional() private readonly onPage?: SeoOnPageService,
     @Optional() private readonly technical?: SeoTechnicalService,
     @Optional() private readonly content?: SeoContentService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
   ) {}
 
   async list(businessId: string) {
@@ -332,6 +350,49 @@ export class SeoSiteAuditService {
         entityId: savedRun.id,
       });
     }
+    await this.enqueueSeoAgentReview(businessId, savedRun);
     return savedRun;
+  }
+
+  private async enqueueSeoAgentReview(
+    businessId: string,
+    run: { id: string; status: string },
+  ): Promise<void> {
+    if (
+      !this.specialistAgentEvents ||
+      (run.status !== 'completed' && run.status !== 'partial')
+    ) {
+      return;
+    }
+
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      if (!resolvePolicies(business).bool('agents.seoAuditEventReviewEnabled')) {
+        return;
+      }
+
+      const eventKey = `seo-audit-completed:${businessId}:${run.id}`;
+      const jobId = `seo-audit-agent-${specialistAgentIdempotencyHash(eventKey).slice(0, 32)}`;
+      await this.specialistAgentEvents.add(
+        SEO_AUDIT_COMPLETED_EVENT_JOB,
+        { businessId, auditRunId: run.id },
+        {
+          jobId,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: 5_000,
+        },
+      );
+    } catch (error) {
+      // The canonical audit has already been saved. An optional agent dispatch must not turn it
+      // into an apparent audit failure; record the queue problem for operator diagnosis instead.
+      this.logger.warn(
+        `Could not queue the SEO agent review for audit ${run.id}: ${(error as Error).message}`,
+      );
+    }
   }
 }

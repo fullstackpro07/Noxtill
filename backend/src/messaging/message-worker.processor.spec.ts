@@ -16,7 +16,7 @@ describe('MessageWorkerProcessor (UPD-BE-092 fix-it — custom message text)', (
     category: 'utility' | 'marketing';
     templateKey: string;
     locale: string;
-    payload: Record<string, string>;
+    payload: Record<string, string | boolean>;
     status: 'queued';
     providerRef: string | null;
     customBody: string | null;
@@ -41,11 +41,44 @@ describe('MessageWorkerProcessor (UPD-BE-092 fix-it — custom message text)', (
 
   function buildProcessor(messageOverrides: Partial<typeof baseMessage>) {
     const message = { ...baseMessage, ...messageOverrides };
+    const transactionClient = {
+      message: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      auditLog: {
+        create: jest
+          .fn<
+            Promise<void>,
+            [
+              {
+                data: {
+                  action: string;
+                  entityId: string;
+                  after: Record<string, unknown>;
+                };
+              },
+            ]
+          >()
+          .mockResolvedValue(undefined),
+      },
+    };
     const prisma = {
+      customer: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: message.customerId,
+          phone: '+15551234567',
+          consentMarketing: true,
+          optedOut: false,
+        }),
+      },
+      customerChannelConsent: {
+        findFirst: jest.fn().mockResolvedValue({ state: 'granted' }),
+      },
       message: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(message),
         update: jest.fn().mockResolvedValue(message),
       },
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(transactionClient),
+      ),
     };
     const templates = new TemplateRegistryService();
     const sms = {
@@ -74,7 +107,7 @@ describe('MessageWorkerProcessor (UPD-BE-092 fix-it — custom message text)', (
       email as unknown as EmailService,
       terminology as unknown as TerminologyService,
     );
-    return { processor, prisma, sms, whatsapp, email };
+    return { processor, prisma, sms, whatsapp, email, transactionClient };
   }
 
   it('uses the fixed registry template when no customBody is set', async () => {
@@ -122,5 +155,114 @@ describe('MessageWorkerProcessor (UPD-BE-092 fix-it — custom message text)', (
         templateKey: 'booking_reminder',
       }),
     );
+  });
+
+  it('suppresses a queued marketing message when consent was revoked before the worker ran', async () => {
+    const { processor, prisma, sms, transactionClient } = buildProcessor({
+      category: 'marketing',
+      templateKey: 'campaign',
+      payload: { body: 'A reviewed follow-up.', __to: '+15551234567' },
+    });
+    prisma.customer.findFirst.mockResolvedValueOnce({
+      id: 'cust-1',
+      phone: '+15551234567',
+      consentMarketing: false,
+      optedOut: false,
+    });
+
+    await processor.process({ data: { messageId: 'msg-1' } } as Job<{
+      messageId: string;
+    }>);
+
+    expect(sms.send).not.toHaveBeenCalled();
+    expect(transactionClient.message.updateMany).toHaveBeenCalledWith({
+      where: { id: 'msg-1', businessId: 'biz-1', status: 'queued' },
+      data: { status: 'failed' },
+    });
+    const auditInput = transactionClient.auditLog.create.mock.calls[0][0];
+    expect(auditInput.data.action).toBe('messaging.marketing_send_suppressed');
+    expect(auditInput.data.entityId).toBe('msg-1');
+    expect(auditInput.data.after.reason).toBe('marketing_consent_missing');
+  });
+
+  it('suppresses a queued marketing message when the customer opted out before delivery', async () => {
+    const { processor, prisma, sms, transactionClient } = buildProcessor({
+      category: 'marketing',
+      templateKey: 'campaign',
+    });
+    prisma.customer.findFirst.mockResolvedValueOnce({
+      id: 'cust-1',
+      phone: '+15551234567',
+      consentMarketing: true,
+      optedOut: true,
+    });
+
+    await processor.process({ data: { messageId: 'msg-1' } } as Job<{
+      messageId: string;
+    }>);
+
+    expect(sms.send).not.toHaveBeenCalled();
+    const auditInput = transactionClient.auditLog.create.mock.calls[0][0];
+    expect(auditInput.data.after.reason).toBe('customer_opted_out');
+  });
+
+  it('suppresses an agent message when the latest channel-specific consent is revoked', async () => {
+    const { processor, prisma, sms, transactionClient } = buildProcessor({
+      category: 'marketing',
+      templateKey: 'campaign',
+      payload: { __to: '+15551234567', __channelConsentRequired: true },
+    });
+    prisma.customerChannelConsent.findFirst.mockResolvedValueOnce({
+      state: 'revoked',
+    });
+
+    await processor.process({ data: { messageId: 'msg-1' } } as Job<{
+      messageId: string;
+    }>);
+
+    expect(prisma.customerChannelConsent.findFirst).toHaveBeenCalledWith({
+      where: { businessId: 'biz-1', customerId: 'cust-1', channel: 'sms' },
+      orderBy: { revision: 'desc' },
+      select: { state: true },
+    });
+    expect(sms.send).not.toHaveBeenCalled();
+    const auditInput = transactionClient.auditLog.create.mock.calls[0][0];
+    expect(auditInput.data.after.reason).toBe(
+      'channel_specific_consent_missing',
+    );
+  });
+
+  it('suppresses a legacy queued marketing message with no channel grant even without the newer marker', async () => {
+    const { processor, prisma, sms, transactionClient } = buildProcessor({
+      category: 'marketing',
+      templateKey: 'campaign',
+      payload: { body: 'A reviewed follow-up.', __to: '+15551234567' },
+    });
+    prisma.customerChannelConsent.findFirst.mockResolvedValueOnce(null);
+
+    await processor.process({ data: { messageId: 'msg-1' } } as Job<{
+      messageId: string;
+    }>);
+
+    expect(sms.send).not.toHaveBeenCalled();
+    const auditInput = transactionClient.auditLog.create.mock.calls[0][0];
+    expect(auditInput.data.after.reason).toBe(
+      'channel_specific_consent_missing',
+    );
+  });
+
+  it('allows a Customer Agent marketing message only while its channel grant remains current', async () => {
+    const { processor, prisma, sms } = buildProcessor({
+      category: 'marketing',
+      templateKey: 'campaign',
+      payload: { __to: '+15551234567', __channelConsentRequired: true },
+    });
+
+    await processor.process({ data: { messageId: 'msg-1' } } as Job<{
+      messageId: string;
+    }>);
+
+    expect(prisma.customerChannelConsent.findFirst).toHaveBeenCalledTimes(1);
+    expect(sms.send).toHaveBeenCalledTimes(1);
   });
 });

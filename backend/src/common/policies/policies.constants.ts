@@ -3,7 +3,8 @@
  * consumer (named beside it); a policy nothing reads does not belong in this list. A missing key
  * means the default, so existing businesses behave exactly as they did before a key was added.
  */
-export type PolicyKind = 'boolean' | 'number' | 'nullableNumber' | 'time';
+export type PolicyKind =
+  'boolean' | 'number' | 'nullableNumber' | 'time' | 'string';
 export type PolicyValue = boolean | number | string | null;
 
 export interface PolicyDef {
@@ -11,6 +12,8 @@ export interface PolicyDef {
   default: PolicyValue;
   min?: number;
   max?: number;
+  /** Maximum characters for validated text policies. */
+  maxLength?: number;
   /** Whole numbers only. */
   integer?: boolean;
 }
@@ -32,6 +35,314 @@ export const POLICY_DEFS = {
     default: 1,
     min: 0,
     max: 5,
+    integer: true,
+  },
+  // commerce/commerce-agent-tools.service.ts (write tools must also be on this business allow-list)
+  'commerce.agentAllowedWriteTools': {
+    kind: 'string',
+    default:
+      'award_rfq_quote,submit_supplier_claim,create_listing_draft,draft_counteroffer,create_rfq,create_supplier_claim_draft,create_experiment,create_b2b_reorder_draft,publish_listing,reserve_inventory,release_inventory,hold_order,release_order,allocate_preorder,send_customer_message',
+    maxLength: 1200,
+  },
+  // commerce/commerce-specialist-agent.service.ts (registered read-only question tools per run)
+  'agents.commerceMaxReadToolCallsPerRun': {
+    kind: 'number',
+    default: 3,
+    min: 1,
+    max: 20,
+    integer: true,
+  },
+  // common/agents/specialist-agent-tool-gateway.service.ts (all registered tools per run)
+  'agents.maxToolCallsPerRun': {
+    kind: 'number',
+    default: 20,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  // Optional specialist overrides; null inherits agents.maxToolCallsPerRun.
+  'agents.inventoryMaxToolCallsPerRun': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  'agents.financeMaxToolCallsPerRun': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  'agents.customerMaxToolCallsPerRun': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  'agents.seoMaxToolCallsPerRun': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  'agents.commerceMaxToolCallsPerRun': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  // Shared cap for material actions proposed from one specialist-agent run.
+  'agents.maxMaterialActionsPerRun': {
+    kind: 'number',
+    default: 10,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  // Specialist agent runs are manually started and read-only by default. AI explanations have
+  // separate per-feature toggles in Business.aiFeatureToggles.
+  'agents.inventoryEnabled': { kind: 'boolean', default: true },
+  'agents.financeEnabled': { kind: 'boolean', default: true },
+  'agents.customerEnabled': { kind: 'boolean', default: true },
+  'agents.seoEnabled': { kind: 'boolean', default: true },
+  'agents.commerceEnabled': { kind: 'boolean', default: true },
+  // Daily specialist reviews are explicit owner opt-ins; existing businesses remain manual-only.
+  'agents.inventoryDailyReviewEnabled': { kind: 'boolean', default: false },
+  'agents.financeDailyReviewEnabled': { kind: 'boolean', default: false },
+  'agents.customerDailyReviewEnabled': { kind: 'boolean', default: false },
+  'agents.seoDailyReviewEnabled': { kind: 'boolean', default: false },
+  'agents.commerceDailyReviewEnabled': { kind: 'boolean', default: false },
+  // Site-audit completion may trigger a read-only SEO workspace review when explicitly enabled.
+  'agents.seoAuditEventReviewEnabled': { kind: 'boolean', default: false },
+  // A canonical low_stock ActivityEvent may trigger a read-only Inventory review when opted in.
+  'agents.inventoryLowStockEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // Applying a canonical physical stock count may trigger a read-only Inventory review.
+  'agents.inventoryStockCountEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A fully received canonical purchase order may queue one read-only Inventory review.
+  'agents.inventoryPurchaseOrderReceivedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A confirmed branch transfer receipt may queue isolated, read-only reviews for opted-in branches.
+  'agents.inventoryStockTransferReceivedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A committed wastage movement may queue a read-only Inventory review when opted in.
+  'agents.inventoryWastageEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // New lapsed-customer transitions may trigger one daily aggregate Customer review when opted in.
+  'agents.customerLapsedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A newly failed delivery may trigger a privacy-minimized, review-only Customer Agent cue.
+  'agents.customerDeliveryFailedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A newly recorded appointment no-show may trigger a privacy-minimized Customer review.
+  'agents.customerNoShowEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A newly cancelled appointment may queue a privacy-minimized Customer review.
+  'agents.customerAppointmentCancelledEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A completed POS sale may queue one daily aggregate Customer review when explicitly enabled.
+  'agents.customerCompletedSaleEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // customers/customer-profile-intelligence.service.ts (minimum order decline cue)
+  'agents.customerRetentionMinimumOrderDecline': {
+    kind: 'number',
+    default: 1,
+    min: 1,
+    max: 1000,
+    integer: true,
+  },
+  // Product Validation events may trigger read-only Commerce reviews only when opted in.
+  'agents.commerceValidationEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A newly failed canonical delivery may queue a read-only Commerce exception review when opted in.
+  'agents.commerceDeliveryFailedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A current operator-recorded supplier quote may trigger a read-only Commerce review.
+  'agents.commerceRfqQuoteEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A recorded experiment decision may queue a read-only Commerce outcome review.
+  'agents.commerceExperimentDecisionEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A completed provider reconciliation may queue a read-only Commerce review.
+  'agents.commerceReconciliationEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A newly saved Expense may queue a read-only Finance review when opted in.
+  'agents.financeExpenseEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A completed canonical Order may queue one aggregate, read-only Finance review per UTC day.
+  'agents.financeCompletedOrderEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // An approved canonical Return may queue a read-only Finance review.
+  'agents.financeApprovedReturnEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // An approved budget revision may queue a read-only Finance review.
+  'agents.financeApprovedBudgetEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A canonically posted manual journal may queue one read-only Finance review.
+  'agents.financePostedJournalEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // An imported statement may queue a read-only Finance review when opted in.
+  'agents.financeStatementImportedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  'agents.inventoryMaxRequestsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
+  'agents.financeMaxRequestsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
+  'agents.customerMaxRequestsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
+  'agents.seoMaxRequestsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
+  'agents.commerceMaxRequestsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
+  // AiInfraService reserves each provider request against its specialist run before calling the provider.
+  'agents.specialistMaxProviderRequestsPerRun': {
+    kind: 'number',
+    default: 10,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  // Reject specialist model requests whose requested output could exceed this per-request cap.
+  'agents.specialistMaxOutputTokensPerRequest': {
+    kind: 'number',
+    default: 1024,
+    min: 128,
+    max: 8192,
+    integer: true,
+  },
+  // Bound the complete serialized specialist request before reserving usage or calling the provider.
+  'agents.specialistMaxInputBytesPerRequest': {
+    kind: 'number',
+    default: 1_048_576,
+    min: 4_096,
+    max: 16_777_216,
+    integer: true,
+  },
+  // specialist-agents/specialist-agent-retention.service.ts (transient run evidence and payloads)
+  'agents.specialistRunRetentionDays': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 30,
+    max: 3650,
+    integer: true,
+  },
+  'agents.inventoryMaxSpendUsdPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0.01,
+    max: 100_000,
+  },
+  'agents.financeMaxSpendUsdPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0.01,
+    max: 100_000,
+  },
+  'agents.customerMaxSpendUsdPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0.01,
+    max: 100_000,
+  },
+  'agents.seoMaxSpendUsdPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0.01,
+    max: 100_000,
+  },
+  'agents.commerceMaxSpendUsdPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0.01,
+    max: 100_000,
+  },
+  // inventory/inventory-intelligence.service.ts (repeated applied-count review filter)
+  'inventory.agentCountVarianceMinimumUnits': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
+  // inventory/reorder-suggestions.service.ts and inventory-intelligence.service.ts
+  'inventory.agentReorderLeadTimeDays': {
+    kind: 'number',
+    default: 14,
+    min: 1,
+    max: 365,
     integer: true,
   },
   'sales.requireCustomer': { kind: 'boolean', default: false },

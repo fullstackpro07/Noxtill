@@ -114,7 +114,8 @@ const clean = (value: string | null | undefined): string | null => {
  * versioned proposals (title / meta description / H1) that go draft → approval → approved → applied
  * by the merchant on their own site → verified only when a later crawl sees the proposed values
  * live. Noxtill does not host or publish the website, so nothing here writes to a live page.
- * Organic clicks/impressions are not available (no Search Console connection).
+ * This page does not expose page-level Search Console clicks or impressions; property-level metrics
+ * are available in SEO Settings and Reports when a property has been synced.
  */
 @Injectable()
 export class SeoOnPageService {
@@ -131,7 +132,13 @@ export class SeoOnPageService {
     return this.db.seoAuditRun.findFirst({
       where: { businessId, status: { in: ['completed', 'partial'] } },
       orderBy: { startedAt: 'desc' },
-      select: { id: true, siteUrl: true, finishedAt: true, pages: true },
+      select: {
+        id: true,
+        siteUrl: true,
+        status: true,
+        finishedAt: true,
+        pages: true,
+      },
     });
   }
 
@@ -479,6 +486,55 @@ export class SeoOnPageService {
     );
   }
 
+  /**
+   * Prepare an On-Page draft from a still-current crawler finding. Technical/indexability
+   * findings stay in their owning workflow, and stale findings must be re-crawled first.
+   */
+  async suggestForAuditIssue(
+    businessId: string,
+    actorUserId: string,
+    issueId: string,
+  ) {
+    const issue = await this.db.seoAuditIssue.findFirst({
+      where: {
+        id: issueId,
+        businessId,
+        status: SeoAuditIssueStatus.open,
+        type: { in: ON_PAGE_ISSUE_TYPES },
+      },
+      select: { pageUrl: true, lastSeenAuditRunId: true },
+    });
+    if (!issue) {
+      throw new AppException(
+        'SEO_ON_PAGE_FINDING_NOT_ELIGIBLE',
+        'This finding is not an open On-Page issue in this business.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const run = await this.latestRun(businessId);
+    if (!run || issue.lastSeenAuditRunId !== run.id) {
+      throw new AppException(
+        'SEO_ON_PAGE_FINDING_STALE',
+        'This finding is not from the latest website audit. Run a fresh audit before preparing a revision.',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const pageExists = SeoOnPageService.htmlPages(run.pages).some(
+      (page) => pageKeyOf(page.url) === pageKeyOf(issue.pageUrl),
+    );
+    if (!pageExists) {
+      throw new AppException(
+        'SEO_ON_PAGE_FINDING_PAGE_MISSING',
+        'The page for this finding is not present in the latest audit. Run a fresh audit before preparing a revision.',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    return this.suggest(businessId, actorUserId, issue.pageUrl);
+  }
+
   /** Edits a draft in place (only drafts are editable; later states are kept as history). */
   async editDraft(
     businessId: string,
@@ -626,6 +682,25 @@ export class SeoOnPageService {
     for (const revision of applied) {
       if (!revision.appliedAt || run.finishedAt <= revision.appliedAt) continue;
       const page = pages.get(revision.pageKey);
+
+      // A partial crawl may omit a URL because it hit a crawl limit or stopped early.
+      // That absence is not evidence that the page was removed from the site.
+      if (!page && run.status === 'partial') {
+        await this.db.seoContentRevision.update({
+          where: { id: revision.id, businessId },
+          data: {
+            verification: {
+              auditRunId: run.id,
+              checkedAt: new Date().toISOString(),
+              pageFound: null,
+              result: 'not_checked',
+              reason: 'partial_crawl_did_not_include_page',
+            } as Prisma.InputJsonValue,
+          },
+        });
+        continue;
+      }
+
       checked += 1;
       const fields: Record<string, 'match' | 'mismatch' | 'not_checked'> = {};
       const compare = (
@@ -650,6 +725,9 @@ export class SeoOnPageService {
         Boolean(page) &&
         Object.values(fields).length > 0 &&
         Object.values(fields).every((value) => value === 'match');
+      const hasMismatch =
+        !page || Object.values(fields).some((value) => value === 'mismatch');
+      const result = ok ? 'verified' : hasMismatch ? 'mismatch' : 'not_checked';
       await this.db.seoContentRevision.update({
         where: { id: revision.id, businessId },
         data: {
@@ -658,6 +736,12 @@ export class SeoOnPageService {
             checkedAt: new Date().toISOString(),
             pageFound: Boolean(page),
             fields,
+            result,
+            ...(!page
+              ? { reason: 'page_not_found_in_completed_crawl' }
+              : result === 'not_checked'
+                ? { reason: 'one_or_more_proposed_fields_not_observed' }
+                : {}),
           } as Prisma.InputJsonValue,
           ...(ok
             ? {

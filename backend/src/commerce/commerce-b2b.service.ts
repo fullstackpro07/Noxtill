@@ -25,6 +25,7 @@ import type {
 } from './dto/commerce-b2b.dto';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_AGENT_REORDER_REVIEW_ACCOUNTS = 20;
 
 function num(value: Prisma.Decimal | number | null | undefined): number | null {
   return value === null || value === undefined ? null : Number(value);
@@ -788,6 +789,64 @@ export class CommerceB2bService {
   }
 
   /**
+   * A bounded, read-only projection for the Commerce Agent. Reuses the same cadence estimate
+   * shown by B2B & Wholesale and deliberately omits customer contact details, tax IDs, notes,
+   * credit balances and price-list data. A due date is an estimate, not a promised reorder.
+   */
+  async agentReorderReview(businessId: string, now = new Date()) {
+    const accounts = await this.listAccounts(businessId, now);
+    const active = accounts.filter(
+      (account) => account.status === CommerceB2bAccountStatus.active,
+    );
+    const due = active
+      .flatMap((account) =>
+        account.reorder.status === 'due'
+          ? [{ account, estimate: account.reorder }]
+          : [],
+      )
+      .sort(
+        (left, right) =>
+          left.estimate.nextExpectedAt.getTime() -
+            right.estimate.nextExpectedAt.getTime() ||
+          left.account.id.localeCompare(right.account.id),
+      );
+    const insufficientHistoryCount = active.filter(
+      (account) => account.reorder.status === 'insufficient_history',
+    ).length;
+    const reviewed = due.slice(0, MAX_AGENT_REORDER_REVIEW_ACCOUNTS);
+
+    return {
+      state:
+        active.length === 0
+          ? 'no_active_accounts'
+          : due.length === 0
+            ? 'no_due_reorders'
+            : 'due_reorders',
+      source: 'CommerceB2bAccount + Order',
+      activeAccountCount: active.length,
+      dueCount: due.length,
+      insufficientHistoryCount,
+      reviewedCount: reviewed.length,
+      maximumReviewed: MAX_AGENT_REORDER_REVIEW_ACCOUNTS,
+      hasMore: due.length > reviewed.length,
+      accounts: reviewed.map(({ account, estimate }) => ({
+        accountId: account.id,
+        companyName: account.companyName,
+        lastOrderAt: estimate.lastOrderAt,
+        nextExpectedAt: estimate.nextExpectedAt,
+        averageGapDays: estimate.averageGapDays,
+        openQuotes: account.openQuotes,
+      })),
+      limitations: [
+        `A due estimate requires at least ${COMMERCE_B2B_MIN_ORDERS_FOR_CADENCE} non-cancelled orders and averages the gaps between up to the 10 most recent order dates.`,
+        'This is a historical cadence estimate, not a customer commitment or a prediction of demand.',
+        'Customer names, contact details, tax IDs, private notes, credit balances and price-list data are omitted.',
+        'No reorder draft, message, quote or order is created by this review.',
+      ],
+    };
+  }
+
+  /**
    * Prices a draft wholesale order for an account without creating anything: price-list line
    * when the quantity meets its minimum, otherwise the canonical price less the tier discount.
    * Also checks the account's minimum order value and available canonical credit.
@@ -796,7 +855,9 @@ export class CommerceB2bService {
     businessId: string,
     accountId: string,
     dto: PreviewCommerceB2bQuoteDto,
+    options: { includeCredit?: boolean } = {},
   ) {
+    const includeCredit = options.includeCredit ?? true;
     const account = await this.findAccount(businessId, accountId);
     const productIds = [...new Set(dto.lines.map((line) => line.productId))];
     const products = await this.tenantPrisma.client.product.findMany({
@@ -850,11 +911,14 @@ export class CommerceB2bService {
     const total = round2(lines.reduce((sum, line) => sum + line.lineTotal, 0));
     const minOrderValue =
       num(account.minOrderValue) ?? num(account.tier?.minOrderValue) ?? null;
-    const balance =
-      (await this.balances(businessId, [account.customerId])).get(
-        account.customerId,
-      ) ?? 0;
-    const creditLimit = num(account.customer.creditLimit);
+    const balance = includeCredit
+      ? ((await this.balances(businessId, [account.customerId])).get(
+          account.customerId,
+        ) ?? 0)
+      : null;
+    const creditLimit = includeCredit
+      ? num(account.customer.creditLimit)
+      : null;
     const warnings: string[] = [];
     if (account.status === CommerceB2bAccountStatus.suspended)
       warnings.push('This account is suspended.');
@@ -862,7 +926,12 @@ export class CommerceB2bService {
       warnings.push(
         `Below the account's minimum order value (${minOrderValue}).`,
       );
-    if (creditLimit !== null && balance + total > creditLimit)
+    if (
+      includeCredit &&
+      creditLimit !== null &&
+      balance !== null &&
+      balance + total > creditLimit
+    )
       warnings.push(
         'This order would take the customer over their credit limit in Credit.',
       );
@@ -871,12 +940,17 @@ export class CommerceB2bService {
       lines,
       total,
       minOrderValue,
-      credit: {
-        limit: creditLimit,
-        balance,
-        availableAfter:
-          creditLimit === null ? null : round2(creditLimit - balance - total),
-      },
+      creditAvailable: includeCredit,
+      credit: includeCredit
+        ? {
+            limit: creditLimit,
+            balance,
+            availableAfter:
+              creditLimit === null || balance === null
+                ? null
+                : round2(creditLimit - balance - total),
+          }
+        : null,
       paymentTermsDays:
         account.paymentTermsDays ?? account.tier?.paymentTermsDays ?? null,
       warnings,

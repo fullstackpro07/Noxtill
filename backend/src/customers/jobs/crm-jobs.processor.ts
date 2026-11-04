@@ -14,6 +14,13 @@ import {
   VIP_LIFETIME_SPEND_THRESHOLD,
 } from './crm-jobs.constants';
 import { ActivityEventType } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { resolvePolicies } from '../../common/policies/policies.service';
+import {
+  CUSTOMER_LAPSED_EVENT_JOB,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
+} from '../../common/agents/specialist-agent-events.constants';
 
 interface CrmTickJobData {
   /** ISO timestamp override, used only by tests to make "current local hour" deterministic. */
@@ -35,6 +42,8 @@ export class CrmJobsProcessor extends WorkerHost {
     private readonly sendGate: SendGateService,
     private readonly workflowTrigger: WorkflowTriggerService,
     private readonly outboundWebhookDispatch: OutboundWebhookDispatchService,
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly specialistAgentEvents: Queue,
   ) {
     super();
   }
@@ -72,7 +81,7 @@ export class CrmJobsProcessor extends WorkerHost {
 
   async runTagRules(now: Date = new Date()): Promise<void> {
     const businesses = await this.prisma.business.findMany({
-      select: { id: true, timezone: true },
+      select: { id: true, timezone: true, policies: true },
     });
     const lapsedCutoff = new Date(
       now.getTime() - LAPSED_DAYS * 24 * 60 * 60 * 1000,
@@ -86,7 +95,10 @@ export class CrmJobsProcessor extends WorkerHost {
         continue;
 
       const customers = await this.prisma.customer.findMany({
-        where: { businessId: business.id },
+        where: {
+          businessId: business.id,
+          NOT: { phone: { startsWith: 'erased-' } },
+        },
       });
       for (const customer of customers) {
         const shouldBeVip =
@@ -152,6 +164,30 @@ export class CrmJobsProcessor extends WorkerHost {
                 `Outbound webhook dispatch failed for customer_lapsed event ${event.id}: ${error.message}`,
               ),
             );
+          if (
+            resolvePolicies(business).bool(
+              'agents.customerLapsedEventReviewEnabled',
+            )
+          ) {
+            const utcDay = event.createdAt.toISOString().slice(0, 10);
+            await this.specialistAgentEvents
+              .add(
+                CUSTOMER_LAPSED_EVENT_JOB,
+                { businessId: business.id, activityEventId: event.id },
+                {
+                  jobId: `customer-lapsed-${business.id}-${utcDay}`,
+                  attempts: 3,
+                  backoff: { type: 'exponential', delay: 1_000 },
+                  removeOnComplete: 200,
+                  removeOnFail: 500,
+                },
+              )
+              .catch((error: Error) =>
+                this.logger.warn(
+                  `Could not queue Customer specialist review for lapsed event ${event.id}: ${error.message}`,
+                ),
+              );
+          }
         }
       }
     }

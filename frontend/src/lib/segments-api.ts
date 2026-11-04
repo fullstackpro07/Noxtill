@@ -57,6 +57,9 @@ export interface Segment {
   name: string;
   rules: SegmentRules;
   count: number;
+  version: number;
+  sourceAgentRecommendationId: string | null;
+  agentApprovalState: 'manual' | 'approved' | 'changed';
   /** Real sum of matching members' lifetime spend — what this group has already spent, not a forecast. */
   spend: number;
   createdAt: string;

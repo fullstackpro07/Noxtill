@@ -1,7 +1,8 @@
 "use client";
 
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchAiSettings, updateAiSettings, type AiFeatureToggles } from "@/lib/ai-settings-api";
+import { cancelSpecialistOrchestration, decideSpecialistAgentAction, downloadSpecialistActionAuditCsv, fetchAiSettings, fetchSpecialistActionAudit, fetchSpecialistAgentConfigurationHistory, fetchSpecialistAgentOperations, fetchSpecialistAgentRunEvidence, fetchSpecialistAgentRunEvents, fetchSpecialistAgentRuns, fetchSpecialistAgentRunToolCalls, fetchSpecialistOrchestrations, retryFailedSpecialistOrchestration, runSpecialistOrchestration, updateAiSettings, type AiFeatureToggles, type SpecialistAgentRunEvent, type SpecialistAgentRunStatus, type SpecialistOrchestrationRun } from "@/lib/ai-settings-api";
 import { formatCurrency } from "@/lib/format";
 import { useAiAssistantDrawer } from "@/components/assistant/ai-assistant-drawer-context";
 import { AI, KpiSkeleton, outlineBtnStyle, primaryBtnStyle } from "@/components/assistant/ai-assistant-ui";
@@ -9,6 +10,7 @@ import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { useSession } from "@/lib/session";
 import { NAV_ITEMS, type Role } from "@/lib/nav-items";
+import { askConfirm, askText } from "@/lib/ask-dialog";
 
 const ROLE_LABELS: Record<Role, string> = { owner: "Owner", manager: "Manager", staff: "Staff" };
 const ROLE_ORDER: Role[] = ["owner", "manager", "staff"];
@@ -74,13 +76,131 @@ const DATA_ACCESS: { module: string; why: string }[] = [
   { module: "Help documentation", why: "Answers how-to questions from real Noxtill docs" },
 ];
 
+function formatElapsedAge(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
 export function AiSettingsView({ currency }: { currency: string }) {
   const session = useSession();
   const isOwner = session.user.role === "owner";
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [runAgentFilter, setRunAgentFilter] = useState("all");
+  const [configAgentFilter, setConfigAgentFilter] = useState("");
+  const [errorCodeFilter, setErrorCodeFilter] = useState("all");
+  const [actionTypeFilter, setActionTypeFilter] = useState("all");
+  const [runStatusFilter, setRunStatusFilter] = useState<"all" | SpecialistAgentRunStatus>("all");
+  const [runHistoryCursor, setRunHistoryCursor] = useState<string | null>(null);
+  const [runHistoryCursorHistory, setRunHistoryCursorHistory] = useState<string[]>([]);
+  const [selectedRunEvidenceId, setSelectedRunEvidenceId] = useState<string | null>(null);
+  const [selectedRunToolCallsId, setSelectedRunToolCallsId] = useState<string | null>(null);
+  const [selectedRunEventsId, setSelectedRunEventsId] = useState<string | null>(null);
+  const [loadedOlderRunEvents, setLoadedOlderRunEvents] = useState<Record<string, { items: SpecialistAgentRunEvent[]; nextCursor: string | null; hasMore: boolean }>>({});
+  const runHistoryTableRef = useRef<HTMLDivElement | null>(null);
+  const [latestOrchestration, setLatestOrchestration] = useState<SpecialistOrchestrationRun | null>(null);
+  const orchestrationIdempotencyKey = useRef<string | null>(null);
+  const orchestrationRetryKeys = useRef(new Map<string, string>());
   const { openDisclosure, openLimits } = useAiAssistantDrawer();
   const queryClient = useQueryClient();
 
   const { data: settings, isPending, isError, error, refetch } = useQuery({ queryKey: ["ai-settings"], queryFn: fetchAiSettings, enabled: isOwner });
+  const { data: specialistOperations, isPending: operationsPending, isError: operationsError, refetch: refetchOperations } = useQuery({
+    queryKey: ["specialist-agent-operations"],
+    queryFn: fetchSpecialistAgentOperations,
+    enabled: isOwner,
+  });
+  const { data: specialistActionAudit, isPending: actionAuditPending, isError: actionAuditError, refetch: refetchActionAudit } = useQuery({
+    queryKey: ["specialist-agent-action-audit"],
+    queryFn: fetchSpecialistActionAudit,
+    enabled: isOwner,
+  });
+  const selectedConfigAgentKey = configAgentFilter || specialistOperations?.agents[0]?.agentKey || "";
+  const { data: specialistConfigHistory, isPending: configHistoryPending, isError: configHistoryError, refetch: refetchConfigHistory } = useQuery({
+    queryKey: ["specialist-agent-config-history", selectedConfigAgentKey],
+    queryFn: () => fetchSpecialistAgentConfigurationHistory(selectedConfigAgentKey),
+    enabled: isOwner && selectedConfigAgentKey.length > 0,
+  });
+  const { data: orchestrationHistory, isPending: orchestrationsPending, refetch: refetchOrchestrations } = useQuery({
+    queryKey: ["specialist-agent-orchestrations"],
+    queryFn: fetchSpecialistOrchestrations,
+    enabled: isOwner,
+    refetchInterval: (query) => {
+      const runs = query.state.data?.runs ?? [];
+      const runningInHistory = runs.some((run) => run.status === "running" || run.status === "cancel_requested");
+      const latestRunInHistory = runs.find((run) => run.id === latestOrchestration?.id);
+      const latestActive = latestOrchestration?.status === "running" || latestOrchestration?.status === "cancel_requested";
+      return runningInHistory || (latestActive && !latestRunInHistory) ? 2_000 : false;
+    },
+  });
+  const latestSavedOrchestration = latestOrchestration
+    ? orchestrationHistory?.runs.find((run) => run.id === latestOrchestration.id) ?? latestOrchestration
+    : null;
+  const orchestrationRunning = (orchestrationHistory?.runs.some((run) => run.status === "running" || run.status === "cancel_requested") ?? false)
+    || latestSavedOrchestration?.status === "running"
+    || latestSavedOrchestration?.status === "cancel_requested";
+  const { data: specialistRunHistory, isPending: specialistRunsPending, isError: specialistRunsError, refetch: refetchSpecialistRuns } = useQuery({
+    queryKey: ["specialist-agent-runs", runAgentFilter, runStatusFilter, runHistoryCursor],
+    queryFn: () => fetchSpecialistAgentRuns({
+      ...(runAgentFilter !== "all" ? { agentKey: runAgentFilter } : {}),
+      ...(runStatusFilter !== "all" ? { status: runStatusFilter } : {}),
+      ...(runHistoryCursor ? { cursor: runHistoryCursor } : {}),
+    }),
+    enabled: isOwner,
+    refetchInterval: (query) => {
+      const hasActiveRun = query.state.data?.items.some((run) => run.status === "queued" || run.status === "running" || run.status === "cancel_requested");
+      return hasActiveRun || orchestrationRunning ? 2_000 : false;
+    },
+  });
+  const { data: selectedRunEvidence, isPending: selectedRunEvidencePending, isError: selectedRunEvidenceError, refetch: refetchSelectedRunEvidence } = useQuery({
+    queryKey: ["specialist-agent-run-evidence", selectedRunEvidenceId],
+    queryFn: () => fetchSpecialistAgentRunEvidence(selectedRunEvidenceId!),
+    enabled: isOwner && selectedRunEvidenceId !== null,
+  });
+  const { data: selectedRunToolCalls, isPending: selectedRunToolCallsPending, isError: selectedRunToolCallsError, refetch: refetchSelectedRunToolCalls } = useQuery({
+    queryKey: ["specialist-agent-run-tool-calls", selectedRunToolCallsId],
+    queryFn: () => fetchSpecialistAgentRunToolCalls(selectedRunToolCallsId!),
+    enabled: isOwner && selectedRunToolCallsId !== null,
+  });
+  const { data: selectedRunEvents, isPending: selectedRunEventsPending, isError: selectedRunEventsError, refetch: refetchSelectedRunEvents } = useQuery({
+    queryKey: ["specialist-agent-run-events", selectedRunEventsId],
+    queryFn: () => fetchSpecialistAgentRunEvents(selectedRunEventsId!),
+    enabled: isOwner && selectedRunEventsId !== null,
+  });
+  useEffect(() => {
+    if (!selectedRunEventsId) return;
+    const frame = window.requestAnimationFrame(() => {
+      runHistoryTableRef.current?.scrollTo({ left: 0 });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedRunEventsId]);
+  const operationErrorCodes = [...new Set(
+    specialistOperations?.agents.flatMap((agent) => agent.failuresByCode.map((failure) => failure.code)) ?? [],
+  )].sort();
+  const visibleOperationAgents = (specialistOperations?.agents ?? []).filter((agent) => {
+    if (agentFilter !== "all" && agent.agentKey !== agentFilter) return false;
+    if (errorCodeFilter === "all") return true;
+    if (errorCodeFilter === "unclassified") return agent.unclassifiedFailures > 0;
+    return agent.failuresByCode.some((failure) => failure.code === errorCodeFilter);
+  });
+  const operationActionAgents = (specialistOperations?.agents ?? []).filter(
+    (agent) => agentFilter === "all" || agent.agentKey === agentFilter,
+  );
+  const visibleOperationalAlerts = (specialistOperations?.alerts ?? []).filter(
+    (alert) => alert.agentKey === "security" || agentFilter === "all" || alert.agentKey === agentFilter,
+  );
+  const operationActionTypes = [...new Set(
+    operationActionAgents.flatMap((agent) => agent.actionTypes.map((action) => action.actionType)),
+  )].sort();
+  const visibleOperationActions = operationActionAgents.flatMap((agent) =>
+    agent.actionTypes
+      .filter((action) => actionTypeFilter === "all" || action.actionType === actionTypeFilter)
+      .map((action) => ({ ...action, agentKey: agent.agentKey, agentName: agent.name })),
+  ).sort((left, right) => right.count - left.count || left.actionType.localeCompare(right.actionType));
 
   const toggleMutation = useMutation({
     mutationFn: (key: keyof AiFeatureToggles) => updateAiSettings({ featureToggles: { [key]: !settings?.featureToggles[key] } }),
@@ -89,6 +209,70 @@ export function AiSettingsView({ currency }: { currency: string }) {
       toast.success("AI Settings updated.");
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Couldn't update this — please try again."),
+  });
+  const orchestrationMutation = useMutation({
+    mutationFn: () => {
+      orchestrationIdempotencyKey.current ??= crypto.randomUUID();
+      return runSpecialistOrchestration(orchestrationIdempotencyKey.current);
+    },
+    onSuccess: (run) => {
+      orchestrationIdempotencyKey.current = null;
+      setLatestOrchestration(run);
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-orchestrations"] });
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-operations"] });
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-runs"] });
+      toast.success("Cross-agent review queued. Progress will update here.");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Cross-agent review could not be started."),
+  });
+  const orchestrationRetryMutation = useMutation({
+    mutationFn: ({ runId, idempotencyKey }: { runId: string; idempotencyKey: string }) => retryFailedSpecialistOrchestration(runId, idempotencyKey),
+    onSuccess: (run, variables) => {
+      orchestrationRetryKeys.current.delete(variables.runId);
+      setLatestOrchestration(run);
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-orchestrations"] });
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-operations"] });
+      toast.success("Failed specialist reviews queued for retry.");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Failed specialist reviews could not be retried."),
+  });
+  const orchestrationCancelMutation = useMutation({
+    mutationFn: (runId: string) => cancelSpecialistOrchestration(runId),
+    onSuccess: (run) => {
+      setLatestOrchestration(run);
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-orchestrations"] });
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-operations"] });
+      toast.success("Stop requested. The current read-only review may finish; no later review will start.");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "The cross-agent review could not be stopped."),
+  });
+  const specialistActionDecisionMutation = useMutation({
+    mutationFn: ({ actionId, operation, reason, expectedVersion }: { actionId: string; operation: "approve" | "reject" | "execute" | "cancel" | "source-rfq"; reason?: string; expectedVersion?: number }) =>
+      decideSpecialistAgentAction(actionId, operation, { ...(reason ? { reason } : {}), ...(expectedVersion !== undefined ? { expectedVersion } : {}) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-action-audit"] });
+      queryClient.invalidateQueries({ queryKey: ["specialist-agent-operations"] });
+      toast.success("The canonical action was updated.");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "The canonical action could not be updated."),
+  });
+  const olderRunEventsMutation = useMutation({
+    mutationFn: ({ runId, cursor }: { runId: string; cursor: string }) =>
+      fetchSpecialistAgentRunEvents(runId, cursor),
+    onSuccess: (page, variables) => {
+      setLoadedOlderRunEvents((current) => {
+        const previous = current[variables.runId];
+        return {
+          ...current,
+          [variables.runId]: {
+            items: [...page.items, ...(previous?.items ?? [])],
+            nextCursor: page.nextCursor,
+            hasMore: page.hasMore,
+          },
+        };
+      });
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Earlier lifecycle events could not be loaded."),
   });
 
   if (!isOwner) {
@@ -164,6 +348,784 @@ export function AiSettingsView({ currency }: { currency: string }) {
           </div>
         )}
       </div>
+
+      <section aria-labelledby="specialist-operations-heading" style={{ background: "#fff", border: `1px solid ${AI.border}`, borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ padding: "14px 17px", borderBottom: "1px solid #F0F2F5", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <h3 id="specialist-operations-heading" style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Specialist agent operations</h3>
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#98A2B3" }}>This business · last {specialistOperations?.windowDays ?? 30} days · refreshed from saved runs</p>
+          </div>
+          <label style={{ display: "grid", gap: 4, fontSize: 10.5, color: "#667085" }}>
+            Agent
+            <select aria-label="Filter specialist operations by agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} style={{ border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: "7px 9px", color: "#344054" }}>
+              <option value="all">All agents</option>
+              {specialistOperations?.agents.map((agent) => <option key={agent.agentKey} value={agent.agentKey}>{agent.name}</option>)}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 10.5, color: "#667085" }}>
+            Error code
+            <select aria-label="Filter specialist operations by error code" value={errorCodeFilter} onChange={(event) => setErrorCodeFilter(event.target.value)} style={{ border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: "7px 9px", color: "#344054" }}>
+              <option value="all">All failures</option>
+              <option value="unclassified">Unclassified</option>
+              {operationErrorCodes.map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={() => void refetchOperations()} style={outlineBtnStyle}>Refresh operations</button>
+        </div>
+        {operationsPending ? <div style={{ padding: 17 }}><KpiSkeleton count={2} /></div> : operationsError || !specialistOperations ? (
+          <div role="alert" style={{ padding: 17, color: "#B42318", fontSize: 12 }}>
+            Specialist operations could not be loaded.
+            <button type="button" onClick={() => void refetchOperations()} style={{ ...outlineBtnStyle, marginLeft: 10 }}>Retry</button>
+          </div>
+        ) : (
+          <>
+            <div
+              role="region"
+              aria-label="Specialist operational alerts"
+              style={{ margin: "13px 17px 0", padding: 12, border: `1px solid ${AI.border}`, borderRadius: 10, background: "#FAFBFC" }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 750, color: "#101828" }}>
+                Current operational alerts · {visibleOperationalAlerts.length}
+              </div>
+              {visibleOperationalAlerts.length ? (
+                <ul style={{ margin: "9px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 7 }}>
+                  {visibleOperationalAlerts.map((alert, index) => {
+                    const critical = alert.severity === "critical";
+                    const color = critical ? "#B42318" : "#B54708";
+                    const background = critical ? "#FEF3F2" : "#FFFAEB";
+                    const observed = alert.unit === "USD"
+                      ? formatCurrency(alert.observedValue, "USD")
+                      : alert.observedValue.toLocaleString("en-US");
+                    const limit = alert.thresholdValue === null
+                      ? ""
+                      : ` · ${observed} / ${alert.unit === "USD" ? formatCurrency(alert.thresholdValue, "USD") : alert.thresholdValue.toLocaleString("en-US")}`;
+                    return (
+                      <li
+                        key={`${alert.agentKey}-${alert.code}-${index}`}
+                        style={{ padding: "8px 10px", borderRadius: 8, background, color: "#344054", fontSize: 11.5 }}
+                      >
+                        <strong style={{ color }}>{critical ? "Critical" : "Warning"} · {alert.agentName}</strong>
+                        <span> · {alert.message}{limit}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div role="status" style={{ marginTop: 6, fontSize: 11.5, color: "#667085" }}>
+                  No alert condition is present in the saved data for this view.
+                </div>
+              )}
+              <div style={{ marginTop: 7, fontSize: 10.5, color: "#98A2B3" }}>
+                Based on recorded failures, verification events, open material actions, sampled evidence freshness, monthly AI limits and the limited security-denial counters shown below. Budget bands are 70% and 90%; estimated spend is not a provider invoice. Cost-spike detection, provider health checks and live alert delivery are not available here.
+              </div>
+            </div>
+            <div style={{ padding: "13px 17px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
+              {[
+                { label: "Saved runs", value: visibleOperationAgents.reduce((sum, agent) => sum + agent.totalRuns, 0) },
+                { label: "Recommendations", value: visibleOperationAgents.reduce((sum, agent) => sum + agent.totalRecommendations, 0) },
+                { label: "Material actions", value: visibleOperationAgents.reduce((sum, agent) => sum + Object.values(agent.actionStateCounts).reduce((count, value) => count + value, 0), 0) },
+                { label: "Logged tool labels", value: visibleOperationAgents.reduce((sum, agent) => sum + Object.values(agent.recordedToolCounts).reduce((count, value) => count + value, 0), 0) },
+                { label: "Persisted registered tool calls", value: visibleOperationAgents.reduce((sum, agent) => sum + agent.persistedToolCalls.total, 0) },
+                { label: "Failed runs", value: visibleOperationAgents.reduce((sum, agent) => sum + (agent.statusCounts.failed ?? 0), 0) },
+                { label: "Currently running", value: visibleOperationAgents.reduce((sum, agent) => sum + (agent.activeRuns?.count ?? 0), 0) },
+                { label: "Linked AI attempts", value: visibleOperationAgents.reduce((sum, agent) => sum + agent.aiUsage.calls, 0) },
+                { label: "App-estimated AI cost", value: formatCurrency(visibleOperationAgents.reduce((sum, agent) => sum + agent.aiUsage.estimatedCostUsd, 0), currency) },
+                { label: "Audited cross-tenant run probes · business-wide", value: specialistOperations.securityEvents.auditedCrossTenantRunProbeDenials },
+                { label: "Audited Commerce tool blocks · business-wide", value: specialistOperations.securityEvents.auditedCommerceToolCallBlocks },
+                { label: "Persisted registered tool refusals · 30 days", value: specialistOperations.securityEvents.persistedToolCallRefusals },
+                { label: "Audited Commerce approval refusals · business-wide", value: specialistOperations.securityEvents.auditedCommerceApprovalRefusals },
+                { label: "Audited Customer Agent message queue refusals · business-wide", value: specialistOperations.securityEvents.auditedCustomerMessageQueueRefusals },
+              ].map((metric) => (
+                <div key={metric.label} style={{ background: "#FAFBFC", border: `1px solid ${AI.border}`, borderRadius: 10, padding: 11 }}>
+                  <div style={{ fontSize: 10.5, color: "#667085" }}>{metric.label}</div>
+                  <div style={{ marginTop: 4, fontSize: 18, fontWeight: 800, color: "#101828" }}>{metric.value}</div>
+                </div>
+              ))}
+            </div>
+            <div
+              role="region"
+              aria-label="Recent specialist security denials"
+              style={{ margin: "0 17px 13px", padding: 12, border: `1px solid ${AI.border}`, borderRadius: 10, background: "#FAFBFC", color: "#475467", fontSize: 11.5 }}
+            >
+              <strong style={{ color: "#101828" }}>
+                Recent security denials · last {specialistOperations.windowDays} days · {specialistOperations.securityDenials.length}
+              </strong>
+              {specialistOperations.securityDenials.length ? (
+                <ul style={{ margin: "8px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+                  {specialistOperations.securityDenials.map((event) => (
+                    <li key={`${event.source}-${event.id}`} style={{ padding: "7px 9px", border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff" }}>
+                      <strong style={{ color: "#344054" }}>{event.event}</strong>
+                      <span> · {event.source === "audit_log" ? "Audit log" : "Registered tool call"} · {new Date(event.occurredAt).toLocaleString()}</span>
+                      <div style={{ marginTop: 3, color: "#667085" }}>
+                        {event.agentKey && event.toolKey ? `${event.agentKey} · ${event.toolKey} · ` : ""}
+                        {event.targetType} {event.targetId}
+                        {event.actorUserId ? ` · actor ${event.actorUserId}` : ""}
+                        {event.errorCode ? ` · ${event.errorCode}` : ""}
+                        {event.correlationId ? ` · ${event.correlationId}` : ""}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div role="status" style={{ marginTop: 5, color: "#667085" }}>
+                  No matching denied-access or blocked-tool events were recorded in this window.
+                </div>
+              )}
+              <div style={{ marginTop: 7, color: "#98A2B3", fontSize: 10.5 }}>
+                Event payloads are excluded. This view includes only the event types listed in the security counters and blocked/refused registered tool-call records; it is not a complete security-event feed.
+              </div>
+            </div>
+            <div
+              role="region"
+              aria-label="Recent specialist budget-limit events"
+              style={{ margin: "0 17px 13px", padding: 12, border: `1px solid ${AI.border}`, borderRadius: 10, background: "#FAFBFC", color: "#475467", fontSize: 11.5 }}
+            >
+              <strong style={{ color: "#101828" }}>
+                Agent budget limits reached · last {specialistOperations.windowDays} days · {specialistOperations.budgetLimitEvents.length}
+              </strong>
+              {specialistOperations.budgetLimitEvents.length ? (
+                <ul style={{ margin: "8px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+                  {specialistOperations.budgetLimitEvents.map((event) => (
+                    <li key={event.id} style={{ padding: "7px 9px", border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff" }}>
+                      <strong style={{ color: "#344054" }}>{event.agentKey}</strong>
+                      <span> · {event.limitCode} · {new Date(event.occurredAt).toLocaleString()}</span>
+                      <div style={{ marginTop: 3, color: "#667085" }}>
+                        Review run {event.targetId}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div role="status" style={{ marginTop: 5, color: "#667085" }}>
+                  No specialist budget limit was reached in this window.
+                </div>
+              )}
+              <div style={{ marginTop: 7, color: "#98A2B3", fontSize: 10.5 }}>
+                One redacted event is kept per agent and limit code per UTC month. Prompt and provider response content are excluded.
+              </div>
+            </div>
+            <div
+              role="region"
+              aria-label="Cross-agent worker pickup"
+              style={{ margin: "0 17px 13px", padding: 12, border: `1px solid ${AI.border}`, borderRadius: 10, background: "#FAFBFC", color: "#475467", fontSize: 11.5 }}
+            >
+              <strong style={{ color: "#101828" }}>Cross-agent worker pickup · shared orchestration</strong>
+              {specialistOperations.orchestrationQueueWait ? (
+                <>
+                  <div style={{ marginTop: 4 }}>
+                    {specialistOperations.orchestrationQueueWait.sampleCount
+                      ? `Saved review to first worker pickup: ${specialistOperations.orchestrationQueueWait.p50Ms} ms p50 / ${specialistOperations.orchestrationQueueWait.p95Ms} ms p95 (${specialistOperations.orchestrationQueueWait.sampleCount}${specialistOperations.orchestrationQueueWait.sampleCount === specialistOperations.orchestrationQueueWait.sampleLimit ? "+ sample" : " sample"})`
+                      : "No first worker pickup measured in this window"}
+                  </div>
+                  <div style={{ marginTop: 3, color: "#667085" }}>
+                    {specialistOperations.orchestrationQueueWait.waitingCount} saved review(s) awaiting first pickup
+                    {specialistOperations.orchestrationQueueWait.waitingCount > 0
+                      ? ` · oldest ${specialistOperations.orchestrationQueueWait.oldestWaitingAgeMs === null ? "age unavailable" : formatElapsedAge(specialistOperations.orchestrationQueueWait.oldestWaitingAgeMs)}`
+                      : " · none currently waiting"}
+                  </div>
+                </>
+              ) : (
+                <div role="status" style={{ marginTop: 4 }}>
+                  Queue pickup metrics are unavailable in the current API response.
+                </div>
+              )}
+              <div style={{ marginTop: 3, color: "#667085" }}>
+                Measures from saved parent-run creation to first persisted worker pickup. This is not a worker-health or queue-depth monitor.
+              </div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1780 }}>
+                <thead><tr style={{ background: "#FAFBFC" }}>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: "9px 17px" }}>Agent / module</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Saved run statuses</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Recommendations by status</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>AI tool/context labels & registered calls</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Saved evidence freshness & source timestamps</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Material actions · approvals · verification</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Triggers · manual / scheduled / event</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Finished-run latency · p50 / p95</th>
+                  <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Successful AI provider latency · p50 / p95</th>
+                <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Current month · AI budget</th>
+                <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Failed AI provider calls</th>
+                  <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: "9px 17px" }}>AI usage · provider attempts / tokens / estimated cost</th>
+                </tr></thead>
+                <tbody>{visibleOperationAgents.map((agent) => (
+                  <tr key={agent.agentKey} style={{ borderTop: "1px solid #F2F4F7" }}>
+                    <td style={{ padding: "11px 17px", fontSize: 11.5, color: "#344054" }}>
+                      <strong style={{ display: "block", color: "#101828" }}>{agent.name}</strong>
+                      <span style={{ color: "#98A2B3" }}>Module {agent.moduleId} · {agent.totalRuns} saved runs · {agent.uniqueOperators} user-initiated operators in this 30-day window</span>
+                      {agent.failuresByCode.length || agent.unclassifiedFailures ? (
+                        <div style={{ marginTop: 4, color: "#B42318" }}>
+                          Failures: {[...agent.failuresByCode.map((failure) => `${failure.code} (${failure.count})`), ...(agent.unclassifiedFailures ? [`Unclassified (${agent.unclassifiedFailures})`] : [])].join(" · ")}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467" }}>
+                      {Object.entries(agent.statusCounts)
+                        .filter(([, count]) => count > 0)
+                        .sort(([left], [right]) => {
+                          const preferred = ["completed", "failed", "running"];
+                          const leftIndex = preferred.indexOf(left);
+                          const rightIndex = preferred.indexOf(right);
+                          if (leftIndex !== -1 || rightIndex !== -1) {
+                            return (leftIndex === -1 ? preferred.length : leftIndex) -
+                              (rightIndex === -1 ? preferred.length : rightIndex);
+                          }
+                          return left.localeCompare(right);
+                        })
+                        .map(([status, count]) => `${status.replaceAll("_", " ")} ${count}`)
+                        .join(" · ") || "No saved runs"}
+                      <div style={{ marginTop: 4, color: "#667085" }}>
+                        {agent.activeRuns?.count
+                          ? `${agent.activeRuns.count} currently running · oldest ${agent.activeRuns.oldestAgeMs === null ? "age unavailable" : formatElapsedAge(agent.activeRuns.oldestAgeMs)}`
+                          : "No current running run"}
+                      </div>
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467" }}>
+                      {Object.entries(agent.recommendationStatusCounts ?? {})
+                        .filter(([, count]) => count > 0)
+                        .sort(([left], [right]) => left.localeCompare(right))
+                        .map(([status, count]) => `${status.replaceAll("_", " ")} ${count}`)
+                        .join(" · ") || "No recommendations"}
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467", minWidth: 190 }}>
+                      {Object.entries(agent.recordedToolCounts)
+                        .filter(([, count]) => count > 0)
+                        .sort(([left], [right]) => left.localeCompare(right))
+                        .map(([tool, count]) => `${tool} ${count}`)
+                        .join(" · ") || "No tool/context metadata logged"}
+                      <div style={{ marginTop: 4, color: "#667085" }}>
+                        Persisted registered calls: {agent.persistedToolCalls.total}
+                        {Object.entries(agent.persistedToolCalls.statusCounts).length
+                          ? ` · ${Object.entries(agent.persistedToolCalls.statusCounts).sort(([left], [right]) => left.localeCompare(right)).map(([status, count]) => `${status} ${count}`).join(" · ")}`
+                          : " · no call records"}
+                      </div>
+                      <div style={{ marginTop: 4, color: "#667085" }}>
+                        {agent.registeredToolExecutionByKey.length
+                          ? `Registered tool elapsed · ${agent.registeredToolExecutionByKey.map((tool) => `${tool.toolKey}: ${tool.p50Ms ?? "not available"} ms p50 / ${tool.p95Ms ?? "not available"} ms p95 (${tool.sampleCount}${tool.sampleCount === tool.sampleLimit ? "+" : ""})`).join(" · ")}`
+                          : "No timed registered calls measured"}
+                      </div>
+                      {agent.agentKey === "autonomous_commerce" ? (
+                        <div style={{ marginTop: 4, color: "#667085" }}>
+                          {agent.toolExecutionByKey.length
+                            ? `Commerce registry elapsed · ${agent.toolExecutionByKey
+                                .map(
+                                  (tool) =>
+                                    `${tool.toolKey}: ${tool.p50Ms ?? "not available"} ms p50 / ${tool.p95Ms ?? "not available"} ms p95 (${tool.sampleCount}${tool.sampleCount === tool.sampleLimit ? "+" : ""})`,
+                                )
+                                .join(" · ")}`
+                            : "No completed or failed Commerce registry calls measured"}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467", minWidth: 220 }}>
+                      {agent.evidence.sampledRecords ? (
+                        <>
+                          <div>{agent.evidence.sampledRecords} saved evidence record(s) in the business sample (limit {agent.evidence.sampleLimit})</div>
+                          <div style={{ marginTop: 3, color: "#667085" }}>
+                            Recorded freshness: {Object.entries(agent.evidence.freshnessCounts).sort(([left], [right]) => left.localeCompare(right)).map(([state, count]) => `${state} ${count}`).join(" · ")}
+                          </div>
+                          <div style={{ marginTop: 3, color: "#667085" }}>
+                            Sources: {Object.entries(agent.evidence.sourceTypeCounts).sort(([left], [right]) => left.localeCompare(right)).map(([source, count]) => `${source} ${count}`).join(" · ")}
+                          </div>
+                          <div style={{ marginTop: 3, color: "#667085" }}>
+                            Latest fetch: {agent.evidence.latestFetchedAt ? new Date(agent.evidence.latestFetchedAt).toLocaleString() : "not recorded"}
+                            {agent.evidence.latestFetchObservedAt ? ` · source observed ${new Date(agent.evidence.latestFetchObservedAt).toLocaleString()}` : ""}
+                          </div>
+                        </>
+                      ) : "No specialist evidence saved in this 30-day window"}
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467", minWidth: 230 }}>
+                      <div>{Object.entries(agent.actionStateCounts)
+                        .filter(([, count]) => count > 0)
+                        .sort(([left], [right]) => left.localeCompare(right))
+                        .map(([state, count]) => `${state.replaceAll("_", " ")} ${count}`)
+                        .join(" · ") || "No material actions"}</div>
+                      <div style={{ marginTop: 3, color: "#667085" }}>
+                        Proposal revisions: {agent.proposalRevisionCount} · Approval events: {agent.approvalDecisions.approved} approved / {agent.approvalDecisions.rejected} rejected · rejection share {agent.approvalDecisions.rejectedSharePercent === null ? "not available" : `${agent.approvalDecisions.rejectedSharePercent}%`} of {agent.approvalDecisions.decisionEvents} decision events · Verification: {agent.verificationOutcomes.verified} verified / {agent.verificationOutcomes.failed} failed · failure share {agent.verificationOutcomes.failedSharePercent === null ? "not available" : `${agent.verificationOutcomes.failedSharePercent}%`} of {agent.verificationOutcomes.verificationEvents} verification events · {agent.actionExecutionAttempts} execution attempts
+                      </div>
+                      <div style={{ marginTop: 3, color: "#667085" }}>
+                        Action execution time: {agent.actionExecutionLatency.sampleCount
+                          ? `${agent.actionExecutionLatency.p50Ms} ms p50 / ${agent.actionExecutionLatency.p95Ms} ms p95 (${agent.actionExecutionLatency.sampleCount}${agent.actionExecutionLatency.sampleCount === agent.actionExecutionLatency.sampleLimit ? "+ sample" : " sample"})`
+                          : "No complete action execution measured"}
+                      </div>
+                      <div style={{ marginTop: 3, color: "#667085" }}>
+                        Open actions awaiting attention · business-wide: {agent.openActionAttention.count}
+                        {agent.openActionAttention.count > 0
+                          ? ` · oldest last updated ${agent.openActionAttention.oldestUpdatedAgeMs === null ? "age unavailable" : formatElapsedAge(agent.openActionAttention.oldestUpdatedAgeMs)}`
+                          : " · none currently open"}
+                      </div>
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467" }}>
+                      {agent.triggerCounts.manual ?? 0} / {agent.triggerCounts.scheduled ?? 0} / {agent.triggerCounts.event ?? 0}
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467" }}>
+                      {agent.finishedRunLatency.sampleCount
+                        ? `${agent.finishedRunLatency.p50Ms} ms / ${agent.finishedRunLatency.p95Ms} ms (${agent.finishedRunLatency.sampleCount}${agent.finishedRunLatency.sampleCount === agent.finishedRunLatency.sampleLimit ? "+ sample" : " sample"})`
+                        : "No finished run measured"}
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467" }}>
+                      <div>
+                        Successful: {agent.providerLatency.sampleCount
+                          ? `${agent.providerLatency.p50Ms} ms p50 / ${agent.providerLatency.p95Ms} ms p95 (${agent.providerLatency.sampleCount}${agent.providerLatency.sampleCount === agent.providerLatency.sampleLimit ? "+" : ""})`
+                          : "no measured call"}
+                      </div>
+                      <div style={{ marginTop: 3, color: "#667085" }}>
+                        Failed: {agent.providerFailureLatency.sampleCount
+                          ? `${agent.providerFailureLatency.p50Ms} ms p50 / ${agent.providerFailureLatency.p95Ms} ms p95 (${agent.providerFailureLatency.sampleCount}${agent.providerFailureLatency.sampleCount === agent.providerFailureLatency.sampleLimit ? "+" : ""})`
+                          : "no measured call"}
+                      </div>
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: "#475467", minWidth: 170 }}>
+                      {agent.monthlyBudget ? (
+                        <>
+                          <div>{agent.monthlyBudget.requestsUsed} / {agent.monthlyBudget.requestLimit ?? "no limit"} requests</div>
+                          <div style={{ marginTop: 3 }}>{formatCurrency(agent.monthlyBudget.estimatedSpendUsd, "USD")} / {agent.monthlyBudget.spendLimitUsd === null ? "no spend limit" : formatCurrency(agent.monthlyBudget.spendLimitUsd, "USD")}</div>
+                          {agent.monthlyBudget.reservedSpendUsd > 0 ? <div style={{ marginTop: 3, color: "#667085" }}>{formatCurrency(agent.monthlyBudget.reservedSpendUsd, "USD")} reserved for pending or failed attempts</div> : null}
+                        </>
+                      ) : "Budget usage unavailable"}
+                    </td>
+                    <td style={{ padding: 9, fontSize: 11, color: agent.providerFailureCalls ? "#B42318" : "#475467" }}>
+                      {agent.providerFailureCalls}
+                      {agent.providerFailureCalls > 0 ? (
+                        <div style={{ marginTop: 3, color: "#667085" }}>
+                          {agent.providerFailureCodes.length
+                            ? agent.providerFailureCodes.map((failure) => `${failure.code} ${failure.count}`).join(" · ")
+                            : "No safe failure code recorded"}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{ padding: "11px 17px", textAlign: "right", fontSize: 11, color: "#475467" }}>
+                      {agent.aiUsage.calls} attempts · {(agent.aiUsage.inputTokens + agent.aiUsage.outputTokens).toLocaleString()} tokens · {formatCurrency(agent.aiUsage.estimatedCostUsd, currency)}
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+              {!visibleOperationAgents.length ? <div role="status" style={{ padding: 14, color: "#667085", fontSize: 11.5 }}>No saved runs match these module and error-code filters.</div> : null}
+            </div>
+            <div style={{ padding: "11px 17px", borderTop: "1px solid #F0F2F5", display: "grid", gap: 4 }}>
+              {specialistOperations.disclosures.map((disclosure) => <div key={disclosure} style={{ fontSize: 10.5, color: "#667085", lineHeight: 1.5 }}>{disclosure}</div>)}
+            </div>
+            <div style={{ padding: "14px 17px", borderTop: "1px solid #F0F2F5" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 9 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: "#101828" }}>Material action types</h4>
+                  <p style={{ margin: "4px 0 0", fontSize: 10.5, color: "#667085" }}>Actions created and execution transitions in this 30-day window. Execution time uses persisted start-to-terminal events; it is not provider-tool latency or business impact. Run and provider metrics above remain unfiltered by action type.</p>
+                </div>
+                <label style={{ display: "grid", gap: 4, fontSize: 10.5, color: "#667085" }}>
+                  Action type
+                  <select aria-label="Filter specialist operations by action type" value={actionTypeFilter} onChange={(event) => setActionTypeFilter(event.target.value)} style={{ border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: "7px 9px", color: "#344054" }}>
+                    <option value="all">All action types</option>
+                    {operationActionTypes.map((actionType) => <option key={actionType} value={actionType}>{actionType.replaceAll("_", " ")}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+                  <thead><tr style={{ background: "#FAFBFC" }}>
+                    <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: "8px 10px" }}>Agent</th>
+                    <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 8 }}>Action type</th>
+                    <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: 8 }}>Actions</th>
+                    <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 8 }}>Persisted states</th>
+                    <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: "8px 10px" }}>Execution attempts</th>
+                    <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: "8px 10px" }}>Execution time · p50 / p95</th>
+                  </tr></thead>
+                  <tbody>{visibleOperationActions.map((action) => (
+                    <tr key={`${action.agentKey}:${action.actionType}`} style={{ borderTop: "1px solid #F2F4F7" }}>
+                      <td style={{ padding: "9px 10px", fontSize: 11, color: "#344054" }}>{action.agentName}</td>
+                      <td style={{ padding: 8, fontSize: 11, color: "#344054" }}>{action.actionType.replaceAll("_", " ")}</td>
+                      <td style={{ padding: 8, textAlign: "right", fontSize: 11, fontWeight: 700, color: "#101828" }}>{action.count}</td>
+                      <td style={{ padding: 8, fontSize: 11, color: "#475467" }}>{Object.entries(action.stateCounts).sort(([left], [right]) => left.localeCompare(right)).map(([state, count]) => `${state.replaceAll("_", " ")} ${count}`).join(" · ")}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", fontSize: 11, color: "#475467" }}>{action.executionAttempts}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", fontSize: 11, color: "#475467" }}>{action.executionLatency.sampleCount ? `${action.executionLatency.p50Ms} ms / ${action.executionLatency.p95Ms} ms (${action.executionLatency.sampleCount}${action.executionLatency.sampleCount === action.executionLatency.sampleLimit ? "+ sample" : " sample"})` : "No complete execution measured"}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+                {!visibleOperationActions.length ? <div role="status" style={{ padding: 12, color: "#667085", fontSize: 11.5 }}>No material actions match this module and action type.</div> : null}
+              </div>
+            </div>
+            <section aria-labelledby="specialist-action-audit-heading" style={{ borderTop: "1px solid #F0F2F5" }}>
+              <div style={{ padding: "14px 17px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <h4 id="specialist-action-audit-heading" style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: "#101828" }}>Material action audit trail</h4>
+                  <p style={{ margin: "4px 0 0", fontSize: 10.5, color: "#667085" }}>Saved approval, execution and verification transitions for this business.</p>
+                </div>
+                <button type="button" onClick={() => void refetchActionAudit()} style={outlineBtnStyle}>Refresh audit</button>
+                <button type="button" disabled={!specialistActionAudit || actionAuditPending} onClick={() => specialistActionAudit && downloadSpecialistActionAuditCsv(specialistActionAudit)} style={{ ...outlineBtnStyle, opacity: !specialistActionAudit || actionAuditPending ? .6 : 1 }}>Download audit CSV</button>
+              </div>
+              {actionAuditPending ? <div style={{ padding: "0 17px 14px", color: "#667085", fontSize: 11.5 }}>Loading saved action history…</div> : actionAuditError || !specialistActionAudit ? (
+                <div role="alert" style={{ padding: "0 17px 14px", color: "#B42318", fontSize: 11.5 }}>The action audit trail could not be loaded. <button type="button" onClick={() => void refetchActionAudit()} style={outlineBtnStyle}>Retry</button></div>
+              ) : (
+                <>
+                  <div style={{ padding: "0 17px 10px", color: "#667085", fontSize: 10.5, lineHeight: 1.5 }}>{specialistActionAudit.disclosure}</div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1120 }}>
+                      <thead><tr style={{ background: "#FAFBFC" }}>
+                        <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: "8px 17px" }}>Created</th>
+                        <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 8 }}>Agent / action</th>
+                        <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 8 }}>Canonical target</th>
+                        <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 8 }}>State / risk</th>
+                        <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 8 }}>Approval / execution</th>
+                        <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: "8px 17px" }}>Timeline</th>
+                      </tr></thead>
+                      <tbody>{specialistActionAudit.actions.map((action) => {
+                        const actionAgent = specialistOperations?.agents.find((agent) => agent.agentKey === action.agentKey);
+                        return (
+                          <Fragment key={action.id}>
+                            <tr style={{ borderTop: "1px solid #F2F4F7" }}>
+                              <td style={{ padding: "10px 17px", fontSize: 10.5, color: "#475467", whiteSpace: "nowrap" }}>{new Date(action.createdAt).toLocaleString()}</td>
+                              <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}><strong>{actionAgent?.name ?? action.agentKey}</strong><div>{action.actionType.replaceAll("_", " ")}</div><div style={{ color: "#667085" }}>Proposal version: {action.expectedVersion ?? "not recorded"}</div><div style={{ color: "#98A2B3" }}>Action {action.id}</div></td>
+                              <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}>{action.canonicalResourceType}<div style={{ color: "#667085" }}>{action.canonicalResourceId}</div>{action.canonicalOperationId ? <div style={{ color: "#667085" }}>Operation {action.canonicalOperationId}</div> : null}</td>
+                              <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}>{action.state}<div style={{ color: "#667085" }}>Risk: {action.riskTier}</div>{action.errorCode ? <div style={{ color: "#B42318" }}>{action.errorCode}</div> : null}</td>
+                              <td style={{ padding: 8, fontSize: 10.5, color: "#475467" }}>
+                                Required: {action.requiredApproval ? action.requiredApproverRole ?? "yes" : "no"}<div>Approved: {action.approvedByUserId ?? "not recorded"}</div><div>Executed: {action.executedByUserId ?? "not recorded"}</div><div>Attempts: {action.executionAttemptCount}</div>
+                                {action.actionType === "inventory_reorder_request" && action.state === "approval_required" ? (
+                                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={() => specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "approve", expectedVersion: action.expectedVersion ?? undefined })} style={outlineBtnStyle}>Approve</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Reject inventory reorder", description: "This records the reason in the canonical Procurement review.", placeholder: "Reason for rejection", minLength: 1, confirmLabel: "Reject", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "reject", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Reject</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel inventory reorder", description: "The submitted Procurement request will be withdrawn and the reason audited.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel request", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel</button>
+                                  </div>
+                                ) : action.actionType === "inventory_reorder_request" && action.state === "approved" ? (
+                                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const confirmed = await askConfirm({ title: "Create purchase order", description: "This delegates to Procurement using the approved proposal version. The request must have a supplier and valid stock items.", confirmLabel: "Create purchase order" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create purchase order</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const confirmed = await askConfirm({ title: "Create shared sourcing RFQ", description: "This creates a draft in the existing Commerce RFQ system and verifies its link to this approved Procurement request. It does not contact suppliers or create a purchase order.", confirmLabel: "Create draft RFQ" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "source-rfq", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create shared RFQ</button>
+                                  </div>
+                                ) : action.actionType === "customer_follow_up_task" && action.state === "approval_required" ? (
+                                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={() => specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "approve", expectedVersion: action.expectedVersion ?? undefined })} style={outlineBtnStyle}>Approve internal task</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Reject follow-up task", description: "Record why this internal CRM task should not be created.", placeholder: "Reason for rejection", minLength: 1, confirmLabel: "Reject", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "reject", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Reject</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel follow-up proposal", description: "Record why this pending internal task proposal is being cancelled.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel proposal", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel</button>
+                                  </div>
+                                ) : action.actionType === "customer_follow_up_task" && action.state === "approved" ? (
+                                  <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const confirmed = await askConfirm({ title: "Create the CRM follow-up task?", description: "This creates one internal task through Customers. It does not draft or send a customer message.", confirmLabel: "Create internal task" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={{ ...outlineBtnStyle, marginTop: 7 }}>Create internal task</button>
+                                ) : null}
+                              </td>
+                              <td style={{ padding: "10px 17px", fontSize: 10.5, color: "#475467" }}><details><summary style={{ cursor: "pointer" }}>View {action.events.length} saved event(s)</summary><div style={{ marginTop: 7, maxWidth: 440 }}><div>{action.reason}</div><div style={{ color: "#667085", marginTop: 4 }}>Correlation {action.correlationId}</div><ol style={{ paddingLeft: 20, margin: "8px 0" }}>{action.events.map((event) => <li key={`${action.id}:${event.sequence}`} style={{ paddingBottom: 6 }}><strong>{event.fromState ?? "created"} → {event.toState ?? event.eventType}</strong><div>{event.eventType} · {new Date(event.createdAt).toLocaleString()}</div>{event.actorUserId ? <div>Actor {event.actorUserId}</div> : null}{event.reason ? <div>{event.reason}</div> : null}</li>)}</ol></div></details></td>
+                            </tr>
+                          </Fragment>
+                        );
+                      })}</tbody>
+                    </table>
+                    {!specialistActionAudit.actions.length ? <div role="status" style={{ padding: 12, color: "#667085", fontSize: 11.5 }}>No saved material actions in the last 30 days.</div> : null}
+                  </div>
+                </>
+              )}
+            </section>
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="specialist-config-history-heading" style={{ background: "#fff", border: `1px solid ${AI.border}`, borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ padding: "14px 17px", borderBottom: "1px solid #F0F2F5", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <h3 id="specialist-config-history-heading" style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Agent configuration history</h3>
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#667085" }}>Immutable snapshots of saved agent policies · provider credentials are excluded</p>
+          </div>
+          <label style={{ display: "grid", gap: 4, fontSize: 10.5, color: "#667085" }}>
+            Agent
+            <select aria-label="Select specialist agent configuration history" value={selectedConfigAgentKey} onChange={(event) => setConfigAgentFilter(event.target.value)} style={{ border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: "7px 9px", color: "#344054" }}>
+              {(specialistOperations?.agents ?? []).map((agent) => <option key={agent.agentKey} value={agent.agentKey}>{agent.name}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={() => void refetchConfigHistory()} disabled={!selectedConfigAgentKey} style={outlineBtnStyle}>Refresh history</button>
+        </div>
+        {configHistoryPending ? <div role="status" style={{ padding: 16, color: "#667085", fontSize: 11.5 }}>Loading saved configuration versions…</div> : configHistoryError || !specialistConfigHistory ? (
+          <div role="alert" style={{ padding: 16, color: "#B42318", fontSize: 11.5 }}>Agent configuration history could not be loaded. <button type="button" onClick={() => void refetchConfigHistory()} style={outlineBtnStyle}>Retry</button></div>
+        ) : specialistConfigHistory.items.length ? (
+          <div style={{ display: "grid", gap: 0 }}>
+            {specialistConfigHistory.items.map((version) => (
+              <details key={version.id} style={{ padding: "10px 17px", borderTop: "1px solid #F2F4F7" }}>
+                <summary style={{ cursor: "pointer", fontSize: 11.5, color: "#344054", fontWeight: 700 }}>
+                  Version {version.version} · {new Date(version.createdAt).toLocaleString()} · {version.configHash.slice(0, 12)}…
+                </summary>
+                <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", background: "#FAFBFC", border: `1px solid ${AI.border}`, borderRadius: 8, padding: 10, margin: "9px 0 0", fontSize: 10.5, color: "#475467" }}>{JSON.stringify(version.configuration, null, 2)}</pre>
+              </details>
+            ))}
+            {specialistConfigHistory.hasMore ? <div style={{ padding: "0 17px 12px", fontSize: 10.5, color: "#667085" }}>Showing the latest {specialistConfigHistory.limit} versions.</div> : null}
+          </div>
+        ) : (
+          <div role="status" style={{ padding: 16, color: "#667085", fontSize: 11.5 }}>No configuration snapshot exists yet. A snapshot is saved when an agent policy changes or before that agent runs.</div>
+        )}
+      </section>
+
+      <section aria-labelledby="specialist-run-history-heading" style={{ background: "#fff", border: `1px solid ${AI.border}`, borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ padding: "14px 17px", borderBottom: "1px solid #F0F2F5", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <h3 id="specialist-run-history-heading" style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Recent specialist runs</h3>
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#667085" }}>Saved run state only · private inputs and model output are not shown here</p>
+          </div>
+          <label style={{ display: "grid", gap: 4, fontSize: 10.5, color: "#667085" }}>
+            Agent
+            <select aria-label="Filter specialist runs by agent" value={runAgentFilter} onChange={(event) => { setRunAgentFilter(event.target.value); setRunHistoryCursor(null); setRunHistoryCursorHistory([]); }} style={{ border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: "7px 9px", color: "#344054" }}>
+              <option value="all">All agents</option>
+              {(specialistOperations?.agents ?? []).map((agent) => <option key={agent.agentKey} value={agent.agentKey}>{agent.name}</option>)}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 10.5, color: "#667085" }}>
+            Run status
+            <select aria-label="Filter specialist runs by status" value={runStatusFilter} onChange={(event) => { setRunStatusFilter(event.target.value as "all" | SpecialistAgentRunStatus); setRunHistoryCursor(null); setRunHistoryCursorHistory([]); }} style={{ border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: "7px 9px", color: "#344054" }}>
+              <option value="all">All statuses</option>
+              <option value="queued">Queued</option>
+              <option value="running">Running</option>
+              <option value="completed">Completed</option>
+              <option value="partial">Partial</option>
+              <option value="failed">Failed</option>
+              <option value="cancel_requested">Cancel requested</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => void refetchSpecialistRuns()} style={outlineBtnStyle}>Refresh runs</button>
+        </div>
+        {specialistRunsPending ? <div role="status" style={{ padding: 16, color: "#667085", fontSize: 11.5 }}>Loading saved specialist runs…</div> : specialistRunsError || !specialistRunHistory ? (
+          <div role="alert" style={{ padding: 16, color: "#B42318", fontSize: 11.5 }}>Saved specialist runs could not be loaded. <button type="button" onClick={() => void refetchSpecialistRuns()} style={outlineBtnStyle}>Retry</button></div>
+        ) : specialistRunHistory.items.length ? (
+          <div ref={runHistoryTableRef} style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 980 }}>
+              <thead><tr style={{ background: "#FAFBFC" }}>
+                <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: "9px 17px" }}>Started</th>
+                <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Agent / module</th>
+                <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Trigger / version</th>
+                <th style={{ textAlign: "left", fontSize: 10.5, color: "#98A2B3", padding: 9 }}>Status</th>
+                <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: "9px 17px" }}>Recommendations · evidence · actions</th>
+                <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: "9px 17px" }}>Tool calls</th>
+                <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: "9px 17px" }}>Source references</th>
+                <th style={{ textAlign: "right", fontSize: 10.5, color: "#98A2B3", padding: "9px 17px" }}>Lifecycle events</th>
+              </tr></thead>
+              <tbody>{specialistRunHistory.items.map((run) => {
+                const agent = specialistOperations?.agents.find((item) => item.agentKey === run.agentKey);
+                return (
+                  <Fragment key={run.id}>
+                    <tr style={{ borderTop: "1px solid #F2F4F7" }}>
+                      <td style={{ padding: "10px 17px", fontSize: 10.5, color: "#475467", whiteSpace: "nowrap" }}>{new Date(run.startedAt).toLocaleString()}</td>
+                      <td style={{ padding: 9, fontSize: 11, color: "#344054" }}><strong>{agent?.name ?? run.agentKey}</strong><div style={{ color: "#98A2B3" }}>Module {run.moduleId}</div></td>
+                      <td style={{ padding: 9, fontSize: 10.5, color: "#475467" }}>{run.triggerType.replaceAll("_", " ")}<div style={{ color: "#667085" }}>Code {run.agentVersion}</div><div style={{ color: "#667085" }}>Config {run.agentConfigVersion === null ? "not pinned" : `v${run.agentConfigVersion}`}</div></td>
+                      <td style={{ padding: 9, fontSize: 10.5, color: run.status === "failed" ? "#B42318" : "#344054" }}>{run.status.replaceAll("_", " ")}{run.errorCode ? <div style={{ color: "#B42318" }}>{run.errorCode}</div> : null}{run.detailsExpired ? <div style={{ color: "#667085" }}>Transient details expired by retention policy</div> : null}</td>
+                      <td style={{ padding: "10px 17px", textAlign: "right", fontSize: 10.5, color: "#475467" }}>{run.relatedCounts.recommendations} · {run.relatedCounts.evidence} · {run.relatedCounts.actions}</td>
+                      <td style={{ padding: "8px 17px", textAlign: "right" }}>
+                        <button
+                          type="button"
+                          aria-expanded={selectedRunToolCallsId === run.id}
+                          aria-controls={`specialist-run-tool-calls-${run.id}`}
+                          onClick={() => setSelectedRunToolCallsId((current) => current === run.id ? null : run.id)}
+                          style={outlineBtnStyle}
+                        >
+                          {selectedRunToolCallsId === run.id ? "Hide calls" : `View ${run.relatedCounts.toolCalls} calls`}
+                        </button>
+                      </td>
+                      <td style={{ padding: "8px 17px", textAlign: "right" }}>
+                        <button
+                          type="button"
+                          aria-expanded={selectedRunEvidenceId === run.id}
+                          aria-controls={`specialist-run-evidence-${run.id}`}
+                          onClick={() => setSelectedRunEvidenceId((current) => current === run.id ? null : run.id)}
+                          style={outlineBtnStyle}
+                        >
+                          {selectedRunEvidenceId === run.id ? "Hide sources" : "View sources"}
+                        </button>
+                      </td>
+                      <td style={{ padding: "8px 17px", textAlign: "right" }}>
+                        <button
+                          type="button"
+                          aria-expanded={selectedRunEventsId === run.id}
+                          aria-controls={`specialist-run-events-${run.id}`}
+                          onClick={() => setSelectedRunEventsId((current) => current === run.id ? null : run.id)}
+                          style={outlineBtnStyle}
+                        >
+                          {selectedRunEventsId === run.id ? "Hide events" : "View events"}
+                        </button>
+                      </td>
+                    </tr>
+                    {selectedRunToolCallsId === run.id ? (
+                      <tr id={`specialist-run-tool-calls-${run.id}`}>
+                        <td colSpan={8} style={{ padding: "10px 17px 14px", background: "#FAFBFC", borderTop: "1px solid #F2F4F7" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                            <strong style={{ fontSize: 10.5, color: "#344054" }}>Registered tool calls · input values and output contents are not stored here</strong>
+                            {selectedRunToolCallsError ? <button type="button" onClick={() => void refetchSelectedRunToolCalls()} style={outlineBtnStyle}>Retry</button> : null}
+                          </div>
+                          {selectedRunToolCallsPending ? <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>Loading tool-call records…</div> : selectedRunToolCallsError || !selectedRunToolCalls ? (
+                            <div role="alert" style={{ fontSize: 10.5, color: "#B42318" }}>Tool-call records could not be loaded.</div>
+                          ) : selectedRunToolCalls.items.length ? (
+                            <div style={{ display: "grid", gap: 7 }}>
+                              {selectedRunToolCalls.items.map((call) => (
+                                <div key={call.id} style={{ display: "grid", gridTemplateColumns: "minmax(120px, .8fr) minmax(150px, 1fr) minmax(170px, 1.2fr) minmax(120px, .8fr)", gap: 8, border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: 9, fontSize: 10.5, color: "#475467" }}>
+                                  <div><strong>{call.toolKey}</strong><div>v{call.toolVersion} · round {call.round}.{call.sequence}</div></div>
+                                  <div><strong>{call.status}</strong><div>{call.durationMs === null ? "Duration not recorded" : `${call.durationMs} ms`}</div>{call.errorCode ? <div style={{ color: "#B42318" }}>{call.errorCode}</div> : null}</div>
+                                  <div>Input fields: {Array.isArray(call.inputFields) ? call.inputFields.map(String).join(", ") || "none" : "not recorded"}<div>Input fingerprint: {call.inputSha256.slice(0, 12)}</div></div>
+                                  <div>{call.outputResourceType ? <><div>{call.outputResourceType}</div><div style={{ color: "#98A2B3" }}>Record {call.outputResourceId}</div></> : "No output reference"}</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>No registered tool calls were saved for this run.</div>}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {selectedRunEvidenceId === run.id ? (
+                      <tr id={`specialist-run-evidence-${run.id}`}>
+                        <td colSpan={8} style={{ padding: "10px 17px 14px", background: "#FAFBFC", borderTop: "1px solid #F2F4F7" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                            <strong style={{ fontSize: 10.5, color: "#344054" }}>Saved source references · values and model output are redacted</strong>
+                            {selectedRunEvidenceError ? <button type="button" onClick={() => void refetchSelectedRunEvidence()} style={outlineBtnStyle}>Retry</button> : null}
+                          </div>
+                          {selectedRunEvidencePending ? <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>Loading evidence references…</div> : selectedRunEvidenceError || !selectedRunEvidence ? (
+                            <div role="alert" style={{ fontSize: 10.5, color: "#B42318" }}>Evidence references could not be loaded.</div>
+                          ) : selectedRunEvidence.items.length ? (
+                            <div style={{ display: "grid", gap: 7 }}>
+                              {selectedRunEvidence.items.map((evidence) => (
+                                <div key={evidence.id} style={{ display: "grid", gridTemplateColumns: "minmax(115px, .7fr) minmax(180px, 1.2fr) minmax(150px, 1fr)", gap: 8, border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: 9, fontSize: 10.5, color: "#475467" }}>
+                                  <div><strong>{evidence.sourceType}</strong><div>{evidence.resourceType}</div><div style={{ color: "#98A2B3" }}>Freshness: {evidence.freshness}</div></div>
+                                  <div><div>Record {evidence.resourceId}</div><div>Fields: {Array.isArray(evidence.fieldRefs) ? evidence.fieldRefs.map(String).join(", ") : "Not listed"}</div></div>
+                                  <div><div>Observed {new Date(evidence.observedAt).toLocaleString()}</div><div>Fetched {new Date(evidence.fetchedAt).toLocaleString()}</div></div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>No source evidence was saved for this run.</div>}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {selectedRunEventsId === run.id ? (
+                      <tr id={`specialist-run-events-${run.id}`}>
+                        <td colSpan={8} style={{ padding: "10px 17px 14px", background: "#FAFBFC", borderTop: "1px solid #F2F4F7" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                            <strong style={{ fontSize: 10.5, color: "#344054" }}>Normalized lifecycle · metadata only</strong>
+                            <span style={{ display: "flex", gap: 7 }}>
+                              {selectedRunEventsError ? <button type="button" onClick={() => void refetchSelectedRunEvents()} style={outlineBtnStyle}>Retry</button> : null}
+                              <button type="button" onClick={() => setSelectedRunEventsId(null)} style={outlineBtnStyle}>Hide events</button>
+                            </span>
+                          </div>
+                          {selectedRunEventsPending ? <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>Loading run events…</div> : selectedRunEventsError || !selectedRunEvents ? (
+                            <div role="alert" style={{ fontSize: 10.5, color: "#B42318" }}>Run lifecycle events could not be loaded.</div>
+                          ) : (
+                            <>
+                              <div style={{ display: "grid", gap: 7 }}>
+                                {[...(loadedOlderRunEvents[run.id]?.items ?? []), ...selectedRunEvents.items].map((event) => (
+                                  <div key={event.eventId} style={{ display: "grid", gridTemplateColumns: "minmax(130px, .8fr) minmax(140px, 1fr) minmax(0, 1.2fr)", gap: 8, border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: 9, fontSize: 10.5, color: "#475467" }}>
+                                    <div style={{ minWidth: 0, overflowWrap: "anywhere" }}><strong>{event.eventName}</strong><div>{new Date(event.occurredAt).toLocaleString()}</div></div>
+                                    <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>Module {event.sourceModule} · schema v{event.schemaVersion}<div>Agent version {event.entityVersion ?? "not recorded"}</div></div>
+                                    <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>Correlation {event.correlationId.slice(0, 12)}<div style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>Payload: {JSON.stringify(event.payload)}</div></div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div role="note" style={{ marginTop: 8, fontSize: 10, color: "#667085" }}>{selectedRunEvents.eventHistoryNote}</div>
+                              {(loadedOlderRunEvents[run.id]?.hasMore ?? selectedRunEvents.hasMore) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const cursor = loadedOlderRunEvents[run.id]?.nextCursor ?? selectedRunEvents.nextCursor;
+                                    if (cursor) olderRunEventsMutation.mutate({ runId: run.id, cursor });
+                                  }}
+                                  disabled={olderRunEventsMutation.isPending}
+                                  style={{ ...outlineBtnStyle, marginTop: 8 }}
+                                >
+                                  {olderRunEventsMutation.isPending ? "Loading earlier events…" : `Load earlier events · ${selectedRunEvents.pageSize} at a time`}
+                                </button>
+                              ) : null}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}</tbody>
+            </table>
+            <div style={{ padding: "0 17px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 10.5, color: "#667085" }}>
+              <span>Page {runHistoryCursorHistory.length + 1} · up to {specialistRunHistory.pageSize} runs · source values and model output remain in the owning module.</span>
+              <span style={{ display: "flex", gap: 7 }}>
+                {runHistoryCursorHistory.length ? (
+                  <button type="button" onClick={() => {
+                    const previous = runHistoryCursorHistory.at(-1) ?? "";
+                    setRunHistoryCursorHistory((history) => history.slice(0, -1));
+                    setRunHistoryCursor(previous || null);
+                  }} style={outlineBtnStyle}>Newer runs</button>
+                ) : null}
+                {specialistRunHistory.nextCursor ? (
+                  <button type="button" onClick={() => {
+                    setRunHistoryCursorHistory((history) => [...history, runHistoryCursor ?? ""]);
+                    setRunHistoryCursor(specialistRunHistory.nextCursor);
+                    setSelectedRunEvidenceId(null);
+                    setSelectedRunToolCallsId(null);
+                    setSelectedRunEventsId(null);
+                  }} style={outlineBtnStyle}>Older runs</button>
+                ) : null}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div role="status" style={{ padding: 16, color: "#667085", fontSize: 11.5 }}>No saved specialist runs match these filters.</div>
+        )}
+      </section>
+
+      <section aria-labelledby="specialist-orchestration-heading" style={{ background: "#fff", border: `1px solid ${AI.border}`, borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ padding: "14px 17px", borderBottom: "1px solid #F0F2F5", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 230 }}>
+            <h3 id="specialist-orchestration-heading" style={{ margin: 0, fontSize: 14.5, fontWeight: 800, color: "#101828" }}>Cross-agent review</h3>
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#667085", lineHeight: 1.5 }}>Run each enabled specialist once, in sequence, using its existing read-only review. Only the business owner can start this because the combined scope includes customer and finance summaries.</p>
+          </div>
+          <button type="button" onClick={() => orchestrationMutation.mutate()} disabled={orchestrationMutation.isPending || orchestrationRunning} style={{ ...primaryBtnStyle, opacity: orchestrationMutation.isPending || orchestrationRunning ? .65 : 1 }}>
+            {orchestrationMutation.isPending ? "Queueing review…" : orchestrationRunning ? "Review in progress…" : "Run enabled agents"}
+          </button>
+        </div>
+        <div style={{ padding: "11px 17px", background: "#F7FCF9", borderBottom: "1px solid #F0F2F5", fontSize: 11, color: "#475467", lineHeight: 1.55 }}>
+          This is a bounded review fan-out, not an autonomous plan: child runs inherit the current business, write no source records, send no messages and make no AI-provider calls. Disabled agents—and Commerce when autonomy is disabled—are recorded as skipped.
+        </div>
+        <div style={{ padding: "12px 17px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <strong style={{ fontSize: 11.5, color: "#344054" }}>Recent cross-agent runs</strong>
+          <button type="button" onClick={() => void refetchOrchestrations()} style={outlineBtnStyle}>Refresh history</button>
+        </div>
+        {orchestrationsPending ? <div style={{ padding: "0 17px 14px", color: "#98A2B3", fontSize: 11 }}>Loading saved orchestration runs…</div> : null}
+        {(latestSavedOrchestration ? [latestSavedOrchestration, ...(orchestrationHistory?.runs ?? []).filter((run) => run.id !== latestSavedOrchestration.id)] : orchestrationHistory?.runs ?? []).slice(0, 5).map((run) => (
+          <div key={run.id} style={{ borderTop: "1px solid #F2F4F7", padding: "12px 17px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: "#101828" }}>{run.result?.summary ?? `Run ${run.status.replaceAll("_", " ")}`}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10.5, color: "#667085" }}>{new Date(run.createdAt).toLocaleString()} · run {run.id.slice(0, 8)} · trace {run.result?.correlationId.slice(0, 8) ?? run.id.slice(0, 8)}</span>
+                {run.status !== "running" && (run.result?.failedCount ?? 0) > 0 ? (
+                  <button
+                    type="button"
+                    disabled={orchestrationRetryMutation.isPending}
+                    onClick={() => {
+                      const idempotencyKey = orchestrationRetryKeys.current.get(run.id) ?? crypto.randomUUID();
+                      orchestrationRetryKeys.current.set(run.id, idempotencyKey);
+                      orchestrationRetryMutation.mutate({ runId: run.id, idempotencyKey });
+                    }}
+                    style={{ ...outlineBtnStyle, opacity: orchestrationRetryMutation.isPending ? .65 : 1 }}
+                  >
+                    {orchestrationRetryMutation.isPending ? "Retrying…" : `Retry failed (${run.result?.failedCount})`}
+                  </button>
+                ) : null}
+              </span>
+            </div>
+            {run.status === "cancel_requested" ? (
+              <div role="status" style={{ marginBottom: 6, fontSize: 10.5, color: "#B54708" }}>
+                Stop requested · the current read-only review may finish; no later review will start.
+              </div>
+            ) : run.status === "running" && run.result?.observedAt ? (
+              <div role="status" style={{ marginBottom: 6, fontSize: 10.5, color: "#667085" }}>
+                Running · last progress {new Date(run.result.observedAt).toLocaleString()} · read-only review
+              </div>
+            ) : null}
+            {run.status === "running" ? (
+              <button
+                type="button"
+                onClick={() => orchestrationCancelMutation.mutate(run.id)}
+                disabled={orchestrationCancelMutation.isPending}
+                style={{ ...outlineBtnStyle, marginBottom: 8, opacity: orchestrationCancelMutation.isPending ? .65 : 1 }}
+              >
+                {orchestrationCancelMutation.isPending ? "Requesting stop…" : "Stop after current review"}
+              </button>
+            ) : null}
+            {run.result?.children.map((child) => (
+              <div key={child.agentKey} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "5px 0", fontSize: 11 }}>
+                <span style={{ minWidth: 165, fontWeight: 700, color: "#344054" }}>{child.name}</span>
+                <span style={{ textTransform: "capitalize", color: child.status === "failed" ? "#B42318" : child.status === "completed" ? "#0E8442" : child.status === "partially_succeeded" ? "#B54708" : "#667085" }}>{child.status.replaceAll("_", " ")}</span>
+                {child.reasonCode ? <span style={{ color: "#667085" }}>({child.reasonCode.replaceAll("_", " ").toLowerCase()})</span> : null}
+                {child.runId ? <span style={{ color: "#98A2B3" }}>run {child.runId.slice(0, 8)}</span> : null}
+              </div>
+            ))}
+          </div>
+        ))}
+        {!orchestrationsPending && !latestSavedOrchestration && !orchestrationHistory?.runs.length ? <div role="status" style={{ padding: "0 17px 14px", color: "#667085", fontSize: 11 }}>No cross-agent review has been run for this business.</div> : null}
+      </section>
 
       <div style={{ background: "#fff", border: `1px solid ${AI.border}`, borderRadius: 16, overflow: "hidden" }}>
         <div style={{ padding: "14px 17px", borderBottom: "1px solid #F0F2F5" }}>

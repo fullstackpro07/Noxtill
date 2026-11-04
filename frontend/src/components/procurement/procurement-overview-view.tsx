@@ -306,8 +306,8 @@ export function ProcurementOverviewView() {
 
           <aside className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-muted)] p-4 text-xs leading-5 text-[var(--app-text-muted)]">
             Procurement reads recorded requests, procurement-linked Commerce RFQs, suppliers,
-            products and purchase orders. Budgets and vendor invoices are not recorded here, so
-            budget tracking and 3-way invoice matching are not available. Generic Commerce RFQs
+            products and purchase orders. Finance expense budgets are not linked to purchase-order
+            commitments, and canonical vendor invoices are not available for 3-way matching. Generic Commerce RFQs
             remain in Autonomous Commerce. This overview does not create or alter supplier,
             purchase-order, inventory or payment records.
           </aside>

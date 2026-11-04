@@ -3,6 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceNumberFeesService } from './voice-number-fees.service';
 
+// These integration cases make several real MySQL writes and can exceed Jest's
+// five-second unit-test default on the shared local database.
+jest.setTimeout(30000);
+
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 

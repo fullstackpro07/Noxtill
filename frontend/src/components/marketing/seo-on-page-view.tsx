@@ -322,8 +322,7 @@ export function SeoOnPageView() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="m-0 max-w-3xl text-xs" style={{ color: "var(--app-text-muted)" }}>
           Pages come from your latest website audit{data?.crawl?.finishedAt ? ` (${data.crawl.siteUrl}, ${formatDate(data.crawl.finishedAt)})` : ""}. Noxtill doesn&rsquo;t host or publish your website, so
-          approved changes are applied by you on your site; a revision is marked <strong>verified</strong> only when a later audit sees the new values live. Organic clicks and impressions are{" "}
-          <strong>not tracked</strong> (no Search Console connection).
+          approved changes are applied by you on your site; a revision is marked <strong>verified</strong> only when a later audit sees the new values live. This page does not show page-level clicks or impressions; property-level Search Console metrics are in Settings and Reports.
         </p>
         <button type="button" disabled={verify.isPending} onClick={() => verify.mutate()} className="rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50" style={{ borderColor: "var(--app-border)" }}>
           {verify.isPending ? "Checking…" : "Check applied changes"}

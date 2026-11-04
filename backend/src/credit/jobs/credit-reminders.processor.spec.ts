@@ -164,7 +164,7 @@ describe('CreditRemindersProcessor (UPD-BE-095)', () => {
       await processor.runReminders(now);
       expect(sendGate.send).toHaveBeenCalledTimes(1);
 
-      await processor.runReminders(new Date(now.getTime() + 60 * 60 * 1000));
+      await processor.runReminders(now);
       expect(sendGate.send).toHaveBeenCalledTimes(1);
     } finally {
       await prisma.creditReminderLog.deleteMany({

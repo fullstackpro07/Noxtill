@@ -378,7 +378,7 @@ export function CommerceExperimentsView() {
   return (
     <main className="flex flex-col gap-5 p-5 md:p-7" style={{ color: "var(--app-text)" }}>
       <p className="m-0 rounded-xl border px-4 py-3 text-xs" style={{ borderColor: "var(--app-border)", background: "var(--app-surface-2)", color: "var(--app-text-muted)" }}>
-        Noxtill has no storefront traffic and can&rsquo;t split visitors between versions, so this is <strong>not a randomized A/B test</strong> and
+        This module does not receive storefront analytics or split visitors between versions, so this is <strong>not a randomized A/B test</strong> and
         conversion rate is <strong>not tracked</strong>. Each experiment compares one product&rsquo;s real orders and returns during the test with an
         equal-length period right before it. Seasonality and promotions aren&rsquo;t controlled for, so treat results as directional. A read appears only
         after {summary ? `${summary.rules.minDays} days and ${summary.rules.minUnitsPerWindow} units sold in each period` : "a minimum run and sample"};
@@ -390,7 +390,7 @@ export function CommerceExperimentsView() {
         <Kpi label="Awaiting decision" value={loading ? "…" : summary?.awaitingDecision ?? "—"} hint="Stopped, results frozen" tone={summary?.awaitingDecision ? "warning" : undefined} />
         <Kpi label="Adopted" value={loading ? "…" : summary?.adopted ?? "—"} hint="Change kept" />
         <Kpi label="Reverted / inconclusive" value={loading ? "…" : summary ? summary.reverted + summary.inconclusive : "—"} hint="Change dropped or unclear" />
-        <Kpi label="Conversion rate" value="Not tracked" hint="No storefront traffic data" />
+        <Kpi label="Conversion rate" value="Not tracked" hint="No variant-level storefront sessions" />
       </section>
 
       {listQuery.isLoading ? (

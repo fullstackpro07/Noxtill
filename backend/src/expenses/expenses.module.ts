@@ -5,9 +5,13 @@ import { ExpensesController } from './expenses.controller';
 import { RecurringExpensesScheduler } from './recurring-expenses.scheduler';
 import { RecurringExpensesProcessor } from './recurring-expenses.processor';
 import { RECURRING_EXPENSES_QUEUE } from './recurring-expenses.constants';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: RECURRING_EXPENSES_QUEUE })],
+  imports: [
+    BullModule.registerQueue({ name: RECURRING_EXPENSES_QUEUE }),
+    SpecialistAgentEventQueueModule,
+  ],
   controllers: [ExpensesController],
   providers: [
     ExpensesService,

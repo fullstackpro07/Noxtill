@@ -117,8 +117,12 @@ describe('AdStatsSyncProcessor (fatigue-warning depth fix, real stats history)',
       'camp_2',
     );
 
-    await processor.run();
+    const result = await processor.syncBusinessProvider(
+      businessId,
+      IntegrationProvider.tiktok_ads,
+    );
 
+    expect(result.total).toBe(1);
     expect(fetchCampaignStats).not.toHaveBeenCalled();
     const snapshots = await prisma.adCampaignStatsSnapshot.findMany({
       where: { campaignId: campaign.id },
@@ -129,8 +133,12 @@ describe('AdStatsSyncProcessor (fatigue-warning depth fix, real stats history)',
   it('skips a campaign whose integration is not connected', async () => {
     const campaign = await makeCampaign(IntegrationProvider.meta_ads, 'camp_3');
 
-    await processor.run();
+    const result = await processor.syncBusinessProvider(
+      businessId,
+      IntegrationProvider.meta_ads,
+    );
 
+    expect(result.total).toBe(1);
     expect(fetchCampaignStats).not.toHaveBeenCalled();
     const snapshots = await prisma.adCampaignStatsSnapshot.findMany({
       where: { campaignId: campaign.id },
@@ -148,8 +156,12 @@ describe('AdStatsSyncProcessor (fatigue-warning depth fix, real stats history)',
     });
     await makeCampaign(IntegrationProvider.meta_ads, null, 'draft');
 
-    await processor.run();
+    const result = await processor.syncBusinessProvider(
+      businessId,
+      IntegrationProvider.meta_ads,
+    );
 
+    expect(result.total).toBe(0);
     expect(fetchCampaignStats).not.toHaveBeenCalled();
   });
 

@@ -8,6 +8,9 @@ import { useModuleHeader } from "@/components/layout/module-header-context";
 import { toast } from "@/lib/toast";
 
 const SUBTITLE_BY_PATH: { prefix: string; subtitle: string }[] = [
+  { prefix: "/profit/reconciliation", subtitle: "Review bank statement lines against posted manual journals." },
+  { prefix: "/profit/journals", subtitle: "Prepare balanced entries and review the posted journal ledger." },
+  { prefix: "/profit/period-close", subtitle: "Review real source records before closing a month." },
   { prefix: "/profit/product-profitability", subtitle: "Which items make money and which lose it." },
   { prefix: "/profit/time-analysis", subtitle: "When the money actually comes in." },
   { prefix: "/expenses", subtitle: "What goes out, so net profit is real." },

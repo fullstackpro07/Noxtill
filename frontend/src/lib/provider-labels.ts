@@ -3,6 +3,8 @@ const OVERRIDES: Record<string, string> = {
   gmb: "Google My Business",
   merchant: "Google Merchant Center",
   google_ads: "Google Ads",
+  google_search_console: "Google Search Console",
+  google_analytics: "Google Analytics 4",
   meta_ads: "Meta Ads",
   tiktok_ads: "TikTok Ads",
   tiktok: "TikTok",

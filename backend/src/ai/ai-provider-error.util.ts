@@ -6,6 +6,15 @@ export interface AiProviderFailure {
   message: string;
 }
 
+export interface AiSummaryProviderFailure {
+  status: 'not_configured' | 'blocked' | 'unavailable';
+  text: null;
+  message: string;
+  inputTokens: 0;
+  outputTokens: 0;
+  errorCode: string;
+}
+
 /** Operator-facing reasons only: never persist a raw provider body or credential. */
 export function describeAiProviderFailure(error: unknown): AiProviderFailure {
   if (error instanceof AppException) {
@@ -62,7 +71,7 @@ export function describeAiProviderFailure(error: unknown): AiProviderFailure {
   }
   if (
     error instanceof Error &&
-    error.message === 'ANTHROPIC_API_KEY is not configured'
+    /^(?:ANTHROPIC_API_KEY|API key) is not configured$/i.test(error.message)
   ) {
     return {
       code: 'AI_PROVIDER_NOT_CONFIGURED',
@@ -73,5 +82,30 @@ export function describeAiProviderFailure(error: unknown): AiProviderFailure {
     code: 'AI_PROVIDER_REQUEST_FAILED',
     message:
       'The AI provider could not complete this request. Check provider configuration, model access, and available credit.',
+  };
+}
+
+/** Safe optional-AI summary fallback; deterministic agent evidence remains available. */
+export function describeAiSummaryProviderFailure(
+  error: unknown,
+  evidenceAvailableMessage: string,
+): AiSummaryProviderFailure {
+  const failure = describeAiProviderFailure(error);
+  const blocked = error instanceof AppException;
+  const notConfigured = failure.code === 'AI_PROVIDER_NOT_CONFIGURED';
+
+  return {
+    status: blocked
+      ? 'blocked'
+      : notConfigured
+        ? 'not_configured'
+        : 'unavailable',
+    text: null,
+    message: blocked
+      ? failure.message
+      : `${failure.message} ${evidenceAvailableMessage}`,
+    inputTokens: 0,
+    outputTokens: 0,
+    errorCode: failure.code,
   };
 }

@@ -1,4 +1,7 @@
 import { apiFetch } from "@/lib/api-client";
+import type { ContentBrief } from "@/lib/seo-content-api";
+import type { SpecialistAgentAiUsageCall } from "@/lib/specialist-agent-usage";
+import { postSpecialistAgentRun } from "@/lib/specialist-agent-run-idempotency";
 
 export type WorkspaceStage = "new" | "draft_ready" | "waiting_approval" | "ready_to_apply" | "verification_required" | "not_matched" | "completed";
 export type WorkspaceKind = "audit_finding" | "page_revision" | "technical_change" | "content";
@@ -18,6 +21,8 @@ export interface WorkspaceItem {
   ownerUserId: string | null;
   updatedAt: string;
   href: string;
+  canPrepareOnPageRevision?: boolean;
+  canPrepareTechnicalReview?: boolean;
 }
 
 export interface WorkspaceQueue {
@@ -35,6 +40,58 @@ export interface WorkspaceDecision {
   createdAt: string;
 }
 
+export interface SeoAgentRun {
+  id: string;
+  agentVersion: string;
+  status: string;
+  createdAt: string;
+  finishedAt: string | null;
+  output: {
+    summary?: string;
+    snapshot?: {
+      queueCounts: WorkspaceQueue["kpis"];
+      newFindingWindowDays: number;
+      completedWindowDays: number;
+      offPageRecords?: {
+        source: "merchant_entered_records";
+        trackedLinks: number;
+        activeLinks: number;
+        lostLinks: number;
+        unverifiedLinks: number;
+        openTrackedOpportunities: number;
+        openOpportunitiesByPipelineStage: Array<{ pipeline: string; stage: string; count: number }>;
+        guestPublications: number;
+        guestPublicationStatuses: Record<string, number>;
+        guestPitches: number;
+        guestPitchStages: Record<string, number>;
+      };
+      currentReview: {
+        kind: WorkspaceKind;
+        stage: WorkspaceStage;
+        risk: string;
+        action: string;
+      } | null;
+    };
+    aiSummary?: { status: string; text: string | null; message: string | null };
+  } | null;
+  recommendations: Array<{ id: string; title: string; summary: string; assumptions: string[]; missingData: string[] }>;
+  aiCallLogs?: SpecialistAgentAiUsageCall[];
+}
+
 export const SEO_WORKSPACE_KEY = ["seo-workspace"] as const;
 export const fetchSeoWorkspace = () => apiFetch<WorkspaceQueue>("/seo-autopilot/workspace");
 export const fetchSeoWorkspaceHistory = () => apiFetch<WorkspaceDecision[]>("/seo-autopilot/workspace/history");
+export const fetchSeoAgentRuns = () => apiFetch<SeoAgentRun[]>("/seo-autopilot/workspace/agent-runs");
+export const runSeoAgentReview = () =>
+  postSpecialistAgentRun('seo', {}, (idempotencyKey) =>
+    apiFetch<SeoAgentRun>("/seo-autopilot/workspace/agent-runs", {
+      method: "POST",
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    }),
+  );
+export const generateSeoOpportunityBrief = (keywordId: string) =>
+  apiFetch<ContentBrief>(`/seo-autopilot/workspace/content-opportunities/${encodeURIComponent(keywordId)}/brief`, { method: "POST", body: JSON.stringify({}) });
+export const generateSeoOnPageRevision = (issueId: string) =>
+  apiFetch(`/seo-autopilot/workspace/audit-findings/${encodeURIComponent(issueId)}/on-page-revision`, { method: "POST" });
+export const prepareSeoTechnicalReview = (issueId: string) =>
+  apiFetch(`/seo-autopilot/workspace/audit-findings/${encodeURIComponent(issueId)}/technical-review`, { method: "POST" });

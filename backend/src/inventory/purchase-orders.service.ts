@@ -1,9 +1,22 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { ActivityService } from '../activity/activity.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { LocaleService } from '../common/localization/locale.service';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  INVENTORY_PURCHASE_ORDER_RECEIVED_EVENT_JOB,
+  SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 import { PURCHASE_ORDER_ERROR_CODES } from './purchase-orders.constants';
@@ -23,11 +36,16 @@ const INCLUDE = {
  */
 @Injectable()
 export class PurchaseOrdersService {
+  private readonly logger = new Logger(PurchaseOrdersService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly activity: ActivityService,
     private readonly sendGate: SendGateService,
     private readonly locale: LocaleService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
   ) {}
 
   async create(
@@ -258,7 +276,7 @@ export class PurchaseOrdersService {
       entityId: id,
     });
 
-    return this.tenantPrisma.client.purchaseOrder.update({
+    const received = await this.tenantPrisma.client.purchaseOrder.update({
       where: { id },
       data: {
         status: fullyReceived
@@ -268,6 +286,56 @@ export class PurchaseOrdersService {
       },
       include: INCLUDE,
     });
+    if (fullyReceived && received.receivedAt) {
+      await this.queueFullyReceivedReview(
+        businessId,
+        received.id,
+        received.receivedAt,
+      );
+    }
+    return received;
+  }
+
+  private async queueFullyReceivedReview(
+    businessId: string,
+    purchaseOrderId: string,
+    receivedAt: Date,
+  ): Promise<void> {
+    if (!this.specialistAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      if (
+        !business ||
+        !resolvePolicies(business).bool(
+          'agents.inventoryPurchaseOrderReceivedEventReviewEnabled',
+        )
+      ) {
+        return;
+      }
+
+      await this.specialistAgentEvents.add(
+        INVENTORY_PURCHASE_ORDER_RECEIVED_EVENT_JOB,
+        {
+          businessId,
+          purchaseOrderId,
+          receivedAt: receivedAt.toISOString(),
+        },
+        {
+          jobId: `inventory-po-received-${businessId}-${purchaseOrderId}-${receivedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Inventory review for fully received purchase order ${purchaseOrderId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   async cancel(id: string) {

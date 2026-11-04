@@ -13,8 +13,9 @@ class FakeClsService {
   }
 }
 
-// The processor's unscoped `business.findMany()` scans the whole shared test DB;
-// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+// The processor's scheduled mode scans every business. This integration spec uses
+// its targeted mode so unrelated rows accumulated in the shared test database do
+// not turn a two-business assertion into a whole-database load test.
 jest.setTimeout(20000);
 
 describe('HealthScoreSnapshotProcessor (UPD-BE-001)', () => {
@@ -80,7 +81,7 @@ describe('HealthScoreSnapshotProcessor (UPD-BE-001)', () => {
   });
 
   it('writes one HealthScoreSnapshot row per business, scoped to the right business', async () => {
-    await processor.runSnapshot();
+    await processor.runSnapshot([businessId, otherBusinessId]);
 
     const [snapshotsA, snapshotsB] = await Promise.all([
       prisma.healthScoreSnapshot.findMany({ where: { businessId } }),

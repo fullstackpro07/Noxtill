@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {
   CommerceRfqStatus,
   CommerceRfqSupplierStatus,
@@ -11,6 +13,16 @@ import {
 import { ActivityService } from '../activity/activity.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import {
+  PoliciesService,
+  resolvePolicies,
+} from '../common/policies/policies.service';
+import { assertInventoryAgentRequestCurrent } from '../common/agents/inventory-reorder-handoff.util';
+import { transitionSpecialistAgentActionForResource } from '../common/agents/specialist-agent-action.util';
+import {
+  COMMERCE_RFQ_QUOTE_EVENT_JOB,
+  SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import {
   AwardCommerceRfqDto,
   CloseCommerceRfqDto,
@@ -102,9 +114,15 @@ function serializeRfq<T extends { quotes: Array<Record<string, unknown>> }>(
 
 @Injectable()
 export class CommerceRfqsService {
+  private readonly logger = new Logger(CommerceRfqsService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly activity: ActivityService,
+    @Optional() private readonly policies?: PoliciesService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
   ) {}
 
   async createFromProcurementRequest(
@@ -131,6 +149,10 @@ export class CommerceRfqsService {
       );
     }
 
+    const isInventoryAgentRequest =
+      Boolean(request.sourceAgentRecommendationId) ||
+      request.agentContext !== null;
+
     if (request.status === ProcurementRequestStatus.sourcing) {
       const active = await this.tenantPrisma.client.commerceRfq.findFirst({
         where: {
@@ -154,6 +176,13 @@ export class CommerceRfqsService {
         'PROCUREMENT_REQUEST_SOURCING_UNAVAILABLE',
         'Only an approved purchase request can be sent to sourcing.',
         HttpStatus.CONFLICT,
+      );
+    }
+    if (isInventoryAgentRequest && !this.policies) {
+      throw this.error(
+        'SPECIALIST_ACTION_UNAVAILABLE',
+        'Inventory proposal verification is unavailable. Refresh the request and try again.',
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
     if (
@@ -188,11 +217,18 @@ export class CommerceRfqsService {
     }
 
     const rfq = await this.tenantPrisma.client.$transaction(async (tx) => {
+      if (isInventoryAgentRequest) {
+        // The same source and exact reviewed request payload must still be current at
+        // the moment the canonical RFQ is created. This also rechecks the agent and
+        // purchase-management permissions, module switches and proposal expiry.
+        await assertInventoryAgentRequestCurrent(tx, request, this.policies!);
+      }
       const claimed = await tx.procurementRequest.updateMany({
         where: {
           id: request.id,
           businessId,
           status: ProcurementRequestStatus.approved,
+          version: request.version,
         },
         data: { status: ProcurementRequestStatus.sourcing },
       });
@@ -852,109 +888,112 @@ export class CommerceRfqsService {
       }
     }
 
-    await this.tenantPrisma.client.$transaction(async (tx) => {
-      const quoteData = {
-        currency: dto.currency,
-        validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
-        paymentTerms: cleanOptionalText(dto.paymentTerms),
-        freight: dto.freight,
-        duties: dto.duties,
-        leadTimeDays: dto.leadTimeDays,
-        notes: cleanOptionalText(dto.notes),
-      };
-      if (
-        latestQuote &&
-        (latestQuote.status === CommerceSupplierQuoteStatus.submitted ||
-          latestQuote.status === CommerceSupplierQuoteStatus.shortlisted)
-      ) {
-        const superseded = await tx.commerceSupplierQuote.updateMany({
-          where: {
-            id: latestQuote.id,
-            businessId,
-            version: latestQuote.version,
-            status: latestQuote.status,
-          },
+    const recordedQuote = await this.tenantPrisma.client.$transaction(
+      async (tx) => {
+        const quoteData = {
+          currency: dto.currency,
+          validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
+          paymentTerms: cleanOptionalText(dto.paymentTerms),
+          freight: dto.freight,
+          duties: dto.duties,
+          leadTimeDays: dto.leadTimeDays,
+          notes: cleanOptionalText(dto.notes),
+        };
+        if (
+          latestQuote &&
+          (latestQuote.status === CommerceSupplierQuoteStatus.submitted ||
+            latestQuote.status === CommerceSupplierQuoteStatus.shortlisted)
+        ) {
+          const superseded = await tx.commerceSupplierQuote.updateMany({
+            where: {
+              id: latestQuote.id,
+              businessId,
+              version: latestQuote.version,
+              status: latestQuote.status,
+            },
+            data: {
+              status: CommerceSupplierQuoteStatus.superseded,
+              version: { increment: 1 },
+            },
+          });
+          if (!superseded.count) this.versionConflict();
+        }
+        const quote = await tx.commerceSupplierQuote.create({
           data: {
-            status: CommerceSupplierQuoteStatus.superseded,
-            version: { increment: 1 },
+            businessId,
+            rfqId: id,
+            supplierId: invitation.supplierId,
+            invitationId: invitation.id,
+            revisionNo: (latestQuote?.revisionNo ?? 0) + 1,
+            ...quoteData,
+            createdByUserId: actorUserId,
+            items: {
+              create: dto.items.map((item) => ({
+                rfqItemId: item.rfqItemId,
+                quotedQty: item.quotedQty,
+                minimumQty: item.minimumQty,
+                unitPrice: item.unitPrice,
+              })),
+            },
           },
         });
-        if (!superseded.count) this.versionConflict();
-      }
-      await tx.commerceSupplierQuote.create({
-        data: {
-          businessId,
-          rfqId: id,
-          supplierId: invitation.supplierId,
-          invitationId: invitation.id,
-          revisionNo: (latestQuote?.revisionNo ?? 0) + 1,
-          ...quoteData,
-          createdByUserId: actorUserId,
-          items: {
-            create: dto.items.map((item) => ({
-              rfqItemId: item.rfqItemId,
-              quotedQty: item.quotedQty,
-              minimumQty: item.minimumQty,
-              unitPrice: item.unitPrice,
-            })),
+        await tx.commerceRfqSupplier.update({
+          where: { id: invitation.id },
+          data: {
+            status: CommerceRfqSupplierStatus.responded,
+            respondedAt: new Date(),
           },
-        },
-      });
-      await tx.commerceRfqSupplier.update({
-        where: { id: invitation.id },
-        data: {
-          status: CommerceRfqSupplierStatus.responded,
-          respondedAt: new Date(),
-        },
-      });
-      const changed = await tx.commerceRfq.updateMany({
-        where: {
-          id,
-          businessId,
-          status: CommerceRfqStatus.open,
-          version: rfq.version,
-        },
-        data: { version: { increment: 1 } },
-      });
-      if (!changed.count) this.versionConflict();
-      await tx.commerceRfqAudit.create({
-        data: {
-          businessId,
-          rfqId: id,
-          action: latestQuote
-            ? 'supplier_quote_revised'
-            : 'supplier_quote_recorded',
-          actorUserId,
-          before: latestQuote
-            ? {
-                quoteId: latestQuote.id,
-                revisionNo: latestQuote.revisionNo,
-                status: latestQuote.status,
-                currency: latestQuote.currency,
-                freight: Number(latestQuote.freight),
-                duties: Number(latestQuote.duties),
-                paymentTerms: latestQuote.paymentTerms,
-                items: latestQuote.items.map((item) => ({
-                  rfqItemId: item.rfqItemId,
-                  quotedQty: item.quotedQty,
-                  unitPrice: Number(item.unitPrice),
-                })),
-                landedTotal: quoteLandedTotal(latestQuote),
-              }
-            : undefined,
-          after: {
-            supplierId: invitation.supplierId,
-            revisionNo: (latestQuote?.revisionNo ?? 0) + 1,
-            currency: dto.currency,
-            itemCount: dto.items.length,
-            freight: dto.freight,
-            duties: dto.duties,
-            validUntil: dto.validUntil ?? null,
-            source: 'operator_recorded',
+        });
+        const changed = await tx.commerceRfq.updateMany({
+          where: {
+            id,
+            businessId,
+            status: CommerceRfqStatus.open,
+            version: rfq.version,
           },
-        },
-      });
-    });
+          data: { version: { increment: 1 } },
+        });
+        if (!changed.count) this.versionConflict();
+        await tx.commerceRfqAudit.create({
+          data: {
+            businessId,
+            rfqId: id,
+            action: latestQuote
+              ? 'supplier_quote_revised'
+              : 'supplier_quote_recorded',
+            actorUserId,
+            before: latestQuote
+              ? {
+                  quoteId: latestQuote.id,
+                  revisionNo: latestQuote.revisionNo,
+                  status: latestQuote.status,
+                  currency: latestQuote.currency,
+                  freight: Number(latestQuote.freight),
+                  duties: Number(latestQuote.duties),
+                  paymentTerms: latestQuote.paymentTerms,
+                  items: latestQuote.items.map((item) => ({
+                    rfqItemId: item.rfqItemId,
+                    quotedQty: item.quotedQty,
+                    unitPrice: Number(item.unitPrice),
+                  })),
+                  landedTotal: quoteLandedTotal(latestQuote),
+                }
+              : undefined,
+            after: {
+              supplierId: invitation.supplierId,
+              revisionNo: (latestQuote?.revisionNo ?? 0) + 1,
+              currency: dto.currency,
+              itemCount: dto.items.length,
+              freight: dto.freight,
+              duties: dto.duties,
+              validUntil: dto.validUntil ?? null,
+              source: 'operator_recorded',
+            },
+          },
+        });
+        return quote;
+      },
+    );
     await this.activity.record(businessId, {
       type: 'commerce_rfq_response_received',
       description:
@@ -963,7 +1002,47 @@ export class CommerceRfqsService {
       entityId: id,
       actorUserId,
     });
+    await this.queueQuoteReview(businessId, recordedQuote.id);
     return this.getOne(businessId, id);
+  }
+
+  /** Queue only an explicitly opted-in, current quote review; this never awards an RFQ. */
+  private async queueQuoteReview(
+    businessId: string,
+    quoteId: string,
+  ): Promise<void> {
+    if (!this.specialistAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findFirst({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.commerceEnabled') ||
+        !policies.bool('agents.commerceRfqQuoteEventReviewEnabled') ||
+        (policies.num('commerce.autonomyLevel') ?? 0) <= 0
+      ) {
+        return;
+      }
+
+      await this.specialistAgentEvents.add(
+        COMMERCE_RFQ_QUOTE_EVENT_JOB,
+        { businessId, quoteId },
+        {
+          jobId: `commerce-rfq-quote-${businessId}-${quoteId}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      // A specialist review is optional and must never fail a quote the operator already saved.
+      this.logger.warn(
+        `Could not queue Commerce specialist review for supplier quote ${quoteId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   async updateQuoteStatus(
@@ -1101,6 +1180,50 @@ export class CommerceRfqsService {
     }
 
     await this.tenantPrisma.client.$transaction(async (tx) => {
+      if (rfq.sourceProcurementRequestId) {
+        const sourceRequest = await tx.procurementRequest.findFirst({
+          where: {
+            id: rfq.sourceProcurementRequestId,
+            businessId,
+            status: ProcurementRequestStatus.sourcing,
+          },
+          include: { items: true },
+        });
+        if (
+          sourceRequest &&
+          (sourceRequest.sourceAgentRecommendationId ||
+            sourceRequest.agentContext !== null)
+        ) {
+          if (!this.policies) {
+            throw this.error(
+              'SPECIALIST_ACTION_UNAVAILABLE',
+              'Inventory proposal verification is unavailable. No purchase order was created.',
+              HttpStatus.SERVICE_UNAVAILABLE,
+            );
+          }
+          // A supplier quote may take days to arrive. Recheck the approved
+          // Inventory proposal immediately before an award can create a PO.
+          await assertInventoryAgentRequestCurrent(
+            tx,
+            sourceRequest,
+            this.policies,
+          );
+          if (sourceRequest.sourceAgentRecommendationId) {
+            await transitionSpecialistAgentActionForResource(tx, {
+              businessId,
+              actionType: 'inventory_reorder_request',
+              canonicalResourceType: 'ProcurementRequest',
+              canonicalResourceId: sourceRequest.id,
+              fromState: 'approved',
+              toState: 'execution_queued',
+              actorUserId,
+              reason:
+                'The approved Inventory request is being executed through the shared RFQ award.',
+              required: true,
+            });
+          }
+        }
+      }
       const claimed = await tx.commerceRfq.updateMany({
         where: {
           id,
@@ -1193,7 +1316,11 @@ export class CommerceRfqsService {
             status: ProcurementRequestStatus.sourcing,
             convertedPurchaseOrderId: null,
           },
-          select: { id: true, version: true },
+          select: {
+            id: true,
+            version: true,
+            sourceAgentRecommendationId: true,
+          },
         });
         if (!request) {
           this.invalidState(
@@ -1226,6 +1353,98 @@ export class CommerceRfqsService {
             reason: `Awarded RFQ ${id}; created draft purchase order ${purchaseOrder.id}.`,
           },
         });
+        if (request.sourceAgentRecommendationId) {
+          const actionTarget = {
+            businessId,
+            actionType: 'inventory_reorder_request',
+            canonicalResourceType: 'ProcurementRequest',
+            canonicalResourceId: request.id,
+            actorUserId,
+            required: true,
+          } as const;
+          await transitionSpecialistAgentActionForResource(tx, {
+            ...actionTarget,
+            fromState: 'execution_queued',
+            toState: 'executing',
+            reason:
+              'The canonical Commerce RFQ award created a draft purchase order.',
+            update: {
+              executedByUserId: actorUserId,
+              executedAt: new Date(),
+              executionAttemptCount: { increment: 1 },
+              canonicalOperationId: purchaseOrder.id,
+            },
+          });
+          await transitionSpecialistAgentActionForResource(tx, {
+            ...actionTarget,
+            fromState: 'executing',
+            toState: 'succeeded',
+            reason:
+              'The RFQ award created a canonical purchase order for review.',
+            update: {
+              actualResult: {
+                procurementRequestId: request.id,
+                commerceRfqId: id,
+                purchaseOrderId: purchaseOrder.id,
+                purchaseOrderStatus: PurchaseOrderStatus.draft,
+              },
+            },
+          });
+          await transitionSpecialistAgentActionForResource(tx, {
+            ...actionTarget,
+            fromState: 'succeeded',
+            toState: 'verification_pending',
+            reason:
+              'Re-reading the canonical request and purchase order before marking verified.',
+          });
+          const verified = await tx.procurementRequest.findFirst({
+            where: {
+              id: request.id,
+              businessId,
+              status: ProcurementRequestStatus.converted,
+              convertedPurchaseOrderId: purchaseOrder.id,
+            },
+            select: {
+              id: true,
+              convertedPurchaseOrder: {
+                select: { id: true, status: true, createdAt: true },
+              },
+            },
+          });
+          if (!verified?.convertedPurchaseOrder) {
+            throw this.error(
+              'SPECIALIST_ACTION_VERIFICATION_FAILED',
+              'The RFQ award was saved but its linked purchase order could not be re-read for verification.',
+              HttpStatus.CONFLICT,
+            );
+          }
+          await transitionSpecialistAgentActionForResource(tx, {
+            ...actionTarget,
+            fromState: 'verification_pending',
+            toState: 'verified',
+            reason:
+              'A fresh canonical read confirmed the Procurement request links to the awarded draft purchase order.',
+            update: {
+              verifiedAt: new Date(),
+              verificationResult: {
+                verified: true,
+                postcondition: 'canonical_purchase_order_linked',
+                procurementRequestId: verified.id,
+                commerceRfqId: id,
+                purchaseOrderId: verified.convertedPurchaseOrder.id,
+                observedStatus: verified.convertedPurchaseOrder.status,
+                observedAt: new Date().toISOString(),
+              },
+            },
+          });
+          await transitionSpecialistAgentActionForResource(tx, {
+            ...actionTarget,
+            fromState: 'verified',
+            toState: 'outcome_monitoring',
+            reason:
+              'The RFQ award is linked to a canonical purchase order. Inventory outcome tracking waits for full receipt and the follow-up window.',
+          });
+        }
       }
     });
 

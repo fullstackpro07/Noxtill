@@ -44,8 +44,90 @@ export class MessageWorkerProcessor extends WorkerHost {
     const message = await this.prisma.message.findUniqueOrThrow({
       where: { id: job.data.messageId },
     });
-
     const payload = message.payload as Record<string, string>;
+    const requireChannelConsent =
+      message.category === 'marketing' ||
+      (message.payload as Record<string, unknown>).__channelConsentRequired ===
+        true;
+
+    // Consent can be revoked after a message is queued. Re-check the current canonical CRM flags
+    // immediately before calling a provider; queue-time consent is not a durable authorization.
+    if (
+      message.category === 'marketing' &&
+      (message.customerId || requireChannelConsent)
+    ) {
+      const customer = message.customerId
+        ? await this.prisma.customer.findFirst({
+            where: {
+              id: message.customerId,
+              businessId: message.businessId,
+            },
+            select: {
+              id: true,
+              phone: true,
+              consentMarketing: true,
+              optedOut: true,
+            },
+          })
+        : null;
+      const channelConsent =
+        requireChannelConsent && customer
+          ? await this.prisma.customerChannelConsent.findFirst({
+              where: {
+                businessId: message.businessId,
+                customerId: customer.id,
+                channel: message.channel,
+              },
+              orderBy: { revision: 'desc' },
+              select: { state: true },
+            })
+          : null;
+      const suppressionReason = !customer
+        ? 'customer_missing'
+        : customer.phone === `erased-${customer.id}`
+          ? 'customer_erased'
+          : customer.optedOut
+            ? 'customer_opted_out'
+            : !customer.consentMarketing
+              ? 'marketing_consent_missing'
+              : requireChannelConsent && channelConsent?.state !== 'granted'
+                ? 'channel_specific_consent_missing'
+                : null;
+      if (suppressionReason) {
+        await this.prisma.$transaction(async (tx) => {
+          const updated = await tx.message.updateMany({
+            where: {
+              id: message.id,
+              businessId: message.businessId,
+              status: 'queued',
+            },
+            data: { status: 'failed' },
+          });
+          if (updated.count > 0) {
+            await tx.auditLog.create({
+              data: {
+                businessId: message.businessId,
+                action: 'messaging.marketing_send_suppressed',
+                entity: 'Message',
+                entityId: message.id,
+                before: { status: message.status },
+                after: {
+                  status: 'failed',
+                  reason: suppressionReason,
+                  category: message.category,
+                  templateKey: message.templateKey,
+                },
+              },
+            });
+          }
+        });
+        this.logger.debug(
+          `Message ${message.id} suppressed before provider send (${suppressionReason})`,
+        );
+        return;
+      }
+    }
+
     // Real custom wording (UPD-BE-092 fix-it) takes priority over the fixed registry copy when
     // set — WhatsApp's own adapter already ignores this text and falls back to `templateKey`
     // outside its 24h window (see `WhatsappService.send`), so no extra gating is needed here.

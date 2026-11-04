@@ -1,10 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { AppException } from '../common/filters/app.exception';
+import {
+  segmentApprovalState,
+  segmentDefinitionHash,
+} from './segment-approval.util';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { CreateSegmentDto } from './dto/create-segment.dto';
 import { UpdateSegmentDto } from './dto/update-segment.dto';
 import { SegmentRulesDto } from './dto/segment-rules.dto';
-import { SegmentRules, rulesToWhere } from './segment-rules.util';
+import {
+  SegmentRules,
+  excludeErasedCustomers,
+  rulesToWhere,
+} from './segment-rules.util';
 import { Prisma } from '@prisma/client';
 
 const NEW_CUSTOMER_WINDOW_DAYS = 30;
@@ -30,8 +39,16 @@ export class SegmentsService {
         where: { id: key },
       });
       if (segment) {
+        if (segmentApprovalState(segment) === 'changed')
+          throw new AppException(
+            'CUSTOMER_SEGMENT_APPROVAL_INVALIDATED',
+            'This agent-created Segment changed after approval. Re-review its proposal before using it as an audience.',
+            HttpStatus.CONFLICT,
+          );
         const members = await this.tenantPrisma.client.customer.findMany({
-          where: rulesToWhere(segment.rules as unknown as SegmentRules),
+          where: excludeErasedCustomers(
+            rulesToWhere(segment.rules as unknown as SegmentRules),
+          ),
           orderBy: { name: 'asc' },
         });
         return { key, count: members.length, members };
@@ -40,7 +57,7 @@ export class SegmentsService {
 
     const where = this.whereForKey(key);
     const members = await this.tenantPrisma.client.customer.findMany({
-      where,
+      where: excludeErasedCustomers(where),
       orderBy: { name: 'asc' },
     });
     return { key, count: members.length, members };
@@ -77,7 +94,9 @@ export class SegmentsService {
     });
     return Promise.all(
       segments.map(async (segment) => {
-        const where = rulesToWhere(segment.rules as unknown as SegmentRules);
+        const where = excludeErasedCustomers(
+          rulesToWhere(segment.rules as unknown as SegmentRules),
+        );
         const [count, spend] = await Promise.all([
           this.tenantPrisma.client.customer.count({ where }),
           this.tenantPrisma.client.customer.aggregate({
@@ -87,6 +106,7 @@ export class SegmentsService {
         ]);
         return {
           ...segment,
+          agentApprovalState: segmentApprovalState(segment),
           count,
           spend: Number(spend._sum.lifetimeSpend ?? 0),
         };
@@ -94,27 +114,101 @@ export class SegmentsService {
     );
   }
 
-  create(businessId: string, dto: CreateSegmentDto) {
-    return this.tenantPrisma.client.segment.create({
+  create(
+    businessId: string,
+    dto: CreateSegmentDto,
+    client: Pick<TenantPrismaService['client'], 'segment'> = this.tenantPrisma
+      .client,
+    recommendationId?: string,
+  ) {
+    return client.segment.create({
       data: {
         businessId,
         name: dto.name,
         rules: dto.rules as unknown as Prisma.InputJsonValue,
+        ...(recommendationId
+          ? {
+              sourceAgentRecommendationId: recommendationId,
+              agentApprovedVersion: 1,
+              agentApprovedDefinitionHash: segmentDefinitionHash(
+                dto.name,
+                dto.rules,
+                1,
+              ),
+            }
+          : {}),
       },
     });
   }
 
-  async update(id: string, dto: UpdateSegmentDto) {
-    await this.findSegment(id);
-    return this.tenantPrisma.client.segment.update({
-      where: { id },
+  async update(id: string, dto: UpdateSegmentDto, actorUserId?: string) {
+    const existing = await this.findSegment(id);
+    if (dto.name === undefined && dto.rules === undefined) return existing;
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      const claimed = await tx.segment.updateMany({
+        where: { id, version: existing.version },
+        data: {
+          name: dto.name,
+          rules: dto.rules
+            ? (dto.rules as unknown as Prisma.InputJsonValue)
+            : undefined,
+          version: { increment: 1 },
+        },
+      });
+      if (claimed.count !== 1)
+        throw new AppException(
+          'CUSTOMER_SEGMENT_TARGET_CHANGED',
+          'The Segment changed. Reload before editing it.',
+          HttpStatus.CONFLICT,
+        );
+      const updated = await tx.segment.findUniqueOrThrow({ where: { id } });
+      if (existing.sourceAgentRecommendationId)
+        await tx.auditLog.create({
+          data: {
+            businessId: existing.businessId,
+            actorUserId,
+            entity: 'Segment',
+            entityId: id,
+            action: 'customer_agent.segment_approval_invalidated',
+            after: {
+              version: updated.version,
+              recommendationId: existing.sourceAgentRecommendationId,
+            },
+          },
+        });
+      return updated;
+    });
+  }
+
+  async applyApprovedDefinition(
+    id: string,
+    businessId: string,
+    expectedVersion: number,
+    dto: CreateSegmentDto,
+    client: Pick<TenantPrismaService['client'], 'segment'>,
+  ) {
+    const version = expectedVersion + 1;
+    const claimed = await client.segment.updateMany({
+      where: { id, businessId, version: expectedVersion },
       data: {
         name: dto.name,
-        rules: dto.rules
-          ? (dto.rules as unknown as Prisma.InputJsonValue)
-          : undefined,
+        rules: dto.rules as unknown as Prisma.InputJsonValue,
+        version,
+        agentApprovedVersion: version,
+        agentApprovedDefinitionHash: segmentDefinitionHash(
+          dto.name,
+          dto.rules,
+          version,
+        ),
       },
     });
+    if (claimed.count !== 1)
+      throw new AppException(
+        'CUSTOMER_SEGMENT_TARGET_CHANGED',
+        'The target Segment changed. Reopen and review a fresh proposal.',
+        HttpStatus.CONFLICT,
+      );
+    return client.segment.findUniqueOrThrow({ where: { id, businessId } });
   }
 
   async remove(id: string): Promise<void> {
@@ -134,9 +228,13 @@ export class SegmentsService {
   }
 
   /** Live matching count for a rule set still being edited — not yet saved. */
-  async previewCount(rules: SegmentRulesDto) {
-    const count = await this.tenantPrisma.client.customer.count({
-      where: rulesToWhere(rules),
+  async previewCount(
+    rules: SegmentRulesDto,
+    client: Pick<TenantPrismaService['client'], 'customer'> = this.tenantPrisma
+      .client,
+  ) {
+    const count = await client.customer.count({
+      where: excludeErasedCustomers(rulesToWhere(rules)),
     });
     return { count };
   }

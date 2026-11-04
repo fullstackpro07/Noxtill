@@ -24,6 +24,7 @@ import { ReviewsModule } from '../reviews/reviews.module';
 import { ActivityModule } from '../activity/activity.module';
 import { PdfModule } from '../common/pdf/pdf.module';
 import { StorageModule } from '../common/storage/storage.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { StorageModule } from '../common/storage/storage.module';
     ActivityModule,
     PdfModule,
     StorageModule,
+    SpecialistAgentEventQueueModule,
   ],
   controllers: [
     PublicBookingController,

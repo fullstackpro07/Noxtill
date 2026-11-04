@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCustomers, updateCustomer, type LiveCustomer } from "@/lib/customers-api";
@@ -15,6 +16,8 @@ import { ApiError } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 import { useCustomersSearchStore } from "@/store/customers-search-store";
 import { askText } from "@/lib/ask-dialog";
+import { completeAction, fetchActions, type LiveActionItem } from "@/lib/action-center-api";
+import { CUSTOMER_FOLLOW_UP_OUTCOME_LABELS, fetchCustomerFollowUpOutcomeSummary, type CustomerFollowUpOutcome } from "@/lib/customer-intelligence-api";
 
 const selectStyle: React.CSSProperties = { border: "1px solid var(--app-border)", borderRadius: 10, padding: "9px 11px", fontSize: 12.5, fontWeight: 600, color: "var(--app-text-muted)", background: "var(--app-surface)", minHeight: 42 };
 const outlineBtn: React.CSSProperties = { border: "1px solid var(--app-border)", background: "var(--app-surface)", borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 700, color: "var(--app-text-muted)", minHeight: 42 };
@@ -99,8 +102,8 @@ export function AllCustomersPanel() {
       const hasCredit = balances.has(c.id);
       if (creditFilter === "Has credit" && !hasCredit) return false;
       if (creditFilter === "No credit" && hasCredit) return false;
-      if (optOutFilter === "Opted out only" && c.consentMarketing) return false;
-      if (optOutFilter === "Marketing allowed" && !c.consentMarketing) return false;
+      if (optOutFilter === "Opted out only" && !c.optedOut) return false;
+      if (optOutFilter === "CRM consent on file" && !c.consentMarketing) return false;
       if (incompleteOnly && !isIncompleteProfile(c)) return false;
       return true;
     });
@@ -150,6 +153,7 @@ export function AllCustomersPanel() {
   return (
     <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
       <SuggestedActions customers={customers} debtors={debtors.length} incomplete={kpis.incomplete} router={router} />
+      <CustomerFollowUpQueue />
 
       <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(165px,1fr))" }}>
         <div className="rounded-[14px] p-[15px]" style={{ background: "var(--app-surface)", border: "1.5px solid #FDD9D6" }}>
@@ -212,8 +216,8 @@ export function AllCustomersPanel() {
           <select value={creditFilter} onChange={(e) => setCreditFilter(e.target.value)} aria-label="Has credit" style={selectStyle}>
             {["All customers", "Has credit", "No credit"].map((o) => <option key={o}>{o}</option>)}
           </select>
-          <select value={optOutFilter} onChange={(e) => setOptOutFilter(e.target.value)} aria-label="Opted out" style={selectStyle}>
-            {["All consent", "Opted out only", "Marketing allowed"].map((o) => <option key={o}>{o}</option>)}
+          <select value={optOutFilter} onChange={(e) => setOptOutFilter(e.target.value)} aria-label="Marketing consent">
+            {["All consent", "Opted out only", "CRM consent on file"].map((o) => <option key={o}>{o}</option>)}
           </select>
           <button type="button" onClick={clearFilters} style={outlineBtn}>Clear</button>
         </div>
@@ -313,6 +317,84 @@ export function AllCustomersPanel() {
         <TagSegmentMessageDialog tag={tagFilter} onClose={() => setMessageOpen(false)} />
       )}
     </main>
+  );
+}
+
+function CustomerFollowUpQueue() {
+  const queryClient = useQueryClient();
+  const queue = useQuery({
+    queryKey: ["action-center", "customer_follow_up"],
+    queryFn: () => fetchActions({ type: "customer_follow_up" }),
+    retry: false,
+  });
+  const outcomes = useQuery({
+    queryKey: ["customer-follow-up-outcomes"],
+    queryFn: fetchCustomerFollowUpOutcomeSummary,
+    retry: false,
+  });
+  const complete = useMutation({
+    mutationFn: ({ id, outcome }: { id: string; outcome: CustomerFollowUpOutcome }) => completeAction(id, outcome),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["action-center"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-agent-follow-up-tasks"] }),
+      ]);
+      toast.success("Follow-up task completed.");
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Could not complete this follow-up task."),
+  });
+
+  if (queue.isPending) {
+    return <section aria-label="Customer follow-up queue" className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}><p className="m-0 text-[12px]" style={{ color: "var(--app-text-muted)" }}>Loading customer follow-ups…</p></section>;
+  }
+  if (queue.error) {
+    return <section aria-label="Customer follow-up queue" className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}><h2 className="m-0 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>Customer follow-up queue</h2><p role="status" className="mb-0 mt-2 text-[12px]" style={{ color: "var(--app-text-muted)" }}>Follow-up queue is unavailable for this account or role. Existing tasks remain in the canonical Action Center.</p></section>;
+  }
+
+  const items = queue.data?.items ?? [];
+  return (
+    <section aria-label="Customer follow-up queue" className="rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="m-0 text-[15px] font-extrabold" style={{ color: "var(--app-text)" }}>Customer follow-up queue <span className="font-semibold" style={{ color: "var(--app-text-muted)" }}>· {items.length}</span></h2>
+          <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-muted)" }}>Open CRM tasks only. Ordered by saved task priority, due date and age—not an AI score. Nothing here claims a customer was contacted.</p>
+        </div>
+        <Link className="text-[12px] font-bold underline" style={{ color: "var(--app-primary)" }} href="/dashboard/actions">Open Action Center</Link>
+      </div>
+      {outcomes.data && <div role="status" className="mt-3 rounded-[10px] p-3 text-[11px]" style={{ background: "var(--app-surface-2)", color: "var(--app-text-muted)" }}>
+        Last {outcomes.data.windowDays} days · {outcomes.data.completedCount} tasks completed · {outcomes.data.recordedCount} outcomes recorded · {outcomes.data.notRecordedCount} without an outcome.
+        <div className="mt-2 flex flex-wrap gap-2">{Object.entries(outcomes.data.outcomes).map(([outcome, count]) => <span key={outcome} className="rounded-full px-2 py-1" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>{CUSTOMER_FOLLOW_UP_OUTCOME_LABELS[outcome as CustomerFollowUpOutcome]} · {count}</span>)}</div>
+        <span className="block mt-1">{outcomes.data.note}</span>
+      </div>}
+      {outcomes.error && <p role="status" className="mb-0 mt-3 text-[11px]" style={{ color: "var(--app-text-muted)" }}>Follow-up outcome summary is unavailable.</p>}
+      {items.length === 0 ? <p className="mb-0 mt-3 text-[12px]" style={{ color: "var(--app-text-muted)" }}>No open customer follow-up tasks.</p> : (
+        <div className="mt-3 flex flex-col gap-2">
+          {items.slice(0, 5).map((item) => <CustomerFollowUpRow key={item.id} item={item} pending={complete.isPending} onComplete={(outcome) => complete.mutate({ id: item.id, outcome })} />)}
+          {items.length > 5 && <p className="mb-0 text-[11px]" style={{ color: "var(--app-text-muted)" }}>Showing 5 of {items.length} open tasks. View the Action Center for the full queue.</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CustomerFollowUpRow({ item, pending, onComplete }: { item: LiveActionItem; pending: boolean; onComplete: (outcome: CustomerFollowUpOutcome) => void }) {
+  const [outcome, setOutcome] = useState<CustomerFollowUpOutcome | "">("");
+  const priorityColor = item.priority === "urgent" ? "var(--app-danger-strong)" : item.priority === "normal" ? "var(--app-warning-text)" : "var(--app-text-muted)";
+  return (
+    <article className="flex flex-wrap items-center gap-2.5 rounded-[11px] p-3" style={{ background: "var(--app-surface-2)", border: "1px solid var(--app-border)" }}>
+      <span className="min-w-[58px] text-[10px] font-extrabold uppercase" style={{ color: priorityColor }}>{item.priority}</span>
+      <div className="min-w-[180px] flex-1">
+        <Link href={item.deepLink} className="text-[12px] font-bold hover:underline" style={{ color: "var(--app-text)" }}>{item.title}</Link>
+        <p className="mb-0 mt-0.5 text-[11px]" style={{ color: "var(--app-text-muted)" }}>{item.reason}</p>
+      </div>
+      <span className="text-[10px]" style={{ color: "var(--app-text-muted)" }}>{item.dueAt ? `Due ${new Date(item.dueAt).toLocaleDateString()}` : "No due date"}</span>
+      <label className="sr-only" htmlFor={`follow-up-outcome-${item.id}`}>Record outcome for {item.title}</label>
+      <select id={`follow-up-outcome-${item.id}`} value={outcome} onChange={(event) => setOutcome(event.target.value as CustomerFollowUpOutcome | "")} disabled={pending} className="rounded-[8px] p-2 text-[11px]" style={{ border: "1px solid var(--app-border)", background: "var(--app-surface)", color: "var(--app-text-muted)" }}>
+        <option value="">Select outcome</option>
+        {Object.entries(CUSTOMER_FOLLOW_UP_OUTCOME_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <button type="button" onClick={() => outcome && onComplete(outcome)} disabled={pending || !outcome} className="rounded-[8px] px-3 py-2 text-[11px] font-bold disabled:opacity-60" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Complete &amp; record</button>
+    </article>
   );
 }
 

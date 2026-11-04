@@ -8,6 +8,10 @@ import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { askText } from "@/lib/ask-dialog";
 import {
+  fetchSeoAnalyticsAttributionSummary,
+  type SeoAnalyticsAttributionSummary,
+} from "@/lib/seo-analytics-attribution-api";
+import {
   dismissContentOpportunity,
   fetchContentBriefs,
   fetchContentOpportunities,
@@ -54,6 +58,86 @@ const fieldStyle = { borderColor: "var(--app-border)", background: "var(--app-su
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
+}
+
+function normalizeLandingPath(value: string) {
+  try {
+    const url = new URL(value, "https://noxtill.invalid");
+    const path = url.pathname.replace(/\/+$/, "");
+    return path || "/";
+  } catch {
+    return null;
+  }
+}
+
+function formatGaMetric(value: string | null | undefined) {
+  if (value == null) return "Not available";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? new Intl.NumberFormat().format(numeric) : value;
+}
+
+function RefreshTraffic({
+  publishedUrl,
+  analytics,
+  loading,
+  failed,
+}: {
+  publishedUrl: string | null;
+  analytics: SeoAnalyticsAttributionSummary | undefined;
+  loading: boolean;
+  failed: boolean;
+}) {
+  if (loading) return <span>Loading GA4…</span>;
+  if (failed || !analytics) return <span>Could not load GA4 status</span>;
+  if (analytics.status !== "connected") {
+    return (
+      <Link
+        href="/marketing/seo-autopilot/settings"
+        className="font-semibold underline"
+      >
+        Connect GA4 in SEO Settings
+      </Link>
+    );
+  }
+
+  const path = publishedUrl ? normalizeLandingPath(publishedUrl) : null;
+  const snapshot = analytics.snapshot;
+  if (!snapshot) {
+    return (
+      <Link
+        href="/marketing/seo-autopilot/settings"
+        className="font-semibold underline"
+      >
+        Sync GA4 in SEO Settings
+      </Link>
+    );
+  }
+  const pages = snapshot.current.landingPages;
+  if (!path) return <span>Published URL is unavailable</span>;
+  if (!pages || pages.dataState === "not_available") {
+    return <span>{pages?.reason ?? "GA4 landing-page report unavailable"}</span>;
+  }
+  if (pages.dataState === "no_data_returned") return <span>No GA4 data returned</span>;
+
+  const match = pages.rows.find((row) => normalizeLandingPath(row.landingPage) === path);
+  if (!match) {
+    return <span>{pages.truncated ? "Not in returned GA4 landing pages" : "No GA4 row for this page"}</span>;
+  }
+
+  const currency = analytics.snapshot?.currencyCode;
+  return (
+    <span className="flex flex-col gap-1">
+      <span>
+        {formatGaMetric(match.sessions)} sessions · {formatGaMetric(match.keyEvents)} key events
+      </span>
+      <span>
+        {currency ? `${currency} ` : ""}{formatGaMetric(match.totalRevenue)} GA4 revenue
+      </span>
+      <span style={{ color: "var(--app-text-faintest)" }}>
+        Organic Search · {snapshot.current.startDate} to {snapshot.current.endDate}
+      </span>
+    </span>
+  );
 }
 
 function useRefresh() {
@@ -258,6 +342,11 @@ export function SeoContentView() {
   const briefs = useQuery({ queryKey: ["seo-content-briefs"], queryFn: fetchContentBriefs });
   const refreshQueue = useQuery({ queryKey: ["seo-content-refresh"], queryFn: fetchRefreshQueue });
   const [tab, setTab] = useState<Tab>("opportunities");
+  const analytics = useQuery({
+    queryKey: ["seo-analytics-attribution"],
+    queryFn: fetchSeoAnalyticsAttributionSummary,
+    enabled: tab === "refresh",
+  });
   const [showDismissed, setShowDismissed] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   // Deep link from the Content Calendar (?brief=<id>); read once on mount.
@@ -300,7 +389,7 @@ export function SeoContentView() {
     <main className="flex flex-col gap-5 p-5 md:p-7" style={{ color: "var(--app-text)" }}>
       <p className="m-0 max-w-3xl text-xs" style={{ color: "var(--app-text-muted)" }}>
         Opportunities come from your tracked keywords, their latest rank checks and your latest site audit — each shows why it was flagged. Interest is Google Trends&rsquo; relative 0–100 index, not search volume.
-        Noxtill doesn&rsquo;t publish to your website: you publish approved drafts and record the URL, and a later audit confirms it&rsquo;s live. Page traffic is <strong>not tracked</strong>.
+        Noxtill doesn&rsquo;t publish to your website: you publish approved drafts and record the URL, and a later audit confirms it&rsquo;s live. Refresh-queue traffic uses saved GA4 Organic Search landing-page data when available; it does not prove SEO caused the result.
       </p>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -411,7 +500,7 @@ export function SeoContentView() {
             <table className="w-full min-w-[760px] text-left text-xs">
               <thead style={{ color: "var(--app-text-faint)" }}>
                 <tr>
-                  {["Content", "Keyword", "Live?", "Rank when published", "Rank now", "Traffic", "Refresh"].map((heading) => <th key={heading} className="px-4 py-3 font-semibold">{heading}</th>)}
+                  {["Content", "Keyword", "Live?", "Rank when published", "Rank now", "Organic Search (GA4)", "Refresh"].map((heading) => <th key={heading} className="px-4 py-3 font-semibold">{heading}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -424,7 +513,14 @@ export function SeoContentView() {
                     <td className="px-4 py-3">{row.liveConfirmedAt ? `Confirmed ${formatDate(row.liveConfirmedAt)}` : "Not yet confirmed"}</td>
                     <td className="px-4 py-3">{row.baselineRank === null ? "Not ranked / not checked" : `#${row.baselineRank}`}</td>
                     <td className="px-4 py-3">{row.rankCheckedAt ? (row.currentRank === null ? "Not in results" : `#${row.currentRank}`) : "—"}</td>
-                    <td className="px-4 py-3" style={{ color: "var(--app-text-faintest)" }}>Not tracked</td>
+                    <td className="px-4 py-3" style={{ color: "var(--app-text-faintest)" }}>
+                      <RefreshTraffic
+                        publishedUrl={row.publishedUrl}
+                        analytics={analytics.data}
+                        loading={analytics.isLoading}
+                        failed={analytics.isError}
+                      />
+                    </td>
                     <td className="px-4 py-3" style={{ color: row.refreshReason ? "var(--app-warning-text)" : undefined }}>{row.refreshReason ?? "No drop detected"}</td>
                   </tr>
                 ))}

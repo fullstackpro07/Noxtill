@@ -9,6 +9,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
 import { CUSTOMER_ERROR_CODES } from './customers.constants';
 import { Prisma } from '@prisma/client';
+import { excludeErasedCustomers } from './segment-rules.util';
 
 /** Customers CRUD, search, and GDPR erasure (BE-040). */
 @Injectable()
@@ -41,7 +42,7 @@ export class CustomersService {
         birthday: dto.birthday ? new Date(dto.birthday) : undefined,
         notes: dto.notes,
         tags: dto.tags ?? [],
-        consentMarketing: dto.consentMarketing ?? true,
+        consentMarketing: dto.consentMarketing ?? false,
       } as unknown as Prisma.CustomerUncheckedCreateInput,
     });
 
@@ -60,7 +61,9 @@ export class CustomersService {
     }
 
     if (dto.tags?.length) {
-      await Promise.all(dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)));
+      await Promise.all(
+        dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)),
+      );
     }
 
     return customer;
@@ -78,14 +81,14 @@ export class CustomersService {
     };
 
     return this.tenantPrisma.client.customer.findMany({
-      where,
+      where: excludeErasedCustomers(where),
       orderBy: { name: 'asc' },
     });
   }
 
   async findOne(id: string) {
-    const customer = await this.tenantPrisma.client.customer.findUnique({
-      where: { id },
+    const customer = await this.tenantPrisma.client.customer.findFirst({
+      where: excludeErasedCustomers({ id }),
       include: {
         orders: {
           orderBy: { createdAt: 'desc' },
@@ -112,12 +115,15 @@ export class CustomersService {
         name: dto.name,
         address: dto.address,
         status: dto.status,
-        customFieldValues: dto.customFieldValues as Prisma.InputJsonValue | undefined,
+        customFieldValues: dto.customFieldValues as
+          Prisma.InputJsonValue | undefined,
       },
     });
 
     if (dto.tags?.length) {
-      await Promise.all(dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)));
+      await Promise.all(
+        dto.tags.map((tag) => this.customerTags.ensureExists(businessId, tag)),
+      );
     }
 
     return updated;
@@ -126,49 +132,111 @@ export class CustomersService {
   /** GDPR erasure: wipes PII, keeps anonymized transaction history, requires the customer's own phone as confirmation. */
   async erase(id: string, confirmPhone: string) {
     const customer = await this.assertExists(id);
-    if (confirmPhone !== customer.phone) {
-      throw new AppException(
-        CUSTOMER_ERROR_CODES.CONFIRMATION_MISMATCH,
-        "Confirmation does not match this customer's phone number",
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    const result = await this.tenantPrisma.client.$transaction(async (tx) => {
+      // Agent task/draft creation takes this same row lock. This serializes erasure
+      // with those writes so no customer-agent record can appear after cleanup.
+      const rows = await tx.$queryRaw<Array<{ id: string; phone: string }>>`
+        SELECT id, phone
+        FROM customers
+        WHERE id = ${id} AND business_id = ${customer.businessId}
+        FOR UPDATE
+      `;
+      const current = rows[0];
+      if (!current) {
+        throw new NotFoundException('Customer not found');
+      }
+      if (confirmPhone !== current.phone) {
+        throw new AppException(
+          CUSTOMER_ERROR_CODES.CONFIRMATION_MISMATCH,
+          "Confirmation does not match this customer's phone number",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
 
-    const before = {
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email,
-      address: customer.address,
-    };
-
-    const erased = await this.tenantPrisma.client.customer.update({
-      where: { id },
-      data: {
-        name: 'Erased Customer',
-        phone: `erased-${customer.id}`,
-        email: null,
-        address: null,
-        birthday: null,
-        notes: null,
-        tags: [],
-      },
+      const [
+        deletedTasks,
+        deletedDrafts,
+        deletedMemoryNotes,
+        deletedChannelConsents,
+      ] = await Promise.all([
+        tx.customerFollowUpTask.deleteMany({
+          where: { businessId: customer.businessId, customerId: id },
+        }),
+        tx.messageDraft.deleteMany({
+          where: {
+            businessId: customer.businessId,
+            customerId: id,
+            sourceKey: { startsWith: `customer_agent:${id}:` },
+          },
+        }),
+        tx.memoryNote.deleteMany({
+          where: {
+            businessId: customer.businessId,
+            subjectType: 'customer',
+            subjectId: id,
+          },
+        }),
+        tx.customerChannelConsent.deleteMany({
+          where: { businessId: customer.businessId, customerId: id },
+        }),
+      ]);
+      const erased = await tx.customer.update({
+        where: { id, businessId: customer.businessId },
+        data: {
+          name: 'Erased Customer',
+          phone: `erased-${id}`,
+          email: null,
+          address: null,
+          birthday: null,
+          notes: null,
+          tags: [],
+          customFieldValues: {},
+          consentMarketing: false,
+          optedOut: true,
+        },
+      });
+      return {
+        erased,
+        deletedTasks: deletedTasks.count,
+        deletedDrafts: deletedDrafts.count,
+        deletedMemoryNotes: deletedMemoryNotes.count,
+        deletedChannelConsents: deletedChannelConsents.count,
+      };
     });
 
     await this.auditService.log({
       entity: 'Customer',
       entityId: id,
       action: 'customer.erase',
-      before,
-      after: { erased: true },
+      // The audit confirms the operation without copying the erased PII into
+      // the append-only audit log.
+      after: {
+        erased: true,
+        clearedFields: [
+          'name',
+          'phone',
+          'email',
+          'address',
+          'birthday',
+          'notes',
+          'tags',
+          'customFieldValues',
+          'consentMarketing',
+        ],
+        deletedCustomerAgentDrafts: result.deletedDrafts,
+        deletedFollowUpTasks: result.deletedTasks,
+        deletedCustomerMemoryNotes: result.deletedMemoryNotes,
+        deletedCustomerChannelConsents: result.deletedChannelConsents,
+      },
     });
 
-    return erased;
+    return result.erased;
   }
 
   /** Customer export (UPD-BE-097) — a real personal-data export: the customer's own record plus every real row tied to them, not a placeholder. */
   async export(id: string) {
-    const customer = await this.tenantPrisma.client.customer.findUnique({
-      where: { id },
+    const customer = await this.tenantPrisma.client.customer.findFirst({
+      where: excludeErasedCustomers({ id }),
       include: {
         orders: { orderBy: { createdAt: 'desc' }, include: { items: true } },
         creditEntries: { orderBy: { createdAt: 'desc' } },
@@ -180,6 +248,9 @@ export class CustomersService {
         loyaltyMembers: { include: { program: true } },
         memberships: { include: { plan: true } },
         installmentPlans: { include: { installments: true } },
+        channelConsentHistory: {
+          orderBy: [{ channel: 'asc' }, { revision: 'desc' }],
+        },
       },
     });
     if (!customer) {
@@ -218,6 +289,7 @@ export class CustomersService {
       loyaltyMembers: customer.loyaltyMembers,
       memberships: customer.memberships,
       installmentPlans: customer.installmentPlans,
+      channelConsentHistory: customer.channelConsentHistory,
     };
   }
 
@@ -241,7 +313,7 @@ export class CustomersService {
     const duplicate = await this.assertExists(duplicateCustomerId);
 
     const client = this.tenantPrisma.client;
-    await client.$transaction(async (tx) => {
+    const mergedRevocationChannels = await client.$transaction(async (tx) => {
       await tx.order.updateMany({
         where: { customerId: duplicateCustomerId },
         data: { customerId: id },
@@ -367,7 +439,56 @@ export class CustomersService {
         },
       });
 
+      // A merge must never turn a revoked channel decision into permission to contact. Preserve
+      // each revoked choice from the duplicate as a fresh, auditable suppression on the canonical
+      // profile. A grant from a duplicate is not copied onto a different canonical profile.
+      const duplicateConsentHistory = await tx.customerChannelConsent.findMany({
+        where: {
+          businessId: duplicate.businessId,
+          customerId: duplicateCustomerId,
+        },
+        orderBy: [{ channel: 'asc' }, { revision: 'desc' }],
+        select: {
+          channel: true,
+          state: true,
+          recordedByUserId: true,
+        },
+      });
+      const latestDuplicateConsent = new Map<
+        (typeof duplicateConsentHistory)[number]['channel'],
+        (typeof duplicateConsentHistory)[number]
+      >();
+      for (const consent of duplicateConsentHistory) {
+        if (!latestDuplicateConsent.has(consent.channel)) {
+          latestDuplicateConsent.set(consent.channel, consent);
+        }
+      }
+      const suppressedChannels: string[] = [];
+      for (const [channel, consent] of latestDuplicateConsent) {
+        if (consent.state !== 'revoked') continue;
+        const latestCanonical = await tx.customerChannelConsent.findFirst({
+          where: { businessId: canonical.businessId, customerId: id, channel },
+          orderBy: { revision: 'desc' },
+          select: { revision: true, state: true },
+        });
+        if (latestCanonical?.state === 'revoked') continue;
+        await tx.customerChannelConsent.create({
+          data: {
+            businessId: canonical.businessId,
+            customerId: id,
+            channel,
+            state: 'revoked',
+            source: 'profile_merge_suppression',
+            evidenceReference: `merge-${duplicateCustomerId}`,
+            revision: Number(latestCanonical?.revision ?? 0) + 1,
+            recordedByUserId: consent.recordedByUserId,
+          },
+        });
+        suppressedChannels.push(channel);
+      }
+
       await tx.customer.delete({ where: { id: duplicateCustomerId } });
+      return suppressedChannels;
     });
 
     await this.auditService.log({
@@ -375,15 +496,18 @@ export class CustomersService {
       entityId: id,
       action: 'customer.merge',
       before: { duplicateCustomerId },
-      after: { mergedInto: id },
+      after: {
+        mergedInto: id,
+        channelConsentSuppressedFromDuplicate: mergedRevocationChannels,
+      },
     });
 
     return this.findOne(id);
   }
 
   private async assertExists(id: string) {
-    const customer = await this.tenantPrisma.client.customer.findUnique({
-      where: { id },
+    const customer = await this.tenantPrisma.client.customer.findFirst({
+      where: excludeErasedCustomers({ id }),
     });
     if (!customer) {
       throw new NotFoundException('Customer not found');

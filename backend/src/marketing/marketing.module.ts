@@ -71,6 +71,7 @@ import {
   SeoAuditScheduleScheduler,
 } from './jobs/seo-audit-schedule.processor';
 import { ActivityModule } from '../activity/activity.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { ActivityModule } from '../activity/activity.module';
     ProfitModule,
     AiModule,
     ActivityModule,
+    SpecialistAgentEventQueueModule,
   ],
   controllers: [
     CampaignsController,
@@ -146,6 +148,13 @@ import { ActivityModule } from '../activity/activity.module';
     SeoAuditScheduleProcessor,
     SeoAuditScheduleScheduler,
   ],
-  exports: [ReferralsService, CouponsService, VouchersService],
+  exports: [
+    ReferralsService,
+    CouponsService,
+    VouchersService,
+    SeoOnPageService,
+    SeoContentService,
+    SeoTechnicalService,
+  ],
 })
 export class MarketingModule {}

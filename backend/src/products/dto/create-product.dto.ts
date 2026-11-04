@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -54,6 +55,28 @@ export class CreateProductDto {
   @IsInt()
   @Min(0)
   lowStockThreshold?: number;
+
+  /** Canonical stock units contained in one supplier purchase unit, e.g. 12 bottles per case. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  stockUnitLabel?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  purchaseUnitLabel?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  purchasePackSize?: number | null;
+
+  /** Product-wide reorder floor in canonical stock units; this is not supplier-specific MOQ. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minimumReorderQty?: number | null;
 
   @IsOptional()
   @IsInt()

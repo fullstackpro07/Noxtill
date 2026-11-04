@@ -2,9 +2,22 @@ import { HttpStatus } from '@nestjs/common';
 import { AppException } from '../../common/filters/app.exception';
 import { IntegrationProvider } from '@prisma/client';
 import { CAPABILITIES } from '../../common/capabilities/capabilities.constants';
-import { CategoryDef, HubValue, row, RowDef, plural, relativeTime } from '../hub.core';
-import { HubDeps, asJson, business, monthStart, updateBusiness } from './hub.deps';
-import { policyRow } from './policy-rows';
+import {
+  CategoryDef,
+  HubValue,
+  row,
+  RowDef,
+  plural,
+  relativeTime,
+} from '../hub.core';
+import {
+  HubDeps,
+  asJson,
+  business,
+  monthStart,
+  updateBusiness,
+} from './hub.deps';
+import { NumberPolicyRow, policyRow } from './policy-rows';
 import { assertAutomationGovernance } from '../../marketing/automations/automation-governance.util';
 import {
   workflowGraphActions,
@@ -13,25 +26,218 @@ import {
 import { BI_OVERVIEW_WIDGETS } from '../../business-intelligence/business-intelligence.constants';
 import { WIDGET_REGISTRY } from '../../widgets/widget-registry';
 import { WIDGET_CACHE_TTL_MS } from '../../widgets/widgets.constants';
+import { estimateHaikuCostUsd } from '../../ai/ai-infra.constants';
 
-const bad = (message: string) => new AppException('SETTING_INVALID', message, HttpStatus.BAD_REQUEST);
+const bad = (message: string) =>
+  new AppException('SETTING_INVALID', message, HttpStatus.BAD_REQUEST);
+const formatMonthlyRequests = (value: number) =>
+  `${value.toLocaleString('en-US')} request${value === 1 ? '' : 's'} / month`;
+const SPECIALIST_TOOL_CALL_OVERRIDES = [
+  {
+    key: 'inventory',
+    policy: 'agents.inventoryMaxToolCallsPerRun',
+    label: 'Inventory',
+  },
+  {
+    key: 'finance',
+    policy: 'agents.financeMaxToolCallsPerRun',
+    label: 'Finance',
+  },
+  {
+    key: 'customer',
+    policy: 'agents.customerMaxToolCallsPerRun',
+    label: 'Customer',
+  },
+  { key: 'seo', policy: 'agents.seoMaxToolCallsPerRun', label: 'SEO' },
+  {
+    key: 'commerce',
+    policy: 'agents.commerceMaxToolCallsPerRun',
+    label: 'Commerce',
+  },
+] as const;
 
 const AI_FEATURES: { key: string; label: string; description: string }[] = [
-  { key: 'assistant', label: 'Business assistant', description: 'The chat assistant that answers questions from your data.' },
-  { key: 'insights', label: 'AI insights', description: 'Suggestions shown on the dashboard and Business Brain.' },
-  { key: 'whatIf', label: 'What-if simulations', description: 'Scenario estimates built from your recorded data.' },
-  { key: 'reviewReplies', label: 'Review reply drafts', description: 'Drafts a reply to a review for a person to send.' },
-  { key: 'campaignCopy', label: 'Campaign copy', description: 'Drafts marketing message copy for a person to approve.' },
-  { key: 'voiceEntry', label: 'Voice entry', description: 'Turns a spoken command into a draft you confirm before anything is saved.' },
-  { key: 'photoDigitizer', label: 'Photo digitizer', description: 'Reads a photo of a list into rows you review before importing.' },
-  { key: 'workflowAgents', label: 'Workflow AI drafts & agents', description: 'AI-draft and read-only AI agent workflow steps. Their output appears in run history and is not sent automatically.' },
+  {
+    key: 'assistant',
+    label: 'Business assistant',
+    description: 'The chat assistant that answers questions from your data.',
+  },
+  {
+    key: 'insights',
+    label: 'AI insights',
+    description: 'Suggestions shown on the dashboard and Business Brain.',
+  },
+  {
+    key: 'whatIf',
+    label: 'What-if simulations',
+    description: 'Scenario estimates built from your recorded data.',
+  },
+  {
+    key: 'reviewReplies',
+    label: 'Review reply drafts',
+    description: 'Drafts a reply to a review for a person to send.',
+  },
+  {
+    key: 'campaignCopy',
+    label: 'Campaign copy',
+    description: 'Drafts marketing message copy for a person to approve.',
+  },
+  {
+    key: 'voiceEntry',
+    label: 'Voice entry',
+    description:
+      'Turns a spoken command into a draft you confirm before anything is saved.',
+  },
+  {
+    key: 'photoDigitizer',
+    label: 'Photo digitizer',
+    description:
+      'Reads a photo of a list into rows you review before importing.',
+  },
+  {
+    key: 'workflowAgents',
+    label: 'Workflow AI drafts & agents',
+    description:
+      'AI-draft and read-only AI agent workflow steps. Their output appears in run history and is not sent automatically.',
+  },
+  {
+    key: 'inventoryAgent',
+    label: 'Inventory Intelligence Agent',
+    description:
+      'Allows the Inventory agent to send stock and sales-velocity evidence to the configured AI provider for a review-only explanation.',
+  },
+  {
+    key: 'financeAgent',
+    label: 'Financial Intelligence Agent',
+    description:
+      'Allows the Financial Intelligence Agent to send the selected Profit & Analytics summary to the configured AI provider for a review-only explanation.',
+  },
+  {
+    key: 'customerAgent',
+    label: 'Customer Intelligence Agent',
+    description:
+      'Allows the Customer Intelligence Agent to send anonymized customer counts and retention aggregates to the configured AI provider for a review-only explanation. Names, contact details and message content are excluded.',
+  },
+  {
+    key: 'seoAgent',
+    label: 'SEO Autopilot Agent',
+    description:
+      'Allows an optional AI explanation of aggregate counts from the existing SEO Agent Workspace. Page URLs, provider credentials and site content are not sent by this review.',
+  },
+  {
+    key: 'commerceAgent',
+    label: 'Autonomous Commerce Agent',
+    description:
+      'Allows an optional AI explanation of aggregate commerce review evidence. Canonical product, order, inventory and provider writes remain with their owning modules and are not performed by this review.',
+  },
 ];
 
 const PROVIDER_LABELS: Record<string, string> = {
-  email: 'Email', gmb: 'Google Business Profile', google_ads: 'Google Ads', merchant: 'Google Merchant Center', meta_ads: 'Meta Ads', tiktok_ads: 'TikTok Ads', bing_places: 'Bing Places', apple_business_connect: 'Apple Business Connect', yelp: 'Yelp', linkedin_ads: 'LinkedIn Ads', pinterest_ads: 'Pinterest Ads', snapchat_ads: 'Snapchat Ads', microsoft_ads: 'Microsoft Ads', amazon_ads: 'Amazon Ads', reddit_ads: 'Reddit Ads', quickbooks: 'QuickBooks', xero: 'Xero', shopify: 'Shopify', woocommerce: 'WooCommerce', zapier: 'Zapier', make: 'Make', n8n: 'n8n', developer: 'Developer API',
+  email: 'Email',
+  gmb: 'Google Business Profile',
+  google_ads: 'Google Ads',
+  google_analytics: 'Google Analytics 4',
+  google_search_console: 'Google Search Console',
+  merchant: 'Google Merchant Center',
+  meta_ads: 'Meta Ads',
+  tiktok_ads: 'TikTok Ads',
+  bing_places: 'Bing Places',
+  apple_business_connect: 'Apple Business Connect',
+  yelp: 'Yelp',
+  linkedin_ads: 'LinkedIn Ads',
+  pinterest_ads: 'Pinterest Ads',
+  snapchat_ads: 'Snapchat Ads',
+  microsoft_ads: 'Microsoft Ads',
+  amazon_ads: 'Amazon Ads',
+  reddit_ads: 'Reddit Ads',
+  quickbooks: 'QuickBooks',
+  xero: 'Xero',
+  shopify: 'Shopify',
+  woocommerce: 'WooCommerce',
+  zapier: 'Zapier',
+  make: 'Make',
+  n8n: 'n8n',
+  developer: 'Developer API',
 };
 
 export function intelligenceCategories(d: HubDeps): CategoryDef[] {
+  const specialistRequestLimitRow = (
+    agentKey: string,
+    spec: NumberPolicyRow,
+  ): RowDef => {
+    const definition = policyRow(d, spec);
+    return {
+      ...definition,
+      state: async (ctx) => {
+        const [state, counted] = await Promise.all([
+          definition.state(ctx),
+          d.prisma.specialistAgentAiRequest.count({
+            where: {
+              businessId: ctx.businessId,
+              agentKey,
+              createdAt: { gte: monthStart(ctx.now) },
+            },
+          }),
+        ]);
+        return {
+          ...state,
+          value: `${state.value} · ${counted.toLocaleString('en-US')} counted this month`,
+        };
+      },
+    };
+  };
+
+  const specialistMonthlySpend = async (
+    businessId: string,
+    agentKey: string,
+    kind: string,
+    now: Date,
+  ): Promise<number> => {
+    const since = monthStart(now);
+    const [logged, outstanding] = await Promise.all([
+      d.prisma.aiCallLog.aggregate({
+        where: { businessId, kind, createdAt: { gte: since } },
+        _sum: { inputTokens: true, outputTokens: true },
+      }),
+      d.prisma.specialistAgentAiRequest.aggregate({
+        where: {
+          businessId,
+          agentKey,
+          createdAt: { gte: since },
+          state: { in: ['reserved', 'provider_failed'] },
+        },
+        _sum: { reservedCostUsd: true },
+      }),
+    ]);
+    return (
+      estimateHaikuCostUsd(
+        Number(logged._sum.inputTokens ?? 0),
+        Number(logged._sum.outputTokens ?? 0),
+      ) + Number(outstanding._sum.reservedCostUsd ?? 0)
+    );
+  };
+
+  const specialistSpendLimitRow = (
+    agentKey: string,
+    kind: string,
+    spec: NumberPolicyRow,
+  ): RowDef => {
+    const definition = policyRow(d, spec);
+    return {
+      ...definition,
+      state: async (ctx) => {
+        const [state, estimatedSpend] = await Promise.all([
+          definition.state(ctx),
+          specialistMonthlySpend(ctx.businessId, agentKey, kind, ctx.now),
+        ]);
+        return {
+          ...state,
+          value: `${state.value} · $${estimatedSpend.toFixed(4)} logged + reserved this month`,
+        };
+      },
+    };
+  };
+
   const aiFeatureRow = (f: (typeof AI_FEATURES)[number]): RowDef =>
     row({
       key: `ai-feature:${f.key}`,
@@ -42,12 +248,21 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       reset: { label: 'On', value: true },
       state: async (ctx) => {
         const b = await business(d, ctx);
-        const on = ((b.aiFeatureToggles ?? {}) as Record<string, boolean>)[f.key] !== false;
-        return { value: on ? 'On' : 'Off', tone: on ? 'green' : 'neutral', control: { type: 'toggle', on } };
+        const on =
+          ((b.aiFeatureToggles ?? {}) as Record<string, boolean>)[f.key] !==
+          false;
+        return {
+          value: on ? 'On' : 'Off',
+          tone: on ? 'green' : 'neutral',
+          control: { type: 'toggle', on },
+        };
       },
       write: async (ctx, v: HubValue) => {
         const b = await business(d, ctx);
-        const next = { ...((b.aiFeatureToggles ?? {}) as Record<string, boolean>), [f.key]: Boolean(v) };
+        const next = {
+          ...((b.aiFeatureToggles ?? {}) as Record<string, boolean>),
+          [f.key]: Boolean(v),
+        };
         await updateBusiness(d, ctx, { aiFeatureToggles: asJson(next) });
       },
     });
@@ -274,15 +489,25 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       title: 'Automations',
       icon: 'workflow',
       group: 'Intelligence',
-      description: 'Your workflows, whether they are running, and what happened when they last ran.',
+      description:
+        'Your workflows, whether they are running, and what happened when they last ran.',
       affects: ['Bookings', 'Credit', 'Marketing', 'Reviews', 'Inventory'],
-      affectsNote: 'Turning a workflow off stops it firing for new events; past runs are kept.',
+      affectsNote:
+        'Turning a workflow off stops it firing for new events; past runs are kept.',
       help: [
         'A failed run is recorded with its reason. You can manually retry eligible failed actions within the retry limit.',
         'Workflows can run from matching events or from a configured schedule. Durable waits and schedule recovery require Redis.',
         'Workflow actions can message customers, update customer tags and fields, wait, request approval, and create AI drafts saved to run history.',
       ],
-      actions: [{ label: 'Open Automations', icon: 'external-link', href: '/marketing/automations', kind: 'link' }, { label: 'View history', icon: 'history', kind: 'history' }],
+      actions: [
+        {
+          label: 'Open Automations',
+          icon: 'external-link',
+          href: '/marketing/automations',
+          kind: 'link',
+        },
+        { label: 'View history', icon: 'history', kind: 'history' },
+      ],
       groups: [
         {
           title: 'Health',
@@ -293,17 +518,36 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               label: 'Workflows',
               description: 'Workflows that are on and off.',
               state: async (ctx) => {
-                const [on, off] = await Promise.all([d.prisma.workflow.count({ where: { businessId: ctx.businessId, active: true } }), d.prisma.workflow.count({ where: { businessId: ctx.businessId, active: false } })]);
+                const [on, off] = await Promise.all([
+                  d.prisma.workflow.count({
+                    where: { businessId: ctx.businessId, active: true },
+                  }),
+                  d.prisma.workflow.count({
+                    where: { businessId: ctx.businessId, active: false },
+                  }),
+                ]);
                 return { value: `${on} on · ${off} off` };
               },
             }),
             row({
               key: 'wf-failed',
               label: 'Failed in the last 24 hours',
-              description: 'Runs that failed, with the reason recorded on each run.',
+              description:
+                'Runs that failed, with the reason recorded on each run.',
               state: async (ctx) => {
-                const n = await d.prisma.workflowRun.count({ where: { workflow: { businessId: ctx.businessId }, status: 'failed', createdAt: { gte: new Date(ctx.now.getTime() - 86_400_000) } } });
-                return { value: n ? `${n} failed` : 'None', tone: n ? 'amber' : 'green' };
+                const n = await d.prisma.workflowRun.count({
+                  where: {
+                    workflow: { businessId: ctx.businessId },
+                    status: 'failed',
+                    createdAt: {
+                      gte: new Date(ctx.now.getTime() - 86_400_000),
+                    },
+                  },
+                });
+                return {
+                  value: n ? `${n} failed` : 'None',
+                  tone: n ? 'amber' : 'green',
+                };
               },
             }),
             row({
@@ -311,8 +555,15 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               label: 'Last run',
               description: 'The most recent run of any workflow.',
               state: async (ctx) => {
-                const r = await d.prisma.workflowRun.findFirst({ where: { workflow: { businessId: ctx.businessId } }, orderBy: { createdAt: 'desc' } });
-                return { value: r ? `${relativeTime(r.createdAt, ctx.now)} · ${r.status}` : 'Never run' };
+                const r = await d.prisma.workflowRun.findFirst({
+                  where: { workflow: { businessId: ctx.businessId } },
+                  orderBy: { createdAt: 'desc' },
+                });
+                return {
+                  value: r
+                    ? `${relativeTime(r.createdAt, ctx.now)} · ${r.status}`
+                    : 'Never run',
+                };
               },
             }),
           ],
@@ -321,8 +572,23 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
           title: 'Your workflows',
           hint: 'On or off',
           dynamicRows: async (ctx) => {
-            const wfs = await d.prisma.workflow.findMany({ where: { businessId: ctx.businessId }, orderBy: { createdAt: 'asc' } });
-            if (wfs.length === 0) return [row({ key: 'wf-none', label: 'Workflows', description: 'No workflow has been created yet.', link: { label: 'Create a workflow', href: '/marketing/automations' }, state: () => ({ value: 'None', tone: 'neutral' }) })];
+            const wfs = await d.prisma.workflow.findMany({
+              where: { businessId: ctx.businessId },
+              orderBy: { createdAt: 'asc' },
+            });
+            if (wfs.length === 0)
+              return [
+                row({
+                  key: 'wf-none',
+                  label: 'Workflows',
+                  description: 'No workflow has been created yet.',
+                  link: {
+                    label: 'Create a workflow',
+                    href: '/marketing/automations',
+                  },
+                  state: () => ({ value: 'None', tone: 'neutral' }),
+                }),
+              ];
             return wfs.map((w): RowDef =>
               row({
                 key: `workflow:${w.id}`,
@@ -330,8 +596,15 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                 description: `Runs when: ${w.triggerKey.replace(/_/g, ' ')}.`,
                 risk: 'Medium',
                 requires: CAPABILITIES.AUTOMATIONS_MANAGE,
-                link: { label: 'Edit workflow', href: '/marketing/automations' },
-                state: () => ({ value: w.active ? 'On' : 'Off', tone: w.active ? 'green' : 'neutral', control: { type: 'toggle', on: w.active } }),
+                link: {
+                  label: 'Edit workflow',
+                  href: '/marketing/automations',
+                },
+                state: () => ({
+                  value: w.active ? 'On' : 'Off',
+                  tone: w.active ? 'green' : 'neutral',
+                  control: { type: 'toggle', on: w.active },
+                }),
                 write: async (ctx, v) => {
                   const on = Boolean(v);
                   if (on && !w.active) {
@@ -349,7 +622,10 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                       graph,
                     });
                   }
-                  await d.prisma.workflow.update({ where: { id: w.id }, data: { active: on } });
+                  await d.prisma.workflow.update({
+                    where: { id: w.id },
+                    data: { active: on },
+                  });
                 },
               }),
             );
@@ -466,7 +742,8 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'wf-actions',
               label: 'What a workflow can do',
-              description: 'The actions currently supported by the workflow engine.',
+              description:
+                'The actions currently supported by the workflow engine.',
               state: () => ({
                 value:
                   'Message · notify · tag · custom field · wait · approval · AI draft',
@@ -482,16 +759,30 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       title: 'AI & Governance',
       icon: 'sparkles',
       group: 'Intelligence',
-      description: 'Which AI features are on, how much they may cost, and what AI is allowed to do.',
+      description:
+        'Which AI features are on, how much they may cost, and what AI is allowed to do.',
       affects: ['Every module', 'Marketing', 'Reviews'],
-      affectsNote: 'Turning a feature off blocks it for everyone in this business immediately.',
+      affectsNote:
+        'Turning a feature off blocks it for everyone in this business immediately.',
       help: [
         'Owner-only: AI switches and spend limits are billing-adjacent controls.',
         'The assistant’s data tools are read-only. It cannot change a price, refund, balance or permission.',
         'Voice commands only draft a record; nothing is saved until you confirm the draft.',
       ],
-      notice: { text: 'AI cannot change prices, refunds, credit, stock or permissions: the assistant only reads, and voice commands are drafts you must confirm.', icon: 'shield-check' },
-      actions: [{ label: 'Reset section', icon: 'rotate-ccw', kind: 'reset' }, { label: 'View history', icon: 'history', kind: 'history' }, { label: 'Open AI settings', icon: 'external-link', href: '/assistant/settings', kind: 'link' }],
+      notice: {
+        text: 'AI cannot change prices, refunds, credit, stock or permissions: the assistant only reads, and voice commands are drafts you must confirm.',
+        icon: 'shield-check',
+      },
+      actions: [
+        { label: 'Reset section', icon: 'rotate-ccw', kind: 'reset' },
+        { label: 'View history', icon: 'history', kind: 'history' },
+        {
+          label: 'Open AI settings',
+          icon: 'external-link',
+          href: '/assistant/settings',
+          kind: 'link',
+        },
+      ],
       groups: [
         {
           title: 'Voice usage limits',
@@ -646,69 +937,954 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'ai-available',
               label: 'Availability',
-              description: 'Whether an AI provider is configured on this Noxtill installation.',
-              state: () => ({ value: process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured', tone: process.env.ANTHROPIC_API_KEY ? 'green' : 'red' }),
+              description:
+                'Whether an AI provider is configured on this Noxtill installation.',
+              state: () => ({
+                value: process.env.ANTHROPIC_API_KEY
+                  ? 'Configured'
+                  : 'Not configured',
+                tone: process.env.ANTHROPIC_API_KEY ? 'green' : 'red',
+              }),
             }),
             row({
               key: 'ai-usage',
               label: 'Usage this month',
               description: 'AI calls made and their estimated cost this month.',
               state: async (ctx) => {
-                const agg = await d.prisma.aiCallLog.aggregate({ where: { businessId: ctx.businessId, createdAt: { gte: monthStart(ctx.now) } }, _count: { _all: true }, _sum: { estimatedCostUsd: true } });
-                return { value: `${agg._count._all.toLocaleString('en-US')} calls · $${Number(agg._sum.estimatedCostUsd ?? 0).toFixed(2)}` };
+                const agg = await d.prisma.aiCallLog.aggregate({
+                  where: {
+                    businessId: ctx.businessId,
+                    createdAt: { gte: monthStart(ctx.now) },
+                  },
+                  _count: { _all: true },
+                  _sum: { estimatedCostUsd: true },
+                });
+                return {
+                  value: `${agg._count._all.toLocaleString('en-US')} calls · $${Number(agg._sum.estimatedCostUsd ?? 0).toFixed(2)}`,
+                };
               },
             }),
             row({
               key: 'ai-cap',
               label: 'Monthly cost cap',
-              description: 'AI calls are refused once estimated spend this month reaches this amount.',
+              description:
+                'AI calls are refused once estimated spend this month reaches this amount.',
               risk: 'High',
-              impact: 'Lowering the cap can immediately block AI features for the rest of the month.',
+              impact:
+                'Lowering the cap can immediately block AI features for the rest of the month.',
               requires: CAPABILITIES.AI_SETTINGS_MANAGE,
               reset: { label: '$5.00', value: 5 },
               state: async (ctx) => {
                 const b = await business(d, ctx);
-                return { value: `$${Number(b.aiMonthlyCostCapUsd).toFixed(2)}`, control: { type: 'number', current: Number(b.aiMonthlyCostCapUsd), min: 0, max: 100000, step: 0.5, unit: 'USD' } };
+                return {
+                  value: `$${Number(b.aiMonthlyCostCapUsd).toFixed(2)}`,
+                  control: {
+                    type: 'number',
+                    current: Number(b.aiMonthlyCostCapUsd),
+                    min: 0,
+                    max: 100000,
+                    step: 0.5,
+                    unit: 'USD',
+                  },
+                };
               },
               write: async (ctx, v) => {
                 const n = Number(v);
-                if (!Number.isFinite(n) || n < 0) throw bad('Enter a cost of 0 or more.');
+                if (!Number.isFinite(n) || n < 0)
+                  throw bad('Enter a cost of 0 or more.');
                 await updateBusiness(d, ctx, { aiMonthlyCostCapUsd: n });
               },
             }),
             row({
               key: 'ai-rate',
               label: 'Calls per minute',
-              description: 'The most AI calls this business can make in a minute.',
+              description:
+                'The most AI calls this business can make in a minute.',
               risk: 'Medium',
               requires: CAPABILITIES.AI_SETTINGS_MANAGE,
               reset: { label: '10', value: 10 },
               state: async (ctx) => {
                 const b = await business(d, ctx);
-                return { value: String(b.aiRateLimitPerMinute), control: { type: 'number', current: b.aiRateLimitPerMinute, min: 1, max: 1000, step: 1, unit: 'per minute' } };
+                return {
+                  value: String(b.aiRateLimitPerMinute),
+                  control: {
+                    type: 'number',
+                    current: b.aiRateLimitPerMinute,
+                    min: 1,
+                    max: 1000,
+                    step: 1,
+                    unit: 'per minute',
+                  },
+                };
               },
               write: async (ctx, v) => {
                 const n = Number(v);
-                if (!Number.isInteger(n) || n < 1) throw bad('Enter a whole number of 1 or more.');
+                if (!Number.isInteger(n) || n < 1)
+                  throw bad('Enter a whole number of 1 or more.');
                 await updateBusiness(d, ctx, { aiRateLimitPerMinute: n });
               },
             }),
           ],
         },
-        { title: 'Features', hint: 'Owner controls', rows: AI_FEATURES.map(aiFeatureRow) },
+        {
+          title: 'Specialist agent access',
+          hint: 'Owner controls · manual reviews',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-inventory-enabled',
+              policy: 'agents.inventoryEnabled',
+              kind: 'toggle',
+              label: 'Inventory Intelligence Agent',
+              description:
+                'Allows authorized users to start manual, read-only inventory reviews. The separate AI feature switch controls whether aggregate evidence may be sent for an AI explanation.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Enabled', tone: 'green' },
+              off: { text: 'Disabled', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-enabled',
+              policy: 'agents.financeEnabled',
+              kind: 'toggle',
+              label: 'Financial Intelligence Agent',
+              description:
+                'Allows authorized users to start manual Profit & Analytics reviews. The agent does not post journals, reconcile transactions or move money.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Profit & Analytics',
+                href: '/profit',
+              },
+              on: { text: 'Enabled', tone: 'green' },
+              off: { text: 'Disabled', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-enabled',
+              policy: 'agents.customerEnabled',
+              kind: 'toggle',
+              label: 'Customer Intelligence Agent',
+              description:
+                'Allows authorized users to run aggregate CRM reviews and prepare versioned segment proposals. A separate exact human approval saves a canonical Segment; later definition edits require reapproval. It does not send messages, merge or change customer records.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customers', href: '/customers' },
+              on: { text: 'Enabled', tone: 'green' },
+              off: { text: 'Disabled', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-seo-enabled',
+              policy: 'agents.seoEnabled',
+              kind: 'toggle',
+              label: 'SEO Autopilot Agent',
+              description:
+                'Allows authorized users to start manual reviews of the existing SEO workspace queue. It does not publish website changes or send outreach.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open SEO Workspace',
+                href: '/marketing/seo-autopilot/workspace',
+              },
+              on: { text: 'Enabled', tone: 'green' },
+              off: { text: 'Disabled', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-enabled',
+              policy: 'agents.commerceEnabled',
+              kind: 'toggle',
+              label: 'Autonomous Commerce Agent',
+              description:
+                'Allows authorized users to start manual, read-only Commerce reviews. Commerce autonomy level and its separate AI feature switch still apply.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Agents & Tools',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              on: { text: 'Enabled', tone: 'green' },
+              off: { text: 'Disabled', tone: 'neutral' },
+            }),
+          ],
+        },
+        {
+          title: 'Scheduled specialist reviews',
+          hint: 'Optional · read-only · once per UTC day',
+          footer:
+            'Each enabled review runs on the next hourly scheduler tick, at most once per UTC day. It only reads canonical module data and records evidence; it does not perform proposed actions. Scheduled runs do not request optional AI explanations.',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-inventory-daily-review',
+              policy: 'agents.inventoryDailyReviewEnabled',
+              kind: 'toggle',
+              label: 'Schedule Inventory review',
+              description:
+                'Create a daily evidence-backed review of inventory, reorder, count and recorded wastage signals.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Daily review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-daily-review',
+              policy: 'agents.financeDailyReviewEnabled',
+              kind: 'toggle',
+              label: 'Schedule Finance review',
+              description:
+                'Create a daily review of the current UTC calendar month using the canonical Profit Analytics sources.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Profit & Analytics', href: '/profit' },
+              on: { text: 'Daily review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-daily-review',
+              policy: 'agents.customerDailyReviewEnabled',
+              kind: 'toggle',
+              label: 'Schedule Customer review',
+              description:
+                'Create a daily aggregate CRM review; it does not contact customers or activate a campaign.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customers', href: '/customers' },
+              on: { text: 'Daily review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-seo-daily-review',
+              policy: 'agents.seoDailyReviewEnabled',
+              kind: 'toggle',
+              label: 'Schedule SEO review',
+              description:
+                'Create a daily review of the existing SEO Workspace queue; no search traffic or provider metrics are estimated.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open SEO Workspace',
+                href: '/marketing/seo-autopilot/workspace',
+              },
+              on: { text: 'Daily review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-daily-review',
+              policy: 'agents.commerceDailyReviewEnabled',
+              kind: 'toggle',
+              label: 'Schedule Commerce review',
+              description:
+                'Create a daily read-only review of recorded Commerce queues. Commerce autonomy must also be enabled.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Agents & Tools',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              on: { text: 'Daily review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+          ],
+        },
+        {
+          title: 'Specialist AI event reviews',
+          hint: 'Optional · read-only · source-event driven',
+          footer:
+            'When enabled, completed or partial site audits queue one SEO workspace review; canonical low-stock scans, applied physical stock counts, fully received purchase orders and confirmed branch-transfer receipts can each queue one Inventory review per eligible branch, while recorded wastage can queue a read-only Inventory review for its business; newly-lapsed customer events and customer-linked completed sales queue at most one aggregate Customer review per business per UTC day, while customer no-shows and cancellations queue privacy-minimized Customer reviews. Product Validation, current supplier-quote and failed-delivery events queue a Commerce review, and newly saved expenses queue a Finance review. Reviews are read-only and do not request AI explanations or apply changes. Commerce reviews also require Commerce autonomy to be enabled.',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-seo-audit-event-review',
+              policy: 'agents.seoAuditEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review SEO workspace after site audits',
+              description:
+                'Start one read-only SEO agent review after each completed or partial site audit. Duplicate delivery of the same audit does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open SEO Workspace',
+                href: '/marketing/seo-autopilot/workspace',
+              },
+              on: { text: 'Audit review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-inventory-low-stock-event-review',
+              policy: 'agents.inventoryLowStockEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review inventory after low-stock events',
+              description:
+                'Start one read-only Inventory review after the canonical low-stock scan records an event. Duplicate delivery of the same event does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Low-stock review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-inventory-stock-count-event-review',
+              policy: 'agents.inventoryStockCountEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review inventory after stock counts',
+              description:
+                'Start one read-only Inventory review after a physical stock count is applied. Duplicate delivery of the same applied count does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Count review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-inventory-purchase-order-received-event-review',
+              policy: 'agents.inventoryPurchaseOrderReceivedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review inventory after fully received purchase orders',
+              description:
+                'Start one read-only Inventory review after a canonical purchase order is fully received. Partial receipts do not queue a review; duplicate delivery of the final receipt does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Receipt review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-inventory-stock-transfer-received-event-review',
+              policy: 'agents.inventoryStockTransferReceivedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review inventory after branch transfers',
+              description:
+                'After a branch transfer is confirmed received, queue one read-only Inventory review for each branch with this setting enabled. Each review stays inside that branch’s business data; duplicate delivery does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Transfer review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-inventory-wastage-event-review',
+              policy: 'agents.inventoryWastageEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review inventory after recorded wastage',
+              description:
+                'Start one read-only Inventory review after a wastage movement is recorded. Duplicate delivery of the same movement does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Wastage review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-lapsed-event-review',
+              policy: 'agents.customerLapsedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer retention after lapsed events',
+              description:
+                'Queue an aggregate, read-only Customer review when the CRM marks a customer as newly lapsed. Multiple lapsed transitions are coalesced to one review per business per UTC day.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Customer Intelligence',
+                href: '/customers',
+              },
+              on: { text: 'Lapsed review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-delivery-failed-event-review',
+              policy: 'agents.customerDeliveryFailedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer context after failed deliveries',
+              description:
+                'Create a privacy-minimized Customer Agent review after a delivery is recorded as failed. It stores no contact details, does not determine channel-specific consent, and never drafts or sends a message.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Customer Intelligence',
+                href: '/customers',
+              },
+              on: { text: 'Failure review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-no-show-event-review',
+              policy: 'agents.customerNoShowEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer context after appointment no-shows',
+              description:
+                'Create one read-only, privacy-minimized Customer review when an appointment is marked no-show. It does not infer a reason, draft a message, or contact the customer.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customers', href: '/customers' },
+              on: { text: 'No-show review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-appointment-cancelled-event-review',
+              policy: 'agents.customerAppointmentCancelledEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer context after appointment cancellations',
+              description:
+                'Create one read-only, privacy-minimized Customer review when an appointment is cancelled. It does not infer the reason, draft a message, or contact the customer.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customers', href: '/customers' },
+              on: { text: 'Cancellation review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-completed-sale-event-review',
+              policy: 'agents.customerCompletedSaleEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer retention after completed sales',
+              description:
+                'Queue one aggregate, read-only Customer review per business per UTC day after a customer-linked sale completes. The review uses canonical CRM analytics and never drafts or sends a message.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customer Intelligence', href: '/customers' },
+              on: { text: 'Sale review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-validation-event-review',
+              policy: 'agents.commerceValidationEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Commerce after validation events',
+              description:
+                'Start one read-only Commerce review after a Product Validation decision or catalog draft creation. Commerce autonomy must also be enabled; duplicate delivery of the same event does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Autonomous Commerce',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              on: { text: 'Validation review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-delivery-failure-event-review',
+              policy: 'agents.commerceDeliveryFailedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Commerce after failed deliveries',
+              description:
+                'Start one read-only Commerce exception review when a delivery is recorded as failed. The worker rechecks the current delivery state; no customer message or delivery change is made.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Autonomous Commerce',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              on: { text: 'Failure review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-rfq-quote-event-review',
+              policy: 'agents.commerceRfqQuoteEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Commerce after supplier quotes',
+              description:
+                'Start one read-only Commerce review after a current supplier quote is recorded for an open RFQ. The worker rechecks that the RFQ and quote are still current; it does not award the RFQ or create a purchase order.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Autonomous Commerce',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              on: { text: 'Quote review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-experiment-decision-event-review',
+              policy: 'agents.commerceExperimentDecisionEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Commerce after experiment decisions',
+              description:
+                'Start a read-only review after an experiment is adopted, reverted or marked inconclusive. Results are observational, not causal; the agent does not change the product, price or listing.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Experiment Lab',
+                href: '/autonomous-commerce/experiment-lab',
+              },
+              on: { text: 'Decision review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-reconciliation-event-review',
+              policy: 'agents.commerceReconciliationEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Commerce after listing checks',
+              description:
+                'Queue a read-only review after a provider reconciliation completes. The worker uses the saved check and current discrepancies; it does not call the provider again or change a listing.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Reconciliation',
+                href: '/autonomous-commerce/reconciliation',
+              },
+              on: { text: 'Listing review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-expense-event-review',
+              policy: 'agents.financeExpenseEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Profit Analytics after expenses',
+              description:
+                'Start one read-only Finance review after a new expense is saved, using its recorded month and the canonical Profit Analytics calculation. It does not post or change finance records.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Profit Analytics',
+                href: '/profit',
+              },
+              on: { text: 'Expense review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-completed-order-event-review',
+              policy: 'agents.financeCompletedOrderEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Profit Analytics after completed orders',
+              description:
+                'Start one read-only Finance review per UTC day after a canonical non-quotation order is completed, using the same month as Profit Analytics. A completed order may still be unpaid or on credit; this review does not treat it as cash, post journals, or change finance records.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Profit Analytics',
+                href: '/profit',
+              },
+              on: { text: 'Order review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-approved-return-event-review',
+              policy: 'agents.financeApprovedReturnEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Profit Analytics after approved returns',
+              description:
+                'Queue one read-only Finance review per UTC day after a canonical return is approved. The review lists approved return records separately from Profit Analytics; it does not subtract them from profit or claim final provider settlement.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Profit Analytics',
+                href: '/profit',
+              },
+              on: { text: 'Return review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-approved-budget-event-review',
+              policy: 'agents.financeApprovedBudgetEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Finance after approved budgets',
+              description:
+                'Queue one read-only Finance review for each newly approved budget version. It uses the approved month and canonical Profit Analytics data; it does not post journals or change finance records.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Profit Analytics',
+                href: '/profit',
+              },
+              on: { text: 'Budget review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-posted-journal-event-review',
+              policy: 'agents.financePostedJournalEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Finance after journals are posted',
+              description:
+                'Queue one read-only Finance review after a Noxtill manual journal is posted. It reviews the canonical posted entry and Profit Analytics; it never edits or reverses the journal.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Profit Analytics',
+                href: '/profit',
+              },
+              on: { text: 'Posted-journal review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-finance-statement-imported-event-review',
+              policy: 'agents.financeStatementImportedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review Finance after statement imports',
+              description:
+                'Queue one read-only Finance review after a statement CSV is imported. It uses the saved dates and amounts to refresh the current reconciliation evidence; the source file and bank descriptions are not retained, and no match is accepted automatically.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Reconciliation',
+                href: '/profit/reconciliation',
+              },
+              on: { text: 'Import review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+          ],
+        },
+        {
+          title: 'Specialist AI per-run request ceiling',
+          hint: 'Server-enforced cap · each persisted specialist run',
+          footer:
+            'Every provider request is reserved before it starts. Failed or interrupted requests count toward this run ceiling, so a retry loop cannot keep calling the provider. The separate monthly request and estimated-spend limits still apply.',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-provider-requests-per-run',
+              policy: 'agents.specialistMaxProviderRequestsPerRun',
+              kind: 'number',
+              label: 'Maximum AI provider requests per specialist run',
+              description:
+                'Stops additional model requests for this saved agent run after the configured count. Start a new review for a fresh run; the existing deterministic review remains available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'requests / run',
+              format: (value) =>
+                `${value} request${value === 1 ? '' : 's'} / run`,
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-output-tokens-per-request',
+              policy: 'agents.specialistMaxOutputTokensPerRequest',
+              kind: 'number',
+              label: 'Maximum output tokens per specialist AI request',
+              description:
+                'Refuses a specialist provider request before it starts when its requested output-token allowance exceeds this cap. This is an output-token limit; it does not measure or cap input-context tokens.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'output tokens / request',
+              format: (value) => `${value} output tokens / request`,
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-input-bytes-per-request',
+              policy: 'agents.specialistMaxInputBytesPerRequest',
+              kind: 'number',
+              label: 'Maximum serialized input size per specialist AI request',
+              description:
+                'Rejects an oversized serialized request before reserving usage or contacting the provider. This is a byte limit, not a token count or a guarantee about model context usage.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'bytes / request',
+              format: (value) =>
+                `${value.toLocaleString('en-US')} bytes / request`,
+            }),
+          ],
+        },
+        {
+          title: 'Commerce Agent read-tool ceiling',
+          hint: 'Server-enforced · one question run · read-only tools',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-commerce-read-tools-per-run',
+              policy: 'agents.commerceMaxReadToolCallsPerRun',
+              kind: 'number',
+              label: 'Maximum read-tool calls per Commerce Agent run',
+              description:
+                'Limits how many registered read-only Commerce tools one AI question can run. Any additional requested tools are refused and recorded; no write tools are available in this question flow.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'tool calls / run',
+              format: (value) =>
+                `${value} read-tool call${value === 1 ? '' : 's'} / run`,
+            }),
+          ],
+        },
+        {
+          title: 'Specialist tool-call budget',
+          hint: 'Server-enforced · per run · all five agents',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-tool-calls-per-run',
+              policy: 'agents.maxToolCallsPerRun',
+              kind: 'number',
+              label: 'Maximum tool calls per specialist run',
+              description:
+                'Limits registered tool calls across Inventory, Finance, Customer, SEO and Commerce. Failed or refused calls count toward the run limit; retries in the same call slot do not use another slot.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'tool calls / run',
+              format: (value) =>
+                `${value} tool call${value === 1 ? '' : 's'} / run`,
+            }),
+          ],
+        },
+        {
+          title: 'Per-agent tool-call overrides',
+          hint: 'Server-enforced · per run · optional overrides',
+          footer:
+            'An empty value uses the shared specialist tool-call limit. Each configured override applies only to that agent.',
+          rows: [
+            ...SPECIALIST_TOOL_CALL_OVERRIDES.map(({ key, policy, label }) =>
+              policyRow(d, {
+                key: `specialist-agent-${key}-tool-calls-per-run`,
+                policy,
+                kind: 'number',
+                label: `Maximum tool calls per ${label} Agent run`,
+                description:
+                  'Overrides the shared per-run tool-call limit for this agent. Failed and refused calls count; retries in the same call slot do not use another slot.',
+                requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+                risk: 'Medium',
+                unit: 'tool calls / run',
+                emptyLabel: 'Use shared limit',
+                format: (value) =>
+                  `${value} tool call${value === 1 ? '' : 's'} / run`,
+              }),
+            ),
+          ],
+        },
+        {
+          title: 'Commerce Agent write-tool allow-list',
+          hint: 'Server-enforced · per business · additional to autonomy and approval gates',
+          footer:
+            'Enter registered write-tool keys separated by commas. Read-only tools are controlled by the Commerce autonomy level. An empty list blocks every write tool; approval and pause rules still apply to listed tools.',
+          rows: [
+            policyRow(d, {
+              key: 'commerce-agent-write-tool-allowlist',
+              policy: 'commerce.agentAllowedWriteTools',
+              kind: 'text',
+              label: 'Allowed Commerce Agent write tools',
+              description:
+                'Only these registered write-tool keys may create drafts or approval requests. The current registry and exact keys are shown in Autonomous Commerce → Agents & Tools. Unknown keys fail closed and block Commerce write tools.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'High',
+              impact:
+                'Changing this list may block new writes and pending approvals. Every approval re-checks the current list before canonical execution.',
+              link: {
+                label: 'Open Agents & Tools',
+                href: '/autonomous-commerce/agent-tools',
+              },
+              placeholder: 'create_listing_draft,create_rfq',
+              emptyLabel: 'No write tools allowed',
+              format: (value) => {
+                const count = value
+                  .split(',')
+                  .filter((key) => key.trim()).length;
+                return `${count} registered tool key${count === 1 ? '' : 's'}`;
+              },
+            }),
+          ],
+        },
+        {
+          title: 'Specialist AI monthly request limits',
+          hint: 'Optional server-enforced caps · UTC calendar month',
+          footer:
+            'These are request-count limits, not dollar budgets. A request is reserved before contacting the AI provider; failed and abandoned requests count. The shared business AI cost cap still applies separately.',
+          rows: [
+            specialistRequestLimitRow('inventory_intelligence', {
+              key: 'specialist-agent-inventory-monthly-requests',
+              policy: 'agents.inventoryMaxRequestsPerMonth',
+              kind: 'number',
+              label: 'Inventory Agent monthly AI requests',
+              description:
+                'Blocks the next optional AI explanation after this many requests in the UTC month. Manual deterministic inventory reviews remain available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'requests / month',
+              format: formatMonthlyRequests,
+              emptyLabel: 'No limit',
+            }),
+            specialistRequestLimitRow('financial_intelligence', {
+              key: 'specialist-agent-finance-monthly-requests',
+              policy: 'agents.financeMaxRequestsPerMonth',
+              kind: 'number',
+              label: 'Finance Agent monthly AI requests',
+              description:
+                'Blocks the next optional AI explanation after this many requests in the UTC month. Deterministic Profit & Analytics reviews remain available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'requests / month',
+              format: formatMonthlyRequests,
+              emptyLabel: 'No limit',
+            }),
+            specialistRequestLimitRow('customer_intelligence', {
+              key: 'specialist-agent-customer-monthly-requests',
+              policy: 'agents.customerMaxRequestsPerMonth',
+              kind: 'number',
+              label: 'Customer Agent monthly AI requests',
+              description:
+                'Blocks the next optional AI explanation after this many requests in the UTC month. Deterministic CRM reviews remain available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'requests / month',
+              format: formatMonthlyRequests,
+              emptyLabel: 'No limit',
+            }),
+            specialistRequestLimitRow('seo_autopilot', {
+              key: 'specialist-agent-seo-monthly-requests',
+              policy: 'agents.seoMaxRequestsPerMonth',
+              kind: 'number',
+              label: 'SEO Agent monthly AI requests',
+              description:
+                'Blocks the next optional AI explanation after this many requests in the UTC month. The deterministic SEO workspace review remains available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'requests / month',
+              format: formatMonthlyRequests,
+              emptyLabel: 'No limit',
+            }),
+            specialistRequestLimitRow('autonomous_commerce', {
+              key: 'specialist-agent-commerce-monthly-requests',
+              policy: 'agents.commerceMaxRequestsPerMonth',
+              kind: 'number',
+              label: 'Commerce Agent monthly AI requests',
+              description:
+                'Blocks the next optional AI explanation after this many requests in the UTC month. Deterministic Commerce reviews remain available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'requests / month',
+              format: formatMonthlyRequests,
+              emptyLabel: 'No limit',
+            }),
+          ],
+        },
+        {
+          title: 'Specialist AI monthly spend budgets',
+          hint: 'Optional server-enforced estimated USD caps · UTC month',
+          footer:
+            'Successful requests use returned token counts at the configured model’s published-rate estimate. Pending or failed requests hold a conservative maximum reservation. Failed requests may therefore remain reserved for this month. This is not a provider invoice; the business-wide AI cost cap still applies separately.',
+          rows: [
+            specialistSpendLimitRow(
+              'inventory_intelligence',
+              'inventory_agent',
+              {
+                key: 'specialist-agent-inventory-monthly-spend',
+                policy: 'agents.inventoryMaxSpendUsdPerMonth',
+                kind: 'number',
+                label: 'Inventory Agent monthly AI spend budget',
+                description:
+                  'Refuses an optional AI explanation before the provider call if its conservative maximum estimate would exceed this UTC-month budget. Deterministic inventory reviews remain available.',
+                requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+                risk: 'Medium',
+                unit: 'USD / month',
+                step: 0.01,
+                format: (value) => `$${value.toFixed(2)} / month`,
+                emptyLabel: 'No cap',
+              },
+            ),
+            specialistSpendLimitRow('financial_intelligence', 'finance_agent', {
+              key: 'specialist-agent-finance-monthly-spend',
+              policy: 'agents.financeMaxSpendUsdPerMonth',
+              kind: 'number',
+              label: 'Finance Agent monthly AI spend budget',
+              description:
+                'Refuses an optional AI explanation before the provider call if its conservative maximum estimate would exceed this UTC-month budget. Deterministic Profit & Analytics reviews remain available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'USD / month',
+              step: 0.01,
+              format: (value) => `$${value.toFixed(2)} / month`,
+              emptyLabel: 'No cap',
+            }),
+            specialistSpendLimitRow('customer_intelligence', 'customer_agent', {
+              key: 'specialist-agent-customer-monthly-spend',
+              policy: 'agents.customerMaxSpendUsdPerMonth',
+              kind: 'number',
+              label: 'Customer Agent monthly AI spend budget',
+              description:
+                'Refuses an optional AI explanation before the provider call if its conservative maximum estimate would exceed this UTC-month budget. Deterministic CRM reviews remain available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'USD / month',
+              step: 0.01,
+              format: (value) => `$${value.toFixed(2)} / month`,
+              emptyLabel: 'No cap',
+            }),
+            specialistSpendLimitRow('seo_autopilot', 'seo_agent', {
+              key: 'specialist-agent-seo-monthly-spend',
+              policy: 'agents.seoMaxSpendUsdPerMonth',
+              kind: 'number',
+              label: 'SEO Agent monthly AI spend budget',
+              description:
+                'Refuses an optional AI explanation before the provider call if its conservative maximum estimate would exceed this UTC-month budget. The deterministic SEO workspace review remains available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'USD / month',
+              step: 0.01,
+              format: (value) => `$${value.toFixed(2)} / month`,
+              emptyLabel: 'No cap',
+            }),
+            specialistSpendLimitRow('autonomous_commerce', 'commerce_agent', {
+              key: 'specialist-agent-commerce-monthly-spend',
+              policy: 'agents.commerceMaxSpendUsdPerMonth',
+              kind: 'number',
+              label: 'Commerce Agent monthly AI spend budget',
+              description:
+                'Refuses an optional AI explanation before the provider call if its conservative maximum estimate would exceed this UTC-month budget. Deterministic Commerce reviews remain available.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'USD / month',
+              step: 0.01,
+              format: (value) => `$${value.toFixed(2)} / month`,
+              emptyLabel: 'No cap',
+            }),
+          ],
+        },
+        {
+          title: 'Inventory Agent review',
+          hint: 'Owner controls · reorder and quantity rules',
+          rows: [
+            policyRow(d, {
+              key: 'inventory-agent-reorder-lead-time-days',
+              policy: 'inventory.agentReorderLeadTimeDays',
+              kind: 'number',
+              label: 'Reorder planning lead-time baseline',
+              description:
+                'Used by the canonical Reorder Suggestions formula and Inventory Agent. This is a planning assumption in days, not a supplier delivery promise. Product-specific historical lead time is shown separately as sensitivity evidence.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              unit: 'days',
+              format: (value) => `${value} days`,
+              link: {
+                label: 'Open Reorder Suggestions',
+                href: '/inventory/reorder-suggestions',
+              },
+            }),
+            policyRow(d, {
+              key: 'inventory-agent-count-variance-minimum-units',
+              policy: 'inventory.agentCountVarianceMinimumUnits',
+              kind: 'number',
+              label: 'Minimum repeated count adjustment units',
+              description:
+                'Only repeated applied-count patterns whose summed absolute corrections meet this unit threshold are shown. This filters quantity only; it does not estimate financial materiality or identify a cause.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              unit: 'units',
+              emptyLabel: 'No minimum',
+              format: (value) => `${value} units`,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+            }),
+          ],
+        },
+        {
+          title: 'Customer Agent retention review',
+          hint: 'Owner control · completed-order activity rule',
+          rows: [
+            policyRow(d, {
+              key: 'customer-agent-retention-minimum-order-decline',
+              policy: 'agents.customerRetentionMinimumOrderDecline',
+              kind: 'number',
+              label: 'Minimum completed-order decline',
+              description:
+                'Show a human review cue only when this customer has at least this many fewer completed non-quotation orders than in the previous 30-day window. It is a rule-based cue, not a churn prediction or a cause.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              unit: 'fewer orders',
+              format: (value) =>
+                `${value} fewer order${value === 1 ? '' : 's'}`,
+              link: {
+                label: 'Open Customer Intelligence',
+                href: '/customers',
+              },
+            }),
+          ],
+        },
+        {
+          title: 'Features',
+          hint: 'Owner controls',
+          rows: AI_FEATURES.map(aiFeatureRow),
+        },
         {
           title: 'Customer contact details',
           hint: 'Enforced in the AI Assistant',
-          footer: 'The assistant still sees customer names, spend and visit counts. It does not apply to text you type into the chat yourself, and other AI features are governed by the switches above.',
+          footer:
+            'The assistant still sees customer names, spend and visit counts. It does not apply to text you type into the chat yourself, and other AI features are governed by the switches above.',
           rows: [
             policyRow(d, {
               key: 'ai-redact',
               policy: 'ai.redactContacts',
               kind: 'toggle',
               label: 'Hide customer phone and email from the AI Assistant',
-              description: 'Phone numbers and email addresses in what the assistant looks up are masked (for example •••4567) before the assistant sees them.',
+              description:
+                'Phone numbers and email addresses in what the assistant looks up are masked (for example •••4567) before the assistant sees them.',
               risk: 'High',
-              impact: 'The assistant can no longer read out a customer’s full contact details.',
+              impact:
+                'The assistant can no longer read out a customer’s full contact details.',
               requires: CAPABILITIES.AI_SETTINGS_MANAGE,
               on: { text: 'Masked', tone: 'green' },
               off: { text: 'Visible to the assistant', tone: 'amber' },
@@ -719,8 +1895,64 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
           title: 'What AI may do',
           hint: 'Not configurable',
           rows: [
-            row({ key: 'ai-tools', label: 'Assistant data tools', description: 'The assistant looks things up. None of its tools writes data.', risk: 'High', state: () => ({ value: 'Read-only', tone: 'green' }) }),
-            row({ key: 'ai-voice', label: 'Voice commands', description: 'Add expense, add customer, record wastage and record cash movement are drafted, then need your confirmation.', risk: 'High', state: () => ({ value: 'Confirmation required', tone: 'green' }) }),
+            row({
+              key: 'ai-tools',
+              label: 'Assistant data tools',
+              description:
+                'The assistant looks things up. None of its tools writes data.',
+              risk: 'High',
+              state: () => ({ value: 'Read-only', tone: 'green' }),
+            }),
+            row({
+              key: 'ai-voice',
+              label: 'Voice commands',
+              description:
+                'Add expense, add customer, record wastage and record cash movement are drafted, then need your confirmation.',
+              risk: 'High',
+              state: () => ({ value: 'Confirmation required', tone: 'green' }),
+            }),
+          ],
+        },
+        {
+          title: 'Specialist agent evidence retention',
+          hint: 'Optional · audited cleanup · completed runs only',
+          footer:
+            'When the retention age is reached, transient evidence and run payloads are cleared only for completed runs with no recommendations or material actions. Run status, token/cost usage and redacted tool-call history remain. Runs with recommendations or actions are preserved so their review and action audit stays available. No value keeps evidence indefinitely.',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-run-retention-days',
+              policy: 'agents.specialistRunRetentionDays',
+              kind: 'number',
+              label: 'Specialist run evidence retention',
+              description:
+                'Clear transient source evidence, request context, generated run output and provider tool-result traces after this many days. Only finished runs with no recommendation or material action are eligible. The cleanup is audited and preserves run status and cost/token records.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'High',
+              unit: 'days',
+              emptyLabel: 'Keep forever',
+              format: (value) => `${value} days`,
+            }),
+          ],
+        },
+        {
+          title: 'Specialist action budget',
+          hint: 'Server-enforced · per specialist run · all five agents',
+          footer:
+            'Counts material action proposals created by a run. Repeated or concurrent proposals cannot exceed the limit. This does not execute an approved action; each canonical module still owns execution and verification.',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-agent-actions-per-run',
+              policy: 'agents.maxMaterialActionsPerRun',
+              kind: 'number',
+              label: 'Maximum material actions per specialist run',
+              description:
+                'Caps the total number of material action proposals one specialist run can create across Inventory, Finance, Customer, SEO and Commerce.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'actions / run',
+              format: (value) =>
+                `${value} action${value === 1 ? '' : 's'} / run`,
+            }),
           ],
         },
       ],
@@ -731,30 +1963,63 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       title: 'Integrations',
       icon: 'plug-zap',
       group: 'Intelligence',
-      description: 'Connected external services and the real state of each connection.',
+      description:
+        'Connected external services and the real state of each connection.',
       affects: ['Marketing', 'Reviews', 'Reports', 'Unified Inbox'],
-      affectsNote: 'A connection that needs attention cannot sync until it is reconnected.',
+      affectsNote:
+        'A connection that needs attention cannot sync until it is reconnected.',
       help: [
         'States are connected, needs attention or not connected — never a fabricated live badge.',
         'Only services Noxtill can genuinely connect to are listed.',
         'Disconnecting stops syncing; data already synced is kept.',
       ],
-      actions: [{ label: 'Open Integrations', icon: 'external-link', primary: true, href: '/integrations', kind: 'link' }],
+      actions: [
+        {
+          label: 'Open Integrations',
+          icon: 'external-link',
+          primary: true,
+          href: '/integrations',
+          kind: 'link',
+        },
+      ],
       groups: [
         {
           title: 'Connected',
           hint: 'Real sync state',
           dynamicRows: async (ctx) => {
-            const list = await d.prisma.integration.findMany({ where: { businessId: ctx.businessId, status: { in: ['connected', 'needs_attention'] } }, orderBy: { provider: 'asc' } });
-            if (list.length === 0) return [row({ key: 'int-none', label: 'Connected services', description: 'No integration is connected.', link: { label: 'Connect a service', href: '/integrations' }, state: () => ({ value: 'None', tone: 'neutral' }) })];
+            const list = await d.prisma.integration.findMany({
+              where: {
+                businessId: ctx.businessId,
+                status: { in: ['connected', 'needs_attention'] },
+              },
+              orderBy: { provider: 'asc' },
+            });
+            if (list.length === 0)
+              return [
+                row({
+                  key: 'int-none',
+                  label: 'Connected services',
+                  description: 'No integration is connected.',
+                  link: { label: 'Connect a service', href: '/integrations' },
+                  state: () => ({ value: 'None', tone: 'neutral' }),
+                }),
+              ];
             return list.map((i): RowDef =>
               row({
                 key: `integration:${i.provider}`,
                 label: PROVIDER_LABELS[i.provider] ?? i.provider,
-                description: `Connected ${i.connectedAt ? relativeTime(i.connectedAt, ctx.now) : ''}. Last synced ${i.lastSyncAt ? relativeTime(i.lastSyncAt, ctx.now) : 'never'}.`.replace('Connected . ', ''),
+                description:
+                  `Connected ${i.connectedAt ? relativeTime(i.connectedAt, ctx.now) : ''}. Last synced ${i.lastSyncAt ? relativeTime(i.lastSyncAt, ctx.now) : 'never'}.`.replace(
+                    'Connected . ',
+                    '',
+                  ),
                 risk: i.status === 'needs_attention' ? 'High' : 'Medium',
                 link: { label: 'Open integration', href: '/integrations' },
-                state: () => ({ value: i.status === 'connected' ? 'Connected' : 'Needs attention', tone: i.status === 'connected' ? 'green' : 'amber' }),
+                state: () => ({
+                  value:
+                    i.status === 'connected' ? 'Connected' : 'Needs attention',
+                  tone: i.status === 'connected' ? 'green' : 'amber',
+                }),
               }),
             );
           },
@@ -766,11 +2031,19 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'int-available',
               label: 'Other services',
-              description: 'Services Noxtill can connect to that you have not connected.',
+              description:
+                'Services Noxtill can connect to that you have not connected.',
               link: { label: 'Browse integrations', href: '/integrations' },
               state: async (ctx) => {
-                const connected = await d.prisma.integration.count({ where: { businessId: ctx.businessId, status: { in: ['connected', 'needs_attention'] } } });
-                return { value: `${Math.max(0, Object.values(IntegrationProvider).length - connected)} available` };
+                const connected = await d.prisma.integration.count({
+                  where: {
+                    businessId: ctx.businessId,
+                    status: { in: ['connected', 'needs_attention'] },
+                  },
+                });
+                return {
+                  value: `${Math.max(0, Object.values(IntegrationProvider).length - connected)} available`,
+                };
               },
             }),
           ],
@@ -783,22 +2056,48 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
       title: 'API & Webhooks',
       icon: 'key-round',
       group: 'Intelligence',
-      description: 'Keys, scopes and event endpoints for connecting your own systems.',
+      description:
+        'Keys, scopes and event endpoints for connecting your own systems.',
       affects: ['Integrations', 'Every module'],
-      affectsNote: 'An API key can read whatever its scopes allow, so scope is the real security boundary.',
+      affectsNote:
+        'An API key can read whatever its scopes allow, so scope is the real security boundary.',
       help: [
         'A key’s secret is shown once at creation and never again. Revoke and recreate rather than recover.',
         'Webhook deliveries record their response and status so failures are diagnosable.',
         'Revoking a key takes effect immediately and breaks anything using it.',
       ],
-      actions: [{ label: 'Manage keys and webhooks', icon: 'external-link', primary: true, href: '/settings/tools/developer', kind: 'link' }, { label: 'View history', icon: 'history', kind: 'history' }],
+      actions: [
+        {
+          label: 'Manage keys and webhooks',
+          icon: 'external-link',
+          primary: true,
+          href: '/settings/tools/developer',
+          kind: 'link',
+        },
+        { label: 'View history', icon: 'history', kind: 'history' },
+      ],
       groups: [
         {
           title: 'API keys',
           hint: 'Scope is the security boundary',
           dynamicRows: async (ctx) => {
-            const keys = await d.prisma.apiKey.findMany({ where: { businessId: ctx.businessId, revokedAt: null }, orderBy: { createdAt: 'desc' } });
-            if (keys.length === 0) return [row({ key: 'api-none', label: 'Active keys', description: 'No API key is active.', link: { label: 'Create a key', href: '/settings/tools/developer' }, state: () => ({ value: 'None', tone: 'neutral' }) })];
+            const keys = await d.prisma.apiKey.findMany({
+              where: { businessId: ctx.businessId, revokedAt: null },
+              orderBy: { createdAt: 'desc' },
+            });
+            if (keys.length === 0)
+              return [
+                row({
+                  key: 'api-none',
+                  label: 'Active keys',
+                  description: 'No API key is active.',
+                  link: {
+                    label: 'Create a key',
+                    href: '/settings/tools/developer',
+                  },
+                  state: () => ({ value: 'None', tone: 'neutral' }),
+                }),
+              ];
             return keys.map((k): RowDef =>
               row({
                 key: `apikey:${k.id}`,
@@ -806,8 +2105,20 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                 description: `${k.keyPrefix}… · ${plural(((k.scopes as unknown as string[]) ?? []).length, 'scope')} · last used ${k.lastUsedAt ? relativeTime(k.lastUsedAt, ctx.now) : 'never'}.`,
                 risk: 'High',
                 requires: CAPABILITIES.INTEGRATIONS_MANAGE,
-                impact: 'Revoking takes effect at once and breaks anything currently using the key. There is no grace period.',
-                state: () => ({ value: 'Revoke', tone: 'neutral', control: { type: 'action', label: 'Revoke', actionKey: `apikey:${k.id}`, tone: 'red', confirm: 'Anything using this key stops working immediately.' } }),
+                impact:
+                  'Revoking takes effect at once and breaks anything currently using the key. There is no grace period.',
+                state: () => ({
+                  value: 'Revoke',
+                  tone: 'neutral',
+                  control: {
+                    type: 'action',
+                    label: 'Revoke',
+                    actionKey: `apikey:${k.id}`,
+                    tone: 'red',
+                    confirm:
+                      'Anything using this key stops working immediately.',
+                  },
+                }),
               }),
             );
           },
@@ -821,21 +2132,51 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               label: 'Endpoints',
               description: 'Webhook destinations that receive events.',
               state: async (ctx) => {
-                const [on, off] = await Promise.all([d.prisma.outboundWebhook.count({ where: { businessId: ctx.businessId, active: true } }), d.prisma.outboundWebhook.count({ where: { businessId: ctx.businessId, active: false } })]);
+                const [on, off] = await Promise.all([
+                  d.prisma.outboundWebhook.count({
+                    where: { businessId: ctx.businessId, active: true },
+                  }),
+                  d.prisma.outboundWebhook.count({
+                    where: { businessId: ctx.businessId, active: false },
+                  }),
+                ]);
                 return { value: `${on} active${off ? ` · ${off} off` : ''}` };
               },
             }),
             row({
               key: 'wh-failed',
               label: 'Failed deliveries',
-              description: 'Deliveries that failed after all attempts in the last 24 hours.',
+              description:
+                'Deliveries that failed after all attempts in the last 24 hours.',
               state: async (ctx) => {
-                const n = await d.prisma.outboundWebhookDelivery.count({ where: { webhook: { businessId: ctx.businessId }, status: 'failed', lastAttemptAt: { gte: new Date(ctx.now.getTime() - 86_400_000) } } });
-                return { value: n ? `${n} failed` : 'None', tone: n ? 'amber' : 'green' };
+                const n = await d.prisma.outboundWebhookDelivery.count({
+                  where: {
+                    webhook: { businessId: ctx.businessId },
+                    status: 'failed',
+                    lastAttemptAt: {
+                      gte: new Date(ctx.now.getTime() - 86_400_000),
+                    },
+                  },
+                });
+                return {
+                  value: n ? `${n} failed` : 'None',
+                  tone: n ? 'amber' : 'green',
+                };
               },
             }),
-            row({ key: 'wh-retry', label: 'Retry policy', description: 'How a failed delivery is retried.', state: () => ({ value: '5 attempts · exponential backoff' }) }),
-            row({ key: 'wh-signature', label: 'Signature', description: 'Every delivery is signed so you can verify it came from Noxtill.', state: () => ({ value: 'HMAC-SHA256', tone: 'green' }) }),
+            row({
+              key: 'wh-retry',
+              label: 'Retry policy',
+              description: 'How a failed delivery is retried.',
+              state: () => ({ value: '5 attempts · exponential backoff' }),
+            }),
+            row({
+              key: 'wh-signature',
+              label: 'Signature',
+              description:
+                'Every delivery is signed so you can verify it came from Noxtill.',
+              state: () => ({ value: 'HMAC-SHA256', tone: 'green' }),
+            }),
           ],
         },
       ],

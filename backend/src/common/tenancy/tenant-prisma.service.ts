@@ -14,9 +14,12 @@ function extendClient(prisma: PrismaService, cls: ClsService) {
 
 @Injectable()
 export class TenantPrismaService {
+  /** Explicit-business background/service transactions that cannot rely on request CLS scoping. */
+  readonly unscoped: PrismaService;
   readonly client: ReturnType<typeof extendClient>;
 
   constructor(prisma: PrismaService, cls: ClsService) {
+    this.unscoped = prisma;
     this.client = extendClient(prisma, cls);
   }
 }

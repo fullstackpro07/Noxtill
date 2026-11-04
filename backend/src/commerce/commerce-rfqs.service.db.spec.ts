@@ -10,6 +10,8 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CommerceRfqsService } from './commerce-rfqs.service';
 import { ActivityService } from '../activity/activity.service';
+import { Queue } from 'bullmq';
+import { COMMERCE_RFQ_QUOTE_EVENT_JOB } from '../common/agents/specialist-agent-events.constants';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -31,6 +33,7 @@ describe('CommerceRfqsService (MySQL)', () => {
   let foreignSupplierId: string;
   let cls: FakeClsService;
   let activityRecord: jest.MockedFunction<ActivityService['record']>;
+  const specialistAgentEvents = { add: jest.fn().mockResolvedValue(null) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -40,6 +43,8 @@ describe('CommerceRfqsService (MySQL)', () => {
     service = new CommerceRfqsService(
       new TenantPrismaService(prisma, cls as unknown as ClsService),
       { record: activityRecord } as unknown as ActivityService,
+      undefined,
+      specialistAgentEvents as unknown as Queue,
     );
     const business = await prisma.business.create({
       data: {
@@ -80,6 +85,11 @@ describe('CommerceRfqsService (MySQL)', () => {
 
   afterEach(async () => {
     activityRecord.mockClear();
+    specialistAgentEvents.add.mockClear();
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: {} },
+    });
     const rfqs = await prisma.commerceRfq.findMany({
       where: { businessId },
       select: { id: true, purchaseOrderId: true },
@@ -234,6 +244,32 @@ describe('CommerceRfqsService (MySQL)', () => {
       'commerce_rfq_response_received',
       'commerce_rfq_awarded',
     ]);
+  });
+
+  it('queues one optional specialist review for a newly recorded current quote', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.commerceEnabled': true,
+          'agents.commerceRfqQuoteEventReviewEnabled': true,
+          'commerce.autonomyLevel': 1,
+        },
+      },
+    });
+    const rfq = await createRfq();
+    const recorded = await openAndQuote(rfq);
+    const quoteId = recorded.quotes[0].id;
+
+    expect(specialistAgentEvents.add).toHaveBeenCalledTimes(1);
+    expect(specialistAgentEvents.add).toHaveBeenCalledWith(
+      COMMERCE_RFQ_QUOTE_EVENT_JOB,
+      { businessId, quoteId },
+      expect.objectContaining({
+        jobId: `commerce-rfq-quote-${businessId}-${quoteId}`,
+        attempts: 3,
+      }),
+    );
   });
 
   it('does not let an RFQ invite a supplier from another business', async () => {

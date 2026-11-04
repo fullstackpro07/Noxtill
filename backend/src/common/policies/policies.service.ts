@@ -6,6 +6,7 @@ import { AppException } from '../filters/app.exception';
 import { CapabilitiesService } from '../capabilities/capabilities.service';
 import { CLS_KEY_BUSINESS_ID, CLS_KEY_ROLE, CLS_KEY_USER_ID } from '../tenancy/tenant.constants';
 import { CAPABILITIES } from '../capabilities/capabilities.constants';
+import { recordSpecialistAgentConfigVersions } from '../agents/specialist-agent-config.util';
 import { POLICY_DEFS, PolicyDef, PolicyKey, PolicyValue, isPolicyKey } from './policies.constants';
 
 /** A business's policies with every default filled in. */
@@ -29,6 +30,13 @@ export class ResolvedPolicies {
   }
 
   time(key: PolicyKey): string | null {
+    const v = this.value(key);
+    return typeof v === 'string' ? v : null;
+  }
+
+  text(key: PolicyKey): string | null {
+    const def = POLICY_DEFS[key] as PolicyDef;
+    if (def.kind !== 'string') return null;
     const v = this.value(key);
     return typeof v === 'string' ? v : null;
   }
@@ -84,6 +92,14 @@ export class PoliciesService {
       if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw bad('Enter a time like 21:00.');
       return value;
     }
+    if (def.kind === 'string') {
+      if (typeof value !== 'string') throw bad('Enter text.');
+      const text = value.trim();
+      if (def.maxLength !== undefined && text.length > def.maxLength) {
+        throw bad(`The maximum is ${def.maxLength} characters.`);
+      }
+      return text;
+    }
     if (value === null || value === '') {
       if (def.kind === 'nullableNumber') return null;
       throw bad('Enter a number.');
@@ -98,11 +114,53 @@ export class PoliciesService {
 
   async set(businessId: string, key: string, value: unknown): Promise<PolicyValue> {
     const canonical = this.normalize(key, value);
-    const b = await this.prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { policies: true } });
-    const current = (b.policies && typeof b.policies === 'object' && !Array.isArray(b.policies) ? b.policies : {}) as Record<string, unknown>;
-    const next = { ...current, [key]: canonical };
-    await this.prisma.business.update({ where: { id: businessId }, data: { policies: next as Prisma.InputJsonValue } });
-    return canonical;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM businesses WHERE id = ${businessId} FOR UPDATE`;
+      const business = await tx.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: {
+          policies: true,
+          aiFeatureToggles: true,
+          aiMonthlyCostCapUsd: true,
+          aiRateLimitPerMinute: true,
+          aiQueryQuota: true,
+        },
+      });
+      const current =
+        business.policies &&
+        typeof business.policies === 'object' &&
+        !Array.isArray(business.policies)
+          ? (business.policies as Record<string, unknown>)
+          : {};
+      if (current[key] === canonical) return canonical;
+
+      const tracksAgentConfig =
+        key.startsWith('agents.') || key === 'commerce.autonomyLevel';
+      const actorUserId =
+        this.cls.get<string | undefined>(CLS_KEY_USER_ID) ?? null;
+      if (tracksAgentConfig) {
+        await recordSpecialistAgentConfigVersions(
+          tx,
+          businessId,
+          { ...business, policies: current },
+          actorUserId,
+        );
+      }
+      const next = { ...current, [key]: canonical };
+      await tx.business.update({
+        where: { id: businessId },
+        data: { policies: next as Prisma.InputJsonValue },
+      });
+      if (tracksAgentConfig) {
+        await recordSpecialistAgentConfigVersions(
+          tx,
+          businessId,
+          { ...business, policies: next },
+          actorUserId,
+        );
+      }
+      return canonical;
+    });
   }
 
   /** Whether the person making this request holds `capability` (owner always does). */

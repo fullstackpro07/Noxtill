@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { AddExpenseDialog } from "./add-expense-drawer";
 import { EditExpenseDialog } from "./edit-expense-dialog";
 import { ScanReceiptDialog } from "./scan-receipt-dialog";
 import { EXPENSE_CATEGORIES, CATEGORY_CHART_SLOT, totalsByCategory } from "@/lib/expenses";
-import { fetchExpenses, deleteExpense, type LiveExpense } from "@/lib/expenses-api";
+import { fetchExpenses, fetchExpenseDuplicateCandidates, deleteExpense, type LiveExpense } from "@/lib/expenses-api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
@@ -24,6 +25,18 @@ function recentMonths(count = 6): { value: string; label: string }[] {
     const label = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
     return { value, label };
   });
+}
+
+function isExpenseMonth(value: string | null): value is string {
+  if (!value || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return false;
+  const now = new Date();
+  const current = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  return value <= current;
+}
+
+function monthLabel(value: string): string {
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${value}-01T00:00:00Z`));
 }
 
 function priorMonth(month: string): string {
@@ -78,9 +91,17 @@ function handleFakeOption(value: string): boolean {
 export function ExpensesView() {
   const session = useSession();
   const currency = session.business.currency;
+  const searchParams = useSearchParams();
+  const requestedMonth = searchParams.get("month");
+  const requestedCategory = searchParams.get("category");
+  const reviewingCandidates = searchParams.get("review") === "exact-match";
   const months = useMemo(() => recentMonths(), []);
-  const [month, setMonth] = useState(months[0].value);
-  const [category, setCategory] = useState("All categories");
+  const [month, setMonth] = useState(() => isExpenseMonth(requestedMonth) ? requestedMonth : months[0].value);
+  const monthOptions = useMemo(() => {
+    if (!isExpenseMonth(requestedMonth) || months.some((item) => item.value === requestedMonth)) return months;
+    return [{ value: requestedMonth, label: monthLabel(requestedMonth) }, ...months];
+  }, [months, requestedMonth]);
+  const [category, setCategory] = useState(() => requestedCategory || "All categories");
   const [recurringFilter, setRecurringFilter] = useState<(typeof RECURRING_FILTERS)[number]>("All expenses");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
@@ -91,6 +112,11 @@ export function ExpensesView() {
   const queryClient = useQueryClient();
 
   const { data: expenses = [], isPending, isError, refetch } = useQuery({ queryKey: ["expenses", month], queryFn: () => fetchExpenses(month) });
+  const duplicateCandidatesQuery = useQuery({
+    queryKey: ["expense-duplicate-candidates", month],
+    queryFn: () => fetchExpenseDuplicateCandidates(month),
+    enabled: reviewingCandidates,
+  });
   const { data: lastMonthExpenses } = useQuery({ queryKey: ["expenses", priorMonth(month)], queryFn: () => fetchExpenses(priorMonth(month)) });
 
   const trendMonths = useMemo(() => [...months].reverse(), [months]);
@@ -102,6 +128,7 @@ export function ExpensesView() {
     mutationFn: (id: string) => deleteExpense(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["expense-duplicate-candidates"] });
       toast.success("Expense removed.");
       setDeleting(null);
     },
@@ -116,6 +143,12 @@ export function ExpensesView() {
     if (maxAmount && e.amount > Number(maxAmount)) return false;
     return true;
   });
+  const duplicateGroups = duplicateCandidatesQuery.data?.groups ?? [];
+  const duplicateCandidateIds = new Set(duplicateGroups.flat());
+  const visibleExpenses = reviewingCandidates
+    ? filtered.filter((expense) => duplicateCandidateIds.has(expense.id))
+    : filtered;
+  const tablePending = isPending || (reviewingCandidates && duplicateCandidatesQuery.isPending);
 
   const totals = totalsByCategory(expenses);
   const grandTotal = totals.reduce((sum, t) => sum + t.total, 0);
@@ -135,7 +168,7 @@ export function ExpensesView() {
 
   function exportCsv() {
     const header = ["Date", "Category", "Description", "Amount", "Recurring"];
-    const lines = [header, ...filtered.map((e) => [formatDate(e.incurredOn), e.category, e.description, e.amount, e.recurring ? "Yes" : "No"])];
+    const lines = [header, ...visibleExpenses.map((e) => [formatDate(e.incurredOn), e.category, e.description, e.amount, e.recurring ? "Yes" : "No"])];
     const csv = lines.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -164,7 +197,7 @@ export function ExpensesView() {
           aria-label="Month"
           style={selectStyle}
         >
-          {months.map((m) => (
+          {monthOptions.map((m) => (
             <option key={m.value} value={m.value}>{m.label}</option>
           ))}
           <option>+ Add your own…</option>
@@ -176,6 +209,9 @@ export function ExpensesView() {
           style={selectStyle}
         >
           <option>All categories</option>
+          {requestedCategory && !EXPENSE_CATEGORIES.includes(requestedCategory as (typeof EXPENSE_CATEGORIES)[number]) && (
+            <option>{requestedCategory}</option>
+          )}
           {EXPENSE_CATEGORIES.map((c) => (
             <option key={c}>{c}</option>
           ))}
@@ -204,6 +240,36 @@ export function ExpensesView() {
           </button>
         </div>
       </div>
+
+      {reviewingCandidates && (
+        <section
+          aria-label="Potential exact-match expense candidates"
+          className="rounded-[13px] p-3.5"
+          style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}
+        >
+          <h2 className="m-0 text-[13px] font-extrabold" style={{ color: "var(--app-text)" }}>
+            Potential exact-match expense candidates · {monthLabel(month)}
+          </h2>
+          <p className="mb-0 mt-1 text-[11.5px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>
+            Candidates share the same business, date, normalized description and category, exact amount, and recurring status. A match is not proof of a duplicate or fraud. Review the source records before making any change. The table is filtered to candidates; the summary cards still cover all expenses in the month.
+          </p>
+          {duplicateCandidatesQuery.isPending ? (
+            <p className="mb-0 mt-2 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>Checking this month&apos;s recorded expenses…</p>
+          ) : duplicateCandidatesQuery.isError ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>
+              <span>Couldn&apos;t load the candidate review. No candidate status is being assumed.</span>
+              <button type="button" onClick={() => duplicateCandidatesQuery.refetch()} className="rounded-[8px] px-2.5 py-1.5 font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Retry</button>
+            </div>
+          ) : duplicateGroups.length === 0 ? (
+            <p className="mb-0 mt-2 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>No exact-match candidates were found in this business for this month.</p>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11.5px]" style={{ color: "var(--app-text-muted)" }}>
+              <span>{duplicateGroups.length} candidate group{duplicateGroups.length === 1 ? "" : "s"} · {duplicateGroups.reduce((count, group) => count + group.length - 1, 0)} additional entr{duplicateGroups.reduce((count, group) => count + group.length - 1, 0) === 1 ? "y" : "ies"}</span>
+              <Link href={`/expenses?month=${encodeURIComponent(month)}`} className="rounded-[8px] px-2.5 py-1.5 font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Show all expenses this month</Link>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid gap-[14px]" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))" }}>
         {isPending ? (
@@ -277,10 +343,18 @@ export function ExpensesView() {
       </div>
 
       <div className="overflow-hidden rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
-        {!isPending && filtered.length === 0 ? (
+        {!tablePending && visibleExpenses.length === 0 ? (
           <div className="text-center" style={{ padding: "52px 18px" }}>
-            <div className="text-[14.5px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>Add your rent and salaries so profit figures are accurate</div>
-            <button type="button" onClick={() => setAddOpen(true)} className="mt-[15px] rounded-[12px] text-[13px] font-extrabold text-white" style={{ background: "var(--app-primary)", padding: "12px 22px", minHeight: 46 }}>Add Expense</button>
+            <div className="text-[14.5px] font-extrabold" style={{ color: "var(--app-text-muted)" }}>
+              {reviewingCandidates
+                ? duplicateCandidatesQuery.isError
+                  ? "Candidate review could not be loaded."
+                  : duplicateGroups.length > 0
+                    ? "No candidates match the selected table filters."
+                    : "No potential exact-match expense entries for this month."
+                : "Add your rent and salaries so profit figures are accurate"}
+            </div>
+            {!reviewingCandidates && <button type="button" onClick={() => setAddOpen(true)} className="mt-[15px] rounded-[12px] text-[13px] font-extrabold text-white" style={{ background: "var(--app-primary)", padding: "12px 22px", minHeight: 46 }}>Add Expense</button>}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -297,17 +371,20 @@ export function ExpensesView() {
                 </tr>
               </thead>
               <tbody>
-                {isPending
+                {tablePending
                   ? Array.from({ length: 4 }).map((_, i) => (
                       <tr key={i} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
                         <td colSpan={7} style={{ padding: 14 }}><div className="h-4 animate-pulse rounded" style={{ background: "var(--app-surface-2)" }} /></td>
                       </tr>
                     ))
-                  : filtered.map((e) => (
+                  : visibleExpenses.map((e) => (
                       <tr key={e.id} style={{ borderTop: "1px solid var(--app-border-strong)" }}>
                         <td style={{ padding: "11px 17px", fontSize: 12.5, fontWeight: 600, color: "var(--app-text-muted)", whiteSpace: "nowrap" }}>{formatDate(e.incurredOn)}</td>
                         <td style={{ padding: 11, fontSize: 12.5, color: "var(--app-text-faint)" }}>{e.category}</td>
-                        <td style={{ padding: 11, fontSize: 12.5, color: "var(--app-text-faint)" }}>{e.description}</td>
+                        <td style={{ padding: 11, fontSize: 12.5, color: "var(--app-text-faint)" }}>
+                          {e.description}
+                          {reviewingCandidates && <div className="mt-1 text-[10px] font-bold" style={{ color: "#B54708" }}>Potential match · not confirmed</div>}
+                        </td>
                         <td style={{ padding: 11, fontSize: 12.5, fontWeight: 800, color: "var(--app-text)", textAlign: "right" }}>{formatCurrency(e.amount, currency)}</td>
                         <td style={{ padding: 11 }}>
                           <span className="rounded-full text-[10.5px] font-bold" style={{ padding: "3px 9px", background: e.recurring ? "#E8F7EE" : "var(--app-surface-2)", color: e.recurring ? "#0E8442" : "var(--app-text-faint)" }}>

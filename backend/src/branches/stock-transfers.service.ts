@@ -2,8 +2,12 @@ import {
   ForbiddenException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import {
@@ -12,6 +16,11 @@ import {
 } from './dto/create-stock-transfer.dto';
 import { STOCK_TRANSFER_ERROR_CODES } from './stock-transfers.constants';
 import { StockMovementKind, StockTransferStatus } from '@prisma/client';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  INVENTORY_STOCK_TRANSFER_RECEIVED_EVENT_JOB,
+  SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 /**
  * Narrow shape actually used by `resolveDestProduct` — satisfied structurally by both the raw
@@ -40,12 +49,20 @@ interface ProductReader {
  */
 @Injectable()
 export class StockTransfersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(StockTransfersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
+  ) {}
 
   async create(
     sourceBusinessId: string,
     actorUserId: string,
     dto: CreateStockTransferDto,
+    sourceSpecialistAgentRecommendationId?: string,
   ) {
     await this.assertSameBranchGroup(sourceBusinessId, dto.destBusinessId);
 
@@ -67,6 +84,7 @@ export class StockTransfersService {
         destBusinessId: dto.destBusinessId,
         note: dto.note,
         requestedByUserId: actorUserId,
+        sourceSpecialistAgentRecommendationId,
         items: {
           create: dto.items.map((i) => ({
             sourceProductId: i.productId,
@@ -196,6 +214,57 @@ export class StockTransfersService {
     });
   }
 
+  private async queueInventoryReviewForReceivedTransfer(transfer: {
+    id: string;
+    sourceBusinessId: string;
+    destBusinessId: string;
+    updatedAt: Date;
+  }): Promise<void> {
+    if (!this.specialistAgentEvents) return;
+
+    try {
+      const businesses = await this.prisma.business.findMany({
+        where: {
+          id: { in: [transfer.sourceBusinessId, transfer.destBusinessId] },
+        },
+        select: { id: true, policies: true },
+      });
+      const optedIn = businesses.some((business) => {
+        const policies = resolvePolicies(business);
+        return (
+          policies.bool('agents.inventoryEnabled') &&
+          policies.bool(
+            'agents.inventoryStockTransferReceivedEventReviewEnabled',
+          )
+        );
+      });
+      if (!optedIn) return;
+
+      const receivedAt = transfer.updatedAt;
+      await this.specialistAgentEvents.add(
+        INVENTORY_STOCK_TRANSFER_RECEIVED_EVENT_JOB,
+        {
+          transferId: transfer.id,
+          sourceBusinessId: transfer.sourceBusinessId,
+          destBusinessId: transfer.destBusinessId,
+          receivedAt: receivedAt.toISOString(),
+        },
+        {
+          jobId: `inventory-transfer-received-${transfer.id}-${receivedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Could not queue Inventory review for received stock transfer ${transfer.id}: ${message}`,
+      );
+    }
+  }
+
   /**
    * Real stock arrives at the destination branch here — the cross-business side of the write.
    *
@@ -242,7 +311,7 @@ export class StockTransfersService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const received = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.stockTransfer.updateMany({
         where: { id, status: StockTransferStatus.shipped },
         data: {
@@ -291,6 +360,9 @@ export class StockTransfersService {
         include: { items: { include: { sourceProduct: true } } },
       });
     });
+
+    await this.queueInventoryReviewForReceivedTransfer(received);
+    return received;
   }
 
   async reject(

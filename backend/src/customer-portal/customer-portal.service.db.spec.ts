@@ -152,6 +152,7 @@ describe('CustomerPortalService (real MySQL)', () => {
         name: 'Portal Customer One',
         phone: `+1555${suffix.replace(/\D/g, '').slice(-7)}`,
         email: `portal-one-${suffix}@example.test`,
+        consentMarketing: true,
       },
     });
     customerId = customer.id;

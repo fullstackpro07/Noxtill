@@ -48,6 +48,68 @@ export class DeliveryInsightsService {
     return `DEL-${orderNo}`;
   }
 
+  /**
+   * Bounded, privacy-safe evidence for specialist reviews. This follows the same resolution rule
+   * as `exceptions()`: only the latest approved Return for the same tenant/order resolves a failed
+   * delivery. It deliberately omits customer data, address, free-text failure notes and amounts.
+   */
+  async specialistExceptionReview(businessId: string) {
+    const maximumFailuresReviewed = 20;
+    const where = { businessId, status: DeliveryStatus.failed };
+    const [failedCount, deliveries] = await Promise.all([
+      this.tenantPrisma.client.delivery.count({ where }),
+      this.tenantPrisma.client.delivery.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: maximumFailuresReviewed + 1,
+        select: {
+          id: true,
+          updatedAt: true,
+          order: {
+            select: {
+              businessId: true,
+              returns: {
+                where: { businessId },
+                orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+                take: 1,
+                select: { status: true },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+    const recentFailures = deliveries
+      .slice(0, maximumFailuresReviewed)
+      // Defense in depth for legacy rows with a mismatched order relation.
+      .filter((delivery) => delivery.order.businessId === businessId)
+      .map((delivery) => ({
+        resolutionStatus:
+          delivery.order.returns[0]?.status === 'approved'
+            ? ('resolved' as const)
+            : ('open' as const),
+        updatedAt: delivery.updatedAt.toISOString(),
+      }));
+
+    return {
+      state:
+        failedCount > 0
+          ? ('available' as const)
+          : ('no_failed_deliveries' as const),
+      source: failedCount > 0 ? ('Delivery' as const) : null,
+      failedCount,
+      maximumFailuresReviewed,
+      reviewedFailureCount: recentFailures.length,
+      hasMore: failedCount > maximumFailuresReviewed,
+      recentFailures,
+      limitations: [
+        'A failure is a canonical Delivery record with stored status failed; this review does not infer its cause or an external carrier outcome.',
+        'A failed delivery is resolved only when its latest same-business Return is approved, matching the Deliveries Exceptions screen; pending, rejected or absent returns remain open.',
+        'Customer identifiers, addresses, free-text failure notes and order/return amounts are omitted. This review does not create returns, issue refunds, dispatch riders or contact customers.',
+      ],
+    };
+  }
+
   async exceptions(businessId: string) {
     const startOfDay = await this.startOfDay(businessId);
     const failed = await this.tenantPrisma.client.delivery.findMany({

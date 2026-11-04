@@ -1,7 +1,20 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { ActivityService } from '../activity/activity.service';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  INVENTORY_STOCK_COUNT_APPLIED_EVENT_JOB,
+  SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import { CreateStockCountDto } from './dto/create-stock-count.dto';
 import { STOCK_COUNT_ERROR_CODES } from './inventory.constants';
 import {
@@ -20,9 +33,14 @@ import {
  */
 @Injectable()
 export class StockCountService {
+  private readonly logger = new Logger(StockCountService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly activity: ActivityService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
   ) {}
 
   async create(
@@ -43,24 +61,44 @@ export class StockCountService {
     }
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    return this.tenantPrisma.client.stockCount.create({
-      data: {
-        businessId,
-        note: dto.note,
-        createdByUserId: actorUserId,
-        lines: {
-          create: dto.lines.map((line) => {
-            const product = productMap.get(line.productId)!;
-            return {
-              productId: line.productId,
-              expectedQty: product.stockQty,
-              countedQty: line.countedQty,
-              variance: line.countedQty - product.stockQty,
-            };
-          }),
+    return this.tenantPrisma.client.$transaction(async (tx) => {
+      const count = await tx.stockCount.create({
+        data: {
+          businessId,
+          note: dto.note,
+          createdByUserId: actorUserId,
+          lines: {
+            create: dto.lines.map((line) => {
+              const product = productMap.get(line.productId)!;
+              return {
+                productId: line.productId,
+                expectedQty: product.stockQty,
+                countedQty: line.countedQty,
+                variance: line.countedQty - product.stockQty,
+              };
+            }),
+          },
         },
-      },
-      include: { lines: { include: { product: true } } },
+        include: { lines: { include: { product: true } } },
+      });
+      const recountProductIds = count.lines.map((line) => line.productId);
+      if (recountProductIds.length > 0) {
+        await tx.inventoryAgentCountTask.updateMany({
+          where: {
+            businessId,
+            productId: { in: recountProductIds },
+            status: 'open',
+            stockCountId: null,
+            createdAt: { lte: count.createdAt },
+          },
+          data: {
+            status: 'completed',
+            stockCountId: count.id,
+            completedAt: count.createdAt,
+          },
+        });
+      }
+      return count;
     });
   }
 
@@ -153,7 +191,46 @@ export class StockCountService {
       entityId: id,
       actorUserId,
     });
+    await this.queueAppliedCountReview(businessId, applied.id, applied.appliedAt);
 
     return applied;
+  }
+
+  private async queueAppliedCountReview(
+    businessId: string,
+    stockCountId: string,
+    appliedAt: Date | null,
+  ): Promise<void> {
+    if (!this.specialistAgentEvents || !appliedAt) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      if (
+        !business ||
+        !resolvePolicies(business).bool(
+          'agents.inventoryStockCountEventReviewEnabled',
+        )
+      ) {
+        return;
+      }
+
+      await this.specialistAgentEvents.add(
+        INVENTORY_STOCK_COUNT_APPLIED_EVENT_JOB,
+        { businessId, stockCountId, appliedAt: appliedAt.toISOString() },
+        {
+          jobId: `inventory-stock-count-${businessId}-${stockCountId}-${appliedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Inventory review for applied stock count ${stockCountId}: ${(error as Error).message}`,
+      );
+    }
   }
 }

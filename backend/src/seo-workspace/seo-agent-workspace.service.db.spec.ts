@@ -43,6 +43,16 @@ describe('SeoAgentWorkspaceService (MySQL)', () => {
       })
     ).id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    const auditRun = await prisma.seoAuditRun.create({
+      data: {
+        businessId,
+        status: 'completed',
+        siteUrl: 'https://ws.test/',
+        pages: [],
+        startedAt: new Date(),
+        finishedAt: new Date(),
+      },
+    });
     const issue = (type: string, firstSeenAt: Date, n: string) => ({
       businessId,
       siteHost: 'ws.test',
@@ -57,8 +67,13 @@ describe('SeoAgentWorkspaceService (MySQL)', () => {
     await prisma.seoAuditIssue.createMany({
       data: [
         issue('missing_title', new Date(), 'd'),
+        issue('missing_sitemap', new Date(), 'f'),
         issue('missing_h1', new Date(Date.now() - 30 * DAY_MS), 'e'), // too old to be "new"
       ],
+    });
+    await prisma.seoAuditIssue.updateMany({
+      where: { businessId },
+      data: { lastSeenAuditRunId: auditRun.id },
     });
     const revision = (
       version: number,
@@ -81,6 +96,13 @@ describe('SeoAgentWorkspaceService (MySQL)', () => {
         }),
         revision(2, SeoContentRevisionStatus.applied, {
           verification: { pageFound: true, fields: { title: 'mismatch' } },
+        }),
+        revision(5, SeoContentRevisionStatus.applied, {
+          verification: {
+            pageFound: null,
+            result: 'not_checked',
+            reason: 'partial_crawl_did_not_include_page',
+          },
         }),
         revision(3, SeoContentRevisionStatus.verified, {
           verifiedAt: new Date(),
@@ -150,6 +172,7 @@ describe('SeoAgentWorkspaceService (MySQL)', () => {
     await prisma.seoTechnicalAction.deleteMany({ where: { businessId } });
     await prisma.seoContentRevision.deleteMany({ where: { businessId } });
     await prisma.seoAuditIssue.deleteMany({ where: { businessId } });
+    await prisma.seoAuditRun.deleteMany({ where: { businessId } });
     await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
@@ -157,11 +180,11 @@ describe('SeoAgentWorkspaceService (MySQL)', () => {
   it('puts every existing SEO action in one queue by lifecycle stage', async () => {
     const { kpis, items } = await service.queue(businessId);
     expect(kpis).toEqual({
-      newFindings: 1,
+      newFindings: 2,
       draftReady: 1, // the drafting brief (a bare brief is not a draft yet)
       waitingApproval: 1,
       readyToApply: 1, // approved redirect
-      verificationRequired: 2, // robots (not verifiable) + published, not yet confirmed
+      verificationRequired: 3, // robots, published, and partial-crawl omission remain pending
       notMatched: 1, // applied revision whose title didn't match the crawl
       completed: 1,
     });
@@ -169,6 +192,31 @@ describe('SeoAgentWorkspaceService (MySQL)', () => {
       (item) => item.kind === 'technical_change' && item.risk === 'high',
     )!;
     expect(robots.verificationNote).toMatch(/cannot check/);
+    expect(
+      items.find(
+        (item) =>
+          item.kind === 'page_revision' && item.action === 'Page metadata v5',
+      ),
+    ).toMatchObject({
+      stage: 'verification_required',
+      verificationNote:
+        'The latest crawl was partial and did not include this page; verification remains pending.',
+    });
+    expect(
+      items.find(
+        (item) =>
+          item.kind === 'audit_finding' && item.action === 'missing title',
+      ),
+    ).toMatchObject({ canPrepareOnPageRevision: true });
+    expect(
+      items.find(
+        (item) =>
+          item.kind === 'audit_finding' && item.action === 'missing sitemap',
+      ),
+    ).toMatchObject({
+      canPrepareOnPageRevision: false,
+      canPrepareTechnicalReview: true,
+    });
     const aiDraft = items.find((item) => item.stage === 'waiting_approval')!;
     expect(aiDraft.origin).toMatch(/AI draft/);
     expect(items.some((item) => item.status === 'superseded')).toBe(false);

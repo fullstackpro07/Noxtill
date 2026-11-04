@@ -8,13 +8,18 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { CreateInstallmentPlanDto } from './dto/create-installment-plan.dto';
 import { WriteOffCreditDto } from './dto/write-off-credit.dto';
-import { DebtorRow, buildLedgerRows, allocateFifoForCustomer } from './credit.types';
+import {
+  DebtorRow,
+  buildLedgerRows,
+  allocateFifoForCustomer,
+} from './credit.types';
 import {
   CREDIT_ERROR_CODES,
   OVERDUE_BUCKETS,
   WRITE_OFF_CONFIRM_PHRASE,
 } from './credit.constants';
 import { generateReviewToken } from '../reviews/review-token.util';
+import { Prisma } from '@prisma/client';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -61,6 +66,62 @@ export class CreditService {
       daysOutstanding: Number(row.days_outstanding),
       optedOutOfReminders: Boolean(row.opted_out),
     }));
+  }
+
+  /**
+   * Privacy-minimized aging aggregate for Finance consumers. This reuses the canonical
+   * `v_credit_balances` age/balance definition but does not select customer IDs or contact data.
+   */
+  async financialAgingSummary() {
+    const businessId = this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    const rows = await this.tenantPrisma.client.$queryRaw<
+      { balance: string; days_outstanding: bigint }[]
+    >`
+      SELECT v.balance, v.days_outstanding
+      FROM v_credit_balances v
+      WHERE v.business_id = ${businessId} AND v.balance > 0
+      ORDER BY v.days_outstanding ASC
+    `;
+    const buckets = OVERDUE_BUCKETS.map((bucket) => ({
+      key: bucket.key,
+      minDays: bucket.min,
+      maxDays: Number.isFinite(bucket.max) ? bucket.max : null,
+      debtorCount: 0,
+      balance: new Prisma.Decimal(0),
+    }));
+
+    for (const row of rows) {
+      const daysOutstanding = Math.max(0, Number(row.days_outstanding));
+      const bucket = buckets.find(
+        (item) =>
+          daysOutstanding >= item.minDays &&
+          (item.maxDays === null || daysOutstanding <= item.maxDays),
+      );
+      if (!bucket) continue;
+      bucket.debtorCount += 1;
+      bucket.balance = bucket.balance.plus(row.balance);
+    }
+
+    return {
+      source: 'v_credit_balances',
+      basis:
+        'age since balance last reached zero or first credit entry; not invoice due-date aging',
+      observedAt: new Date().toISOString(),
+      debtorCount: rows.length,
+      totalBalance: buckets
+        .reduce(
+          (total, bucket) => total.plus(bucket.balance),
+          new Prisma.Decimal(0),
+        )
+        .toFixed(2),
+      buckets: buckets.map((bucket) => ({
+        key: bucket.key,
+        minDays: bucket.minDays,
+        maxDays: bucket.maxDays,
+        debtorCount: bucket.debtorCount,
+        balance: bucket.balance.toFixed(2),
+      })),
+    };
   }
 
   /**

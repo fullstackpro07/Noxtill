@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 
@@ -25,7 +26,14 @@ export class SeoSettingsService {
 
   async summary(businessId: string) {
     const db = this.tenantPrisma.client;
-    const [business, schedule, lastRun, keywords, listing] = await Promise.all([
+    const [
+      business,
+      schedule,
+      lastRun,
+      keywords,
+      listing,
+      analyticsIntegration,
+    ] = await Promise.all([
       db.business.findUniqueOrThrow({
         where: { id: businessId },
         select: { country: true, locale: true, policies: true },
@@ -44,6 +52,15 @@ export class SeoSettingsService {
         where: { businessId },
         select: { website: true },
       }),
+      db.integration.findUnique({
+        where: {
+          businessId_provider: {
+            businessId,
+            provider: IntegrationProvider.google_analytics,
+          },
+        },
+        select: { status: true, meta: true },
+      }),
     ]);
     const policies = resolvePolicies(business);
     const aiDrafts = policies.bool('seo.aiDraftsEnabled');
@@ -51,6 +68,50 @@ export class SeoSettingsService {
       this.config.get<string>('SERPAPI_KEY')?.trim(),
     );
     const siteUrl = lastRun?.siteUrl ?? listing?.website ?? null;
+    const analyticsMeta =
+      analyticsIntegration?.meta &&
+      typeof analyticsIntegration.meta === 'object' &&
+      !Array.isArray(analyticsIntegration.meta)
+        ? (analyticsIntegration.meta as Record<string, unknown>)
+        : {};
+    const analyticsSelected =
+      typeof analyticsMeta.analyticsSelectedProperty === 'string';
+    const analyticsSnapshot = analyticsMeta.analyticsOrganicSearchSnapshot;
+    const analyticsSnapshotRecord =
+      typeof analyticsSnapshot === 'object' &&
+      analyticsSnapshot !== null &&
+      !Array.isArray(analyticsSnapshot)
+        ? (analyticsSnapshot as Record<string, unknown>)
+        : {};
+    const analyticsCurrent = analyticsSnapshotRecord.current;
+    const analyticsCurrentRecord =
+      typeof analyticsCurrent === 'object' &&
+      analyticsCurrent !== null &&
+      !Array.isArray(analyticsCurrent)
+        ? (analyticsCurrent as Record<string, unknown>)
+        : {};
+    const analyticsLandingPages = analyticsCurrentRecord.landingPages;
+    const analyticsLandingPagesRecord =
+      typeof analyticsLandingPages === 'object' &&
+      analyticsLandingPages !== null &&
+      !Array.isArray(analyticsLandingPages)
+        ? (analyticsLandingPages as Record<string, unknown>)
+        : {};
+    const analyticsSynced = Boolean(analyticsSnapshot);
+    const analyticsLandingPagesSynced = [
+      'returned',
+      'no_data_returned',
+    ].includes(String(analyticsLandingPagesRecord.dataState));
+    const analyticsUnavailableReason =
+      analyticsIntegration?.status !== IntegrationStatus.connected
+        ? 'Connect Google Analytics 4 in Integrations to sync Organic Search totals and page-path metrics.'
+        : !analyticsSelected
+          ? 'Select a Google Analytics 4 property in SEO Settings to sync Organic Search totals and page-path metrics.'
+          : !analyticsSynced
+            ? 'Google Analytics 4 is connected, but no Organic Search snapshot has been synced yet.'
+            : !analyticsLandingPagesSynced
+              ? 'A saved Google Analytics snapshot is missing page-path metrics. Sync again in SEO Settings.'
+              : null;
 
     const checks: SeoConfigCheck[] = [
       {
@@ -116,16 +177,14 @@ export class SeoSettingsService {
         of: checks.length,
       },
       notConnected: [
-        {
-          label: 'Google Search Console',
-          reason:
-            'No connector exists — clicks, impressions and indexing are not tracked.',
-        },
-        {
-          label: 'Analytics',
-          reason:
-            'No analytics connection — traffic and conversions are not tracked.',
-        },
+        ...(analyticsUnavailableReason
+          ? [
+              {
+                label: 'Google Analytics 4',
+                reason: analyticsUnavailableReason,
+              },
+            ]
+          : []),
         {
           label: 'Backlink index',
           reason: 'No backlink provider — links are recorded by your team.',

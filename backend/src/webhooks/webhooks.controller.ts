@@ -45,7 +45,11 @@ interface MetaWebhookBody {
     changes?: Array<{
       value?: {
         statuses?: Array<{ id: string }>;
-        messages?: Array<{ id: string }>;
+        messages?: Array<{
+          id: string;
+          from?: string;
+          context?: { id?: string };
+        }>;
       };
     }>;
   }>;
@@ -217,6 +221,7 @@ export class WebhooksController {
             messageId: payload?.id,
             status: payload?.to?.[0]?.status,
             hasErrors: Boolean(payload?.errors?.length),
+            type: payload?.type,
           },
           { jobId: `telnyx-status-${eventId}` },
         );

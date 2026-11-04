@@ -8,6 +8,8 @@ import type {
   SendGateParams,
   SendGateService,
 } from '../messaging/send-gate.service';
+import { SendGateService as RealSendGateService } from '../messaging/send-gate.service';
+import { TemplateRegistryService } from '../messaging/templates/template-registry.service';
 import type { Message } from '@prisma/client';
 
 class FakeClsService {
@@ -23,6 +25,7 @@ class FakeClsService {
 describe('ProductWaitlistService (UPD-BE-111)', () => {
   let prisma: PrismaService;
   let service: ProductWaitlistService;
+  let previewService: ProductWaitlistService;
   let businessId: string;
   let productId: string;
   let customerAId: string;
@@ -46,6 +49,12 @@ describe('ProductWaitlistService (UPD-BE-111)', () => {
     service = new ProductWaitlistService(
       tenantPrisma,
       sendGate as unknown as SendGateService,
+    );
+    previewService = new ProductWaitlistService(
+      tenantPrisma,
+      new RealSendGateService(tenantPrisma, new TemplateRegistryService(), {
+        add: jest.fn(),
+      } as never),
     );
 
     const business = await prisma.business.create({
@@ -119,6 +128,80 @@ describe('ProductWaitlistService (UPD-BE-111)', () => {
       AppException,
     );
     expect(sendGate.send).not.toHaveBeenCalled();
+  });
+
+  it('previews current send-gate eligibility without creating messages or notifying customers', async () => {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { stockQty: 15 },
+    });
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { msgQuota: 1, msgUsed: 0 },
+    });
+    const waitingBefore = await prisma.productWaitlistEntry.findMany({
+      where: { businessId, productId, notifiedAt: null },
+    });
+    const messagesBefore = await prisma.message.count({
+      where: { businessId },
+    });
+
+    const preview = await previewService.previewNotification(
+      businessId,
+      'waitlist-preview-test-actor',
+      productId,
+    );
+
+    expect(preview).toMatchObject({
+      productId,
+      productName: 'Popular Widget',
+      availableStock: 15,
+      waitingCount: 2,
+      eligibleCount: 1,
+      blockedCount: 1,
+      providerDeliveryChecked: false,
+    });
+    expect(
+      preview.recipients.filter((recipient) => recipient.status === 'eligible'),
+    ).toHaveLength(1);
+    const eligible = preview.recipients.find(
+      (recipient) => recipient.status === 'eligible',
+    );
+    expect(eligible?.channel).toBe('whatsapp');
+    expect(eligible?.message).toContain('Popular Widget');
+    expect(eligible?.reason).toBeNull();
+    expect(
+      preview.recipients.find(
+        (recipient) => recipient.reasonCode === 'QUOTA_EXCEEDED',
+      ),
+    ).toBeDefined();
+
+    expect(await prisma.message.count({ where: { businessId } })).toBe(
+      messagesBefore,
+    );
+    expect(
+      (await prisma.business.findUniqueOrThrow({ where: { id: businessId } }))
+        .msgUsed,
+    ).toBe(0);
+    expect(
+      await prisma.productWaitlistEntry.findMany({
+        where: { businessId, productId, notifiedAt: null },
+      }),
+    ).toHaveLength(waitingBefore.length);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          businessId,
+          action: 'inventory.waitlist_notification_previewed',
+          entityId: productId,
+        },
+      }),
+    ).toBe(1);
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { msgQuota: 600 },
+    });
   });
 
   it('notifies every real waiting customer once restocked, then marks each notified so count drops to zero', async () => {

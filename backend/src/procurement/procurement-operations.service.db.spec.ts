@@ -6,6 +6,8 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CommerceRfqsService } from '../commerce/commerce-rfqs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProcurementService } from './procurement.service';
+import { PoliciesService } from '../common/policies/policies.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 
 class FakeClsService {
   private values: Record<string, unknown> = {};
@@ -78,7 +80,14 @@ describe('Procurement sourcing and receipt ledger (real MySQL)', () => {
     const cls = new FakeClsService();
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     tenant = new TenantPrismaService(prisma, cls as unknown as ClsService);
-    procurement = new ProcurementService(tenant);
+    procurement = new ProcurementService(
+      tenant,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        new CapabilitiesService(prisma),
+      ),
+    );
     commerceRfqs = new CommerceRfqsService(tenant, {
       record: jest.fn().mockResolvedValue(undefined),
     } as unknown as ActivityService);

@@ -9,6 +9,27 @@ import {
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import {
+  PoliciesService,
+  resolvePolicies,
+} from '../common/policies/policies.service';
+import {
+  agentHandoffError,
+  assertInventoryAgentRequestCurrent,
+  assertInventoryHandoffEnabled,
+  inventoryReorderSource,
+  INVENTORY_HANDOFF_VALIDITY_MS,
+  purchaseRequestPayloadHash,
+  readInventoryHandoffContext,
+  type AgentDataClient,
+} from '../common/agents/inventory-reorder-handoff.util';
+import {
+  createSpecialistAgentAction,
+  recordSpecialistAgentActionProposalRevision,
+  specialistAgentActionIdempotencyHash,
+  transitionSpecialistAgentAction,
+  type SpecialistAgentActionState,
+} from '../common/agents/specialist-agent-action.util';
+import {
   CreateProcurementRequestDto,
   DecideProcurementRequestDto,
   ListProcurementRequestsDto,
@@ -54,7 +75,239 @@ const COMMITTED_STATUSES: PurchaseOrderStatus[] = [
 
 @Injectable()
 export class ProcurementService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly policies: PoliciesService,
+  ) {}
+
+  /** One canonical draft per recommendation. Approval remains in the existing Action Center. */
+  async createInventoryAgentRequest(
+    actorUserId: string,
+    recommendationId: string,
+  ) {
+    const sourceRecommendation =
+      await this.tenantPrisma.client.specialistAgentRecommendation.findFirst({
+        where: { id: recommendationId, agentKey: 'inventory_intelligence' },
+        select: { id: true, businessId: true },
+      });
+    if (!sourceRecommendation) {
+      throw new AppException(
+        'SPECIALIST_RECOMMENDATION_NOT_FOUND',
+        'Inventory recommendation not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const businessId = sourceRecommendation.businessId;
+    const requestId = await this.tenantPrisma.client.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM specialist_agent_recommendations WHERE id = ${recommendationId} AND business_id = ${businessId} FOR UPDATE`;
+        const business = await assertInventoryHandoffEnabled(
+          tx,
+          businessId,
+          this.policies,
+        );
+        const existing = await tx.procurementRequest.findFirst({
+          where: { businessId, sourceAgentRecommendationId: recommendationId },
+          select: { id: true },
+        });
+        if (existing) return existing.id;
+        const recommendation = await tx.specialistAgentRecommendation.findFirst(
+          {
+            where: {
+              id: recommendationId,
+              businessId,
+              agentKey: 'inventory_intelligence',
+            },
+            include: {
+              run: { select: { id: true, moduleId: true, status: true } },
+              evidence: { select: { id: true } },
+            },
+          },
+        );
+        const details = recommendation?.details as
+          Prisma.JsonObject | undefined;
+        if (
+          !recommendation ||
+          recommendation.run.status !== 'completed' ||
+          details?.signalType !== 'reorder' ||
+          typeof details.productId !== 'string'
+        ) {
+          throw agentHandoffError(
+            'SPECIALIST_ACTION_UNSUPPORTED',
+            'Only a completed Inventory reorder recommendation can prepare a purchase request.',
+          );
+        }
+        const expiresAt = new Date(
+          recommendation.createdAt.getTime() + INVENTORY_HANDOFF_VALIDITY_MS,
+        );
+        if (expiresAt.getTime() <= Date.now())
+          throw agentHandoffError(
+            'SPECIALIST_ACTION_EXPIRED',
+            'This recommendation has expired. Run Inventory analysis again.',
+          );
+        const source = await inventoryReorderSource(
+          tx,
+          businessId,
+          details.productId,
+          resolvePolicies(business).num('inventory.agentReorderLeadTimeDays') ??
+            14,
+        );
+        if (
+          details.currentStock !== source.product.stockQty ||
+          details.lowStockThreshold !== source.product.lowStockThreshold ||
+          details.velocityPerDay !== source.calculation.velocityPerDay ||
+          details.suggestedQty !== source.calculation.suggestedQty ||
+          details.minimumReorderQty !== source.product.minimumReorderQty ||
+          details.baselineLeadTimeDays !== source.source.baselineLeadTimeDays
+        ) {
+          throw agentHandoffError(
+            'SPECIALIST_ACTION_SOURCE_CHANGED',
+            'Inventory changed since this recommendation. Run analysis again before preparing the request.',
+          );
+        }
+        if (
+          !Number.isInteger(source.calculation.suggestedQty) ||
+          source.calculation.suggestedQty <= 0 ||
+          source.calculation.suggestedQty > 999999999
+        ) {
+          throw agentHandoffError(
+            'SPECIALIST_ACTION_QUANTITY_INVALID',
+            'There is no supported positive reorder quantity for this product.',
+          );
+        }
+        const draft = await this.createRequest(
+          businessId,
+          actorUserId,
+          {
+            reason: `${recommendation.title}. ${recommendation.summary} Unit cost is an estimate from the current product cost price. Review supplier, quantity, cost, lead time and purchase-unit constraints before approval.`,
+            currency: business.currency,
+            supplierId:
+              typeof details.supplierId === 'string'
+                ? details.supplierId
+                : undefined,
+            urgency: 'normal',
+            items: [
+              {
+                lineType: 'stock',
+                productId: source.product.id,
+                description: source.product.name,
+                category: source.product.category ?? undefined,
+                quantity: source.calculation.suggestedQty,
+                estimatedUnitCost: Number(source.product.costPrice),
+              },
+            ],
+          },
+          tx,
+        );
+        const canonical = await tx.procurementRequest.findFirstOrThrow({
+          where: { id: draft.id, businessId },
+          include: { items: true },
+        });
+        const context = {
+          schemaVersion: 1,
+          actionType: 'inventory_reorder_request',
+          productId: source.product.id,
+          sourceHash: source.sourceHash,
+          payloadHash: purchaseRequestPayloadHash(canonical),
+          preparedAt: new Date().toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          source: source.source,
+        } satisfies Prisma.InputJsonObject;
+        await tx.procurementRequest.update({
+          where: { id: canonical.id },
+          data: {
+            sourceAgentRecommendationId: recommendationId,
+            agentContext: context,
+          },
+        });
+        await tx.specialistAgentRecommendation.update({
+          where: { id: recommendationId },
+          data: { status: 'handed_off', approvalRequired: true },
+        });
+        const proposedPayload = {
+          requestId: canonical.id,
+          version: canonical.version,
+          currency: canonical.currency,
+          supplierId: canonical.supplierId,
+          items: canonical.items.map((item) => ({
+            productId: item.productId,
+            lineType: item.lineType,
+            description: item.description,
+            quantity: Number(item.quantity),
+            estimatedUnitCost: Number(item.estimatedUnitCost),
+          })),
+        } satisfies Prisma.InputJsonObject;
+        await createSpecialistAgentAction(tx, {
+          data: {
+            businessId,
+            runId: recommendation.runId,
+            recommendationId: recommendation.id,
+            agentKey: recommendation.agentKey,
+            moduleId: recommendation.run.moduleId,
+            branchBusinessId: canonical.branchBusinessId,
+            actionType: 'inventory_reorder_request',
+            canonicalResourceType: 'ProcurementRequest',
+            canonicalResourceId: canonical.id,
+            expectedVersion: canonical.version,
+            expectedPostcondition: {
+              requestStatus: 'converted',
+              linkedResourceType: 'PurchaseOrder',
+              linkedFromRequestId: canonical.id,
+            },
+            proposedPayload,
+            reason: canonical.reason,
+            evidenceRefs: recommendation.evidence.map((item) => ({
+              evidenceId: item.id,
+            })),
+            assumptions: recommendation.assumptions as Prisma.InputJsonValue,
+            confidenceValue: recommendation.confidenceValue,
+            riskTier: recommendation.riskTier,
+            policyResult: {
+              approvalRequired: true,
+              approvalSystem: 'canonical_procurement_request',
+              inventoryAgentPolicy: 'rechecked_by_canonical_service',
+            },
+            permissionResult: {
+              capability: 'PURCHASES_MANAGE',
+              enforcedBy: 'ProcurementController',
+            },
+            requiredApproval: true,
+            idempotencyKeyHash: specialistAgentActionIdempotencyHash({
+              businessId,
+              agentKey: recommendation.agentKey,
+              actionType: 'inventory_reorder_request',
+              recommendationId: recommendation.id,
+            }),
+            correlationId: recommendation.runId,
+            state: 'proposed',
+            createdByUserId: actorUserId,
+          },
+          actorUserId,
+          reason:
+            'Prepared as a draft in the canonical Procurement request flow.',
+        });
+        await tx.auditLog.create({
+          data: {
+            businessId,
+            actorUserId,
+            action: 'inventory_agent.purchase_request_prepared',
+            entity: 'ProcurementRequest',
+            entityId: canonical.id,
+            after: {
+              recommendationId,
+              runId: recommendation.runId,
+              payloadHash: context.payloadHash,
+              sourceHash: source.sourceHash,
+              status: 'draft',
+            },
+          },
+        });
+        return canonical.id;
+      },
+      { timeout: 15000 },
+    );
+    return this.getRequest(businessId, requestId);
+  }
 
   async overview(businessId: string) {
     // PurchaseOrder is an older model that was not originally added to the tenant extension.
@@ -225,12 +478,13 @@ export class ProcurementService {
           value: null,
           availability: 'not_available' as const,
           detail:
-            'Supplier bills are not recorded, so 3-way match exceptions cannot be computed.',
+            'Canonical supplier invoices linked to purchase orders are not available, so 3-way match exceptions cannot be computed.',
         },
         spendVsBudget: {
           value: null,
           availability: 'not_available' as const,
-          detail: 'No procurement budget source is configured.',
+          detail:
+            'Finance expense budgets are not linked to purchase-order commitments.',
         },
         supplierConcentration: {
           value:
@@ -484,8 +738,9 @@ export class ProcurementService {
     businessId: string,
     actorUserId: string,
     dto: CreateProcurementRequestDto,
+    client: AgentDataClient = this.tenantPrisma.client,
   ) {
-    const business = await this.tenantPrisma.client.business.findUnique({
+    const business = await client.business.findUnique({
       where: { id: businessId },
       select: { currency: true },
     });
@@ -497,9 +752,9 @@ export class ProcurementService {
       );
     }
 
-    await this.validateRequestReferences(businessId, dto);
+    await this.validateRequestReferences(businessId, dto, client);
 
-    const request = await this.tenantPrisma.client.procurementRequest.create({
+    const request = await client.procurementRequest.create({
       data: {
         businessId,
         requesterUserId: actorUserId,
@@ -564,6 +819,23 @@ export class ProcurementService {
     await this.validateRequestReferences(businessId, dto);
 
     await this.tenantPrisma.client.$transaction(async (tx) => {
+      const agentContext = await assertInventoryAgentRequestCurrent(
+        tx,
+        request,
+        this.policies,
+      );
+      if (
+        agentContext &&
+        (dto.items.length !== 1 ||
+          dto.items[0].productId !== agentContext.productId ||
+          (dto.items[0].lineType ?? 'stock') !== 'stock' ||
+          !Number.isInteger(dto.items[0].quantity))
+      ) {
+        throw agentHandoffError(
+          'SPECIALIST_ACTION_SCOPE_CHANGED',
+          'An agent reorder draft must keep its original product and whole-unit quantity. Create a normal request for other needs.',
+        );
+      }
       const updated = await tx.procurementRequest.updateMany({
         where: {
           id,
@@ -603,6 +875,58 @@ export class ProcurementService {
           estimatedUnitCost: item.estimatedUnitCost,
         })),
       });
+      if (agentContext) {
+        const revised = await tx.procurementRequest.findFirstOrThrow({
+          where: { id, businessId },
+          include: { items: true },
+        });
+        await tx.procurementRequest.update({
+          where: { id },
+          data: {
+            agentContext: {
+              ...agentContext,
+              payloadHash: purchaseRequestPayloadHash(revised),
+            },
+          },
+        });
+        const action = await tx.specialistAgentAction.findFirst({
+          where: {
+            businessId,
+            recommendationId: request.sourceAgentRecommendationId!,
+            canonicalResourceType: 'ProcurementRequest',
+            canonicalResourceId: id,
+          },
+          select: { id: true },
+        });
+        if (!action) {
+          throw new AppException(
+            'SPECIALIST_ACTION_NOT_FOUND',
+            'The Inventory action record is missing for this purchase request.',
+            HttpStatus.CONFLICT,
+          );
+        }
+        await recordSpecialistAgentActionProposalRevision(tx, {
+          businessId,
+          actionId: action.id,
+          actorUserId,
+          expectedVersion: revised.version,
+          proposedPayload: {
+            requestId: revised.id,
+            version: revised.version,
+            currency: revised.currency,
+            supplierId: revised.supplierId,
+            items: revised.items.map((item) => ({
+              productId: item.productId,
+              lineType: item.lineType,
+              description: item.description,
+              quantity: Number(item.quantity),
+              estimatedUnitCost: Number(item.estimatedUnitCost),
+            })),
+          },
+          reason:
+            'The canonical Procurement draft was revised before submission.',
+        });
+      }
       await tx.procurementRequestEvent.create({
         data: {
           businessId,
@@ -624,8 +948,17 @@ export class ProcurementService {
     actorUserId: string,
     id: string,
     canManageAll: boolean,
+    reason?: string,
+    expectedVersion?: number,
   ) {
     const request = await this.findRequest(businessId, id);
+    if (expectedVersion !== undefined && request.version !== expectedVersion) {
+      throw new AppException(
+        'PROCUREMENT_REQUEST_VERSION_CONFLICT',
+        'This request changed after it was reviewed. Refresh the request before withdrawing it.',
+        HttpStatus.CONFLICT,
+      );
+    }
     if (request.status !== ProcurementRequestStatus.submitted) {
       throw this.invalidTransition(
         'Only a submitted request awaiting approval can be withdrawn.',
@@ -667,11 +1000,25 @@ export class ProcurementService {
           toStatus: ProcurementRequestStatus.cancelled,
           version: request.version + 1,
           reason:
-            request.requesterUserId === actorUserId
+            reason?.trim() ||
+            (request.requesterUserId === actorUserId
               ? 'Withdrawn by requester.'
-              : 'Withdrawn by a procurement manager.',
+              : 'Withdrawn by a procurement manager.'),
         },
       });
+      await this.transitionLinkedAgentAction(
+        tx,
+        businessId,
+        request,
+        'approval_required',
+        'cancelled',
+        actorUserId,
+        reason?.trim() ||
+          (request.requesterUserId === actorUserId
+            ? 'Withdrawn by requester.'
+            : 'Withdrawn by a procurement manager.'),
+        { closedAt: new Date() },
+      );
     });
     return this.getRequest(businessId, id);
   }
@@ -679,9 +1026,10 @@ export class ProcurementService {
   private async validateRequestReferences(
     businessId: string,
     dto: CreateProcurementRequestDto,
+    client: AgentDataClient = this.tenantPrisma.client,
   ) {
     if (dto.branchBusinessId) {
-      const branch = await this.tenantPrisma.client.business.findUnique({
+      const branch = await client.business.findUnique({
         where: { id: dto.branchBusinessId },
         select: { id: true, parentId: true, active: true },
       });
@@ -698,7 +1046,7 @@ export class ProcurementService {
     }
 
     if (dto.supplierId) {
-      const supplier = await this.tenantPrisma.client.supplier.findFirst({
+      const supplier = await client.supplier.findFirst({
         where: { id: dto.supplierId, businessId },
         select: { id: true },
       });
@@ -717,7 +1065,7 @@ export class ProcurementService {
       ),
     ];
     if (productIds.length) {
-      const products = await this.tenantPrisma.client.product.findMany({
+      const products = await client.product.findMany({
         where: { businessId, id: { in: productIds } },
         select: { id: true },
       });
@@ -738,8 +1086,14 @@ export class ProcurementService {
     }
 
     await this.tenantPrisma.client.$transaction(async (tx) => {
+      await assertInventoryAgentRequestCurrent(tx, request, this.policies);
       const updated = await tx.procurementRequest.updateMany({
-        where: { id, businessId, status: ProcurementRequestStatus.draft },
+        where: {
+          id,
+          businessId,
+          status: ProcurementRequestStatus.draft,
+          version: request.version,
+        },
         data: {
           status: ProcurementRequestStatus.submitted,
           submittedAt: new Date(),
@@ -761,6 +1115,15 @@ export class ProcurementService {
           version: request.version,
         },
       });
+      await this.transitionLinkedAgentAction(
+        tx,
+        businessId,
+        request,
+        'proposed',
+        'approval_required',
+        actorUserId,
+        'Submitted through the canonical Procurement approval flow.',
+      );
     });
     return this.getRequest(businessId, id);
   }
@@ -772,6 +1135,16 @@ export class ProcurementService {
     dto: DecideProcurementRequestDto,
   ) {
     const request = await this.findRequest(businessId, id);
+    if (
+      dto.expectedVersion !== undefined &&
+      request.version !== dto.expectedVersion
+    ) {
+      throw new AppException(
+        'PROCUREMENT_REQUEST_VERSION_CONFLICT',
+        'This request changed after it was reviewed. Refresh the request before deciding it.',
+        HttpStatus.CONFLICT,
+      );
+    }
     if (request.status !== ProcurementRequestStatus.submitted) {
       throw this.invalidTransition(
         'Only a submitted request can be approved or rejected.',
@@ -791,11 +1164,16 @@ export class ProcurementService {
         : ProcurementRequestStatus.rejected;
 
     await this.tenantPrisma.client.$transaction(async (tx) => {
+      const agentContext =
+        dto.decision === 'approve'
+          ? await assertInventoryAgentRequestCurrent(tx, request, this.policies)
+          : null;
       const updated = await tx.procurementRequest.updateMany({
         where: {
           id,
           businessId,
           status: ProcurementRequestStatus.submitted,
+          version: dto.expectedVersion ?? request.version,
         },
         data: {
           status,
@@ -819,9 +1197,37 @@ export class ProcurementService {
           fromStatus: ProcurementRequestStatus.submitted,
           toStatus: status,
           version: request.version,
-          reason,
+          reason:
+            reason ??
+            (agentContext
+              ? `Approved exact Inventory proposal ${agentContext.payloadHash}; source ${agentContext.sourceHash}.`
+              : undefined),
         },
       });
+      await this.transitionLinkedAgentAction(
+        tx,
+        businessId,
+        request,
+        'approval_required',
+        dto.decision === 'approve' ? 'approved' : 'rejected',
+        actorUserId,
+        reason ??
+          (dto.decision === 'approve'
+            ? 'Approved through the canonical Procurement approval flow.'
+            : undefined),
+        dto.decision === 'approve'
+          ? {
+              approvedByUserId: actorUserId,
+              approvedAt: new Date(),
+              approvalReason:
+                reason ??
+                'Approved through the canonical Procurement approval flow.',
+            }
+          : {
+              rejectionReason: reason,
+              closedAt: new Date(),
+            },
+      );
     });
     return this.getRequest(businessId, id);
   }
@@ -830,8 +1236,16 @@ export class ProcurementService {
     businessId: string,
     actorUserId: string,
     id: string,
+    expectedVersion?: number,
   ) {
     const request = await this.findRequest(businessId, id);
+    if (expectedVersion !== undefined && request.version !== expectedVersion) {
+      throw new AppException(
+        'PROCUREMENT_REQUEST_VERSION_CONFLICT',
+        'This request changed after approval. Refresh it before creating a purchase order.',
+        HttpStatus.CONFLICT,
+      );
+    }
     if (request.status !== ProcurementRequestStatus.approved) {
       throw this.invalidTransition(
         'Only an approved request can be converted to a purchase order.',
@@ -873,11 +1287,22 @@ export class ProcurementService {
 
     const purchaseOrder = await this.tenantPrisma.client.$transaction(
       async (tx) => {
+        await assertInventoryAgentRequestCurrent(tx, request, this.policies);
+        await this.transitionLinkedAgentAction(
+          tx,
+          businessId,
+          request,
+          'approved',
+          'execution_queued',
+          actorUserId,
+          'Canonical Procurement conversion was requested after approval.',
+        );
         const claimed = await tx.procurementRequest.updateMany({
           where: {
             id,
             businessId,
             status: ProcurementRequestStatus.approved,
+            version: expectedVersion ?? request.version,
             convertedPurchaseOrderId: null,
           },
           data: { status: ProcurementRequestStatus.converted },
@@ -892,7 +1317,8 @@ export class ProcurementService {
             businessId,
             supplierId: request.supplierId!,
             createdByUserId: actorUserId,
-            note: `Converted from request ${request.id}. ${request.reason}`,
+            // The PO note is VARCHAR(191); keep the full rationale on its linked request.
+            note: `Converted from approved request ${request.id}. Full rationale and evidence are saved on the request.`,
             items: {
               create: request.items.map((item) => ({
                 productId: item.productId!,
@@ -918,6 +1344,87 @@ export class ProcurementService {
             reason: `Created purchase order ${po.id}`,
           },
         });
+
+        await this.transitionLinkedAgentAction(
+          tx,
+          businessId,
+          request,
+          'execution_queued',
+          'executing',
+          actorUserId,
+          'The canonical Procurement service is creating the purchase order.',
+          {
+            executedByUserId: actorUserId,
+            executedAt: new Date(),
+            executionAttemptCount: { increment: 1 },
+            canonicalOperationId: po.id,
+          },
+        );
+        await this.transitionLinkedAgentAction(
+          tx,
+          businessId,
+          request,
+          'executing',
+          'succeeded',
+          actorUserId,
+          'The canonical Procurement service created a purchase order.',
+          {
+            actualResult: {
+              procurementRequestId: request.id,
+              purchaseOrderId: po.id,
+              purchaseOrderStatus: po.status,
+            },
+          },
+        );
+        await this.transitionLinkedAgentAction(
+          tx,
+          businessId,
+          request,
+          'succeeded',
+          'verification_pending',
+          actorUserId,
+          'Re-reading the canonical purchase order to verify the action postcondition.',
+        );
+        const verifiedPurchaseOrder = await tx.purchaseOrder.findFirst({
+          where: { id: po.id, businessId },
+          select: { id: true, status: true, createdAt: true },
+        });
+        if (!verifiedPurchaseOrder) {
+          throw new AppException(
+            'SPECIALIST_ACTION_VERIFICATION_FAILED',
+            'The purchase order was not found after canonical creation.',
+            HttpStatus.CONFLICT,
+          );
+        }
+        await this.transitionLinkedAgentAction(
+          tx,
+          businessId,
+          request,
+          'verification_pending',
+          'verified',
+          actorUserId,
+          'The canonical Procurement request links to the purchase order confirmed by a fresh read.',
+          {
+            verifiedAt: new Date(),
+            verificationResult: {
+              verified: true,
+              postcondition: 'canonical_purchase_order_linked',
+              procurementRequestId: request.id,
+              purchaseOrderId: verifiedPurchaseOrder.id,
+              observedStatus: verifiedPurchaseOrder.status,
+              observedAt: new Date().toISOString(),
+            },
+          },
+        );
+        await this.transitionLinkedAgentAction(
+          tx,
+          businessId,
+          request,
+          'verified',
+          'outcome_monitoring',
+          actorUserId,
+          'The canonical purchase order is linked. The Inventory Agent will measure recorded sales only after full receipt and the follow-up window.',
+        );
         return po;
       },
     );
@@ -994,6 +1501,34 @@ export class ProcurementService {
         : [],
       convertedPurchaseOrder: request.convertedPurchaseOrder,
       sourceRfqs: request.sourceRfqs,
+      agentSource: request.sourceAgentRecommendationId
+        ? (() => {
+            const context = readInventoryHandoffContext(request.agentContext);
+            return {
+              recommendationId: request.sourceAgentRecommendationId,
+              agentKey: 'inventory_intelligence',
+              expiresAt: context.expiresAt,
+              preparedAt: context.preparedAt,
+              productId: context.productId,
+              stockUnitLabel:
+                typeof context.source.stockUnitLabel === 'string'
+                  ? context.source.stockUnitLabel
+                  : null,
+              purchaseUnitLabel:
+                typeof context.source.purchaseUnitLabel === 'string'
+                  ? context.source.purchaseUnitLabel
+                  : null,
+              purchasePackSize:
+                typeof context.source.purchasePackSize === 'number'
+                  ? context.source.purchasePackSize
+                  : null,
+              purchaseUnitCount:
+                typeof context.source.purchaseUnitCount === 'number'
+                  ? context.source.purchaseUnitCount
+                  : null,
+            };
+          })()
+        : null,
       totalEstimate: items.reduce(
         (sum, item) => sum + item.estimatedLineTotal,
         0,
@@ -1028,5 +1563,43 @@ export class ProcurementService {
       message,
       HttpStatus.CONFLICT,
     );
+  }
+
+  private async transitionLinkedAgentAction(
+    tx: AgentDataClient,
+    businessId: string,
+    request: { id: string; sourceAgentRecommendationId: string | null },
+    fromState: SpecialistAgentActionState,
+    toState: SpecialistAgentActionState,
+    actorUserId: string,
+    reason?: string,
+    update?: Prisma.SpecialistAgentActionUpdateManyMutationInput,
+  ) {
+    if (!request.sourceAgentRecommendationId) return;
+    const action = await tx.specialistAgentAction.findFirst({
+      where: {
+        businessId,
+        recommendationId: request.sourceAgentRecommendationId,
+        canonicalResourceType: 'ProcurementRequest',
+        canonicalResourceId: request.id,
+      },
+      select: { id: true },
+    });
+    if (!action) {
+      throw new AppException(
+        'SPECIALIST_ACTION_NOT_FOUND',
+        'The Inventory action record is missing for this purchase request.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    await transitionSpecialistAgentAction(tx, {
+      businessId,
+      actionId: action.id,
+      fromState,
+      toState,
+      actorUserId,
+      reason,
+      update,
+    });
   }
 }

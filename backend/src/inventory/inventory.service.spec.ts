@@ -21,6 +21,8 @@ describe('InventoryService (BE-033/BE-034)', () => {
   let inventoryService: InventoryService;
   let businessId: string;
   let productId: string;
+  let wastageEventProductId: string;
+  const specialistQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -32,10 +34,6 @@ describe('InventoryService (BE-033/BE-034)', () => {
       cls as unknown as ClsService,
     );
     const activity = { record: jest.fn().mockResolvedValue(undefined) };
-    inventoryService = new InventoryService(
-      tenantPrisma,
-      activity as unknown as ActivityService,
-    );
 
     const business = await prisma.business.create({
       data: {
@@ -58,6 +56,22 @@ describe('InventoryService (BE-033/BE-034)', () => {
       },
     });
     productId = product.id;
+    const wastageEventProduct = await prisma.product.create({
+      data: {
+        businessId,
+        kind: 'product',
+        name: 'Wastage event fixture',
+        costPrice: 2,
+        sellingPrice: 4,
+        stockQty: 10,
+      },
+    });
+    wastageEventProductId = wastageEventProduct.id;
+    inventoryService = new InventoryService(
+      tenantPrisma,
+      activity as unknown as ActivityService,
+      specialistQueue as never,
+    );
   });
 
   afterAll(async () => {
@@ -116,6 +130,42 @@ describe('InventoryService (BE-033/BE-034)', () => {
         reason: 'Other',
       }),
     ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('queues a confirmed wastage review only when its policy is enabled', async () => {
+    specialistQueue.add.mockClear();
+    const firstMovement = await inventoryService.recordWastage(businessId, {
+      productId: wastageEventProductId,
+      qty: 1,
+      reason: 'Damaged',
+    });
+    expect(specialistQueue.add).not.toHaveBeenCalled();
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: { 'agents.inventoryWastageEventReviewEnabled': true },
+      },
+    });
+    const movement = await inventoryService.recordWastage(businessId, {
+      productId: wastageEventProductId,
+      qty: 1,
+      reason: 'Expired',
+    });
+
+    expect(movement.id).not.toBe(firstMovement.id);
+    expect(specialistQueue.add).toHaveBeenCalledWith(
+      'inventory-wastage-recorded',
+      {
+        businessId,
+        stockMovementId: movement.id,
+        occurredAt: movement.createdAt.toISOString(),
+      },
+      expect.objectContaining({
+        jobId: `inventory-wastage-${businessId}-${movement.id}`,
+        attempts: 3,
+      }),
+    );
   });
 
   it('lists inventory with computed stock value and status', async () => {

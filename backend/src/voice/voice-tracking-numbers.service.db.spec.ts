@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { randomUUID } from 'node:crypto';
 import { ClsService } from 'nestjs-cls';
 import { ConfigService } from '@nestjs/config';
 import { PhoneCallStatus, Prisma } from '@prisma/client';
@@ -30,6 +31,7 @@ class FakeClsService {
 }
 
 const unique = String(Date.now()).slice(-4);
+const callSidUnique = randomUUID();
 const OWNED = `+1628201${unique}`;
 const PURCHASED = `+1628202${unique}`;
 
@@ -202,7 +204,7 @@ describe('VoiceTrackingNumbersService (real MySQL)', () => {
     const earlyCall = await prisma.phoneCall.create({
       data: {
         businessId,
-        callSid: `CA-trk-1-${unique}`,
+        callSid: `CA-trk-1-${callSidUnique}`,
         fromNumber: '+14155550111',
         status: PhoneCallStatus.completed,
         transcript: [],
@@ -212,7 +214,7 @@ describe('VoiceTrackingNumbersService (real MySQL)', () => {
     await prisma.phoneCall.create({
       data: {
         businessId,
-        callSid: `CA-trk-2-${unique}`,
+        callSid: `CA-trk-2-${callSidUnique}`,
         fromNumber: '+14155550112',
         status: PhoneCallStatus.completed,
         transcript: [],

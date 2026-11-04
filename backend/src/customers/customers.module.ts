@@ -30,6 +30,21 @@ import { BillingModule } from '../billing/billing.module';
 import { AutomationsModule } from '../marketing/automations/automations.module';
 import { AutomationModule as OutboundWebhookAutomationModule } from '../integrations/automation/automation.module';
 import { AiModule } from '../ai/ai.module';
+import { CustomerIntelligenceService } from './customer-intelligence.service';
+import { CustomerAnalyticsSummaryService } from './customer-analytics-summary.service';
+import { CustomerProfileIntelligenceService } from './customer-profile-intelligence.service';
+import { CustomerProfileIntelligenceController } from './customer-profile-intelligence.controller';
+import { CustomerSegmentDraftsController } from './customer-segment-drafts.controller';
+import { CustomerSegmentDraftsService } from './customer-segment-drafts.service';
+import { CustomerSegmentActionsController } from './customer-segment-actions.controller';
+import {
+  CustomerAgentActionsController,
+  CustomerFollowUpTaskActionsController,
+} from './customer-agent-actions.controller';
+import { CustomerAgentActionsService } from './customer-agent-actions.service';
+import { CustomerChannelConsentController } from './customer-channel-consent.controller';
+import { CustomerChannelConsentService } from './customer-channel-consent.service';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
   imports: [
@@ -39,12 +54,19 @@ import { AiModule } from '../ai/ai.module';
     AutomationsModule,
     OutboundWebhookAutomationModule,
     AiModule,
+    SpecialistAgentEventQueueModule,
   ],
   controllers: [
     // Registration order matters: these two register literal `customers/duplicates` and
     // `customers/export`/`customers/export-history` paths that would otherwise be swallowed by
     // `CustomersController`'s `customers/:id`-style dynamic routes if it came first.
     CustomerDuplicatesController,
+    CustomerSegmentDraftsController,
+    CustomerSegmentActionsController,
+    CustomerAgentActionsController,
+    CustomerChannelConsentController,
+    CustomerFollowUpTaskActionsController,
+    CustomerProfileIntelligenceController,
     CustomersExportController,
     CustomersController,
     CustomerCustomFieldsController,
@@ -70,12 +92,22 @@ import { AiModule } from '../ai/ai.module';
     LoyaltyService,
     MembershipsService,
     MemoryNotesService,
+    CustomerIntelligenceService,
+    CustomerAnalyticsSummaryService,
+    CustomerProfileIntelligenceService,
+    CustomerSegmentDraftsService,
+    CustomerAgentActionsService,
+    CustomerChannelConsentService,
   ],
   exports: [
     CustomersService,
     SegmentsService,
     LoyaltyService,
     MembershipsService,
+    CustomerIntelligenceService,
+    CustomerAnalyticsSummaryService,
+    CustomerSegmentDraftsService,
+    CustomerAgentActionsService,
   ],
 })
 export class CustomersModule {}

@@ -46,6 +46,8 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
     onDelivered: jest.fn(),
     onFailed: jest.fn(),
   };
+  const commerceAgentEvents = { add: jest.fn() };
+  const customerAgentEvents = { add: jest.fn() };
   const geocoding = { geocode: jest.fn().mockResolvedValue(null) };
 
   beforeAll(async () => {
@@ -70,6 +72,8 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
       notifier as unknown as DeliveryNotifierService,
       automations as unknown as DeliveryAutomationsService,
       geocoding as unknown as GeocodingService,
+      commerceAgentEvents as never,
+      customerAgentEvents as never,
     );
 
     const business = await prisma.business.create({
@@ -85,6 +89,8 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
   beforeEach(() => {
     s3.upload.mockResolvedValue(undefined);
     s3.getSignedDownloadUrl.mockResolvedValue('https://signed.example/url');
+    commerceAgentEvents.add.mockResolvedValue(undefined);
+    customerAgentEvents.add.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -105,8 +111,14 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
     await prisma.$disconnect();
   });
 
-  async function makeOrder() {
-    return prisma.order.create({ data: { businessId, orderNo: orderNo++ } });
+  async function makeOrder(customerId?: string) {
+    return prisma.order.create({
+      data: {
+        business: { connect: { id: businessId } },
+        orderNo: orderNo++,
+        ...(customerId ? { customer: { connect: { id: customerId } } } : {}),
+      },
+    });
   }
 
   describe('create()', () => {
@@ -428,6 +440,101 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
       expect(failed.status).toBe('failed');
       expect(failed.failureReason).toBe('Customer refused delivery');
     });
+
+    it('queues an opted-in Commerce review using the exact failed-delivery version', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          policies: {
+            'agents.commerceEnabled': true,
+            'agents.commerceDeliveryFailedEventReviewEnabled': true,
+            'commerce.autonomyLevel': 1,
+          },
+        },
+      });
+      const order = await makeOrder();
+      const delivery = await service.create(businessId, {
+        orderId: order.id,
+        addressLine: '4 Main St',
+      });
+      await prisma.delivery.update({
+        where: { id: delivery.id },
+        data: { status: 'assigned' },
+      });
+
+      const failed = await service.updateStatus(
+        businessId,
+        delivery.id,
+        { status: 'failed', failureReason: 'Customer not available' },
+      );
+
+      expect(commerceAgentEvents.add).toHaveBeenCalledWith(
+        'commerce-delivery-failed',
+        {
+          businessId,
+          deliveryId: delivery.id,
+          failedAt: failed.updatedAt.toISOString(),
+        },
+        expect.objectContaining({
+          jobId: `commerce-delivery-failed-${businessId}-${delivery.id}-${failed.updatedAt.getTime()}`,
+          attempts: 5,
+          removeOnFail: false,
+        }),
+      );
+    });
+
+    it('queues an opted-in Customer review only for a delivery linked to a customer', async () => {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          policies: {
+            'agents.customerEnabled': true,
+            'agents.customerDeliveryFailedEventReviewEnabled': true,
+          },
+        },
+      });
+      const customer = await prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Delivery event customer',
+          phone: `+1555${Date.now().toString().slice(-7)}91`,
+        },
+      });
+      const order = await makeOrder(customer.id);
+      const delivery = await service.create(businessId, {
+        orderId: order.id,
+        addressLine: '5 Main St',
+      });
+      await prisma.delivery.update({
+        where: { id: delivery.id },
+        data: { status: 'assigned' },
+      });
+
+      try {
+        const failed = await service.updateStatus(businessId, delivery.id, {
+          status: 'failed',
+          failureReason: 'Customer not available',
+        });
+
+        expect(customerAgentEvents.add).toHaveBeenCalledWith(
+          'customer-delivery-failed',
+          {
+            businessId,
+            deliveryId: delivery.id,
+            failedAt: failed.updatedAt.toISOString(),
+          },
+          expect.objectContaining({
+            jobId: `customer-delivery-failed-${businessId}-${delivery.id}-${failed.updatedAt.getTime()}`,
+            attempts: 5,
+            removeOnFail: false,
+          }),
+        );
+      } finally {
+        await prisma.delivery.deleteMany({ where: { id: delivery.id, businessId } });
+        await prisma.order.deleteMany({ where: { id: order.id, businessId } });
+        await prisma.customer.deleteMany({ where: { id: customer.id, businessId } });
+      }
+    });
   });
 
   describe('rate() (UPD-FE-127)', () => {
@@ -560,6 +667,8 @@ describe('DeliveriesService (UPD-BE-065/067)', () => {
         notifier as unknown as DeliveryNotifierService,
         automations as unknown as DeliveryAutomationsService,
         geocoding as unknown as GeocodingService,
+        commerceAgentEvents as never,
+        customerAgentEvents as never,
       );
       return { business, isolatedService };
     }

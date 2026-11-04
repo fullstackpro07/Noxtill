@@ -42,14 +42,18 @@ describe('SeoOnPageService (MySQL)', () => {
   let prisma: PrismaService;
   let service: SeoOnPageService;
   let businessId: string;
-  const complete = jest.fn();
+  const complete = jest.fn<Promise<string>, unknown[]>();
   const stamp = Date.now();
 
-  async function crawl(pages: unknown[], finishedAt: Date) {
+  async function crawl(
+    pages: unknown[],
+    finishedAt: Date,
+    status: 'completed' | 'partial' = 'completed',
+  ) {
     return prisma.seoAuditRun.create({
       data: {
         businessId,
-        status: 'completed',
+        status,
         siteUrl: 'https://shop.test/',
         pagesCrawled: pages.length,
         pages: pages as object[],
@@ -223,6 +227,26 @@ describe('SeoOnPageService (MySQL)', () => {
       verified: 0,
     });
 
+    // A partial crawl omitting the target page cannot prove the page disappeared.
+    await crawl(
+      [page(PAGE_B, { title: 'About us', description: 'Who we are' })],
+      new Date(Date.now() + 500),
+      'partial',
+    );
+    expect(await service.verifyApplied(businessId)).toEqual({
+      checked: 0,
+      verified: 0,
+    });
+    const notChecked = await prisma.seoContentRevision.findUniqueOrThrow({
+      where: { id: v2.id },
+    });
+    expect(notChecked.status).toBe(SeoContentRevisionStatus.applied);
+    expect(notChecked.verification).toMatchObject({
+      pageFound: null,
+      result: 'not_checked',
+      reason: 'partial_crawl_did_not_include_page',
+    });
+
     // A later crawl shows the title live but the old (missing) description: not verified.
     await crawl(
       [
@@ -232,7 +256,7 @@ describe('SeoOnPageService (MySQL)', () => {
         }),
         page(PAGE_B, { title: 'About us', description: 'Who we are' }),
       ],
-      new Date(Date.now() + 1000),
+      new Date(Date.now() + 1500),
     );
     expect(await service.verifyApplied(businessId)).toEqual({
       checked: 1,
@@ -254,7 +278,7 @@ describe('SeoOnPageService (MySQL)', () => {
         }),
         page(PAGE_B, { title: 'About us', description: 'Who we are' }),
       ],
-      new Date(Date.now() + 2000),
+      new Date(Date.now() + 2500),
     );
     expect(await service.verifyApplied(businessId)).toEqual({
       checked: 1,

@@ -27,11 +27,23 @@ export class AiController {
   }
 
   @RequireCapability(CAPABILITIES.AI_SETTINGS_MANAGE)
+  @Get('specialist-operations')
+  getSpecialistOperations(@CurrentUser() user: AuthenticatedUser) {
+    return this.aiSettings.getSpecialistOperations(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.AI_SETTINGS_MANAGE)
+  @Get('specialist-operations/audit')
+  getSpecialistActionAudit(@CurrentUser() user: AuthenticatedUser) {
+    return this.aiSettings.getSpecialistActionAudit(user.businessId);
+  }
+
+  @RequireCapability(CAPABILITIES.AI_SETTINGS_MANAGE)
   @Patch('settings')
   updateSettings(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateAiSettingsDto,
   ) {
-    return this.aiSettings.updateSettings(user.businessId, dto);
+    return this.aiSettings.updateSettings(user.businessId, dto, user.sub);
   }
 }

@@ -108,6 +108,12 @@ function factorValue(key: string, value: unknown, currency: string): string {
   return String(value);
 }
 
+function scorecardEvidenceLabel(status: string): string {
+  if (status === "inputs_recorded") return "Inputs recorded · not scored";
+  if (status === "partial_evidence") return "Partial evidence";
+  return "Not tracked";
+}
+
 export function ProductValidationView() {
   const { business } = useSession();
   const queryClient = useQueryClient();
@@ -765,6 +771,105 @@ function ValidationDrawer({
                   <ExternalLink className="h-3 w-3" aria-hidden />
                 </a>
               )}
+            </section>
+
+            <section
+              className="mt-4 rounded-[12px] p-4"
+              style={{ background: "var(--app-surface-2)" }}
+              aria-label="Product validation evidence scorecard"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3
+                    className="text-[12px] font-extrabold"
+                    style={{ color: "var(--app-text)" }}
+                  >
+                    Evidence scorecard
+                  </h3>
+                  <p
+                    className="mb-0 mt-1 text-[10.5px]"
+                    style={{ color: "var(--app-text-muted)" }}
+                  >
+                    {candidate.evidenceReview.scorecard.interpretation}
+                  </p>
+                </div>
+                <span
+                  className="rounded-full px-2 py-1 text-[10px] font-bold"
+                  style={{
+                    background: "var(--app-warning-bg)",
+                    color: "var(--app-warning-text)",
+                  }}
+                >
+                  Not scored
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {candidate.evidenceReview.scorecard.dimensions.map(
+                  (dimension) => (
+                    <article
+                      key={dimension.key}
+                      className="rounded-[9px] border p-2.5"
+                      style={{
+                        background: "var(--app-surface)",
+                        borderColor: "var(--app-border)",
+                      }}
+                    >
+                      <div className="flex flex-wrap justify-between gap-1">
+                        <strong
+                          className="text-[10.5px]"
+                          style={{ color: "var(--app-text)" }}
+                        >
+                          {dimension.label}
+                        </strong>
+                        <span
+                          className="text-[10px]"
+                          style={{ color: "var(--app-text-muted)" }}
+                        >
+                          {scorecardEvidenceLabel(dimension.status)}
+                        </span>
+                      </div>
+                      {dimension.recordedFields.length > 0 && (
+                        <p
+                          className="mb-0 mt-1 text-[10px]"
+                          style={{ color: "var(--app-text-muted)" }}
+                        >
+                          Recorded: {dimension.recordedFields
+                            .map((key) => FACTOR_LABELS[key] ?? key)
+                            .join(", ")}
+                        </p>
+                      )}
+                      {dimension.missingFields.length > 0 && (
+                        <p
+                          className="mb-0 mt-1 text-[10px]"
+                          style={{ color: "var(--app-text-faint)" }}
+                        >
+                          Missing: {dimension.missingFields
+                            .map((key) => FACTOR_LABELS[key] ?? key)
+                            .join(", ")}
+                        </p>
+                      )}
+                      {dimension.assumptions.map((assumption) => (
+                        <p
+                          key={assumption}
+                          className="mb-0 mt-1 text-[10px]"
+                          style={{ color: "var(--app-text-faint)" }}
+                        >
+                          {assumption}
+                        </p>
+                      ))}
+                      {dimension.missingData.map((item) => (
+                        <p
+                          key={item}
+                          className="mb-0 mt-1 text-[10px]"
+                          style={{ color: "var(--app-text-faint)" }}
+                        >
+                          {item}
+                        </p>
+                      ))}
+                    </article>
+                  ),
+                )}
+              </div>
             </section>
 
             <section

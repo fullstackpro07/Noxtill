@@ -37,6 +37,7 @@ describe('CommerceExperimentsService (MySQL)', () => {
   let productId: string;
   let orderNo = 1;
   const stamp = Date.now();
+  const queueExperimentReview = jest.fn().mockResolvedValue(null);
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -44,6 +45,7 @@ describe('CommerceExperimentsService (MySQL)', () => {
     const cls = new FakeClsService();
     service = new CommerceExperimentsService(
       new TenantPrismaService(prisma, cls as unknown as ClsService),
+      { add: queueExperimentReview } as never,
     );
     businessId = (
       await prisma.business.create({
@@ -57,6 +59,8 @@ describe('CommerceExperimentsService (MySQL)', () => {
       })
     ).id;
   });
+
+  beforeEach(() => queueExperimentReview.mockClear());
 
   afterAll(async () => {
     await prisma.commerceExperimentAudit.deleteMany({ where: { businessId } });
@@ -252,5 +256,53 @@ describe('CommerceExperimentsService (MySQL)', () => {
       'started',
       'stopped',
     ]);
+  });
+
+  it('queues a read-only agent review only after an opted-in final decision', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.commerceEnabled': true,
+          'agents.commerceExperimentDecisionEventReviewEnabled': true,
+          'commerce.autonomyLevel': 1,
+        },
+      },
+    });
+    const eventProduct = await prisma.product.create({
+      data: {
+        businessId,
+        name: 'Experiment event review fixture',
+        costPrice: 6,
+        sellingPrice: 10,
+      },
+    });
+    const experiment = await service.create(businessId, 'owner', {
+      productId: eventProduct.id,
+      name: 'Agent event review',
+      type: CommerceExperimentType.price,
+      hypothesis: 'The recorded test change may affect revenue',
+      changeDescription: 'Merchant-entered change',
+      primaryMetric: CommerceExperimentMetric.revenue,
+    });
+    await service.start(businessId, 'owner', experiment.id);
+    await service.stop(businessId, 'owner', experiment.id);
+    const decided = await service.decide(
+      businessId,
+      'owner',
+      experiment.id,
+      CommerceExperimentStatus.adopted,
+      'The recorded outcome was reviewed',
+    );
+
+    expect(queueExperimentReview).toHaveBeenCalledWith(
+      'commerce-experiment-decision-recorded',
+      {
+        businessId,
+        experimentId: experiment.id,
+        decisionUpdatedAt: decided.updatedAt.toISOString(),
+      },
+      expect.objectContaining({ attempts: 3 }),
+    );
   });
 });

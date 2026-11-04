@@ -1,0 +1,31 @@
+CREATE TABLE `specialist_agent_tool_calls` (
+  `id` VARCHAR(191) NOT NULL,
+  `business_id` VARCHAR(191) NOT NULL,
+  `run_id` VARCHAR(191) NOT NULL,
+  `agent_key` VARCHAR(64) NOT NULL,
+  `module_id` VARCHAR(16) NOT NULL,
+  `tool_key` VARCHAR(128) NOT NULL,
+  `tool_version` INTEGER NOT NULL DEFAULT 1,
+  `round` INTEGER NOT NULL DEFAULT 1,
+  `sequence` INTEGER NOT NULL,
+  `status` VARCHAR(24) NOT NULL,
+  `input_sha256` CHAR(64) NOT NULL,
+  `input_fields` JSON NOT NULL,
+  `output_resource_type` VARCHAR(64) NULL,
+  `output_resource_id` VARCHAR(191) NULL,
+  `duration_ms` INTEGER NULL,
+  `retryable` BOOLEAN NOT NULL DEFAULT false,
+  `error_code` VARCHAR(64) NULL,
+  `correlation_id` VARCHAR(191) NOT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `finished_at` DATETIME(3) NULL,
+  UNIQUE INDEX `specialist_agent_tool_calls_run_round_sequence_uq` (`run_id`, `round`, `sequence`),
+  INDEX `specialist_agent_tool_calls_business_run_created_idx` (`business_id`, `run_id`, `created_at`),
+  INDEX `specialist_agent_tool_calls_business_agent_created_idx` (`business_id`, `agent_key`, `created_at`),
+  INDEX `specialist_agent_tool_calls_business_status_created_idx` (`business_id`, `status`, `created_at`),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `specialist_agent_tool_calls_business_fk`
+    FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `specialist_agent_tool_calls_run_fk`
+    FOREIGN KEY (`run_id`) REFERENCES `specialist_agent_runs` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

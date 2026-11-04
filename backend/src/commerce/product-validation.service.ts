@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {
   ActivityEventType,
   ProductOpportunity,
@@ -13,17 +15,61 @@ import { PRODUCT_VALIDATION_ERROR_CODES } from './commerce.constants';
 import { ProductValidationDecisionDto } from './dto/product-validation.dto';
 import { CreateValidationProductDto } from './dto/create-validation-product.dto';
 import { ActivityService } from '../activity/activity.service';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  COMMERCE_VALIDATION_EVENT_JOB,
+  SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 function numeric(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
 }
 
+type EvidenceFactor = {
+  key: string;
+  value: unknown;
+  status: 'recorded' | 'not_recorded';
+};
+
+type ValidationDimensionStatus =
+  'inputs_recorded' | 'partial_evidence' | 'not_tracked';
+
+function validationDimension(
+  key: string,
+  label: string,
+  fieldKeys: string[],
+  factors: EvidenceFactor[],
+  assumptions: string[],
+  missingData: string[],
+) {
+  const recordedFields = fieldKeys.filter((fieldKey) =>
+    factors.some(
+      (factor) => factor.key === fieldKey && factor.status === 'recorded',
+    ),
+  );
+  const missingFields = fieldKeys.filter(
+    (fieldKey) => !recordedFields.includes(fieldKey),
+  );
+  const status: ValidationDimensionStatus =
+    recordedFields.length === 0
+      ? 'not_tracked'
+      : missingFields.length === 0
+        ? 'inputs_recorded'
+        : 'partial_evidence';
+
+  return {
+    key,
+    label,
+    status,
+    recordedFields,
+    missingFields,
+    assumptions,
+    missingData,
+  };
+}
+
 function snapshotEvidence(opportunity: ProductOpportunity) {
-  const factors: Array<{
-    key: string;
-    value: unknown;
-    status: 'recorded' | 'not_recorded';
-  }> = [
+  const factors: EvidenceFactor[] = [
     {
       key: 'demand_signal',
       value: opportunity.demandSignal,
@@ -96,6 +142,84 @@ function snapshotEvidence(opportunity: ProductOpportunity) {
       recorded: factors.filter((factor) => factor.status === 'recorded').length,
       total: factors.length,
     },
+    scorecard: {
+      status: 'evidence_only_not_scored',
+      interpretation:
+        'This scorecard reports which source fields are recorded. It calculates no dimension score, overall score, probability or pass/fail result.',
+      dimensions: [
+        validationDimension(
+          'demand_and_competition',
+          'Demand and competition',
+          ['demand_signal', 'trend_velocity', 'competition_score'],
+          factors,
+          [
+            'Values are stored Product Radar research inputs; this scorecard does not verify the underlying source or combine them into a score.',
+          ],
+          [
+            'Missing demand or competition fields remain unknown; recorded values may have no freshness timestamp.',
+          ],
+        ),
+        validationDimension(
+          'economics',
+          'Economics',
+          [
+            'observed_price',
+            'estimated_landed_cost',
+            'margin_estimate',
+            'shipping_estimate',
+          ],
+          factors,
+          [
+            'Price, landed cost, margin and shipping are stored research inputs; no additional tax, fee or currency conversion is calculated here.',
+          ],
+          [
+            'Missing amounts stay unavailable; a recorded estimate is not a realized cost or profitability result.',
+          ],
+        ),
+        validationDimension(
+          'supply',
+          'Supply',
+          ['supplier_count'],
+          factors,
+          [
+            'Supplier count is a stored Product Radar value and does not prove a supplier is verified or able to fulfill.',
+          ],
+          [
+            'Supplier quality, capacity, compliance, delivery performance and current terms are not assessed by this scorecard.',
+          ],
+        ),
+        validationDimension(
+          'store_fit',
+          'Store fit',
+          ['store_fit_score'],
+          factors,
+          [
+            'Store-fit value is shown as recorded and is not recalculated from catalog or order data.',
+          ],
+          [
+            'The fit method and source evidence are not independently verified here.',
+          ],
+        ),
+        validationDimension(
+          'compliance',
+          'Compliance',
+          [],
+          factors,
+          [],
+          [
+            'Product-level compliance evidence is not tracked by Product Radar.',
+          ],
+        ),
+        validationDimension(
+          'return_risk',
+          'Return risk',
+          [],
+          factors,
+          [],
+          ['Product-level customer return-risk evidence is not tracked here.'],
+        ),
+      ],
+    },
     launchApproval: {
       available: false,
       reason: launchApprovalBlockReason(opportunity.risk),
@@ -160,9 +284,13 @@ function launchApprovalBlockReason(risk: ProductOpportunityRisk): string {
 
 @Injectable()
 export class ProductValidationService {
+  private readonly logger = new Logger(ProductValidationService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly activity: ActivityService,
+    @InjectQueue(SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE)
+    private readonly specialistAgentEvents: Queue,
   ) {}
 
   async list(businessId: string, search?: string) {
@@ -193,6 +321,45 @@ export class ProductValidationService {
     }));
   }
 
+  async specialistScorecards(businessId: string) {
+    const maximumReviewed = 20;
+    const opportunities =
+      await this.tenantPrisma.client.productOpportunity.findMany({
+        where: {
+          businessId,
+          status: ProductOpportunityStatus.validation_requested,
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: maximumReviewed + 1,
+      });
+    const hasMore = opportunities.length > maximumReviewed;
+    const reviewed = opportunities.slice(0, maximumReviewed);
+
+    return {
+      state: reviewed.length === 0 ? 'no_candidates' : 'available',
+      source: 'ProductOpportunity',
+      reviewedCount: reviewed.length,
+      maximumReviewed,
+      hasMore,
+      interpretation:
+        'Evidence availability only. No dimension score, overall score, probability, launch recommendation or pass/fail result is calculated.',
+      candidates: reviewed.map((opportunity) => ({
+        opportunityId: opportunity.id,
+        version: opportunity.version,
+        source: opportunity.source,
+        market: opportunity.market,
+        risk: opportunity.risk,
+        sourceFreshAt: opportunity.sourceFreshAt?.toISOString() ?? null,
+        scorecard: snapshotEvidence(opportunity).scorecard,
+      })),
+      limitations: [
+        'Only current validation_requested Product Radar opportunities are reviewed, most recently updated first, with a 20-candidate cap.',
+        'Recorded Product Radar fields may be manual research and are not treated as provider-verified measurements.',
+        'Compliance and product-level return-risk evidence are not tracked by this scorecard; the canonical validation screen continues to block launch approval while its required evidence/policy is unavailable.',
+      ],
+    };
+  }
+
   async getOne(businessId: string, opportunityId: string) {
     const opportunity = await this.findOpportunity(businessId, opportunityId);
     return {
@@ -201,11 +368,12 @@ export class ProductValidationService {
     };
   }
 
-  async history(businessId: string, opportunityId: string) {
+  async history(businessId: string, opportunityId: string, take?: number) {
     await this.findOpportunity(businessId, opportunityId);
     return this.tenantPrisma.client.productValidationRun.findMany({
       where: { businessId, opportunityId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(take === undefined ? {} : { take }),
     });
   }
 
@@ -293,6 +461,7 @@ export class ProductValidationService {
       entityId: result.validationRun.id,
       actorUserId,
     });
+    await this.queueSpecialistReview(businessId, 'ProductValidationRun', result.validationRun.id);
 
     return {
       opportunity: serialiseOpportunity(result.opportunity),
@@ -398,6 +567,7 @@ export class ProductValidationService {
       entityId: result.id,
       actorUserId,
     });
+    await this.queueSpecialistReview(businessId, 'Product', result.id);
 
     return {
       product: this.serialiseCatalogProduct(result),
@@ -420,6 +590,58 @@ export class ProductValidationService {
       costPrice: Number(product.costPrice),
       sellingPrice: Number(product.sellingPrice),
     };
+  }
+
+  private async queueSpecialistReview(
+    businessId: string,
+    entityType: 'ProductValidationRun' | 'Product',
+    entityId: string,
+  ): Promise<void> {
+    try {
+      const business = await this.tenantPrisma.client.business.findFirst({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.commerceEnabled') ||
+        !policies.bool('agents.commerceValidationEventReviewEnabled') ||
+        (policies.num('commerce.autonomyLevel') ?? 0) <= 0
+      ) {
+        return;
+      }
+
+      // ActivityService intentionally swallows event-write failures; query by the unique domain
+      // entity reference so only a persisted canonical event can start a review.
+      const activityEvent = await this.tenantPrisma.client.activityEvent.findFirst({
+        where: {
+          businessId,
+          type: ActivityEventType.commerce_validation,
+          entityType,
+          entityId,
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { id: true },
+      });
+      if (!activityEvent) return;
+
+      await this.specialistAgentEvents.add(
+        COMMERCE_VALIDATION_EVENT_JOB,
+        { businessId, activityEventId: activityEvent.id },
+        {
+          jobId: `commerce-validation-${businessId}-${activityEvent.id}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      // An optional review must never undo or turn a successful validation mutation into a failure.
+      this.logger.warn(
+        `Could not queue Commerce specialist review for ${entityType} ${entityId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   private findOpportunity(businessId: string, opportunityId: string) {

@@ -31,11 +31,13 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ActivityModule } from '../activity/activity.module';
 import { StorageModule } from '../common/storage/storage.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
   imports: [
     ActivityModule,
     StorageModule,
+    SpecialistAgentEventQueueModule,
     MessagingModule,
     NotificationsModule,
     BullModule.registerQueue({ name: DELIVERY_AUTOMATIONS_QUEUE }),
@@ -68,6 +70,6 @@ import { StorageModule } from '../common/storage/storage.module';
     GeocodingService,
     PublicTrackingService,
   ],
-  exports: [DeliveryPricingService],
+  exports: [DeliveryPricingService, DeliveryInsightsService],
 })
 export class DeliveryModule {}

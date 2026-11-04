@@ -1,15 +1,28 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { SideDrawer } from "@/components/shared/side-drawer";
-import { fetchPnl, fetchProfitByProduct, type PnlCategoryRow, type PnlPeriod } from "@/lib/profit-api";
+import {
+  fetchFinancialAgentRuns,
+  fetchPnl,
+  fetchProfitByProduct,
+  fetchXeroOpenItems,
+  runFinancialAgent,
+  type FinancialAgentRun,
+  type PnlCategoryRow,
+  type PnlPeriod,
+} from "@/lib/profit-api";
 import { fetchBranches } from "@/lib/branches-api";
 import { formatCurrency } from "@/lib/format";
 import { useSession } from "@/lib/session";
+import { ApiError } from "@/lib/api-client";
+import { XeroBankTransactionStatusPanel } from "./xero-bank-transaction-status-panel";
 import { toast } from "@/lib/toast";
+import { SpecialistAgentUsage } from "@/components/agents/specialist-agent-usage";
+import { FinanceBudgetsPanel } from "@/components/profit/finance-budgets-panel";
 
 const KPI_ICON = {
   revenue: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 6.5v11M14 9.5A2.6 2.6 0 0 0 11.5 8",
@@ -139,6 +152,94 @@ function KpiTile({ label, value, icon, bg, color, border, delta }: { label: stri
   );
 }
 
+function XeroOpenItemsPanel({ branchId }: { branchId: string }) {
+  const session = useSession();
+  const query = useQuery({
+    queryKey: ["finance-xero-open-items", session.business.id, branchId],
+    queryFn: () => fetchXeroOpenItems(branchId),
+    enabled: false,
+  });
+  const review = query.data;
+
+  return (
+    <section className="rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", padding: 17 }} aria-label="Xero open items">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="m-0 text-[14.5px] font-extrabold" style={{ color: "var(--app-text)" }}>Xero open invoices and bills</h2>
+          <p className="mb-0 mt-1 text-[12px]" style={{ color: "var(--app-text-faint)" }}>
+            Read-only provider check. It does not run AI or create a saved Finance Agent review.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/integrations" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+            Integrations
+          </Link>
+          <button
+            type="button"
+            onClick={() => { void query.refetch(); }}
+            disabled={query.isFetching}
+            className="rounded-[11px] px-4 py-2.5 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ background: "var(--app-primary)" }}
+          >
+            {query.isFetching ? "Checking…" : review ? "Refresh Xero" : "Check Xero"}
+          </button>
+        </div>
+      </div>
+
+      {query.isError ? (
+        <p role="alert" className="mb-0 mt-3 text-[12px]" style={{ color: "var(--app-text-muted)" }}>
+          {query.error instanceof ApiError ? query.error.message : "Xero could not be checked. Try again."}
+        </p>
+      ) : !review ? (
+        <p className="mb-0 mt-3 text-[12px]" style={{ color: "var(--app-text-disabled)" }}>
+          Check for authorized invoices and bills when you want. If Xero is not connected, the page will say so without treating missing data as zero.
+        </p>
+      ) : review.status !== "available" ? (
+        <p role="status" className="mb-0 mt-3 text-[12px]" style={{ color: "var(--app-text-muted)" }}>
+          {review.unavailableReason || "Xero data is not available for this business scope."}
+        </p>
+      ) : (
+        <div className="mt-3">
+          <p className="mb-0 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+            Fetched {review.observedAt ? new Date(review.observedAt).toLocaleString() : "time unavailable"} · due-date aging as of {review.asOfDate || "date unavailable"}.
+            {review.partial ? " The page limit was reached, so totals are partial." : ""}
+          </p>
+          {review.currencies.length === 0 ? (
+            <p role="status" className="mb-0 mt-2 text-[12px]" style={{ color: "var(--app-text-muted)" }}>Xero returned no authorized invoices or bills with an amount due.</p>
+          ) : (
+            <div className="mt-2 grid gap-2 lg:grid-cols-2">
+              {review.currencies.map((currencyItems) => (
+                <div key={currencyItems.currencyCode} className="rounded-[10px] p-3" style={{ background: "var(--app-surface-2)" }}>
+                  <div className="mb-2 text-[11px] font-extrabold" style={{ color: "var(--app-text)" }}>{currencyItems.currencyCode}</div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {([ ["Receivables", currencyItems.receivables], ["Payables", currencyItems.payables] ] as const).map(([label, side]) => (
+                      <div key={label} className="rounded-[8px] p-2" style={{ border: "1px solid var(--app-border)" }}>
+                        <div className="text-[10px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{label} · {side.invoiceCount} open</div>
+                        <div className="mt-0.5 text-[13px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(Number(side.amountDue), currencyItems.currencyCode)}</div>
+                        <div className="mt-1 space-y-0.5">
+                          {side.buckets.filter((bucket) => bucket.invoiceCount > 0).map((bucket) => (
+                            <div key={bucket.key} className="flex justify-between gap-2 text-[9.5px]" style={{ color: "var(--app-text-faint)" }}>
+                              <span>{bucket.label} · {bucket.invoiceCount}</span>
+                              <span>{formatCurrency(Number(bucket.amountDue), currencyItems.currencyCode)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mb-0 mt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+            External Xero invoice records only. This is not a reconciled Noxtill ledger or proof of payment; customer and supplier names are not returned.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function ProfitOverviewView() {
   const session = useSession();
   const currency = session.business.currency;
@@ -149,10 +250,29 @@ export function ProfitOverviewView() {
   const [drawerCategory, setDrawerCategory] = useState<PnlCategoryRow | null>(null);
   const [customiseOpen, setCustomiseOpen] = useState(false);
   const [widgets, setWidgets] = useState<WidgetKey[]>(() => loadWidgetPrefs());
+  const queryClient = useQueryClient();
 
   const month = useMemo(() => currentMonth(), []);
   const { data, isPending, isError, refetch } = useQuery({ queryKey: ["profit-pnl", month, period, branchId], queryFn: () => fetchPnl(month, period, branchId) });
   const { data: branches = [] } = useQuery({ queryKey: ["branches"], queryFn: fetchBranches });
+  const canRunFinancialAgent = session.user.role === "owner" || session.user.role === "manager";
+  const agentRunsQuery = useQuery({
+    queryKey: ["financial-agent-runs", session.business.id],
+    queryFn: fetchFinancialAgentRuns,
+    enabled: canRunFinancialAgent,
+  });
+  const runAgent = useMutation({
+    mutationFn: () => runFinancialAgent({ month, period, branchId }),
+    onSuccess: (run) => {
+      queryClient.setQueryData<FinancialAgentRun[]>(
+        ["financial-agent-runs", session.business.id],
+        (current = []) => [run, ...current.filter((item) => item.id !== run.id)].slice(0, 10),
+      );
+      queryClient.invalidateQueries({ queryKey: ["financial-agent-runs", session.business.id] });
+      toast.success("Financial snapshot reviewed. No accounting entries were changed.");
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : "Couldn't run the financial review."),
+  });
 
   if (isError) {
     return (
@@ -258,6 +378,23 @@ export function ProfitOverviewView() {
           Customise View
         </button>
       </div>
+
+      <FinanceBudgetsPanel />
+
+      <FinancialAgentPanel
+        run={agentRunsQuery.data?.[0]}
+        businessName={session.business.name}
+        loading={agentRunsQuery.isPending}
+        error={agentRunsQuery.isError}
+        canRun={canRunFinancialAgent}
+        canSubmit={!isPending && Boolean(data) && !runAgent.isPending}
+        running={runAgent.isPending}
+        currency={currency}
+        onRun={() => runAgent.mutate()}
+      />
+
+      <XeroOpenItemsPanel branchId={branchId} />
+      <XeroBankTransactionStatusPanel branchId={branchId} />
 
       <div className="grid gap-[14px]" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))" }}>
         {isPending || !data ? (
@@ -463,6 +600,800 @@ export function ProfitOverviewView() {
         />
       )}
     </main>
+  );
+}
+
+function FinancialAgentPanel({
+  run,
+  businessName,
+  loading,
+  error,
+  canRun,
+  canSubmit,
+  running,
+  currency,
+  onRun,
+}: {
+  run?: FinancialAgentRun;
+  businessName: string;
+  loading: boolean;
+  error: boolean;
+  canRun: boolean;
+  canSubmit: boolean;
+  running: boolean;
+  currency: string;
+  onRun: () => void;
+}) {
+  const snapshot = run?.output.snapshot;
+  const recommendation = run?.recommendations[0];
+  const profitEvidence = recommendation?.evidence.find(
+    (item) => item.resourceType === "profit_period",
+  );
+  const expenseDuplicateReview = run?.output.expenseDuplicateReview;
+  const expenseCategoryVariance = run?.output.expenseCategoryVariance;
+  const expenseAnomalyReview = run?.output.expenseAnomalyReview;
+  const periodVariance = run?.output.periodVariance;
+  const cashFlowReview = run?.output.cashFlowReview;
+  const creditAgingReview = run?.output.creditAgingReview;
+  const xeroOpenItemsReview = run?.output.xeroOpenItemsReview;
+  const xeroBankTransactionStatusReview = run?.output.xeroBankTransactionStatusReview;
+  const approvedReturnReview = run?.output.approvedReturnReview;
+  const budgetActualReview = run?.output.budgetActualReview;
+  const periodCloseReadiness = run?.output.periodCloseReadiness;
+  const bankStatementReview = run?.output.bankStatementReview;
+  const financeTrialBalance = run?.output.financeTrialBalance;
+  const aiSummary = run?.output.aiSummary;
+  const expenseScopeCount = expenseDuplicateReview?.scopeBusinessCount ?? 1;
+
+  return (
+    <section className="rounded-[16px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", padding: 17 }} aria-label="Financial Intelligence Agent">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="m-0 text-[14.5px] font-extrabold" style={{ color: "var(--app-text)" }}>Financial Intelligence Agent</h2>
+          <p className="mb-0 mt-1 text-[12px]" style={{ color: "var(--app-text-faint)" }}>
+            Read-only review using this page’s Profit Analytics calculation. It does not post journals or reconcile accounts.
+          </p>
+        </div>
+        {canRun && (
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={!canSubmit}
+            className="rounded-[11px] px-4 py-2.5 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ background: "var(--app-primary)" }}
+          >
+            {running ? "Reviewing…" : "Run review"}
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <p className="mb-0 mt-3 text-[12px]" style={{ color: "var(--app-text-disabled)" }}>Loading saved reviews…</p>
+      ) : error ? (
+        <p className="mb-0 mt-3 text-[12px]" style={{ color: "var(--app-text-disabled)" }}>Saved reviews are temporarily unavailable. The Profit Analytics figures above are unaffected.</p>
+      ) : !run ? (
+        <p className="mb-0 mt-3 text-[12px]" style={{ color: "var(--app-text-disabled)" }}>
+          No saved financial-agent review yet. {canRun ? "Run a review to save the current period and branch scope with its source and assumptions." : "An owner or manager can run a review."}
+        </p>
+      ) : (
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] p-3" style={{ background: "var(--app-surface-2)" }}>
+            <div>
+              <div className="text-[12px] font-bold" style={{ color: "var(--app-text)" }}>{run.status === "completed" ? "Review saved" : `Run ${run.status}`}</div>
+              <div className="mt-0.5 text-[11px]" style={{ color: "var(--app-text-disabled)" }}>
+                {snapshot ? `${snapshot.period} · ${snapshot.month} · ${snapshot.scopeBusinessCount} business scope` : "Snapshot unavailable"} · {new Date(run.createdAt).toLocaleString()}
+              </div>
+            </div>
+            {snapshot && (
+              <div className="text-right">
+                <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--app-text-disabled)" }}>Recorded net profit</div>
+                <div className="text-[16px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(snapshot.netProfit, snapshot.currency || currency)}</div>
+              </div>
+            )}
+          </div>
+
+          {run.output.summary && <p className="m-0 text-[12px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>{run.output.summary}</p>}
+
+          {snapshot && (
+            <div className="grid gap-2 sm:grid-cols-4">
+              {[
+                ["Revenue", snapshot.revenue],
+                ["COGS", snapshot.cogs],
+                ["Recorded expenses + wastage", snapshot.totalExpenses + snapshot.wastageCost],
+                ["Net profit", snapshot.netProfit],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-[10px] p-2.5" style={{ border: "1px solid var(--app-border)" }}>
+                  <div className="text-[10.5px] font-semibold" style={{ color: "var(--app-text-disabled)" }}>{label}</div>
+                  <div className="mt-1 text-[12px] font-bold" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(value), snapshot.currency || currency)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {snapshot && (
+            <section className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }} aria-label="Finance Agent partial trial balance">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Partial posted-journal trial balance</div>
+                  {financeTrialBalance ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+                        As of {financeTrialBalance.asOf} · {financeTrialBalance.scopeBusinessCount} business scope · balances are kept separate by entity and currency.
+                      </p>
+                      {financeTrialBalance.entities.map((entity) => (
+                        <div key={entity.businessId} className="mt-3 rounded-[9px] p-2.5" style={{ background: "var(--app-surface-2)" }}>
+                          <div className="text-[10.5px] font-bold" style={{ color: "var(--app-text)" }}>{entity.businessName}</div>
+                          {entity.currencies.length > 0 ? entity.currencies.map((currencyRow) => (
+                            <div key={`${entity.businessId}:${currencyRow.currencyCode}`} className="mt-2 overflow-x-auto">
+                              <div className="mb-1 flex flex-wrap justify-between gap-2 text-[10px]" style={{ color: "var(--app-text-muted)" }}>
+                                <span>{currencyRow.currencyCode}</span>
+                                <span>Debits {formatCurrency(Number(currencyRow.totalDebitBalances), currencyRow.currencyCode)} · Credits {formatCurrency(Number(currencyRow.totalCreditBalances), currencyRow.currencyCode)} · {currencyRow.balanced ? "balanced" : "out of balance"}</span>
+                              </div>
+                              <table className="w-full min-w-[560px] text-left text-[10px]">
+                                <thead style={{ color: "var(--app-text-faint)" }}>
+                                  <tr><th className="py-1 pr-3 font-semibold">Account</th><th className="py-1 pr-3 font-semibold">Debits</th><th className="py-1 pr-3 font-semibold">Credits</th><th className="py-1 pr-3 font-semibold">Debit balance</th><th className="py-1 font-semibold">Credit balance</th></tr>
+                                </thead>
+                                <tbody>
+                                  {currencyRow.accounts.map((account) => (
+                                    <tr key={account.accountId} className="border-t" style={{ borderColor: "var(--app-border)" }}>
+                                      <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{account.accountCode} · {account.accountName}</td>
+                                      <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(account.debits), currencyRow.currencyCode)}</td>
+                                      <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(account.credits), currencyRow.currencyCode)}</td>
+                                      <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(account.debitBalance), currencyRow.currencyCode)}</td>
+                                      <td className="py-1.5" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(account.creditBalance), currencyRow.currencyCode)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )) : (
+                            <p className="mb-0 mt-2 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>No posted manual journal balances were recorded for this business by the as-of date.</p>
+                          )}
+                        </div>
+                      ))}
+                      <p className="mb-0 mt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{financeTrialBalance.disclosure}</p>
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>Not included in this older saved review. Run a new review to read posted manual-journal balances.</p>
+                  )}
+                </div>
+                <Link href="/profit/journals" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Journals &amp; accounts</Link>
+              </div>
+            </section>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }} aria-label="Imported bank statement review">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Imported bank statement review</div>
+                  {bankStatementReview?.status === "available" ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+                        {bankStatementReview.importCount} imports · {bankStatementReview.lineCount} lines · last statement date {bankStatementReview.latestStatementDate} · recent {bankStatementReview.windowDays}-day window.
+                      </p>
+                      <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                        {bankStatementReview.currencyBreakdown.map((item) => (
+                          <div key={item.currencyCode} className="rounded-[9px] p-2.5" style={{ background: "var(--app-surface-2)" }}>
+                            <div className="text-[10px] font-bold" style={{ color: "var(--app-text-faint)" }}>{item.currencyCode}</div>
+                            <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                              <div>
+                                <div className="text-[10px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Human accepted · {item.matchedCount} lines</div>
+                                <div className="text-[12px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(Number(item.humanAcceptedSignedAmount), item.currencyCode)}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-semibold" style={{ color: "var(--app-text-muted)" }}>Awaiting review · {item.unmatchedCount} · no match {item.noMatchCount}</div>
+                                <div className="text-[12px] font-extrabold" style={{ color: "var(--app-text)" }}>Imported signed total {formatCurrency(Number(item.importedSignedAmount), item.currencyCode)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mb-0 mt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{bankStatementReview.calculation}</p>
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+                      {bankStatementReview?.unavailableReason || "Not included in this older saved review. No statement lines are counted as reconciled."}
+                    </p>
+                  )}
+                </div>
+                <Link href="/profit/reconciliation" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Review statements</Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Approved budget vs recorded expenses</div>
+                  {budgetActualReview?.status === "available" ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        {budgetActualReview.month} · {budgetActualReview.scopeBusinessCount} business scope · latest approved budget version compared with expenses recorded in the same category and month.
+                      </p>
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="w-full min-w-[560px] text-left text-[10.5px]">
+                          <thead style={{ color: "var(--app-text-faint)" }}>
+                            <tr><th className="pb-1 pr-3 font-semibold">Business · category</th><th className="pb-1 pr-3 font-semibold">Budget</th><th className="pb-1 pr-3 font-semibold">Actual</th><th className="pb-1 font-semibold">Variance</th></tr>
+                          </thead>
+                          <tbody>
+                            {budgetActualReview.lines.map((line) => (
+                              <tr key={`${line.businessName}:${line.category}`} className="border-t" style={{ borderColor: "var(--app-border)" }}>
+                                <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{line.businessName} · {line.category || "blank category"}</td>
+                                <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{line.approvedAmount === null ? "Not budgeted" : formatCurrency(Number(line.approvedAmount), snapshot.currency || currency)}</td>
+                                <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(line.actualAmount), snapshot.currency || currency)}</td>
+                                <td className="py-1.5 font-semibold" style={{ color: Number(line.variance ?? 0) > 0 ? "#B54708" : "var(--app-text-muted)" }}>{line.variance === null ? "Not available" : `${Number(line.variance) > 0 ? "Over" : "Under / at"} ${formatCurrency(Math.abs(Number(line.variance)), snapshot.currency || currency)}`}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>No approved native budget exists for this month and business scope. Actual expenses are not treated as a target.</p>
+                  )}
+                  <p className="mb-0 mt-1 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{budgetActualReview?.calculation || "This older saved review predates native budget tracking."}</p>
+                </div>
+                <Link href="#finance-budgets" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>Manage budgets</Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Xero bank transaction flags</div>
+              {xeroBankTransactionStatusReview?.status === "available" ? (
+                <>
+                  <p className="mb-0 mt-1 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+                    {xeroBankTransactionStatusReview.fromDate} to {xeroBankTransactionStatusReview.toDate} · Xero data only.
+                    {xeroBankTransactionStatusReview.partial ? " The page limit was reached, so the result is partial." : ""}
+                  </p>
+                  {xeroBankTransactionStatusReview.currencies.length > 0 ? (
+                    <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                      {xeroBankTransactionStatusReview.currencies.map((item) => (
+                        <div key={item.currencyCode} className="rounded-[9px] p-2.5" style={{ background: "var(--app-surface-2)" }}>
+                          <div className="text-[10px] font-bold" style={{ color: "var(--app-text-faint)" }}>{item.currencyCode}</div>
+                          <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                            {([["Xero marked reconciled", item.reconciled], ["Xero marked unreconciled", item.unreconciled]] as const).map(([label, side]) => (
+                              <div key={label}>
+                                <div className="text-[10px] font-semibold" style={{ color: "var(--app-text-muted)" }}>{label} · {side.transactionCount}</div>
+                                <div className="text-[12px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(Number(side.amount), item.currencyCode)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mb-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>Xero returned no authorized bank transactions in this date range.</p>
+                  )}
+                  <p className="mb-0 mt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                    This reports Xero&rsquo;s IsReconciled flags only. No bank statement lines are read, and no Noxtill ledger matches are created.
+                  </p>
+                </>
+              ) : (
+                <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>
+                  {xeroBankTransactionStatusReview?.unavailableReason || "Not available in this saved review. Check the Xero connection and bank transaction read access."}
+                </p>
+              )}
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }} aria-label="Period close readiness">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Period close source-record readiness</div>
+                  {periodCloseReadiness ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        {periodCloseReadiness.month} · {periodCloseReadiness.scope} · generated {new Date(periodCloseReadiness.generatedAt).toLocaleString()}. This is partial preparation, not a reconciled or certified accounting close.
+                      </p>
+                      <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                        {periodCloseReadiness.businesses.map((business) => (
+                          <div key={business.businessId} className="rounded-[9px] p-2.5" style={{ background: "var(--app-surface-2)" }}>
+                            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                              <span className="text-[10.5px] font-bold" style={{ color: "var(--app-text)" }}>{business.businessName}</span>
+                              <span className="text-[10px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{business.currency}</span>
+                            </div>
+                            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                              <div className="rounded-[7px] p-2" style={{ border: "1px solid var(--app-border)" }}>
+                                <div className="text-[9.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Sales · recorded orders</div>
+                                <div className="mt-0.5 text-[10.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>
+                                  {business.sales.completedOrderCount} completed / {business.sales.orderCount} total · {formatCurrency(Number(business.sales.completedOrderTotal), business.currency)}
+                                </div>
+                                <div className="mt-0.5 text-[9px]" style={{ color: "var(--app-text-faint)" }}>{business.sales.openOrderCount} open · {business.sales.cancelledOrderCount} cancelled</div>
+                              </div>
+                              <div className="rounded-[7px] p-2" style={{ border: "1px solid var(--app-border)" }}>
+                                <div className="text-[9.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Expenses · recorded</div>
+                                <div className="mt-0.5 text-[10.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>
+                                  {business.expenses.count} · {formatCurrency(Number(business.expenses.recordedTotal), business.currency)}
+                                </div>
+                                <div className="mt-0.5 text-[9px]" style={{ color: "var(--app-text-faint)" }}>
+                                  {business.expenses.withoutAttachedReceiptCount} without attached receipt · {formatCurrency(Number(business.expenses.withoutAttachedReceiptTotal), business.currency)}
+                                </div>
+                              </div>
+                              <div className="rounded-[7px] p-2" style={{ border: "1px solid var(--app-border)" }}>
+                                <div className="text-[9.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Pending returns</div>
+                                <div className="mt-0.5 text-[10.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>
+                                  {business.pendingReturns.count} · {formatCurrency(Number(business.pendingReturns.refundAmount), business.currency)}
+                                </div>
+                              </div>
+                              <div className="rounded-[7px] p-2" style={{ border: "1px solid var(--app-border)" }}>
+                                <div className="text-[9.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Noxtill manual journals</div>
+                                <div className="mt-0.5 text-[10.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>
+                                  {business.manualJournals.balancedPostedCount}/{business.manualJournals.postedCount} posted balanced · {business.manualJournals.unbalancedPostedCount} unbalanced · {business.manualJournals.unresolvedCount} unresolved
+                                </div>
+                                <div className="mt-0.5 text-[9px]" style={{ color: "var(--app-text-faint)" }}>
+                                  Posting lock: {business.manualJournals.postingLocked ? `locked${business.manualJournals.lockReason ? ` · ${business.manualJournals.lockReason}` : ""}` : "not locked"}
+                                </div>
+                              </div>
+                              <div className="rounded-[7px] p-2 sm:col-span-2" style={{ border: "1px solid var(--app-border)" }}>
+                                <div className="text-[9.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Xero sync evidence</div>
+                                <div className="mt-0.5 text-[10.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>
+                                  {business.xeroSync.status === "connected" ? `Connected · ${business.xeroSync.unsyncedOrderCount ?? "Not available"} unsynced orders` : "Not connected"}
+                                </div>
+                                {business.xeroSync.lastSyncAt && <div className="mt-0.5 text-[9px]" style={{ color: "var(--app-text-faint)" }}>Last sync {new Date(business.xeroSync.lastSyncAt).toLocaleString()}</div>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mb-0 mt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        {periodCloseReadiness.note} {periodCloseReadiness.unavailable.map((item) => `${item.label}: Not available`).join(" · ")}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>Not included in this saved review. Run a new review to check source-record period readiness.</p>
+                  )}
+                </div>
+                <Link href={periodCloseReadiness ? `/profit/period-close?month=${encodeURIComponent(periodCloseReadiness.month)}` : "/profit/period-close"} className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+                  Open Period Close
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }} aria-label="Expense anomaly review">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Unusual expense patterns · review cues</div>
+                  {expenseAnomalyReview ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        {expenseAnomalyReview.status === "available"
+                          ? `${expenseAnomalyReview.candidateCount} category pattern(s) crossed the comparison rule for ${expenseAnomalyReview.selectedMonth}.`
+                          : `Not enough recorded monthly history to evaluate categories for ${expenseAnomalyReview.selectedMonth}.`}
+                        {expenseAnomalyReview.insufficientHistoryCategoryCount > 0
+                          ? ` ${expenseAnomalyReview.insufficientHistoryCategoryCount} current category group(s) lacked four observed baseline months and were not scored.`
+                          : ""}
+                      </p>
+                      {expenseAnomalyReview.candidates.length > 0 ? (
+                        <div className="mt-2 overflow-x-auto">
+                          <table className="w-full min-w-[820px] text-left text-[10.5px]">
+                            <thead style={{ color: "var(--app-text-faint)" }}>
+                              <tr>
+                                <th className="pb-1 pr-3 font-semibold">Business · category</th>
+                                <th className="pb-1 pr-3 font-semibold">Recorded</th>
+                                <th className="pb-1 pr-3 font-semibold">Baseline median</th>
+                                <th className="pb-1 pr-3 font-semibold">Review threshold</th>
+                                <th className="pb-1 font-semibold">Above threshold</th>
+                                <th className="pb-1 pl-3 font-semibold">Source expenses</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {expenseAnomalyReview.candidates.map((item) => (
+                                <tr key={`${item.businessName}:${item.category}`} className="border-t" style={{ borderColor: "var(--app-border)" }}>
+                                  <td className="py-1.5 pr-3 font-semibold" style={{ color: "var(--app-text-muted)" }}>{item.businessName} · {item.category || "blank category"}</td>
+                                  <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(item.currentAmount), snapshot.currency || currency)}</td>
+                                  <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(item.baselineMedian), snapshot.currency || currency)} · {item.observedBaselineMonths} months</td>
+                                  <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(item.reviewThreshold), snapshot.currency || currency)}</td>
+                                  <td className="py-1.5 font-semibold" style={{ color: "var(--app-warning-text)" }}>{formatCurrency(Number(item.amountAboveThreshold), snapshot.currency || currency)}</td>
+                                  <td className="py-1.5 pl-3">
+                                    {item.businessName === businessName && item.category ? (
+                                      <Link
+                                        href={`/expenses?month=${encodeURIComponent(expenseAnomalyReview.selectedMonth)}&category=${encodeURIComponent(item.category)}`}
+                                        className="font-bold"
+                                        style={{ color: "var(--app-primary)" }}
+                                      >
+                                        Review expenses
+                                      </Link>
+                                    ) : item.category ? (
+                                      <span style={{ color: "var(--app-text-faint)" }}>Switch to this business to review</span>
+                                    ) : (
+                                      <span style={{ color: "var(--app-text-faint)" }}>Blank category · open Expenses</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="mb-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+                          {expenseAnomalyReview.status === "available"
+                            ? "No eligible category crossed this review rule. That does not prove expenses are error-free."
+                            : "No anomaly conclusion is available because the baseline is too sparse."}
+                        </p>
+                      )}
+                      {expenseAnomalyReview.omittedCandidateCount > 0 && (
+                        <p className="mb-0 mt-1 text-[10px]" style={{ color: "var(--app-text-faint)" }}>Showing the 10 largest amounts above the review threshold.</p>
+                      )}
+                      <p className="mb-0 mt-1 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{expenseAnomalyReview.calculation}</p>
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>Not available in this saved review. Run a new review to compare expense history.</p>
+                  )}
+                </div>
+                <Link href={expenseAnomalyReview ? `/expenses?month=${encodeURIComponent(expenseAnomalyReview.selectedMonth)}` : "/expenses"} className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+                  Review in Expenses
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Xero open invoices and bills</div>
+                  {xeroOpenItemsReview?.status === "available" ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+                        Read from Xero on {xeroOpenItemsReview.asOfDate}. Amounts are grouped by each invoice&rsquo;s currency.
+                        {xeroOpenItemsReview.partial ? " The page limit was reached, so these totals are partial." : ""}
+                      </p>
+                      {xeroOpenItemsReview.currencies.length > 0 ? (
+                        <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                          {xeroOpenItemsReview.currencies.map((currencyItems) => (
+                            <div key={currencyItems.currencyCode} className="rounded-[9px] p-2.5" style={{ background: "var(--app-surface-2)" }}>
+                              <div className="text-[10px] font-bold" style={{ color: "var(--app-text-faint)" }}>{currencyItems.currencyCode}</div>
+                              <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                                {([
+                                  ["Receivables", currencyItems.receivables],
+                                  ["Payables", currencyItems.payables],
+                                ] as const).map(([label, side]) => (
+                                  <div key={label}>
+                                    <div className="text-[10px] font-semibold" style={{ color: "var(--app-text-muted)" }}>{label} · {side.invoiceCount} open</div>
+                                    <div className="text-[12px] font-extrabold" style={{ color: "var(--app-text)" }}>{formatCurrency(Number(side.amountDue), currencyItems.currencyCode)}</div>
+                                    <div className="mt-1 space-y-0.5">
+                                      {side.buckets.filter((bucket) => bucket.invoiceCount > 0).map((bucket) => (
+                                        <div key={bucket.key} className="flex justify-between gap-2 text-[9.5px]" style={{ color: "var(--app-text-faint)" }}>
+                                          <span>{bucket.label} · {bucket.invoiceCount}</span>
+                                          <span>{formatCurrency(Number(bucket.amountDue), currencyItems.currencyCode)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="mt-2 border-t pt-1.5" style={{ borderColor: "var(--app-border)" }}>
+                                      <div className="mb-1 text-[9px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Upcoming invoice due dates · not confirmed cash</div>
+                                      {side.upcomingDue?.some((bucket) => bucket.invoiceCount > 0) ? (
+                                        <div className="space-y-0.5">
+                                          {side.upcomingDue.filter((bucket) => bucket.invoiceCount > 0).map((bucket) => (
+                                            <div key={bucket.key} className="flex justify-between gap-2 text-[9.5px]" style={{ color: "var(--app-text-faint)" }}>
+                                              <span>{bucket.label} · {bucket.invoiceCount}</span>
+                                              <span>{formatCurrency(Number(bucket.amountDue), currencyItems.currencyCode)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-[9.5px]" style={{ color: "var(--app-text-faint)" }}>No future due dates recorded.</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mb-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>Xero returned no authorized invoices or bills with an amount due.</p>
+                      )}
+                      <p className="mb-0 mt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        These are external Xero invoice records, not a reconciled Noxtill ledger or proof of payment. No customer or supplier names are copied into the Finance Agent result.
+                      </p>
+                    </>
+                  ) : xeroOpenItemsReview?.unavailableReason ? (
+                    <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>{xeroOpenItemsReview.unavailableReason}</p>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>
+                      Not available in this saved review. Run a new review to check the selected business&rsquo;s Xero connection.
+                    </p>
+                  )}
+                </div>
+                <Link href="/integrations" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+                  Integrations
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Potential exact-match expense entries</div>
+                  {expenseDuplicateReview ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-muted)" }}>
+                        {expenseDuplicateReview.candidateGroups} candidate groups · {expenseDuplicateReview.additionalEntries} additional entries · {formatCurrency(Number(expenseDuplicateReview.additionalEntryAmount), snapshot.currency || currency)} in additional-entry amounts
+                      </p>
+                      <p className="mb-0 mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        Scanned {expenseDuplicateReview.calendarMonth} within the selected business scope. Candidates match business, incurred date, normalized description and category, exact amount, and recurring status. A match is not proof of a duplicate or fraud; review the source entries before taking action.
+                      </p>
+                      {expenseScopeCount > 1 && (
+                        <p className="mb-0 mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                          This summary covers {expenseScopeCount} businesses. The Expenses link opens only the current business, so branch records must be reviewed in their own business context.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>
+                      Not available in this saved review. Run a new review to check the selected calendar month.
+                    </p>
+                  )}
+                </div>
+                <Link
+                  href={expenseDuplicateReview?.calendarMonth ? `/expenses?month=${encodeURIComponent(expenseDuplicateReview.calendarMonth)}${expenseScopeCount === 1 ? "&review=exact-match" : ""}` : "/expenses"}
+                  className="rounded-[9px] px-3 py-2 text-[11px] font-bold"
+                  style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}
+                >
+                  {expenseScopeCount === 1 ? "Review in Expenses" : "Open current business Expenses"}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Month-over-month variance</div>
+              {periodVariance?.status === "available" ? (
+                <>
+                  <p className="mb-0 mt-1 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+                    {periodVariance.currentMonth} compared with {periodVariance.priorMonth}. Differences describe the recorded totals; they do not explain the cause.
+                  </p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {([
+                      ["Revenue", periodVariance.metrics.revenue],
+                      ["COGS", periodVariance.metrics.cogs],
+                      ["Expenses + wastage", periodVariance.metrics.expensesAndWastage],
+                      ["Net profit", periodVariance.metrics.netProfit],
+                    ] as const).map(([label, metric]) => (
+                      <div key={label} className="rounded-[9px] p-2" style={{ background: "var(--app-surface-2)" }}>
+                        <div className="text-[10px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{label}</div>
+                        {metric ? (
+                          <>
+                            <div className="mt-1 text-[10.5px]" style={{ color: "var(--app-text-muted)" }}>
+                              Current {formatCurrency(metric.current, snapshot.currency || currency)} · Prior {formatCurrency(metric.prior, snapshot.currency || currency)}
+                            </div>
+                            <div className="mt-0.5 text-[11px] font-bold" style={{ color: "var(--app-text-muted)" }}>
+                              Difference {metric.delta > 0 ? "+" : ""}{formatCurrency(metric.delta, snapshot.currency || currency)}
+                            </div>
+                          </>
+                        ) : <div className="mt-1 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>Not available</div>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+                  {periodVariance?.unavailableReason || "Not available in this saved review. Run a new monthly review to compare calendar months."}
+                </p>
+              )}
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Expense category movement</div>
+                  {expenseCategoryVariance ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        Recorded expenses for {expenseCategoryVariance.currentMonth} compared with {expenseCategoryVariance.priorMonth}, grouped by business and stored category. Differences describe the records only; they do not explain why spending changed or establish an error.
+                      </p>
+                      {expenseCategoryVariance.categories.length > 0 ? (
+                        <div className="mt-2 overflow-x-auto">
+                          <table className="w-full min-w-[620px] text-left text-[10.5px]">
+                            <thead style={{ color: "var(--app-text-faint)" }}>
+                              <tr>
+                                <th className="pb-1 pr-3 font-semibold">Business · category</th>
+                                <th className="pb-1 pr-3 font-semibold">Current</th>
+                                <th className="pb-1 pr-3 font-semibold">Prior</th>
+                                <th className="pb-1 font-semibold">Difference</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {expenseCategoryVariance.categories.map((item) => (
+                                <tr key={`${item.businessName}:${item.category}`} className="border-t" style={{ borderColor: "var(--app-border)" }}>
+                                  <td className="py-1.5 pr-3 font-semibold" style={{ color: "var(--app-text-muted)" }}>{item.businessName} · {item.category}</td>
+                                  <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(item.currentAmount), snapshot.currency || currency)}</td>
+                                  <td className="py-1.5 pr-3" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(item.priorAmount), snapshot.currency || currency)}</td>
+                                  <td className="py-1.5 font-semibold" style={{ color: "var(--app-text-muted)" }}>{Number(item.difference) > 0 ? "+" : ""}{formatCurrency(Number(item.difference), snapshot.currency || currency)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="mb-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>No recorded expenses in either compared month.</p>
+                      )}
+                      {expenseCategoryVariance.omittedCategoryCount > 0 && (
+                        <p className="mb-0 mt-1 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                          Showing the 10 largest absolute differences of {expenseCategoryVariance.categoryCount} business/category groups.
+                        </p>
+                      )}
+                      <p className="mb-0 mt-1 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{expenseCategoryVariance.calculation}</p>
+                      {expenseCategoryVariance.scopeBusinessCount > 1 && (
+                        <p className="mb-0 mt-1 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                          This comparison covers {expenseCategoryVariance.scopeBusinessCount} businesses; the Expenses screen below opens only the current business.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+                      Not available in this saved review. Run a new review to compare recorded expense categories.
+                    </p>
+                  )}
+                </div>
+                <Link href={expenseCategoryVariance ? `/expenses?month=${encodeURIComponent(expenseCategoryVariance.currentMonth)}` : "/expenses"} className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+                  {expenseCategoryVariance?.scopeBusinessCount === 1 ? "Review month in Expenses" : "Open current business Expenses"}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Cash-flow context</div>
+                  {cashFlowReview?.status === "available" ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[11.5px] font-semibold" style={{ color: "var(--app-text-muted)" }}>
+                        {cashFlowReview.days}-day projected cumulative net flow: {cashFlowReview.endingRelativeNetFlow === null ? "Not available" : formatCurrency(cashFlowReview.endingRelativeNetFlow, snapshot.currency || currency)}
+                      </p>
+                      <p className="mb-0 mt-1 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        Reuses the existing cash forecast: trailing recorded sales/expense averages plus scheduled recurring obligations. The projection starts at zero; it is not an account balance, and it does not include scheduled receivables/payables. A connected Xero open-invoice check appears separately below; invoice due dates are not confirmed cash.
+                      </p>
+                      <p className="mb-0 mt-1 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+                        Scheduled recurring obligations in this projection: {cashFlowReview.scheduledObligationsTotal === null ? "Not available" : formatCurrency(cashFlowReview.scheduledObligationsTotal, snapshot.currency || currency)} · {cashFlowReview.negativeRelativeNetFlowDays ?? "Not available"} negative relative-flow days
+                      </p>
+                    </>
+                  ) : cashFlowReview?.unavailableReason ? (
+                    <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>{cashFlowReview.unavailableReason}</p>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>
+                      Not available in this saved review. Run a new review to include current forecast context.
+                    </p>
+                  )}
+                </div>
+                <Link href="/profit/cash-flow" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+                  Open Cash Flow
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Customer credit balance age</div>
+                  {creditAgingReview?.status === "available" ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[11.5px] font-semibold" style={{ color: "var(--app-text-muted)" }}>
+                        {creditAgingReview.debtorCount} customers · {formatCurrency(Number(creditAgingReview.totalBalance), snapshot.currency || currency)} outstanding in the Credit module
+                      </p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                        {creditAgingReview.buckets.map((bucket) => {
+                          const label = bucket.key === "current" ? "0–29 days" : bucket.key === "thirtyPlus" ? "30–59 days" : bucket.key === "sixtyPlus" ? "60–89 days" : "90+ days";
+                          return (
+                            <div key={bucket.key} className="rounded-[9px] p-2" style={{ background: "var(--app-surface-2)" }}>
+                              <div className="text-[10px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{label} · {bucket.debtorCount}</div>
+                              <div className="mt-0.5 text-[11px] font-bold" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(bucket.balance), snapshot.currency || currency)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="mb-0 mt-2 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        Uses the Credit module’s balance-aging view. Age is since the balance last reached zero or the first credit entry; it is not invoice due-date aging or a finance-owned A/R ledger.
+                      </p>
+                    </>
+                  ) : creditAgingReview?.unavailableReason ? (
+                    <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>{creditAgingReview.unavailableReason}</p>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>
+                      Not available in this saved review. Run a new review to include the current business’s customer-credit summary.
+                    </p>
+                  )}
+                </div>
+                <Link href="/credit" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+                  Review in Credit
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-[11px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Approved return records</div>
+                  {approvedReturnReview ? (
+                    <>
+                      <p className="mb-0 mt-1 text-[11.5px] font-semibold" style={{ color: "var(--app-text-muted)" }}>
+                        {approvedReturnReview.approvedCount} approved {approvedReturnReview.approvedCount === 1 ? "return" : "returns"} · {formatCurrency(Number(approvedReturnReview.refundAmountTotal), snapshot.currency || currency)} recorded for {approvedReturnReview.calendarMonth}
+                      </p>
+                      {approvedReturnReview.byMethod.length > 0 ? (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                          {approvedReturnReview.byMethod.map((item) => (
+                            <div key={item.method} className="rounded-[9px] p-2" style={{ background: "var(--app-surface-2)" }}>
+                              <div className="text-[10px] font-semibold capitalize" style={{ color: "var(--app-text-faint)" }}>{item.method.replaceAll("_", " ")} · {item.count}</div>
+                              <div className="mt-0.5 text-[11px] font-bold" style={{ color: "var(--app-text-muted)" }}>{formatCurrency(Number(item.amount), snapshot.currency || currency)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mb-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>No approved return records in this calendar month.</p>
+                      )}
+                      <p className="mb-0 mt-2 text-[10.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                        Uses approved Return rows and `updatedAt` because a separate approval timestamp is not stored. These amounts are separate from Profit Analytics and are not deducted from P&L. Approval alone does not prove a provider settlement or cash payout.
+                      </p>
+                      {approvedReturnReview.scopeBusinessCount > 1 && (
+                        <p className="mb-0 mt-1 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                          This review covers {approvedReturnReview.scopeBusinessCount} businesses in the selected branch scope.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mb-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+                      Not available in this saved review. Run a new review to inspect approved return records for the selected month.
+                    </p>
+                  )}
+                </div>
+                <Link href="/orders" className="rounded-[9px] px-3 py-2 text-[11px] font-bold" style={{ border: "1px solid var(--app-border)", color: "var(--app-text-muted)" }}>
+                  Open Orders & Returns
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {aiSummary && (
+            <div className="rounded-[11px] p-3" style={{ background: "var(--app-surface-2)", borderLeft: "3px solid var(--app-primary)" }}>
+              <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>AI explanation · {aiSummary.status.replaceAll("_", " ")}</div>
+              <p className="mb-0 mt-1 text-[12px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>
+                {aiSummary.text || aiSummary.message || "Not available"}
+              </p>
+            </div>
+          )}
+          <SpecialistAgentUsage calls={run?.aiCallLogs} />
+
+          {recommendation && (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Calculation & assumptions</div>
+                <p className="mb-1 mt-1 text-[11.5px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>{profitEvidence?.calculation || "Calculation not available"}</p>
+                <ul className="m-0 list-disc pl-4 text-[11px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                  {recommendation.assumptions.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold" style={{ color: "var(--app-text)" }}>Source coverage</div>
+                <p className="mb-1 mt-1 text-[11.5px]" style={{ color: "var(--app-text-faint)" }}>
+                  {profitEvidence?.sourceType || "Not available"} · {profitEvidence?.fieldRefs.join(", ") || "No source fields"}
+                </p>
+                <ul className="m-0 list-disc pl-4 text-[11px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                  {recommendation.missingData.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -13,6 +13,8 @@ import { UpdateSegmentDto } from './dto/update-segment.dto';
 import { SegmentRulesDto } from './dto/segment-rules.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 
 @Controller('segments')
 export class SegmentsController {
@@ -24,6 +26,7 @@ export class SegmentsController {
   }
 
   @Post()
+  @RequireCapability(CAPABILITIES.CUSTOMERS_MANAGE)
   create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateSegmentDto,
@@ -45,16 +48,23 @@ export class SegmentsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateSegmentDto) {
-    return this.segmentsService.update(id, dto);
+  @RequireCapability(CAPABILITIES.CUSTOMERS_MANAGE)
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateSegmentDto,
+  ) {
+    return this.segmentsService.update(id, dto, user.sub);
   }
 
   @Delete(':id')
+  @RequireCapability(CAPABILITIES.CUSTOMERS_MANAGE)
   remove(@Param('id') id: string) {
     return this.segmentsService.remove(id);
   }
 
   @Post(':id/duplicate')
+  @RequireCapability(CAPABILITIES.CUSTOMERS_MANAGE)
   duplicate(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.segmentsService.duplicate(user.businessId, id);
   }

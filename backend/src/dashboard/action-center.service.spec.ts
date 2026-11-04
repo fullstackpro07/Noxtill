@@ -3,7 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { ActionCenterService } from './action-center.service';
+import { StockTransfersService } from '../branches/stock-transfers.service';
 import { ProcurementService } from '../procurement/procurement.service';
+import { PoliciesService } from '../common/policies/policies.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { Role } from '@prisma/client';
 
 class FakeClsService {
@@ -34,7 +37,15 @@ describe('ActionCenterService (UPD-BE-004)', () => {
     );
     service = new ActionCenterService(
       tenantPrisma,
-      new ProcurementService(tenantPrisma),
+      new ProcurementService(
+        tenantPrisma,
+        new PoliciesService(
+          prisma,
+          cls as unknown as ClsService,
+          new CapabilitiesService(prisma),
+        ),
+      ),
+      new StockTransfersService(prisma),
     );
 
     const business = await prisma.business.create({

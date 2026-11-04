@@ -123,4 +123,9 @@ export class BusinessModulesService {
       HttpStatus.FORBIDDEN,
     );
   }
+
+  async isEnabled(businessId: string, key: string): Promise<boolean> {
+    const disabled = await this.disabledFor(businessId);
+    return !disabled.includes(key);
+  }
 }

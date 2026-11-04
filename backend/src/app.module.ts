@@ -74,6 +74,8 @@ import { CommerceModule } from './commerce/commerce.module';
 import { BusinessIntelligenceModule } from './business-intelligence/business-intelligence.module';
 import { CustomerPortalModule } from './customer-portal/customer-portal.module';
 import { ProcurementModule } from './procurement/procurement.module';
+import { SpecialistAgentSchedulesModule } from './common/agents/specialist-agent-schedules.module';
+import { SpecialistAgentOrchestrationModule } from './specialist-agents/specialist-agent-orchestration.module';
 
 @Module({
   imports: [
@@ -152,6 +154,8 @@ import { ProcurementModule } from './procurement/procurement.module';
     BusinessIntelligenceModule,
     CustomerPortalModule,
     ProcurementModule,
+    SpecialistAgentSchedulesModule,
+    SpecialistAgentOrchestrationModule,
   ],
   controllers: [AppController],
   providers: [AppService, ReadinessService],

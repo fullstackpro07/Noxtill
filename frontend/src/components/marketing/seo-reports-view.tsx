@@ -4,7 +4,12 @@ import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
-import { fetchSeoReport, type RankBuckets, type ReportMetric, type ReportSection } from "@/lib/seo-reports-api";
+import {
+  fetchSeoReport,
+  type RankBuckets,
+  type ReportMetric,
+  type ReportSection,
+} from "@/lib/seo-reports-api";
 
 const SECTIONS: { key: ReportSection | "summary"; label: string }[] = [
   { key: "summary", label: "Executive summary" },
@@ -30,16 +35,29 @@ function errorMessage(error: unknown, fallback: string) {
 
 function format(value: number | null, unit?: ReportMetric["unit"]) {
   if (value === null) return "—";
-  return unit === "stars" ? `${value}★` : unit === "%" ? `${value}%` : String(value);
+  return unit === "stars"
+    ? `${value}★`
+    : unit === "%"
+      ? `${value}%`
+      : String(value);
 }
 
 function Change({ metric }: { metric: ReportMetric }) {
-  if (metric.baseline === null || metric.current === null) return <span style={{ color: "var(--app-text-faintest)" }}>No comparison</span>;
+  if (metric.baseline === null || metric.current === null)
+    return (
+      <span style={{ color: "var(--app-text-faintest)" }}>No comparison</span>
+    );
   const delta = Math.round((metric.current - metric.baseline) * 10) / 10;
-  if (delta === 0) return <span style={{ color: "var(--app-text-faint)" }}>No change</span>;
+  if (delta === 0)
+    return <span style={{ color: "var(--app-text-faint)" }}>No change</span>;
   const good = metric.lowerIsBetter ? delta < 0 : delta > 0;
   return (
-    <span className="font-semibold" style={{ color: good ? "var(--app-success-text)" : "var(--app-danger-strong)" }}>
+    <span
+      className="font-semibold"
+      style={{
+        color: good ? "var(--app-success-text)" : "var(--app-danger-strong)",
+      }}
+    >
       {delta > 0 ? "+" : ""}
       {delta}
     </span>
@@ -48,26 +66,60 @@ function Change({ metric }: { metric: ReportMetric }) {
 
 function Card({ metric }: { metric: ReportMetric }) {
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>
-      <p className="m-0 text-xs font-semibold" style={{ color: "var(--app-text-faint)" }}>{metric.label}</p>
-      <p className="m-0 mt-1 text-2xl font-bold">{format(metric.current, metric.unit)}</p>
+    <div
+      className="rounded-xl border p-4"
+      style={{
+        borderColor: "var(--app-border)",
+        background: "var(--app-surface)",
+      }}
+    >
+      <p
+        className="m-0 text-xs font-semibold"
+        style={{ color: "var(--app-text-faint)" }}
+      >
+        {metric.label}
+      </p>
+      <p className="m-0 mt-1 text-2xl font-bold">
+        {format(metric.current, metric.unit)}
+      </p>
       <p className="m-0 mt-1 text-xs">
-        <Change metric={metric} /> <span style={{ color: "var(--app-text-faintest)" }}>vs {format(metric.baseline, metric.unit)}</span>
+        <Change metric={metric} />{" "}
+        <span style={{ color: "var(--app-text-faintest)" }}>
+          vs {format(metric.baseline, metric.unit)}
+        </span>
       </p>
     </div>
   );
 }
 
-function Distribution({ label, buckets }: { label: string; buckets: RankBuckets }) {
+function Distribution({
+  label,
+  buckets,
+}: {
+  label: string;
+  buckets: RankBuckets;
+}) {
   const total = BUCKETS.reduce((sum, bucket) => sum + buckets[bucket.key], 0);
   return (
     <div className="flex flex-col gap-1">
       <p className="m-0 text-xs font-bold">{label}</p>
       {BUCKETS.map((bucket) => (
-        <div key={bucket.key} className="grid grid-cols-[80px_1fr_32px] items-center gap-2 text-xs">
+        <div
+          key={bucket.key}
+          className="grid grid-cols-[80px_1fr_32px] items-center gap-2 text-xs"
+        >
           <span style={{ color: "var(--app-text-faint)" }}>{bucket.label}</span>
-          <div className="h-2 rounded" style={{ background: "var(--app-surface-2)" }}>
-            <div className="h-2 rounded" style={{ width: total ? `${(buckets[bucket.key] / total) * 100}%` : 0, background: "var(--app-primary)" }} />
+          <div
+            className="h-2 rounded"
+            style={{ background: "var(--app-surface-2)" }}
+          >
+            <div
+              className="h-2 rounded"
+              style={{
+                width: total ? `${(buckets[bucket.key] / total) * 100}%` : 0,
+                background: "var(--app-primary)",
+              }}
+            />
           </div>
           <span className="text-right tabular-nums">{buckets[bucket.key]}</span>
         </div>
@@ -80,9 +132,23 @@ function exportCsv(metrics: ReportMetric[], days: number) {
   const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const rows = [
     ["Metric", "Baseline", "Current", "Source", "Freshness", "Caveat"],
-    ...metrics.map((metric) => [metric.label, metric.baseline ?? "", metric.current ?? "", metric.source, metric.freshness ?? "", metric.caveat]),
+    ...metrics.map((metric) => [
+      metric.label,
+      metric.baseline ?? "",
+      metric.current ?? "",
+      metric.source,
+      metric.freshness ?? "",
+      metric.caveat,
+    ]),
   ];
-  const blob = new Blob([rows.map((row) => row.map((cell) => escape(String(cell))).join(",")).join("\n")], { type: "text/csv" });
+  const blob = new Blob(
+    [
+      rows
+        .map((row) => row.map((cell) => escape(String(cell))).join(","))
+        .join("\n"),
+    ],
+    { type: "text/csv" },
+  );
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -94,18 +160,42 @@ function exportCsv(metrics: ReportMetric[], days: number) {
 export function SeoReportsView() {
   const [days, setDays] = useState(30);
   const [section, setSection] = useState<ReportSection | "summary">("summary");
-  const query = useQuery({ queryKey: ["seo-report", days], queryFn: () => fetchSeoReport(days) });
+  const query = useQuery({
+    queryKey: ["seo-report", days],
+    queryFn: () => fetchSeoReport(days),
+  });
   const data = query.data;
-  const metrics = (data?.metrics ?? []).filter((metric) => section === "summary" || metric.section === section);
-  const summaryKeys = ["keywords_top10", "audit_issues", "content_published", "actions_completed"];
+  const metrics = (data?.metrics ?? []).filter(
+    (metric) => section === "summary" || metric.section === section,
+  );
+  const summaryKeys = [
+    "keywords_top10",
+    "audit_issues",
+    "content_published",
+    "actions_completed",
+  ];
 
   let body: ReactNode;
-  if (query.isLoading) body = <p className="m-0 text-sm" style={{ color: "var(--app-text-faint)" }}>Loading…</p>;
+  if (query.isLoading)
+    body = (
+      <p className="m-0 text-sm" style={{ color: "var(--app-text-faint)" }}>
+        Loading…
+      </p>
+    );
   else if (query.isError || !data)
     body = (
-      <div className="flex items-center gap-3 text-sm" style={{ color: "var(--app-danger-strong)" }}>
+      <div
+        className="flex items-center gap-3 text-sm"
+        style={{ color: "var(--app-danger-strong)" }}
+      >
         {errorMessage(query.error, "Couldn't load the report.")}
-        <button type="button" onClick={() => query.refetch()} className="font-bold underline">Retry</button>
+        <button
+          type="button"
+          onClick={() => query.refetch()}
+          className="font-bold underline"
+        >
+          Retry
+        </button>
       </div>
     );
   else
@@ -114,37 +204,325 @@ export function SeoReportsView() {
         {section === "summary" && (
           <>
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-              {data.metrics.filter((metric) => summaryKeys.includes(metric.key)).map((metric) => <Card key={metric.key} metric={metric} />)}
+              {data.metrics
+                .filter((metric) => summaryKeys.includes(metric.key))
+                .map((metric) => (
+                  <Card key={metric.key} metric={metric} />
+                ))}
             </div>
-            <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "var(--app-border)" }}>
+            <section
+              className="rounded-xl border p-3"
+              style={{ borderColor: "var(--app-border)" }}
+            >
+              <p className="m-0 text-xs font-bold">
+                Google Search Console · latest {data.searchConsole.windowDays}
+                -day windows
+              </p>
+              {data.searchConsole.status !== "connected" ? (
+                <p
+                  className="m-0 mt-1 text-xs"
+                  style={{ color: "var(--app-text-faint)" }}
+                >
+                  Not connected. Connect Search Console and sync a property in
+                  SEO Settings.
+                </p>
+              ) : !data.searchConsole.selectedProperty ? (
+                <p
+                  className="m-0 mt-1 text-xs"
+                  style={{ color: "var(--app-text-faint)" }}
+                >
+                  No property selected. Choose one in SEO Settings.
+                </p>
+              ) : data.searchConsole.snapshots.length === 0 ? (
+                <p
+                  className="m-0 mt-1 text-xs"
+                  style={{ color: "var(--app-text-faint)" }}
+                >
+                  No performance snapshot is available yet for{" "}
+                  {data.searchConsole.selectedProperty}.
+                </p>
+              ) : (
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {data.searchConsole.snapshots.map((snapshot) => (
+                    <div
+                      key={snapshot.id}
+                      className="rounded-lg border p-2 text-xs"
+                      style={{ borderColor: "var(--app-border)" }}
+                    >
+                      <p className="m-0 font-semibold">
+                        {snapshot.startDate} to {snapshot.endDate} ·{" "}
+                        {snapshot.dataState === "final"
+                          ? "Final"
+                          : "No data returned"}
+                      </p>
+                      <p className="m-0 mt-1">
+                        Clicks {snapshot.clicks ?? "Not available"} ·
+                        Impressions {snapshot.impressions ?? "Not available"} ·
+                        CTR{" "}
+                        {snapshot.clickThroughRate === null
+                          ? "Not available"
+                          : `${(snapshot.clickThroughRate * 100).toFixed(2)}%`}{" "}
+                        · Avg position{" "}
+                        {snapshot.averagePosition === null
+                          ? "Not available"
+                          : snapshot.averagePosition.toFixed(2)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p
+                className="m-0 mt-2 text-[11px]"
+                style={{ color: "var(--app-text-faintest)" }}
+              >
+                These are fixed Search Console windows and may not match the
+                comparison period selected above. They are not attributed to
+                changes listed in this report.
+              </p>
+            </section>
+            <section
+              className="rounded-xl border p-3"
+              style={{ borderColor: "var(--app-border)" }}
+            >
+              <p className="m-0 text-xs font-bold">
+                Google Analytics 4 · latest {data.googleAnalytics.windowDays}
+                -day windows
+              </p>
+              {data.googleAnalytics.status !== "connected" ? (
+                <p
+                  className="m-0 mt-1 text-xs"
+                  style={{ color: "var(--app-text-faint)" }}
+                >
+                  Not connected. Connect GA4, select a property and sync it in
+                  SEO Settings.
+                </p>
+              ) : !data.googleAnalytics.selectedProperty ? (
+                <p
+                  className="m-0 mt-1 text-xs"
+                  style={{ color: "var(--app-text-faint)" }}
+                >
+                  No property selected. Choose one in SEO Settings.
+                </p>
+              ) : !data.googleAnalytics.snapshot ? (
+                <p
+                  className="m-0 mt-1 text-xs"
+                  style={{ color: "var(--app-text-faint)" }}
+                >
+                  No Organic Search snapshot is available yet for{" "}
+                  {data.googleAnalytics.selectedProperty}.
+                </p>
+              ) : (
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {(
+                    [
+                      ["Current", data.googleAnalytics.snapshot.current],
+                      ["Previous", data.googleAnalytics.snapshot.comparison],
+                    ] as const
+                  ).map(([label, window]) => (
+                    <div
+                      key={label}
+                      className="rounded-lg border p-2 text-xs"
+                      style={{ borderColor: "var(--app-border)" }}
+                    >
+                      <p className="m-0 font-semibold">
+                        {window.startDate} to {window.endDate} ·{" "}
+                        {window.dataState === "returned"
+                          ? "Data returned"
+                          : "No data returned"}
+                      </p>
+                      <p className="m-0 mt-1">
+                        Organic Search sessions{" "}
+                        {window.sessions ?? "Not available"} · Key events{" "}
+                        {window.keyEvents ?? "Not available"} · Total revenue{" "}
+                        {window.totalRevenue === null
+                          ? "Not available"
+                          : `${data.googleAnalytics.snapshot?.currencyCode ?? "Currency not available"} ${window.totalRevenue}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {data.googleAnalytics.snapshot && (
+                <div
+                  className="mt-3 rounded-lg border p-2 text-xs"
+                  style={{ borderColor: "var(--app-border)" }}
+                >
+                  <p className="m-0 font-semibold">
+                    Current period · Organic Search landing pages
+                  </p>
+                  {!data.googleAnalytics.snapshot.current.landingPages ||
+                  data.googleAnalytics.snapshot.current.landingPages
+                    .dataState === "not_available" ? (
+                    <p
+                      className="m-0 mt-1"
+                      style={{ color: "var(--app-text-faint)" }}
+                    >
+                      {data.googleAnalytics.snapshot.current.landingPages
+                        ?.reason ??
+                        "Page-level metrics are not in this saved snapshot. Sync again in SEO Settings."}
+                    </p>
+                  ) : data.googleAnalytics.snapshot.current.landingPages
+                      .dataState === "no_data_returned" ? (
+                    <p
+                      className="m-0 mt-1"
+                      style={{ color: "var(--app-text-faint)" }}
+                    >
+                      Google Analytics returned no landing-page rows for this
+                      period.
+                    </p>
+                  ) : (
+                    <div className="mt-1 overflow-x-auto">
+                      <table className="w-full min-w-[560px] text-left">
+                        <thead style={{ color: "var(--app-text-faint)" }}>
+                          <tr>
+                            {[
+                              "Page path",
+                              "Sessions",
+                              "Key events",
+                              "Revenue",
+                            ].map((heading) => (
+                              <th key={heading} className="py-1.5 pe-3">
+                                {heading}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.googleAnalytics.snapshot.current.landingPages.rows
+                            .slice(0, 10)
+                            .map((row) => (
+                              <tr
+                                key={row.landingPage}
+                                className="border-t"
+                                style={{ borderColor: "var(--app-border)" }}
+                              >
+                                <td className="py-1.5 pe-3 font-mono">
+                                  {row.landingPage}
+                                </td>
+                                <td className="py-1.5 pe-3 tabular-nums">
+                                  {row.sessions ?? "Not available"}
+                                </td>
+                                <td className="py-1.5 pe-3 tabular-nums">
+                                  {row.keyEvents ?? "Not available"}
+                                </td>
+                                <td className="py-1.5 tabular-nums">
+                                  {row.totalRevenue === null
+                                    ? "Not available"
+                                    : `${data.googleAnalytics.snapshot?.currencyCode ?? "Currency not available"} ${row.totalRevenue}`}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {data.googleAnalytics.snapshot.current.landingPages
+                    ?.truncated && (
+                    <p
+                      className="m-0 mt-1"
+                      style={{ color: "var(--app-text-faintest)" }}
+                    >
+                      The Data API row limit is 250; this table shows the first
+                      10 returned paths.
+                    </p>
+                  )}
+                  <p
+                    className="m-0 mt-1"
+                    style={{ color: "var(--app-text-faintest)" }}
+                  >
+                    Page paths exclude query strings. These are Google-reported
+                    Organic Search values and do not prove SEO causality.
+                  </p>
+                </div>
+              )}
+              <p
+                className="m-0 mt-2 text-[11px]"
+                style={{ color: "var(--app-text-faintest)" }}
+              >
+                {data.googleAnalytics.disclosure}
+              </p>
+            </section>
+            <div
+              className="rounded-xl border p-3 text-xs"
+              style={{ borderColor: "var(--app-border)" }}
+            >
               <p className="m-0 font-bold">Not tracked</p>
-              <ul className="m-0 mt-1 list-disc ps-5" style={{ color: "var(--app-text-muted)" }}>
-                {data.notTracked.map((row) => <li key={row.label}><strong>{row.label}:</strong> {row.reason}</li>)}
+              <ul
+                className="m-0 mt-1 list-disc ps-5"
+                style={{ color: "var(--app-text-muted)" }}
+              >
+                {data.notTracked.map((row) => (
+                  <li key={row.label}>
+                    <strong>{row.label}:</strong> {row.reason}
+                  </li>
+                ))}
               </ul>
             </div>
           </>
         )}
         {section === "visibility" && (
           <div className="grid gap-4 md:grid-cols-2">
-            <Distribution label={`Rank distribution — end of previous ${days} days`} buckets={data.rankDistribution.baseline} />
-            <Distribution label="Rank distribution — now" buckets={data.rankDistribution.current} />
+            <Distribution
+              label={`Rank distribution — end of previous ${days} days`}
+              buckets={data.rankDistribution.baseline}
+            />
+            <Distribution
+              label="Rank distribution — now"
+              buckets={data.rankDistribution.current}
+            />
           </div>
         )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-xs">
             <thead style={{ color: "var(--app-text-faint)" }}>
-              <tr>{["Metric", "Baseline", "Current", "Change", "Source", "Freshness", "Caveat"].map((heading) => <th key={heading} className="px-3 py-2 font-semibold">{heading}</th>)}</tr>
+              <tr>
+                {[
+                  "Metric",
+                  "Baseline",
+                  "Current",
+                  "Change",
+                  "Source",
+                  "Freshness",
+                  "Caveat",
+                ].map((heading) => (
+                  <th key={heading} className="px-3 py-2 font-semibold">
+                    {heading}
+                  </th>
+                ))}
+              </tr>
             </thead>
             <tbody>
               {metrics.map((metric) => (
-                <tr key={metric.key} className="border-t align-top" style={{ borderColor: "var(--app-border)" }}>
+                <tr
+                  key={metric.key}
+                  className="border-t align-top"
+                  style={{ borderColor: "var(--app-border)" }}
+                >
                   <td className="px-3 py-2 font-semibold">{metric.label}</td>
-                  <td className="px-3 py-2 tabular-nums">{format(metric.baseline, metric.unit)}</td>
-                  <td className="px-3 py-2 tabular-nums">{format(metric.current, metric.unit)}</td>
-                  <td className="px-3 py-2"><Change metric={metric} /></td>
-                  <td className="px-3 py-2" style={{ color: "var(--app-text-muted)" }}>{metric.source}</td>
-                  <td className="px-3 py-2">{metric.freshness ? formatDate(metric.freshness) : "—"}</td>
-                  <td className="max-w-[260px] px-3 py-2" style={{ color: "var(--app-text-faint)" }}>{metric.caveat}</td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {format(metric.baseline, metric.unit)}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {format(metric.current, metric.unit)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Change metric={metric} />
+                  </td>
+                  <td
+                    className="px-3 py-2"
+                    style={{ color: "var(--app-text-muted)" }}
+                  >
+                    {metric.source}
+                  </td>
+                  <td className="px-3 py-2">
+                    {metric.freshness ? formatDate(metric.freshness) : "—"}
+                  </td>
+                  <td
+                    className="max-w-[260px] px-3 py-2"
+                    style={{ color: "var(--app-text-faint)" }}
+                  >
+                    {metric.caveat}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -154,15 +532,44 @@ export function SeoReportsView() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead style={{ color: "var(--app-text-faint)" }}>
-                <tr>{["Keyword", `Rank ${days} days ago`, "Rank now", "Last checked"].map((heading) => <th key={heading} className="px-3 py-2 font-semibold">{heading}</th>)}</tr>
+                <tr>
+                  {[
+                    "Keyword",
+                    `Rank ${days} days ago`,
+                    "Rank now",
+                    "Last checked",
+                  ].map((heading) => (
+                    <th key={heading} className="px-3 py-2 font-semibold">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
                 {data.keywords.map((row) => (
-                  <tr key={row.keyword} className="border-t" style={{ borderColor: "var(--app-border)" }}>
+                  <tr
+                    key={row.keyword}
+                    className="border-t"
+                    style={{ borderColor: "var(--app-border)" }}
+                  >
                     <td className="px-3 py-2 font-semibold">{row.keyword}</td>
-                    <td className="px-3 py-2">{!row.baselineChecked ? "Not checked" : row.baseline === null ? "Not found" : `#${row.baseline}`}</td>
-                    <td className="px-3 py-2">{!row.currentChecked ? "Not checked" : row.current === null ? "Not found" : `#${row.current}`}</td>
-                    <td className="px-3 py-2">{row.checkedAt ? formatDate(row.checkedAt) : "—"}</td>
+                    <td className="px-3 py-2">
+                      {!row.baselineChecked
+                        ? "Not checked"
+                        : row.baseline === null
+                          ? "Not found"
+                          : `#${row.baseline}`}
+                    </td>
+                    <td className="px-3 py-2">
+                      {!row.currentChecked
+                        ? "Not checked"
+                        : row.current === null
+                          ? "Not found"
+                          : `#${row.current}`}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.checkedAt ? formatDate(row.checkedAt) : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -173,30 +580,78 @@ export function SeoReportsView() {
     );
 
   return (
-    <main className="flex flex-col gap-5 p-5 md:p-7" style={{ color: "var(--app-text)" }}>
+    <main
+      className="flex flex-col gap-5 p-5 md:p-7"
+      style={{ color: "var(--app-text)" }}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="m-0 max-w-3xl text-xs" style={{ color: "var(--app-text-muted)" }}>
+        <p
+          className="m-0 max-w-3xl text-xs"
+          style={{ color: "var(--app-text-muted)" }}
+        >
           {data
             ? `Last ${data.period.days} days (${formatDate(data.period.currentFrom)} – ${formatDate(data.period.currentTo)}) compared with the ${data.period.days} days before. `
             : ""}
-          Every figure comes from records Noxtill holds and shows its source and caveat. Changes are shown next to the SEO work done in the same period — that&rsquo;s correlation, not proof of cause. Scheduled report delivery
-          isn&rsquo;t available for SEO yet.
+          Every figure comes from records Noxtill holds and shows its source and
+          caveat. Changes are shown next to the SEO work done in the same period
+          — that&rsquo;s correlation, not proof of cause. Scheduled report
+          delivery isn&rsquo;t available for SEO yet.
         </p>
         <div className="flex gap-2">
-          <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="rounded-lg border px-3 py-2 text-xs font-bold" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }} aria-label="Compare period">
+          <select
+            value={days}
+            onChange={(event) => setDays(Number(event.target.value))}
+            className="rounded-lg border px-3 py-2 text-xs font-bold"
+            style={{
+              borderColor: "var(--app-border)",
+              background: "var(--app-surface)",
+            }}
+            aria-label="Compare period"
+          >
             <option value={7}>Last 7 days</option>
             <option value={30}>Last 30 days</option>
             <option value={90}>Last 90 days</option>
           </select>
-          <button type="button" disabled={!data} onClick={() => data && exportCsv(data.metrics, days)} className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50" style={{ background: "var(--app-primary)" }}>
+          <button
+            type="button"
+            disabled={!data}
+            onClick={() => data && exportCsv(data.metrics, days)}
+            className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+            style={{ background: "var(--app-primary)" }}
+          >
             Export CSV
           </button>
         </div>
       </div>
-      <section className="rounded-2xl border" style={{ background: "var(--app-surface)", borderColor: "var(--app-border)" }}>
-        <div role="tablist" className="flex flex-wrap gap-4 border-b px-4 pt-3" style={{ borderColor: "var(--app-border)" }}>
+      <section
+        className="rounded-2xl border"
+        style={{
+          background: "var(--app-surface)",
+          borderColor: "var(--app-border)",
+        }}
+      >
+        <div
+          role="tablist"
+          className="flex flex-wrap gap-4 border-b px-4 pt-3"
+          style={{ borderColor: "var(--app-border)" }}
+        >
           {SECTIONS.map((item) => (
-            <button key={item.key} type="button" role="tab" aria-selected={section === item.key} onClick={() => setSection(item.key)} className="border-b-2 pb-2.5 text-sm font-bold" style={{ borderColor: section === item.key ? "var(--app-primary)" : "transparent", color: section === item.key ? "var(--app-text)" : "var(--app-text-faint)" }}>
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={section === item.key}
+              onClick={() => setSection(item.key)}
+              className="border-b-2 pb-2.5 text-sm font-bold"
+              style={{
+                borderColor:
+                  section === item.key ? "var(--app-primary)" : "transparent",
+                color:
+                  section === item.key
+                    ? "var(--app-text)"
+                    : "var(--app-text-faint)",
+              }}
+            >
               {item.label}
             </button>
           ))}

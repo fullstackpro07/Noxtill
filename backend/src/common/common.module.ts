@@ -12,6 +12,9 @@ import { WebhookIdempotencyService } from './webhooks/webhook-idempotency.servic
 import { CapabilitiesService } from './capabilities/capabilities.service';
 import { ApiKeyAuthService } from '../developer/api-key-auth.service';
 import { PoliciesService } from './policies/policies.service';
+import { SpecialistAgentPolicyService } from './agents/specialist-agent-policy.service';
+import { SpecialistAgentToolGatewayService } from './agents/specialist-agent-tool-gateway.service';
+import { BusinessModulesModule } from '../business-modules/business-modules.module';
 
 /**
  * Wires the global request pipeline in guard-execution order (BE-006/008/009/013/UPD-BE-035):
@@ -27,6 +30,7 @@ import { PoliciesService } from './policies/policies.service';
   // Per business (or IP when anonymous). API_RATE_LIMIT_PER_MINUTE overrides the default 120,
   // e.g. for a capacity test environment; unset keeps the existing limit.
   imports: [
+    BusinessModulesModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60_000,
@@ -39,6 +43,8 @@ import { PoliciesService } from './policies/policies.service';
     WebhookIdempotencyService,
     CapabilitiesService,
     PoliciesService,
+    SpecialistAgentPolicyService,
+    SpecialistAgentToolGatewayService,
     ApiKeyAuthService,
     { provide: APP_GUARD, useClass: BusinessThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
@@ -52,6 +58,8 @@ import { PoliciesService } from './policies/policies.service';
     WebhookIdempotencyService,
     CapabilitiesService,
     PoliciesService,
+    SpecialistAgentPolicyService,
+    SpecialistAgentToolGatewayService,
     ApiKeyAuthService,
   ],
 })

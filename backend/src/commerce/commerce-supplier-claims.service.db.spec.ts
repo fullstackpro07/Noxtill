@@ -10,11 +10,20 @@ import {
 } from '@prisma/client';
 import { ActivityService } from '../activity/activity.service';
 import type { ActivityPubSubService } from '../activity/activity-pubsub.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
+import { PoliciesService } from '../common/policies/policies.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { S3Service } from '../common/storage/s3.service';
 import { CommerceSupplierClaimsService } from './commerce-supplier-claims.service';
+import { CommerceAgentToolsService } from './commerce-agent-tools.service';
+import { CommerceB2bService } from './commerce-b2b.service';
+import type { CommerceExperimentsService } from './commerce-experiments.service';
+import type { CommerceFulfillmentRouterService } from './commerce-fulfillment-router.service';
+import type { CommerceListingBuilderService } from './commerce-listing-builder.service';
+import type { CommerceRfqsService } from './commerce-rfqs.service';
+import { ProductValidationService } from './product-validation.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -31,6 +40,7 @@ class FakeClsService {
 describe('CommerceSupplierClaimsService (MySQL)', () => {
   let prisma: PrismaService;
   let service: CommerceSupplierClaimsService;
+  let agentTools: CommerceAgentToolsService;
   let businessId: string;
   let foreignBusinessId: string;
   let supplierId: string;
@@ -72,6 +82,23 @@ describe('CommerceSupplierClaimsService (MySQL)', () => {
         getSignedDownloadUrl,
       } as unknown as S3Service,
       activity,
+    );
+    agentTools = new CommerceAgentToolsService(
+      tenantPrisma,
+      {} as CommerceRfqsService,
+      {} as CommerceFulfillmentRouterService,
+      {} as CommerceListingBuilderService,
+      {} as CommerceExperimentsService,
+      service,
+      new ProductValidationService(tenantPrisma, activity, {
+        add: jest.fn().mockResolvedValue(undefined),
+      } as never),
+      new CommerceB2bService(tenantPrisma),
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        new CapabilitiesService(prisma),
+      ),
     );
 
     const business = await prisma.business.create({
@@ -123,6 +150,7 @@ describe('CommerceSupplierClaimsService (MySQL)', () => {
   });
 
   afterEach(async () => {
+    await prisma.commerceAgentToolRun.deleteMany({ where: { businessId } });
     await prisma.commerceSupplierClaim.deleteMany({ where: { businessId } });
     await prisma.activityEvent.deleteMany({ where: { businessId } });
     upload.mockClear();
@@ -168,6 +196,73 @@ describe('CommerceSupplierClaimsService (MySQL)', () => {
       ],
     });
   }
+
+  it('creates a canonical draft through the Commerce Agent without submitting or messaging the supplier', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: { 'commerce.autonomyLevel': 2 } },
+    });
+    const business = await prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { currency: true },
+    });
+
+    const response = await agentTools.run(
+      businessId,
+      'claim-agent-operator',
+      'create_supplier_claim_draft',
+      {
+        supplierId,
+        purchaseOrderId,
+        reasonCode: 'damaged_goods',
+        reason: 'Receiving inspection recorded damaged units',
+        productId,
+        purchaseOrderItemId,
+        itemDescription: 'Damaged units from the received order',
+        quantityAffected: '2',
+        productLossAmount: '40.00',
+        freightLossAmount: '0',
+        otherLossAmount: '0',
+      },
+      'commerce-agent-claim-draft-idempotency',
+    );
+
+    const result = response.result as { id: string; status: string };
+    expect(response.run).toMatchObject({
+      toolKey: 'create_supplier_claim_draft',
+      outcome: 'succeeded',
+      riskClass: 'LOW_RISK_WRITE',
+      autonomyLevel: 2,
+    });
+    expect(result.status).toBe('draft');
+    expect(response.run.resultSummary).toContain('no supplier was contacted');
+    const [claim, communicationCount] = await Promise.all([
+      prisma.commerceSupplierClaim.findUniqueOrThrow({
+        where: { id: result.id },
+        include: { items: true, audits: true },
+      }),
+      prisma.commerceSupplierClaimCommunication.count({
+        where: { claim: { businessId } },
+      }),
+    ]);
+    expect(claim).toMatchObject({
+      businessId,
+      supplierId,
+      purchaseOrderId,
+      reasonCode: 'damaged_goods',
+      currency: business.currency,
+      status: 'draft',
+    });
+    expect(claim.items).toHaveLength(1);
+    expect(claim.items[0]).toMatchObject({
+      productId,
+      purchaseOrderItemId,
+      quantityAffected: 2,
+    });
+    expect(claim.items[0].productLossAmount.toString()).toBe('40');
+    expect(claim.audits.map((audit) => audit.action)).toContain('created');
+    expect(communicationCount).toBe(0);
+  });
 
   async function addPdfEvidence(claimId: string) {
     return service.uploadEvidence(

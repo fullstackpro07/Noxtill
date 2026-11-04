@@ -46,6 +46,7 @@ describe('SeoSiteAuditService', () => {
   function service(
     website: string | null,
     auditResult: SeoSiteAuditResult = result,
+    policies: Record<string, unknown> = {},
   ) {
     type CreateArgs = {
       data: { businessId: string; siteUrl: string; status: string };
@@ -66,6 +67,9 @@ describe('SeoSiteAuditService', () => {
       };
     };
     const client = {
+      business: {
+        findUnique: jest.fn().mockResolvedValue({ policies }),
+      },
       seoAuditRun: {
         create: jest.fn((_args: CreateArgs) =>
           Promise.resolve({ id: 'audit_1' }),
@@ -93,14 +97,44 @@ describe('SeoSiteAuditService', () => {
         newlyDetectedHighPriorityCount: 0,
       }),
     };
+    const specialistAgentEvents = {
+      add: jest
+        .fn<
+          Promise<unknown>,
+          [
+            string,
+            Record<string, string>,
+            {
+              jobId: string;
+              attempts: number;
+              backoff: { type: 'exponential'; delay: number };
+              removeOnComplete: number;
+              removeOnFail: number;
+            },
+          ]
+        >()
+        .mockResolvedValue(undefined),
+    };
     const instance = new SeoSiteAuditService(
       tenantPrisma,
       listing as unknown as MasterListingService,
       crawler as unknown as SeoSiteAuditCrawler,
       activity as never,
       auditIssues as never,
+      undefined,
+      undefined,
+      undefined,
+      specialistAgentEvents as never,
     );
-    return { instance, client, listing, crawler, activity, auditIssues };
+    return {
+      instance,
+      client,
+      listing,
+      crawler,
+      activity,
+      auditIssues,
+      specialistAgentEvents,
+    };
   }
 
   it('uses the canonical Business Listing URL and persists the measured run result', async () => {
@@ -334,6 +368,52 @@ describe('SeoSiteAuditService', () => {
     await instance.run('business_1');
 
     expect(activity.record).not.toHaveBeenCalled();
+  });
+
+  it('queues one read-only SEO review after an opted-in completed audit', async () => {
+    const { instance, specialistAgentEvents } = service(
+      'https://example.com',
+      result,
+      { 'agents.seoAuditEventReviewEnabled': true },
+    );
+
+    await instance.run('business_1');
+
+    expect(specialistAgentEvents.add).toHaveBeenCalledTimes(1);
+    const [jobName, event, options] =
+      specialistAgentEvents.add.mock.calls[0];
+    expect(jobName).toBe('seo-audit-completed');
+    expect(event).toEqual({ businessId: 'business_1', auditRunId: 'audit_1' });
+    expect(options.jobId).toMatch(/^seo-audit-agent-/);
+    expect(options.attempts).toBe(3);
+  });
+
+  it('does not queue a review for failed audits or when the event opt-in is off', async () => {
+    const failed = service('https://example.com', {
+      ...result,
+      status: 'failed',
+      error: 'Audit failed.',
+    }, { 'agents.seoAuditEventReviewEnabled': true });
+    await failed.instance.run('business_1');
+    expect(failed.specialistAgentEvents.add).not.toHaveBeenCalled();
+
+    const optedOut = service('https://example.com');
+    await optedOut.instance.run('business_1');
+    expect(optedOut.specialistAgentEvents.add).not.toHaveBeenCalled();
+  });
+
+  it('keeps a successful audit successful if optional agent dispatch is unavailable', async () => {
+    const { instance, specialistAgentEvents } = service(
+      'https://example.com',
+      result,
+      { 'agents.seoAuditEventReviewEnabled': true },
+    );
+    specialistAgentEvents.add.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    const saved = await instance.run('business_1');
+
+    expect(saved.status).toBe('completed');
+    expect(specialistAgentEvents.add).toHaveBeenCalledTimes(1);
   });
 
   it('requires the canonical listing website before starting an audit', async () => {

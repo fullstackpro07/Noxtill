@@ -4,6 +4,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { S3Service } from '../common/storage/s3.service';
 import { PdfRendererService } from '../common/pdf/pdf-renderer.service';
 import { ExportCustomersDto } from './dto/export-customers.dto';
+import { excludeErasedCustomers } from './segment-rules.util';
 
 interface DebtorBalanceRow {
   customer_id: string;
@@ -55,7 +56,7 @@ export class CustomersExportService {
     ) as CustomerExportField[];
 
     const customers = await this.tenantPrisma.client.customer.findMany({
-      where: { businessId },
+      where: excludeErasedCustomers({ businessId }),
       orderBy: { name: 'asc' },
     });
 

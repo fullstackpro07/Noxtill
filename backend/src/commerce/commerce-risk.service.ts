@@ -218,6 +218,10 @@ export class CommerceRiskService {
             ),
             evidence: {
               explanation: `${rows.length} returns in the last ${rule.windowDays} days (threshold ${rule.threshold}).`,
+              windowDays: rule.windowDays,
+              threshold: rule.threshold,
+              returnCount: rows.length,
+              uniqueOrderCount: new Set(rows.map((row) => row.orderId)).size,
               returnIds: rows.map((row) => row.id),
               orderIds: [...new Set(rows.map((row) => row.orderId))],
             },
@@ -292,6 +296,13 @@ export class CommerceRiskService {
             evidence: {
               explanation:
                 'More units were returned than this order contained — a possible duplicate refund.',
+              windowDays: rule.windowDays,
+              returnCount: rows.length,
+              affectedProductCount: excess.length,
+              excessUnitCount: excess.reduce(
+                (sum, row) => sum + row.returned - row.ordered,
+                0,
+              ),
               products: excess,
               returnIds: rows.map((row) => row.id),
             },
@@ -341,6 +352,14 @@ export class CommerceRiskService {
             ),
             evidence: {
               explanation: `${rows.length} coupon orders in the last ${rule.windowDays} days (threshold ${rule.threshold}).`,
+              windowDays: rule.windowDays,
+              threshold: rule.threshold,
+              orderCount: rows.length,
+              uniqueCouponCount: new Set(
+                rows.flatMap((row) =>
+                  row.coupon?.code ? [row.coupon.code] : [],
+                ),
+              ).size,
               orderIds: rows.map((row) => row.id),
               couponCodes: [...new Set(rows.map((row) => row.coupon?.code))],
             },

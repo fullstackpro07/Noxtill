@@ -37,7 +37,15 @@ export interface TimePolicyRow extends PolicyRowBase {
   emptyLabel: string;
 }
 
-export type PolicyRowSpec = TogglePolicyRow | NumberPolicyRow | TimePolicyRow;
+export interface TextPolicyRow extends PolicyRowBase {
+  kind: 'text';
+  placeholder?: string;
+  emptyLabel: string;
+  format?: (value: string) => string;
+}
+
+export type PolicyRowSpec =
+  TogglePolicyRow | NumberPolicyRow | TimePolicyRow | TextPolicyRow;
 
 /**
  * A Settings row backed by one owner policy (`Business.policies`). Reading falls back to the
@@ -51,6 +59,10 @@ export function policyRow(d: HubDeps, spec: PolicyRowSpec): RowDef {
   const resetOf = (): RowDef['reset'] => {
     if (spec.kind === 'toggle') return { label: def.default ? spec.on.text : spec.off.text, value: def.default === true };
     if (spec.kind === 'time') return { label: spec.emptyLabel, value: null };
+    if (spec.kind === 'text') {
+      const value = typeof def.default === 'string' ? def.default : '';
+      return { label: value ? (spec.format?.(value) ?? value) : spec.emptyLabel, value };
+    }
     const n = def.default as number | null;
     return n === null ? { label: spec.emptyLabel ?? 'No limit', value: null } : { label: spec.format(n), value: n };
   };
@@ -74,6 +86,19 @@ export function policyRow(d: HubDeps, spec: PolicyRowSpec): RowDef {
       if (spec.kind === 'time') {
         const t = p.time(spec.policy);
         return { value: t ?? spec.emptyLabel, tone: t ? 'blue' : 'neutral', control: { type: 'time', current: t, nullable: true } };
+      }
+      if (spec.kind === 'text') {
+        const value = p.text(spec.policy) ?? '';
+        return {
+          value: value ? (spec.format?.(value) ?? value) : spec.emptyLabel,
+          tone: value ? 'blue' : 'neutral',
+          control: {
+            type: 'text',
+            current: value,
+            placeholder: spec.placeholder,
+            maxLength: def.maxLength,
+          },
+        };
       }
       const n = p.num(spec.policy);
       return {

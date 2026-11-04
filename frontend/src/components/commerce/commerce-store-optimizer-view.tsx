@@ -147,7 +147,7 @@ export function CommerceStoreOptimizerView() {
   return (
     <main className="flex flex-col gap-5 p-5 md:p-7" style={{ color: "var(--app-text)" }}>
       <p className="m-0 rounded-xl border px-4 py-3 text-xs" style={{ borderColor: "var(--app-border)", background: "var(--app-surface-2)", color: "var(--app-text-muted)" }}>
-        Noxtill doesn&rsquo;t collect storefront traffic, so <strong>conversion rate, page drop-off, search and mobile conversion are not tracked</strong> here.
+        This Commerce view does not use storefront analytics, so <strong>conversion rate, page drop-off, search and mobile conversion are not available</strong> here.
         These checks use your products, orders, returns, waitlist and listings
         {summary ? ` (sales and returns from the last ${summary.rules.lookbackDays} days; high returns = at least ${summary.rules.highReturnMinUnits} units and ${summary.rules.highReturnRatePct}% of units sold)` : ""}.
         Nothing on your live store is edited — each finding links to where you fix it, and it&rsquo;s marked <em>verified fixed</em> only when a re-check
@@ -160,7 +160,7 @@ export function CommerceStoreOptimizerView() {
         <Kpi label="High impact" value={loading ? "…" : summary?.highImpactOpen ?? "—"} hint="Open, affecting sold or in-demand products" tone={summary?.highImpactOpen ? "danger" : undefined} />
         <Kpi label="Marked done" value={loading ? "…" : summary?.markedDone ?? "—"} hint="Awaiting re-check" />
         <Kpi label="Verified fixed" value={loading ? "…" : summary?.verifiedFixed ?? "—"} hint="Confirmed gone by a re-check" tone="good" />
-        <Kpi label="Conversion rate" value="Not tracked" hint="No storefront analytics connected" />
+        <Kpi label="Conversion rate" value="Not tracked" hint="No storefront analytics in this view" />
         <div className="flex items-center justify-center">
           <button type="button" onClick={() => run.mutate()} disabled={run.isPending} className="rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-50" style={{ background: "var(--app-primary)" }}>
             {run.isPending ? "Checking…" : "Run checks"}

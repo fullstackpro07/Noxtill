@@ -548,9 +548,11 @@ other agent's unfinished hunk, don't commit that file — ask under Requests. Ne
   verified and Prisma reports 151 migrations up to date. Backend/frontend `tsc`, touched-file eslint,
   and full backend Jest (`--maxWorkers=2`, 339 suites / 2,127 tests) passed. Browser QA in QA Test
   Business confirmed live data, empty assumptions, saved a labelled 5% v1 and 7% v2, and compared
-  earlier history. That QA-only test assumption remains in the test business. Physical equipment and
-  supplier lead times are disclosed as not tracked; staff/service capacity and product cost coverage
-  are disclosed as partial for the documented source-data gaps.
+  earlier history. That QA-only test assumption remains in the test business. Physical equipment
+  and explicit supplier SLA fields are not tracked; historical purchase-order timing can be derived
+  in Inventory Intelligence when completed records exist but is not calculated by this Digital Twin
+  screen. Staff/service capacity and product cost coverage are disclosed as partial for the
+  documented source-data gaps.
 - Screen 7 ✅ Intelligence Settings (`/settings/business-intelligence`, Settings Hub). Business
   policies configure source-confidence bands, an on-screen recorded-impact marker and optional
   price/stock/staff/marketing what-if defaults. BI Overview and Opportunity Radar display threshold
@@ -1572,3 +1574,1435 @@ is `docs/MODULE21_COMPLETION_CHECKLIST.md`; the overall goal is still active, no
   keyboard-only browser check with a date-picker focus fix (`618fa5f`). Final verification: backend
   Jest 399/399 suites, 2,422 tests; backend and frontend tsc clean; migrations up to date; browser
   suite 52/52.
+
+## Five Specialized AI Agents — Inventory procurement handoff (2026-10-22)
+
+- Added the first bounded specialist action: a saved Inventory reorder recommendation prepares an
+  existing ProcurementRequest draft, edited/submitted through Procurement, approved in the existing
+  Dashboard Action Center, then converted once into a canonical draft PurchaseOrder. No duplicate
+  approval engine, stock mutation, supplier sending or financial posting. The other four agents
+  remain initial review slices; the full five-agent specification is not complete.
+- The request pins the original evidence, source hash, exact versioned payload hash and 24-hour
+  expiry. Submit/approve/convert recheck stock/sales/incoming POs, current role permissions, enabled
+  modules and the agent switch. Concurrent prepare retries reuse one request. Stale proposals remain
+  rejectable; RFQ sourcing is refused until that adapter can enforce the same contract. Supplier
+  sending/provider idempotency, outcome verification and the wider orchestration remain open.
+- Applied `20261022190000_inventory_agent_procurement_handoff` with `prisma db execute` (exit 0),
+  marked applied, regenerated client; FK verified in `information_schema`. All 205 migrations are
+  applied. Unrelated index/FK drift was excluded.
+- Seven real-MySQL tests cover this handoff, tenant isolation, concurrent retries, stale/expired or
+  tampered proposals, kill switch/role revocation, unchanged stock and canonical draft PO identity.
+  Browser QA in a newly signed-up QA Specialist Agents business passed the complete create → edit →
+  submit → Action Center approve → convert flow with no browser console/page errors or API 5xx in
+  the passing run. Screenshots inspected. The missing `.dc.html` reference prevents a reference
+  pixel comparison; existing styling is retained. The QA backend used port 5001 because macOS owns
+  5000; separate QA Redis 6381. Both temporary QA servers were stopped afterwards.
+- Browser QA found/fixed a long-reason conversion failure (PO note is VARCHAR(191)); the PO now
+  references its request and the full evidence/rationale remains on that request. Added regression
+  coverage. React Query button calls no longer create unhandled rejected mutation promises.
+- Final checks: backend/frontend `tsc --noEmit` passed; touched-file ESLint passed; fabrication grep
+  and `git diff --check` passed; full backend Jest **406/406 suites, 2,450/2,450 tests passed**;
+  Playwright **1/1 end-to-end flow passed**. More detail in
+  `docs/SPECIALIZED_AI_AGENTS_REPOSITORY_AUDIT.md`. Nothing committed or pushed.
+
+## Five Specialized AI Agents — Customer profile review (2026-10-22)
+
+- Added `GET /customers/:id/intelligence` and an on-demand panel in the existing Customer Profile.
+  Real source projections cover adjacent 30-day completed-order counts, 90-day booking/message
+  statuses, next booking, recorded loyalty/membership state and authorized note/support metadata.
+  No duplicated customer master, retained personal summary, AI provider call or new migration.
+- Explicit method: fewer completed orders than the customer's prior window is a human review cue
+  only when the previous window has at least three orders. Sparse history is disclosed; confidence
+  is uncalibrated. Unresolved support has precedence only with Voice access. This is a partial
+  deterministic review, not the complete AI Customer 360/retention contract.
+- Fresh `CUSTOMER_AGENT_RUN` permission and kill-switch checks; `PROFIT_VIEW` for money and no
+  monetary context for Staff. Existing note-visibility setting is enforced; no note/message/ticket
+  content, contacts, credit or plan prices are returned. Source modules disabled at the root are
+  excluded, including when working in a branch. Erased customers and foreign IDs are refused.
+- Marketing consent/opt-out/status produce exclusions or a channel-check-required disclosure,
+  never send authorization. No messages, campaign or follow-up task is created. Queued/sent states
+  are not counted as delivered/read. `Cache-Control: no-store`, no inactive query retention, open
+  panel polling/focus refresh, and old review data hidden on query error.
+- Nine real-MySQL tests pass; four related suites / 34 tests pass. Browser QA in a newly signed-up
+  QA Specialist Agents business passed the previous Inventory approval flow and the new Customer
+  profile review with an actual test sale, consent exclusion/update/refresh and evidence details.
+  No browser console/page errors or API 5xx; screenshot inspected. Temporary QA servers stopped.
+- Final checks: backend/frontend `tsc --noEmit`, touched-file ESLint, fabrication grep and
+  `git diff --check` pass; full backend Jest **407/407 suites, 2,459/2,459 tests passed**;
+  Playwright **1/1 combined browser scenario passed**. No commit or push.
+- Still open: full authorized Customer 360 narrative, versioned segment/action handoffs, follow-up
+  tasks/message drafts, wider source context, calibrated retention, scheduling and metering. See
+  `docs/SPECIALIZED_AI_AGENTS_REPOSITORY_AUDIT.md`; the full five-agent module is not complete.
+
+## Five Specialized AI Agents — Editable segment proposals (2026-10-22)
+
+- Added prepare/list/get/revise/reject endpoints under `/customers` and a drafts panel inside the
+  existing Segments page. Customer Insights prepares a completed current-business recommendation.
+  Its existing recommendation JSON stores versioned rule proposals, not another Segment/customer
+  master or approval inbox. No migration, canonical Segment creation, campaign or message sending.
+- Explicit L1 boundary: the UI says canonical segment creation/approval handoff is not connected.
+  Normal manual Segment creation still works separately. Extracted/reused its existing rule-builder
+  UI; it retains existing field/operator behavior for ordinary manually created Segments.
+- Each revision retains normalized rules/name, reason, actor/time, SHA-256 and aggregate match/
+  exclusion counts at save time. Live counts reuse the existing Segments matcher and are refreshed
+  on load/save. Exclusions are disjoint inactive/erased → opted out → missing consent; passing flags
+  is not permission to send. No member IDs or contact details enter the proposal.
+- Only recorded visits, signup/visit dates and consent/opt-out conditions are supported by this
+  bounded adapter. Identity, tag/sensitive-trait and financial targeting are refused. Validates
+  field/operator/value combinations and dates. Twelve conditions, fifty revisions, original-source
+  24-hour expiry; row locking and expected-version checks protect concurrent prepare/edit requests.
+  Fresh agent/manage permissions, agent switch and module selection guard writes. Authorized
+  rejection with a reason remains possible after expiry or agent disablement.
+- Seven real-MySQL tests pass; related focused checks **3 suites / 24 tests passed**. Browser QA
+  passed prepare → version-2 edit → counts/history inspection → reasoned reject; confirmed that no
+  canonical Segment existed, then separately exercised ordinary manual Segment creation. The
+  expanded scenario also rechecked the previous Inventory approval and Customer profile flows.
+  No console/page errors or API 5xx; screenshot inspected. Temporary QA servers stopped.
+- Final backend/frontend type checks, touched-file ESLint, fabrication grep and `git diff --check`
+  pass. Full backend Jest **408/408 suites, 2,466/2,466 tests passed**. Playwright **1/1 expanded
+  scenario passed**. No commit or push. Canonical segment approval/application and wider agent
+  actions, scheduling and metering remain open; see the specialist audit.
+
+## Five Specialized AI Agents — Exact Segment approval/application (2026-10-23)
+
+- Customer proposals now submit into the existing Action Center. Exact human approval pins the
+  revision, rule payload and aggregate audience/exclusion hashes and saves a canonical Segment
+  through `SegmentsService`. No campaign/message is sent. Reasoned reject/withdraw, original expiry,
+  live permission/module/agent checks, row-lock retries and audit history are enforced.
+- Segment provenance/version/hash make later canonical edits invalidate agent approval and block
+  the shared audience resolver. A fresh review reads the real canonical definition; reapproval
+  updates the same Segment. A racing canonical edit requires withdrawal/rebase. Deleted Segments
+  are not silently recreated. Manual Segments continue to work. Definitions now require Customers
+  management capability. Action Center complete/dismiss/snooze/mark-read cannot bypass approval.
+- UI in existing Insights/Segments/Action Center shows exact previews, history, verified/changed/
+  missing canonical state and disabled audience actions until reapproval. Deep links load older
+  proposals outside the latest-20 list. Stale unsupported copy was replaced, including Settings.
+- Applied `20261022210000_customer_segment_approval` (four reviewed SQL statements only) using
+  db execute → resolve → generate; its FK is asserted against information_schema. All 206
+  migrations applied. Excluded unrelated voice/RFQ/index drift. No new duplicated tenant master.
+- Final backend/frontend type checks pass. Full backend Jest **408 suites / 2,474 tests passed**;
+  segment DB coverage is 15 tests (8 added). Touched lint has no new errors; intelligence settings
+  have the same 74 pre-existing Prettier-only errors as HEAD. Fabrication grep/diff check pass.
+- Playwright **1/1 expanded scenario passed**: previous Inventory/profile flows, exact Segment
+  approval, canonical invalidation/reapproval, rejection/manual creation, and old queue links.
+  No console/page errors or API 5xx; screenshots inspected. `.dc.html` refs remain absent, so no
+  reference pixel comparison. The final browser run used explicitly blocked provider env keys and
+  no recurring global queue jobs (Redis verified 0 registrations). The prior launcher allowed
+  Prisma's schema-relative env auto-load and three background stale-call status GETs returned 404;
+  those status-check timestamps were updated, but no calls were placed. Hardened the test launcher
+  only; no application policy bypass. No specialist AI usage logs were recorded across this turn's
+  browser QA businesses. See the audit for detail. Temporary QA servers/Redis stopped afterwards.
+- No commit/push. Full five-agent module remains unfinished; wider Customer actions and the other
+  specialists' action/scheduling/metering contracts remain. See the specialist audit for detail.
+
+## Five Specialized AI Agents — Customer follow-up tasks and message drafts (2026-10-23)
+
+- Added a tenant-scoped, idempotent `CustomerFollowUpTask` with audit events and manager/assigned-
+  staff completion rules. It appears in the existing Action Center and Staff Tasks; generic
+  dismiss/snooze/complete cannot bypass the CRM completion endpoint.
+- Reused canonical `MessageDraft` for staff-written customer copy. Active customer, marketing
+  consent, no opt-out, Unified Inbox enabled, agent switch and permissions are checked. Saving
+  creates no `Message`, queue job or delivery. AI-generated text is still missing; the UI states
+  that clearly, and no customer PII was sent to an AI provider.
+- Applied handwritten migration `20261023100000_customer_agent_followup`; Prisma generation and
+  `information_schema` FK checks pass, and MySQL reports 207/207 migrations applied.
+- Real-MySQL tests: 5 focused suites / 43 tests pass. Full backend Jest: **409/409 suites,
+  2,479/2,479 tests passed**. Backend/frontend type checks and touched-file ESLint pass;
+  fabrication grep and `git diff --check` pass. Playwright **1/1** combined isolated QA flow passed,
+  including creating/completing the task and saving a draft; screenshot inspected, no console/page
+  errors or API 5xx. Temporary QA services stopped; no paid provider call was made.
+- No commit or push. Accumulated work remains uncommitted. The five-agent module is not complete;
+  Customer AI copy and other agents' action/scheduling/metering work remain. Design references are
+  absent, so pixel-perfect comparison is not claimed.
+
+## Five Specialized AI Agents — AI customer message drafts and editing (2026-10-23)
+
+- Added a purpose-limited AI draft endpoint for booking, order, support, feedback and general
+  follow-up. It calls the existing `AiInfraService.createMessage`, so shared AI enablement,
+  rate-limit and cost-cap checks still apply. The request contains only the approved purpose
+  instruction; it does not send customer identity, contact details, orders, notes or history.
+- AI output is saved to the existing `MessageDraft` record as a review-only draft. Staff can edit
+  drafts before review. Customer activity/consent, opt-out, Unified Inbox, module, capability and
+  agent checks remain enforced. No `Message`, send job or delivery is created. AI-origin remains
+  visible after editing; all actions are audited. If the provider is unavailable, the API returns
+  typed `CUSTOMER_AGENT_AI_UNAVAILABLE` (503) and saves nothing.
+- Real-MySQL Customer Agent action spec: **7 tests passed**, including provider-disabled behavior,
+  idempotent AI drafts, absence of PII in the AI request, draft editing and no send side effect.
+  Full backend Jest: **409/409 suites, 2,481/2,481 tests passed**. Backend/frontend `tsc --noEmit`,
+  backend build, touched-file ESLint, and `git diff --check` pass. Prisma reports **207/207
+  migrations applied**; no migration was added for AI drafts/editing.
+- Isolated Playwright QA: **1/1 scenario passed**, including follow-up task creation/completion,
+  staff-written draft save/edit, and provider-unavailable UI. Provider credentials were blocked;
+  the expected 503 was surfaced as an unavailable notice. No paid/live AI request or message send
+  occurred. Screenshot inspected; temporary QA services stopped. Static-number/random fabrication
+  grep found no matches in the touched Customer Agent files.
+- No commit or push. The broader five-agent module is still unfinished; this completes only the
+  bounded Customer Agent follow-up/draft slice. Design references are absent, so pixel-perfect
+  comparison is not claimed.
+
+## Five Specialized AI Agents — Inventory back-in-stock review cue (2026-10-23)
+
+- Inventory Agent now reads the canonical `ProductWaitlistEntry` aggregate for active, tracked
+  products with positive on-hand stock and unnotified waitlist entries. It persists a review-only
+  recommendation with count, current stock and source evidence; it excludes customer IDs/contact
+  details and does not inspect consent or treat the count as send authorization.
+- “Review canonical waitlist” opens the existing Inventory waitlist modal. The agent does not
+  generate a per-customer message, alter waitlist records, queue a delivery or send anything. The
+  existing canonical notification flow remains responsible for channel eligibility when a user
+  explicitly chooses to notify.
+- Real-MySQL `inventory-intelligence.service.db.spec.ts`: **3 tests passed**, including a pending
+  versus already-notified waitlist count and exclusion of fixture contact details from the finding.
+  Full backend Jest: **409/409 suites, 2,481/2,481 tests passed**. Backend/frontend type checks,
+  backend build, touched-file ESLint, fabrication grep and `git diff --check` pass. MySQL remains
+  at **207/207 migrations applied**; no schema change was required.
+- Isolated Playwright: **1/1 scenario passed**. It creates a test waitlist entry with marketing
+  consent off, runs the Inventory Agent, opens the existing waitlist, and verifies the actual
+  waiting row/count without pressing “Notify Waitlist”. Screenshot inspected; temporary QA
+  services stopped and provider keys blocked.
+- No commit or push. This is a review cue, not the full approved notification-preparation lifecycle;
+  customer-level eligibility preview and notification approval remain outstanding. The five-agent
+  module remains incomplete.
+
+## Five Specialized AI Agents — Inventory branch rebalance review (2026-10-23)
+
+- Inventory Agent compares active products across the caller's own branch group, matching only SKUs
+  that are unique at both locations (the canonical transfer service's identity rule). Sender
+  surplus is on-hand less pending/approved outbound transfers, compared with 120 days of cover at
+  trailing 30-day recorded sales velocity. Receiver risk uses its canonical low-stock threshold
+  after open outbound, approved inbound and shipped in-transit quantities.
+- Findings include source evidence and link to canonical Stock Transfers. They never create a
+  transfer or change stock. The inventory schema has no separate reservation ledger; that, and
+  missing product-specific transfer lead time/UOM/seasonality, are disclosed in each finding.
+- Real-MySQL Inventory tests pass 3/3, including approved-outbound and in-transit accounting and
+  checks that stock/transfer rows remain unchanged. Full backend Jest passes **409 suites / 2,481
+  tests**. Backend/frontend `tsc --noEmit`, backend build/Prisma generation and touched-file ESLint
+  pass. Playwright passes **2/2** including setup and the end-to-end scenario; screenshot inspected,
+  provider credentials blocked and temporary QA services stopped. No migration was needed.
+- No commit or push; this is a review-only transfer recommendation, not a full approved transfer
+  lifecycle. The five-agent specification remains unfinished.
+
+## Five Specialized AI Agents — Inventory repeated applied-count review (2026-10-23)
+
+- Inventory Agent now finds active products with adjustment movements in the trailing 90 days
+  that reference at least two distinct, applied `StockCount` records. It verifies that each count
+  is applied, has `appliedAt`, and includes the adjusted product before counting evidence.
+- Findings report the count IDs, adjustment count, absolute and net units, and observed dates. The
+  UI links to canonical Stock Count for a fresh recount; it does not change stock or infer a cause.
+  Missing structured discrepancy causes and a configurable materiality threshold are disclosed.
+- Inventory Agent also surfaces a value-at-cost snapshot and the value of rows with the existing
+  overstock flag, reusing `stockValue`/`overstocked` from `InventoryService.listInventory()` rather
+  than adding a second valuation formula. The UI links to canonical Inventory Valuation and
+  discloses zero recorded cost rows; it labels the amount as carrying value, not cash or loss.
+- Real-MySQL Inventory tests pass **3/3**, covering repeated applied corrections, valuation
+  evidence and assertions that analysis leaves stock and movement rows unchanged. Backend and
+  frontend `tsc --noEmit`, backend build/Prisma generation and touched ESLint pass. Full Jest had
+  **407/409 suites and 2,468/2,481 tests pass**; the unrelated Competitive Opportunities and Cash
+  Register suites hit timeouts during the parallel run, then passed isolated (**8/8** and **12/12**).
+  Isolated Playwright passes **2/2** including setup; page/console/network assertions pass and the
+  $45 QA cost snapshot was confirmed. Provider keys were blocked and temporary QA services stopped.
+- No migration, commit or push. This is a discrepancy-review cue, not automatic recount task
+  creation or write-off; unknown-vs-zero cost, structured causes and a materiality setting remain
+  unsupported. The five-agent spec remains unfinished.
+
+## Inventory Agent — audited recount request handoff (2026-10-23)
+
+Added a tenant-scoped recount task for an eligible inventory count-discrepancy recommendation. A
+request is idempotent per recommendation, checks business/agent/product ownership, and writes an
+audit event. The task links to the canonical Stock Count flow; creating a physical count draft for
+that product closes the open request and links the draft. It does not itself apply stock changes;
+the existing stock-count apply flow remains the only path that changes inventory.
+
+Verification: migration `20261023120000_inventory_agent_count_tasks` was applied and resolved;
+Prisma reports **208/208 migrations applied**, with the tenant/product/recommendation/count foreign
+keys verified by the real-MySQL spec. Inventory DB spec passes **5/5**; the last full backend Jest
+run passes **409 suites / 2,483 tests**, backend and frontend type checks pass, and touched-file
+ESLint plus `git diff --check` pass. Isolated Playwright passes **1/1**; it creates a variance
+finding, requests a recount, records a later count, and verifies the task is completed on reload.
+The combined flow also checks the Inventory-to-Procurement handoff and customer-agent screens. The
+Inventory screenshot was inspected; the server's AI-unconfigured state was disclosed. The agent
+made no provider request and no stock mutation. No commit or push.
+
+The first browser attempt hit a login hydration race and timed out; adding a network-idle wait to the
+isolated test fixed the harness, and the rerun passed. The QA business is separate from the main
+account. This is one Inventory Agent capability, not completion of the five-agent spec.
+
+## Inventory Agent — reasoned recount-request dismissal (2026-10-23)
+
+Open recount requests can now be dismissed by an authorized owner/manager with a required 5–500
+character reason. The tenant-scoped service conditionally changes only an open request, records the
+actor, timestamp and reason, and writes an audit event. Repeated or cross-business dismissal is
+refused. The Inventory page shows the decision and reason; dismissal does not create a stock count,
+movement or balance change.
+
+Verification: handwritten migration `20261023130000_inventory_agent_count_task_dismissal` is
+applied; Prisma reports **209/209 migrations up to date**. Inventory real-MySQL spec passes **6/6**;
+full backend Jest passes **409 suites / 2,484 tests**. Backend/frontend `tsc --noEmit`, backend
+build, touched-file ESLint and `git diff --check` pass. Isolated Playwright passes **1/1**, including
+reasoned dismissal and screenshot review; the first attempt used a stale `dist` build, then passed
+after rebuilding. Provider keys were blocked and no external call was made. No commit or push. This
+closes one more Inventory Agent action gap; the five-agent specification remains unfinished.
+
+## Inventory Agent — back-in-stock notification preview (2026-10-23)
+
+Added a no-send preview for active, restocked products with unnotified waitlist entries. The
+preview reuses the same send-gate preparation path as the existing notification flow, so the
+current contact/channel resolution, registered template, WhatsApp template approval, and message
+quota checks are reflected per recipient. Multi-recipient previews account for quota already
+allocated to earlier eligible rows. The preview is audited with aggregate outcomes; it does not
+create Message rows, consume quota, mark waitlist entries notified, enqueue a provider job, or
+confirm delivery. The canonical user-initiated send still rechecks current conditions.
+
+The page shows the rendered registered copy and per-recipient eligibility/reason. It explicitly
+discloses that a waitlist row records a request but the system stores no separate consent evidence,
+and that provider delivery is not checked by a preview. No external provider was called and no
+inventory/customer record was changed.
+
+Verification: real-MySQL waitlist/send-gate spec **6/6**; full backend Jest **409/409 suites,
+2,485/2,485 tests**. Backend/frontend `tsc --noEmit`, touched-file ESLint, backend build,
+`git diff --check` and Prisma migration status (**209/209 up to date**) pass. Isolated browser QA
+passes **1/1** in a temporary QA business; the page/screenshot was inspected and the test confirms
+the preview does not send. The first full run had unrelated Health Score and QR Poster timeouts;
+both passed alone, and the clean full rerun passed. No migration, commit or push. The five-agent
+specification remains unfinished.
+
+## Inventory Agent — recorded-wastage review task (2026-10-23)
+
+Added an idempotent, tenant-scoped review task from a recorded-wastage recommendation. Authorized
+owners/managers can create it, open the canonical Wastage log, then record a review note or dismiss
+with a reason. Each request/decision is audited; a task never edits stock, wastage movements, or
+their source records. The finding still reports recorded movements only and does not infer a cause
+or write-off.
+
+Handwritten migration `20261023140000_inventory_agent_wastage_review_tasks` is applied and Prisma
+reports **210 migrations up to date**; all three task foreign keys were verified through
+`information_schema`. Inventory real-MySQL spec passes **8/8**; full backend Jest passes **409
+suites / 2,487 tests**. Backend/frontend type checks, backend build, touched-file ESLint and
+`git diff --check` pass. Isolated browser QA passes **1/1**, including create → record-review and a
+persisted API read; screenshot plus console/API-error assertions were checked. No provider was
+called. No commit or push. The five-agent specification remains unfinished.
+
+## Five Specialized AI Agents — Customer CRM data-quality review (2026-10-23)
+
+Customer Intelligence now includes aggregate missing-contact and duplicate-candidate evidence in
+its saved review. Duplicate totals come from `CustomerDuplicatesService` and the business's existing
+`CustomerMergeSettings.matchOn`; pairs are de-duplicated by canonical customer IDs, prior dismissals
+are respected, and the stored evidence/output/AI prompt contain counts only—not names, emails,
+phones or customer IDs. The missing-contact count is limited to active, non-erased profiles whose
+email or phone field is blank. The page links to the canonical Duplicates screen for human review;
+it does not merge records or check contact deliverability. Selected-branch scopes disclose that
+these business-scoped counts are unavailable.
+
+Real-MySQL Customer Intelligence spec passes **3/3**; full backend Jest passes **409 suites / 2,488
+tests**. Backend/frontend `tsc --noEmit`, backend build, clean lint for the Customer Intelligence,
+frontend and E2E files, and `git diff --check` pass. `customer-duplicates.service.ts` has pre-existing
+lint diagnostics confirmed at HEAD; none point at the new aggregate method. Isolated Playwright
+passes **1/1**, confirming a real same-email pair produces aggregate-only output and the handoff
+opens the canonical review page; screenshot inspected, no browser console or API 5xx errors. No
+migration, provider call, commit or push. Five-agent work remains incomplete.
+
+## Finance Agent — cash-flow, customer-credit aging and monthly variance (2026-10-23)
+
+- The Finance review now reuses `CashForecastService.forecast` for relative projected net flow,
+  `CreditService.financialAgingSummary` for privacy-minimized customer-credit balance aging, and
+  `ProfitService.pnl.trend` for calendar-month variance. The UI links back to the canonical Cash
+  Flow, Credit and Expenses pages. It does not imply a bank balance, accounting A/R, a duplicate
+  finding, a cause for a variance, or any posted/reconciled transaction.
+- Real-MySQL Finance spec passes **8/8**; supporting Credit + Finance focused tests pass **26/26**.
+  Full backend Jest passes **409 suites / 2,493 tests**. Backend/frontend `tsc --noEmit`, Finance
+  service/spec ESLint, frontend touched-file ESLint, and `git diff --check` pass. CreditService's
+  whole-file ESLint still reports pre-existing Prettier-only findings in untouched methods; the
+  same findings were confirmed at HEAD, and the new aggregate method/test add none.
+- Isolated Finance Playwright passes **2/2** including setup; it verifies real QA-business expense
+  and credit rows, calendar comparison, AI-unconfigured disclosure, and canonical page handoffs.
+  The screenshot was inspected; no console/API 5xx errors or provider calls. No migration, commit
+  or push. Bank-feed reconciliation, finance-owned A/R/AP, budgets and period close remain
+  unavailable and disclosed. Five-agent work remains incomplete.
+
+## Five Specialized AI Agents — Customer 360 profile summary (2026-10-23)
+
+- The live customer profile now includes a deterministic Customer 360 narrative assembled from
+  the same tenant-scoped and permission-filtered CRM source reads: profile/visit metadata, completed
+  non-quotation order windows, booking and message statuses, permitted support metadata, loyalty
+  and membership state, and customer-linked private-feedback aggregates. It includes source dates,
+  window limits, and the existing human-review cue; it is not a churn prediction or causal claim.
+- Private feedback is owner/manager-only and available only when Reviews is enabled. The service
+  returns counts, status, average stars and last-recorded time only; message/review text is excluded.
+  Public `ExternalReview` records are not linked to customers in the schema, so they are explicitly
+  not attributed. Staff receive a restricted state. The result remains no-store and is not persisted;
+  no customer-level information is sent to an AI model.
+- Real-MySQL profile spec passes **9/9**. Backend/frontend `tsc --noEmit`, touched-file ESLint,
+  fabrication grep and `git diff --check` pass. Full backend Jest passes **409 suites / 2,493 tests**.
+  Isolated Playwright passes **2/2** including setup; the summary card screenshot was inspected and
+  browser console/API 5xx checks passed. No migration, external provider call, commit or push.
+- Still partial: private note/conversation content is not summarized; public reviews cannot be tied
+  to a person; the follow-up confidence is uncalibrated. Customer sends remain with canonical
+  consent/channel services. The five-agent specification is not complete.
+
+## Five Specialized AI Agents — Customer win-back draft eligibility (2026-10-23)
+
+- Added a review-only win-back draft purpose to the existing Customer Agent draft flow. It is
+  available only for an active customer with marketing consent, no opt-out, Unified Inbox enabled,
+  and at least the canonical CRM `LAPSED_DAYS` threshold (60 days) since last visit, or since
+  creation when no visit is recorded. Recent activity returns a typed refusal before any AI call
+  or draft write.
+- The AI receives only the selected purpose instruction; customer identity/contact, order, note
+  and conversation data are not sent. A saved result remains an editable `MessageDraft`; this does
+  not create a Marketing campaign, queue a message, or deliver anything. UI copy labels the
+  threshold and keeps sending with canonical Marketing/Unified Inbox flows.
+- Real-MySQL Customer Agent action/profile specs pass **17/17**; full backend Jest passes **409
+  suites / 2,494 tests**. Backend/frontend `tsc --noEmit`, touched backend/frontend ESLint and the
+  isolated Customer Agent Playwright scenario pass (**2/2**, including setup). `git diff --check`
+  passes. No migration, external AI/provider call, commit or push. The broader five-agent
+  specification remains incomplete.
+
+## Five Specialized AI Agents — Customer List follow-up queue view (2026-10-23)
+
+- Surfaced actual open CRM follow-up tasks on the existing Customer List by reusing the canonical
+  Action Center query and completion endpoint. The server continues to enforce staff assignment;
+  managers see business tasks. Rows link to the canonical customer profile and completion goes
+  through the existing audited CRM task action. No new task table or ranking model was added.
+- The UI states that the order is the saved task priority, due date and age—not an AI score—and
+  that an open task is not evidence a customer was contacted. The full queue remains available in
+  Action Center; the Customer List only previews the first five returned tasks.
+- Frontend `tsc --noEmit` and touched-file ESLint pass. Isolated Playwright passes **2/2** including
+  setup, and verifies a real created task appears with its canonical profile link and completion
+  control; it then completes through the existing Staff Tasks flow. The screenshot was inspected.
+  Full backend Jest at this checkpoint passes **409 suites / 2,494 tests**; no backend source or
+  migration changed for this view. `git diff --check` and fabrication grep pass. No provider call,
+  commit or push. This is a queue view, not an AI-priority score or complete Customer Agent.
+
+## Five Specialized AI Agents — aggregate win-back campaign brief (2026-10-24)
+
+- Customer Intelligence now saves a review-only, aggregate brief for customers with a recorded
+  visit at least 60 days ago, including active-profile, opt-out, marketing-consent and stored
+  destination counts. It uses the canonical CRM lapse threshold and tenant-scoped Customer rows;
+  selected-branch scope is explicitly unavailable because the existing segment preview is
+  business-scoped.
+- No customer IDs or contact values enter the saved recommendation/evidence. No Marketing
+  Campaign or Message is created, queued or sent. The page links to canonical Marketing and warns
+  that channel-specific consent, suppression, contact validity, frequency, quota and provider
+  delivery must be checked there. This brief does not rank customers or predict churn.
+- Real-MySQL Customer Intelligence spec passes **4/4**; backend/frontend `tsc --noEmit`, touched
+  backend/frontend ESLint, and `git diff --check` pass. Isolated Playwright passes **2/2** including
+  setup; screenshot inspected and console/API-error assertions pass with Customer Agent AI disabled
+  during QA. Full backend Jest passes **409/409 suites and 2,495/2,495 tests**. The first parallel
+  full run had transient DB timeouts; three reported suites passed isolated, then a full rerun was
+  clean. No migration, paid AI/provider call, commit or push. The five-agent specification remains
+  incomplete.
+
+## Five Specialized AI Agents — Customer Profile RFM source values (2026-10-24)
+
+- Added a transparent RFM source snapshot to the live Customer Profile review: recency is calendar
+  days since the latest completed non-quotation order, frequency is the all-time count of those
+  orders, and monetary is the permission-checked CRM `Customer.lifetimeSpend` in business currency.
+  It shows source values only; there are no configured customer-specific score bands, so no RFM
+  score is invented.
+- Orders-disabled businesses see R/F as unavailable. Staff without Profit view permission see M
+  as restricted. The UI and evidence disclose that order creation time is used and CRM lifetime
+  spend is neither recomputed from orders nor netted for refunds.
+- The real-MySQL Customer Profile spec passes **9/9**, including quotation/status filtering and
+  staff spend restriction. Backend/frontend `tsc --noEmit`, touched backend/frontend/E2E ESLint and
+  `git diff --check` pass. Isolated Playwright passes **2/2** including setup; the RFM card
+  screenshot was inspected. Full backend Jest passes **409/409 suites and 2,495/2,495 tests**. No
+  migration, provider call, commit or push. Five-agent work remains incomplete.
+
+## Five Specialized AI Agents — Inventory count-review quantity threshold (2026-10-24)
+
+- Added owner policy `inventory.agentCountVarianceMinimumUnits` in AI & Governance. `null` preserves
+  existing behavior; a configured integer filters repeated applied-count findings by the inclusive
+  sum of absolute adjustment units. The saved run input and evidence record the policy value.
+- The review states that this is a quantity filter only. It does not claim financial materiality or
+  infer discrepancy cause. The setting is editable and auditable through the shared `policyRow()`
+  flow; no schema migration was needed.
+- The real-MySQL Inventory Agent spec passes **9/9**, including no-minimum behavior, suppression
+  above the threshold and inclusion at the exact threshold. Backend/frontend `tsc --noEmit` pass.
+  Full backend Jest passes **409/409 suites and 2,496/2,496 tests**. The touched Inventory files,
+  policy constants and E2E spec pass ESLint; the existing Intelligence category file has unrelated
+  Prettier baseline errors, with none in the added lines. Browser QA passes **1/1** for the
+  specialist flow, including saving `2 units`, clearing back to `No minimum`, and checking the
+  inventory view; console/API error assertions pass and the Settings screenshot was inspected.
+  No migration, provider call, commit or push. Five-agent work remains incomplete.
+
+## Five Specialized AI Agents — saved Commerce listing-reconciliation review (2026-10-24)
+
+- Commerce Agent now summarizes up to 20 latest saved reconciliation runs and groups all open
+  discrepancy records. It does not start provider syncs, expose listing-level snapshots or send
+  reconciliation details to the AI explanation. The UI links to canonical Reconciliation and
+  says that no saved check does not prove store health. Existing provider checks only cover SKU
+  presence and stock quantity.
+- Real-MySQL Commerce Agent spec **5/5**; backend/frontend `tsc --noEmit`, touched ESLint,
+  fabrication grep and `git diff --check` pass. Isolated Playwright **1/1** verifies the honest
+  empty state, canonical link, console and API 5xx checks; screenshot inspected. Full backend Jest:
+  **409 suites / 2,497 tests passed**. No migration, provider call, commit or push. Five-agent work
+  remains incomplete.
+
+## Five Specialized AI Agents — Commerce Experiment Lab outcome evidence (2026-10-24)
+
+- Commerce Agent now summarizes up to 20 latest running or decision-stage experiments, reusing the
+  canonical Experiment Lab result calculator for running tests and frozen results for stopped or
+  decided tests. It surfaces primary metric values, observed change, the canonical sample minimum
+  and any saved margin guardrail; it does not provide a winner, significance or causal conclusion.
+  Hypotheses, product names and descriptions are omitted, and experiment details are not sent to AI.
+- The read-only UI links to Experiment Lab and explicitly discloses that Noxtill does not split
+  visitors or track conversion in this flow. It does not adopt/revert experiments or change products.
+- Real-MySQL Commerce Agent spec **5/5**; backend/frontend `tsc --noEmit`, touched ESLint,
+  fabrication grep and `git diff --check` pass. Isolated Playwright **1/1** verifies the honest
+  empty state, route link, console and API 5xx checks, with screenshot inspection. Full backend
+  Jest: **409 suites / 2,497 tests passed**. No migration, provider call, commit or push. Five-agent
+  work remains incomplete.
+
+## Five Specialized AI Agents — supplier-claim evidence review (2026-10-24)
+
+- The Commerce Agent now reports all canonical supplier-claim counts by stored status and itemizes
+  up to 20 most recently updated claims. Loss and settlement totals use exact decimal sums of
+  operator-entered canonical records; evidence and communication counts are included. It omits
+  supplier identifiers/names, references, reasons, descriptions, files and communication notes.
+- Settlement amounts are explicitly described as recorded, not independently verified; credits
+  and replacements do not prove cash receipt or delivery. The read-only view links to Supplier
+  Claims and never submits, acknowledges, settles, closes or contacts a supplier. The AI summary
+  provider still receives only existing aggregate Commerce queue counts, not claim details.
+- Real-MySQL Commerce Agent spec **5/5**; backend/frontend `tsc --noEmit`, touched backend and
+  frontend/E2E ESLint, fabrication grep and `git diff --check` pass. Isolated Playwright passes
+  **2/2** including setup, claim creation, persisted summary, console/API checks and inspected
+  screenshot. A full backend Jest attempt returned **406/409 suites and 2,490/2,497 tests**;
+  three unrelated DB-heavy suites timed out under parallel load. Those same three suites pass
+  isolated sequentially (**3/3 suites, 12/12 tests**). No migration, provider call, commit or push.
+  The five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — Commerce delivery follow-up evidence (2026-10-24)
+
+- Commerce Agent now reuses `DeliveryInsightsService`'s canonical exception rule: a failed
+  `Delivery` is considered resolved only when its latest same-business `Return` is approved. It
+  reports the real failed-delivery count and at most 20 recent resolution states/timestamps.
+- Customer details, addresses, free-text failure reasons, order/return amounts, causes and external
+  carrier results are omitted or explicitly not inferred. The read-only panel links to Delivery
+  Exceptions; it does not create a return, issue a refund, dispatch a rider or contact a customer.
+- Real-MySQL Commerce Agent spec **5/5**, including open vs. approved-return resolution,
+  cross-tenant exclusion and private-field omission. Backend/frontend `tsc --noEmit`, touched-file
+  ESLint, Playwright **2/2**, screenshot inspection, fabrication grep and `git diff --check` pass.
+  Full backend Jest **409/409 suites and 2,497/2,497 tests passed**. No migration, provider call,
+  commit or push. The five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — Commerce fulfillment queue review (2026-10-24)
+
+- Commerce Agent now reuses the canonical Fulfillment Router queue for current open online/delivery
+  orders with physical product lines. It counts open orders and shows the 20 newest with only order
+  type/status, physical line count, and whether an operator route exists, a candidate is available,
+  or no candidate was produced. The candidate calculation itself remains the Router's canonical
+  deterministic policy.
+- The destination is absent in this queue review, so market eligibility remains unknown. External
+  inventory/capacity and carrier confirmation are not inferred. No route is assigned, stock is not
+  reserved, and PII/order identifiers/prices are omitted; the panel links to Fulfillment Router.
+- Real-MySQL Commerce Agent spec **5/5** includes an eligible real order plus a second-tenant order
+  and proves the latter is excluded. Backend/frontend `tsc --noEmit`, frontend touched-file ESLint,
+  Playwright **2/2**, screenshot inspection, fabrication grep and `git diff --check` pass. Backend
+  touched-file ESLint and full backend Jest remain to be rerun after this addition. No migration,
+  provider call, commit or push.
+  The five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — run-linked AI usage attribution (2026-10-24)
+
+- Optional AI summaries generated for a specialist-agent run now link their `AiCallLog` to that
+  exact run. The five specialist services pass the run ID through `AiInfraService`; the shared
+  usage panel reports real logged call count, tokens, and estimated logged cost for the latest run.
+  This is usage-log attribution, not a provider invoice or a billing ledger.
+- The run ID is validated against the active business before an AI request. Deleting a run keeps
+  its cost/token log and clears the optional relation. A real-MySQL spec covers attribution,
+  cross-business/missing-run rejection, provider-not-called on invalid IDs, and `SET NULL` delete.
+- Hand-written migration `20261024200000_specialist_agent_ai_usage` was applied locally; Prisma
+  generation and migration status confirmed 212 migrations with the database up to date.
+  Backend/frontend `tsc --noEmit`, touched-file ESLint, six focused MySQL suites (46 tests), and
+  `git diff --check` pass. Full backend Jest: 406/409 suites and 2,452/2,516 tests passed; the
+  remaining three suites are Assistant/Help retrieval fixture failures and Voice's repeated fixed
+  phone-number uniqueness collision. Browser QA loaded the SEO Agent Workspace empty state via
+  accessibility inspection; no screenshot, console/network audit, or paid provider call was made.
+  No commit or push. The five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — monthly cap usage visibility (2026-10-24)
+
+- AI & Governance now shows the real count of specialist AI requests counted for each agent in the
+  current UTC month beside its configured cap. It reads the same reservation records used by the
+  enforcement path, including failed and still-reserved attempts, and scopes every count to the
+  selected business and agent.
+- Settings Hub real-MySQL spec passes **1 suite / 20 tests**, proving current-month inclusion,
+  prior-month exclusion, agent separation and tenant isolation. Backend/frontend `tsc --noEmit` and
+  `git diff --check` pass. The Intelligence category ESLint passes with the file's existing
+  Prettier rule disabled; the older Settings Hub spec reports eight existing unsafe-any lint
+  findings outside the new test. Full backend Jest: **406/409 suites and 2,454/2,518 tests passed**;
+  the same Assistant/Help retrieval fixture failures and Voice fixed-phone-number uniqueness
+  collision remain. After rebuilding and restarting the stale compiled API, a fresh QA Test Business
+  browser page showed `0 counted this month` for all five agents; no console/network audit or AI
+  provider request was made. No migration, commit or push. The five-agent specification remains
+  incomplete.
+
+## Five Specialized AI Agents — per-agent monthly AI request limits (2026-10-24)
+
+- AI & Governance now has nullable monthly request caps for each of Inventory, Finance, Customer,
+  SEO and Commerce agents. `null` preserves the existing uncapped behavior. These are request-count
+  limits, not dollar budgets; the existing business-wide estimated-cost cap remains separate.
+- Every specialist `createMessage` call must match a persisted run and its agent kind. Before the
+  model is called, a transaction locks that business, checks the agent's UTC-month request count,
+  and creates a reservation. This prevents concurrent requests from racing past the limit. Failed
+  provider attempts and abandoned reservations conservatively count; deterministic reviews still
+  work after the optional AI limit is reached.
+- Hand-written migration `20261024205200_specialist_agent_monthly_requests` is applied locally;
+  both business and run foreign keys were verified (`CASCADE` and `SET NULL` respectively), and
+  Prisma reports 213 migrations up-to-date. Focused MySQL tests pass **2 suites / 18 tests**,
+  including simultaneous requests, failed-provider counting, separate per-agent limits, and
+  uncapped defaults. Backend/frontend `tsc --noEmit`, touched ESLint (the Intelligence category
+  file was checked with its pre-existing Prettier rule disabled), and `git diff --check` pass.
+- Browser QA in the isolated QA Test Business loaded AI & Governance, saved a temporary Inventory
+  limit of 1, confirmed it, then cleared it back to **No limit**. No AI provider request was made.
+  Full backend Jest: **406/409 suites and 2,453/2,517 tests passed**; remaining failures are the
+  existing Assistant/Help retrieval fixture failures and Voice's fixed-number uniqueness collision.
+  No commit or push. The five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — per-agent monthly AI spend budgets (2026-10-24)
+
+- AI & Governance now has optional monthly USD budgets for Inventory, Finance, Customer, SEO and
+  Commerce specialist explanations. Each nullable policy defaults to no cap, and each row shows
+  real logged token-based estimated spend plus any pending/failed reservation for the current UTC
+  month. The existing business-wide cost cap remains in force as a separate ceiling.
+- Before a provider request, the service estimates a conservative maximum for serialized text,
+  request framing and the full allowed output-token count. It reserves that amount in the existing
+  request ledger under the business row lock, so concurrent requests cannot pass the same remaining
+  balance. Successful calls are counted from exact returned token counts at the default Haiku
+  list-price estimate; failed/abandoned calls retain their maximum reservation for that month.
+  Non-default models and non-text specialist inputs are rejected rather than priced inaccurately.
+  Deterministic specialist reviews still work when an optional AI budget is reached. These amounts
+  are estimates, not provider invoices.
+- Hand-written migration `20261024213000_specialist_agent_monthly_spend_budgets` adds a reservation
+  amount column (default zero for old rows) to the existing specialist request table; the caps
+  themselves are nullable policies defaulting to no limit. It is applied locally and Prisma reports
+  the schema up-to-date at 214 migrations. No new table or tenant registration was needed.
+- Focused real-MySQL AI/Settings tests pass **2 suites / 36 tests**, covering budget refusal before
+  provider call, exact completed-token estimate, conservative failed-call reservation, displayed
+  spend, current-month scope and tenant isolation. Backend/frontend `tsc --noEmit` pass. Functional
+  ESLint passes with the category's legacy Prettier formatting disabled and the Settings Hub spec's
+  eight pre-existing unsafe-any findings suppressed; the new lines introduce no lint findings.
+  Browser inspection of `/settings/ai` in the QA Test Business showed all five budget rows and the
+  honest estimate/reservation disclosure. No setting was changed and no paid AI call was made.
+- Full backend Jest: **406/409 suites, 2,456/2,520 tests passed**. The same unrelated Assistant/Help
+  retrieval fixture misses and Voice suite fixed-phone-number uniqueness collision account for the
+  failures. No commit or push; the five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — idempotent manual reviews (2026-10-24)
+
+- Manual runs for all five specialists now accept an optional `Idempotency-Key`. Only its SHA-256
+  hash is stored; uniqueness is scoped by business and agent, and replay is bound to the same user
+  and canonicalized request scope. Exact retries return the existing run; conflicting reuse and
+  retries of failed runs return typed conflicts. Calls without a key retain legacy behavior.
+- The frontend reuses a pending key across network/5xx retries for the same agent, user/business,
+  branch and input, clearing it after a definitive response. It stores no raw key server-side.
+- Applied hand-written migration `20261024224200_specialist_agent_run_idempotency`; Prisma
+  generation and migration status succeeded (215 migrations up to date). Focused real-MySQL tests:
+  **2 suites / 15 tests passed**. Backend/frontend TypeScript, touched-file ESLint and diff check
+  pass. Full backend Jest: **407/410 suites, 2,461/2,525 tests passed**; three unrelated suites
+  fail in Assistant/Help retrieval fixtures and VoiceCallService's repeated phone-number unique
+  constraint setup. No browser/provider QA, commit or push. The five-agent scope remains
+  incomplete; shared actions/approvals, scheduled/event orchestration and remaining agent-specific
+  capabilities are outstanding.
+
+## Five Specialized AI Agents — opt-in daily scheduled reviews (2026-10-25)
+
+- Added five owner-controlled daily-review policies, all disabled by default, and surfaced them in
+  Settings → AI & Governance. The hourly UTC scheduler invokes the existing Inventory, Finance,
+  Customer, SEO and Commerce review services; it does not add parallel data stores or workflows.
+- Each scheduled review runs in the business tenant context, is tagged `scheduled`, has no
+  fabricated user actor, suppresses optional AI summaries/provider spend, and is deduplicated by
+  agent/business/UTC day using the existing idempotency field. Commerce additionally requires
+  Commerce autonomy to be enabled. No migration was needed.
+- Real-MySQL scheduling spec: **1 suite / 1 test passed**. Backend and frontend `tsc --noEmit`,
+  touched-file ESLint and focused checks passed. Full backend Jest: **408/411 suites and
+  2,462/2,526 tests passed**; the three known failing suites are Assistant/Help retrieval fixtures
+  and VoiceCallService's repeated fixed-phone-number setup. Browser QA was unavailable because
+  port 5000 is occupied by macOS ControlCenter, so the backend could not be safely started there.
+- No commit or push. The five-agent work is still incomplete: this adds opt-in daily reviews only;
+  broader event-driven orchestration, additional agent capabilities and browser/provider QA remain.
+
+## Five Specialized AI Agents — opt-in SEO audit event review (2026-10-25)
+
+- Successful or partial SEO site audits can now enqueue a durable, owner-opt-in SEO specialist
+  review. The policy defaults off. The worker rechecks the business policy, agent enablement,
+  tenant ownership and audit status; failed audits and duplicate deliveries do not create extra
+  reviews. It uses the existing specialist run/idempotency path, performs no provider AI call, and
+  does not publish or mutate business data. No migration was needed.
+- Focused real-MySQL and service coverage passed **3 suites / 18 tests**. Backend and frontend
+  `tsc --noEmit` and touched-file ESLint passed. Full backend Jest: **409/412 suites and
+  2,467/2,531 tests passed**. The 3 failing suites are the existing Assistant/Help retrieval
+  fixtures and VoiceCallService fixed-number uniqueness setup; the added idempotency race test
+  passes after asserting the database invariant rather than assuming Promise arrival order.
+- Browser QA was not run because the backend's required port 5000 is occupied by macOS
+  ControlCenter; it was not terminated. No migration, commit or push. General event orchestration,
+  cross-agent handoffs, the remaining specialist capabilities, and browser/provider QA remain open.
+  The module is not complete or production-ready.
+
+## Five Specialized AI Agents — opt-in Inventory low-stock event review (2026-10-25)
+
+- The existing canonical low-stock `ActivityEvent` can now queue one read-only Inventory review
+  when the new owner policy is enabled (off by default). It uses a separate durable queue, then
+  rechecks the business policy, Inventory-agent enablement, event type and tenant before running.
+  Duplicate delivery is idempotent; the review has no user actor and does not request AI. No
+  migration was needed.
+- Focused MySQL event tests passed **2 suites / 4 tests** (Inventory and SEO processors). Backend
+  `tsc --noEmit` and touched-file ESLint passed; frontend was unchanged and its type-check passed
+  during the preceding event-trigger slice. Full backend Jest: **410/413 suites and 2,469/2,533
+  tests passed**. The same three unrelated Assistant/Help retrieval and Voice fixed-number fixture
+  suites failed. No browser QA, commit or push. General event orchestration and other specialist
+  capabilities remain unfinished.
+
+## Five Specialized AI Agents — opt-in Customer lapsed-event review (2026-10-25)
+
+- The CRM's existing `customer_lapsed` event can now trigger an aggregate Customer Intelligence
+  review when an owner enables the new policy (off by default). Multiple newly-lapsed events are
+  coalesced to one review per business per UTC day. The worker rechecks tenant, event type, agent
+  and policy, and confirms the referenced customer is still marked Lapsed. It uses canonical
+  Analytics aggregates, stores the event reference, makes no AI call, and sends no message.
+- Focused Customer event + CRM tests passed **2 suites / 5 tests**. Backend `tsc --noEmit` and
+  touched-file ESLint passed; frontend code was unchanged and its type-check passed in this work
+  sequence. Full backend Jest: **411/414 suites and 2,471/2,535 tests passed**. The same three
+  unrelated Assistant/Help retrieval and Voice fixed-number fixture suites failed. No migration,
+  browser QA, commit or push. The broader five-agent spec remains unfinished.
+
+## Five Specialized AI Agents — opt-in Commerce validation event review (2026-10-25)
+
+- Product Validation decisions and canonical catalog-draft creation now queue a Commerce review
+  only when the owner enables the new policy. The producer looks up the exact persisted
+  `commerce_validation` ActivityEvent; queue failures are logged and do not undo the saved
+  validation action. The worker rechecks the event, entity ownership, Commerce agent toggle, event
+  policy and nonzero Commerce autonomy, and deduplicates by event ID.
+- Reviews use the existing Commerce specialist run, record the source event reference, have no
+  user actor, suppress optional AI explanations, and do not publish listings or change catalog,
+  inventory, orders or customer records. No new model or migration was needed.
+- Focused real-MySQL/product-validation tests passed **4 suites / 20 tests**. Backend and frontend
+  TypeScript passed; touched backend ESLint passed with the existing Prettier rule disabled for
+  shared legacy formatting. Full backend Jest: **412/415 suites and 2,475/2,539 tests passed**;
+  the three recurring failures remain Assistant/Help retrieval fixtures and Voice's fixed phone
+  number fixture collision. No browser/provider QA, migration, commit or push. The five-agent
+  specification remains incomplete.
+
+## Five Specialized AI Agents — opt-in Finance expense event review (2026-10-25)
+
+- Saving a new canonical Expense can now queue a Finance review when the owner enables its new
+  policy (off by default). The worker rechecks business ownership, Finance-agent enablement and the
+  policy, derives the month from the saved expense date, and deduplicates by expense ID. Queue
+  failures do not undo a saved expense.
+- The review uses the existing Financial Intelligence service and `ProfitService.pnl`, stores the
+  expense event reference, has no user actor, and suppresses optional AI explanations. It does not
+  modify the expense or post/reconcile any accounting entry. No new model or migration was needed.
+- Focused expense/Finance/Commerce tests passed **7 suites / 36 tests**. Backend and frontend
+  TypeScript and touched backend ESLint passed. Full backend Jest: **413/416 suites and
+  2,478/2,542 tests passed**; the three recurring failures are Assistant/Help retrieval fixtures
+  and Voice's fixed phone-number uniqueness setup. No browser/provider QA, migration, commit or
+  push. The five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — opt-in failed-delivery Commerce review (2026-10-25)
+
+- A failed canonical Delivery can now enqueue a read-only Commerce exception review when its
+  owner-controlled policy is enabled, Commerce is enabled, and Commerce autonomy is above zero.
+  The queue payload binds to the delivery's exact `updatedAt`; the worker rechecks tenant, status,
+  timestamp, policy, and autonomy before running. Same-event redelivery is idempotent through the
+  existing specialist-run key. No customer message, delivery update, AI request, or migration is
+  created by this path.
+- Added the toggle under Settings → AI & Governance and queue-producer/real-MySQL worker coverage.
+  Focused Deliveries and Commerce event tests pass **2 suites / 32 tests**. Backend and frontend
+  `tsc --noEmit` and touched-file ESLint pass. Full backend Jest: **413/416 suites and
+  2,482/2,546 tests passed**; the same Assistant/Help retrieval fixture failures and Voice fixed
+  phone-number uniqueness fixture failures remain. Browser/provider QA was not run. No commit or
+  push; the five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — opt-in Customer failed-delivery follow-up review (2026-10-25)
+
+- A newly failed canonical Delivery can now enqueue a privacy-minimized Customer Agent review when
+  the owner enables its separate policy (off by default). The queue job binds to the exact delivery
+  update timestamp; the worker rechecks business, customer-agent enablement, policy, delivery state,
+  linked customer and timestamp before running. Run creation is idempotent for that delivery state.
+- The saved review contains CRM status/consent flags and contact-presence booleans only; it excludes
+  contact values, address and free-text failure reason. It explicitly says marketing consent is not
+  channel-specific permission. The review is audited and read-only; no message is drafted or sent,
+  and no delivery/customer record is changed. No schema migration was needed.
+- Focused real-MySQL and delivery producer tests passed **3 suites / 35 tests**. Backend and frontend
+  `tsc --noEmit` and touched-file ESLint pass; scoped `git diff --check` is clean. The full-worktree
+  check reports an unrelated existing blank line at EOF in `backend/src/marketing/automations/workflows.constants.ts`.
+  Full backend Jest:
+  **413/416 suites, 2,485/2,549 tests passed**. The three failing suites are Voice's fixed-number
+  uniqueness fixture and the existing Assistant/Help retrieval fixtures. Browser/provider QA was
+  not run. No commit or push; the five-agent specification remains incomplete.
+
+## Five Specialized AI Agents — Commerce Agent draft-tool retry safety (2026-10-25)
+
+- Added idempotency for Commerce Agent's bounded canonical draft tools. A write requires a key;
+  MySQL stores only key/request hashes and reserves the business-scoped key before the canonical
+  draft write. Same-key/same-actor/tool/input retries return the original draft; conflicting reuse
+  is refused; a concurrent retry reports pending. Failed or stale outcomes require operator
+  inspection before a new key is used. Read-only tools remain keyless.
+- Added a read-only B2B quote preview using the canonical B2B tier/price-list and credit checks. The
+  returned quote states its business currency and that tax is excluded; a real-MySQL test confirms
+  it creates no Order.
+- API responses omit key hashes and canonical resource references. The UI retains a stable retry
+  key across transient network/5xx failures and identifies when the previous draft is returned.
+  Existing canonical guards, audit, autonomy checks and draft-only behavior remain; no listing is
+  published and no RFQ/claim is sent.
+- Hand-written migration `20261025103000_commerce_agent_tool_idempotency` is applied locally;
+  Prisma reports all 216 migrations current. Focused real-MySQL tool/claim tests pass **2 suites /
+  22 tests**. Backend/frontend `tsc --noEmit`, touched-file ESLint and scoped `git diff --check` pass.
+  Full backend Jest passed **413/416 suites, 2,490/2,554 tests**. The three failures are the
+  recurring Assistant/Help retrieval fixtures and Voice fixed-number uniqueness fixture; no Commerce
+  suite failed. Browser/provider QA was not run. No commit or push; the five-agent specification
+  remains incomplete and is not production accepted.
+
+## Five Specialized AI Agents — fail-closed Commerce approval gate (2026-10-25)
+
+- Commerce Agent tool metadata already marked medium/high-risk, financial and irreversible tools as
+  requiring approval, but the direct run gate did not enforce that metadata if a future tool was
+  switched to executable. The gate now refuses those risk classes until an approval workflow is
+  connected; existing non-executable tools keep their more specific refusal, and every attempted
+  write is still recorded as a refused tool run.
+- A real-MySQL test temporarily enables the high-risk listing publish tool and proves the registry
+  reports the approval block and the run is refused/audited without invoking a provider. No migration
+  was needed. Focused Commerce tool spec: **1 suite / 16 tests passed**; backend/frontend
+  `tsc --noEmit`, touched backend ESLint and scoped `git diff --check` pass.
+- Full backend Jest: **413/416 suites passed; 2,491/2,555 tests passed**. The three failing suites
+  remain the unrelated Assistant and Help retrieval fixtures and VoiceCallService's fixed-number
+  uniqueness fixture. No browser/provider QA, commit or push. The actual human approval/action
+  lifecycle is still not connected, so these tools remain unavailable to agents.
+
+## Five Specialized AI Agents — opt-in Commerce supplier-quote review (2026-10-25)
+
+- Recording a canonical supplier quote now queues a Commerce Agent review only when the owner
+  enables the new event-review setting, the Commerce agent is enabled, and Commerce autonomy is
+  above zero. Queue failure does not undo the quote. The worker verifies the quote still belongs
+  to the business, remains submitted/shortlisted, and belongs to an open RFQ; it deduplicates by
+  quote ID and records a read-only run with a source reference. It does not award the RFQ, create a
+  purchase order, contact the supplier, or call an AI provider.
+- Added an owner-controlled AI & Governance toggle with a default-off policy. No schema migration
+  was needed. Real-MySQL quote producer and event-worker specs pass **2 suites / 17 tests**.
+  Backend/frontend `tsc --noEmit` pass. ESLint passes with the repository's existing Prettier rule
+  disabled; the normal touched-file ESLint check still reports the large compact-format backlog in
+  `settings-hub/categories/intelligence.ts`. Scoped `git diff --check` is clean.
+- Full backend Jest: **413/416 suites passed; 2,494/2,558 tests passed**. The same three known
+  failures remain: Assistant and Help retrieval fixtures, and VoiceCallService's fixed-number
+  uniqueness setup. No browser/provider QA, commit, or push. This adds one opt-in source event; the
+  five-agent system remains incomplete and is not production accepted.
+
+## Five Specialized AI Agents — opt-in Customer appointment no-show review (2026-10-25)
+
+- Marking an appointment no-show can now enqueue a Customer Agent review only when both the
+  customer-agent switch and the separate owner-controlled no-show policy are enabled. The worker
+  rechecks the business, opt-in, current no-show status and exact update timestamp before calling
+  the CRM review service. Queue failures do not undo the canonical booking/deposit action.
+- The review stores appointment provenance, CRM consent/opt-out flags and contact-presence booleans
+  only. It does not store the customer's name/contact values or infer a no-show reason, make an AI
+  provider call, draft/send a message, or modify customer data. It is idempotent for the exact
+  appointment state and audited. No schema migration was needed.
+- Focused real-MySQL producer/worker/CRM specs pass **3 suites / 38 tests**. Backend and frontend
+  `tsc --noEmit` pass; touched-file ESLint passes with the existing Prettier rule disabled, and
+  scoped `git diff --check` is clean. Full backend Jest: **412/416 suites passed; 2,496/2,561
+  tests passed**. The three recurring Assistant/Help retrieval and Voice fixed-phone fixture suites
+  failed. SEO Workspace also failed once in the parallel full run, then passed alone (**1 suite /
+  2 tests**), consistent with shared-DB contention. No browser/provider QA, commit, or push. The
+  five-agent specification remains incomplete and is not production accepted.
+
+## Five Specialized AI Agents — supplier terms in Inventory reorder evidence (2026-10-25)
+
+- Inventory reorder findings now include current, active, terms-confirmed supplier contract context
+  for the real supplier already linked to the recommendation. The evidence exposes supplier-level
+  minimum order quantity, currency, categories and effective dates, while warning that the contract
+  is not mapped to a specific SKU/unit and does not change the reorder quantity formula. Unconfirmed
+  or out-of-date contracts are excluded. No supplier/product terms are fabricated.
+- Real-MySQL coverage proves an eligible contract is surfaced, an unconfirmed contract is omitted,
+  and the existing reorder quantity remains unchanged. Focused Inventory specs pass **2 suites / 14
+  tests**. The preceding no-show work passes **3 suites / 38 tests**. Backend and frontend
+  `tsc --noEmit`, touched backend ESLint (existing Prettier rule disabled) and scoped `git diff
+  --check` pass. No migration was needed.
+- Full backend Jest: **412/416 suites passed; 2,497/2,562 tests passed**. Assistant and Help
+  retrieval fixtures and VoiceCallService's fixed-number uniqueness fixture failed as in prior runs.
+  ReviewRemindersProcessor also timed out under full-suite contention; its isolated rerun passed
+  **1 suite / 3 tests**. Browser QA was not run because the frontend is not listening on port 3000
+  and port 5000 is owned by macOS ControlCenter. No commit or push; the five-agent specification
+  remains incomplete and is not production accepted.
+
+## Five Specialized AI Agents — observed supplier/product lead-time context (2026-10-25)
+
+- Inventory reorder findings now inspect the current business's fully received purchase orders for
+  the suggested product and its last recorded supplier. In a rolling 365-day window, they calculate
+  median, minimum and maximum elapsed days from PO `sentAt` to final `receivedAt`, with sample count
+  and an explicit cap of the latest 1,000 matching orders. This observation is persisted in the
+  existing recommendation evidence and shown in the Inventory Agent finding.
+- Historical timing is context only: it does not replace the existing 30-day reorder formula or
+  claim to be a supplier SLA/guaranteed delivery time. Without completed matching POs, the finding
+  says not tracked. The contract's MOQ still is not applied because category/unit-to-SKU mapping is
+  not verified. Digital Twin disclosures were updated to distinguish missing SLA fields from the
+  historical PO observation available in Inventory Intelligence. No migration or provider call was
+  needed.
+- Focused real-MySQL coverage for the five changed event/Inventory suites passes **5 suites / 52
+  tests**; after the final sample-cap wording adjustment, the Inventory DB and reorder specs pass
+  **2 suites / 14 tests**. Backend/frontend `tsc --noEmit`, touched-file ESLint and scoped
+  `git diff --check` pass. Full backend Jest, rerun after the final change: **413/416 suites and
+  2,498/2,562 tests passed**. The three recurring failures are Assistant retrieval, Help retrieval,
+  and VoiceCallService's fixed-phone uniqueness fixture. A prior run had Credit cleanup and SEO
+  Workspace failures under parallel load; both passed in isolation (**19/19** and **2/2**) and in
+  the latest full run. Browser QA remains unavailable (no listener on port 3000; macOS ControlCenter
+  owns 5000). No commit or push; the five-agent specification is incomplete and not production
+  accepted.
+
+## Five Specialized AI Agents — live-policy and cancellation admission safety (Codex, 2026-10-25)
+
+- Durable cross-agent review jobs now re-read each specialist's enabled policy immediately before
+  every review, including retries. If a toggle is disabled during a queued run, later child work is
+  recorded as skipped rather than started; canonical agent services still recheck their own gates.
+- Owner cancellation now competes atomically with child admission through a conditional parent-run
+  update. If cancellation wins, the next review is not started; if admission wins first, that
+  already-started read-only review may finish. Added a real-MySQL test for the admission guard.
+- Focused controller, orchestration MySQL and AI Settings tests pass **3 suites / 15 tests**.
+  Backend/frontend `tsc --noEmit` and touched-file ESLint pass. Full backend Jest: **416/419 suites
+  and 2,520/2,584 tests passed**; the recurring failing suites are Assistant retrieval, Help
+  retrieval and VoiceCallService's fixed phone-number uniqueness fixture. The authenticated browser
+  check still showed no console errors, but the 5-agent run completed before the stop button could
+  be exercised end-to-end. No provider calls, schema change, migration, commit or push. The broader
+  five-agent specification remains incomplete and is not production accepted.
+
+## Five Specialized AI Agents — business-module disable enforcement for background reviews (2026-10-25)
+
+- Specialist manual runs now check the canonical business-module selection as well as each agent's
+  own AI & Governance switch. Scheduled reviews, cross-agent orchestration, and Inventory, SEO,
+  Customer, Commerce and Finance event workers also skip reviews when the corresponding module is
+  disabled. Branches inherit the root business selection. If a business disappears between the
+  scheduler's page query and policy lookup, that tick fails closed for the stale row rather than
+  aborting the job.
+- Added real-MySQL coverage for all five agent-to-module mappings, branch inheritance, scheduler
+  skipping, orchestration skipping (including a module disabled mid-run), and the event worker
+  paths. Focused coverage passes **8 suites / 39 tests**. Backend/frontend `tsc --noEmit` pass;
+  touched backend ESLint passes with the repository Prettier rule disabled. The standard check
+  reports formatting-only Prettier differences in these compact legacy/new files. Full backend
+  Jest: **416/419 suites, 2,523/2,587 tests passed**; the three failing suites remain Assistant
+  retrieval, Help retrieval and VoiceCallService's fixed-phone-number uniqueness fixture. The
+  scheduler's transient full-suite DB deletion race was fixed and no longer fails. No browser or
+  provider QA, schema change, migration, commit or push. The specialist-agent specification
+  remains incomplete and is not production accepted.
+
+
+## Five Specialized AI Agents — opt-in fully received purchase-order review (2026-10-25)
+
+- A fully received Inventory purchase order can now enqueue a read-only Inventory Agent review when
+  both the Inventory Agent and a new owner-controlled event policy are enabled. Partial receipts do
+  not trigger it. The worker revalidates the business, module selection, agent/event switches, exact
+  purchase order and its final received state, then deduplicates through the existing event-run
+  helper. Queue failure does not undo the canonical receipt. It does not call an AI provider or
+  change the purchase order. No migration was needed.
+- Focused real-MySQL/service tests pass **2 suites / 16 tests**. Backend/frontend `tsc --noEmit`
+  pass; touched backend ESLint passes with the existing Prettier rule disabled; scoped
+  `git diff --check` is clean. The logged-in QA browser loaded AI & Governance and showed the new
+  default-off toggle, and the Inventory reorder page loaded with real data/empty states. This was
+  route/visual QA only; no receipt was created and no end-to-end event was exercised.
+- Full backend Jest: **416/419 suites and 2,527/2,591 tests passed**. The three recurring failing
+  suites are Assistant retrieval, Help retrieval and VoiceCallService's fixed-phone-number
+  uniqueness fixture. No commit or push. This adds one more opt-in event path; the five-agent
+  specification remains incomplete and is not production accepted.
+
+## Backend QA follow-up — isolate shared MySQL search fixtures (2026-10-25)
+
+- The VoiceCallService integration spec no longer uses a shared hard-coded phone number or Twilio
+  call SIDs. Its fixture now generates a unique E.164-compatible inbound number and per-test
+  34-character Twilio-shaped SIDs. Isolated result improved from setup-wide duplicate-key failures
+  to **59/60 tests passing**; the one remaining Voice failure is its newly inserted FAQ not
+  appearing in the MySQL full-text result.
+- Reproduced the same search symptom for a temporary HelpArticle row: the row existed but MySQL
+  `MATCH(title)` returned score 0 immediately after insert, while the existing seeded HelpArticle
+  `staff-commissions` matched normally. The temporary row was deleted after the probe. Assistant,
+  Help and Voice retrieval tests remain **1 + 3 + 1 failures**; this is an unresolved full-text
+  indexing/search behavior, not a green test result and not yet diagnosed to a production root cause.
+- After the fixture change, full backend Jest is **416/419 suites; 2,586/2,591 tests passed**.
+  Backend/frontend `tsc --noEmit` and ESLint on the touched Voice spec pass. No schema or migration
+  change, commit or push.
+
+## Five Specialized AI Agents — erasure-aware Customer Agent records (2026-10-25)
+
+- Customer erasure clears custom field values, marketing consent and Customer Agent follow-up tasks
+  and message drafts in the same transaction as anonymization. Draft cleanup is limited to the
+  `customer_agent:<customerId>:` namespace; unrelated voice drafts and canonical order/transaction
+  history remain. The audit entry records cleared field names and deletion counts, never the
+  customer's former PII.
+- Customer Agent task/manual-draft/AI-draft saves lock and re-check the same customer row, preventing
+  a concurrent agent write from recreating those records after erasure commits. AI generation uses
+  purpose-only provider input and re-checks before persistence.
+- Real-MySQL Customers and Customer Agent specs: **2 suites / 18 tests passed**. Backend/frontend
+  `tsc --noEmit` pass. Touched backend ESLint passes with existing Prettier-only findings disabled;
+  normal lint shows three formatting-only issues on pre-existing untouched lines. Full backend Jest:
+  **416/419 suites, 2,588/2,593 tests passed**; known Assistant retrieval, Help retrieval and Voice
+  FAQ retrieval failures remain. Browser QA was not performed for this backend-only change; local
+  API port 5000 remains occupied by macOS Control Center. No migration, commit or push.
+
+## Five Specialized AI Agents — erased profiles excluded from segments (2026-10-25)
+
+- Canonical legacy audiences, saved-segment member lists and counts, and unsaved rule previews now
+  exclude anonymized customer profiles. Customer Agent draft counts use the same exclusion and
+  report inactive non-erased profiles separately, so the displayed exclusion categories stay
+  disjoint without exposing erased profiles as segment matches.
+- Added a real-MySQL regression proving an erased profile is absent from the `all` and `vip`
+  audiences, a saved segment, its live count and an unsaved preview. The customer segment-draft DB
+  spec also verifies corrected exclusion counts. The Customer Agent's win-back summary now excludes
+  erased rows before counting lapsed candidates; a DB test proves six raw matches resolve to five
+  non-erased candidates. Focused Customer/segment/erasure coverage passes **5 suites / 55 tests**;
+  backend and frontend `tsc --noEmit` pass. Targeted backend ESLint passes with the existing
+  Prettier-only findings disabled; frontend ESLint passes. Standard backend lint still reports
+  three formatting-only differences on pre-existing untouched lines. Scoped `git diff --check` and
+  fabrication grep are clean.
+- Full backend Jest: **416/419 suites and 2,589/2,594 tests passed**. Five failures remain in three
+  existing retrieval suites: Assistant help retrieval (1), Help retrieval (3), and Voice FAQ
+  retrieval (1). Their inserted MySQL full-text fixtures still return no match. No schema migration,
+  browser QA, commit or push. This closes segment resurfacing for erased profiles, not the full
+  five-agent privacy/acceptance scope.
+
+## Five Specialized AI Agents — keep erased profiles out of CRM surfaces (2026-10-25)
+
+- Erased customer placeholders are excluded from the CRM directory, profile/export lookup,
+  updates/merge existence checks, bulk exports and duplicate suggestions. The scheduled lapsed
+  tagger skips them, so retained anonymized rows cannot be retagged or create a new lapsed-customer
+  activity/agent event. The workflow AI agent's profile/orders/run-value tools and the Assistant's
+  direct phone-lookup/top-customer/top-debtor tools also exclude erased profiles. Transaction and
+  financial history remains retained.
+- Added real-MySQL regressions across CRM, exports, duplicate suggestions, periodic tagger, workflow
+  AI tools and Assistant tools. Focused coverage passes **5 suites / 24 tests**. Backend/frontend
+  `tsc --noEmit` pass. Touched-file ESLint passes with the existing Prettier rule disabled; standard
+  lint reports only formatting-only findings in pre-existing compact legacy code, while the new
+  spec is formatted. Scoped `git diff --check` passes.
+- Full backend Jest: **417/420 suites, 2,592/2,597 tests passed**. Five known MySQL full-text fixture
+  failures remain: Assistant retrieval (1), Help retrieval (3), and Voice FAQ retrieval (1). No
+  browser/provider QA, schema change, migration, commit or push. This hardens customer erasure
+  visibility but does not complete the five-agent specification or production acceptance.
+
+## Five Specialized AI Agents — fresh knowledge retrieval and Memory Note erasure (2026-10-25)
+
+- Help Assistant and voice-agent knowledge retrieval now use a bounded, parameterized fallback
+  when MySQL FULLTEXT returns no rows for newly inserted content. Results are ranked from matching
+  real terms (title weighted above body/content), scoped to active voice sources and allowed IDs,
+  and capped before returning; no knowledge content is invented.
+- Customer erasure now deletes customer-linked Memory Notes in the same transaction and records
+  only the deletion count in the audit. Existing legacy notes tied to erased placeholders are hidden
+  from per-customer and Business Memory reads and cannot be edited or removed through the normal note
+  API. Real-MySQL erasure/Memory Notes coverage passes **2 suites / 16 tests**; VoiceCallService
+  passes **1 suite / 60 tests**.
+- Backend/frontend `tsc --noEmit` and touched-file ESLint (with existing Prettier-only findings
+  disabled) pass. Full backend Jest: **420/420 suites, 2,598/2,598 tests passed**. Scoped
+  `git diff --check` is clean. No migration, browser/provider QA, commit or push. Browser QA and
+  production provider acceptance remain outstanding; the five-agent specification is not complete.
+
+## Five Specialized AI Agents — reject post-erasure customer writes (2026-10-25)
+
+- POS order creation validates submitted customer IDs inside the order transaction and refuses
+  missing/erased rows before writing an order. New loyalty enrollment and memberships likewise
+  reject erased customer placeholders; historical financial/order records remain intact.
+- Real-MySQL POS, loyalty, and membership coverage passes **3 suites / 35 tests**. The Voice
+  Tracking numbers DB suite passes **1 suite / 2 tests** after call SID fixtures switched to UUIDs
+  to avoid collisions from short timestamp suffixes.
+- Backend/frontend `tsc --noEmit` and touched-file ESLint (existing Prettier-only findings disabled)
+  pass. Full backend Jest passes **420/420 suites, 2,601/2,601 tests**. No migration, browser/live
+  provider QA, commit, or push. This continues privacy hardening; the five-agent specification and
+  production acceptance remain incomplete.
+
+## Five Specialized AI Agents — consent-checked Customer Agent message drafts (2026-10-25)
+
+- Customer Agent message drafts can now be previewed and explicitly queued by a staff member
+  through the canonical messaging send gate. Queueing is idempotent per draft and reports the
+  persisted message status; it does not claim that a provider delivered the message. Channel-
+  specific consent is still not tracked, so the UI discloses that limitation.
+- Marketing consent and opt-out are checked at preview, re-checked under a customer-row lock when
+  queueing, then checked again immediately before provider delivery. A revoked/missing consent or
+  opted-out customer is suppressed, marked failed, and audited without calling the provider.
+- Real-MySQL Customer Agent and send-gate specs plus provider-worker tests pass **3 suites / 19
+  tests**. Backend/frontend `tsc --noEmit`, ESLint on touched files and `git diff --check` pass.
+  Full backend Jest passes **421/421 suites, 2,607/2,607 tests**. Browser and live-provider QA were
+  not performed; no migration, commit, or push. This adds a safe human-reviewed message path, not
+  autonomous Customer Agent delivery, and does not complete the five-agent specification.
+
+## Five Specialized AI Agents — channel-specific CRM consent records (2026-10-25)
+
+- Added append-only, versioned per-customer email/SMS/WhatsApp consent records with tenant
+  isolation, an internal evidence-reference ID (never evidence text/contact details), actor audit,
+  and revocation. Customer Agent marketing previews, queueing and the final provider worker check
+  require the current explicit channel grant in addition to CRM marketing consent and opt-out.
+- The customer profile now shows the real latest status and history and can record a grant or
+  revocation with an evidence ID. Export includes the history; erasure removes it; a duplicate
+  profile's latest revocation carries forward on merge, while grants are never copied. Existing
+  legacy marketing senders retain their current CRM-flag behavior; strict channel consent is
+  enforced on the Customer Agent path only.
+- Hand-written migration `20261025120000_customer_channel_consent` was applied locally and its two
+  foreign keys verified in `information_schema`; Prisma migration status is up to date. Focused
+  real-MySQL/provider-worker coverage passes **5 suites / 34 tests**. Backend and frontend
+  `tsc --noEmit`, touched-file ESLint, and the full backend Jest (**422/422 suites, 2,614/2,614
+  tests**) pass. Browser/live-provider QA was not performed: no Noxtill browser session is logged
+  in, and API port 5000 responds from macOS Control Center rather than the backend. No commit or
+  push. This closes channel-consent enforcement for Customer Agent sends, not the entire CRM
+  consent/communication scope or the five-agent specification.
+
+## Five Specialized AI Agents — default-deny marketing consent and universal send enforcement (2026-10-25)
+
+- New customer records now default to marketing consent off. The existing flag is no longer enough
+  to authorize marketing delivery: every marketing send requires the latest explicit grant for its
+  channel, both when it is queued and immediately before provider delivery. The worker also
+  suppresses legacy queued marketing messages if they lack a grant. Missing customer identity,
+  missing grant, revocation, and CRM opt-out all fail closed; suppression is audited and no provider
+  call is made.
+- Recording or revoking channel consent is append-only and audited. The broad CRM marketing flag is
+  recomputed from the latest states across email, SMS and WhatsApp: it stays on only while at least
+  one channel remains granted. A prior customer opt-out still blocks new grants. Existing customers'
+  stored consent values were not bulk-rewritten; only the database default changed.
+- The CRM list now filters explicit opt-outs from the separate general CRM consent flag, and the
+  profile badge distinguishes opt-out, no recorded consent, and a general flag that still requires
+  per-channel checks. The UI no longer equates missing consent with an opt-out.
+- Hand-written migration `20261025130000_marketing_consent_opt_in_default` was applied locally,
+  preserving existing rows and changing only the `customers.consent_marketing` default to false.
+  Together with `20261025120000_customer_channel_consent`, Prisma reports all 218 migrations up to
+  date; the live MySQL default was verified as `0` and Prisma Client was regenerated.
+- Focused real-MySQL and provider-worker coverage passes **5 suites / 36 tests**. Backend and
+  frontend `tsc --noEmit` passed; touched-file ESLint passed. The full backend Jest run passed
+  **422/422 suites, 2,616/2,616 tests** with one worker. The logged-in QA browser showed the
+  Customers page and Add Customer form disclosing that consent remains off until channel-specific
+  permission is recorded; the form was closed without creating test data. No console errors were
+  captured. The original logged-in tab closed before the later label correction; a fresh browser tab
+  redirected to Login, so the corrected list/profile labels were type-checked and linted but not
+  visually rechecked. The customer-profile grant/revoke flow and browser network panel were not
+  exercised, and no live message/provider call was made. No commit or push. This hardens marketing
+  consent across canonical messaging, but does not complete the five-agent specification or
+  production acceptance.
+
+## Five Specialized AI Agents — bounded Commerce tool inputs and quote output (2026-10-25)
+
+- Commerce Agent tool calls now pass raw request values to the service boundary, which rejects
+  undeclared fields, non-string values, oversized fields and oversized UTF-8 payloads before any
+  tool-run record or canonical write is created. The tool registry now declares the optional
+  destination country used by fulfillment-route calculation.
+- RFQ quote comparison now uses a tenant-scoped, bounded projection: at most 20 quotes and 100
+  lines per RFQ/quote, with total counts and truncation flags. Supplier phone/email, RFQ free text,
+  payment terms and quote notes are omitted from the tool result. `get_order` likewise returns at
+  most 100 deterministically ordered lines, with the total line count and a truncation disclosure.
+  `get_inventory` now filters against each product's canonical low-stock threshold in MySQL, reports
+  the exact qualifying count and bounds the returned product list to 500 with a truncation flag.
+  `get_product` respects the canonical cost-visibility policy, and B2B quote previews omit credit
+  balances, limits and the indirect credit-limit warning unless the actor has the owner-only Credit
+  Recovery Report capability; the preview still uses the canonical B2B quote calculation.
+- Real-MySQL Commerce Agent Tools spec passes **1 suite / 21 tests**; Commerce Agent Tools, Supplier
+  Claims and B2B focused specs pass **3 suites / 33 tests**. Backend/frontend `tsc --noEmit`,
+  touched-file ESLint and scoped `git diff --check` pass. Full backend Jest initially had one
+  Health Score snapshot timeout with two workers; that suite passed alone (**3/3 tests**) and the
+  full one-worker rerun passed **422/422 suites, 2,621/2,621 tests**. No migration, browser/provider
+  QA, commit or push. This hardens manual Commerce tool requests; approval-connected orchestration
+  and production acceptance remain incomplete.
+
+## Five Specialized AI Agents — avoid scanning businesses without enabled daily reviews (2026-10-25)
+
+- The specialist daily scheduler now selects only businesses whose JSON policy explicitly enables
+  at least one daily review. Reviews remain default-off; module selection, agent switches,
+  autonomy-level checks and per-agent idempotency remain enforced before a run starts.
+- The real-MySQL scheduler spec asserts the candidate count for its opted-in fixtures. Isolated
+  runtime decreased from **20.274 seconds to 1.935 seconds** on the current local database (946+
+  accumulated test businesses); the query uses Prisma's MySQL JSON path filter and no schema change.
+- Backend/frontend `tsc --noEmit`, touched-file ESLint and scoped `git diff --check` pass. Full
+  backend Jest passes **422/422 suites, 2,621/2,621 tests**. No migration, browser/provider QA,
+  commit or push. This optimizes daily-review scheduling only; broader agent event coverage,
+  approval-connected action execution and production acceptance remain incomplete.
+
+## Five Specialized AI Agents — completed-sale Customer Agent review (2026-10-25)
+
+- Added a default-off owner setting to queue an aggregate, read-only Customer Intelligence review
+  after a customer-linked POS sale completes. Reviews are coalesced to one per business per UTC
+  day and use the canonical Customer Analytics summary; they do not include customer contact data,
+  call the AI provider, or send messages.
+- `createSale` enqueues only after its transaction commits and only when the Customer Agent and new
+  event policy are enabled. The worker rechecks the business/module/policies, exact order ID,
+  business, completion status, non-quotation state, creation timestamp, linked non-erased customer
+  and same-day idempotency before starting a run. Queue failures are logged and cannot roll back a
+  completed sale.
+- Customer Analytics now excludes anonymized erased profiles from customer summaries, cohorts,
+  cohort drill-downs, KPI new-customer counts and new/returning aggregates. This prevents retained
+  financial history from making an erased identity visible as an active customer. A real-MySQL
+  regression checks the analytics surfaces before and after an erased placeholder/order is added.
+- Focused real-MySQL POS, Customer event and Analytics tests pass **3 suites / 33 tests**.
+  Backend/frontend `tsc --noEmit` pass. Touched backend ESLint passes with repository Prettier-only
+  findings disabled; scoped `git diff --check` passes. Full backend Jest passes **422/422 suites,
+  2,623/2,623 tests** with one worker. No migration, commit or push. Browser QA was not performed
+  because the available Chrome tabs were on an unrelated app; no live provider call was made. The
+  five-agent specification and production acceptance remain incomplete.
+
+## Five Specialized AI Agents — reject queued Customer reviews after erasure (2026-10-25)
+
+- Customer lapsed, failed-delivery and no-show jobs now recheck the linked profile at worker
+  execution time and refuse erased placeholders. The underlying delivery/no-show review methods
+  repeat the guard, so direct retries cannot recreate a review after erasure.
+- Real-MySQL worker and service regressions cover queued-event replay after the profile is erased.
+  Focused coverage passes **2 suites / 11 tests**; backend/frontend `tsc --noEmit`, touched backend
+  ESLint and scoped `git diff --check` pass. Full backend Jest passes **422/422 suites,
+  2,623/2,623 tests** with one worker. No migration, browser/provider QA, commit or push. This
+  closes the post-erasure queued-event replay path; it does not complete the five-agent spec or
+  establish production acceptance.
+
+## Five Specialized AI Agents — business-scoped Customer aggregate event references (2026-10-25)
+
+- Lapsed-customer and completed-sale reviews summarize the whole business for one UTC day. Their
+  persisted source references now identify that business/day aggregate instead of retaining the
+  first triggering ActivityEvent or Order ID, which could misleadingly associate the aggregate
+  review with one customer's event.
+- Real-MySQL tests verify same-day coalescing and that the triggering event/order identifiers are
+  absent from the stored trigger reference. Focused Customer event and intelligence specs pass
+  **2 suites / 11 tests**. Backend/frontend `tsc --noEmit` and ESLint on the two changed files pass.
+  Full backend Jest passes **422/422 suites, 2,623/2,623 tests** with one worker. No migration,
+  browser/provider QA, commit or push. This is a privacy-minimization correction, not completion or
+  production acceptance of the five-agent specification.
+
+## Five Specialized AI Agents — Commerce RFQ award approval (2026-10-25)
+
+The Commerce Agent can submit a version-bound RFQ quote-award request for a second authorized user
+to approve or reject with a reason. Approval rechecks current Commerce pause policy and calls the
+canonical RFQ award service; it creates a draft purchase order only, with no supplier contact or
+stock change. Requests are idempotent and decisions audited. Interrupted awards are reconciled from
+canonical RFQ state rather than blindly retried. Real-MySQL Commerce Agent and RFQ tests pass **2
+suites / 32 tests**. Backend/frontend `tsc --noEmit`, touched-file ESLint and full backend Jest pass
+(**422/422 suites, 2,625/2,625 tests**, one worker). The logged-in QA route loaded, but the
+approve/reject browser interaction and console/network checks were not exercised. No migration,
+commit or push; the five-agent spec remains incomplete and is not production accepted.
+
+## Five Specialized AI Agents — Action Center Commerce approval handoff (2026-10-25)
+
+Pending Commerce Agent RFQ quote awards now appear in the existing Dashboard Action Center, with a
+deep link to the exact run. A different user can approve/reject there using the canonical Commerce
+agent decision endpoint and a required reason; generic complete, dismiss and snooze are refused.
+The Action Center exposes only a brief action summary, not quote or customer data. Real-MySQL
+Action Center coverage passes **1 suite / 3 tests**. Backend/frontend `tsc --noEmit`, touched-file
+ESLint, scoped `git diff --check`, and full backend Jest pass (**422/422 suites, 2,626/2,626
+tests**, one worker). Browser QA confirms the Action Center loads in the QA business and has no
+console warning/error logs; there was no pending Commerce approval in that business, so no approval
+click was made and network requests were not independently inspected. No migration, commit or push.
+
+## Five Specialized AI Agents — Commerce Agent read-only question flow (2026-10-25)
+
+Agents & Tools now has a question flow that can select only six static, registered read-only
+Commerce tools. Each call is rechecked against the registry and autonomy policy, executed through
+the canonical tenant-scoped tool service, attributed as `commerce_agent`, bounded to three tool
+calls and a capped result payload, and audited. Provider-requested write or unknown tools are
+blocked. The question itself is not persisted in the specialist run; only its SHA-256 reference is
+stored. Both provider turns use the existing specialist rate, monthly request and cost guardrails;
+the cost estimator now accepts structured tool-use/result blocks and includes their serialized
+size in its conservative input bound. No migration was needed.
+
+Real-MySQL Commerce Agent plus AI-infrastructure focused specs pass **2 suites / 25 tests**. Backend
+and frontend `tsc --noEmit` pass. Touched frontend ESLint passes; backend ESLint passes with the
+repository's Prettier-only rule disabled (strict lint still reports the existing formatting
+finding at `ai-infra.service.ts:533`, outside this change). Full backend Jest passes **422/422
+suites, 2,629/2,629 tests** with one worker; the first run's Health Score timeout passed in
+isolation and the clean full rerun passed. The logged-in QA business loaded
+`/autonomous-commerce/agent-tools`; no live AI question was sent to avoid spending the client's
+metered balance, and browser console/network logs were not inspected. No commit or push. The
+five-agent spec and production acceptance remain incomplete.
+
+## Five Specialized AI Agents — Inventory transfer approval in Action Center (2026-10-25)
+
+Pending branch-transfer drafts created from Inventory Intelligence recommendations now appear in
+the shared Action Center as a distinct approval item. Approve/reject endpoints are capability-gated
+for stock-transfer management and delegate to the canonical `StockTransfersService`; generic
+dismiss/complete/snooze is refused. Approval validates the destination SKU match and only marks the
+transfer approved; it does not ship stock. Rejection requires and stores a reason. The Action Center
+query is explicitly scoped to the source business, hides the item if Inventory or Branches is
+disabled, and lists only recommendations from `inventory_intelligence`.
+
+Added and locally applied migration `20261025140000_inventory_agent_transfer_action_center` for
+the new action type. Real-MySQL coverage verifies visibility, tenant isolation, dismissal refusal,
+canonical approval, no stock movement on approval, and reasoned rejection. Focused Action Center,
+Procurement and Customer regression suites pass **7 suites / 58 tests**; backend/frontend
+`tsc --noEmit` and touched-file ESLint pass. Full backend Jest passes **423/423 suites,
+2,630/2,630 tests**. The live Action Center loaded in the QA business, the new type appears in its
+filter, and browser console warning/error logs were empty. That business had no pending Inventory
+Agent transfer, so the approval buttons and network trace were not browser-tested. No provider call,
+commit or push. This adds one canonical agent handoff; it does not complete or production-accept
+the five-agent specification.
+
+## Five Specialized AI Agents — Commerce experiment decision review (2026-10-26)
+
+Commerce can now optionally queue a read-only specialist review after a merchant records a final
+Experiment Lab decision. The new owner policy is default-off. The worker rechecks the active
+business, Commerce module, specialist switch, event toggle, autonomy level, final experiment state
+and exact experiment version before it starts; duplicate delivery is idempotent. The review stores
+the final decision as context but does not claim causality or edit products, listings or experiments.
+Queue failure does not roll back the merchant's decision. Settings links to the canonical Experiment
+Lab screen and describes the action as observational.
+
+Real-MySQL producer and worker coverage passes **2 suites / 13 tests**. Backend/frontend
+`tsc --noEmit`, touched backend ESLint (with existing Prettier-only findings disabled), and the full
+backend Jest run pass (**424/424 suites, 2,637/2,637 tests**, one worker). No schema migration or
+provider call was needed. Browser QA was not performed; no commit or push. This adds one opt-in
+Commerce event path and does not complete the five-agent specification or establish production
+acceptance.
+
+## Five Specialized AI Agents — Commerce reconciliation event review (2026-10-26)
+
+Completed provider reconciliation runs with actual discrepancies can now queue an optional,
+read-only Commerce review. The owner-controlled setting is default-off. The producer queues only
+after saving a completed check with discrepancies, and a queue outage does not undo the saved
+check. The worker revalidates the current business/module/agent/event policy, autonomy level, exact
+saved run timestamp and discrepancy state; it pins the run ID and saved provider/check counts in
+the event reference and deduplicates redelivery. It does not call the provider a second time or
+change listings.
+
+Focused real-MySQL reconciliation producer/worker coverage passes **3 suites / 18 tests**. Backend
+and frontend `tsc --noEmit` pass; touched backend ESLint passes with existing Prettier-only
+findings disabled. Full backend Jest is **423/424 suites and 2,639/2,640 tests**: one unrelated
+Voice number-fees test exceeded its 5-second timeout under the full-suite run and passes isolated
+(**1 suite / 2 tests**). No migration or provider call was needed. Browser QA was not performed; no
+commit or push. This adds one opt-in Commerce event path and does not complete the five-agent
+specification or establish production acceptance.
+
+
+## Five Specialized AI Agents — Commerce supplier-claim approval (2026-10-26)
+
+The Commerce Agent can now request submission of an existing supplier claim through a
+second-person approval. Approval rechecks the canonical claim version and evidence before calling
+the supplier-claims service; it only records the submitted state for follow-up and sends no
+supplier message. The decision is audited, duplicate/recovered runs reconcile against canonical
+claim state, and the UI links to the claim rather than implying that a supplier was contacted.
+
+Focused real-MySQL Commerce Agent coverage passes **1 suite / 25 tests**. Backend and frontend
+`tsc --noEmit`, touched-file ESLint, and `git diff --check` pass. The full backend Jest run passes
+**424/424 suites, 2,642/2,642 tests** with one worker. Browser QA could not get past login: the
+available local accounts did not authenticate as a business, so the approval interaction and
+browser console/network checks remain unverified. No migration or provider call; no commit or
+push. This closes one Commerce Agent approval path only; the five-agent system is not complete or
+production-accepted.
+
+
+## Five Specialized AI Agents — supplier-claim approval in Action Center (2026-10-26)
+
+Pending Commerce Agent supplier-claim submissions now appear in the existing Dashboard Action Center.
+The requester cannot decide their own request; generic dismiss, snooze and complete are refused.
+Approve/reject uses the existing canonical Commerce Agent decision endpoint with a required reason.
+The claim’s current version and evidence are rechecked there, and successful approval only marks it
+submitted for follow-up; it does not contact the supplier. The queue links to the exact agent run
+and uses claim-specific review copy.
+
+Real-MySQL Action Center coverage passes **1 suite / 4 tests**. Backend/frontend `tsc --noEmit`,
+touched-file ESLint and `git diff --check` pass. Full backend Jest finished **422/424 suites and
+2,641/2,643 tests passed**; the two failures were database-heavy timeouts in Health Score snapshot
+and Voice number-fees. Each passes alone: **1 suite / 3 tests** and **1 suite / 2 tests**. No
+migration or provider call. Browser QA remains blocked at login because the available local
+accounts did not authenticate as a business. No commit or push. This completes the shared queue
+handoff for this claim action only; it does not complete or production-accept the five-agent scope.
+
+## Five Specialized AI Agents — Commerce Agent read-only research and claim tools (2026-10-26)
+
+The Commerce Agent question flow now has three additional registered read-only tools: Product Radar
+opportunity details, Product Validation evidence coverage/recent decisions, and supplier-claim status.
+Radar reads selected canonical fields and labels stored research as unverified. Validation uses the
+existing scorecard service and returns at most five decisions without reasons. Claim totals use
+database aggregates and at most ten recent settlements; evidence contents, file links, free-text
+reasons, item descriptions, supplier contact details and communication notes stay out of model
+context. Claim totals remain operator-recorded and do not prove supplier acceptance, cash receipt or
+replacement delivery. No tool writes, publishes or contacts suppliers.
+
+Focused real-MySQL coverage passes **3 suites / 43 tests**. Backend/frontend `tsc --noEmit` pass;
+full backend Jest passes **424/424 suites, 2,646/2,646 tests**. Touched backend lint passes; the
+standard lint command reports only existing Prettier-format findings elsewhere in the already
+modified `product-validation.service.ts`, while its non-format lint passes. Frontend lint and scoped
+`git diff --check` pass. Browser QA was not performed because the available browser tab is a
+different local app. No migration, provider call, commit or push. This is one additional Commerce
+Agent read path, not completion or production acceptance of the five-agent scope.
+
+## Five Specialized AI Agents — Commerce risk and listing detail reads (2026-10-26)
+
+Added two tenant-scoped, read-only Commerce Agent question tools for existing Risk & Compliance
+cases and channel-listing sync records. Risk output includes the recorded rule, severity, status,
+signal count and exposure, but omits raw evidence, resolution, entity labels and entity IDs; its
+copy states that a risk case is not a confirmed loss or order hold. Listing output uses the saved
+local status/version/product fields and omits external provider IDs and provider error text. The
+question UI now names these available sources and states the sensitive fields excluded from AI.
+
+Focused real-MySQL Commerce coverage passes **2 suites / 37 tests**. Backend and frontend
+`tsc --noEmit`, touched backend/frontend ESLint and scoped `git diff --check` pass. Full backend
+Jest passes **424/424 suites, 2,647/2,647 tests**. No migration or provider call. Browser QA remains
+unverified because the open browser is a different local app. No commit or push. This adds two
+bounded reads only; it does not complete or production-accept the five-agent system.
+
+## Five Specialized AI Agents — Commerce Agent Experiment Lab questions (2026-10-26)
+
+Added a read-only `get_experiment_review` tool to the Commerce Agent. It delegates to the canonical
+Experiment Lab review for up to 20 running or decided experiments; drafts are excluded. The tool
+returns saved frozen results for decided experiments and the canonical live calculation for running
+ones. UI and tool descriptions disclose that before/after comparisons are observational, not causal
+or statistically significant. No experiment or product is modified.
+
+Focused real-MySQL Commerce Agent tests pass **2 suites / 39 tests**. Backend and frontend
+`tsc --noEmit`, touched-file ESLint, and scoped `git diff --check` pass. Full backend Jest passes
+**424/424 suites, 2,649/2,649 tests** with one worker; the Health Score suite also passes isolated
+**1 suite / 3 tests** after database contention caused its two tests to time out in the two-worker
+full run. Browser QA remains unavailable because Chrome's localhost:3000 is another application.
+No migration, provider call, commit or push. This adds one Commerce Agent read path and does not
+complete or production-accept the five-agent system.
+
+## Five Specialized AI Agents — structured Commerce risk evidence (2026-10-26)
+
+Commerce risk-case evidence now includes safe numeric facts already captured by the canonical
+detectors: detection window, threshold, return/order counts, affected product count and excess units
+where applicable. The read-only agent projection exposes only those structured numeric facts and
+continues to omit raw evidence text, resolution notes, labels and underlying record IDs. Older cases
+without stored snapshot fields return null where a value cannot be derived safely.
+
+Focused real-MySQL coverage passes **3 suites / 43 tests**. Backend/frontend `tsc --noEmit`, touched
+backend/frontend ESLint and scoped `git diff --check` pass. The full backend Jest run passes
+**424/424 suites, 2,649/2,649 tests** with one worker. The two-worker attempt hit database contention
+in Health Score snapshot tests; those pass alone (**1 suite / 3 tests**) and in the one-worker full
+run. Browser QA remains unavailable because Chrome's localhost:3000 is another application. No
+migration, provider call, commit or push. This improves the evidence available to the Commerce Agent
+but does not complete or production-accept the five-agent system.
+
+## Five Specialized AI Agents — Store Optimizer aggregate review tool (2026-10-26)
+
+Added a read-only Commerce Agent tool that reuses the canonical Store Optimizer rule scan and
+returns only current finding counts by rule and impact. It omits product names, customer data,
+return reasons and raw evidence. The result states that a rule finding is not proof of cause or
+financial impact, and that storefront sessions, impressions, conversion and drop-off are not
+tracked by this scan. The tool makes no status or live commerce changes.
+
+Focused real-MySQL Commerce Agent coverage passes **1 suite / 31 tests**. Backend/frontend
+`tsc --noEmit`, touched-file ESLint and scoped `git diff --check` pass. Full backend Jest passes
+**424/424 suites, 2,651/2,651 tests** with one worker. Browser QA in the QA business confirms that
+the page loads, the read-only tool is registered at Observe level, the run returns real current
+data and limitations, and its audit is successful. No JavaScript errors were captured. Notification
+requests returned errors while the backend was stopped for the full test run; they recovered after
+restart and auth refresh. No migration, provider call, commit or push. This adds one aggregate read
+path; it does not complete or production-accept the five-agent system.
+
+## Five Specialized AI Agents — Production & Assembly review tool (2026-10-26)
+
+Added the read-only `get_production_review` Commerce Agent tool, reusing `CommerceProductionService`
+and tenant-scoped database aggregates for BOM counts, work-order status counts/units, late open
+orders and completed output. It omits product names, demand-source text and costs; it explicitly
+does not diagnose lateness or infer capacity. The Agents & Tools disclosure and the AI tool schema
+describe this scope. No records are changed.
+
+The real-MySQL Commerce Agent spec passes **1 suite / 32 tests**. Backend and frontend
+`tsc --noEmit`, touched-file ESLint and scoped `git diff --check` pass. Full backend Jest passes
+**424/424 suites, 2,652/2,652 tests** with two workers. Browser QA in the isolated QA business
+confirmed the screen loads, the tool runs and is audited successfully, empty production data is
+reported accurately, all app API requests returned 200 after reload, and no console errors were
+captured. No migration, provider call, commit or push. This adds one production-data read path; it
+does not complete or production-accept the five-agent system.
+
+## Five Specialized AI Agents — Commerce Production review prioritization (2026-10-26)
+
+Added the canonical Production & Assembly aggregate to the saved Autonomous Commerce review and
+the existing Commerce Agents & Tools page. Review evidence reuses `CommerceProductionService`,
+records real BOM/work-order counts and units, and omits product names, demand-source text and costs.
+The deterministic queue now selects overdue planned/in-progress work orders after the existing
+risk, listing, validation, RFQ and experiment checks. Its wording labels lateness as a follow-up
+cue and does not claim a cause or capacity diagnosis. A real-MySQL test verifies that a late
+production order is selected when earlier queues have no work, that the due-date/status evidence
+is attached, and that test fixtures are removed.
+
+Focused real-MySQL Commerce Agent coverage passes **1 suite / 11 tests**. Backend and frontend
+`tsc --noEmit`, touched-file ESLint and scoped `git diff --check` pass. Full backend Jest passes
+**424/424 suites, 2,653/2,653 tests** with one worker; an earlier two-worker run had database-load
+timeouts in Health Score and Voice number-fee tests (the fee suite passes alone). Browser QA in
+the logged-in QA business confirmed the review runs and persists after reload, reports the actual
+empty Production state, and produced no console errors. Local frontend and API health endpoints
+returned HTTP 200; the browser's isolated page context did not expose Performance API entries, so
+per-request network status was not directly inspected. No migration, provider call, commit or push.
+This adds one bounded Commerce review path; it does not complete or production-accept the five
+specialist agents.

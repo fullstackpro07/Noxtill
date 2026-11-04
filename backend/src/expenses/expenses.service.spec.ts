@@ -1,4 +1,5 @@
 import { ClsService } from 'nestjs-cls';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
@@ -38,6 +39,7 @@ describe('ExpensesService (BE-035)', () => {
       tenantPrisma,
       prisma,
       s3 as unknown as S3Service,
+      { add: jest.fn().mockResolvedValue(null) } as never,
     );
 
     const business = await prisma.business.create({
@@ -75,6 +77,84 @@ describe('ExpensesService (BE-035)', () => {
     expect(januaryExpenses).toHaveLength(1);
     expect(januaryExpenses[0].category).toBe('Rent');
     expect(januaryExpenses[0].receiptUrl).toBeNull(); // no receipt attached
+  });
+
+  it('returns only exact-match candidate IDs for this tenant and month', async () => {
+    const stamp = Date.now();
+    const otherBusiness = await prisma.business.create({
+      data: {
+        name: 'Expenses Candidate Isolation',
+        slug: `expenses-candidate-isolation-${stamp}`,
+      },
+    });
+    const date = new Date('2026-04-12T00:00:00.000Z');
+    const exactRows = await Promise.all([
+      prisma.expense.create({
+        data: {
+          businessId,
+          description: ` QA Expense ${stamp} `,
+          category: ' Office ',
+          amount: new Prisma.Decimal('44.25'),
+          incurredOn: date,
+        },
+      }),
+      prisma.expense.create({
+        data: {
+          businessId,
+          description: `qa   expense ${stamp}`,
+          category: 'office',
+          amount: new Prisma.Decimal('44.25'),
+          incurredOn: date,
+        },
+      }),
+    ]);
+    const nonCandidateRows = await Promise.all([
+      prisma.expense.create({
+        data: {
+          businessId,
+          description: `QA Expense ${stamp}`,
+          category: 'Office',
+          amount: new Prisma.Decimal('44.26'),
+          incurredOn: date,
+        },
+      }),
+      prisma.expense.create({
+        data: {
+          businessId: otherBusiness.id,
+          description: `QA Expense ${stamp}`,
+          category: 'Office',
+          amount: new Prisma.Decimal('44.25'),
+          incurredOn: date,
+        },
+      }),
+      prisma.expense.create({
+        data: {
+          businessId,
+          description: `QA Expense ${stamp}`,
+          category: 'Office',
+          amount: new Prisma.Decimal('44.25'),
+          incurredOn: new Date('2026-05-12T00:00:00.000Z'),
+        },
+      }),
+    ]);
+
+    try {
+      const result = await expensesService.findPotentialDuplicateIds('2026-04');
+      expect(result.month).toBe('2026-04');
+      expect(result.groups).toEqual([
+        [...exactRows.map((row) => row.id).sort()],
+      ]);
+      expect(result.groups.flat()).not.toContain(nonCandidateRows[0].id);
+      expect(result.groups.flat()).not.toContain(nonCandidateRows[1].id);
+      expect(result.groups.flat()).not.toContain(nonCandidateRows[2].id);
+    } finally {
+      await prisma.expense.deleteMany({
+        where: {
+          id: { in: [...exactRows, ...nonCandidateRows].map((row) => row.id) },
+        },
+      });
+      await prisma.business.delete({ where: { id: otherBusiness.id } });
+    }
   });
 
   it('resolves a real signed receiptUrl when a receipt was attached (UPD-BE-107)', async () => {

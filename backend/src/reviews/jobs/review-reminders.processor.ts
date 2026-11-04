@@ -40,8 +40,14 @@ export class ReviewRemindersProcessor extends WorkerHost {
     return this.runReminders(now);
   }
 
-  async runReminders(now: Date = new Date()): Promise<void> {
+  async runReminders(
+    now: Date = new Date(),
+    businessIds?: readonly string[],
+  ): Promise<void> {
+    const requestedIds =
+      businessIds === undefined ? undefined : [...new Set(businessIds)];
     const businesses = await this.prisma.business.findMany({
+      where: requestedIds ? { id: { in: requestedIds } } : undefined,
       select: { id: true, timezone: true, reviewSettings: true },
     });
 

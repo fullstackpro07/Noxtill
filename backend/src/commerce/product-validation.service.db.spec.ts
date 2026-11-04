@@ -9,6 +9,8 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductValidationService } from './product-validation.service';
 import { ActivityService } from '../activity/activity.service';
+import { ActivityPubSubService } from '../activity/activity-pubsub.service';
+import { Queue } from 'bullmq';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -27,6 +29,7 @@ describe('ProductValidationService (MySQL)', () => {
   let service: ProductValidationService;
   let businessId: string;
   let opportunityId: string;
+  const specialistAgentEvents = { add: jest.fn().mockResolvedValue(null) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -36,9 +39,14 @@ describe('ProductValidationService (MySQL)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    service = new ProductValidationService(tenantPrisma, {
-      record: jest.fn().mockResolvedValue(undefined),
-    } as unknown as ActivityService);
+    service = new ProductValidationService(
+      tenantPrisma,
+      new ActivityService(
+        tenantPrisma,
+        { publish: jest.fn().mockResolvedValue(undefined) } as unknown as ActivityPubSubService,
+      ),
+      specialistAgentEvents as unknown as Queue,
+    );
 
     const business = await prisma.business.create({
       data: {
@@ -51,6 +59,7 @@ describe('ProductValidationService (MySQL)', () => {
   });
 
   beforeEach(async () => {
+    specialistAgentEvents.add.mockClear();
     const opportunity = await prisma.productOpportunity.create({
       data: {
         businessId,
@@ -67,6 +76,7 @@ describe('ProductValidationService (MySQL)', () => {
   });
 
   afterEach(async () => {
+    await prisma.activityEvent.deleteMany({ where: { businessId } });
     await prisma.productValidationRun.deleteMany({
       where: { businessId, opportunityId },
     });
@@ -117,6 +127,70 @@ describe('ProductValidationService (MySQL)', () => {
       }),
     ).toMatchObject({ actorUserId: 'operator_1' });
     expect(await service.history(businessId, opportunityId)).toHaveLength(1);
+  });
+
+  it('queues a Commerce review only for a persisted validation event and explicit opt-in', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.commerceEnabled': true,
+          'agents.commerceValidationEventReviewEnabled': true,
+          'commerce.autonomyLevel': 1,
+        },
+      },
+    });
+
+    await service.decide(businessId, 'operator_1', opportunityId, {
+      decision: ProductValidationDecision.approve_test,
+      reason: 'Verify the review event handoff',
+      expectedVersion: 1,
+    });
+
+    const activityEvent = await prisma.activityEvent.findFirstOrThrow({
+      where: {
+        businessId,
+        type: 'commerce_validation',
+        entityType: 'ProductValidationRun',
+      },
+    });
+    expect(specialistAgentEvents.add).toHaveBeenCalledWith(
+      'commerce-validation',
+      { businessId, activityEventId: activityEvent.id },
+      expect.objectContaining({
+        jobId: `commerce-validation-${businessId}-${activityEvent.id}`,
+      }),
+    );
+  });
+
+  it('groups recorded inputs by validation dimension without inventing scores', async () => {
+    const candidate = await service.getOne(businessId, opportunityId);
+
+    expect(candidate.evidenceReview.scorecard.status).toBe(
+      'evidence_only_not_scored',
+    );
+    expect(candidate.evidenceReview.scorecard.interpretation).toContain(
+      'calculates no dimension score',
+    );
+    expect(candidate.evidenceReview.scorecard.dimensions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'demand_and_competition',
+          status: 'partial_evidence',
+          recordedFields: ['demand_signal'],
+          missingFields: ['trend_velocity', 'competition_score'],
+        }),
+        expect.objectContaining({
+          key: 'economics',
+          status: 'partial_evidence',
+          recordedFields: ['observed_price', 'estimated_landed_cost'],
+          missingFields: ['margin_estimate', 'shipping_estimate'],
+        }),
+        expect.objectContaining({ key: 'supply', status: 'not_tracked' }),
+        expect.objectContaining({ key: 'compliance', status: 'not_tracked' }),
+        expect.objectContaining({ key: 'return_risk', status: 'not_tracked' }),
+      ]),
+    );
   });
 
   it('refuses to approve launch for a high-risk candidate', async () => {

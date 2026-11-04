@@ -27,6 +27,22 @@ class FakeCls {
   }
 }
 
+async function expectAppExceptionCode(
+  operation: Promise<unknown>,
+  code: string,
+) {
+  let caught: unknown;
+  try {
+    await operation;
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(AppException);
+  const response =
+    caught instanceof AppException ? caught.getResponse() : null;
+  expect(response).toHaveProperty('code', code);
+}
+
 describe('SettingsHubService', () => {
   let prisma: PrismaService;
   let hub: SettingsHubService;
@@ -34,7 +50,11 @@ describe('SettingsHubService', () => {
   let otherBusinessId: string;
   let ownerId: string;
   let managerId: string;
-  const roles = { update: jest.fn().mockResolvedValue(undefined) };
+  const roles = {
+    update: jest
+      .fn<Promise<void>, [string, string, string[]]>()
+      .mockResolvedValue(undefined),
+  };
   const notifications = { getPreferenceMatrix: jest.fn().mockResolvedValue([]), setPreferences: jest.fn().mockResolvedValue([]) };
 
   const user = (sub: string, role: Role, sessionId?: string): AuthenticatedUser => ({
@@ -73,6 +93,9 @@ describe('SettingsHubService', () => {
   });
 
   afterAll(async () => {
+    await prisma.aiCallLog.deleteMany({
+      where: { businessId: { in: [businessId, otherBusinessId] } },
+    });
     for (const id of [businessId, otherBusinessId]) {
       await prisma.auditLog.deleteMany({ where: { businessId: id } });
       await prisma.settingPin.deleteMany({ where: { businessId: id } });
@@ -190,9 +213,235 @@ describe('SettingsHubService', () => {
     ).toMatchObject({ 'bi.insightImpactAlertThreshold': null });
   });
 
+  it('shows tenant-scoped specialist AI requests counted against each monthly cap', async () => {
+    const now = new Date();
+    const priorMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15, 12),
+    );
+    await prisma.specialistAgentAiRequest.createMany({
+      data: [
+        {
+          businessId,
+          agentKey: 'inventory_intelligence',
+          state: 'provider_completed',
+          createdAt: now,
+        },
+        {
+          businessId,
+          agentKey: 'inventory_intelligence',
+          state: 'provider_failed',
+          createdAt: priorMonth,
+        },
+        {
+          businessId,
+          agentKey: 'seo_autopilot',
+          state: 'reserved',
+          reservedCostUsd: 0.0123,
+          createdAt: now,
+        },
+        {
+          businessId: otherBusinessId,
+          agentKey: 'inventory_intelligence',
+          state: 'provider_completed',
+          createdAt: now,
+        },
+      ],
+    });
+    await prisma.aiCallLog.createMany({
+      data: [
+        {
+          businessId,
+          kind: 'inventory_agent',
+          inputTokens: 1000,
+          outputTokens: 500,
+          estimatedCostUsd: 0.0035,
+          createdAt: now,
+        },
+        {
+          businessId: otherBusinessId,
+          kind: 'inventory_agent',
+          inputTokens: 100_000,
+          outputTokens: 100_000,
+          estimatedCostUsd: 0.75,
+          createdAt: now,
+        },
+      ],
+    });
+
+    const detail = await hub.detail('ai', await ctxOf(ownerId, Role.owner));
+    const rows = detail.groups.flatMap((group) => group.rows);
+    expect(
+      rows.find((row) => row.key === 'specialist-agent-inventory-monthly-requests'),
+    ).toMatchObject({ value: 'No limit · 1 counted this month', editable: true });
+    expect(
+      rows.find((row) => row.key === 'specialist-agent-seo-monthly-requests')?.value,
+    ).toBe('No limit · 1 counted this month');
+    expect(
+      rows.find((row) => row.key === 'specialist-agent-finance-monthly-requests')?.value,
+    ).toBe('No limit · 0 counted this month');
+    expect(
+      rows.find((row) => row.key === 'specialist-agent-inventory-monthly-spend'),
+    ).toMatchObject({ value: 'No cap · $0.0035 logged + reserved this month', editable: true });
+    expect(
+      rows.find((row) => row.key === 'specialist-agent-seo-monthly-spend')?.value,
+    ).toBe('No cap · $0.0123 logged + reserved this month');
+  });
+
+  it('exposes and validates specialist per-run request, action, token, input and Commerce tool ceilings', async () => {
+    const owner = await ctxOf(ownerId, Role.owner);
+    const getRow = async () =>
+      (await hub.detail('ai', owner)).groups
+        .flatMap((group) => group.rows)
+        .find((candidate) => candidate.key === 'specialist-agent-provider-requests-per-run');
+
+    expect(await getRow()).toMatchObject({
+      value: '10 requests / run',
+      editable: true,
+    });
+    expect(await hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-provider-requests-per-run',
+      value: 1,
+    }])).toEqual({ saved: 1 });
+    expect(await getRow()).toMatchObject({ value: '1 request / run' });
+    expect(await hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-provider-requests-per-run',
+      value: 2,
+    }])).toEqual({ saved: 1 });
+    expect(await getRow()).toMatchObject({ value: '2 requests / run' });
+    await expect(hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-provider-requests-per-run',
+      value: 0,
+    }])).rejects.toBeInstanceOf(AppException);
+
+    const getCommerceToolLimitRow = async () =>
+      (await hub.detail('ai', owner)).groups
+        .flatMap((group) => group.rows)
+        .find((candidate) => candidate.key === 'specialist-agent-commerce-read-tools-per-run');
+    expect(await getCommerceToolLimitRow()).toMatchObject({
+      value: '3 read-tool calls / run',
+      editable: true,
+    });
+    expect(await hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-commerce-read-tools-per-run',
+      value: 1,
+    }])).toEqual({ saved: 1 });
+    expect(await getCommerceToolLimitRow()).toMatchObject({
+      value: '1 read-tool call / run',
+    });
+    await expect(hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-commerce-read-tools-per-run',
+      value: 0,
+    }])).rejects.toBeInstanceOf(AppException);
+
+    const getActionLimitRow = async () =>
+      (await hub.detail('ai', owner)).groups
+        .flatMap((group) => group.rows)
+        .find((candidate) => candidate.key === 'specialist-agent-actions-per-run');
+    expect(await getActionLimitRow()).toMatchObject({
+      value: '10 actions / run',
+      editable: true,
+    });
+    expect(await hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-actions-per-run',
+      value: 1,
+    }])).toEqual({ saved: 1 });
+    expect(await getActionLimitRow()).toMatchObject({ value: '1 action / run' });
+    await expect(hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-actions-per-run',
+      value: 0,
+    }])).rejects.toBeInstanceOf(AppException);
+
+    const getOutputTokenRow = async () =>
+      (await hub.detail('ai', owner)).groups
+        .flatMap((group) => group.rows)
+        .find((candidate) => candidate.key === 'specialist-agent-output-tokens-per-request');
+    expect(await getOutputTokenRow()).toMatchObject({
+      value: '1024 output tokens / request',
+      editable: true,
+    });
+    expect(await hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-output-tokens-per-request',
+      value: 256,
+    }])).toEqual({ saved: 1 });
+    expect(await getOutputTokenRow()).toMatchObject({
+      value: '256 output tokens / request',
+    });
+    await expect(hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-output-tokens-per-request',
+      value: 127,
+    }])).rejects.toBeInstanceOf(AppException);
+
+    const getInputBytesRow = async () =>
+      (await hub.detail('ai', owner)).groups
+        .flatMap((group) => group.rows)
+        .find((candidate) => candidate.key === 'specialist-agent-input-bytes-per-request');
+    expect(await getInputBytesRow()).toMatchObject({
+      value: '1,048,576 bytes / request',
+      editable: true,
+    });
+    expect(await hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-input-bytes-per-request',
+      value: 8192,
+    }])).toEqual({ saved: 1 });
+    expect(await getInputBytesRow()).toMatchObject({
+      value: '8,192 bytes / request',
+    });
+    await expect(hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'specialist-agent-input-bytes-per-request',
+      value: 4095,
+    }])).rejects.toBeInstanceOf(AppException);
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: {} },
+    });
+  }, 15000);
+
+  it('exposes and validates the Customer Agent retention threshold setting', async () => {
+    const owner = await ctxOf(ownerId, Role.owner);
+    const detail = await hub.detail('ai', owner);
+    const row = detail.groups.flatMap((group) => group.rows).find(
+      (candidate) => candidate.key === 'customer-agent-retention-minimum-order-decline',
+    );
+    expect(row).toMatchObject({ value: '1 fewer order', editable: true });
+
+    expect(await hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'customer-agent-retention-minimum-order-decline',
+      value: 3,
+    }])).toEqual({ saved: 1 });
+    expect(
+      (await prisma.business.findUniqueOrThrow({ where: { id: businessId } }))
+        .policies,
+    ).toMatchObject({ 'agents.customerRetentionMinimumOrderDecline': 3 });
+
+    await expect(hub.saveChanges(owner, [{
+      category: 'ai',
+      rowKey: 'customer-agent-retention-minimum-order-decline',
+      value: 0,
+    }])).rejects.toBeInstanceOf(AppException);
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: {} },
+    });
+  });
+
   it('saves a change to the real field, audits before/after, and validates input', async () => {
     const ctx = await ctxOf(ownerId, Role.owner);
-    await expect(hub.saveChanges(ctx, [{ category: 'general', rowKey: 'timezone', value: 'Mars/Olympus' }])).rejects.toMatchObject({ response: expect.objectContaining({ code: 'SETTING_INVALID' }) });
+    await expectAppExceptionCode(
+      hub.saveChanges(ctx, [{ category: 'general', rowKey: 'timezone', value: 'Mars/Olympus' }]),
+      'SETTING_INVALID',
+    );
 
     expect(await hub.saveChanges(ctx, [{ category: 'general', rowKey: 'timezone', value: 'Asia/Karachi' }])).toEqual({ saved: 1 });
     expect((await prisma.business.findUniqueOrThrow({ where: { id: businessId } })).timezone).toBe('Asia/Karachi');
@@ -230,7 +479,10 @@ describe('SettingsHubService', () => {
     await hub.resetRow(ctx, 'general', 'locale');
     expect((await prisma.business.findUniqueOrThrow({ where: { id: businessId } })).locale).toBe('en');
     expect((await prisma.auditLog.findFirstOrThrow({ where: { businessId, entityId: 'general.locale' }, orderBy: { createdAt: 'desc' } })).action).toBe('setting.reset');
-    await expect(hub.resetRow(ctx, 'general', 'timezone')).rejects.toMatchObject({ response: expect.objectContaining({ code: 'SETTING_INVALID' }) });
+    await expectAppExceptionCode(
+      hub.resetRow(ctx, 'general', 'timezone'),
+      'SETTING_INVALID',
+    );
   });
 
   it('refuses a change the caller lacks permission for, server-side', async () => {
@@ -242,7 +494,10 @@ describe('SettingsHubService', () => {
 
   it('rejects out-of-range numbers before writing', async () => {
     const ctx = await ctxOf(ownerId, Role.owner);
-    await expect(hub.saveChanges(ctx, [{ category: 'tax', rowKey: 'tax-rate', value: 150 }])).rejects.toMatchObject({ response: expect.objectContaining({ code: 'SETTING_INVALID' }) });
+    await expectAppExceptionCode(
+      hub.saveChanges(ctx, [{ category: 'tax', rowKey: 'tax-rate', value: 150 }]),
+      'SETTING_INVALID',
+    );
     expect((await prisma.business.findUniqueOrThrow({ where: { id: businessId } })).taxRate.toString()).toBe('0');
   });
 
@@ -286,7 +541,10 @@ describe('SettingsHubService', () => {
     expect(rows.find((r) => r.key === `session:${other.id}`)?.control).toMatchObject({ type: 'action' });
     expect(rows.find((r) => r.key === `session:${stranger.id}`)).toBeUndefined();
 
-    await expect(hub.runAction(ctx, `session:${current.id}`)).rejects.toMatchObject({ response: expect.objectContaining({ code: 'SETTING_INVALID' }) });
+    await expectAppExceptionCode(
+      hub.runAction(ctx, `session:${current.id}`),
+      'SETTING_INVALID',
+    );
     await hub.runAction(ctx, `session:${other.id}`);
     expect((await prisma.session.findUniqueOrThrow({ where: { id: other.id } })).revokedAt).not.toBeNull();
     await expect(hub.runAction(ctx, `session:${stranger.id}`)).rejects.toBeDefined();

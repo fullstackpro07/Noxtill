@@ -30,6 +30,7 @@ describe('assistant tools that query the tenant DB directly', () => {
   let ctx: Parameters<NonNullable<ReturnType<typeof findAssistantTool>>['execute']>[0];
   let businessId: string;
   let otherBusinessId: string;
+  let erasedCustomerPhone: string;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -47,7 +48,7 @@ describe('assistant tools that query the tenant DB directly', () => {
     });
     otherBusinessId = other.id;
 
-    ctx = { businessId, tenantPrisma, prisma } as typeof ctx;
+    ctx = { businessId, tenantPrisma, prisma };
 
     const spends = [500, 100, 900, 300, 700, 50];
     for (const [i, spend] of spends.entries()) {
@@ -55,6 +56,18 @@ describe('assistant tools that query the tenant DB directly', () => {
         data: { businessId, phone: `+1555${Date.now()}${i}`, name: `Customer ${spend}`, lifetimeSpend: spend, visitCount: i + 1 },
       });
     }
+    erasedCustomerPhone = `erased-${Date.now()}`;
+    const erased = await prisma.customer.create({
+      data: {
+        businessId,
+        phone: erasedCustomerPhone,
+        name: 'Erased Customer',
+        lifetimeSpend: 100000,
+      },
+    });
+    await prisma.creditEntry.create({
+      data: { businessId, customerId: erased.id, kind: 'credit', amount: 500 },
+    });
     await prisma.customer.create({
       data: { businessId: otherBusinessId, phone: `+1666${Date.now()}`, name: 'Other Tenant Whale', lifetimeSpend: 99999 },
     });
@@ -119,6 +132,7 @@ describe('assistant tools that query the tenant DB directly', () => {
     }[];
     expect(result.map((c) => c.lifetimeSpend)).toEqual([900, 700, 500, 300, 100]);
     expect(result.some((c) => c.name === 'Other Tenant Whale')).toBe(false);
+    expect(result.some((c) => c.name === 'Erased Customer')).toBe(false);
   });
 
   it('get_low_stock_products lists only active products at/below threshold, emptiest first', async () => {
@@ -134,6 +148,15 @@ describe('assistant tools that query the tenant DB directly', () => {
   it('get_top_debtors returns real net balances (credit minus payments), largest first, this tenant only', async () => {
     const result = (await findAssistantTool('get_top_debtors')!.execute(ctx, {})) as { name: string; balance: number }[];
     expect(result.map((d) => d.balance)).toEqual([150, 80]);
+    expect(result.some((d) => d.name === 'Erased Customer')).toBe(false);
+  });
+
+  it('does not resolve an anonymized customer through the phone lookup tool', async () => {
+    const result = await findAssistantTool('find_customer_by_phone')!.execute(
+      ctx,
+      { phone: erasedCustomerPhone },
+    );
+    expect(result).toEqual({ found: false });
   });
 
   it('get_bookings_on_date counts only booked/confirmed appointments on that exact day', async () => {

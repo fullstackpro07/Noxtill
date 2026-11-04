@@ -1,6 +1,7 @@
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { CashForecastService } from './cash-forecast.service';
 import { RecurringObligationsService } from './recurring-obligations.service';
@@ -25,6 +26,8 @@ describe('CashForecastService (UPD-BE-078)', () => {
   let forecast: CashForecastService;
   let obligations: RecurringObligationsService;
   let businessId: string;
+  let branchBusinessId: string;
+  let unrelatedBusinessId: string;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -35,7 +38,7 @@ describe('CashForecastService (UPD-BE-078)', () => {
       prisma,
       cls as unknown as ClsService,
     );
-    forecast = new CashForecastService(tenantPrisma);
+    forecast = new CashForecastService(prisma, new BranchScopeService(prisma));
     obligations = new RecurringObligationsService(tenantPrisma);
 
     const business = await prisma.business.create({
@@ -46,15 +49,44 @@ describe('CashForecastService (UPD-BE-078)', () => {
     });
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
+
+    const branch = await prisma.business.create({
+      data: {
+        name: 'Cash Forecast Test Branch',
+        slug: `cash-forecast-branch-${Date.now()}`,
+        parentId: businessId,
+      },
+    });
+    branchBusinessId = branch.id;
+    const unrelated = await prisma.business.create({
+      data: {
+        name: 'Cash Forecast Unrelated Business',
+        slug: `cash-forecast-unrelated-${Date.now()}`,
+      },
+    });
+    unrelatedBusinessId = unrelated.id;
   });
 
   afterAll(async () => {
-    await prisma.recurringObligation.deleteMany({ where: { businessId } });
-    await prisma.order.deleteMany({ where: { businessId } });
-    await prisma.expense.deleteMany({ where: { businessId } });
+    const fixtureBusinessIds = [
+      businessId,
+      branchBusinessId,
+      unrelatedBusinessId,
+    ];
+    await prisma.recurringObligation.deleteMany({
+      where: { businessId: { in: fixtureBusinessIds } },
+    });
+    await prisma.order.deleteMany({
+      where: { businessId: { in: fixtureBusinessIds } },
+    });
+    await prisma.expense.deleteMany({
+      where: { businessId: { in: fixtureBusinessIds } },
+    });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
-      await tx.business.delete({ where: { id: businessId } });
+      await tx.business.deleteMany({
+        where: { id: { in: fixtureBusinessIds } },
+      });
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
     await prisma.$disconnect();
@@ -108,6 +140,63 @@ describe('CashForecastService (UPD-BE-078)', () => {
     const result = await forecast.forecast(businessId, 10);
     expect(result.shortfallDates.length).toBeGreaterThan(0);
     expect(result.shortfallDates).toContain(result.projection[3].date);
+  });
+
+  it('aggregates a validated same-currency branch group without including unrelated businesses', async () => {
+    const recordedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    await prisma.order.create({
+      data: {
+        businessId: branchBusinessId,
+        orderNo: 2001,
+        orderType: OrderType.counter,
+        status: OrderStatus.completed,
+        total: 600,
+        createdAt: recordedAt,
+      },
+    });
+    await prisma.expense.create({
+      data: {
+        businessId: branchBusinessId,
+        description: 'Branch test expense',
+        category: 'utilities',
+        amount: 300,
+        incurredOn: recordedAt,
+      },
+    });
+    await prisma.order.create({
+      data: {
+        businessId: unrelatedBusinessId,
+        orderNo: 3001,
+        orderType: OrderType.counter,
+        status: OrderStatus.completed,
+        total: 30_000,
+        createdAt: recordedAt,
+      },
+    });
+
+    const result = await forecast.forecast(businessId, 10, 'all');
+    expect(result.dailyAvgRevenue).toBe(120);
+    expect(result.dailyAvgExpense).toBe(30);
+  });
+
+  it('refuses a branch group whose currencies differ', async () => {
+    const foreignCurrencyBranch = await prisma.business.create({
+      data: {
+        name: 'Cash Forecast Foreign Currency Branch',
+        slug: `cash-forecast-foreign-${Date.now()}`,
+        parentId: businessId,
+        currency: 'EUR',
+      },
+    });
+
+    await expect(
+      forecast.forecast(businessId, 10, 'all'),
+    ).rejects.toMatchObject({
+      response: { code: 'CASH_FORECAST_CURRENCY_SCOPE_UNSUPPORTED' },
+      status: 422,
+    });
+
+    await prisma.business.delete({ where: { id: foreignCurrencyBranch.id } });
   });
 
   it('an inactive obligation is excluded from the projection', async () => {

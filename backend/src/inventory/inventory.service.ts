@@ -1,4 +1,12 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { ActivityService } from '../activity/activity.service';
@@ -7,6 +15,11 @@ import { CreateWastageDto } from './dto/create-wastage.dto';
 import { INVENTORY_ERROR_CODES } from './inventory.constants';
 import { REORDER_VELOCITY_WINDOW_DAYS } from './reorder-suggestions.constants';
 import { ProductKind, StockMovementKind } from '@prisma/client';
+import {
+  INVENTORY_WASTAGE_RECORDED_EVENT_JOB,
+  SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
+import { resolvePolicies } from '../common/policies/policies.service';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -15,9 +28,14 @@ function round2(value: number): number {
 /** Inventory: purchases/wastage (BE-033), on-hand list + movement timeline (BE-034). */
 @Injectable()
 export class InventoryService {
+  private readonly logger = new Logger(InventoryService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly activity: ActivityService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
   ) {}
 
   async recordPurchase(businessId: string, dto: CreatePurchaseDto) {
@@ -53,6 +71,42 @@ export class InventoryService {
     });
 
     return movement;
+  }
+
+  private async queueWastageReview(
+    businessId: string,
+    stockMovementId: string,
+    occurredAt: Date,
+  ): Promise<void> {
+    if (!this.specialistAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      if (
+        !business ||
+        !resolvePolicies(business).bool('agents.inventoryWastageEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      await this.specialistAgentEvents.add(
+        INVENTORY_WASTAGE_RECORDED_EVENT_JOB,
+        { businessId, stockMovementId, occurredAt: occurredAt.toISOString() },
+        {
+          jobId: `inventory-wastage-${businessId}-${stockMovementId}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Inventory review for wastage movement ${stockMovementId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   async recordWastage(businessId: string, dto: CreateWastageDto) {
@@ -100,6 +154,8 @@ export class InventoryService {
       entityType: 'StockMovement',
       entityId: movement.id,
     });
+
+    await this.queueWastageReview(businessId, movement.id, movement.createdAt);
 
     return movement;
   }

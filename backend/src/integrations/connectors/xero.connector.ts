@@ -13,7 +13,43 @@ const AUTHORIZE_URL = 'https://login.xero.com/identity/connect/authorize';
 const TOKEN_URL = 'https://identity.xero.com/connect/token';
 const REVOKE_URL = 'https://identity.xero.com/connect/revocation';
 const SCOPE =
-  'openid profile email accounting.transactions accounting.contacts offline_access';
+  'openid profile email accounting.invoices.read accounting.invoices accounting.contacts accounting.banktransactions.read offline_access';
+
+export type XeroOpenInvoiceType = 'ACCREC' | 'ACCPAY';
+
+export type XeroOpenInvoiceSummary = {
+  type: XeroOpenInvoiceType;
+  status: string;
+  amountDue: string | number;
+  currencyCode: string;
+  dueDateString?: string;
+  dueDate?: string;
+};
+
+type XeroInvoiceResponseItem = {
+  Type: XeroOpenInvoiceType;
+  Status: string;
+  AmountDue: string | number;
+  CurrencyCode: string;
+  DueDateString?: string;
+  DueDate?: string;
+};
+
+export type XeroBankTransactionSummary = {
+  status: string;
+  type: string;
+  total: string | number;
+  currencyCode: string;
+  isReconciled: boolean;
+};
+
+type XeroBankTransactionResponseItem = {
+  Status: string;
+  Type: string;
+  Total: string | number;
+  CurrencyCode: string;
+  IsReconciled: boolean;
+};
 
 interface XeroTokenResponse {
   access_token: string;
@@ -110,6 +146,79 @@ export class XeroConnector implements Connector {
       { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
     );
     return response.data;
+  }
+
+  /** Reads one bounded page of authorised Xero invoices or bills without returning contacts or IDs. */
+  async getAuthorizedOpenInvoicesPage(
+    tokens: OAuthTokens,
+    tenantId: string,
+    type: XeroOpenInvoiceType,
+    page: number,
+  ): Promise<XeroOpenInvoiceSummary[]> {
+    const response = await axios.get<{
+      Invoices?: XeroInvoiceResponseItem[];
+    }>('https://api.xero.com/api.xro/2.0/Invoices', {
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        'Xero-tenant-id': tenantId,
+        Accept: 'application/json',
+      },
+      params: {
+        where: `Type=="${type}" AND Status=="AUTHORISED"`,
+        summaryOnly: true,
+        page,
+      },
+    });
+    if (!Array.isArray(response.data.Invoices)) {
+      throw new Error('Xero returned an invalid invoices response.');
+    }
+    return response.data.Invoices.map((invoice) => ({
+      type: invoice.Type,
+      status: invoice.Status,
+      amountDue: invoice.AmountDue,
+      currencyCode: invoice.CurrencyCode,
+      dueDateString: invoice.DueDateString,
+      dueDate: invoice.DueDate,
+    }));
+  }
+
+  /** Reads one bounded bank-transaction page and strips account/contact/provider identifiers. */
+  async getAuthorizedBankTransactionsPage(
+    tokens: OAuthTokens,
+    tenantId: string,
+    page: number,
+    fromDate: string,
+    toDate: string,
+  ): Promise<XeroBankTransactionSummary[]> {
+    const dateTime = (value: string) => {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) throw new Error('Invalid Xero bank transaction date range.');
+      return `DateTime(${Number(match[1])},${Number(match[2])},${Number(match[3])})`;
+    };
+    const response = await axios.get<{
+      BankTransactions?: XeroBankTransactionResponseItem[];
+    }>('https://api.xero.com/api.xro/2.0/BankTransactions', {
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        'Xero-tenant-id': tenantId,
+        Accept: 'application/json',
+      },
+      params: {
+        where: `Status=="AUTHORISED" AND Date>=${dateTime(fromDate)} AND Date<=${dateTime(toDate)}`,
+        page,
+        pageSize: 100,
+      },
+    });
+    if (!Array.isArray(response.data.BankTransactions)) {
+      throw new Error('Xero returned an invalid bank transactions response.');
+    }
+    return response.data.BankTransactions.map((transaction) => ({
+      status: transaction.Status,
+      type: transaction.Type,
+      total: transaction.Total,
+      currencyCode: transaction.CurrencyCode,
+      isReconciled: transaction.IsReconciled,
+    }));
   }
 
   async disconnect(tokens?: OAuthTokens): Promise<void> {

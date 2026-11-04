@@ -5,6 +5,8 @@ import { ConnectorRegistry } from './connector-registry';
 import { TokenCipherService } from './token-cipher.service';
 import { GmbConnector } from './connectors/gmb.connector';
 import { GoogleAdsConnector } from './connectors/google-ads.connector';
+import { GoogleSearchConsoleConnector } from './connectors/google-search-console.connector';
+import { GoogleAnalyticsConnector } from './connectors/google-analytics.connector';
 import { MerchantCenterConnector } from './connectors/merchant-center.connector';
 import { MetaAdsConnector } from './connectors/meta-ads.connector';
 import { TikTokAdsConnector } from './connectors/tiktok-ads.connector';
@@ -33,6 +35,8 @@ import { EmailCampaignsModule } from './email/email-campaigns.module';
     TokenCipherService,
     GmbConnector,
     GoogleAdsConnector,
+    GoogleSearchConsoleConnector,
+    GoogleAnalyticsConnector,
     MerchantCenterConnector,
     MetaAdsConnector,
     TikTokAdsConnector,
@@ -56,6 +60,7 @@ import { EmailCampaignsModule } from './email/email-campaigns.module';
     ConnectorRegistry,
     TokenCipherService,
     GmbConnector,
+    XeroConnector,
   ],
 })
 export class IntegrationsModule {}

@@ -9,6 +9,7 @@ import { formatRelativeTime } from "@/lib/format";
 import { SimpleKpiTile, KpiSkeleton, Chip, selectStyle, primaryBtnStyle, outlineBtnStyle, DisclosureNote } from "@/components/staff/staff-ui";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
+import { CUSTOMER_FOLLOW_UP_OUTCOME_LABELS, type CustomerFollowUpOutcome } from "@/lib/customer-intelligence-api";
 
 const SOURCE_LABEL: Record<ActionItemType, string> = {
   complaint: "Reviews",
@@ -17,13 +18,26 @@ const SOURCE_LABEL: Record<ActionItemType, string> = {
   unreplied_review: "Reviews",
   commerce: "Autonomous Commerce",
   procurement_request: "Procurement",
+  customer_segment: "Customers",
+  customer_follow_up: "Customer follow-up",
+  inventory_transfer_approval: "Inventory branch transfer",
+  finance_journal: "Finance journal approval",
+  seo_content_brief: "SEO Autopilot",
 };
 const PRIORITY_LABEL: Record<LiveActionItem["priority"], string> = { urgent: "High", normal: "Normal", low: "Low" };
 
 /** Real derivation from the item's own `ageMs` and `priority` — the Action Center has no explicit
  * due-date field, so "Overdue" for an urgent item means it's been open more than a day; for
  * everything else it means more than a week. */
-function dueLabel(item: LiveActionItem): "Overdue" | "Today" | "This week" {
+function dueLabel(item: LiveActionItem): "Overdue" | "Today" | "This week" | "Later" {
+  if (item.dueAt) {
+    const dueAt = new Date(item.dueAt);
+    const now = new Date();
+    if (dueAt.getTime() < now.getTime()) return "Overdue";
+    if (dueAt.toDateString() === now.toDateString()) return "Today";
+    if (dueAt.getTime() - now.getTime() <= 7 * 24 * 60 * 60 * 1000) return "This week";
+    return "Later";
+  }
   const ageHours = item.ageMs / (60 * 60 * 1000);
   if (item.priority === "urgent") return ageHours > 24 ? "Overdue" : "Today";
   return ageHours > 24 * 7 ? "Overdue" : ageHours > 24 ? "This week" : "Today";
@@ -36,12 +50,13 @@ export function TasksView() {
   const [source, setSource] = useState("All sources");
   const [priority, setPriority] = useState("All priorities");
   const [status, setStatus] = useState("All statuses");
+  const [followUpOutcomes, setFollowUpOutcomes] = useState<Record<string, CustomerFollowUpOutcome | "">>({});
 
   const { data: staffList = [] } = useQuery({ queryKey: ["staff-list"], queryFn: () => fetchStaffList() });
   const { data: actions, isPending, isError, refetch } = useQuery({ queryKey: ["actions"], queryFn: () => fetchActions() });
 
   const completeMutation = useMutation({
-    mutationFn: (id: string) => completeAction(id),
+    mutationFn: ({ id, outcome }: { id: string; outcome?: CustomerFollowUpOutcome }) => completeAction(id, outcome),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["actions"] });
       toast.success("Task completed.");
@@ -158,7 +173,12 @@ export function TasksView() {
                       <td style={{ padding: "12px 17px", textAlign: "right" }}>
                         <div className="flex justify-end gap-1.5">
                           <button type="button" onClick={() => router.push(it.deepLink)} className="rounded-[9px] text-[11.5px] font-bold" style={{ ...outlineBtnStyle, minHeight: 34, padding: "6px 10px" }}>Open</button>
-                          <button type="button" onClick={() => completeMutation.mutate(it.id)} disabled={completeMutation.isPending} className="rounded-[9px] text-[11.5px] font-extrabold text-white" style={{ ...primaryBtnStyle(), minHeight: 34, padding: "6px 10px" }}>Complete</button>
+                          {it.type === "customer_follow_up" && <label className="sr-only" htmlFor={`task-outcome-${it.id}`}>Record follow-up outcome for {it.title}</label>}
+                          {it.type === "customer_follow_up" && <select id={`task-outcome-${it.id}`} value={followUpOutcomes[it.id] ?? ""} onChange={(event) => setFollowUpOutcomes((current) => ({ ...current, [it.id]: event.target.value as CustomerFollowUpOutcome | "" }))} aria-label={`Outcome for ${it.title}`} className="rounded-[8px] text-[11px]" style={selectStyle}>
+                            <option value="">Select outcome</option>
+                            {Object.entries(CUSTOMER_FOLLOW_UP_OUTCOME_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>}
+                          <button type="button" onClick={() => completeMutation.mutate({ id: it.id, outcome: followUpOutcomes[it.id] || undefined })} disabled={completeMutation.isPending || (it.type === "customer_follow_up" && !followUpOutcomes[it.id])} className="rounded-[9px] text-[11.5px] font-extrabold text-white" style={{ ...primaryBtnStyle(), minHeight: 34, padding: "6px 10px" }}>{it.type === "customer_follow_up" ? "Complete & record" : "Complete"}</button>
                         </div>
                       </td>
                     </tr>

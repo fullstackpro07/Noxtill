@@ -4,12 +4,20 @@ export interface DuplicateCandidate {
   id: string;
   name: string;
   phone: string;
+  email: string | null;
+  address: string | null;
 }
 
 export interface DuplicatePair {
   a: DuplicateCandidate;
   b: DuplicateCandidate;
   reason: string;
+  matchEvidence: {
+    field: "email" | "phone";
+    method: "trimmed_case_insensitive" | "digits_only";
+    label: string;
+  }[];
+  conflictingFields: ("name" | "phone" | "email" | "address")[];
 }
 
 /** GET /customers/duplicates — server-computed exact-match pairs (per the business's real

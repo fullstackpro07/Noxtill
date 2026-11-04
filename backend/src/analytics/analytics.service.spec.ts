@@ -1,10 +1,12 @@
 import { ClsService } from 'nestjs-cls';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AnalyticsService } from './analytics.service';
 import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 import { SegmentsService } from '../customers/segments.service';
+import { CustomerAnalyticsSummaryService } from '../customers/customer-analytics-summary.service';
 import type { SendGateService } from '../messaging/send-gate.service';
 import type { AiInfraService } from '../ai/ai-infra.service';
 
@@ -38,6 +40,11 @@ describe('AnalyticsService (BE-071)', () => {
       tenantPrisma,
       aiInfra as unknown as AiInfraService,
     );
+    const customerAnalyticsSummary = new CustomerAnalyticsSummaryService(
+      prisma,
+      new BranchScopeService(prisma),
+      segments,
+    );
     service = new AnalyticsService(
       tenantPrisma,
       prisma,
@@ -45,6 +52,7 @@ describe('AnalyticsService (BE-071)', () => {
       cls as unknown as ClsService,
       segments,
       sendGate as unknown as SendGateService,
+      customerAnalyticsSummary,
     );
 
     const business = await prisma.business.create({
@@ -81,7 +89,9 @@ describe('AnalyticsService (BE-071)', () => {
   });
 
   afterAll(async () => {
+    await prisma.reviewRequest.deleteMany({ where: { businessId } });
     await prisma.order.deleteMany({ where: { businessId } });
+    await prisma.customer.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
@@ -108,6 +118,127 @@ describe('AnalyticsService (BE-071)', () => {
   it('returns an empty channel breakdown when no messages exist', async () => {
     const channels = await service.channels(30);
     expect(channels).toEqual({});
+  });
+
+  it('summarizes only recent rated review requests linked to non-erased customers', async () => {
+    const stamp = randomUUID();
+    const phoneSeed = Date.now();
+    const customers = await Promise.all([
+      prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Feedback Public',
+          phone: `+1555${phoneSeed}1`,
+        },
+        select: { id: true },
+      }),
+      prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Feedback Private',
+          phone: `+1555${phoneSeed}2`,
+        },
+        select: { id: true },
+      }),
+      prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Feedback Old',
+          phone: `+1555${phoneSeed}3`,
+        },
+        select: { id: true },
+      }),
+      prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Feedback Erased',
+          phone: `erased-${stamp}`,
+        },
+        select: { id: true },
+      }),
+    ]);
+    const [publicCustomer, privateCustomer, oldCustomer, erasedCustomer] =
+      customers;
+    const respondedAt = new Date();
+    const oldRespondedAt = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+
+    await prisma.reviewRequest.createMany({
+      data: [
+        {
+          businessId,
+          customerId: publicCustomer.id,
+          token: `feedback-${stamp}-public`,
+          source: 'qa',
+          status: 'rated',
+          stars: 2,
+          routedTo: 'public',
+          respondedAt,
+        },
+        {
+          businessId,
+          customerId: privateCustomer.id,
+          token: `feedback-${stamp}-private`,
+          source: 'qa',
+          status: 'rated',
+          stars: 4,
+          routedTo: 'private',
+          respondedAt,
+        },
+        {
+          businessId,
+          customerId: oldCustomer.id,
+          token: `feedback-${stamp}-old`,
+          source: 'qa',
+          status: 'rated',
+          stars: 5,
+          routedTo: 'public',
+          respondedAt: oldRespondedAt,
+        },
+        {
+          businessId,
+          customerId: erasedCustomer.id,
+          token: `feedback-${stamp}-erased`,
+          source: 'qa',
+          status: 'rated',
+          stars: 1,
+          routedTo: 'private',
+          respondedAt,
+        },
+        {
+          businessId,
+          token: `feedback-${stamp}-unlinked`,
+          source: 'qa',
+          status: 'rated',
+          stars: 1,
+          routedTo: 'public',
+          respondedAt,
+        },
+      ],
+    });
+
+    try {
+      const { customerFeedback } = await service.customerSummary(businessId);
+      expect(customerFeedback).toMatchObject({
+        responseCount: 2,
+        averageStars: 3,
+        ratingCounts: [
+          { stars: 1, count: 0 },
+          { stars: 2, count: 1 },
+          { stars: 3, count: 0 },
+          { stars: 4, count: 1 },
+          { stars: 5, count: 0 },
+        ],
+        routedCounts: { public: 1, private: 1 },
+        source: 'customer_linked_noxtill_review_requests',
+      });
+    } finally {
+      await prisma.reviewRequest.deleteMany({
+        where: { businessId, token: { startsWith: `feedback-${stamp}-` } },
+      });
+      await prisma.customer.deleteMany({
+        where: { id: { in: customers.map((customer) => customer.id) } },
+      });
+    }
   });
 
   describe('staff (UPD-BE-108)', () => {
@@ -325,6 +456,84 @@ describe('AnalyticsService (BE-071)', () => {
         0,
       );
       expect(totalBucketed).toBe(summary.totalCustomers);
+    });
+
+    it('excludes erased customer profiles from analytics counts and cohort drilldowns', async () => {
+      const thisMonth = new Date().toISOString().slice(0, 7);
+      const beforeSummary = await service.customerSummary(businessId);
+      const beforeCohorts = await service.cohorts(businessId);
+      const beforeNewVsReturning = await service.newVsReturningByMonth(
+        businessId,
+      );
+      const beforeCohortCustomers = await service.cohortCustomers(
+        businessId,
+        thisMonth,
+      );
+      const beforeKpis = await service.kpis();
+      let erasedCustomerId: string | undefined;
+      let erasedOrderId: string | undefined;
+
+      try {
+        const erasedCustomer = await prisma.customer.create({
+          data: {
+            businessId,
+            phone: `erased-analytics-${businessId}`,
+            name: 'Anonymized customer placeholder',
+            visitCount: 9,
+            lifetimeSpend: 9999,
+            tags: ['Lapsed'],
+          },
+        });
+        erasedCustomerId = erasedCustomer.id;
+        const erasedOrder = await prisma.order.create({
+          data: {
+            businessId,
+            customerId: erasedCustomer.id,
+            orderNo: 98_765_432,
+            status: 'completed',
+            orderType: 'counter',
+          },
+          select: { id: true },
+        });
+        erasedOrderId = erasedOrder.id;
+
+        const afterSummary = await service.customerSummary(businessId);
+        expect(afterSummary).toMatchObject({
+          totalCustomers: beforeSummary.totalCustomers,
+          newCount: beforeSummary.newCount,
+          returningCount: beforeSummary.returningCount,
+          withVisitCount: beforeSummary.withVisitCount,
+          retentionRate: beforeSummary.retentionRate,
+          avgLTV: beforeSummary.avgLTV,
+          ltvDistribution: beforeSummary.ltvDistribution,
+          atRiskCount: beforeSummary.atRiskCount,
+          customerFeedback: {
+            windowDays: beforeSummary.customerFeedback.windowDays,
+            responseCount: beforeSummary.customerFeedback.responseCount,
+            averageStars: beforeSummary.customerFeedback.averageStars,
+            ratingCounts: beforeSummary.customerFeedback.ratingCounts,
+            routedCounts: beforeSummary.customerFeedback.routedCounts,
+            source: beforeSummary.customerFeedback.source,
+          },
+        });
+        expect(await service.cohorts(businessId)).toEqual(beforeCohorts);
+        expect(await service.newVsReturningByMonth(businessId)).toEqual(
+          beforeNewVsReturning,
+        );
+        expect(await service.cohortCustomers(businessId, thisMonth)).toEqual(
+          beforeCohortCustomers,
+        );
+        expect((await service.kpis()).newCustomersThisMonth).toBe(
+          beforeKpis.newCustomersThisMonth,
+        );
+      } finally {
+        if (erasedOrderId) {
+          await prisma.order.delete({ where: { id: erasedOrderId } });
+        }
+        if (erasedCustomerId) {
+          await prisma.customer.delete({ where: { id: erasedCustomerId } });
+        }
+      }
     });
 
     it('drills down a cohort month to the real customers who signed up in it', async () => {

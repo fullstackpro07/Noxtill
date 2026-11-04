@@ -174,8 +174,250 @@ export class CommerceSupplierClaimsService {
     return Promise.all(claims.map((claim) => this.serialize(claim)));
   }
 
+  /**
+   * Read-only, bounded summary for the Commerce specialist agent. This intentionally omits
+   * supplier/customer identifiers, references, reasons, item descriptions and settlement notes.
+   */
+  async specialistReview(businessId: string) {
+    const maximumClaimsReviewed = 20;
+    const [statusRows, recentRows] = await Promise.all([
+      this.tenantPrisma.client.commerceSupplierClaim.groupBy({
+        by: ['status'],
+        where: { businessId },
+        _count: { _all: true },
+        orderBy: { status: 'asc' },
+      }),
+      this.tenantPrisma.client.commerceSupplierClaim.findMany({
+        where: { businessId },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: maximumClaimsReviewed + 1,
+        select: {
+          id: true,
+          status: true,
+          currency: true,
+          updatedAt: true,
+          _count: { select: { evidence: true, communications: true } },
+        },
+      }),
+    ]);
+    const statusCounts = Object.fromEntries(
+      statusRows.map((row) => [row.status, row._count._all]),
+    );
+    const totalClaims = statusRows.reduce(
+      (sum, row) => sum + row._count._all,
+      0,
+    );
+    const hasMore = recentRows.length > maximumClaimsReviewed;
+    const claimsToReview = recentRows.slice(0, maximumClaimsReviewed);
+    const claimIds = claimsToReview.map((claim) => claim.id);
+    const [lossRows, settlementRows] = claimIds.length
+      ? await Promise.all([
+          this.tenantPrisma.client.commerceSupplierClaimItem.groupBy({
+            by: ['claimId'],
+            where: { claimId: { in: claimIds } },
+            _sum: {
+              productLossAmount: true,
+              freightLossAmount: true,
+              otherLossAmount: true,
+            },
+            orderBy: { claimId: 'asc' },
+          }),
+          this.tenantPrisma.client.commerceSupplierClaimSettlement.groupBy({
+            by: ['claimId'],
+            where: { claimId: { in: claimIds } },
+            _sum: { amount: true },
+            orderBy: { claimId: 'asc' },
+          }),
+        ])
+      : [[], []];
+    const lossByClaim = new Map(
+      lossRows.map((row) => [
+        row.claimId,
+        new Prisma.Decimal(row._sum.productLossAmount ?? 0)
+          .plus(row._sum.freightLossAmount ?? 0)
+          .plus(row._sum.otherLossAmount ?? 0),
+      ]),
+    );
+    const settlementByClaim = new Map(
+      settlementRows.map((row) => [
+        row.claimId,
+        new Prisma.Decimal(row._sum.amount ?? 0),
+      ]),
+    );
+    const claims = claimsToReview.map((claim) => ({
+      status: claim.status,
+      currency: claim.currency,
+      recordedLossAmount: (
+        lossByClaim.get(claim.id) ?? new Prisma.Decimal(0)
+      ).toFixed(2),
+      recordedSettlementAmount: (
+        settlementByClaim.get(claim.id) ?? new Prisma.Decimal(0)
+      ).toFixed(2),
+      evidenceCount: claim._count.evidence,
+      communicationCount: claim._count.communications,
+      updatedAt: claim.updatedAt.toISOString(),
+    }));
+
+    return {
+      state: totalClaims > 0 ? ('available' as const) : ('no_claims' as const),
+      source: totalClaims > 0 ? ('CommerceSupplierClaim' as const) : null,
+      totalClaims,
+      statusCounts,
+      maximumClaimsReviewed,
+      reviewedClaims: claims.length,
+      hasMore,
+      claims,
+      limitations: [
+        'Claimed losses, evidence counts and communications come from operator-entered supplier-claim records; they are not independently verified.',
+        'Settlement amounts are recorded values and may include credits or replacements; they do not prove cash receipt or inventory delivery.',
+        'Only the 20 most recently updated claims are itemized. No supplier names, references, claim reasons, descriptions, evidence files or communication notes are included.',
+        'This review does not submit, acknowledge, settle, close or contact anyone about a claim.',
+      ],
+    };
+  }
+
   async getOne(businessId: string, id: string) {
     return this.serialize(await this.findOne(businessId, id));
+  }
+
+  /**
+   * Compact claim context for the Commerce Agent. Deliberately excludes contact details,
+   * free-text notes, communication bodies and signed evidence URLs from model prompts.
+   */
+  async agentReadView(businessId: string, id: string) {
+    const claim =
+      await this.tenantPrisma.client.commerceSupplierClaim.findFirst({
+        where: { id, businessId },
+        select: {
+          id: true,
+          supplier: { select: { id: true, name: true } },
+          purchaseOrderId: true,
+          reasonCode: true,
+          currency: true,
+          status: true,
+          version: true,
+          submittedAt: true,
+          acknowledgedAt: true,
+          resolvedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              items: true,
+              evidence: true,
+              communications: true,
+              settlements: true,
+            },
+          },
+        },
+      });
+    if (!claim) {
+      throw this.error(
+        ERROR.NOT_FOUND,
+        'Supplier claim not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const [
+      lossRows,
+      settlementRows,
+      evidenceRows,
+      settlements,
+      communications,
+    ] = await Promise.all([
+      this.tenantPrisma.client.commerceSupplierClaimItem.aggregate({
+        where: { claimId: id },
+        _sum: {
+          productLossAmount: true,
+          freightLossAmount: true,
+          otherLossAmount: true,
+          quantityAffected: true,
+        },
+      }),
+      this.tenantPrisma.client.commerceSupplierClaimSettlement.aggregate({
+        where: { claimId: id },
+        _sum: { amount: true },
+      }),
+      this.tenantPrisma.client.commerceSupplierClaimEvidence.groupBy({
+        by: ['evidenceType'],
+        where: { claimId: id },
+        _count: { _all: true },
+        orderBy: { evidenceType: 'asc' },
+      }),
+      this.tenantPrisma.client.commerceSupplierClaimSettlement.findMany({
+        where: { claimId: id },
+        orderBy: [{ settledAt: 'desc' }, { id: 'desc' }],
+        take: 10,
+        select: {
+          settlementType: true,
+          amount: true,
+          currency: true,
+          settledAt: true,
+        },
+      }),
+      this.tenantPrisma.client.commerceSupplierClaimCommunication.findMany({
+        where: { claimId: id },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 1,
+        select: {
+          channel: true,
+          direction: true,
+          providerState: true,
+          occurredAt: true,
+        },
+      }),
+    ]);
+    const requested = new Prisma.Decimal(lossRows._sum.productLossAmount ?? 0)
+      .plus(lossRows._sum.freightLossAmount ?? 0)
+      .plus(lossRows._sum.otherLossAmount ?? 0);
+    const recovered = new Prisma.Decimal(settlementRows._sum.amount ?? 0);
+    const latestCommunication = communications[0];
+    const maximumSettlements = 10;
+
+    return {
+      id: claim.id,
+      supplier: { id: claim.supplier.id, name: claim.supplier.name },
+      purchaseOrderId: claim.purchaseOrderId,
+      reasonCode: claim.reasonCode,
+      currency: claim.currency,
+      status: claim.status,
+      version: claim.version,
+      submittedAt: claim.submittedAt,
+      acknowledgedAt: claim.acknowledgedAt,
+      resolvedAt: claim.resolvedAt,
+      createdAt: claim.createdAt,
+      updatedAt: claim.updatedAt,
+      requestedAmount: requested.toNumber(),
+      recoveredAmount: recovered.toNumber(),
+      outstandingAmount: requested.minus(recovered).toNumber(),
+      itemCount: claim._count.items,
+      affectedQuantity: Number(lossRows._sum.quantityAffected ?? 0),
+      evidenceCount: claim._count.evidence,
+      evidenceTypes: evidenceRows.map((item) => ({
+        type: item.evidenceType,
+        count: item._count._all,
+      })),
+      communicationCount: claim._count.communications,
+      latestCommunication: latestCommunication
+        ? {
+            channel: latestCommunication.channel,
+            direction: latestCommunication.direction,
+            providerState: latestCommunication.providerState,
+            occurredAt: latestCommunication.occurredAt,
+          }
+        : null,
+      settlements: settlements.map((item) => ({
+        settlementType: item.settlementType,
+        amount: Number(item.amount),
+        currency: item.currency,
+        settledAt: item.settledAt,
+      })),
+      settlementsTruncated: claim._count.settlements > maximumSettlements,
+      limitations: [
+        'Loss and settlement amounts are operator-recorded claim values; they do not independently prove supplier acceptance, cash receipt or replacement delivery.',
+        'Only the 10 most recent settlements are listed. Evidence content, file links, references, free-text reasons and communication notes are omitted; open the canonical Supplier Claims screen to review them.',
+      ],
+    };
   }
 
   async history(businessId: string, id: string) {

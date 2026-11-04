@@ -1,4 +1,5 @@
 import { CAPABILITIES } from '../../common/capabilities/capabilities.constants';
+import { IntegrationProvider } from '@prisma/client';
 import { CategoryDef, row } from '../hub.core';
 import { HubDeps } from './hub.deps';
 import { policyRow } from './policy-rows';
@@ -26,7 +27,7 @@ export function seoCategories(d: HubDeps): CategoryDef[] {
       help: [
         'Turning AI drafts off removes AI suggestions everywhere in SEO Autopilot; drafts already created stay.',
         'Thresholds change which items are flagged, never your data.',
-        'Search Console, analytics and backlink providers are not connected, so those figures show as not tracked.',
+        'Google Search Console clicks and impressions and Google Analytics 4 Organic Search sessions, key events and total revenue can be synced after you connect the corresponding read-only Google account and select a property. GA4 total revenue may include purchase, subscription and ad revenue less refunds; it is not the Noxtill sales ledger. GA4 attribution does not prove that SEO work caused an outcome. External backlink authority data is not tracked.',
       ],
       actions: [
         {
@@ -112,8 +113,47 @@ export function seoCategories(d: HubDeps): CategoryDef[] {
               key: 'seo-search-console',
               label: 'Google Search Console',
               description:
-                'Clicks, impressions and indexing data. No connector exists yet.',
-              state: () => ({ value: 'Not connected', tone: 'neutral' }),
+                'Property-level clicks and impressions can be synced, and URL Inspection can read Google’s stored index status for a page in the selected property. It does not test the live page or request indexing.',
+              state: async (ctx) => {
+                const integration = await d.prisma.integration.findUnique({
+                  where: {
+                    businessId_provider: {
+                      businessId: ctx.businessId,
+                      provider: 'google_search_console',
+                    },
+                  },
+                  select: { status: true },
+                });
+                const status = integration?.status ?? 'not_connected';
+                return status === 'connected'
+                  ? { value: 'Connected', tone: 'green' }
+                  : status === 'needs_attention'
+                    ? { value: 'Needs attention', tone: 'amber' }
+                    : { value: 'Not connected', tone: 'neutral' };
+              },
+            }),
+            row({
+              key: 'seo-google-analytics',
+              label: 'Google Analytics 4',
+              description:
+                'The SEO Workspace can use Google-reported Organic Search sessions, key events and total revenue from the selected property. GA4 total revenue may include purchase, subscription and ad revenue less refunds; this is not Noxtill ledger revenue or causal SEO impact.',
+              state: async (ctx) => {
+                const integration = await d.prisma.integration.findUnique({
+                  where: {
+                    businessId_provider: {
+                      businessId: ctx.businessId,
+                      provider: IntegrationProvider.google_analytics,
+                    },
+                  },
+                  select: { status: true },
+                });
+                const status = integration?.status ?? 'not_connected';
+                return status === 'connected'
+                  ? { value: 'Connected', tone: 'green' }
+                  : status === 'needs_attention'
+                    ? { value: 'Needs attention', tone: 'amber' }
+                    : { value: 'Not connected', tone: 'neutral' };
+              },
             }),
             row({
               key: 'seo-outreach-identity',

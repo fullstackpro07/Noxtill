@@ -8,6 +8,11 @@ import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { askConfirm, askText } from "@/lib/ask-dialog";
 import {
+  fetchSeoSearchConsoleSummary,
+  inspectSeoSearchConsoleUrl,
+  type SeoSearchConsoleUrlInspection,
+} from "@/lib/seo-search-console-api";
+import {
   createTechnicalAction,
   fetchTechnicalActions,
   fetchTechnicalOverview,
@@ -246,7 +251,146 @@ function ActionCard({ action }: { action: TechnicalAction }) {
   );
 }
 
-type Tab = "issues" | "redirects" | "canonicals" | "changes" | "not_tracked";
+function UrlInspectionPanel() {
+  const searchConsole = useQuery({
+    queryKey: ["seo-search-console"],
+    queryFn: fetchSeoSearchConsoleSummary,
+  });
+  const [url, setUrl] = useState("");
+  const inspection = useMutation({ mutationFn: inspectSeoSearchConsoleUrl });
+  const result = inspection.data as SeoSearchConsoleUrlInspection | undefined;
+  const selectedProperty = searchConsole.data?.selectedProperty;
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    inspection.mutate(url.trim());
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h2 className="m-0 text-sm font-bold">Google Search Console URL Inspection</h2>
+        <p className="m-0 mt-1 max-w-3xl text-xs" style={{ color: "var(--app-text-muted)" }}>
+          Reads the URL&rsquo;s stored Google index status for the selected property. It does not test the live page or request re-indexing.
+        </p>
+      </div>
+      {searchConsole.isLoading ? (
+        <p className="m-0 text-sm" style={{ color: "var(--app-text-faint)" }}>Checking Search Console connection…</p>
+      ) : searchConsole.isError ? (
+        <div className="text-sm" style={{ color: "var(--app-danger-strong)" }}>
+          {errorMessage(searchConsole.error, "Couldn't load Search Console status.")}
+        </div>
+      ) : searchConsole.data?.status !== "connected" ? (
+        <p className="m-0 text-sm" style={{ color: "var(--app-text-muted)" }}>
+          Google Search Console is not connected. Connect it in <Link href="/integrations" className="font-bold underline">Integrations</Link> before inspecting a URL.
+        </p>
+      ) : !selectedProperty ? (
+        <p className="m-0 text-sm" style={{ color: "var(--app-text-muted)" }}>
+          Select a Search Console property in <Link href="/marketing/seo-autopilot/settings" className="font-bold underline">SEO Settings</Link> before inspecting a URL.
+        </p>
+      ) : (
+        <>
+          <p className="m-0 break-all text-xs" style={{ color: "var(--app-text-faint)" }}>Selected property: {selectedProperty}</p>
+          <form onSubmit={submit} className="flex flex-col gap-2 rounded-xl border p-3" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>
+            <label htmlFor="seo-url-inspection-input" className="text-xs font-semibold">Page URL</label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                id="seo-url-inspection-input"
+                type="url"
+                required
+                maxLength={2048}
+                value={url}
+                onChange={(event) => { setUrl(event.target.value); inspection.reset(); }}
+                placeholder="https://example.com/page"
+                className={fieldClass}
+                style={fieldStyle}
+              />
+              <button type="submit" disabled={inspection.isPending || !url.trim()} className="shrink-0 rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-50" style={{ background: "var(--app-primary)" }}>
+                {inspection.isPending ? "Inspecting…" : "Inspect URL"}
+              </button>
+            </div>
+            {inspection.isError && <p role="alert" className="m-0 text-xs font-semibold" style={{ color: "var(--app-danger-strong)" }}>{errorMessage(inspection.error, "Google Search Console could not inspect this URL.")}</p>}
+          </form>
+          {result && (
+            <section aria-label="URL inspection result" className="rounded-xl border p-4" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="m-0 text-sm font-bold">Index status: {result.verdict ?? "Not reported"}</h3>
+                  <p className="m-0 mt-1 break-all text-xs" style={{ color: "var(--app-text-muted)" }}>{result.inspectionUrl}</p>
+                </div>
+                {result.inspectionResultLink && <a href={result.inspectionResultLink} target="_blank" rel="noreferrer" className="text-xs font-bold underline">Open Google report</a>}
+              </div>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {([
+                  ["Coverage", result.coverageState],
+                  ["Indexing state", result.indexingState],
+                  ["robots.txt", result.robotsTxtState],
+                  ["Page fetch", result.pageFetchState],
+                  ["Last Google crawl", result.lastCrawlTime],
+                  ["Google canonical", result.googleCanonical],
+                  ["User canonical", result.userCanonical],
+                ] as const).map(([label, value]) => (
+                  <div key={label} className="min-w-0 rounded-lg border p-3" style={{ borderColor: "var(--app-border)" }}>
+                    <dt className="text-[11px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{label}</dt>
+                    <dd className="m-0 mt-1 break-all text-xs">{value || "Not reported by Google"}</dd>
+                  </div>
+                ))}
+                <div className="min-w-0 rounded-lg border p-3" style={{ borderColor: "var(--app-border)" }}>
+                  <dt className="text-[11px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Sitemaps</dt>
+                  <dd className="m-0 mt-1 break-all text-xs">{result.sitemaps.length ? result.sitemaps.join(", ") : "Not reported by Google"}</dd>
+                </div>
+                <div className="min-w-0 rounded-lg border p-3 sm:col-span-2" style={{ borderColor: "var(--app-border)" }}>
+                  <dt className="text-[11px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Referring URLs</dt>
+                  <dd className="m-0 mt-1 break-all text-xs">{result.referringUrls.length ? result.referringUrls.join(", ") : "Not reported by Google"}</dd>
+                </div>
+              </dl>
+              <div className="mt-4 rounded-xl border p-3" style={{ borderColor: "var(--app-border)" }}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="m-0 text-xs font-bold">Google web-search performance</h3>
+                  <span className="text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+                    {result.searchPerformance.startDate} – {result.searchPerformance.endDate}
+                  </span>
+                </div>
+                {result.searchPerformance.status === "final" ? (
+                  <>
+                    {result.searchPerformance.pageUrl && result.searchPerformance.pageUrl !== result.inspectionUrl && (
+                      <p className="m-0 mt-2 break-all text-[11px]" style={{ color: "var(--app-text-muted)" }}>
+                        Google grouped this row under canonical page {result.searchPerformance.pageUrl}
+                      </p>
+                    )}
+                    <dl className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+                      {([
+                        ["Clicks", result.searchPerformance.clicks],
+                        ["Impressions", result.searchPerformance.impressions],
+                        ["CTR", result.searchPerformance.clickThroughRate === null ? null : new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 2 }).format(result.searchPerformance.clickThroughRate)],
+                        ["Average position", result.searchPerformance.averagePosition?.toString() ?? null],
+                      ] as const).map(([label, value]) => (
+                        <div key={label} className="rounded-lg border p-2" style={{ borderColor: "var(--app-border)" }}>
+                          <dt className="text-[10px] font-semibold" style={{ color: "var(--app-text-faint)" }}>{label}</dt>
+                          <dd className="m-0 mt-1 text-sm font-bold">{value ?? "Not reported"}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                ) : (
+                  <p className="m-0 mt-2 text-xs" style={{ color: result.searchPerformance.status === "unavailable" ? "var(--app-warning-text)" : "var(--app-text-muted)" }}>
+                    {result.searchPerformance.status === "unavailable"
+                      ? "Search Console did not return page performance for this request. The index inspection above succeeded separately."
+                      : "No finalized page-performance row was returned for this date window. This does not mean the page had zero clicks or impressions."}
+                  </p>
+                )}
+                <p className="m-0 mt-2 text-[11px]" style={{ color: "var(--app-text-faint)" }}>{result.searchPerformanceDisclosure}</p>
+              </div>
+              <p className="m-0 mt-3 text-[11px]" style={{ color: "var(--app-text-faint)" }}>{result.disclosure} Inspected {result.inspectedAt}.</p>
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+type Tab = "issues" | "redirects" | "canonicals" | "changes" | "url_inspection" | "not_tracked";
 
 export function SeoTechnicalView() {
   const refresh = useRefresh();
@@ -275,6 +419,7 @@ export function SeoTechnicalView() {
     ["redirects", `Redirects (${data?.redirects.length ?? 0})`],
     ["canonicals", `Canonicals (${data?.canonicals.length ?? 0})`],
     ["changes", `Changes (${openChanges} open)`],
+    ["url_inspection", "URL inspection"],
     ["not_tracked", "Not tracked"],
   ];
 
@@ -324,6 +469,8 @@ export function SeoTechnicalView() {
               {errorMessage(overview.error, "Couldn't load technical SEO.")}
               <button type="button" onClick={() => overview.refetch()} className="font-bold underline">Retry</button>
             </div>
+          ) : tab === "url_inspection" ? (
+            <UrlInspectionPanel />
           ) : !data?.crawl ? (
             <p className="m-0 text-sm" style={{ color: "var(--app-text-faint)" }}>
               No website audit yet. <Link href="/marketing/seo-autopilot" className="font-bold underline">Run a site audit</Link> first.
@@ -394,7 +541,7 @@ export function SeoTechnicalView() {
               <li><strong>Structured data (schema):</strong> not tracked — the site audit doesn&rsquo;t read JSON-LD or microdata.</li>
               <li><strong>Core Web Vitals:</strong> not tracked — no PageSpeed / Chrome UX Report connection.</li>
               <li><strong>Hreflang, mobile rendering:</strong> not tracked — the audit fetches HTML without rendering or reading alternate-language links.</li>
-              <li><strong>Re-index requests:</strong> not available — no Search Console connection.</li>
+              <li><strong>Live page testing and re-index requests:</strong> not available — URL Inspection reads Google&rsquo;s stored index version only; it does not test current page contents or request indexing.</li>
             </ul>
           )}
         </div>

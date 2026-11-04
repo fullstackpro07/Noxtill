@@ -59,6 +59,8 @@ function buildService(overrides: Record<string, unknown> = {}) {
     productOpportunityAudit: { create: createAudit },
   };
   const client = {
+    business: { findFirst: jest.fn().mockResolvedValue({ policies: {} }) },
+    activityEvent: { findFirst: jest.fn().mockResolvedValue(null) },
     productOpportunity: {
       findMany: jest.fn().mockResolvedValue([opportunity]),
       findFirst: jest.fn().mockResolvedValue(opportunity),
@@ -69,6 +71,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
     ),
   };
   const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const specialistAgentEvents = { add: jest.fn().mockResolvedValue(null) };
   Object.assign(client.productOpportunity, overrides);
   return {
     service: new ProductValidationService(
@@ -76,12 +79,14 @@ function buildService(overrides: Record<string, unknown> = {}) {
         client,
       } as unknown as TenantPrismaService,
       activity as unknown as ActivityService,
+      specialistAgentEvents as never,
     ),
     client,
     updateMany,
     createRun,
     createAudit,
     activity,
+    specialistAgentEvents,
   };
 }
 

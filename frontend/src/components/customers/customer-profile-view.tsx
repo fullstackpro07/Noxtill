@@ -18,6 +18,7 @@ import { ApiError } from "@/lib/api-client";
 import { formatCurrency, formatDate, formatTime } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { useSession } from "@/lib/session";
+import { CustomerProfileIntelligencePanel } from "./customer-profile-intelligence-panel";
 
 type HistTab = "purchases" | "appts" | "reviews" | "credit" | "messages";
 
@@ -114,13 +115,14 @@ export function CustomerProfileView({ customer, currency }: { customer: Customer
 
   return (
     <main className="flex flex-col gap-[15px] px-[22px] pb-[26px] pt-4">
+      <CustomerProfileIntelligencePanel key={customer.id} customerId={customer.id} />
       <div className="flex flex-wrap items-center gap-[14px] rounded-[16px] p-[17px]" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
         <span className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full text-[16px] font-extrabold" style={{ background: avatar.bg, color: avatar.fg }}>{initialsFor(customer.name)}</span>
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-[9px]">
             <span className="text-[19px] font-extrabold" style={{ color: "var(--app-text)", letterSpacing: "-.4px" }}>{customer.name}</span>
             {isVip && <span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-extrabold" style={{ background: "#FEF6E7", color: "#B54708" }}>VIP</span>}
-            {!customer.consentMarketing && <span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-extrabold" style={{ background: "var(--app-surface-2)", color: "var(--app-text-muted)" }}>Opted out of marketing</span>}
+            {customer.optedOut ? <span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-extrabold" style={{ background: "var(--app-surface-2)", color: "var(--app-text-muted)" }}>Opted out of marketing</span> : !customer.consentMarketing ? <span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-extrabold" style={{ background: "var(--app-surface-2)", color: "var(--app-text-muted)" }}>No marketing consent recorded</span> : <span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-extrabold" style={{ background: "var(--app-surface-2)", color: "var(--app-text-muted)" }}>CRM consent on file · channel checks still required</span>}
           </span>
           <span className="mt-1 block text-[12.5px]" style={{ color: "var(--app-text-disabled)" }}>{customer.phone} · customer since {formatDate(customer.createdAt)}</span>
           <span className="mt-[7px] flex flex-wrap gap-[5px]">

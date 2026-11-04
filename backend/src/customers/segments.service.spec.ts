@@ -109,6 +109,49 @@ describe('SegmentsService (BE-041, extended by UPD-BE-098)', () => {
       expect(segment.count).toBe(1);
     });
 
+    it('excludes erased profiles from legacy audiences, saved segments, counts, and previews', async () => {
+      const erased = await prisma.customer.create({
+        data: {
+          businessId,
+          name: 'Erased Customer',
+          phone: `erased-${Date.now()}`,
+          tags: ['VIP'],
+          lifetimeSpend: 5000,
+          visitCount: 40,
+        },
+      });
+      const segment = await segmentsService.create(businessId, {
+        name: 'High value',
+        rules: {
+          combinator: 'AND',
+          conditions: [{ field: 'lifetimeSpend', operator: 'gte', value: 0 }],
+        },
+      });
+
+      try {
+        expect((await segmentsService.getSegment('all')).count).toBe(3);
+        expect((await segmentsService.getSegment('vip')).count).toBe(1);
+        expect((await segmentsService.getSegment(segment.id)).count).toBe(3);
+        expect(
+          (await segmentsService.list()).find((row) => row.id === segment.id)
+            ?.count,
+        ).toBe(3);
+        expect(
+          (
+            await segmentsService.previewCount({
+              combinator: 'AND',
+              conditions: [
+                { field: 'lifetimeSpend', operator: 'gte', value: 0 },
+              ],
+            })
+          ).count,
+        ).toBe(3);
+      } finally {
+        await prisma.segment.delete({ where: { id: segment.id } });
+        await prisma.customer.delete({ where: { id: erased.id } });
+      }
+    });
+
     it('returns every customer for the all segment', async () => {
       const segment = await segmentsService.getSegment('all');
       expect(segment.count).toBe(3);

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { randomInt } from 'crypto';
 import { ClsService } from 'nestjs-cls';
 import { ConfigService } from '@nestjs/config';
 import { PhoneCallStatus, Role } from '@prisma/client';
@@ -64,7 +65,7 @@ describe('VoiceCallbacksService (real MySQL)', () => {
       data: {
         businessId,
         twilioSid: `PN${suffix}`,
-        phoneNumber: `+1415203${String(Date.now()).slice(-4)}`,
+        phoneNumber: `+1${randomInt(1_000_000_000, 10_000_000_000)}`,
       },
     });
     userId = (

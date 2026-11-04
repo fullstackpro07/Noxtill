@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  BarChart3,
   Link2,
   Plus,
   Search,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/keywords-api";
 import { formatDate } from "@/lib/format";
 import { askConfirm } from "@/lib/ask-dialog";
+import { fetchSeoSearchConsoleKeywordSummary } from "@/lib/seo-search-console-api";
 
 const INTENT_LABELS: Record<KeywordIntent, string> = {
   informational: "Informational",
@@ -224,6 +226,8 @@ export function SeoKeywordIntelligenceView() {
             icon={AlertTriangle}
           />
         </div>
+
+        <SearchConsoleKeywordEvidence />
 
         <div
           className="mt-4 rounded-[11px] p-3"
@@ -541,6 +545,176 @@ export function SeoKeywordIntelligenceView() {
       </section>
     </main>
   );
+}
+
+function SearchConsoleKeywordEvidence() {
+  const query = useQuery({
+    queryKey: ["seo-search-console-keywords"],
+    queryFn: fetchSeoSearchConsoleKeywordSummary,
+    staleTime: 30_000,
+  });
+  const data = query.data;
+
+  return (
+    <section
+      className="mt-4 rounded-[11px] p-3"
+      aria-labelledby="gsc-keyword-evidence-title"
+      style={{
+        border: "1px solid var(--app-border)",
+        background: "var(--app-surface-2)",
+      }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <BarChart3
+              className="h-3.5 w-3.5"
+              style={{ color: "var(--app-primary)" }}
+              aria-hidden
+            />
+            <h2
+              id="gsc-keyword-evidence-title"
+              className="m-0 text-[12px] font-bold"
+              style={{ color: "var(--app-text)" }}
+            >
+              Search Console keyword evidence
+            </h2>
+          </div>
+          <p
+            className="mb-0 mt-1 text-[10px]"
+            style={{ color: "var(--app-text-muted)" }}
+          >
+            Only exact matches to your tracked terms are saved. Search Console
+            may omit anonymized or low-volume queries.
+          </p>
+        </div>
+        <Link
+          href="/marketing/seo-autopilot/settings"
+          className="text-[10px] font-bold underline"
+          style={{ color: "var(--app-primary)" }}
+        >
+          Manage connection and sync
+        </Link>
+      </div>
+
+      {query.isPending ? (
+        <div
+          className="mt-3 h-16 animate-pulse rounded-lg"
+          style={{ background: "var(--app-surface)" }}
+          aria-label="Loading Search Console keyword data"
+        />
+      ) : query.isError ? (
+        <p
+          role="status"
+          className="mb-0 mt-3 text-[10.5px]"
+          style={{ color: "var(--app-text-muted)" }}
+        >
+          Search Console keyword data is unavailable. Retry the page or check
+          the connection in SEO Settings.
+        </p>
+      ) : !data?.selectedProperty ? (
+        <p
+          className="mb-0 mt-3 text-[10.5px]"
+          style={{ color: "var(--app-text-muted)" }}
+        >
+          {data?.status === "connected"
+            ? "No Search Console property is selected. Choose one in SEO Settings to load keyword evidence."
+            : "Not connected. Connect Search Console and select a property in SEO Settings."}
+        </p>
+      ) : data.windows.every((row) => row.snapshots.length === 0) ? (
+        <p
+          className="mb-0 mt-3 text-[10.5px]"
+          style={{ color: "var(--app-text-muted)" }}
+        >
+          No keyword snapshot has been synced for this property yet. Use Search
+          Console sync in SEO Settings.
+        </p>
+      ) : (
+        <>
+          <p
+            className="mb-0 mt-3 text-[9.5px]"
+            style={{ color: "var(--app-text-faint)" }}
+          >
+            Latest saved window ending {data.latestWindowEnd ?? "—"} ·{" "}
+            {data.matchedKeywordCount} of {data.trackedKeywordCount} tracked
+            terms reported · {data.notReportedKeywordCount} not reported
+          </p>
+          <div
+            className="mt-2 overflow-x-auto rounded-lg"
+            style={{ border: "1px solid var(--app-border)" }}
+          >
+            <table className="w-full min-w-[620px] border-collapse text-left text-[10px]">
+              <thead
+                style={{
+                  background: "var(--app-surface)",
+                  color: "var(--app-text-faint)",
+                }}
+              >
+                <tr>
+                  <th className="px-2.5 py-2 font-semibold">Tracked keyword</th>
+                  <th className="px-2.5 py-2 font-semibold">Clicks</th>
+                  <th className="px-2.5 py-2 font-semibold">Impressions</th>
+                  <th className="px-2.5 py-2 font-semibold">CTR</th>
+                  <th className="px-2.5 py-2 font-semibold">Avg. position</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.windows.map((row) => {
+                  const latest = row.snapshots[0];
+                  const reported = latest?.dataState === "final";
+                  return (
+                    <tr
+                      key={row.id}
+                      className="border-t"
+                      style={{
+                        borderColor: "var(--app-border)",
+                        color: "var(--app-text)",
+                      }}
+                    >
+                      <td className="px-2.5 py-2 font-semibold">{row.keyword}</td>
+                      <td className="px-2.5 py-2">
+                        {reported ? formatProviderCount(latest.clicks) : "Not reported"}
+                      </td>
+                      <td className="px-2.5 py-2">
+                        {reported ? formatProviderCount(latest.impressions) : "Not reported"}
+                      </td>
+                      <td className="px-2.5 py-2">
+                        {reported && latest.clickThroughRate !== null
+                          ? `${(latest.clickThroughRate * 100).toFixed(1)}%`
+                          : "Not reported"}
+                      </td>
+                      <td className="px-2.5 py-2">
+                        {reported && latest.averagePosition !== null
+                          ? latest.averagePosition.toFixed(1)
+                          : "Not reported"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p
+            className="mb-0 mt-2 text-[9.5px]"
+            style={{ color: "var(--app-text-faint)" }}
+          >
+            “Not reported” means Google did not return that exact tracked term
+            for this window; it does not mean zero activity. These are provider
+            observations, not estimates.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function formatProviderCount(value: string | null) {
+  if (value === null) return "Not reported";
+  try {
+    return new Intl.NumberFormat().format(BigInt(value));
+  } catch {
+    return "Not available";
+  }
 }
 
 function KeywordRow({

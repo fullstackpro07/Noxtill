@@ -7,13 +7,21 @@ import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { askConfirm, askText } from "@/lib/ask-dialog";
-import { transitionContentBrief } from "@/lib/seo-content-api";
+import { fetchContentOpportunities, transitionContentBrief } from "@/lib/seo-content-api";
 import { transitionSeoRevision } from "@/lib/seo-on-page-api";
 import { transitionTechnicalAction } from "@/lib/seo-technical-api";
+import { useSession } from "@/lib/session";
+import { SpecialistAgentUsage } from "@/components/agents/specialist-agent-usage";
 import {
+  fetchSeoAgentRuns,
   fetchSeoWorkspace,
   fetchSeoWorkspaceHistory,
+  generateSeoOnPageRevision,
+  generateSeoOpportunityBrief,
+  prepareSeoTechnicalReview,
+  runSeoAgentReview,
   SEO_WORKSPACE_KEY,
+  type SeoAgentRun,
   type WorkspaceItem,
   type WorkspaceKind,
   type WorkspaceStage,
@@ -75,6 +83,31 @@ function QueueRow({ item }: { item: WorkspaceItem }) {
     },
     onError: (error) => toast.error(errorMessage(error, "Couldn't record the decision.")),
   });
+  const prepareRevision = useMutation({
+    mutationFn: () => generateSeoOnPageRevision(item.id),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: SEO_WORKSPACE_KEY }),
+        client.invalidateQueries({ queryKey: ["seo-on-page-summary"] }),
+        client.invalidateQueries({ queryKey: ["seo-on-page-pages"] }),
+        client.invalidateQueries({ queryKey: ["seo-revisions"] }),
+      ]);
+      toast.success("Revision draft created. Review it in On-Page before submitting for approval.");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't prepare the revision draft.")),
+  });
+  const prepareTechnicalReview = useMutation({
+    mutationFn: () => prepareSeoTechnicalReview(item.id),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: SEO_WORKSPACE_KEY }),
+        client.invalidateQueries({ queryKey: ["seo-technical-overview"] }),
+        client.invalidateQueries({ queryKey: ["seo-technical-actions"] }),
+      ]);
+      toast.success("Technical review draft created. Review it in Technical SEO before submitting it for approval.");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't prepare the technical review draft.")),
+  });
   return (
     <tr className="border-t align-top" style={{ borderColor: "var(--app-border)" }}>
       <td className="px-3 py-2">
@@ -92,6 +125,26 @@ function QueueRow({ item }: { item: WorkspaceItem }) {
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-col gap-1">
+          {item.kind === "audit_finding" && item.canPrepareOnPageRevision && item.stage === "new" && (
+            <button
+              type="button"
+              disabled={prepareRevision.isPending}
+              onClick={() => prepareRevision.mutate()}
+              className="font-bold underline disabled:opacity-50"
+            >
+              {prepareRevision.isPending ? "Preparing…" : "Prepare revision"}
+            </button>
+          )}
+          {item.kind === "audit_finding" && item.canPrepareTechnicalReview && item.stage === "new" && (
+            <button
+              type="button"
+              disabled={prepareTechnicalReview.isPending}
+              onClick={() => prepareTechnicalReview.mutate()}
+              className="font-bold underline disabled:opacity-50"
+            >
+              {prepareTechnicalReview.isPending ? "Preparing…" : "Prepare technical review"}
+            </button>
+          )}
           {item.stage === "waiting_approval" && (
             <>
               <button
@@ -128,14 +181,48 @@ function QueueRow({ item }: { item: WorkspaceItem }) {
 type Tab = "queue" | "history";
 
 export function SeoWorkspaceView() {
+  const session = useSession();
+  const client = useQueryClient();
+  const canRunAgent = session.user.role !== "staff";
   const queue = useQuery({ queryKey: SEO_WORKSPACE_KEY, queryFn: fetchSeoWorkspace });
   const [tab, setTab] = useState<Tab>("queue");
   const [stage, setStage] = useState<WorkspaceStage | "all">("all");
   const history = useQuery({ queryKey: [...SEO_WORKSPACE_KEY, "history"], queryFn: fetchSeoWorkspaceHistory, enabled: tab === "history" });
+  const agentRuns = useQuery({ queryKey: [...SEO_WORKSPACE_KEY, "agent-runs"], queryFn: fetchSeoAgentRuns });
+  const contentOpportunities = useQuery({ queryKey: ["seo-content-opportunities"], queryFn: fetchContentOpportunities });
+  const agentRun = useMutation({
+    mutationFn: runSeoAgentReview,
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: [...SEO_WORKSPACE_KEY, "agent-runs"] });
+      toast.success("SEO Agent review saved.");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't run the SEO review.")),
+  });
+  const briefFromOpportunity = useMutation({
+    mutationFn: generateSeoOpportunityBrief,
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["seo-content-opportunities"] }),
+        client.invalidateQueries({ queryKey: ["seo-content-briefs"] }),
+        client.invalidateQueries({ queryKey: SEO_WORKSPACE_KEY }),
+      ]);
+      toast.success("AI brief created. Review it in Content before drafting or publishing.");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't create the content brief.")),
+  });
   const data = queue.data;
   const kpis = data?.kpis;
   const loading = queue.isLoading;
   const items = (data?.items ?? []).filter((item) => stage === "all" || item.stage === stage);
+  const latestAgentRun: SeoAgentRun | undefined = agentRuns.data?.[0];
+  const agentOffPageRecords = latestAgentRun?.output?.snapshot?.offPageRecords;
+  const hasTeamOffPageRecords = agentOffPageRecords
+    ? agentOffPageRecords.trackedLinks +
+        agentOffPageRecords.openTrackedOpportunities +
+        agentOffPageRecords.guestPublications +
+        agentOffPageRecords.guestPitches >
+      0
+    : false;
   const toggle = (next: WorkspaceStage) => {
     setTab("queue");
     setStage((current) => (current === next ? "all" : next));
@@ -145,7 +232,7 @@ export function SeoWorkspaceView() {
     <main className="flex flex-col gap-5 p-5 md:p-7" style={{ color: "var(--app-text)" }}>
       <p className="m-0 max-w-4xl text-xs" style={{ color: "var(--app-text-muted)" }}>
         One queue for every SEO change in progress — site-audit findings, page metadata, technical changes and content. Approving here uses the same rules as each screen. Noxtill doesn&rsquo;t publish to your
-        website, so approved changes are applied by you and confirmed by the next site audit. Expected traffic impact is <strong>not estimated</strong> (no Search Console or analytics connection); each item shows
+        website, so approved changes are applied by you and confirmed by the next site audit. Expected page-level traffic impact is <strong>not estimated</strong> (this queue does not include Search Console metrics and no analytics source attributes visits to orders); each item shows
         who or what produced it instead of a confidence score. Other SEO work queues:{" "}
         {OTHER_QUEUES.map((queueLink, index) => (
           <span key={queueLink.href}>
@@ -155,6 +242,91 @@ export function SeoWorkspaceView() {
         ))}
         .
       </p>
+
+      <section className="rounded-2xl border p-4" style={{ background: "var(--app-surface)", borderColor: "var(--app-border)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="m-0 text-sm font-bold">SEO Autopilot Agent</h2>
+            <p className="mb-0 mt-1 max-w-3xl text-xs leading-relaxed" style={{ color: "var(--app-text-muted)" }}>
+              A read-only review of this existing workspace queue. It can identify the next item to review, but it does not approve or publish changes. Search Console clicks and impressions and aggregate GA4 Organic Search metrics may appear when connected; provider-wide backlink data is not included.
+            </p>
+          </div>
+          {canRunAgent && (
+            <button type="button" onClick={() => agentRun.mutate()} disabled={agentRun.isPending} className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-60" style={{ background: "var(--app-primary)" }}>
+              {agentRun.isPending ? "Reviewing…" : "Run agent review"}
+            </button>
+          )}
+        </div>
+        {latestAgentRun?.output && (
+          <div className="mt-3 rounded-xl p-3" style={{ background: "var(--app-surface-2)" }}>
+            <p className="m-0 text-xs font-semibold">{latestAgentRun.recommendations[0]?.summary ?? latestAgentRun.output.summary}</p>
+            {latestAgentRun.output.snapshot?.queueCounts && (
+              <div className="mt-2 flex flex-wrap gap-2 text-[10.5px]" style={{ color: "var(--app-text-muted)" }}>
+                <span>{latestAgentRun.output.snapshot.queueCounts.newFindings} new</span>
+                <span>{latestAgentRun.output.snapshot.queueCounts.waitingApproval} waiting approval</span>
+                <span>{latestAgentRun.output.snapshot.queueCounts.verificationRequired} need verification</span>
+                <span>{latestAgentRun.output.snapshot.queueCounts.notMatched} not matched</span>
+              </div>
+            )}
+            {agentOffPageRecords && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px]" style={{ color: "var(--app-text-muted)" }}>
+                {!hasTeamOffPageRecords ? (
+                  <span>No tracked off-page or guest-post records in this review</span>
+                ) : (
+                  <span>
+                    Team records: {agentOffPageRecords.trackedLinks} tracked links
+                    ({agentOffPageRecords.activeLinks} active · {agentOffPageRecords.lostLinks} marked lost · {agentOffPageRecords.unverifiedLinks} unverified), {agentOffPageRecords.openTrackedOpportunities} open opportunities, {agentOffPageRecords.guestPublications} publications and {agentOffPageRecords.guestPitches} pitches
+                  </span>
+                )}
+                <Link href="/marketing/seo-autopilot/off-page" className="font-bold underline">Review Off-Page SEO</Link>
+                <span>Merchant-entered only · no provider authority score</span>
+              </div>
+            )}
+            {latestAgentRun.output.aiSummary && (
+              <p className="mb-0 mt-2 text-[11px]" style={{ color: "var(--app-text-muted)" }}>
+                Optional AI explanation · {latestAgentRun.output.aiSummary.status}: {latestAgentRun.output.aiSummary.text ?? latestAgentRun.output.aiSummary.message}
+              </p>
+            )}
+            <SpecialistAgentUsage calls={latestAgentRun.aiCallLogs} />
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border p-4" style={{ background: "var(--app-surface)", borderColor: "var(--app-border)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="m-0 text-sm font-bold">Content opportunities</h2>
+            <p className="mb-0 mt-1 text-xs" style={{ color: "var(--app-text-muted)" }}>
+              Based on tracked keywords, rank checks and the latest site audit. The agent can prepare a source-backed brief; you review it in Content. AI drafts must be enabled and a provider configured.
+            </p>
+          </div>
+          <Link href="/marketing/seo-autopilot/content" className="text-xs font-bold underline">Open Content</Link>
+        </div>
+        {contentOpportunities.isLoading ? (
+          <p className="mb-0 mt-3 text-xs" style={{ color: "var(--app-text-faint)" }}>Loading opportunities…</p>
+        ) : contentOpportunities.isError ? (
+          <p className="mb-0 mt-3 text-xs" style={{ color: "var(--app-danger-strong)" }}>
+            {errorMessage(contentOpportunities.error, "Couldn't load content opportunities.")}
+            {" "}<button type="button" onClick={() => contentOpportunities.refetch()} className="font-bold underline">Retry</button>
+          </p>
+        ) : (contentOpportunities.data?.opportunities ?? []).filter((item) => !item.dismissed && !item.briefId).length === 0 ? (
+          <p className="mb-0 mt-3 text-xs" style={{ color: "var(--app-text-faint)" }}>No open, unbriefed content opportunities from current sources.</p>
+        ) : (
+          <ul className="mb-0 mt-3 flex list-none flex-col p-0">
+            {(contentOpportunities.data?.opportunities ?? []).filter((item) => !item.dismissed && !item.briefId).map((item) => (
+              <li key={item.keywordId} className="flex flex-wrap items-center justify-between gap-3 border-t py-3 text-xs" style={{ borderColor: "var(--app-border)" }}>
+                <div className="min-w-[220px] flex-1">
+                  <p className="m-0 font-semibold">{item.keyword}</p>
+                  <p className="mb-0 mt-1" style={{ color: "var(--app-text-muted)" }}>{item.evidence} · {item.kind.replaceAll("_", " ")} · {item.suggestedFormat.replaceAll("_", " ")}</p>
+                </div>
+                <button type="button" disabled={!canRunAgent || briefFromOpportunity.isPending} onClick={() => briefFromOpportunity.mutate(item.keywordId)} className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50" style={{ background: "var(--app-primary)" }}>
+                  {briefFromOpportunity.isPending && briefFromOpportunity.variables === item.keywordId ? "Generating…" : "Generate AI brief"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Kpi label="New findings" value={loading ? "…" : kpis?.newFindings ?? "—"} hint={data ? `Audit issues from the last ${data.rules.newFindingDays} days` : "Recent audit issues"} active={stage === "new"} onClick={() => toggle("new")} />

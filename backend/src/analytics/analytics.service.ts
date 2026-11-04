@@ -12,6 +12,8 @@ import {
   MARKETING_ERROR_CODES,
 } from '../marketing/marketing.constants';
 import { OrderStatus, Prisma } from '@prisma/client';
+import { excludeErasedCustomers } from '../customers/segment-rules.util';
+import { CustomerAnalyticsSummaryService } from '../customers/customer-analytics-summary.service';
 
 const COHORT_MONTHS_BACK = 6;
 const COHORT_RELATIVE_MONTHS = 6;
@@ -69,6 +71,7 @@ export class AnalyticsService {
     private readonly cls: ClsService,
     private readonly segments: SegmentsService,
     private readonly sendGate: SendGateService,
+    private readonly customerAnalyticsSummary: CustomerAnalyticsSummaryService,
   ) {}
 
   async kpis() {
@@ -86,7 +89,9 @@ export class AnalyticsService {
           _sum: { total: true, cogs: true },
           _count: true,
         }),
-        client.customer.count({ where: { createdAt: { gte: since } } }),
+        client.customer.count({
+          where: excludeErasedCustomers({ createdAt: { gte: since } }),
+        }),
         client.appointment.count({ where: { createdAt: { gte: since } } }),
         client.externalReview.aggregate({ _avg: { stars: true } }),
       ]);
@@ -179,7 +184,10 @@ export class AnalyticsService {
           ),
         );
         const cohortCustomers = await client.customer.findMany({
-          where: { businessId: { in: ids }, createdAt: { gte: cohortStart, lt: cohortEnd } },
+          where: excludeErasedCustomers({
+            businessId: { in: ids },
+            createdAt: { gte: cohortStart, lt: cohortEnd },
+          }),
           select: { id: true, lifetimeSpend: true },
         });
         const customerIds = cohortCustomers.map((c) => c.id);
@@ -259,6 +267,7 @@ export class AnalyticsService {
           status: OrderStatus.completed,
           isQuotation: false,
           customerId: { not: null },
+          customer: { isNot: { phone: { startsWith: 'erased-' } } },
         },
         _min: { createdAt: true },
       }),
@@ -268,6 +277,7 @@ export class AnalyticsService {
           status: OrderStatus.completed,
           isQuotation: false,
           customerId: { not: null },
+          customer: { isNot: { phone: { startsWith: 'erased-' } } },
           createdAt: { gte: rangeStart },
         },
         select: { customerId: true, createdAt: true },
@@ -440,70 +450,7 @@ export class AnalyticsService {
    * maintains — reused via `SegmentsService`, not a re-derived "days since last visit" guess that
    * could disagree with what the Customers screen shows for the same customer). */
   async customerSummary(businessId: string, branchId?: string) {
-    const ids = await this.branchScope.resolveIds(businessId, branchId);
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-
-    // `atRiskCount` deliberately stays scoped to the caller's own business only, not the resolved
-    // branch group: `SegmentsService` (shared with Marketing's Audiences feature) has no
-    // multi-business concept, and giving it one is a larger change than this screen's branch
-    // filter warrants. Every other figure below respects the real branch selection.
-    const [lapsedSegment, customers, newThisMonth] = await Promise.all([
-      this.segments.getSegment('lapsed'),
-      this.prisma.customer.findMany({
-        where: { businessId: { in: ids } },
-        select: { id: true, visitCount: true, lifetimeSpend: true },
-      }),
-      // Same real "signed up this calendar month" definition `cohorts()` uses for a cohort's own
-      // size (UPD-BE-113b) — before this, "New Customers" used a different, unrelated window
-      // (signed up in the trailing 30 days), which didn't line up with the "New vs returning"
-      // chart's current-month bar directly below it on the same screen.
-      this.prisma.customer.count({
-        where: { businessId: { in: ids }, createdAt: { gte: monthStart, lt: monthEnd } },
-      }),
-    ]);
-
-    const withVisit = customers.filter((c) => c.visitCount >= 1);
-    const returning = customers.filter((c) => c.visitCount > 1);
-    const retentionRate =
-      withVisit.length > 0
-        ? round2((returning.length / withVisit.length) * 100)
-        : 0;
-
-    const spends = customers
-      .map((c) => Number(c.lifetimeSpend))
-      .sort((a, b) => a - b);
-    const avgLTV = spends.length
-      ? round2(spends.reduce((sum, v) => sum + v, 0) / spends.length)
-      : 0;
-
-    return {
-      totalCustomers: customers.length,
-      newCount: newThisMonth,
-      returningCount: returning.length,
-      retentionRate,
-      avgLTV,
-      ltvDistribution: this.buildLtvQuartiles(spends),
-      atRiskCount: lapsedSegment.count,
-    };
-  }
-
-  /** Real percentile-based buckets (not fixed currency amounts, which would be meaningless across
-   * businesses using different currencies) — quartiles of this business's own real LTV spread. */
-  private buildLtvQuartiles(sortedSpends: number[]) {
-    if (sortedSpends.length === 0) return [];
-    const quartileLabels = ['Bottom 25%', '25–50%', '50–75%', 'Top 25%'];
-    const size = Math.ceil(sortedSpends.length / 4);
-    return quartileLabels.map((label, i) => {
-      const bucket = sortedSpends.slice(i * size, (i + 1) * size);
-      return {
-        label,
-        count: bucket.length,
-        minLtv: bucket.length ? round2(bucket[0]) : 0,
-        maxLtv: bucket.length ? round2(bucket[bucket.length - 1]) : 0,
-      };
-    });
+    return this.customerAnalyticsSummary.customerSummary(businessId, branchId);
   }
 
   /** UPD-FE-098's cohort-table drill-down — the real customers behind one cohort month's %. Takes
@@ -520,7 +467,10 @@ export class AnalyticsService {
     const end = new Date(Date.UTC(year, month, 1));
 
     return this.prisma.customer.findMany({
-      where: { businessId: { in: ids }, createdAt: { gte: start, lt: end } },
+      where: excludeErasedCustomers({
+        businessId: { in: ids },
+        createdAt: { gte: start, lt: end },
+      }),
       select: {
         id: true,
         name: true,

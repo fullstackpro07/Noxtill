@@ -192,6 +192,65 @@ export class IntegrationsService {
     return JSON.parse(this.tokenCipher.decrypt(row.tokens)) as OAuthTokens;
   }
 
+  /** Returns a usable OAuth token and persists a provider refresh when the saved access token is expired. */
+  async getFreshTokens(
+    businessId: string,
+    provider: IntegrationProvider,
+  ): Promise<OAuthTokens | null> {
+    const row = await this.tenantPrisma.client.integration.findUnique({
+      where: { businessId_provider: { businessId, provider } },
+      select: { status: true, tokens: true },
+    });
+    if (row?.status !== IntegrationStatus.connected || !row.tokens) return null;
+
+    let tokens: OAuthTokens;
+    try {
+      tokens = JSON.parse(this.tokenCipher.decrypt(row.tokens)) as OAuthTokens;
+    } catch {
+      throw new AppException(
+        'INTEGRATION_TOKEN_UNAVAILABLE',
+        'This integration token could not be read. Reconnect it in Integrations.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const expiresAt = tokens.expiresAt ? Date.parse(tokens.expiresAt) : NaN;
+    if (!Number.isFinite(expiresAt) || expiresAt > Date.now() + 60_000) {
+      return tokens;
+    }
+    if (!tokens.refreshToken) {
+      await this.tenantPrisma.client.integration.updateMany({
+        where: { businessId, provider, status: IntegrationStatus.connected },
+        data: { status: IntegrationStatus.needs_attention },
+      });
+      throw new AppException(
+        'INTEGRATION_REAUTH_REQUIRED',
+        'This integration needs to be reconnected in Integrations.',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    try {
+      const refreshed = await this.connectors
+        .get(provider)
+        .refreshToken(tokens);
+      await this.tenantPrisma.client.integration.updateMany({
+        where: { businessId, provider, status: IntegrationStatus.connected },
+        data: { tokens: this.tokenCipher.encrypt(JSON.stringify(refreshed)) },
+      });
+      return refreshed;
+    } catch {
+      await this.tenantPrisma.client.integration.updateMany({
+        where: { businessId, provider, status: IntegrationStatus.connected },
+        data: { status: IntegrationStatus.needs_attention },
+      });
+      throw new AppException(
+        'INTEGRATION_TOKEN_REFRESH_FAILED',
+        'This integration needs attention. Reconnect it in Integrations.',
+        HttpStatus.CONFLICT,
+      );
+    }
+  }
+
   private stateSecret(): string {
     return this.config.get<string>('INTEGRATIONS_STATE_SECRET') ?? '';
   }

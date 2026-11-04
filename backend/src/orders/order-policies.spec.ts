@@ -209,6 +209,7 @@ describe('Owner sale policies (createSale)', () => {
     expect(p.num('sales.maxDiscountPercent')).toBe(15);
     expect(p.bool('sales.requireCustomer')).toBe(false);
     expect(p.num('catalog.defaultLowStockThreshold')).toBe(5);
+    expect(p.num('inventory.agentReorderLeadTimeDays')).toBe(14);
   });
 
   it('rejects out-of-range and unknown policy values', () => {
@@ -217,5 +218,8 @@ describe('Owner sale policies (createSale)', () => {
     expect(policies.normalize('sales.maxDiscountPercent', '')).toBeNull();
     expect(policies.normalize('marketing.quietFrom', '21:30')).toBe('21:30');
     expect(() => policies.normalize('marketing.quietFrom', '25:00')).toThrow();
+    expect(policies.normalize('inventory.agentReorderLeadTimeDays', 21)).toBe(21);
+    expect(() => policies.normalize('inventory.agentReorderLeadTimeDays', 0)).toThrow();
+    expect(() => policies.normalize('inventory.agentReorderLeadTimeDays', 1.5)).toThrow();
   });
 });

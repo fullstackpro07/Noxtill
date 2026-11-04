@@ -25,6 +25,24 @@ describe('StockCountService (UPD-BE-037)', () => {
   let productBId: string;
   let serviceProductId: string;
   const activity = { record: jest.fn().mockResolvedValue(undefined) };
+  const specialistAgentEvents = {
+    add: jest
+      .fn<
+        Promise<unknown>,
+        [
+          string,
+          Record<string, unknown>,
+          {
+            jobId: string;
+            attempts: number;
+            backoff: { type: 'exponential'; delay: number };
+            removeOnComplete: number;
+            removeOnFail: number;
+          },
+        ]
+      >()
+      .mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -38,12 +56,14 @@ describe('StockCountService (UPD-BE-037)', () => {
     service = new StockCountService(
       tenantPrisma,
       activity as unknown as ActivityService,
+      specialistAgentEvents as never,
     );
 
     const business = await prisma.business.create({
       data: {
         name: 'Stock Count Test Biz',
         slug: `stock-count-test-${Date.now()}`,
+        policies: { 'agents.inventoryStockCountEventReviewEnabled': true },
       },
     });
     businessId = business.id;
@@ -67,6 +87,7 @@ describe('StockCountService (UPD-BE-037)', () => {
 
   afterEach(() => {
     activity.record.mockClear();
+    specialistAgentEvents.add.mockClear();
   });
 
   afterAll(async () => {
@@ -153,6 +174,35 @@ describe('StockCountService (UPD-BE-037)', () => {
       businessId,
       expect.objectContaining({ type: 'stock', entityType: 'StockCount' }),
     );
+    const queuedCountReview = specialistAgentEvents.add.mock.calls[0];
+    expect(queuedCountReview?.[0]).toBe('inventory-stock-count-applied');
+    expect(queuedCountReview?.[1]).toMatchObject({
+      businessId,
+      stockCountId: count.id,
+      appliedAt: applied.appliedAt?.toISOString(),
+    });
+    expect(queuedCountReview?.[2].jobId).toContain(
+      `inventory-stock-count-${businessId}-${count.id}-`,
+    );
+    expect(queuedCountReview?.[2].attempts).toBe(3);
+  });
+
+  it('does not enqueue an applied-count review unless the owner opts in', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: { 'agents.inventoryStockCountEventReviewEnabled': false } },
+    });
+    const count = await service.create(businessId, 'owner-1', {
+      lines: [{ productId: productAId, countedQty: 41 }],
+    });
+
+    await service.apply(businessId, count.id, 'owner-1');
+    expect(specialistAgentEvents.add).not.toHaveBeenCalled();
+
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { policies: { 'agents.inventoryStockCountEventReviewEnabled': true } },
+    });
   });
 
   it('rejects applying an already-applied stock count', async () => {

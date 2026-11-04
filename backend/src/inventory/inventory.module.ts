@@ -15,15 +15,29 @@ import { ActivityModule } from '../activity/activity.module';
 import { AutomationsModule } from '../marketing/automations/automations.module';
 import { AutomationModule as OutboundWebhookAutomationModule } from '../integrations/automation/automation.module';
 import { LocalizationModule } from '../common/localization/localization.module';
+import { AiModule } from '../ai/ai.module';
+import { InventoryIntelligenceService } from './inventory-intelligence.service';
+import { BranchesModule } from '../branches/branches.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
+import { InventoryAgentEventProcessor } from './inventory-agent-event.processor';
+import { INVENTORY_AGENT_OUTCOMES_QUEUE } from './inventory-agent-outcomes.constants';
+import { InventoryAgentOutcomesScheduler } from './inventory-agent-outcomes.scheduler';
+import { InventoryAgentOutcomesProcessor } from './inventory-agent-outcomes.processor';
 
 @Module({
   imports: [
-    BullModule.registerQueue({ name: LOW_STOCK_SCAN_QUEUE }),
+    BullModule.registerQueue(
+      { name: LOW_STOCK_SCAN_QUEUE },
+      { name: INVENTORY_AGENT_OUTCOMES_QUEUE },
+    ),
     MessagingModule,
     ActivityModule,
     AutomationsModule,
     OutboundWebhookAutomationModule,
     LocalizationModule,
+    AiModule,
+    BranchesModule,
+    SpecialistAgentEventQueueModule,
   ],
   controllers: [InventoryController, PurchaseOrdersController],
   providers: [
@@ -34,7 +48,11 @@ import { LocalizationModule } from '../common/localization/localization.module';
     PurchaseOrdersService,
     LowStockScanScheduler,
     LowStockScanProcessor,
+    InventoryIntelligenceService,
+    InventoryAgentEventProcessor,
+    InventoryAgentOutcomesScheduler,
+    InventoryAgentOutcomesProcessor,
   ],
-  exports: [InventoryService],
+  exports: [InventoryService, InventoryIntelligenceService],
 })
 export class InventoryModule {}

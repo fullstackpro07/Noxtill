@@ -41,6 +41,16 @@ export function fetchExpenses(month?: string): Promise<LiveExpense[]> {
   return apiFetch<RawExpense[]>(`/expenses${query}`).then((rows) => rows.map(toLiveExpense));
 }
 
+export interface ExpenseDuplicateCandidates {
+  month: string;
+  groups: string[][];
+}
+
+/** GET /expenses/duplicate-candidates?month=YYYY-MM — tenant-scoped IDs only; expense details stay in the normal Expenses query. */
+export function fetchExpenseDuplicateCandidates(month: string): Promise<ExpenseDuplicateCandidates> {
+  return apiFetch<ExpenseDuplicateCandidates>(`/expenses/duplicate-candidates?month=${encodeURIComponent(month)}`);
+}
+
 export interface CreateExpenseInput {
   description: string;
   category: string;

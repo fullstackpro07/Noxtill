@@ -24,6 +24,8 @@ import { BusinessGoalService } from './business-goal.service';
 import { AutonomousCommerceDashboardService } from './autonomous-commerce-dashboard.service';
 import { AutonomousCommerceDashboardController } from './autonomous-commerce-dashboard.controller';
 import { ProcurementModule } from '../procurement/procurement.module';
+import { BranchesModule } from '../branches/branches.module';
+import { MarketingModule } from '../marketing/marketing.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { ProcurementModule } from '../procurement/procurement.module';
     ProfitModule,
     AiModule,
     ProcurementModule,
+    BranchesModule,
+    MarketingModule,
     BullModule.registerQueue(
       { name: HEALTH_SCORE_SNAPSHOT_QUEUE },
       { name: AI_INSIGHTS_QUEUE },

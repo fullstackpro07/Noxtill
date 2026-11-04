@@ -16,7 +16,7 @@ const cancelBtn: React.CSSProperties = { border: "1px solid var(--app-border)", 
 const primaryBtn: React.CSSProperties = { border: 0, background: "var(--app-primary)", borderRadius: 11, padding: "12px 16px", fontSize: 13, fontWeight: 800, color: "#fff" };
 
 function emptyDraft(kind: ProductKind): Omit<Product, "id" | "active"> {
-  return { name: "", category: "", kind, price: 0, costPrice: 0, stockOnHand: 0, lowStockThreshold: 5, variations: [] };
+  return { name: "", category: "", kind, price: 0, costPrice: 0, stockOnHand: 0, lowStockThreshold: 5, stockUnitLabel: null, purchaseUnitLabel: null, purchasePackSize: null, minimumReorderQty: null, variations: [] };
 }
 
 /** "Add/Edit Product", pixel-matched to the design's `dProduct` drawer — a lightweight quick-entry
@@ -55,6 +55,20 @@ function ProductFormBody({ product, forceKind, onClose }: { product: Product | n
   const margin = marginPercent(draft.price, draft.costPrice);
   const marginColor = margin < 10 ? "var(--app-danger-strong)" : margin < 30 ? "var(--app-warning-text)" : "var(--app-primary)";
   const displayedPhoto = photoPreview ?? (removingPhoto ? null : product?.photoUrl ?? null);
+  const packConfigured = Boolean(
+    draft.stockUnitLabel?.trim() ||
+    draft.purchaseUnitLabel?.trim() ||
+    draft.purchasePackSize != null,
+  );
+  const packValid =
+    !packConfigured ||
+    (Boolean(draft.stockUnitLabel?.trim()) &&
+      Boolean(draft.purchaseUnitLabel?.trim()) &&
+      Number.isInteger(draft.purchasePackSize) &&
+      (draft.purchasePackSize ?? 0) >= 2);
+  const minimumReorderValid =
+    draft.minimumReorderQty == null ||
+    (Number.isInteger(draft.minimumReorderQty) && draft.minimumReorderQty >= 1);
 
   function pickPhoto(file: File) {
     setPhotoFile(file);
@@ -206,16 +220,49 @@ function ProductFormBody({ product, forceKind, onClose }: { product: Product | n
       </div>
 
       {draft.kind === "product" ? (
-        <div className="grid grid-cols-2 gap-2.5">
-          <label className="block">
-            <span style={fieldLabel}>STOCK</span>
-            <input type="number" min={0} value={draft.stockOnHand ?? 0} onChange={(e) => setDraft((d) => ({ ...d, stockOnHand: Number(e.target.value) }))} style={fieldStyle} />
+        <>
+          <div className="grid grid-cols-2 gap-2.5">
+            <label className="block">
+              <span style={fieldLabel}>STOCK</span>
+              <input type="number" min={0} value={draft.stockOnHand ?? 0} onChange={(e) => setDraft((d) => ({ ...d, stockOnHand: Number(e.target.value) }))} style={fieldStyle} />
+            </label>
+            <label className="block">
+              <span style={fieldLabel}>LOW STOCK THRESHOLD</span>
+              <input type="number" min={0} value={draft.lowStockThreshold ?? 5} onChange={(e) => setDraft((d) => ({ ...d, lowStockThreshold: Number(e.target.value) }))} style={fieldStyle} />
+            </label>
+          </div>
+          <label className="mt-2.5 block">
+            <span style={fieldLabel}>MINIMUM REORDER QUANTITY (STOCK UNITS)</span>
+            <input type="number" min={1} step={1} value={draft.minimumReorderQty ?? ""} onChange={(e) => setDraft((d) => ({ ...d, minimumReorderQty: e.target.value === "" ? null : Number(e.target.value) }))} placeholder="No product-level minimum" style={fieldStyle} />
+            <span className="mt-1 block text-[11px] leading-5" style={{ color: "var(--app-text-faint)" }}>Applies to this product across suppliers when a reorder is needed. Supplier contract minimums are separate.</span>
+            {!minimumReorderValid && <span role="alert" className="mt-1 block text-[11px]" style={{ color: "var(--app-danger-strong)" }}>Enter a whole number of at least 1 stock unit, or leave blank.</span>}
           </label>
-          <label className="block">
-            <span style={fieldLabel}>LOW STOCK THRESHOLD</span>
-            <input type="number" min={0} value={draft.lowStockThreshold ?? 5} onChange={(e) => setDraft((d) => ({ ...d, lowStockThreshold: Number(e.target.value) }))} style={fieldStyle} />
-          </label>
-        </div>
+          <div className="rounded-[12px] p-3" style={{ border: "1px solid var(--app-border)" }}>
+            <div className="mb-2 text-[11px] font-bold" style={{ color: "var(--app-text-disabled)" }}>PURCHASING UNIT</div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <label className="block">
+                <span style={fieldLabel}>STOCK UNIT</span>
+                <input value={draft.stockUnitLabel ?? ""} onChange={(e) => setDraft((d) => ({ ...d, stockUnitLabel: e.target.value }))} placeholder="e.g. bottle" maxLength={32} style={fieldStyle} />
+              </label>
+              <label className="block">
+                <span style={fieldLabel}>PURCHASE UNIT</span>
+                <input value={draft.purchaseUnitLabel ?? ""} onChange={(e) => setDraft((d) => ({ ...d, purchaseUnitLabel: e.target.value }))} placeholder="e.g. case" maxLength={32} style={fieldStyle} />
+              </label>
+            </div>
+            <label className="mt-2.5 block">
+              <span style={fieldLabel}>STOCK UNITS PER PURCHASE UNIT</span>
+              <input type="number" min={2} step={1} value={draft.purchasePackSize ?? ""} onChange={(e) => setDraft((d) => ({ ...d, purchasePackSize: e.target.value === "" ? null : Number(e.target.value) }))} placeholder="e.g. 12" style={fieldStyle} />
+            </label>
+            <p className="mt-2 text-[11px] leading-5" style={{ color: "var(--app-text-faint)" }}>
+              Inventory tracks stock in the stock unit and rounds reorder suggestions up to a whole purchase unit. For example 12 bottles per case.
+            </p>
+            {packConfigured && !packValid && (
+              <p role="alert" className="mt-1 text-[11px]" style={{ color: "var(--app-danger-strong)" }}>
+                Enter both unit names and a whole pack size of at least 2, or clear all three fields.
+              </p>
+            )}
+          </div>
+        </>
       ) : (
         <label className="block">
           <span style={fieldLabel}>DURATION (MINUTES)</span>
@@ -232,10 +279,10 @@ function ProductFormBody({ product, forceKind, onClose }: { product: Product | n
 
       <div className="flex gap-2.5 border-t pt-3.5" style={{ borderColor: "var(--app-surface-2)" }}>
         <button type="button" onClick={onClose} style={cancelBtn}>Cancel</button>
-        <button type="button" onClick={() => mutation.mutate()} disabled={!draft.name.trim() || mutation.isPending} style={{ ...cancelBtn, opacity: !draft.name.trim() || mutation.isPending ? 0.6 : 1 }}>
+        <button type="button" onClick={() => mutation.mutate()} disabled={!draft.name.trim() || !packValid || !minimumReorderValid || mutation.isPending} style={{ ...cancelBtn, opacity: !draft.name.trim() || !packValid || !minimumReorderValid || mutation.isPending ? 0.6 : 1 }}>
           Save &amp; Close
         </button>
-        <button type="button" onClick={() => mutation.mutate()} disabled={!draft.name.trim() || mutation.isPending} className="flex-1" style={{ ...primaryBtn, opacity: !draft.name.trim() || mutation.isPending ? 0.6 : 1 }}>
+        <button type="button" onClick={() => mutation.mutate()} disabled={!draft.name.trim() || !packValid || !minimumReorderValid || mutation.isPending} className="flex-1" style={{ ...primaryBtn, opacity: !draft.name.trim() || !packValid || !minimumReorderValid || mutation.isPending ? 0.6 : 1 }}>
           {mutation.isPending ? "Saving…" : product ? "Save Product" : "Add Product"}
         </button>
       </div>

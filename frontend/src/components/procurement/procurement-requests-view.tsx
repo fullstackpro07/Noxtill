@@ -87,7 +87,7 @@ function emptyInput(currency: string): ProcurementRequestInput {
 }
 
 function sourcingUnavailableReason(
-  request: Pick<ProcurementRequest, "currency" | "items">,
+  request: Pick<ProcurementRequest, "currency" | "items" | "agentSource">,
   businessCurrency: string,
 ) {
   if (
@@ -764,6 +764,7 @@ export function ProcurementRequestsView() {
             return (
               <article
                 key={request.id}
+                id={`request-${request.id}`}
                 className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -808,6 +809,20 @@ export function ProcurementRequestsView() {
                     </p>
                   </div>
                 </div>
+                {request.agentSource ? (
+                  <div className="mt-3 rounded-lg border border-[var(--app-border)] p-3 text-sm text-[var(--app-text-muted)]">
+                    <p className="font-medium text-[var(--app-text)]">Prepared from Inventory Intelligence</p>
+                    <p className="mt-1">Review the supplier, quantity and product-cost estimate. Stock, sales and outstanding purchases are checked again when submitting, approving, creating an RFQ and awarding it for a purchase order. Proposal expires {formatDate(request.agentSource.expiresAt)}.</p>
+                    {request.agentSource.purchaseUnitCount !== null && request.agentSource.purchasePackSize !== null ? (
+                      <p className="mt-1">
+                        Quantity: {request.agentSource.purchaseUnitCount} × {request.agentSource.purchaseUnitLabel} ({request.agentSource.purchaseUnitCount * request.agentSource.purchasePackSize} × {request.agentSource.stockUnitLabel}).
+                        The request stores stock units.
+                      </p>
+                    ) : null}
+                    <p className="mt-1">After approval, this request can enter the shared Commerce RFQ flow. Creating the RFQ does not contact suppliers; supplier invitations remain manual.</p>
+                    <Link href="/inventory/reorder-suggestions" className="mt-1 inline-block text-[var(--app-primary)] underline">View Inventory source evidence</Link>
+                  </div>
+                ) : null}
                 <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--app-border)]">
                   <table className="w-full min-w-[580px] text-left text-sm">
                     <thead className="bg-[var(--app-surface-muted)] text-xs uppercase text-[var(--app-text-muted)]">
@@ -834,6 +849,8 @@ export function ProcurementRequestsView() {
                           </td>
                           <td className="px-3 py-2 tabular-nums text-[var(--app-text-muted)]">
                             {item.quantity}
+                            {request.agentSource?.productId === item.productId && request.agentSource.stockUnitLabel ? ` ${request.agentSource.stockUnitLabel}` : ""}
+                            {request.agentSource?.productId === item.productId && request.agentSource.purchaseUnitCount !== null && request.agentSource.purchaseUnitLabel ? <span className="block text-xs">{request.agentSource.purchaseUnitCount} × {request.agentSource.purchaseUnitLabel}</span> : null}
                           </td>
                           <td className="px-3 py-2 tabular-nums text-[var(--app-text-muted)]">
                             {formatRequestCurrency(
@@ -908,7 +925,7 @@ export function ProcurementRequestsView() {
                       type="button"
                       disabled={busy}
                       onClick={() =>
-                        void submitMutation.mutateAsync(request.id)
+                        submitMutation.mutate(request.id)
                       }
                       className="rounded-lg border border-[var(--app-border)] px-3 py-2 text-sm font-semibold text-[var(--app-text)] disabled:opacity-50"
                     >
@@ -958,18 +975,18 @@ export function ProcurementRequestsView() {
                         disabled={sourcingBusy || !!sourcingReason}
                         title={sourcingReason ?? undefined}
                         onClick={() =>
-                          void sourcingMutation.mutateAsync(request.id)
+                          sourcingMutation.mutate(request.id)
                         }
                         className="inline-flex items-center gap-2 rounded-lg border border-[var(--app-border)] px-3 py-2 text-sm font-semibold text-[var(--app-text)] disabled:opacity-50"
                       >
                         <ArrowUpRight className="h-4 w-4" aria-hidden />
-                        Send to sourcing
+                        {request.agentSource ? "Create shared RFQ" : "Send to sourcing"}
                       </button>
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() =>
-                          void conversionMutation.mutateAsync(request.id)
+                          conversionMutation.mutate(request.id)
                         }
                         className="inline-flex items-center gap-2 rounded-lg bg-[var(--app-primary)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                       >

@@ -37,6 +37,7 @@ function ScanReceiptDialogBody({ onClose }: { onClose: () => void }) {
     mutationFn: () => commitDigitizerBatch(preview!.batchId),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["expense-duplicate-candidates"] });
       const created = result.created.expense ?? 0;
       if (created > 0) {
         toast.success(`Added ${created} expense${created === 1 ? "" : "s"} from the receipt.`);

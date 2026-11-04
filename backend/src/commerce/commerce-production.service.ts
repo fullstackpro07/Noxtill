@@ -351,6 +351,79 @@ export class CommerceProductionService {
     };
   }
 
+  /** Safe aggregate projection for the Commerce Agent; deliberately excludes product names and costs. */
+  async agentReview(businessId: string, now = new Date()) {
+    const [bomGroups, workOrderGroups, lateOpenCount] = await Promise.all([
+      this.tenantPrisma.client.commerceBom.groupBy({
+        by: ['status'],
+        where: { businessId },
+        _count: { _all: true },
+      }),
+      this.tenantPrisma.client.commerceWorkOrder.groupBy({
+        by: ['status'],
+        where: { businessId },
+        _count: { _all: true },
+        _sum: { qtyPlanned: true, qtyGood: true, qtyScrap: true },
+      }),
+      this.tenantPrisma.client.commerceWorkOrder.count({
+        where: {
+          businessId,
+          status: { in: OPEN_STATUSES },
+          dueDate: { lt: now },
+        },
+      }),
+    ]);
+    const bomCounts = Object.fromEntries(
+      bomGroups.map((group) => [group.status, group._count._all]),
+    );
+    const workOrdersByStatus = Object.fromEntries(
+      workOrderGroups.map((group) => [
+        group.status,
+        {
+          count: group._count._all,
+          plannedUnits: group._sum.qtyPlanned ?? 0,
+        },
+      ]),
+    );
+    const inProgress = workOrderGroups.find(
+      (group) => group.status === CommerceWorkOrderStatus.in_progress,
+    );
+    const completed = workOrderGroups.find(
+      (group) => group.status === CommerceWorkOrderStatus.completed,
+    );
+    const totalWorkOrders = workOrderGroups.reduce(
+      (sum, group) => sum + group._count._all,
+      0,
+    );
+
+    return {
+      state:
+        totalWorkOrders || bomGroups.length
+          ? 'records_present'
+          : 'no_production_records',
+      source: 'CommerceBom + CommerceWorkOrder',
+      asOf: now.toISOString(),
+      activeBomCount: bomCounts[CommerceBomStatus.active] ?? 0,
+      archivedBomCount: bomCounts[CommerceBomStatus.archived] ?? 0,
+      workOrders: {
+        total: totalWorkOrders,
+        byStatus: workOrdersByStatus,
+        lateOpenCount,
+        inProgressPlannedUnits: inProgress?._sum.qtyPlanned ?? 0,
+        completedOutputUnits: completed
+          ? completed._sum.qtyGood === null
+            ? null
+            : completed._sum.qtyGood + (completed._sum.qtyScrap ?? 0)
+          : null,
+      },
+      limitations: [
+        'Counts and units come from recorded bills of materials and work orders at this time; they do not establish why a run is late or whether production capacity is sufficient.',
+        'This review omits product names, customer or demand-source text, unit costs and cost variance.',
+        'Supplier delivery dates, machine capacity and labor availability are not included in this review.',
+      ],
+    };
+  }
+
   async createWorkOrder(
     businessId: string,
     actorUserId: string,

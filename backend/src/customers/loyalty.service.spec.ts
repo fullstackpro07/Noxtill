@@ -114,6 +114,33 @@ describe('LoyaltyService (UPD-BE-024)', () => {
     expect(first.stampCount).toBe(0);
   });
 
+  it('does not enroll an erased customer into a new loyalty program', async () => {
+    const program = await loyaltyService.createProgram({
+      name: 'Erased Customer Card',
+      stampsRequired: 10,
+    });
+    const erased = await prisma.customer.create({
+      data: {
+        businessId,
+        phone: `+1${Date.now()}88`,
+        name: 'Loyalty Erasure Test',
+      },
+    });
+    await prisma.customer.update({
+      where: { id: erased.id },
+      data: { name: 'Erased Customer', phone: `erased-${erased.id}` },
+    });
+
+    await expect(
+      loyaltyService.enroll(program.id, { customerId: erased.id }),
+    ).rejects.toThrow('Customer not found');
+    expect(
+      await prisma.loyaltyMember.count({
+        where: { businessId, customerId: erased.id },
+      }),
+    ).toBe(0);
+  });
+
   it('issueStampIfEligible is a no-op when no active punch-card program exists', async () => {
     const iso = await makeIsolatedBusinessAndCustomer();
     const order = await makeOrder(iso.businessId);

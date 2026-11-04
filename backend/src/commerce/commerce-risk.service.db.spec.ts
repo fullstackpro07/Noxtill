@@ -255,6 +255,11 @@ describe('CommerceRiskService (MySQL)', () => {
       (finding) => finding.ruleKey === CommerceRiskRuleKey.over_returned_order,
     )!;
     expect(over).toMatchObject({ severity: 'high', exposureAmount: 60 });
+    expect(over.evidence).toMatchObject({
+      returnCount: 2,
+      affectedProductCount: 1,
+      excessUnitCount: 1,
+    });
   });
 
   it('flags repeated coupon use but ignores cancelled orders', async () => {
@@ -268,6 +273,10 @@ describe('CommerceRiskService (MySQL)', () => {
     );
     expect(coupon.map((finding) => finding.entityId)).toEqual([repeatCustomer]);
     expect(coupon[0].exposureAmount).toBe(20);
+    expect(coupon[0].evidence).toMatchObject({
+      orderCount: 4,
+      uniqueCouponCount: 1,
+    });
   });
 
   it('records cases idempotently and only reopens a closed case when the pattern grows', async () => {
@@ -285,6 +294,18 @@ describe('CommerceRiskService (MySQL)', () => {
       refreshed: 1,
     });
     const [riskCase] = await service.listCases(businessId);
+    expect(riskCase.evidence).toMatchObject({
+      threshold: 3,
+      returnCount: 3,
+      uniqueOrderCount: 3,
+    });
+    const windowDays =
+      typeof riskCase.evidence === 'object' &&
+      riskCase.evidence !== null &&
+      !Array.isArray(riskCase.evidence)
+        ? riskCase.evidence.windowDays
+        : null;
+    expect(typeof windowDays).toBe('number');
     await expect(
       service.setCaseStatus(
         businessId,
@@ -325,6 +346,10 @@ describe('CommerceRiskService (MySQL)', () => {
     expect(reopened).toMatchObject({
       status: CommerceRiskCaseStatus.open,
       signalCount: 4,
+    });
+    expect(reopened.evidence).toMatchObject({
+      returnCount: 4,
+      uniqueOrderCount: 4,
     });
   });
 

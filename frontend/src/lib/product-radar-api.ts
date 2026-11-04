@@ -16,6 +16,22 @@ export type ProductOpportunityRisk = "low" | "medium" | "high" | "blocked";
 export type ProductValidationDecision =
   "approve_test" | "approve_launch" | "watch" | "reject";
 
+export interface ProductValidationScorecardDimension {
+  key: string;
+  label: string;
+  status: "inputs_recorded" | "partial_evidence" | "not_tracked";
+  recordedFields: string[];
+  missingFields: string[];
+  assumptions: string[];
+  missingData: string[];
+}
+
+export interface ProductValidationScorecard {
+  status: "evidence_only_not_scored";
+  interpretation: string;
+  dimensions: ProductValidationScorecardDimension[];
+}
+
 export interface ProductOpportunity {
   id: string;
   title: string;
@@ -67,6 +83,7 @@ export interface ProductValidationRun {
 export interface ProductValidationCandidate extends ProductOpportunity {
   evidenceReview: {
     evidenceCoverage: { recorded: number; total: number };
+    scorecard: ProductValidationScorecard;
     launchApproval: { available: boolean; reason: string };
     factors: Array<{
       key: string;

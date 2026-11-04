@@ -20,6 +20,10 @@ import { CashRegisterService } from '../cash-register/cash-register.service';
 import { BillingService } from '../billing/billing.service';
 import { AppException } from '../common/filters/app.exception';
 import { deleteCrossTestBusinessRows } from '../common/testing/cleanup-test-business';
+import {
+  FINANCE_RETURN_APPROVED_EVENT_JOB,
+  SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -43,6 +47,7 @@ describe('ReturnsService (UPD-BE-011)', () => {
     recordRefundMovement: jest.fn().mockResolvedValue(undefined),
   };
   const billing = { refund: jest.fn() };
+  const financeAgentEvents = { add: jest.fn().mockResolvedValue(undefined) };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -85,6 +90,7 @@ describe('ReturnsService (UPD-BE-011)', () => {
       cls as unknown as ClsService,
       cashRegister as unknown as CashRegisterService,
       billing as unknown as BillingService,
+      financeAgentEvents as never,
     );
 
     const business = await prisma.business.create({
@@ -116,9 +122,11 @@ describe('ReturnsService (UPD-BE-011)', () => {
     customerId = customer.id;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     cashRegister.recordRefundMovement.mockClear();
     billing.refund.mockReset();
+    financeAgentEvents.add.mockClear();
+    await prisma.business.update({ where: { id: businessId }, data: { policies: {} } });
   });
 
   afterAll(async () => {
@@ -204,6 +212,44 @@ describe('ReturnsService (UPD-BE-011)', () => {
       businessId,
       50,
       expect.any(String),
+    );
+  });
+
+  it('queues an opt-in read-only Finance review after a return is approved', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        policies: {
+          'agents.financeEnabled': true,
+          'agents.financeApprovedReturnEventReviewEnabled': true,
+        },
+      },
+    });
+    const order = await makeSale(1);
+    const returned = await returnsService.create(businessId, {
+      orderId: order.id,
+      reason: 'Finance event QA',
+      refundMethod: 'cash',
+      items: [{ productId, qty: 1 }],
+    });
+
+    const approved = await returnsService.approve(businessId, returned.id);
+    expect(approved.status).toBe('approved');
+    expect(financeAgentEvents.add).toHaveBeenCalledWith(
+      FINANCE_RETURN_APPROVED_EVENT_JOB,
+      {
+        businessId,
+        returnId: approved.id,
+        approvedAt: approved.updatedAt.toISOString(),
+      },
+      expect.objectContaining({
+        jobId: `finance-return-approved-${businessId}-${approved.id}-${approved.updatedAt.getTime()}`,
+        attempts: 3,
+      }),
+    );
+    expect(financeAgentEvents.add).toHaveBeenCalledTimes(1);
+    expect(SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE).toBe(
+      'specialist-agent-finance-events',
     );
   });
 

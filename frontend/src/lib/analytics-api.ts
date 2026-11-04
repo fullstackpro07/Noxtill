@@ -128,6 +128,7 @@ export interface CustomerAnalyticsSummary {
   totalCustomers: number;
   newCount: number;
   returningCount: number;
+  withVisitCount: number;
   retentionRate: number;
   avgLTV: number;
   ltvDistribution: LtvBucket[];

@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { BranchScopeService } from '../common/tenancy/branch-scope.service';
+import { AppException } from '../common/filters/app.exception';
+import { PrismaService } from '../prisma/prisma.service';
 import { CASH_FORECAST_HISTORY_WINDOW_DAYS } from './cash-forecast.constants';
 import {
   OrderStatus,
@@ -79,17 +81,46 @@ function occurrencesInRange(
  * bank balance (this app has no bank-account integration): inflow/outflow are smoothed real
  * trailing-30-day averages (revenue, expenses), with real `RecurringObligation` occurrences added
  * as discrete spikes on the exact days they fall due. `cumulativeNet` starts at 0 and accumulates
- * `netFlow` day over day — a disclosed simplification, same honesty standard as `RoutingService`'s
- * haversine-when-unconfigured fallback.
+ * `netFlow` day over day. Branch scopes are validated against the caller's business group and
+ * cannot mix currencies.
  */
 @Injectable()
 export class CashForecastService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly branchScope: BranchScopeService,
+  ) {}
 
   async forecast(
     businessId: string,
     days: number,
+    requestedBranchId?: string,
   ): Promise<CashForecastResult> {
+    const businessIds = await this.branchScope.resolveIds(
+      businessId,
+      requestedBranchId,
+    );
+    const scopedBusinesses = await this.prisma.business.findMany({
+      where: { id: { in: businessIds } },
+      select: { id: true, currency: true },
+    });
+    if (scopedBusinesses.length !== businessIds.length) {
+      throw new AppException(
+        'CASH_FORECAST_SCOPE_UNAVAILABLE',
+        'The selected business scope is not available for this forecast.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (
+      new Set(scopedBusinesses.map((business) => business.currency)).size > 1
+    ) {
+      throw new AppException(
+        'CASH_FORECAST_CURRENCY_SCOPE_UNSUPPORTED',
+        'A cash-flow forecast cannot combine branches with different currencies. Select one branch at a time.',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
     const today = new Date(
       new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z',
     );
@@ -98,21 +129,24 @@ export class CashForecastService {
     );
 
     const [revenueAgg, expenseAgg, obligations] = await Promise.all([
-      this.tenantPrisma.client.order.aggregate({
+      this.prisma.order.aggregate({
         where: {
-          businessId,
+          businessId: { in: businessIds },
           status: OrderStatus.completed,
           isQuotation: false,
           createdAt: { gte: historyCutoff },
         },
         _sum: { total: true },
       }),
-      this.tenantPrisma.client.expense.aggregate({
-        where: { businessId, incurredOn: { gte: historyCutoff } },
+      this.prisma.expense.aggregate({
+        where: {
+          businessId: { in: businessIds },
+          incurredOn: { gte: historyCutoff },
+        },
         _sum: { amount: true },
       }),
-      this.tenantPrisma.client.recurringObligation.findMany({
-        where: { businessId, active: true },
+      this.prisma.recurringObligation.findMany({
+        where: { businessId: { in: businessIds }, active: true },
       }),
     ]);
 

@@ -85,6 +85,7 @@ export function AddCustomerDialog({ open, onClose }: { open: boolean; onClose: (
           <label style={labelStyle}>EMAIL</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" aria-label="Email" style={inputStyle} />
         </div>
+        <p className="m-0 text-[11px]" style={{ color: "var(--app-text-muted)" }}>Marketing consent stays off for new contacts until a real channel-specific choice is recorded from the customer profile. Transactional service messages follow their own rules.</p>
         <div>
           <label style={{ ...labelStyle, marginBottom: 7 }}>TAGS</label>
           <div className="flex flex-wrap gap-[7px]">

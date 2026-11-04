@@ -6,6 +6,7 @@ import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { MEMBERSHIP_ERROR_CODES } from './memberships.constants';
 import { MembershipStatus, Prisma } from '@prisma/client';
+import { excludeErasedCustomers } from './segment-rules.util';
 
 /** Membership depth fix (UPD-INT-007) — real interval math shared by cash enrollment and renewal. */
 function nextPeriodEnd(from: Date, interval: 'monthly' | 'yearly'): Date {
@@ -56,8 +57,8 @@ export class MembershipsService {
 
   async create(businessId: string, dto: CreateMembershipDto) {
     const plan = await this.findPlan(dto.planId);
-    const customer = await this.tenantPrisma.client.customer.findUnique({
-      where: { id: dto.customerId },
+    const customer = await this.tenantPrisma.client.customer.findFirst({
+      where: excludeErasedCustomers({ id: dto.customerId }),
     });
     if (!customer) {
       throw new NotFoundException('Customer not found');

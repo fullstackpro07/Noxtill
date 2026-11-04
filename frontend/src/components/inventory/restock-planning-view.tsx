@@ -40,6 +40,13 @@ export function RestockPlanningView() {
           velocity: s.velocityPerDay,
           cover: item?.daysOfCover ?? 0,
           suggested: s.suggestedQty,
+          baselineLeadTimeDays: s.baselineLeadTimeDays,
+          purchaseQuantityLabel:
+            s.purchasePackCount !== null &&
+            s.purchaseUnitLabel &&
+            s.stockUnitLabel
+              ? `${s.purchasePackCount} × ${s.purchaseUnitLabel} · ${s.suggestedQty} × ${s.stockUnitLabel}`
+              : null,
           estCost: s.suggestedQty * cost,
           why,
         };
@@ -57,8 +64,8 @@ export function RestockPlanningView() {
   const totalCost = rows.reduce((s, r) => s + r.estCost, 0);
 
   useRegisterExport(() => {
-    const header = ["Product", "Supplier", "On hand", "Reorder at", "Velocity/day", "Cover (days)", "Suggested", "Est. cost", "Why"];
-    const csvRows = filtered.map((r) => [r.name, r.supplierName, r.stock, r.threshold, r.velocity, r.cover, r.suggested, r.estCost, r.why]);
+    const header = ["Product", "Supplier", "On hand", "Reorder at", "Velocity/day", "Cover (days)", "Suggested stock units", "Suggested purchase units", "Est. cost", "Why"];
+    const csvRows = filtered.map((r) => [r.name, r.supplierName, r.stock, r.threshold, r.velocity, r.cover, r.suggested, r.purchaseQuantityLabel ?? "Not configured", r.estCost, r.why]);
     const csv = [header, ...csvRows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -74,7 +81,7 @@ export function RestockPlanningView() {
       <div style={{ background: "#FFFBF2", border: "1px solid #FDE3B3", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
         <AlertTriangle size={17} style={{ color: "#B54708", flex: "0 0 17px", marginTop: 1 }} />
         <div style={{ fontSize: 12, color: "#93370D", lineHeight: 1.55 }}>
-          <strong>Suggested quantities are a starting point, not an order.</strong> Nothing is committed to a supplier until you approve it — quantities target 14 days of lead-time cover on top of your reorder threshold, from your real sales velocity over the last 30 days.
+          <strong>Suggested quantities are a starting point, not an order.</strong> These suggestions use your configured {rows[0]?.baselineLeadTimeDays != null ? `${rows[0].baselineLeadTimeDays}-day` : "lead-time"} planning baseline and recorded sales velocity from the last 30 days. Accepting a suggestion opens a draft purchase order for your review; it is not sent to the supplier.
         </div>
       </div>
 
@@ -121,7 +128,10 @@ export function RestockPlanningView() {
                     <td style={{ padding: 12, fontSize: 12.5, color: "#475467", textAlign: "right" }}>{r.threshold}</td>
                     <td style={{ padding: 12, fontSize: 12.5, color: "#475467", textAlign: "right" }}>{r.velocity}/d</td>
                     <td style={{ padding: 12, fontSize: 12.5, color: "#475467", textAlign: "right" }}>{r.cover} d</td>
-                    <td style={{ padding: 12, fontSize: 13, fontWeight: 800, color: "#0E8442", textAlign: "right" }}>{r.suggested}</td>
+                    <td style={{ padding: 12, fontSize: 13, fontWeight: 800, color: "#0E8442", textAlign: "right" }}>
+                      {r.suggested}
+                      {r.purchaseQuantityLabel && <span style={{ display: "block", marginTop: 3, fontSize: 10, fontWeight: 600, color: "#667085" }}>{r.purchaseQuantityLabel}</span>}
+                    </td>
                     <td style={{ padding: 12, fontSize: 12.5, color: "#475467", textAlign: "right" }}>{formatCurrency(r.estCost, currency)}</td>
                     <td style={{ padding: 12 }}>
                       <span style={chipStyle(WHY_TONE[r.why])}>{r.why}</span>

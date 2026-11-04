@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AskHelpDto } from './help.dto';
@@ -54,12 +55,73 @@ export async function retrieveHelpPassages(
     ORDER BY score DESC
     LIMIT ${TOP_K}
   `;
-  if (rows.length === 0) return [];
+  const candidates =
+    rows.length > 0
+      ? rows
+      : await retrieveHelpPassagesBySubstring(prisma, booleanQuery);
+  if (candidates.length === 0) return [];
 
-  const topScore = Number(rows[0].score);
-  return rows.filter(
+  const topScore = Number(candidates[0].score);
+  return candidates.filter(
     (row) => Number(row.score) >= topScore * MIN_RELATIVE_SCORE,
   );
+}
+
+/**
+ * InnoDB can leave newly committed text outside the searchable FULLTEXT cache until its next
+ * index flush on some local MySQL setups. Keep newly created help content immediately searchable
+ * with a bounded literal-substring fallback when FULLTEXT returns no rows; parameters stay bound
+ * and the same real-term ranking/relative threshold still decides which passages are returned.
+ */
+async function retrieveHelpPassagesBySubstring(
+  prisma: PrismaService,
+  booleanQuery: string,
+): Promise<RetrievedRow[]> {
+  const terms = booleanQuery
+    .split(/\s+/)
+    .map((term) => term.replace(/^\+/, '').replace(/\*$/, ''))
+    .filter(Boolean);
+  if (terms.length === 0) return [];
+
+  const conditions = Prisma.join(
+    terms.map(
+      (term) => Prisma.sql`(
+        INSTR(LOWER(title), LOWER(${term})) > 0 OR
+        INSTR(LOWER(body), LOWER(${term})) > 0
+      )`,
+    ),
+    ' OR ',
+  );
+  const rows = await prisma.$queryRaw<Omit<RetrievedRow, 'score'>[]>(Prisma.sql`
+    SELECT slug, title, url, body
+    FROM help_articles
+    WHERE ${conditions}
+    ORDER BY title ASC
+    LIMIT 50
+  `);
+
+  return rows
+    .map((row) => {
+      const score = terms.reduce(
+        (total, term) =>
+          total +
+          (hasTokenPrefix(row.title, term) ? 2 : 0) +
+          (hasTokenPrefix(row.body, term) ? 1 : 0),
+        0,
+      );
+      return { ...row, score };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+    .slice(0, TOP_K);
+}
+
+function hasTokenPrefix(text: string, term: string): boolean {
+  const normalizedTerm = term.toLowerCase();
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .some((word) => word.startsWith(normalizedTerm));
 }
 
 /**
@@ -85,7 +147,13 @@ export class HelpService {
     const passages = await retrieveHelpPassages(this.prisma, dto.question);
 
     if (passages.length === 0) {
-      await this.logQuery(businessId, userId, dto.question, HELP_NOT_FOUND_MESSAGE, []);
+      await this.logQuery(
+        businessId,
+        userId,
+        dto.question,
+        HELP_NOT_FOUND_MESSAGE,
+        [],
+      );
       return { answer: HELP_NOT_FOUND_MESSAGE, sources: [] };
     }
 

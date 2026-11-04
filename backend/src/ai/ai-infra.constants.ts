@@ -19,7 +19,12 @@ export type AiFeatureKey =
   | 'insights'
   | 'whatIf'
   | 'assistant'
-  | 'workflowAgents';
+  | 'workflowAgents'
+  | 'inventoryAgent'
+  | 'financeAgent'
+  | 'customerAgent'
+  | 'seoAgent'
+  | 'commerceAgent';
 
 export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'voiceEntry',
@@ -32,10 +37,15 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'whatIf',
   'assistant',
   'workflowAgents',
+  'inventoryAgent',
+  'financeAgent',
+  'customerAgent',
+  'seoAgent',
+  'commerceAgent',
 ];
 
 /**
- * Maps every `AiCallLog.kind` this codebase actually writes into one of the 9 toggleable
+ * Maps every `AiCallLog.kind` this codebase actually writes into one of the named toggleable
  * features, for both enforcement (`AiInfraService.checkGuardrails`) and the AI Settings screen's
  * per-feature usage figures. Deliberately incomplete: several real AI call sites (branch advisor,
  * pricing-rationale phrasing, segment personas, competitive opportunities, the AI phone
@@ -60,6 +70,11 @@ export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   assistant_chat: 'assistant',
   help_ask: 'assistant',
   workflow_agent: 'workflowAgents',
+  inventory_agent: 'inventoryAgent',
+  finance_agent: 'financeAgent',
+  customer_agent: 'customerAgent',
+  seo_agent: 'seoAgent',
+  commerce_agent: 'commerceAgent',
 };
 
 /** EU AI Act transparency requirement (UPD-BE-115) — shown verbatim on the AI Settings screen. */
@@ -77,6 +92,16 @@ export const AI_USAGE_DISCLOSURE_TEXT =
 /** Haiku 4.5 standard USD token rates, matching ClaudeClient's default model; still an estimate, not a provider invoice. */
 export const HAIKU_INPUT_COST_PER_TOKEN = 1 / 1_000_000;
 export const HAIKU_OUTPUT_COST_PER_TOKEN = 5 / 1_000_000;
+
+export function estimateHaikuCostUsd(
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  return (
+    inputTokens * HAIKU_INPUT_COST_PER_TOKEN +
+    outputTokens * HAIKU_OUTPUT_COST_PER_TOKEN
+  );
+}
 
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 

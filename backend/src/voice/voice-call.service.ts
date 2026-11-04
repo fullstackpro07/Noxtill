@@ -3452,7 +3452,58 @@ export class VoiceCallService {
       ORDER BY score DESC
       LIMIT 1
     `;
-    const hit = rows[0];
+    let hit = rows[0];
+    if (!hit) {
+      // Newly saved MySQL FULLTEXT rows may not be visible until InnoDB flushes its search cache.
+      // Fall back to bounded, parameterized literal matching so fresh owner-authored knowledge can
+      // answer a call immediately without inventing or crossing business/source boundaries.
+      const terms = booleanQuery
+        .split(/\s+/)
+        .map((term) => term.replace(/^\+/, '').replace(/\*$/, ''))
+        .filter(Boolean);
+      if (terms.length > 0) {
+        const conditions = Prisma.join(
+          terms.map(
+            (term) => Prisma.sql`(
+              INSTR(LOWER(title), LOWER(${term})) > 0 OR
+              INSTR(LOWER(content), LOWER(${term})) > 0
+            )`,
+          ),
+          ' OR ',
+        );
+        const candidates = await this.prisma.$queryRaw<
+          {
+            id: string;
+            title: string;
+            content: string;
+            kind: 'faq' | 'document';
+          }[]
+        >(Prisma.sql`
+          SELECT id, title, content, kind
+          FROM voice_knowledge_entries
+          WHERE business_id = ${businessId} AND active = true
+            ${sourceFilter}
+            AND (${conditions})
+          ORDER BY title ASC
+          LIMIT 50
+        `);
+        hit = candidates
+          .map((candidate) => {
+            const score = terms.reduce(
+              (total, term) =>
+                total +
+                (this.hasTokenPrefix(candidate.title, term) ? 2 : 0) +
+                (this.hasTokenPrefix(candidate.content, term) ? 1 : 0),
+              0,
+            );
+            return { ...candidate, score };
+          })
+          .filter((candidate) => candidate.score > 0)
+          .sort(
+            (a, b) => b.score - a.score || a.title.localeCompare(b.title),
+          )[0];
+      }
+    }
     if (!hit) return null;
     await this.prisma.voiceKnowledgeEntry
       .update({
@@ -3469,6 +3520,14 @@ export class VoiceCallService {
           : hit.content,
       kind: hit.kind,
     };
+  }
+
+  private hasTokenPrefix(text: string, term: string): boolean {
+    const normalizedTerm = term.toLowerCase();
+    return text
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .some((word) => word.startsWith(normalizedTerm));
   }
 
   /** The first ACTIVE routing rule (in the business's own order) that this turn matches, or null. */

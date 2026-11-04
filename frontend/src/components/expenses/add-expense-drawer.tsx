@@ -45,6 +45,7 @@ function AddExpenseDialogBody({ onClose, month }: { onClose: () => void; month: 
       }),
     onSuccess: (expense) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["expense-duplicate-candidates"] });
       toast.success(`"${expense.description}" added${expense.recurring ? " as a recurring expense" : ""}.`);
       onClose();
     },

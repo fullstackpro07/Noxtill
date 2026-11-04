@@ -2,6 +2,8 @@ export type ConnectorKey =
   | "email"
   | "gmb"
   | "google_ads"
+  | "google_search_console"
+  | "google_analytics"
   | "merchant_center"
   | "meta_ads"
   | "tiktok_ads"
@@ -39,6 +41,8 @@ export const CONNECTORS: Connector[] = [
   { key: "email", name: "Email Marketing", description: "Segment campaigns, templates, and list health.", status: "not_connected", href: "/integrations/email" },
   { key: "gmb", name: "Google My Business", description: "Profile health, posts, photos, and Q&A.", status: "not_connected", href: "/integrations/gmb" },
   { key: "google_ads", name: "Google Ads", description: "Smart campaigns with a live spend forecast.", status: "not_connected", href: "/advertising" },
+  { key: "google_search_console", name: "Google Search Console", description: "Read verified search clicks, impressions and average position for your property.", status: "not_connected", href: "/marketing/seo-autopilot/settings" },
+  { key: "google_analytics", name: "Google Analytics 4", description: "Read Organic Search sessions, key events and recorded revenue for SEO evidence.", status: "not_connected", href: "/marketing/seo-autopilot/settings" },
   { key: "merchant_center", name: "Google Merchant Center", description: "Product feed built from your catalog.", status: "not_connected", href: "/integrations/merchant-center" },
   { key: "meta_ads", name: "Meta Ads", description: "Facebook & Instagram, including review-to-ad.", status: "not_connected", href: "/advertising" },
   { key: "tiktok_ads", name: "TikTok Ads", description: "Slideshow creatives from your product photos.", status: "not_connected", href: "/advertising" },

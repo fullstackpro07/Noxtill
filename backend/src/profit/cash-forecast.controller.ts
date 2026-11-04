@@ -36,6 +36,7 @@ export class CashForecastController {
     return this.cashForecast.forecast(
       user.businessId,
       query.days ?? CASH_FORECAST_DEFAULT_DAYS,
+      query.branchId,
     );
   }
 

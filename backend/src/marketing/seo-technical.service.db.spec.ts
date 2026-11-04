@@ -43,10 +43,12 @@ describe('SeoTechnicalService (MySQL)', () => {
   let prisma: PrismaService;
   let service: SeoTechnicalService;
   let businessId: string;
+  let auditRunId: string;
+  let reviewIssueId: string;
   const stamp = Date.now();
 
   async function crawl(pages: unknown[], finishedAt: Date) {
-    await prisma.seoAuditRun.create({
+    return prisma.seoAuditRun.create({
       data: {
         businessId,
         status: 'completed',
@@ -71,7 +73,7 @@ describe('SeoTechnicalService (MySQL)', () => {
       })
     ).id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
-    await crawl(
+    const crawlRun = await crawl(
       [
         page('/', { inSitemap: true }),
         page('/old', { inSitemap: false }),
@@ -82,6 +84,7 @@ describe('SeoTechnicalService (MySQL)', () => {
       ],
       new Date(Date.now() - 60 * 60 * 1000),
     );
+    auditRunId = crawlRun.id;
     await prisma.seoAuditIssue.createMany({
       data: [
         {
@@ -106,6 +109,21 @@ describe('SeoTechnicalService (MySQL)', () => {
         },
       ],
     });
+    const reviewIssue = await prisma.seoAuditIssue.create({
+      data: {
+        businessId,
+        siteHost: 'tech.test',
+        fingerprint: 'd'.repeat(64),
+        type: 'missing_sitemap',
+        severity: 'low',
+        pageUrl: u('/'),
+        evidence: 'The checked sitemap URL returned HTTP 404.',
+        recommendation:
+          'Publish a valid XML sitemap and reference it in robots.txt.',
+        lastSeenAuditRunId: auditRunId,
+      },
+    });
+    reviewIssueId = reviewIssue.id;
   });
 
   afterAll(async () => {
@@ -129,8 +147,54 @@ describe('SeoTechnicalService (MySQL)', () => {
     });
     expect(overview.issues.map((issue) => issue.type)).toEqual([
       'broken_internal_link',
+      'missing_sitemap',
     ]);
     expect(overview.issues[0].group).toBe('broken_links');
+  });
+
+  it('prepares an audited, idempotent review-only action from a current technical finding', async () => {
+    const draft = await service.createReviewFromAuditIssue(
+      businessId,
+      'owner',
+      reviewIssueId,
+    );
+    expect(draft).toMatchObject({
+      businessId,
+      type: SeoTechnicalActionType.other,
+      status: SeoTechnicalActionStatus.draft,
+      sourceUrl: u('/'),
+      issueId: reviewIssueId,
+      currentState: { crawled: true, auditRunId },
+      validation: { ok: true },
+    });
+    expect(draft.description).toContain('HTTP 404');
+    expect(draft.description).toContain('does not change the website');
+    expect(
+      await prisma.seoTechnicalActionAudit.findFirst({
+        where: { businessId, actionId: draft.id, action: 'created' },
+      }),
+    ).toMatchObject({ actorUserId: 'owner' });
+    expect(
+      await service.createReviewFromAuditIssue(
+        businessId,
+        'owner',
+        reviewIssueId,
+      ),
+    ).toMatchObject({ id: draft.id });
+
+    await prisma.seoAuditIssue.update({
+      where: { id: reviewIssueId },
+      data: { lastSeenAuditRunId: null },
+    });
+    await expect(
+      service.createReviewFromAuditIssue(businessId, 'owner', reviewIssueId),
+    ).rejects.toMatchObject({
+      response: { code: 'SEO_TECHNICAL_FINDING_STALE' },
+    });
+    await prisma.seoAuditIssue.update({
+      where: { id: reviewIssueId },
+      data: { lastSeenAuditRunId: auditRunId },
+    });
   });
 
   it('validates redirects for loops, broken targets and chains', async () => {

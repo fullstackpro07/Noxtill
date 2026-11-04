@@ -98,6 +98,37 @@ describe('MembershipsService (UPD-BE-025)', () => {
     expect(daysUntilDue).toBeLessThan(32);
   });
 
+  it('does not create a new membership for an erased customer', async () => {
+    const plan = await membershipsService.createPlan({
+      name: 'Erased Customer Plan',
+      price: 30,
+    });
+    const erased = await prisma.customer.create({
+      data: {
+        businessId,
+        phone: `+1${Date.now()}77`,
+        name: 'Membership Erasure Test',
+      },
+    });
+    await prisma.customer.update({
+      where: { id: erased.id },
+      data: { name: 'Erased Customer', phone: `erased-${erased.id}` },
+    });
+
+    await expect(
+      membershipsService.create(businessId, {
+        customerId: erased.id,
+        planId: plan.id,
+        method: 'cash',
+      }),
+    ).rejects.toThrow('Customer not found');
+    expect(
+      await prisma.membership.count({
+        where: { businessId, customerId: erased.id },
+      }),
+    ).toBe(0);
+  });
+
   it('an online membership with no stripePriceId configured fails cleanly rather than faking checkout', async () => {
     const plan = await membershipsService.createPlan({
       name: 'No Stripe Plan',

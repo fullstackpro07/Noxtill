@@ -7,7 +7,10 @@ import { TenantPrismaService } from '../../common/tenancy/tenant-prisma.service'
 import type { SendGateService } from '../../messaging/send-gate.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AutomationCommandCenterService } from './automation-command-center.service';
-import { aiProviderErrorReason } from './workflow-agent.util';
+import {
+  aiProviderErrorReason,
+  runWorkflowAgentTool,
+} from './workflow-agent.util';
 import { validateWorkflowDefinition } from './workflow-definition.util';
 import { WorkflowTriggerService } from './workflow-trigger.service';
 
@@ -257,6 +260,42 @@ describe('AI agent step (MySQL)', () => {
     expect(result).toMatchObject({ completed: false });
     expect(String(result.error)).toMatch(/did not finish within 2/);
     expect(context.agentAnswer).toBeUndefined();
+  });
+
+  it('does not expose retained orders or run values for an erased customer', async () => {
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        name: 'Erased Customer',
+        phone: `erased-${customerId}`,
+        email: null,
+        consentMarketing: false,
+        optedOut: true,
+      },
+    });
+
+    const context = { customerId, customerName: 'Ana', orderTotal: 42 };
+    const orders = await runWorkflowAgentTool(
+      prisma,
+      businessId,
+      context,
+      'get_customer_orders',
+    );
+    const values = await runWorkflowAgentTool(
+      prisma,
+      businessId,
+      context,
+      'get_run_values',
+    );
+
+    expect(JSON.parse(orders)).toEqual({
+      customer: null,
+      note: 'Customer not found.',
+    });
+    expect(JSON.parse(values)).toEqual({
+      customer: null,
+      note: 'Customer not found.',
+    });
   });
 });
 

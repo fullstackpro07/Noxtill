@@ -15,7 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-const LISTING_CHANNELS = [
+export const COMMERCE_LISTING_CHANNELS = [
   'shopify',
   'woocommerce',
   'amazon',
@@ -43,8 +43,8 @@ export class GenerateCommerceListingDraftDto {
   @MinLength(1)
   productId!: string;
 
-  @IsIn(LISTING_CHANNELS)
-  channel!: (typeof LISTING_CHANNELS)[number];
+  @IsIn(COMMERCE_LISTING_CHANNELS)
+  channel!: (typeof COMMERCE_LISTING_CHANNELS)[number];
 
   @IsOptional()
   @IsString()
@@ -130,8 +130,8 @@ export class CommerceListingDraftQueryDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(LISTING_CHANNELS)
-  channel?: (typeof LISTING_CHANNELS)[number];
+  @IsIn(COMMERCE_LISTING_CHANNELS)
+  channel?: (typeof COMMERCE_LISTING_CHANNELS)[number];
 
   @IsOptional()
   @IsString()

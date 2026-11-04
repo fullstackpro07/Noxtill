@@ -6,6 +6,13 @@ import { WorkflowTriggerService } from '../marketing/automations/workflow-trigge
 import { OutboundWebhookDispatchService } from '../integrations/automation/outbound-webhook-dispatch.service';
 import { LOW_STOCK_SCAN_QUEUE } from './low-stock-scan.constants';
 import { ActivityEventType, Role } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  INVENTORY_LOW_STOCK_EVENT_JOB,
+  SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 interface LowStockProductRow {
   id: string;
@@ -32,6 +39,8 @@ export class LowStockScanProcessor extends WorkerHost {
     private readonly sendGate: SendGateService,
     private readonly workflowTrigger: WorkflowTriggerService,
     private readonly outboundWebhookDispatch: OutboundWebhookDispatchService,
+    @InjectQueue(SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE)
+    private readonly specialistAgentEvents: Queue,
   ) {
     super();
   }
@@ -114,6 +123,35 @@ export class LowStockScanProcessor extends WorkerHost {
           `Outbound webhook dispatch failed for low_stock event ${event.id}: ${error.message}`,
         ),
       );
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { policies: true },
+    });
+    if (
+      business &&
+      resolvePolicies(business).bool(
+        'agents.inventoryLowStockEventReviewEnabled',
+      )
+    ) {
+      await this.specialistAgentEvents
+        .add(
+          INVENTORY_LOW_STOCK_EVENT_JOB,
+          { businessId, activityEventId: event.id },
+          {
+            jobId: `inventory-low-stock-${businessId}-${event.id}`,
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 1_000 },
+            removeOnComplete: 200,
+            removeOnFail: 500,
+          },
+        )
+        .catch((error: Error) =>
+          this.logger.warn(
+            `Could not queue Inventory specialist review for low-stock event ${event.id}: ${error.message}`,
+          ),
+        );
+    }
   }
 
   private async alreadyAlertedToday(businessId: string): Promise<boolean> {

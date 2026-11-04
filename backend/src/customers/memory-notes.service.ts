@@ -10,6 +10,7 @@ import {
   MEMORY_NOTE_ERROR_CODES,
 } from './memory-notes.constants';
 import { Prisma } from '@prisma/client';
+import { excludeErasedCustomers } from './segment-rules.util';
 
 /**
  * Business Memory notes (UPD-BE-026) — polymorphic, multi-row, timestamped notes attached to a
@@ -40,6 +41,21 @@ export class MemoryNotesService {
   }
 
   list(subjectType: string, subjectId: string) {
+    if (subjectType === 'customer') {
+      return this.tenantPrisma.client.customer
+        .findFirst({
+          where: excludeErasedCustomers({ id: subjectId }),
+          select: { id: true },
+        })
+        .then((customer) =>
+          customer
+            ? this.tenantPrisma.client.memoryNote.findMany({
+                where: { subjectType, subjectId },
+                orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+              })
+            : [],
+        );
+    }
     return this.tenantPrisma.client.memoryNote.findMany({
       where: { subjectType, subjectId },
       orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
@@ -47,8 +63,22 @@ export class MemoryNotesService {
   }
 
   /** Business Memory screen — every note across every subject type, most recent first. */
-  listAll() {
+  async listAll() {
+    const erasedCustomers = await this.tenantPrisma.client.customer.findMany({
+      where: { phone: { startsWith: 'erased-' } },
+      select: { id: true },
+    });
     return this.tenantPrisma.client.memoryNote.findMany({
+      where: erasedCustomers.length
+        ? {
+            NOT: {
+              AND: [
+                { subjectType: 'customer' },
+                { subjectId: { in: erasedCustomers.map(({ id }) => id) } },
+              ],
+            },
+          }
+        : {},
       orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
       take: 500,
     });
@@ -78,6 +108,19 @@ export class MemoryNotesService {
         HttpStatus.NOT_FOUND,
       );
     }
+    if (note.subjectType === 'customer') {
+      const customer = await this.tenantPrisma.client.customer.findFirst({
+        where: excludeErasedCustomers({ id: note.subjectId }),
+        select: { id: true },
+      });
+      if (!customer) {
+        throw new AppException(
+          MEMORY_NOTE_ERROR_CODES.NOTE_NOT_FOUND,
+          'Memory note not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+    }
     return note;
   }
 
@@ -88,8 +131,8 @@ export class MemoryNotesService {
     const exists = await (() => {
       switch (subjectType) {
         case 'customer':
-          return this.tenantPrisma.client.customer.findUnique({
-            where: { id: subjectId },
+          return this.tenantPrisma.client.customer.findFirst({
+            where: excludeErasedCustomers({ id: subjectId }),
           });
         case 'supplier':
           return this.tenantPrisma.client.supplier.findUnique({

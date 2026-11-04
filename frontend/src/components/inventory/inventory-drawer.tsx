@@ -369,7 +369,10 @@ function RationaleBody({ productId }: { productId: string }) {
       <div>
         <div style={{ fontSize: 16, fontWeight: 800, color: "#0F172A" }}>{item.name}</div>
         <div style={{ fontSize: 12, color: INV.textFaint, marginTop: 3 }}>
-          Suggested quantity: <strong style={{ color: "#0E8442" }}>{item.suggestedQty}</strong>
+          Suggested stock quantity: <strong style={{ color: "#0E8442" }}>{item.suggestedQty} {item.stockUnitLabel ?? "stock units"}</strong>
+          {item.purchasePackCount !== null && item.purchaseUnitLabel && (
+            <span style={{ display: "block", marginTop: 3 }}>Whole packs: {item.purchasePackCount} × {item.purchaseUnitLabel}</span>
+          )}
         </div>
       </div>
       <div style={{ background: "#FFFBF2", border: "1px solid #FDE3B3", borderRadius: 12, padding: "12px 14px", fontSize: 12, color: "#93370D", lineHeight: 1.55 }}>
@@ -386,7 +389,7 @@ function RationaleBody({ productId }: { productId: string }) {
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: "#0E8442" }}>Suggested order</span>
-            <span style={{ fontSize: 19, fontWeight: 800, color: "#0F172A" }}>{item.suggestedQty}</span>
+            <span style={{ fontSize: 19, fontWeight: 800, color: "#0F172A" }}>{item.suggestedQty} {item.stockUnitLabel ?? "units"}</span>
           </div>
         </div>
         <div style={{ fontSize: 11.5, color: INV.textFaint, marginTop: 8, lineHeight: 1.55 }}>(Velocity × 14-day lead time) + reorder threshold − current stock, rounded up.</div>

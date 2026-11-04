@@ -2,6 +2,7 @@ import { AppointmentStatus } from '@prisma/client';
 import { WidgetContext, findWidget } from '../widgets/widget-registry';
 import { AnthropicTool } from '../ai/claude.client';
 import { retrieveHelpPassages } from '../help/help.service';
+import { excludeErasedCustomers } from '../customers/segment-rules.util';
 
 export interface AssistantTool {
   name: string;
@@ -173,8 +174,8 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
     },
     async execute({ businessId, tenantPrisma }, input) {
       const phone = typeof input.phone === 'string' ? input.phone : '';
-      const customer = await tenantPrisma.client.customer.findUnique({
-        where: { businessId_phone: { businessId, phone } },
+      const customer = await tenantPrisma.client.customer.findFirst({
+        where: excludeErasedCustomers({ businessId, phone }),
       });
       return customer
         ? {
@@ -195,6 +196,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
     inputSchema: EMPTY_SCHEMA,
     async execute({ tenantPrisma }) {
       const customers = await tenantPrisma.client.customer.findMany({
+        where: excludeErasedCustomers({}),
         orderBy: { lifetimeSpend: 'desc' },
         take: 5,
         select: { name: true, lifetimeSpend: true, visitCount: true },
@@ -219,6 +221,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
         FROM v_credit_balances v
         JOIN customers c ON c.id = v.customer_id
         WHERE v.business_id = ${businessId} AND v.balance > 0
+          AND c.phone NOT LIKE 'erased-%'
         ORDER BY v.balance DESC
         LIMIT 5
       `;

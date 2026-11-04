@@ -6,6 +6,8 @@ import {
   SeoTechnicalActionStatus,
 } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { ON_PAGE_ISSUE_TYPES } from '../marketing/seo-on-page.service';
+import { TECHNICAL_ISSUE_TYPES } from '../marketing/seo-technical.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const WORKSPACE_RULES = {
@@ -41,6 +43,8 @@ export interface WorkspaceItem {
   ownerUserId: string | null;
   updatedAt: Date;
   href: string;
+  canPrepareOnPageRevision?: boolean;
+  canPrepareTechnicalReview?: boolean;
 }
 
 const REVISION_STAGE: Partial<
@@ -65,6 +69,7 @@ const TECHNICAL_STAGE: Partial<
 const ORIGIN: Record<string, string> = {
   ai: 'AI draft — review before approving',
   ai_edited: 'AI draft, edited by your team',
+  specialist_agent: 'Prepared by SEO Autopilot Agent — AI brief',
   manual: 'Written by your team',
   restore: 'Restored from an earlier version',
   crawler: 'Found by the site audit',
@@ -76,7 +81,8 @@ const ORIGIN: Record<string, string> = {
  * by where each one is in draft → approval → apply → verify. It adds no state of its own: approve /
  * reject call the owning screen's API, so every rule and audit trail stays in one place. Noxtill
  * doesn't publish to the merchant's site, so "executing" is the merchant applying an approved change;
- * expected traffic impact is not estimated (no Search Console / analytics data).
+ * expected page-level traffic impact is not estimated because this queue does not include Search
+ * Console metrics and no analytics source attributes visits to orders.
  */
 @Injectable()
 export class SeoAgentWorkspaceService {
@@ -93,88 +99,94 @@ export class SeoAgentWorkspaceService {
     const doneSince = new Date(
       now.getTime() - WORKSPACE_RULES.completedDays * DAY_MS,
     );
-    const [findings, revisions, technical, briefs] = await Promise.all([
-      this.db.seoAuditIssue.findMany({
-        where: {
-          businessId,
-          status: SeoAuditIssueStatus.open,
-          firstSeenAt: { gte: newSince },
-        },
-        orderBy: [{ firstSeenAt: 'desc' }],
-        take: 200,
-      }),
-      this.db.seoContentRevision.findMany({
-        where: {
-          businessId,
-          OR: [
-            {
-              status: {
-                in: [
-                  SeoContentRevisionStatus.draft,
-                  SeoContentRevisionStatus.approval_required,
-                  SeoContentRevisionStatus.approved,
-                  SeoContentRevisionStatus.applied,
+    const [findings, revisions, technical, briefs, latestRun] =
+      await Promise.all([
+        this.db.seoAuditIssue.findMany({
+          where: {
+            businessId,
+            status: SeoAuditIssueStatus.open,
+            firstSeenAt: { gte: newSince },
+          },
+          orderBy: [{ firstSeenAt: 'desc' }],
+          take: 200,
+        }),
+        this.db.seoContentRevision.findMany({
+          where: {
+            businessId,
+            OR: [
+              {
+                status: {
+                  in: [
+                    SeoContentRevisionStatus.draft,
+                    SeoContentRevisionStatus.approval_required,
+                    SeoContentRevisionStatus.approved,
+                    SeoContentRevisionStatus.applied,
+                  ],
+                },
+              },
+              {
+                status: SeoContentRevisionStatus.verified,
+                verifiedAt: { gte: doneSince },
+              },
+            ],
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 300,
+        }),
+        this.db.seoTechnicalAction.findMany({
+          where: {
+            businessId,
+            OR: [
+              {
+                status: {
+                  in: [
+                    SeoTechnicalActionStatus.draft,
+                    SeoTechnicalActionStatus.approval_required,
+                    SeoTechnicalActionStatus.approved,
+                    SeoTechnicalActionStatus.applied,
+                  ],
+                },
+              },
+              {
+                status: SeoTechnicalActionStatus.verified,
+                verifiedAt: { gte: doneSince },
+              },
+            ],
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 300,
+        }),
+        this.db.seoContentBrief.findMany({
+          where: {
+            businessId,
+            OR: [
+              {
+                status: {
+                  in: [
+                    SeoContentBriefStatus.drafting,
+                    SeoContentBriefStatus.approval_required,
+                    SeoContentBriefStatus.approved,
+                  ],
+                },
+              },
+              {
+                status: SeoContentBriefStatus.published,
+                OR: [
+                  { liveConfirmedAt: null },
+                  { liveConfirmedAt: { gte: doneSince } },
                 ],
               },
-            },
-            {
-              status: SeoContentRevisionStatus.verified,
-              verifiedAt: { gte: doneSince },
-            },
-          ],
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 300,
-      }),
-      this.db.seoTechnicalAction.findMany({
-        where: {
-          businessId,
-          OR: [
-            {
-              status: {
-                in: [
-                  SeoTechnicalActionStatus.draft,
-                  SeoTechnicalActionStatus.approval_required,
-                  SeoTechnicalActionStatus.approved,
-                  SeoTechnicalActionStatus.applied,
-                ],
-              },
-            },
-            {
-              status: SeoTechnicalActionStatus.verified,
-              verifiedAt: { gte: doneSince },
-            },
-          ],
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 300,
-      }),
-      this.db.seoContentBrief.findMany({
-        where: {
-          businessId,
-          OR: [
-            {
-              status: {
-                in: [
-                  SeoContentBriefStatus.drafting,
-                  SeoContentBriefStatus.approval_required,
-                  SeoContentBriefStatus.approved,
-                ],
-              },
-            },
-            {
-              status: SeoContentBriefStatus.published,
-              OR: [
-                { liveConfirmedAt: null },
-                { liveConfirmedAt: { gte: doneSince } },
-              ],
-            },
-          ],
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 300,
-      }),
-    ]);
+            ],
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 300,
+        }),
+        this.db.seoAuditRun.findFirst({
+          where: { businessId, status: { in: ['completed', 'partial'] } },
+          orderBy: { startedAt: 'desc' },
+          select: { id: true },
+        }),
+      ]);
 
     const items: WorkspaceItem[] = [];
     for (const issue of findings) {
@@ -198,6 +210,12 @@ export class SeoAgentWorkspaceService {
         ownerUserId: null,
         updatedAt: issue.lastSeenAt,
         href: '/marketing/seo-autopilot',
+        canPrepareOnPageRevision:
+          issue.lastSeenAuditRunId === latestRun?.id &&
+          ON_PAGE_ISSUE_TYPES.includes(issue.type),
+        canPrepareTechnicalReview:
+          issue.lastSeenAuditRunId === latestRun?.id &&
+          TECHNICAL_ISSUE_TYPES.includes(issue.type),
       });
     }
     for (const revision of revisions) {
@@ -205,7 +223,8 @@ export class SeoAgentWorkspaceService {
       if (!stage) continue;
       const verification = revision.verification as {
         fields?: Record<string, string>;
-        pageFound?: boolean;
+        pageFound?: boolean | null;
+        result?: string;
       } | null;
       const mismatched =
         revision.status === SeoContentRevisionStatus.applied &&
@@ -231,7 +250,11 @@ export class SeoAgentWorkspaceService {
                   ([field, result]) => `${field} ${result.replace('_', ' ')}`,
                 )
                 .join(', ')}`
-          : null,
+          : verification?.result === 'not_checked'
+            ? verification.pageFound === null
+              ? 'The latest crawl was partial and did not include this page; verification remains pending.'
+              : 'The latest crawl did not capture every proposed field; verification remains pending.'
+            : null,
         ownerUserId: revision.createdByUserId,
         updatedAt: revision.updatedAt,
         href: '/marketing/seo-autopilot/on-page',

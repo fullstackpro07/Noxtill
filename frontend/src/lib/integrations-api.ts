@@ -6,6 +6,8 @@ const TO_BACKEND_PROVIDER: Record<ConnectorKey, string> = {
   email: "email",
   gmb: "gmb",
   google_ads: "google_ads",
+  google_search_console: "google_search_console",
+  google_analytics: "google_analytics",
   merchant_center: "merchant",
   meta_ads: "meta_ads",
   tiktok_ads: "tiktok_ads",

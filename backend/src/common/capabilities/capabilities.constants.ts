@@ -66,6 +66,20 @@ export const CAPABILITIES = {
   /// send/confirm/receive lifecycle is owner+manager, matching the spec's "Purchases: Owner,
   /// Manager" note (unlike Wastage, which the spec marks staff-recordable and stays ungated).
   PURCHASES_MANAGE: 'purchases.manage',
+  /** Inventory Intelligence runs may send business stock data to the configured AI provider. */
+  INVENTORY_AGENT_RUN: 'inventory_agent.run',
+  /** Finance Intelligence reads Profit & Analytics and may send its aggregate snapshot to AI. */
+  FINANCE_AGENT_RUN: 'finance_agent.run',
+  /** Finance journal drafting and second-person approval; never exposes journals to staff. */
+  FINANCE_JOURNAL_MANAGE: 'finance_journal.manage',
+  /** Manually lock an accounting month against further Noxtill journal posting. Owner-only. */
+  FINANCE_PERIOD_LOCK: 'finance_period.lock',
+  /** Customer Intelligence reads anonymized customer aggregates and may request an AI explanation. */
+  CUSTOMER_AGENT_RUN: 'customer_agent.run',
+  /** SEO specialist review over canonical SEO workspace records. */
+  SEO_AGENT_RUN: 'seo_agent.run',
+  /** Autonomous Commerce specialist review over permissioned commerce records. */
+  COMMERCE_AGENT_RUN: 'commerce_agent.run',
   /// AI Settings (UPD-BE-115) — owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES
   /// below), matching the spec's explicit "Owner-only" note on this screen: cost cap / rate limit /
   /// per-feature toggles are a billing-adjacent control, same tier as BILLING_MANAGE.
@@ -136,6 +150,12 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.BOOKINGS_MANAGE,
   CAPABILITIES.CREDIT_MANAGE,
   CAPABILITIES.PURCHASES_MANAGE,
+  CAPABILITIES.INVENTORY_AGENT_RUN,
+  CAPABILITIES.FINANCE_AGENT_RUN,
+  CAPABILITIES.FINANCE_JOURNAL_MANAGE,
+  CAPABILITIES.CUSTOMER_AGENT_RUN,
+  CAPABILITIES.SEO_AGENT_RUN,
+  CAPABILITIES.COMMERCE_AGENT_RUN,
   CAPABILITIES.BUSINESS_PROFILE_MANAGE,
   CAPABILITIES.MESSAGING_CHANNELS_MANAGE,
   CAPABILITIES.NIGHTLY_CLOSE_MANAGE,

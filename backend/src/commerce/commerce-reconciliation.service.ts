@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {
   CommerceChannelListingStatus,
   IntegrationProvider,
@@ -9,6 +11,11 @@ import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { ConnectorRegistry } from '../integrations/connector-registry';
 import { IntegrationsService } from '../integrations/integrations.service';
+import {
+  COMMERCE_RECONCILIATION_EVENT_JOB,
+  SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
+import { resolvePolicies } from '../common/policies/policies.service';
 
 export const COMMERCE_RECON_ERROR_CODES = {
   NOT_FOUND: 'COMMERCE_RECON_ITEM_NOT_FOUND',
@@ -25,10 +32,15 @@ export const COMMERCE_RECON_ERROR_CODES = {
  */
 @Injectable()
 export class CommerceReconciliationService {
+  private readonly logger = new Logger(CommerceReconciliationService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly integrations: IntegrationsService,
     private readonly connectors: ConnectorRegistry,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE)
+    private readonly specialistEventQueue?: Queue,
   ) {}
 
   private get db() {
@@ -153,7 +165,7 @@ export class CommerceReconciliationService {
         });
       }
     }
-    return this.db.commerceReconciliationRun.create({
+    const run = await this.db.commerceReconciliationRun.create({
       data: {
         businessId,
         provider,
@@ -166,6 +178,42 @@ export class CommerceReconciliationService {
         items: { createMany: { data: items } },
       },
     });
+    if (run.discrepancies > 0 && this.specialistEventQueue) {
+      try {
+        const business = await this.db.business.findFirst({
+          where: { id: businessId },
+          select: { policies: true },
+        });
+        const policies = resolvePolicies(business);
+        if (
+          policies.bool('agents.commerceEnabled') &&
+          policies.bool('agents.commerceReconciliationEventReviewEnabled') &&
+          (policies.num('commerce.autonomyLevel') ?? 0) > 0
+        ) {
+          await this.specialistEventQueue.add(
+            COMMERCE_RECONCILIATION_EVENT_JOB,
+            {
+              businessId,
+              reconciliationRunId: run.id,
+              finishedAt: run.finishedAt?.toISOString() ?? null,
+            },
+            {
+              jobId: `commerce-reconciliation-${businessId}-${run.id}`,
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 1_000 },
+              removeOnComplete: 200,
+              removeOnFail: 500,
+            },
+          );
+        }
+      } catch (error) {
+        // A saved provider check remains valid even if its optional review cannot be queued.
+        this.logger.warn(
+          `Could not queue Commerce reconciliation review for ${run.id}: ${(error as Error).message}`,
+        );
+      }
+    }
+    return run;
   }
 
   async overview(businessId: string) {

@@ -1,16 +1,28 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { MessageAtRiskDto } from './dto/message-at-risk.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
+import { CustomerIntelligenceService } from '../customers/customer-intelligence.service';
 
 /** UPD-BE-108 fix-it: no capability gate previously existed on real KPI/cohort/staff-sales data. */
 @RequireCapability(CAPABILITIES.PROFIT_VIEW)
 @Controller('analytics')
 export class AnalyticsController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly customerIntelligence: CustomerIntelligenceService,
+  ) {}
 
   @Get('kpis')
   kpis() {
@@ -68,6 +80,29 @@ export class AnalyticsController {
     @Query('branchId') branchId?: string,
   ) {
     return this.analyticsService.customerSummary(user.businessId, branchId);
+  }
+
+  @Get('customers/agent-runs')
+  listCustomerAgentRuns() {
+    return this.customerIntelligence.listRuns();
+  }
+
+  @RequireCapability(CAPABILITIES.CUSTOMER_AGENT_RUN)
+  @Post('customers/agent-runs')
+  async runCustomerAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('branchId') branchId?: string,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+  ) {
+    return this.customerIntelligence.run(
+      user.businessId,
+      user.sub,
+      branchId && branchId !== user.businessId
+        ? 'selected_branch'
+        : 'current_business',
+      idempotencyKey,
+      branchId ?? user.businessId,
+    );
   }
 
   @Post('customers/message-at-risk')

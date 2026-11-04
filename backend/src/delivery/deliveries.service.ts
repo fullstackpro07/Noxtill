@@ -1,4 +1,12 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { Observable, concat, map } from 'rxjs';
 import type { MessageEvent } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -26,6 +34,13 @@ import {
   deliveryChannel,
 } from './delivery.constants';
 import { Delivery, DeliveryStatus } from '@prisma/client';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  CUSTOMER_DELIVERY_FAILED_EVENT_JOB,
+  COMMERCE_DELIVERY_FAILED_EVENT_JOB,
+  SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 export interface ProofFile {
   buffer: Buffer;
@@ -36,6 +51,8 @@ export interface ProofFile {
 /** Delivery assignment + live tracking (UPD-BE-065) and proof of delivery (UPD-BE-067). */
 @Injectable()
 export class DeliveriesService {
+  private readonly logger = new Logger(DeliveriesService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly s3: S3Service,
@@ -47,6 +64,12 @@ export class DeliveriesService {
     private readonly notifier: DeliveryNotifierService,
     private readonly automations: DeliveryAutomationsService,
     private readonly geocoding: GeocodingService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE)
+    private readonly commerceAgentEvents?: Queue,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly customerAgentEvents?: Queue,
   ) {}
 
   list(status?: DeliveryStatus) {
@@ -420,8 +443,89 @@ export class DeliveriesService {
       await this.automations.onDelivered(businessId, id);
     } else if (dto.status === 'failed') {
       await this.automations.onFailed(businessId, id);
+      await this.queueCommerceFailureReview(businessId, id, updated.updatedAt);
+      await this.queueCustomerFailureReview(businessId, id, updated.updatedAt);
     }
     return updated;
+  }
+
+  private async queueCommerceFailureReview(
+    businessId: string,
+    deliveryId: string,
+    failedAt: Date,
+  ): Promise<void> {
+    if (!this.commerceAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, policies: true },
+      });
+      if (!business) return;
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.commerceEnabled') ||
+        !policies.bool('agents.commerceDeliveryFailedEventReviewEnabled') ||
+        (policies.num('commerce.autonomyLevel') ?? 0) <= 0
+      ) {
+        return;
+      }
+
+      const timestamp = failedAt.getTime();
+      await this.commerceAgentEvents.add(
+        COMMERCE_DELIVERY_FAILED_EVENT_JOB,
+        { businessId, deliveryId, failedAt: failedAt.toISOString() },
+        {
+          jobId: `commerce-delivery-failed-${businessId}-${deliveryId}-${timestamp}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: false,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Commerce review for failed delivery ${deliveryId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async queueCustomerFailureReview(
+    businessId: string,
+    deliveryId: string,
+    failedAt: Date,
+  ): Promise<void> {
+    if (!this.customerAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, policies: true },
+      });
+      if (!business) return;
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.customerEnabled') ||
+        !policies.bool('agents.customerDeliveryFailedEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      const timestamp = failedAt.getTime();
+      await this.customerAgentEvents.add(
+        CUSTOMER_DELIVERY_FAILED_EVENT_JOB,
+        { businessId, deliveryId, failedAt: failedAt.toISOString() },
+        {
+          jobId: `customer-delivery-failed-${businessId}-${deliveryId}-${timestamp}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: false,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Customer review for failed delivery ${deliveryId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   /**

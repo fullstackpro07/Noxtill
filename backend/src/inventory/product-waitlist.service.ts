@@ -4,6 +4,15 @@ import { AppException } from '../common/filters/app.exception';
 import { SendGateService } from '../messaging/send-gate.service';
 import { INVENTORY_ERROR_CODES } from './inventory.constants';
 
+type WaitlistPreviewRecipient = {
+  name: string;
+  status: 'eligible' | 'blocked';
+  channel: string | null;
+  message: string | null;
+  reasonCode: string | null;
+  reason: string | null;
+};
+
 /**
  * Back-in-stock notifications (UPD-BE-111) — deliberately minimal: staff add a customer who asked
  * in person/by phone (no `WaitlistEntry` reuse — that model is booking-slot-only), not a public
@@ -44,6 +53,138 @@ export class ProductWaitlistService {
     return this.tenantPrisma.client.productWaitlistEntry.count({
       where: { productId, notifiedAt: null },
     });
+  }
+
+  /**
+   * Builds a current, non-sending preview for an existing explicit waitlist request. Every
+   * recipient is checked through the same send-gate preflight used by `notify`; no message row is
+   * created, no quota is consumed and no provider job is queued. The actual send rechecks later.
+   */
+  async previewNotification(
+    businessId: string,
+    actorUserId: string,
+    productId: string,
+  ) {
+    const product = await this.tenantPrisma.client.product.findFirst({
+      where: { id: productId, businessId, active: true },
+      select: { id: true, name: true, stockQty: true },
+    });
+    if (!product) {
+      throw new AppException(
+        'INVENTORY_WAITLIST_PREVIEW_PRODUCT_NOT_FOUND',
+        'This active product is not available in the current business.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (product.stockQty <= 0) {
+      throw new AppException(
+        INVENTORY_ERROR_CODES.PRODUCT_NOT_FOUND,
+        `${product.name} is still out of stock — restock it before preparing a notification preview.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const business = await this.tenantPrisma.client.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { name: true },
+    });
+    const waiting =
+      await this.tenantPrisma.client.productWaitlistEntry.findMany({
+        where: { businessId, productId, notifiedAt: null },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        include: { customer: { select: { id: true, name: true } } },
+      });
+
+    const recipients: WaitlistPreviewRecipient[] = [];
+    for (const entry of waiting) {
+      try {
+        const preview = await this.sendGate.preview(
+          {
+            businessId,
+            customerId: entry.customer.id,
+            templateKey: 'back_in_stock',
+            variables: {
+              customerName: entry.customer.name,
+              productName: product.name,
+              businessName: business.name,
+            },
+          },
+          {
+            quotaOffset: recipients.filter((row) => row.status === 'eligible')
+              .length,
+          },
+        );
+        recipients.push({
+          name: entry.customer.name,
+          status: 'eligible',
+          channel: preview.channel,
+          message: preview.renderedText,
+          reasonCode: null,
+          reason: null,
+        });
+      } catch (error) {
+        if (!(error instanceof AppException)) throw error;
+        const response = error.getResponse();
+        const detail =
+          typeof response === 'object' && response !== null
+            ? (response as { code?: unknown; message?: unknown })
+            : {};
+        recipients.push({
+          name: entry.customer.name,
+          status: 'blocked',
+          channel: null,
+          message: null,
+          reasonCode:
+            typeof detail.code === 'string' ? detail.code : 'SEND_GATE_BLOCKED',
+          reason:
+            typeof detail.message === 'string'
+              ? detail.message
+              : 'The current send-gate checks did not allow this notification.',
+        });
+      }
+    }
+
+    const eligibleCount = recipients.filter(
+      (recipient) => recipient.status === 'eligible',
+    ).length;
+    const blockedCount = recipients.length - eligibleCount;
+    await this.tenantPrisma.client.auditLog.create({
+      data: {
+        businessId,
+        actorUserId,
+        action: 'inventory.waitlist_notification_previewed',
+        entity: 'ProductWaitlistEntry',
+        entityId: productId,
+        before: {
+          availableStock: product.stockQty,
+          waitingCount: waiting.length,
+        },
+        after: {
+          eligibleCount,
+          blockedCount,
+          eligibleChannels: recipients
+            .filter((recipient) => recipient.channel)
+            .map((recipient) => recipient.channel),
+          blockedReasonCodes: recipients
+            .filter((recipient) => recipient.reasonCode)
+            .map((recipient) => recipient.reasonCode),
+          sendsMessage: false,
+          providerDeliveryChecked: false,
+        },
+      },
+    });
+
+    return {
+      productId,
+      productName: product.name,
+      availableStock: product.stockQty,
+      asOf: new Date().toISOString(),
+      waitingCount: waiting.length,
+      eligibleCount,
+      blockedCount,
+      providerDeliveryChecked: false,
+      recipients,
+    };
   }
 
   async remove(id: string) {
