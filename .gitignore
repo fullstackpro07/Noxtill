@@ -25,6 +25,7 @@ yarn-error.log*
 
 # ── OS / editor noise ────────────────────────────────────────────────────
 .DS_Store
+temp_auto_push.bat
 Thumbs.db
 *.pem
 .idea/
@@ -52,3 +53,5 @@ docs/Dashboard module with sidebar/
 docs/Noxtill master theme overview/
 docs/Articles of Organization.pdf/
 config.bat
+.gitignore
+branch_structure.json
