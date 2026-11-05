@@ -12,8 +12,6 @@ node_modules/
 !.yarn/versions
 
 # ── Env files ────────────────────────────────────────────────────────────
-.env
-.env.*
 !.env.example
 
 # ── Logs / debug ─────────────────────────────────────────────────────────
@@ -28,6 +26,7 @@ yarn-error.log*
 Thumbs.db
 *.pem
 .idea/
+temp_auto_push.bat
 
 # ── Backend (NestJS + Prisma) ────────────────────────────────────────────
 backend/dist/
@@ -56,9 +55,7 @@ docs/Legal pages/
 docs/Noxtill pricing page built/
 docs/Noxtill pages/
 docs/Logo asset and green panel/
-branch_structure.json
-temp_auto_push.bat
-temp_interactive_push.bat
 config.bat
 docs/Noxtill Pages/
-docs/policies/
+docs/policies/.gitignore
+branch_structure.json

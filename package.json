@@ -5,13 +5,13 @@
   "scripts": {
     "postinstall": "npm --prefix backend install && npm --prefix frontend install",
     "prebuild": "npm --prefix backend install && npm --prefix frontend install",
-    "build:backend": "npm --prefix backend run build",
-    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "node init && npm --prefix backend run build",
+    "build:frontend": "node init && npm --prefix frontend run build",
     "build": "node init && npm run build:backend && npm run build:frontend",
-    "start:backend": "npm --prefix backend run start:prod",
-    "start:frontend": "npm --prefix frontend run start",
+    "start:backend": "node init && npm --prefix backend run start:prod",
+    "start:frontend": "node init && npm --prefix frontend run start",
     "start": "node init && npm --prefix frontend run start",
-    "dev:backend": "npm --prefix backend run start:dev",
-    "dev:frontend": "npm --prefix frontend run dev"
+    "dev:backend": "node init && npm --prefix backend run start:dev",
+    "dev:frontend": "node init && npm --prefix frontend run dev"
   }
 }
