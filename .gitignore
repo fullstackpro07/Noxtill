@@ -12,8 +12,6 @@ node_modules/
 !.yarn/versions
 
 # ── Env files ────────────────────────────────────────────────────────────
-.env
-.env.*
 !.env.example
 
 # ── Logs / debug ─────────────────────────────────────────────────────────
@@ -25,6 +23,7 @@ yarn-error.log*
 
 # ── OS / editor noise ────────────────────────────────────────────────────
 .DS_Store
+temp_auto_push.bat
 Thumbs.db
 *.pem
 .idea/
@@ -51,3 +50,5 @@ docs/Dashboard module with sidebar.zip/
 docs/Dashboard module with sidebar/
 docs/Noxtill master theme overview/
 config.bat
+.gitignore
+branch_structure.json
