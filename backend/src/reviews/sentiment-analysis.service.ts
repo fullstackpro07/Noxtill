@@ -158,7 +158,12 @@ export class SentimentAnalysisService {
 
     let raw: string;
     try {
-      raw = await this.aiInfra.complete(businessId, prompt);
+      raw = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0,
+        'review_sentiment',
+      );
     } catch (error) {
       this.logger.warn(
         `Sentiment theme clustering failed for business ${businessId}: ${(error as Error).message}`,

@@ -67,7 +67,12 @@ export class BranchAdvisorService {
 
     let answer: string;
     try {
-      answer = await this.aiInfra.complete(businessId, prompt);
+      answer = await this.aiInfra.complete(
+        businessId,
+        prompt,
+        0,
+        'branch_advice',
+      );
     } catch (error) {
       if (error instanceof AppException) {
         throw error;

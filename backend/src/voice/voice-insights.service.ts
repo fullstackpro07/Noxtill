@@ -573,6 +573,8 @@ export class VoiceInsightsService {
         '',
         conversation,
       ].join('\n'),
+      0,
+      'call_summary',
     );
     const summary = raw.trim();
     if (!summary) {

@@ -888,7 +888,7 @@ export class BusinessIntelligenceService {
     try {
       const response = await this.aiInfra.createMessage(
         businessId,
-        'ai_insights',
+        'bi_insights',
         {
           system,
           messages: [{ role: 'user', content: prompt }],

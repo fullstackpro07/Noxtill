@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { AiInfraService } from '../ai/ai-infra.service';
@@ -56,6 +57,7 @@ export class KeywordsService {
     private readonly rankProcessor: KeywordRankProcessor,
     private readonly aiInfra: AiInfraService,
     private readonly masterListing: MasterListingService,
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   async list() {
@@ -161,6 +163,8 @@ export class KeywordsService {
       );
     }
 
+    // Usage & Limits: tracked keywords are capacity on the SEO meter (never AI credits).
+    await this.meters?.assertAllowance(businessId, 'seo_keywords');
     return this.tenantPrisma.client.trackedKeyword.create({
       data: { businessId, keyword: dto.keyword },
     });

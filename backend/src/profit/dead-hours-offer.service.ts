@@ -75,7 +75,7 @@ export class DeadHoursOfferService {
         businessId,
         prompt,
         0.6,
-        'campaign_copy',
+        'offer_copy',
       );
       return { windowLabel, offerText };
     } catch {

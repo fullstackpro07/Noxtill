@@ -21,6 +21,8 @@ export const NOTIFICATION_EVENTS = [
   'project_update',
   // helpdesk/helpdesk-context.service.ts notify() (assignment, customer reply, SLA risk/breach, escalation, CSAT)
   'helpdesk_update',
+  // usage/usage-alerts.service.ts (50/75/90/100% of an allowance, trial reminders, payment issues)
+  'subscription_usage',
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
@@ -39,6 +41,8 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
     'Projects & Tasks: assignments, mentions, approvals and deadlines',
   helpdesk_update:
     'Helpdesk: new tickets, assignments, customer replies, SLA and escalations',
+  subscription_usage:
+    'Subscription & usage: renewals, payment issues, allowances running low',
 };
 
 export type NotificationPriority = 'low' | 'normal' | 'high';
@@ -59,6 +63,7 @@ export const NOTIFICATION_EVENT_PRIORITY: Record<
   brain_watch_triggered: 'high',
   project_update: 'normal',
   helpdesk_update: 'high',
+  subscription_usage: 'high',
 };
 
 export function isNotificationEvent(value: string): value is NotificationEvent {

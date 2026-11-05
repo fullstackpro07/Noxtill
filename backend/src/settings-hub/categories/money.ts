@@ -32,14 +32,21 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
       help: [
         'Noxtill invoices and customer invoices never appear in the same report.',
         'Usage shown here is your platform usage, not your business volume.',
-        'A trial that ends without a subscription falls back to the Basic plan.',
+        'A trial that ends without a payment method and a chosen plan becomes read-only. Nothing is deleted and you can still export everything.',
+        'Seat, location and AI credit limits are enforced; see Usage & Limits for every meter.',
       ],
       actions: [
         {
           label: 'Manage plan',
           icon: 'external-link',
           primary: true,
-          href: '/settings/tools/billing',
+          href: '/settings/account/plan',
+          kind: 'link',
+        },
+        {
+          label: 'Usage & Limits',
+          icon: 'activity',
+          href: '/settings/usage/overview',
           kind: 'link',
         },
       ],
@@ -53,8 +60,26 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
               label: 'Plan',
               description: 'Your current subscription.',
               risk: 'Medium',
-              link: { label: 'Manage plan', href: '/settings/tools/billing' },
+              link: { label: 'Manage plan', href: '/settings/account/plan' },
               state: async (ctx) => {
+                if (d.entitlements) {
+                  const set = await d.entitlements.resolve(ctx.businessId);
+                  const plan = await d.prisma.plan.findUnique({
+                    where: { key: set.planKey },
+                  });
+                  const price =
+                    set.interval === 'year'
+                      ? plan?.yearlyPrice
+                      : (plan?.price ?? null);
+                  return {
+                    value:
+                      set.status === 'trialing'
+                        ? 'Free trial'
+                        : price == null || set.planKey === 'enterprise'
+                          ? set.planName
+                          : `${set.planName} · ${Number(price)}/${set.interval === 'year' ? 'year' : 'month'}`,
+                  };
+                }
                 const b = await d.prisma.business.findUniqueOrThrow({
                   where: { id: ctx.businessId },
                   include: { plan: true },
@@ -73,6 +98,34 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
                 'Whether the subscription is active, on trial or on the free plan.',
               risk: 'Medium',
               state: async (ctx) => {
+                if (d.entitlements) {
+                  const set = await d.entitlements.resolve(ctx.businessId);
+                  if (set.status === 'trialing') {
+                    const days = set.trialEndsAt
+                      ? Math.max(
+                          0,
+                          Math.ceil(
+                            (new Date(set.trialEndsAt).getTime() -
+                              ctx.now.getTime()) /
+                              86_400_000,
+                          ),
+                        )
+                      : 0;
+                    return {
+                      value: `Trial · ${plural(days, 'day')} left`,
+                      tone: days <= 3 ? 'amber' : 'blue',
+                    };
+                  }
+                  if (set.status === 'past_due')
+                    return { value: 'Payment overdue', tone: 'red' };
+                  if (set.status === 'paused')
+                    return { value: 'Paused · read-only', tone: 'red' };
+                  if (set.status === 'cancelled')
+                    return { value: 'Cancelled', tone: 'neutral' };
+                  return set.cancelAtPeriodEnd
+                    ? { value: 'Active · cancels at period end', tone: 'amber' }
+                    : { value: 'Active subscription', tone: 'green' };
+                }
                 const b = await business(d, ctx);
                 if (b.stripeSubscriptionId)
                   return { value: 'Active subscription', tone: 'green' };
@@ -108,8 +161,26 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
               key: 'seats',
               label: 'Team members',
               description:
-                'Active team members against the plan’s user limit. The limit is shown for reference and is not enforced.',
+                'Members (pending invitations included) against your plan’s seats plus any seats you bought. Inviting past the limit is refused.',
+              link: {
+                label: 'Users & Locations',
+                href: '/settings/usage/team',
+              },
               state: async (ctx) => {
+                if (d.entitlements) {
+                  const set = await d.entitlements.resolve(ctx.businessId);
+                  const m = set.metrics.users;
+                  const limit =
+                    m && m.included != null ? m.included + m.purchased : null;
+                  return {
+                    value:
+                      limit == null
+                        ? `${m?.used ?? 0} · limit not configured`
+                        : `${m.used} of ${limit}`,
+                    tone:
+                      limit != null && m.used >= limit ? 'amber' : 'neutral',
+                  };
+                }
                 const [b, active] = await Promise.all([
                   d.prisma.business.findUniqueOrThrow({
                     where: { id: ctx.businessId },
@@ -127,9 +198,32 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
               },
             }),
             row({
+              key: 'ai-credits',
+              label: 'AI credits',
+              description:
+                'Credits used this period against your plan’s included credits plus any you bought. AI features pause at the limit; nothing is charged automatically.',
+              link: { label: 'AI credits', href: '/settings/usage/ai' },
+              state: async (ctx) => {
+                const m = d.entitlements
+                  ? (await d.entitlements.resolve(ctx.businessId)).metrics
+                      .ai_credits
+                  : undefined;
+                if (!m) return { value: 'Not available', tone: 'neutral' };
+                if (m.included == null)
+                  return { value: 'Not configured', tone: 'neutral' };
+                const limit = m.included + m.purchased;
+                const used = m.used + m.reserved;
+                return {
+                  value: `${used.toLocaleString('en-US')} of ${limit.toLocaleString('en-US')}`,
+                  tone: limit > 0 && used / limit >= 0.9 ? 'amber' : 'neutral',
+                };
+              },
+            }),
+            row({
               key: 'ai-spend',
               label: 'AI spend this month',
-              description: 'Estimated AI cost this month against your cap.',
+              description:
+                'Estimated provider cost of AI this month against the internal safety cap. Your customer-facing AI limit is AI credits.',
               state: async (ctx) => {
                 const [b, sum] = await Promise.all([
                   business(d, ctx),
@@ -151,7 +245,7 @@ export function moneyCategories(d: HubDeps): CategoryDef[] {
             }),
           ],
           footer:
-            'A trial that ends without a subscription falls back to the Basic plan and its message quota. Your data export stays available.',
+            'A trial that ends without a payment method and a chosen plan becomes read-only. Nothing is deleted and your data export stays available.',
         },
         {
           title: 'Add-ons',

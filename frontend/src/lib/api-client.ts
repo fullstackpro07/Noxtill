@@ -12,6 +12,7 @@ interface ApiErrorBody {
     code: string;
     message: string;
     fields?: Record<string, string[]>;
+    details?: Record<string, unknown>;
   };
 }
 
@@ -19,13 +20,16 @@ export class ApiError extends Error {
   status: number;
   code: string;
   fields?: Record<string, string[]>;
+  /** Structured context for typed errors, e.g. a usage limit's metric, remaining and remedies. */
+  details?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string, fields?: Record<string, string[]>) {
+  constructor(status: number, code: string, message: string, fields?: Record<string, string[]>, details?: Record<string, unknown>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.details = details;
   }
 }
 
@@ -98,7 +102,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, options:
       // response had no JSON body
     }
     const err = body.error ?? { code: "UNKNOWN_ERROR", message: res.statusText || "Something went wrong" };
-    throw new ApiError(res.status, err.code, err.message, err.fields);
+    throw new ApiError(res.status, err.code, err.message, err.fields, err.details);
   }
 
   if (res.status === 204) return undefined as T;

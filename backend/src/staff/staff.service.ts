@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -36,7 +42,11 @@ const BCRYPT_ROUNDS = 10;
  */
 @Injectable()
 export class StaffService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    /** Usage & Limits seat enforcement (spec CP-01..05). Optional only for unit specs. */
+    @Optional() private readonly meters?: MetersService,
+  ) {}
 
   /**
    * `includeInactive` defaults to false so every existing caller (booking/schedule staff pickers,
@@ -50,7 +60,18 @@ export class StaffService {
         role: { in: [Role.owner, Role.manager, Role.staff] },
         ...(includeInactive ? {} : { active: true }),
       },
-      include: { user: true },
+      include: {
+        user: {
+          include: {
+            // Most recent session = "last active" (and none at all = invited, never signed in).
+            sessions: {
+              select: { lastUsedAt: true },
+              orderBy: { lastUsedAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -160,6 +181,7 @@ export class StaffService {
       // a new BusinessUser row would collide with the `[businessId, userId]` unique constraint,
       // and re-creating a new "person" would orphan their real attendance/commission/order history.
       if (existingLink) {
+        await this.meters?.assertCapacity(businessId, 'users');
         const reactivated = await this.tenantPrisma.client.businessUser.update({
           where: { id: existingLink.id },
           data: {
@@ -173,6 +195,8 @@ export class StaffService {
         return { ...reactivated, tempPassword };
       }
     } else {
+      // An invitation holds a seat from the moment it is sent (spec CP-02).
+      await this.meters?.assertCapacity(businessId, 'users');
       tempPassword = randomBytes(TEMP_PASSWORD_BYTES).toString('hex');
       const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
       user = await this.tenantPrisma.client.user.create({
@@ -185,6 +209,11 @@ export class StaffService {
       });
     }
 
+    // An existing Noxtill user joining this business takes a seat too (the new-user path above
+    // already checked before creating the account).
+    if (tempPassword === undefined) {
+      await this.meters?.assertCapacity(businessId, 'users');
+    }
     const businessUser = await this.tenantPrisma.client.businessUser.create({
       data: {
         businessId,
@@ -244,6 +273,9 @@ export class StaffService {
 
   async reactivate(id: string) {
     const existing = await this.loadNonOwner(id);
+    if (!existing.active) {
+      await this.meters?.assertCapacity(existing.businessId, 'users');
+    }
     return this.tenantPrisma.client.businessUser.update({
       where: { id: existing.id },
       data: { active: true },

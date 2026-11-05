@@ -335,7 +335,7 @@ export class VoiceCommandService {
         businessId,
         prompt,
         0,
-        'voice_entry',
+        'pos_voice_entry',
       );
       const jsonStart = raw.indexOf('{');
       const jsonEnd = raw.lastIndexOf('}');

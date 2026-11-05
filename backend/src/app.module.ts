@@ -37,6 +37,8 @@ import { StaffModule } from './staff/staff.module';
 import { BranchesModule } from './branches/branches.module';
 import { MarketingModule } from './marketing/marketing.module';
 import { BillingModule } from './billing/billing.module';
+import { UsageCoreModule } from './usage/usage-core.module';
+import { UsageModule } from './usage/usage.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { BusinessTypesModule } from './business-types/business-types.module';
@@ -130,6 +132,8 @@ import { ProcurementModule } from './procurement/procurement.module';
     BranchesModule,
     MarketingModule,
     BillingModule,
+    UsageCoreModule,
+    UsageModule,
     WidgetsModule,
     DashboardModule,
     ActivityModule,

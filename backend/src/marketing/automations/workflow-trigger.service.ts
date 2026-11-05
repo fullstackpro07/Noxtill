@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { MetersService } from '../../usage/meters.service';
 import { isDeepStrictEqual } from 'node:util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendGateService } from '../../messaging/send-gate.service';
@@ -159,6 +160,7 @@ export class WorkflowTriggerService {
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
     @Optional() private readonly aiInfra?: AiInfraService,
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   async dispatch(
@@ -448,6 +450,10 @@ export class WorkflowTriggerService {
           }
         : {}),
     };
+
+    // Usage & Limits: automation runs are counted against the plan; this only refuses once a
+    // per-plan allowance has been set (counted-only until then).
+    await this.meters?.assertAllowance(businessId, 'automation_runs');
 
     if (limit === null) {
       const run = await this.prisma.workflowRun.create({

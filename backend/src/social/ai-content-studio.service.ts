@@ -42,7 +42,7 @@ export class AiContentStudioService {
         businessId,
         prompt,
         0,
-        'campaign_copy',
+        'social_post',
       );
     } catch (error) {
       if (error instanceof AppException) throw error; // rate-limit / cost-cap errors already typed
@@ -79,7 +79,7 @@ export class AiContentStudioService {
         businessId,
         prompt,
         0.3,
-        'campaign_copy',
+        'social_caption',
       );
     } catch (error) {
       if (error instanceof AppException) throw error;

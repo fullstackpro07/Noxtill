@@ -577,7 +577,12 @@ export class CommerceListingBuilderService {
       `Brand voice direction (style only; not a product fact): ${brandVoice ?? 'not supplied'}`,
       `Available sources: ${JSON.stringify(sources)}`,
     ].join('\n\n');
-    const raw = await this.ai.complete(businessId, prompt, 0.1, 'complete');
+    const raw = await this.ai.complete(
+      businessId,
+      prompt,
+      0.1,
+      'commerce_listing',
+    );
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim());

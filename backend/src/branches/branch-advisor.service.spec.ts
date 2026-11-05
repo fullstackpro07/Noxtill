@@ -70,6 +70,8 @@ describe('BranchAdvisorService (BE-060)', () => {
     expect(aiInfra.complete).toHaveBeenCalledWith(
       businessId,
       expect.stringContaining('Advisor Test Biz'),
+      0,
+      'branch_advice',
     );
   });
 

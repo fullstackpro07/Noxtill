@@ -12,6 +12,8 @@ interface ErrorBody {
   code: string;
   message: string;
   fields?: Record<string, string[]>;
+  /** Structured context for a typed error (e.g. a usage limit's metric, remaining and remedies). */
+  details?: Record<string, unknown>;
   /** Correlation id (see request-id.middleware) so a report can be matched to server logs. */
   requestId?: string;
 }
@@ -74,6 +76,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
           body: {
             code: resObj.code,
             message: toMessage(resObj.message, resObj.code),
+            ...(resObj.details && typeof resObj.details === 'object'
+              ? { details: resObj.details as Record<string, unknown> }
+              : {}),
           },
         };
       }

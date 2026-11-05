@@ -607,6 +607,18 @@ model Plan {
   features      Json       @default("{}")
   stripePriceId String?    @unique @map("stripe_price_id")
   businesses    Business[]
+  /// Usage & Limits (spec §3.4) — plans are data. Yearly price (−25%), lifecycle status
+  /// (draft|active|retired — a retired plan keeps resolving for businesses already on it),
+  /// catalog order, trial length, and whether it can be bought (the `trial` row cannot).
+  yearlyPrice         Decimal?          @map("yearly_price") @db.Decimal(10, 2)
+  status              String            @default("active") @db.VarChar(16)
+  displayOrder        Int               @default(0) @map("display_order")
+  trialDays           Int               @default(0) @map("trial_days")
+  purchasable         Boolean           @default(true)
+  stripeYearlyPriceId String?           @unique @map("stripe_yearly_price_id")
+  entitlements        PlanEntitlement[]
+  subscriptions       Subscription[]    @relation("SubscriptionPlan")
+  scheduledSubs       Subscription[]    @relation("SubscriptionScheduledPlan")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -14617,4 +14629,340 @@ model VoiceProviderWebhookEvent {
   @@index([businessId, state, receivedAt], map: "voice_provider_webhook_business_state_idx")
   @@index([state, nextAttemptAt, processingUntil], map: "voice_provider_webhook_retry_idx")
   @@map("voice_provider_webhook_events")
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Usage, Limits & Subscription system (docs/Noxtill_Usage_Limits_System.md). Every row is keyed
+// by the GROUP ROOT business id (branches share their root's subscription and allowances).
+// ---------------------------------------------------------------------------------------------
+
+/// What a plan includes for one metric. `includedQuantity` NULL = not_configured (spec §6.4).
+model PlanEntitlement {
+  id               String   @id @default(uuid())
+  planId           String   @map("plan_id")
+  plan             Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  metricCode       String   @map("metric_code") @db.VarChar(64)
+  /// capacity | allowance | spend_cap | feature | passthrough
+  kind             String   @db.VarChar(16)
+  includedQuantity Decimal? @map("included_quantity") @db.Decimal(14, 2)
+  /// none | period | one_off
+  resetRule        String   @default("period") @map("reset_rule") @db.VarChar(16)
+
+  @@unique([planId, metricCode])
+  @@map("plan_entitlements")
+}
+
+/// The metric registry (spec §5.1). `enforced` = whether a NULL allowance blocks usage; the
+/// counted-only meters (automation, storage, digitizer, SEO, eSign) ship with it off.
+model MeterDefinition {
+  metricCode      String  @id @map("metric_code") @db.VarChar(64)
+  displayName     String  @map("display_name")
+  unit            String  @db.VarChar(32)
+  kind            String  @db.VarChar(16)
+  provider        String? @db.VarChar(32)
+  resetRule       String  @default("period") @map("reset_rule") @db.VarChar(16)
+  alertThresholds Json    @map("alert_thresholds")
+  isBillable      Boolean @default(false) @map("is_billable")
+  enforced        Boolean @default(true)
+  sortOrder       Int     @default(0) @map("sort_order")
+
+  @@map("meter_definitions")
+}
+
+/// Published Noxtill price per unit (data, not code). `countryCode`/`numberType` are '' when not
+/// applicable (MySQL treats NULLs as distinct in unique keys). `per` = units the price covers
+/// (e.g. 1000 for "$1 per 1,000 emails").
+model MeterPrice {
+  id            String   @id @default(uuid())
+  metricCode    String   @map("metric_code") @db.VarChar(64)
+  countryCode   String   @default("") @map("country_code") @db.VarChar(8)
+  numberType    String   @default("") @map("number_type") @db.VarChar(16)
+  unitPriceUsd  Decimal  @map("unit_price_usd") @db.Decimal(14, 6)
+  per           Int      @default(1)
+  currency      String   @default("USD") @db.VarChar(3)
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+
+  @@unique([metricCode, countryCode, numberType, effectiveFrom])
+  @@index([metricCode, countryCode])
+  @@map("meter_prices")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  businessId           String    @unique @map("business_id")
+  planId               String    @map("plan_id")
+  plan                 Plan      @relation("SubscriptionPlan", fields: [planId], references: [id])
+  /// trialing | active | past_due | paused | cancelled
+  status               String    @db.VarChar(16)
+  /// month | year
+  billingInterval      String    @default("month") @map("billing_interval") @db.VarChar(8)
+  periodStart          DateTime  @map("period_start")
+  periodEnd            DateTime  @map("period_end")
+  trialEndsAt          DateTime? @map("trial_ends_at")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  scheduledPlanId      String?   @map("scheduled_plan_id")
+  scheduledPlan        Plan?     @relation("SubscriptionScheduledPlan", fields: [scheduledPlanId], references: [id])
+  scheduledInterval    String?   @map("scheduled_interval") @db.VarChar(8)
+  pastDueSince         DateTime? @map("past_due_since")
+  /// Bumped on every entitlement-affecting change (spec §6.3 cache version).
+  version              Int       @default(1)
+  trialRemindersSent   Json      @map("trial_reminders_sent")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, periodEnd])
+  @@map("subscriptions")
+}
+
+/// The single row the atomic credit reservation updates (spec §4.7). Included credits reset each
+/// period; purchased credits carry forward indefinitely.
+model CreditBalance {
+  businessId       String   @id @map("business_id")
+  periodStart      DateTime @map("period_start")
+  periodEnd        DateTime @map("period_end")
+  includedQuantity Int      @map("included_quantity")
+  includedUsed     Int      @default(0) @map("included_used")
+  purchasedBalance Int      @default(0) @map("purchased_balance")
+  purchasedUsed    Int      @default(0) @map("purchased_used")
+  reserved         Int      @default(0)
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("credit_balances")
+}
+
+/// Per-period snapshot of each pass-through/allowance metric (one row per business × metric ×
+/// period). Spend-capped metrics reserve and settle money here atomically.
+model Allowance {
+  id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
+  metricCode        String   @map("metric_code") @db.VarChar(64)
+  periodStart       DateTime @map("period_start")
+  periodEnd         DateTime @map("period_end")
+  includedQuantity  Decimal? @map("included_quantity") @db.Decimal(14, 2)
+  purchasedQuantity Decimal  @default(0) @map("purchased_quantity") @db.Decimal(14, 2)
+  usedQuantity      Decimal  @default(0) @map("used_quantity") @db.Decimal(14, 4)
+  reservedQuantity  Decimal  @default(0) @map("reserved_quantity") @db.Decimal(14, 4)
+  spentUsd          Decimal  @default(0) @map("spent_usd") @db.Decimal(14, 6)
+  reservedUsd       Decimal  @default(0) @map("reserved_usd") @db.Decimal(14, 6)
+
+  @@unique([businessId, metricCode, periodStart])
+  @@map("allowances")
+}
+
+/// Customer-set monthly spend caps for pass-through metrics (spec §5.5) — persist across periods.
+model UsageSpendCap {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  /// 'voice' | 'messaging'
+  capGroup       String   @map("cap_group") @db.VarChar(16)
+  capUsd         Decimal  @map("cap_usd") @db.Decimal(14, 2)
+  /// Voice only: longest allowed call (pre-flight reserve = this × per-minute rate).
+  maxCallMinutes Int?     @map("max_call_minutes")
+  /// Voice only: voicemail | closed_message | missed_call_list
+  fallback       String?  @db.VarChar(24)
+  updatedById    String?  @map("updated_by_id")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([businessId, capGroup])
+  @@map("usage_spend_caps")
+}
+
+/// Append-only event log (spec §7.1). Never UPDATE, never DELETE.
+model UsageEvent {
+  id             String   @id @default(uuid())
+  businessId     String   @map("business_id")
+  branchId       String?  @map("branch_id")
+  actorUserId    String?  @map("actor_user_id")
+  metricCode     String   @map("metric_code") @db.VarChar(64)
+  operationCode  String?  @map("operation_code") @db.VarChar(96)
+  quantity       Decimal  @db.Decimal(14, 4)
+  unit           String   @db.VarChar(32)
+  costUsd        Decimal? @map("cost_usd") @db.Decimal(14, 6)
+  priceUsd       Decimal? @map("price_usd") @db.Decimal(14, 6)
+  provider       String?  @db.VarChar(32)
+  providerRef    String?  @map("provider_ref") @db.VarChar(191)
+  countryCode    String?  @map("country_code") @db.VarChar(8)
+  /// completed | failed | duplicate | refused | allocated | received
+  status         String   @default("completed") @db.VarChar(24)
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(191)
+  occurredAt     DateTime @map("occurred_at")
+  recordedAt     DateTime @default(now()) @map("recorded_at")
+  metadata       Json?
+
+  @@unique([businessId, idempotencyKey])
+  @@index([businessId, metricCode, occurredAt])
+  @@index([businessId, occurredAt])
+  @@map("usage_events")
+}
+
+/// AI credit reservations (spec §4.7). `id` is the reservation id. Transitions only forward:
+/// reserved → committed | released | expired.
+model CreditLedger {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(191)
+  operationCode  String    @map("operation_code") @db.VarChar(96)
+  band           String    @db.VarChar(16)
+  reservedQty    Int       @map("reserved_qty")
+  actualQty      Int?      @map("actual_qty")
+  includedPart   Int       @default(0) @map("included_part")
+  purchasedPart  Int       @default(0) @map("purchased_part")
+  /// included | purchased | split
+  bucket         String?   @db.VarChar(16)
+  state          String    @db.VarChar(16)
+  reason         String?   @db.VarChar(191)
+  actorUserId    String?   @map("actor_user_id")
+  reservedAt     DateTime  @default(now()) @map("reserved_at")
+  settledAt      DateTime? @map("settled_at")
+  expiresAt      DateTime  @map("expires_at")
+
+  @@unique([businessId, idempotencyKey])
+  @@index([state, expiresAt])
+  @@index([businessId, reservedAt])
+  @@map("credit_ledger")
+}
+
+/// Extra capacity bought (seats, locations, numbers, agent seats, credit packs). Granted only once
+/// Stripe confirms payment (`status` pending → active).
+model CapacityPurchase {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  metricCode       String    @map("metric_code") @db.VarChar(64)
+  quantity         Int
+  unitPriceUsd     Decimal   @map("unit_price_usd") @db.Decimal(10, 2)
+  recurring        Boolean
+  /// pending | active | cancelled | failed
+  status           String    @default("pending") @db.VarChar(16)
+  stripeCheckoutId String?   @unique @map("stripe_checkout_id")
+  stripeItemId     String?   @map("stripe_item_id")
+  activeFrom       DateTime? @map("active_from")
+  activeTo         DateTime? @map("active_to")
+  createdById      String?   @map("created_by_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([businessId, metricCode, status])
+  @@map("capacity_purchases")
+}
+
+model UsageAlert {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  metricCode  String   @map("metric_code") @db.VarChar(64)
+  threshold   Int
+  periodStart DateTime @map("period_start")
+  sentAt      DateTime @default(now()) @map("sent_at")
+  channels    Json
+
+  @@unique([businessId, metricCode, threshold, periodStart])
+  @@map("usage_alerts")
+}
+
+model EntitlementAudit {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  actorUserId String?  @map("actor_user_id")
+  /// user | system | stripe
+  actorType   String   @map("actor_type") @db.VarChar(16)
+  /// plan_change | purchase | override | suspension | spend_cap | period_roll | trial
+  changeType  String   @map("change_type") @db.VarChar(24)
+  before      Json?
+  after       Json?
+  reason      String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("entitlement_audit")
+}
+
+/// Transactional outbox (spec §10) — written in the same transaction as the state change.
+model UsageOutbox {
+  id          String    @id @default(uuid())
+  businessId  String?   @map("business_id")
+  type        String    @db.VarChar(64)
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+
+  @@index([publishedAt, createdAt])
+  @@map("usage_outbox")
+}
+
+model ProviderCost {
+  id          String   @id @default(uuid())
+  provider    String   @db.VarChar(32)
+  metricCode  String   @map("metric_code") @db.VarChar(64)
+  countryCode String   @default("") @map("country_code") @db.VarChar(8)
+  numberType  String   @default("") @map("number_type") @db.VarChar(16)
+  unitCostUsd Decimal  @map("unit_cost_usd") @db.Decimal(14, 6)
+  currency    String   @default("USD") @db.VarChar(3)
+  fetchedAt   DateTime @default(now()) @map("fetched_at")
+  /// api | manual
+  source      String   @db.VarChar(8)
+
+  @@index([provider, metricCode, countryCode, fetchedAt])
+  @@map("provider_costs")
+}
+
+model ProviderInvoice {
+  id               String   @id @default(uuid())
+  provider         String   @db.VarChar(32)
+  periodStart      DateTime @map("period_start")
+  periodEnd        DateTime @map("period_end")
+  lineItem         String   @map("line_item") @db.VarChar(96)
+  providerQuantity Decimal  @map("provider_quantity") @db.Decimal(14, 4)
+  providerCostUsd  Decimal  @map("provider_cost_usd") @db.Decimal(14, 6)
+  ourQuantity      Decimal  @map("our_quantity") @db.Decimal(14, 4)
+  ourCostUsd       Decimal  @map("our_cost_usd") @db.Decimal(14, 6)
+  variancePct      Decimal  @map("variance_pct") @db.Decimal(8, 2)
+  /// matched | investigating | resolved
+  status           String   @db.VarChar(16)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, lineItem, periodStart])
+  @@map("provider_invoices")
+}
+
+/// Money set aside against a spend cap before a pass-through operation runs (an SMS queued, an AI
+/// call answered), settled to the real charge afterwards or released (spec §5.4/§5.5). The
+/// matching `Allowance` row's `reservedUsd` moves in the same transaction.
+model SpendHold {
+  id             String    @id @default(uuid())
+  businessId     String    @map("business_id")
+  /// 'voice' | 'messaging'
+  capGroup       String    @map("cap_group") @db.VarChar(16)
+  metricCode     String    @map("metric_code") @db.VarChar(64)
+  allowanceId    String    @map("allowance_id")
+  amountUsd      Decimal   @map("amount_usd") @db.Decimal(14, 6)
+  actualUsd      Decimal?  @map("actual_usd") @db.Decimal(14, 6)
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(191)
+  /// reserved | committed | released | expired
+  state          String    @db.VarChar(16)
+  reason         String?   @db.VarChar(191)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  settledAt      DateTime? @map("settled_at")
+  expiresAt      DateTime  @map("expires_at")
+
+  @@unique([businessId, idempotencyKey])
+  @@index([state, expiresAt])
+  @@map("spend_holds")
+}
+
+/// Cards that pay for the Noxtill subscription. Only brand/last4/expiry are stored; the card
+/// itself lives in Stripe.
+model PlatformPaymentMethod {
+  id                    String   @id @default(uuid())
+  businessId            String   @map("business_id")
+  stripePaymentMethodId String   @unique @map("stripe_payment_method_id")
+  brand                 String   @db.VarChar(32)
+  last4                 String   @db.VarChar(4)
+  expMonth              Int      @map("exp_month")
+  expYear               Int      @map("exp_year")
+  isDefault             Boolean  @default(false) @map("is_default")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("platform_payment_methods")
 }
