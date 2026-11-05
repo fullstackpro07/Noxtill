@@ -1,6 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
+import { SubscriptionService } from '../../usage/subscription.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PlanAssignmentService } from '../plan-assignment.service';
 import { TRIAL_EXPIRY_QUEUE, BASIC_PLAN_KEY } from '../billing.constants';
@@ -24,6 +25,8 @@ export class TrialExpiryProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly planAssignment: PlanAssignmentService,
+    /** Usage & Limits owns trial end now (spec §15.2): convert with card + plan, else pause. */
+    @Optional() private readonly subscriptions?: SubscriptionService,
   ) {
     super();
   }
@@ -35,6 +38,15 @@ export class TrialExpiryProcessor extends WorkerHost {
   }
 
   async runExpiry(now: Date = new Date()): Promise<void> {
+    if (this.subscriptions) {
+      // A trial no longer silently drops to a free plan: it converts to the plan the owner chose
+      // (with the card they added) or becomes read-only (paused) — nothing is deleted.
+      const result = await this.subscriptions.endDueTrials(now);
+      this.logger.debug(
+        `Trial end: ${result.converted} converted, ${result.paused} paused`,
+      );
+      return;
+    }
     const basic = await this.prisma.plan.findUnique({
       where: { key: BASIC_PLAN_KEY },
     });

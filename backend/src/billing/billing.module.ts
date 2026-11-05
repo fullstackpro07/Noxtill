@@ -18,6 +18,7 @@ import { TRIAL_EXPIRY_QUEUE, QUOTA_RESET_QUEUE } from './billing.constants';
 import { VoiceUsageBillingService } from './voice-usage-billing.service';
 import { VoiceUsageBillingHandoffService } from './voice-usage-billing-handoff.service';
 import { VoiceUsageBillingController } from './voice-usage-billing.controller';
+import { UsageModule } from '../usage/usage.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { VoiceUsageBillingController } from './voice-usage-billing.controller';
       { name: TRIAL_EXPIRY_QUEUE },
       { name: QUOTA_RESET_QUEUE },
     ),
+    UsageModule,
   ],
   controllers: [
     BillingController,

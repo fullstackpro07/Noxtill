@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, randomInt } from 'crypto';
 import { EmailService } from '../messaging/channels/email.service';
@@ -53,6 +54,7 @@ export class CtEsignService {
     private readonly files: CtFilesService,
     private readonly email: EmailService,
     private readonly config: ConfigService,
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   private get db() {
@@ -343,6 +345,10 @@ export class CtEsignService {
         CT_ERRORS.STATUS,
         `${s.number} is ${s.status} — nothing to send.`,
       );
+    // Usage & Limits: a first send is one eSign transaction; a resend never counts again.
+    if (s.status === 'Prepared') {
+      await this.meters?.assertAllowance(a.rootId, 'esign_transactions');
+    }
     const cfg = await this.ctx.config(a.rootId);
     if (s.contractId) {
       const c = await this.db.ctContract.findUnique({

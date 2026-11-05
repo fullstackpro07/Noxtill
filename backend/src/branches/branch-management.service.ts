@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,7 +44,11 @@ const BCRYPT_ROUNDS = 10;
  */
 @Injectable()
 export class BranchManagementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /** Usage & Limits location enforcement (spec CP-06). Optional only for unit specs. */
+    @Optional() private readonly meters?: MetersService,
+  ) {}
 
   async create(callerBusinessId: string, dto: CreateBranchDto) {
     if (!dto.ownerEmail && !dto.ownerPhone) {
@@ -48,6 +58,9 @@ export class BranchManagementService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    // A new branch is a location, and its owner holds a user seat in the group.
+    await this.meters?.assertCapacity(callerBusinessId, 'locations');
+    await this.meters?.assertCapacity(callerBusinessId, 'users');
 
     const caller = await this.prisma.business.findUniqueOrThrow({
       where: { id: callerBusinessId },
@@ -154,7 +167,10 @@ export class BranchManagementService {
   }
 
   async reactivate(callerBusinessId: string, branchId: string) {
-    await this.assertSameGroup(callerBusinessId, branchId);
+    const branch = await this.assertSameGroup(callerBusinessId, branchId);
+    if (!branch.active) {
+      await this.meters?.assertCapacity(callerBusinessId, 'locations');
+    }
     return this.prisma.business.update({
       where: { id: branchId },
       data: { active: true },

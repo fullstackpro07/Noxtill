@@ -49,6 +49,7 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
  */
 export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   voice_entry: 'voiceEntry',
+  pos_voice_entry: 'voiceEntry',
   voice_realtime: 'voiceEntry',
   voice_quality_assist: 'voiceQualityAssist',
   voice_meeting_summary: 'voiceMeetingSummary',
@@ -56,8 +57,15 @@ export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   digitizer_assistant: 'photoDigitizer',
   review_reply: 'reviewReplies',
   campaign_copy: 'campaignCopy',
+  // Usage & Limits split these out of `campaign_copy`/`ai_insights` so each is billed as its own
+  // credit operation; they keep the toggle they were always governed by.
+  social_post: 'campaignCopy',
+  social_caption: 'campaignCopy',
+  ad_copy: 'campaignCopy',
+  offer_copy: 'campaignCopy',
   generate_image: 'campaignCopy',
   ai_insights: 'insights',
+  bi_insights: 'insights',
   marketing_reallocation: 'insights',
   what_if: 'whatIf',
   assistant_chat: 'assistant',

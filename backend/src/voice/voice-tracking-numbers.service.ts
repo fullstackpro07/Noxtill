@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
+import { isTollFree } from '../usage/entitlements.service';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import axios from 'axios';
@@ -70,6 +72,7 @@ export class VoiceTrackingNumbersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   async list(businessId: string) {
@@ -150,6 +153,13 @@ export class VoiceTrackingNumbersService {
     const channel = this.text(dto.channel, 'Channel');
     const label = this.text(dto.label, 'Label');
     await this.assertCampaign(businessId, dto.campaignId ?? null);
+    // Usage & Limits: every number is bought capacity, checked before Twilio is touched.
+    await this.meters?.assertCapacity(
+      businessId,
+      dto.mode === 'connect' && isTollFree(dto.phoneNumber ?? '')
+        ? 'phone_numbers_tollfree'
+        : 'phone_numbers_local',
+    );
     const { accountSid, auth } = this.twilio();
     const backendUrl = this.config.get<string>('BACKEND_URL') ?? '';
     const webhook = {

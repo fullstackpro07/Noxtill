@@ -73,6 +73,7 @@ export function updateAddOns(keys: string[]): Promise<AddOnsState> {
 }
 
 /** POST /billing/cancel (UPD-BE-121) — cancels this business's own active subscription. */
-export function cancelSubscription(): Promise<{ cancelled: true }> {
-  return apiFetch<{ cancelled: true }>("/billing/cancel", { method: "POST" });
+/** POST /subscription/cancel (Usage & Limits) — cancels at the END of the period; access continues until then. */
+export function cancelSubscription(): Promise<{ accessUntil: string }> {
+  return apiFetch<{ accessUntil: string }>("/subscription/cancel", { method: "POST" });
 }

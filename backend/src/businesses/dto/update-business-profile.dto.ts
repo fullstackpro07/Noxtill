@@ -1,4 +1,5 @@
 import {
+  IsEmail,
   IsNumber,
   IsOptional,
   IsString,
@@ -37,6 +38,12 @@ export class UpdateBusinessProfileDto {
   @IsString()
   @MaxLength(191)
   country?: string;
+
+  /** Public business email (the same field the Settings hub Business category edits). */
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(191)
+  email?: string;
 
   /** Taxes & Currency (UPD-BE-120) — the flat default rate/label, never previously persistable by any endpoint. */
   @IsOptional()

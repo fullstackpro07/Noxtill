@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
@@ -37,7 +38,8 @@ const ASK_PROMPTS: { key: string; label: string }[] = [
 
 function catFromPath(pathname: string): string {
   const m = pathname.match(/^\/settings\/?([^/]*)/);
-  return m && m[1] ? m[1] : "general";
+  // A bare /settings opens the Settings home screen.
+  return m && m[1] ? m[1] : "home";
 }
 
 // ---------------------------------------------------------------- header controls (rendered by the shared Topbar)
@@ -56,11 +58,16 @@ function HeaderSearch() {
     return () => window.removeEventListener("keydown", onKey);
   }, [openPanel]);
   return (
-    <button type="button" onClick={() => openPanel({ type: "search" })} style={{ width: "100%", minWidth: 0, height: 38, minHeight: 38, display: "flex", alignItems: "center", gap: 9, padding: "0 12px", background: R.page, border: `1px solid ${R.border}`, borderRadius: 10, cursor: "text", textAlign: "left" }}>
-      <HIcon name="search" size={15} style={{ color: R.label }} />
-      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "#8B97A6", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Search settings — “credit limit”, “WhatsApp”, “timezone”…</span>
-      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: R.label, background: "#fff", border: `1px solid ${R.border}`, borderBottomWidth: 2, borderRadius: 5, padding: "2px 6px" }}>/</span>
-    </button>
+    // When the header is crowded the box shrinks to just its icon (container query) instead of
+    // letting the placeholder and the "/" hint spill under the pills next to it.
+    <div style={{ width: "100%", minWidth: 38, containerType: "inline-size" }}>
+      <style>{"@container (max-width: 150px){.hub-search-text,.hub-search-kbd{display:none!important}.hub-search-btn{justify-content:center;padding:0!important}}"}</style>
+      <button type="button" aria-label="Search settings" className="hub-search-btn" onClick={() => openPanel({ type: "search" })} style={{ width: "100%", minWidth: 0, height: 38, minHeight: 38, display: "flex", alignItems: "center", gap: 9, padding: "0 12px", background: R.page, border: `1px solid ${R.border}`, borderRadius: 10, cursor: "text", textAlign: "left", overflow: "hidden" }}>
+        <HIcon name="search" size={15} style={{ color: R.label }} />
+        <span className="hub-search-text" style={{ flex: 1, minWidth: 0, fontSize: 13, color: "#8B97A6", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Search settings — “credit limit”, “WhatsApp”, “timezone”…</span>
+        <span className="hub-search-kbd" style={{ flexShrink: 0, fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: R.label, background: "#fff", border: `1px solid ${R.border}`, borderBottomWidth: 2, borderRadius: 5, padding: "2px 6px" }}>/</span>
+      </button>
+    </div>
   );
 }
 
@@ -93,7 +100,7 @@ function ScopePill() {
     <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
       <button type="button" onClick={() => selectable && setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} style={{ ...chipStyle(current ? "green" : "neutral"), height: 34, minHeight: 34, flexShrink: 0, fontSize: 12.5, padding: "0 11px", cursor: selectable ? "pointer" : "default" }}>
         <HIcon name="building-2" size={14} />
-        <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{current?.name ?? session.business.name}</span>
+        <span className="hub-lbl-2" title={current?.name ?? session.business.name} style={{ whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>{current?.name ?? session.business.name}</span>
         {selectable ? <HIcon name="chevron-down" size={14} style={{ opacity: 0.7 }} /> : null}
       </button>
       {open ? (
@@ -142,14 +149,17 @@ function HeaderActions() {
 
   return (
     <>
+      {/* Narrow headers: labels give way to icons (full text stays in the tooltip) so the bell and
+          account menu never get pushed off-screen. */}
+      <style>{"@media (max-width:1320px){.hub-lbl-1{display:none!important}}@media (max-width:1150px){.hub-lbl-2{display:none!important}}"}</style>
       <ScopePill />
-      <button type="button" onClick={() => openPanel({ type: "health" })} style={{ ...chipStyle(needs ? "amber" : "green"), height: 34, minHeight: 34, flexShrink: 0, fontSize: 12.5, padding: "0 11px", cursor: "pointer" }}>
+      <button type="button" title={`Config: ${health.data ? (needs ? "Needs attention" : "Healthy") : "…"}`} onClick={() => openPanel({ type: "health" })} style={{ ...chipStyle(needs ? "amber" : "green"), height: 34, minHeight: 34, flexShrink: 0, fontSize: 12.5, padding: "0 11px", cursor: "pointer" }}>
         <HIcon name="activity" size={13} />
-        <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>Config: {health.data ? (needs ? "Needs attention" : "Healthy") : "…"}</span>
+        <span className="hub-lbl-2" style={{ whiteSpace: "nowrap", flexShrink: 0 }}>Config: {health.data ? (needs ? "Needs attention" : "Healthy") : "…"}</span>
       </button>
-      <span style={{ ...chipStyle(dirty ? "amber" : "green"), height: 34, minHeight: 34, flexShrink: 0, fontSize: 12.5, padding: "0 11px" }}>
+      <span title={saving ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"} style={{ ...chipStyle(dirty ? "amber" : "green"), height: 34, minHeight: 34, flexShrink: 0, fontSize: 12.5, padding: "0 11px" }}>
         <HIcon name={saving ? "loader-circle" : dirty ? "circle-alert" : "circle-check"} size={13} />
-        <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{saving ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}</span>
+        <span className="hub-lbl-1" style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{saving ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}</span>
       </span>
       {dirty ? (
         <>
@@ -180,9 +190,9 @@ function HeaderActions() {
           </button>
         </>
       ) : null}
-      <button type="button" onClick={() => openPanel({ type: "ask", key: "risky" })} style={{ height: 34, minHeight: 34, flexShrink: 0, display: "flex", alignItems: "center", gap: 7, padding: "0 11px", borderRadius: 10, border: "1px solid #DDD3FE", background: "#FBFAFF", fontSize: 12.5, fontWeight: 700, color: "#6D28D9", cursor: "pointer" }}>
+      <button type="button" title="Ask about your settings" onClick={() => openPanel({ type: "ask", key: "risky" })} style={{ height: 34, minHeight: 34, flexShrink: 0, display: "flex", alignItems: "center", gap: 7, padding: "0 11px", borderRadius: 10, border: "1px solid #DDD3FE", background: "#FBFAFF", fontSize: 12.5, fontWeight: 700, color: "#6D28D9", cursor: "pointer" }}>
         <HIcon name="sparkles" size={15} />
-        <span style={{ whiteSpace: "nowrap" }}>Ask</span>
+        <span className="hub-lbl-1" style={{ whiteSpace: "nowrap" }}>Ask</span>
       </button>
     </>
   );
@@ -399,6 +409,19 @@ function HomeView({ onGo }: { onGo: (key: string) => void }) {
   const color = (t: HubTone) => (t === "amber" ? "#B45309" : t === "blue" ? "#1D4ED8" : t === "red" ? "#B42318" : "#15803D");
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ ...cardBox, overflow: "visible", padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <HIcon name="receipt" size={16} style={{ color: R.green }} />
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800 }}>Account &amp; billing</div>
+          <div style={{ fontSize: 12, color: R.muted, marginTop: 2 }}>Business profile, team, your Noxtill plan, payment methods, invoices and notification preferences.</div>
+        </div>
+        <Link href="/settings/account/plan" style={{ ...actionBtn(true), textDecoration: "none" }}>
+          My plan &amp; usage
+        </Link>
+        <Link href="/settings/usage/overview" style={{ ...actionBtn(false), textDecoration: "none" }}>
+          Usage &amp; Limits
+        </Link>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))", gap: 12 }}>
         {(d?.health ?? Array.from({ length: 6 }, () => null)).map((h, i) =>
           h ? (

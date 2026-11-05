@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
@@ -27,6 +28,8 @@ export class TelephonyService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly config: ConfigService,
+    /** Usage & Limits: numbers are bought capacity; refused on trial (spec TR-03). */
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   async provisionNumber(businessId: string) {
@@ -40,6 +43,8 @@ export class TelephonyService {
         HttpStatus.CONFLICT,
       );
     }
+    // Checked before Twilio is called, so a refused number is never bought.
+    await this.meters?.assertCapacity(businessId, 'phone_numbers_local');
 
     const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
     const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');

@@ -12,6 +12,9 @@ const PROFILE_SELECT = {
   country: true,
   taxLabel: true,
   taxRate: true,
+  /** Public contact email (receipts, invoices, listings) — Settings → Business profile. */
+  email: true,
+  type: { select: { label: true } },
 } as const;
 
 /**

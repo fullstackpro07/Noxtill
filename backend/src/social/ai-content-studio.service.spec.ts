@@ -40,7 +40,7 @@ describe('AiContentStudioService (UPD-BE-048)', () => {
       'biz-1',
       expect.stringContaining('new menu launch'),
       0,
-      'campaign_copy',
+      'social_post',
     );
     const [{ data }] = socialCaptionGeneration.create.mock.calls[0];
     expect(data.businessId).toBe('biz-1');
@@ -58,7 +58,7 @@ describe('AiContentStudioService (UPD-BE-048)', () => {
       'biz-1',
       expect.stringContaining('urgent'),
       0,
-      'campaign_copy',
+      'social_post',
     );
   });
 
@@ -101,7 +101,7 @@ describe('AiContentStudioService (UPD-BE-048)', () => {
       'biz-1',
       expect.stringContaining('Come try our new menu today!'),
       0.3,
-      'campaign_copy',
+      'social_caption',
     );
   });
 

@@ -128,7 +128,12 @@ export class CompetitiveOpportunitiesService {
       'Example shape: ["Recommendation for gap 1.", "Recommendation for gap 2."]',
     ].join('\n');
 
-    const raw = await this.aiInfra.complete(businessId, prompt);
+    const raw = await this.aiInfra.complete(
+      businessId,
+      prompt,
+      0,
+      'competitive_recommendation',
+    );
     const parsed = this.parseArray(raw, facts.length);
     if (!parsed) {
       throw new AppException(

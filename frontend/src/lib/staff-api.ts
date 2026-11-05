@@ -5,7 +5,7 @@ import type { CommissionRule } from "@/lib/staff";
 interface RawStaffMember {
   id: string;
   role: "owner" | "manager" | "staff";
-  user: { id: string; name: string; email: string | null; phone: string | null };
+  user: { id: string; name: string; email: string | null; phone: string | null; sessions?: { lastUsedAt: string }[] };
 }
 
 /** Minimal read of the real staff roster — just what the bookings calendar needs (id + name) for
@@ -66,6 +66,8 @@ export interface LiveStaffMember {
   /** UPD-BE-STAFF-02: false means deactivated — access revoked, but every historical record
    * (attendance, commissions, shifts, orders) stays intact. Reactivatable via `reactivateStaffMember`. */
   active: boolean;
+  /** Most recent session activity; null = invited but never signed in (holds a seat). */
+  lastActiveAt: string | null;
 }
 
 function toLiveStaffMember(
@@ -87,6 +89,7 @@ function toLiveStaffMember(
     customRoleId: raw.customRoleId ?? null,
     hourlyRate: raw.hourlyRate != null ? Number(raw.hourlyRate) : null,
     active: raw.active ?? true,
+    lastActiveAt: raw.user.sessions?.[0]?.lastUsedAt ?? null,
   };
 }
 

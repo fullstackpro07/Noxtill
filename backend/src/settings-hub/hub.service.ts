@@ -4,7 +4,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { EntitlementsService } from '../usage/entitlements.service';
 import { ConfigService } from '@nestjs/config';
 import { ClsService } from 'nestjs-cls';
 import { Queue } from 'bullmq';
@@ -177,6 +179,7 @@ export class SettingsHubService {
     s3: S3Service,
     policies: PoliciesService,
     private readonly backups: BackupService,
+    @Optional() entitlements?: EntitlementsService,
   ) {
     this.deps = {
       prisma,
@@ -186,6 +189,7 @@ export class SettingsHubService {
       s3,
       policies,
       queueSnapshot: () => this.queueSnapshot(),
+      entitlements,
     };
   }
 

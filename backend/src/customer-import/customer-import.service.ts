@@ -124,7 +124,7 @@ export class CustomerImportService {
       if (records) {
         rawRows = applyMapping(records.rows, suggestMapping(records.headers));
       } else {
-        rawRows = await this.parser.parse(file);
+        rawRows = await this.parser.parse(file, businessId);
       }
     }
 

@@ -115,6 +115,12 @@ export class AssistantService {
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
       await this.aiInfra.checkGuardrails(businessId, AI_CALL_KIND);
+      // Each model turn reserves its credits up front and commits the real cost once the turn is
+      // recorded; a turn that never reaches the model is released, never charged.
+      const reservation = await this.aiInfra.reserveCredits(
+        businessId,
+        AI_CALL_KIND,
+      );
 
       let stream: NodeJS.ReadableStream;
       try {
@@ -126,6 +132,7 @@ export class AssistantService {
           tools: toAnthropicTools(),
         });
       } catch (error) {
+        await this.aiInfra.releaseCredits(reservation, 'provider_error');
         this.logger.error(
           `Assistant Claude call failed: ${(error as Error).message}`,
         );
@@ -135,7 +142,13 @@ export class AssistantService {
           HttpStatus.SERVICE_UNAVAILABLE,
         );
       }
-      const result = await collectAnthropicStream(stream, onTextDelta);
+      let result: Awaited<ReturnType<typeof collectAnthropicStream>>;
+      try {
+        result = await collectAnthropicStream(stream, onTextDelta);
+      } catch (error) {
+        await this.aiInfra.releaseCredits(reservation, 'stream_error');
+        throw error;
+      }
 
       const toolUseBlocks = result.content.filter((b) => b.type === 'tool_use');
       const turnToolCalls: { name: string; input: unknown }[] =
@@ -150,6 +163,8 @@ export class AssistantService {
           AI_CALL_KIND,
           result,
           toolCallLog,
+          undefined,
+          reservation,
         );
         finalText = result.content.find((b) => b.type === 'text')?.text ?? '';
         break;
@@ -178,6 +193,8 @@ export class AssistantService {
         AI_CALL_KIND,
         result,
         turnToolCalls,
+        undefined,
+        reservation,
       );
     }
 

@@ -1,9 +1,14 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { TemplateRegistryService } from './templates/template-registry.service';
+import {
+  TemplateRegistryService,
+  substituteTemplateVariables,
+} from './templates/template-registry.service';
+import { countryOf, MetersService, smsSegments } from '../usage/meters.service';
 import { resolveChannel } from './channel-resolution.util';
 import { deferOutOfQuietHours } from './send-policy.util';
 import { resolvePolicies } from '../common/policies/policies.service';
@@ -43,6 +48,8 @@ export class SendGateService {
     private readonly tenantPrisma: TenantPrismaService,
     private readonly templates: TemplateRegistryService,
     @InjectQueue(MESSAGES_QUEUE) private readonly messagesQueue: Queue,
+    /** Usage & Limits: trial/dunning gate + messaging spend cap. Optional only for unit specs. */
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   async send(params: SendGateParams): Promise<Message> {
@@ -203,11 +210,26 @@ export class SendGateService {
       if (allowed.getTime() !== intended.getTime()) scheduledFor = allowed;
     }
 
+    // Usage & Limits (spec §5.5): SMS and email are pass-through services billed at Noxtill
+    // prices against the monthly messaging limit. The estimated price is set aside BEFORE the
+    // message exists, so nothing can be queued past the limit; the worker settles the real price
+    // once the provider accepts it. WhatsApp is counted only — Meta bills the business directly.
+    const messageId = randomUUID();
+    const hold = await this.holdMessagingSpend(
+      params,
+      business.locale,
+      channel,
+      contact.phone ?? null,
+      messageId,
+      scheduledFor,
+    );
+
     let message: Message;
     try {
       [message] = await this.tenantPrisma.client.$transaction([
         this.tenantPrisma.client.message.create({
           data: {
+            id: messageId,
             businessId: params.businessId,
             customerId: params.customerId,
             campaignId: params.campaignId,
@@ -228,6 +250,7 @@ export class SendGateService {
         }),
       ]);
     } catch (error) {
+      if (hold) await this.meters?.releaseHold(hold, 'message not created');
       if (!params.idempotencyKey || !this.isUniqueConstraintError(error)) {
         throw error;
       }
@@ -242,6 +265,57 @@ export class SendGateService {
     await this.enqueueMessage(message);
 
     return message;
+  }
+
+  private async holdMessagingSpend(
+    params: SendGateParams,
+    locale: string,
+    channel: Message['channel'],
+    phone: string | null,
+    messageId: string,
+    scheduledFor: Date | undefined,
+  ): Promise<string | null> {
+    if (!this.meters || channel === 'whatsapp') return null;
+    const isSms = channel === 'sms';
+    const metric = isSms ? 'sms_segments' : 'emails';
+    await this.meters.assertMeteredAllowed(
+      params.businessId,
+      metric,
+      isSms ? 'Sending SMS' : 'Sending email',
+    );
+    let units = 1;
+    let country: string | null = null;
+    if (isSms) {
+      const text = params.customBody
+        ? substituteTemplateVariables(params.customBody, params.variables)
+        : this.templates.render(params.templateKey, locale, params.variables)
+            .text;
+      units = smsSegments(text);
+      country = countryOf(phone);
+    }
+    const unit = await this.meters.unitPrice(metric, isSms ? country : null);
+    if (unit == null) {
+      throw new AppException(
+        MESSAGE_ERROR_CODES.NO_CHANNEL_AVAILABLE,
+        isSms
+          ? `SMS to ${country ?? 'this number'} isn't available — Noxtill has no published price for that destination, so it can't be messaged. Nothing was sent or charged.`
+          : 'Email sending has no published price yet. Nothing was sent or charged.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    const waitMs = scheduledFor
+      ? Math.max(0, scheduledFor.getTime() - Date.now())
+      : 0;
+    const { holdId } = await this.meters.holdSpend({
+      businessId: params.businessId,
+      group: 'messaging',
+      metricCode: metric,
+      amountUsd: unit * units,
+      idempotencyKey: `msg:${messageId}`,
+      ttlMs: waitMs + 6 * 60 * 60 * 1000,
+      what: isSms ? 'This SMS' : 'This email',
+    });
+    return holdId;
   }
 
   private async findIdempotentMessage(

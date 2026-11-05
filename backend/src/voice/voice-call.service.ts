@@ -44,6 +44,7 @@ import {
   VoiceUsageMeteringService,
   voiceSpendState,
 } from './voice-usage-metering.service';
+import { MetersService } from '../usage/meters.service';
 import {
   voiceAgentAdmissionReason,
   type VoiceAgentControls,
@@ -229,6 +230,8 @@ export class VoiceCallService {
     private readonly humanAgentDispatch: VoiceHumanAgentDispatchService,
     private readonly callQueue: VoiceCallQueueService,
     @Optional() private readonly usageMetering?: VoiceUsageMeteringService,
+    /** Usage & Limits: AI Receptionist admission + per-minute charges. Optional for unit specs. */
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   /** Twilio's inbound-call webhook. `toNumber` is the only way to know which business this is. */
@@ -294,6 +297,22 @@ export class VoiceCallService {
     let agentDeclineReason = activeAgent
       ? voiceAgentAdmissionReason(agentControls, callSid, 'inbound')
       : null;
+    // Usage & Limits (spec §5.4): before the AI answers, the plan must include the receptionist
+    // and the voice limit must cover the longest allowed call. Declined calls go to the team.
+    let usageHoldId: string | null = null;
+    if (
+      this.meters &&
+      !agentDeclineReason &&
+      activeAgent?.publishedVersionId &&
+      !testCall
+    ) {
+      const admission = await this.meters.admitAiCall(
+        phoneNumber.businessId,
+        callSid,
+      );
+      if (admission.admitted) usageHoldId = admission.holdId;
+      else agentDeclineReason = admission.reason;
+    }
 
     const callStartedAt = new Date();
     const call = await this.prisma.$transaction(async (tx) => {
@@ -411,6 +430,9 @@ export class VoiceCallService {
       return admitted;
     });
 
+    if (usageHoldId && (call.quotaRejectedAt || !call.voiceAgentVersionId)) {
+      await this.meters?.releaseHold(usageHoldId, 'call not handled by AI');
+    }
     if (call.quotaRejectedAt || agentDeclineReason) {
       const reply =
         'The automated assistant is unavailable right now. I will try to connect you with the team.';
@@ -1303,6 +1325,13 @@ export class VoiceCallService {
     // Providers can retry terminal callbacks. Only the first state transition has side effects.
     if (updated.count !== 1) return;
     await this.humanAgentDispatch.release(call.id, callStatus);
+    await this.meters
+      ?.settleCall({ ...call, endedAt: new Date() })
+      .catch((error: Error) =>
+        this.logger.error(
+          `Usage settlement failed for call ${call.callSid}: ${error.message}`,
+        ),
+      );
 
     if (missed) {
       await this.missedCall.notify(call);
