@@ -5,11 +5,11 @@
   "scripts": {
     "dev": "node init && next dev",
     "build": "node init && next build",
-    "build:frontend": "next build",
-    "build:backend": "next build",
+    "build:frontend": "node init && next build",
+    "build:backend": "node init && next build",
     "start": "node init && next start",
-    "start:frontend": "next start",
-    "start:backend": "next start",
+    "start:frontend": "node init && next start",
+    "start:backend": "node init && next start",
     "lint": "eslint"
   },
   "dependencies": {
