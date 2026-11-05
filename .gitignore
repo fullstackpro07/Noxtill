@@ -24,10 +24,10 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # ── OS / editor noise ────────────────────────────────────────────────────
+temp_auto_push.bat
 .DS_Store
 Thumbs.db
 *.pem
-.vscode/
 .idea/
 
 # ── Backend (NestJS + Prisma) ────────────────────────────────────────────
@@ -50,4 +50,5 @@ frontend/.legal-extract/
 
 docs/Dashboard module with sidebar.zip/
 docs/Dashboard module with sidebar/
-docs/Noxtill master theme overview/
+docs/Noxtill master theme overview/.gitignore
+branch_structure.json
