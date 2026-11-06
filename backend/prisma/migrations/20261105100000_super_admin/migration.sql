@@ -175,6 +175,12 @@ ALTER TABLE `platform_admin_sessions` ADD CONSTRAINT `platform_admin_sessions_ad
 
 
 -- Append-only admin audit log (PRD §11.4): refuse UPDATE and DELETE at the database level.
-CREATE TRIGGER `platform_audit_logs_no_update` BEFORE UPDATE ON `platform_audit_logs` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'platform_audit_logs is append-only';
+CREATE TRIGGER `platform_audit_logs_no_update` BEFORE UPDATE ON `platform_audit_logs` FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'platform_audit_logs is append-only';
+END;
 
-CREATE TRIGGER `platform_audit_logs_no_delete` BEFORE DELETE ON `platform_audit_logs` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'platform_audit_logs is append-only';
+CREATE TRIGGER `platform_audit_logs_no_delete` BEFORE DELETE ON `platform_audit_logs` FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'platform_audit_logs is append-only';
+END;
