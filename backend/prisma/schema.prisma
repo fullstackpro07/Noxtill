@@ -598,15 +598,15 @@ model Widget {
 }
 
 model Plan {
-  id            String     @id @default(uuid())
-  key           String     @unique
-  name          String
-  price         Decimal    @db.Decimal(10, 2)
-  msgQuota      Int        @map("msg_quota")
-  userLimit     Int        @map("user_limit")
-  features      Json       @default("{}")
-  stripePriceId String?    @unique @map("stripe_price_id")
-  businesses    Business[]
+  id                  String            @id @default(uuid())
+  key                 String            @unique
+  name                String
+  price               Decimal           @db.Decimal(10, 2)
+  msgQuota            Int               @map("msg_quota")
+  userLimit           Int               @map("user_limit")
+  features            Json              @default("{}")
+  stripePriceId       String?           @unique @map("stripe_price_id")
+  businesses          Business[]
   /// Usage & Limits (spec §3.4) — plans are data. Yearly price (−25%), lifecycle status
   /// (draft|active|retired — a retired plan keeps resolving for businesses already on it),
   /// catalog order, trial length, and whether it can be bought (the `trial` row cannot).
@@ -760,6 +760,13 @@ model Business {
   /// All Branches management (UPD-BE-109): soft-deactivation for a branch — the root business
   /// (no `parentId`) can never be deactivated, since that would orphan the whole group.
   active Boolean @default(true)
+
+  /// Super Admin (platform-level) account state — separate from `active` (the owner's own branch
+  /// toggle). active | suspended | archived. Set only by a Noxtill platform administrator, always
+  /// with a reason and a `platform_audit_logs` row; enforced by `PlatformAccessGuard` and login.
+  platformStatus       String    @default("active") @map("platform_status") @db.VarChar(16)
+  platformStatusReason String?   @map("platform_status_reason") @db.Text
+  platformStatusAt     DateTime? @map("platform_status_at")
 
   /// Branch Settings (UPD-BE-109), stored as JSON since MySQL has no native array column type —
   /// same convention as `Customer.tags`. A real, displayed preference; not yet enforced as a
@@ -1063,26 +1070,30 @@ model Business {
 }
 
 model User {
-  id                  String    @id @default(uuid())
-  email               String?   @unique
-  phone               String?   @unique
-  passwordHash        String    @map("password_hash")
-  name                String
-  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
-  lockedUntil         DateTime? @map("locked_until")
+  id                   String    @id @default(uuid())
+  email                String?   @unique
+  phone                String?   @unique
+  passwordHash         String    @map("password_hash")
+  name                 String
+  failedLoginAttempts  Int       @default(0) @map("failed_login_attempts")
+  lockedUntil          DateTime? @map("locked_until")
   /// UPD-BE-040: WhatsApp-OTP two-factor. Replaces the old single `refreshTokenHash` column —
   /// each login now creates its own `Session` row instead of overwriting one shared hash, which
   /// also fixes the pre-existing "logging in on a second device silently kills the first" bug.
-  twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorEnabled     Boolean   @default(false) @map("two_factor_enabled")
   /// Per-user interface preferences (motion, text size, notification sounds) the app applies.
-  uiPreferences       Json      @default("{}") @map("ui_preferences")
+  uiPreferences        Json      @default("{}") @map("ui_preferences")
   /// Auth & Onboarding: set when the owner clicks the emailed confirmation link (or signs in with a
   /// provider that already verified the address). Backfilled for every account that predates this.
-  emailVerifiedAt     DateTime? @map("email_verified_at")
+  emailVerifiedAt      DateTime? @map("email_verified_at")
   /// bcrypt hashes of the last few passwords — a reset refuses to reuse any of them.
-  passwordHistory     Json      @default("[]") @map("password_history")
+  passwordHistory      Json      @default("[]") @map("password_history")
   /// Google account subject id ("sub") once the user has signed in with Google.
-  googleId            String?   @unique @map("google_id")
+  googleId             String?   @unique @map("google_id")
+  /// Super Admin: active | suspended. A suspended person cannot log in or use any live token.
+  platformStatus       String    @default("active") @map("platform_status") @db.VarChar(16)
+  platformStatusReason String?   @map("platform_status_reason") @db.Text
+  platformStatusAt     DateTime? @map("platform_status_at")
 
   businessUsers                 BusinessUser[]
   notifications                 Notification[]
@@ -14631,7 +14642,6 @@ model VoiceProviderWebhookEvent {
   @@map("voice_provider_webhook_events")
 }
 
-
 // ---------------------------------------------------------------------------------------------
 // Usage, Limits & Subscription system (docs/Noxtill_Usage_Limits_System.md). Every row is keyed
 // by the GROUP ROOT business id (branches share their root's subscription and allowances).
@@ -14965,4 +14975,177 @@ model PlatformPaymentMethod {
 
   @@index([businessId])
   @@map("platform_payment_methods")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Super Admin Control Center (docs: Noxtill_Super_Admin_Dashboard_PRD.md)
+// Internal Noxtill administrators are a separate identity system from tenant users — never mixed.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Internal admin roles (PRD §6). `permissions` is a JSON array of `ADMIN_PERMISSIONS` keys;
+/// `super_admin` always resolves to every permission regardless of this column.
+model PlatformAdminRole {
+  key         String          @id @db.VarChar(32)
+  name        String
+  description String?         @db.Text
+  permissions Json
+  isSystem    Boolean         @default(false) @map("is_system")
+  admins      PlatformAdmin[]
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  @@map("platform_admin_roles")
+}
+
+model PlatformAdmin {
+  id                  String                 @id @default(uuid())
+  email               String                 @unique
+  name                String
+  passwordHash        String                 @map("password_hash")
+  roleKey             String                 @map("role_key") @db.VarChar(32)
+  role                PlatformAdminRole      @relation(fields: [roleKey], references: [key])
+  /// active | disabled
+  status              String                 @default("active") @db.VarChar(16)
+  /// AES-256-GCM ciphertext of the base32 TOTP secret. Set at first login; `totpEnabledAt` stays
+  /// null until the admin proves possession with a valid code.
+  totpSecret          String?                @map("totp_secret") @db.Text
+  totpEnabledAt       DateTime?              @map("totp_enabled_at")
+  /// Last accepted TOTP time-step — a code can never be accepted twice.
+  totpLastStep        Int?                   @map("totp_last_step")
+  failedLoginAttempts Int                    @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?              @map("locked_until")
+  lastLoginAt         DateTime?              @map("last_login_at")
+  createdById         String?                @map("created_by_id")
+  sessions            PlatformAdminSession[]
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+
+  @@map("platform_admins")
+}
+
+model PlatformAdminSession {
+  id               String        @id @default(uuid())
+  adminId          String        @map("admin_id")
+  admin            PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  refreshTokenHash String        @map("refresh_token_hash")
+  ipAddress        String?       @map("ip_address")
+  userAgent        String?       @map("user_agent") @db.Text
+  lastUsedAt       DateTime      @default(now()) @map("last_used_at")
+  /// Absolute expiry — an admin session never lives past this, whatever the refresh activity.
+  expiresAt        DateTime      @map("expires_at")
+  revokedAt        DateTime?     @map("revoked_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  @@index([adminId])
+  @@map("platform_admin_sessions")
+}
+
+/// Append-only record of every privileged admin action (PRD §11.4). UPDATE and DELETE are refused
+/// by database triggers (see the migration), not just by the absence of an endpoint.
+model PlatformAuditLog {
+  id           String   @id @default(uuid())
+  adminId      String?  @map("admin_id")
+  adminEmail   String   @map("admin_email")
+  businessId   String?  @map("business_id")
+  action       String   @db.VarChar(64)
+  resourceType String   @map("resource_type") @db.VarChar(32)
+  resourceId   String?  @map("resource_id") @db.VarChar(191)
+  before       Json?
+  after        Json?
+  reason       String   @db.Text
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent") @db.Text
+  requestId    String?  @map("request_id") @db.VarChar(64)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([businessId, createdAt])
+  @@index([adminId, createdAt])
+  @@map("platform_audit_logs")
+}
+
+/// Authentication and access security events, tenant and admin (PRD §11.2). Severity comes from
+/// the documented rules in `common/security/security-events.constants.ts`.
+model SecurityEvent {
+  id         String   @id @default(uuid())
+  type       String   @db.VarChar(48)
+  /// critical | high | medium | low
+  severity   String   @db.VarChar(12)
+  businessId String?  @map("business_id")
+  userId     String?  @map("user_id")
+  adminId    String?  @map("admin_id")
+  /// The login identifier tried (email/phone) — kept for unknown-account attempts.
+  identifier String?  @db.VarChar(191)
+  ipAddress  String?  @map("ip_address") @db.VarChar(64)
+  userAgent  String?  @map("user_agent") @db.Text
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+  @@index([businessId, createdAt])
+  @@index([userId, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("security_events")
+}
+
+/// A per-business limit set by a platform admin (PRD §8.3, usage spec "contractual overrides").
+/// Replaces the plan included quantity for this one metric while active; never edits the plan.
+model EntitlementOverride {
+  id               String    @id @default(uuid())
+  /// Always the branch-group ROOT business (allowances are shared across a group).
+  businessId       String    @map("business_id")
+  metricCode       String    @map("metric_code") @db.VarChar(64)
+  includedQuantity Decimal   @map("included_quantity") @db.Decimal(14, 2)
+  effectiveFrom    DateTime  @default(now()) @map("effective_from")
+  expiresAt        DateTime? @map("expires_at")
+  reason           String    @db.Text
+  createdByAdminId String    @map("created_by_admin_id")
+  revokedAt        DateTime? @map("revoked_at")
+  revokedByAdminId String?   @map("revoked_by_admin_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([businessId, metricCode])
+  @@map("entitlement_overrides")
+}
+
+/// Admin-imposed module state for one business: `suspended` (blocked) or `restricted` (read-only).
+model ModuleAccessOverride {
+  id               String    @id @default(uuid())
+  businessId       String    @map("business_id")
+  moduleKey        String    @map("module_key") @db.VarChar(48)
+  state            String    @db.VarChar(16)
+  reason           String    @db.Text
+  expiresAt        DateTime? @map("expires_at")
+  createdByAdminId String    @map("created_by_admin_id")
+  revokedAt        DateTime? @map("revoked_at")
+  revokedByAdminId String?   @map("revoked_by_admin_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([businessId, moduleKey])
+  @@map("module_access_overrides")
+}
+
+/// Global module availability. A missing row means the module is available.
+model PlatformModuleState {
+  moduleKey        String   @id @map("module_key") @db.VarChar(48)
+  globallyDisabled Boolean  @default(false) @map("globally_disabled")
+  reason           String?  @db.Text
+  updatedByAdminId String?  @map("updated_by_admin_id")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_module_states")
+}
+
+/// Private Noxtill staff notes about a business. Never returned by any tenant API.
+model InternalNote {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  adminId    String   @map("admin_id")
+  adminName  String   @map("admin_name")
+  body       String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt])
+  @@map("internal_notes")
 }

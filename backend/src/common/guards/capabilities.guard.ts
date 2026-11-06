@@ -3,7 +3,9 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Optional,
 } from '@nestjs/common';
+import { SecurityEventsService } from '../security/security-events.service';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
 import { CAPABILITY_KEY } from '../decorators/require-capability.decorator';
@@ -32,9 +34,44 @@ export class CapabilitiesGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly capabilities: CapabilitiesService,
+    @Optional() private readonly securityEvents?: SecurityEventsService,
   ) {}
 
+  /** Records each denial as a `permission_denied` security event (Super Admin PRD §11.2). */
   canActivate(context: ExecutionContext): boolean | Promise<boolean> {
+    const onDenied = (error: unknown): never => {
+      if (error instanceof ForbiddenException && this.securityEvents) {
+        const req = context.switchToHttp().getRequest<RequestWithUser>();
+        this.securityEvents.emit({
+          type: 'permission_denied',
+          businessId: req.user?.businessId ?? null,
+          userId: req.user?.sub.startsWith(API_KEY_SUBJECT_PREFIX)
+            ? null
+            : (req.user?.sub ?? null),
+          ipAddress: req.ip ?? null,
+          userAgent: req.headers?.['user-agent'] ?? null,
+          metadata: {
+            path: (req.originalUrl ?? req.url ?? '').split('?')[0],
+            method: req.method,
+            capability: this.reflector.getAllAndOverride<Capability>(
+              CAPABILITY_KEY,
+              [context.getHandler(), context.getClass()],
+            ),
+            apiKey: req.user?.sub.startsWith(API_KEY_SUBJECT_PREFIX) ?? false,
+          },
+        });
+      }
+      throw error;
+    };
+    try {
+      const result = this.check(context);
+      return result instanceof Promise ? result.catch(onDenied) : result;
+    } catch (error) {
+      return onDenied(error);
+    }
+  }
+
+  private check(context: ExecutionContext): boolean | Promise<boolean> {
     const requiredCapability = this.reflector.getAllAndOverride<Capability>(
       CAPABILITY_KEY,
       [context.getHandler(), context.getClass()],

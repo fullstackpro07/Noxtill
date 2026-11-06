@@ -342,7 +342,7 @@ export class SubscriptionService {
     interval: Interval,
     audit: {
       actorUserId?: string | null;
-      actorType: 'user' | 'system' | 'stripe';
+      actorType: 'user' | 'system' | 'stripe' | 'admin';
       reason: string;
       resetPeriod: boolean;
     },
@@ -354,9 +354,14 @@ export class SubscriptionService {
       include: { entitlements: true },
     });
     const now = new Date();
-    const included = plan.entitlements.find(
-      (e) => e.metricCode === 'ai_credits',
-    )?.includedQuantity;
+    // A Super Admin override on AI credits survives a plan change (it never edits the plan).
+    const creditOverride = (await this.entitlements.activeOverrides(rootId)).find(
+      (o) => o.metricCode === 'ai_credits',
+    );
+    const included =
+      creditOverride?.includedQuantity ??
+      plan.entitlements.find((e) => e.metricCode === 'ai_credits')
+        ?.includedQuantity;
     await this.prisma.$transaction(async (tx) => {
       const periodStart = audit.resetPeriod ? now : sub.periodStart;
       const periodEnd = audit.resetPeriod
@@ -431,6 +436,7 @@ export class SubscriptionService {
   async cancelScheduled(
     businessId: string,
     actorUserId: string,
+    actorType: 'user' | 'admin' = 'user',
   ): Promise<void> {
     const rootId = await this.entitlements.rootId(businessId);
     const sub = await this.entitlements.ensureSubscription(rootId);
@@ -447,7 +453,7 @@ export class SubscriptionService {
         data: {
           businessId: rootId,
           actorUserId,
-          actorType: 'user',
+          actorType,
           changeType: 'plan_change',
           before: {
             scheduled: sub.scheduledPlan?.key ?? null,
@@ -475,6 +481,7 @@ export class SubscriptionService {
   async cancel(
     businessId: string,
     actorUserId: string,
+    actorType: 'user' | 'admin' = 'user',
   ): Promise<{ accessUntil: string }> {
     const rootId = await this.entitlements.rootId(businessId);
     const sub = await this.entitlements.ensureSubscription(rootId);
@@ -494,7 +501,7 @@ export class SubscriptionService {
         data: {
           businessId: rootId,
           actorUserId,
-          actorType: 'user',
+          actorType,
           changeType: 'plan_change',
           before: { cancelAtPeriodEnd: false },
           after: { cancelAtPeriodEnd: true },

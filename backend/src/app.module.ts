@@ -47,6 +47,7 @@ import { SeoWorkspaceModule } from './seo-workspace/seo-workspace.module';
 import { SearchModule } from './search/search.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
+import { SuperAdminModule } from './super-admin/super-admin.module';
 import { HelpModule } from './help/help.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -143,6 +144,7 @@ import { ProcurementModule } from './procurement/procurement.module';
     SearchModule,
     AnalyticsModule,
     PlatformAdminModule,
+    SuperAdminModule,
     HelpModule,
     AssistantModule,
     NotificationsModule,

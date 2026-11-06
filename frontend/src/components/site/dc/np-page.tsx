@@ -34,13 +34,64 @@ const CTX: Record<string, DcContext> = {
   },
 };
 
+const AGENT_PAGE_KEYS = new Set([
+  "features--ai-receptionist",
+  "features--ai-sales-agent",
+  "features--ai-booking-agent",
+  "features--ai-support-agent",
+  "features--ai-marketing-agent",
+  "features--ai-seo-agent",
+  "features--ai-business-assistant",
+  "features--ai-agents-and-workflows",
+]);
+
+const WIDE_FEATURE_KEYS = new Set(["features--video-meetings", "features--screen-sharing", "features--audio-conference-calls"]);
+
 export async function NpPage({ pageKey }: { pageKey: string }) {
   const page = await load(pageKey);
   if (!page) notFound();
   const Body = NP_PAGES[pageKey].Body;
   // Industry pages are drawn at a fixed 1500px width with pixel-placed content.
   const fitDesign = pageKey.startsWith("industries--");
-  return <DcPage page={page} withHeader fontClass={npFontVars} fitDesign={fitDesign} body={Body ? <Body tree={dcBody(page)} /> : undefined} ctx={CTX[pageKey]} />;
+  // Strictly render our main site header on every page.
+  const withHeader = true;
+
+  // Agent pages and 1040px feature designs scale to fit desktop screens without side padding
+  const isAgent =
+    AGENT_PAGE_KEYS.has(pageKey) ||
+    pageKey.startsWith("agents--") ||
+    pageKey.includes("-agent") ||
+    pageKey === "features--ai-receptionist" ||
+    pageKey === "features--ai-business-assistant";
+
+  const is1040Feature =
+    pageKey.startsWith("features--") &&
+    !pageKey.includes("quick-checkout") &&
+    !pageKey.includes("powered-operations") &&
+    // Designed at ~1240px (responsive), not 1040px: zooming them up makes type far too large.
+    !WIDE_FEATURE_KEYS.has(pageKey) &&
+    // These designs already scale themselves with `.dcx [data-z]{zoom}` media rules; zooming the whole
+    // page as well compounds to ~3x and wrecks the layout.
+    !page.css.includes("[data-z]{zoom") &&
+    // Responsive (non-1024px) designs have no [data-z] containers; they size themselves, so don't zoom them.
+    JSON.stringify(page.tree).includes('"data-z"');
+
+  const extraEffects = [
+    ...(isAgent || is1040Feature ? [pageKey === "features--local-seo" ? "fit1040Md" : "fit1040"] : []),
+    ...(pageKey.startsWith("features--") ? ["fitMocks"] : []),
+  ];
+
+  return (
+    <DcPage
+      page={page}
+      withHeader={withHeader}
+      fontClass={npFontVars}
+      fitDesign={fitDesign}
+      effects={extraEffects}
+      body={Body ? <Body tree={dcBody(page)} /> : undefined}
+      ctx={CTX[pageKey]}
+    />
+  );
 }
 
 /** Route keys under a prefix ("industries" → ["automotive", …]) for generateStaticParams. */

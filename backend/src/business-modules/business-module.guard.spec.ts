@@ -106,6 +106,7 @@ describe('BusinessModuleGuard', () => {
     expect(assertEnabled).toHaveBeenCalledWith(
       'business-1',
       'autonomous-commerce',
+      'GET',
     );
   });
 

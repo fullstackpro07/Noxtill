@@ -24,6 +24,6 @@ import { AccountService } from './account.service';
     AuthTokensService,
     AccountService,
   ],
-  exports: [AuthService, SessionsService],
+  exports: [AuthService, SessionsService, AuthTokensService],
 })
 export class AuthModule {}

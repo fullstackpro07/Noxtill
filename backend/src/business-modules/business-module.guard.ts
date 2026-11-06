@@ -20,7 +20,11 @@ export class BusinessModuleGuard implements CanActivate {
     const moduleKey = gatedModuleForApiPath(request.originalUrl || request.url);
     if (!moduleKey) return true;
 
-    await this.modules.assertEnabled(request.user.businessId, moduleKey);
+    await this.modules.assertEnabled(
+      request.user.businessId,
+      moduleKey,
+      request.method,
+    );
     return true;
   }
 }

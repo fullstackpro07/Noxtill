@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { Plan, PlanEntitlement, Prisma, Subscription } from '@prisma/client';
+import {
+  EntitlementOverride,
+  Plan,
+  PlanEntitlement,
+  Prisma,
+  Subscription,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EntitlementCacheService } from './entitlement-cache.service';
 import {
@@ -25,6 +31,8 @@ import {
 export type SubscriptionWithPlan = Subscription & {
   plan: Plan & { entitlements: PlanEntitlement[] };
   scheduledPlan: Plan | null;
+  /** Active Super Admin overrides for this business (see `activeOverrides`). */
+  overrides?: EntitlementOverride[];
 };
 
 export type MetricState =
@@ -40,6 +48,10 @@ export interface ResolvedMetric {
   kind: EntitlementKind;
   /** NULL = not_configured (never "unlimited"). */
   included: number | null;
+  /** The plan's own included quantity, before any Super Admin override. */
+  planIncluded: number | null;
+  /** Set when a Super Admin override replaces the plan value for this metric. */
+  override: { id: string; expiresAt: string | null } | null;
   purchased: number;
   used: number;
   reserved: number;
@@ -156,7 +168,7 @@ export class EntitlementsService {
       where: { businessId: rootId },
       include,
     });
-    if (existing) return existing;
+    if (existing) return this.withOverrides(existing);
 
     const business = await this.prisma.business.findUniqueOrThrow({
       where: { id: rootId },
@@ -244,15 +256,58 @@ export class EntitlementsService {
       )
         throw error;
     }
-    return this.prisma.subscription.findUniqueOrThrow({
-      where: { businessId: rootId },
-      include,
-    });
+    return this.withOverrides(
+      await this.prisma.subscription.findUniqueOrThrow({
+        where: { businessId: rootId },
+        include,
+      }),
+    );
   }
 
-  includedFor(sub: SubscriptionWithPlan, metric: string): number | null {
+  /**
+   * Super Admin per-business overrides currently in force (PRD §8.3): not revoked, already
+   * effective, not expired. At most one per metric counts — the newest wins.
+   */
+  async activeOverrides(
+    rootId: string,
+    now = new Date(),
+  ): Promise<EntitlementOverride[]> {
+    const rows = await this.prisma.entitlementOverride.findMany({
+      where: {
+        businessId: rootId,
+        revokedAt: null,
+        effectiveFrom: { lte: now },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+    });
+    const seen = new Set<string>();
+    return rows.filter((r) =>
+      seen.has(r.metricCode) ? false : (seen.add(r.metricCode), true),
+    );
+  }
+
+  private async withOverrides<T extends SubscriptionWithPlan>(
+    sub: T,
+  ): Promise<T> {
+    sub.overrides = await this.activeOverrides(sub.businessId);
+    return sub;
+  }
+
+  /** The plan's own value for a metric, ignoring overrides. */
+  planIncludedFor(sub: SubscriptionWithPlan, metric: string): number | null {
     const row = sub.plan.entitlements.find((e) => e.metricCode === metric);
     return row?.includedQuantity == null ? null : Number(row.includedQuantity);
+  }
+
+  /**
+   * The effective included quantity every enforcement path reads: an active Super Admin override
+   * when one exists for this metric, otherwise the plan's value. Overrides never edit the plan.
+   */
+  includedFor(sub: SubscriptionWithPlan, metric: string): number | null {
+    const override = sub.overrides?.find((o) => o.metricCode === metric);
+    if (override) return Number(override.includedQuantity);
+    return this.planIncludedFor(sub, metric);
   }
 
   async purchasedCapacity(rootId: string, metric: string): Promise<number> {
@@ -513,6 +568,11 @@ export class EntitlementsService {
       const code = def.metricCode as MetricCode;
       const kind = def.kind as EntitlementKind;
       const included = this.includedFor(sub, code);
+      const planIncluded = this.planIncludedFor(sub, code);
+      const ov = sub.overrides?.find((o) => o.metricCode === code);
+      const override = ov
+        ? { id: ov.id, expiresAt: ov.expiresAt?.toISOString() ?? null }
+        : null;
       if (kind === 'feature') {
         features[code] = included == null ? null : included > 0;
         continue;
@@ -538,6 +598,8 @@ export class EntitlementsService {
         code,
         kind,
         included: inc,
+        planIncluded,
+        override,
         purchased: purchasedQty,
         used: usedQty,
         reserved,

@@ -1,6 +1,6 @@
 /* eslint-disable */
 // Component logic of docs/Noxtill Header Build/Noxtill Home.dc.html, kept verbatim. Changes from the
-// design: icons come from dcIcon (same lucide@0.460.0 geometry) instead of window.lucide; the initial
+// design: icons come from dcIcon (same lucide@0.460.0 geometry) instead of globalThis.lucide; the initial
 // width is the design default (1440) on server and client, with the real width read on mount; the
 // nx-js class, reveal markers and Escape handler are reset on unmount so a remount works; the tab
 // screenshot path points at /marketing/hb; the Nightly Close chat also starts when its phone is on

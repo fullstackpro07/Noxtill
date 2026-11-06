@@ -9,5 +9,5 @@ export const metadata: Metadata = dcMetadata(PAGE);
 
 /** Blog index — docs/Noxtill Header Build/Blog.dc.html. */
 export default function BlogPage() {
-  return <DcPage page={PAGE} effects={["toc"]} />;
+  return <DcPage page={PAGE} withHeader effects={["toc"]} />;
 }

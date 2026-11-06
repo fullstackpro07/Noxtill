@@ -52,9 +52,37 @@ export function ModuleGate({ children }: { children: ReactNode }) {
     );
   }
 
+  const label = t(item.labelKey);
+  const platform = modulesQuery.data.platform?.[item.key];
+
+  if (platform?.state === "restricted") {
+    return (
+      <>
+        <div role="status" className="border-b px-6 py-2 text-[12.5px] font-semibold" style={{ background: "var(--app-warning-bg)", borderColor: "var(--app-warning-border)", color: "var(--app-warning-text)" }}>
+          {label} is read-only for this business (set by Noxtill). You can view and export, but changes are blocked. Contact Noxtill support.
+        </div>
+        {children}
+      </>
+    );
+  }
+
   if (!modulesQuery.data.disabled.includes(item.key)) return <>{children}</>;
 
-  const label = t(item.labelKey);
+  if (platform) {
+    return (
+      <div className="flex min-h-full items-center justify-center p-6" style={{ color: "var(--app-text)" }}>
+        <div className="max-w-md rounded-2xl border p-6 text-center" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>
+          <h1 className="m-0 text-lg font-bold">{label} is unavailable</h1>
+          <p className="m-0 mt-2 text-sm" style={{ color: "var(--app-text-muted)" }}>
+            {platform.state === "global_disabled"
+              ? `${label} is temporarily unavailable on Noxtill. Your data is safe.`
+              : `${label} has been suspended for this business by Noxtill. Your data is safe — contact Noxtill support.`}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-full items-center justify-center p-6" style={{ color: "var(--app-text)" }}>
       <div className="max-w-md rounded-2xl border p-6 text-center" style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}>

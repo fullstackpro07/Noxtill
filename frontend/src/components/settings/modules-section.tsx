@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "@/lib/toast";
 import { Icon } from "@/components/onboarding-flow/icons";
+import { useBusinessModulesQuery } from "@/components/layout/module-gate";
 
 /** Workspace modules — the sidebar set chosen in onboarding, changeable anytime by the owner. */
 export function ModulesSection() {
@@ -32,6 +33,22 @@ export function ModulesSection() {
   );
 }
 
+/** Modules Noxtill has turned off or made read-only — the owner's own choice below cannot override them. */
+function PlatformBlockedNotice() {
+  const { data } = useBusinessModulesQuery();
+  const blocked = (data?.modules ?? []).filter((m) => m.platform);
+  if (!blocked.length) return null;
+  return (
+    <div role="status" className="mb-4 rounded-xl border p-3 text-sm" style={{ background: "var(--app-warning-bg, #fef6e7)", borderColor: "var(--app-warning-border, #fde3b3)", color: "var(--app-warning-text, #b54708)" }}>
+      Set by Noxtill (your own selection can&apos;t change these):{" "}
+      {blocked
+        .map((m) => `${m.label} — ${m.platform!.state === "restricted" ? "read-only" : m.platform!.state === "global_disabled" ? "temporarily unavailable" : "suspended"}`)
+        .join("; ")}
+      .
+    </div>
+  );
+}
+
 function ModulesForm({ initial }: { initial: WorkspaceModules }) {
   const qc = useQueryClient();
   const isOwner = useAuthStore((s) => s.user?.role) === "owner";
@@ -49,6 +66,7 @@ function ModulesForm({ initial }: { initial: WorkspaceModules }) {
 
   return (
     <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
+      <PlatformBlockedNotice />
       {!initial.curated && (
         <p className="mb-4 text-sm text-fg-muted">Your workspace was set up before module selection existed, so every module is shown. Saving below limits the sidebar to the ones you keep on.</p>
       )}

@@ -13,12 +13,15 @@ import { CapabilitiesService } from './capabilities/capabilities.service';
 import { ApiKeyAuthService } from '../developer/api-key-auth.service';
 import { PoliciesService } from './policies/policies.service';
 import { SubscriptionStateGuard } from '../usage/subscription-state.guard';
+import { SecurityEventsService } from './security/security-events.service';
+import { PlatformAccessGuard } from './security/platform-access.guard';
 
 /**
  * Wires the global request pipeline in guard-execution order (BE-006/008/009/013/UPD-BE-035):
  * 1. BusinessThrottlerGuard — reject spam before doing any auth work
  * 2. JwtAuthGuard            — verify the token, populate request.user (bypassed by @Public())
- * 3. TenancyGuard            — bind businessId/userId/role into CLS from request.user
+ * 2b. PlatformAccessGuard — revoked session / Super-Admin-suspended user or business is blocked
+ * 3. TenancyGuard           — bind businessId/userId/role into CLS from request.user
  * 4. CapabilitiesGuard       — enforce @RequireCapability(...) route gates
  * 5. SubscriptionStateGuard  — a suspended workspace is read and export only (Usage & Limits)
  * Then AuditInterceptor (no-ops without @Audited(...)) and HttpExceptionFilter
@@ -42,8 +45,10 @@ import { SubscriptionStateGuard } from '../usage/subscription-state.guard';
     CapabilitiesService,
     PoliciesService,
     ApiKeyAuthService,
+    SecurityEventsService,
     { provide: APP_GUARD, useClass: BusinessThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PlatformAccessGuard },
     { provide: APP_GUARD, useClass: TenancyGuard },
     { provide: APP_GUARD, useClass: CapabilitiesGuard },
     { provide: APP_GUARD, useClass: SubscriptionStateGuard },
@@ -56,6 +61,7 @@ import { SubscriptionStateGuard } from '../usage/subscription-state.guard';
     CapabilitiesService,
     PoliciesService,
     ApiKeyAuthService,
+    SecurityEventsService,
   ],
 })
 export class CommonModule {}

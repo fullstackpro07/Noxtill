@@ -80,14 +80,19 @@ function isImport(n: DcNode) {
   return typeof n !== "string" && n[0] === "dc-import";
 }
 
+/** A design's own top-level <header> (features, agents, etc.) — replaced by the site-wide SiteHeader. */
+function isDesignHeader(n: DcNode) {
+  return typeof n !== "string" && n[0] === "header";
+}
+
 /** A design's own top-level <footer> (Home has one) — replaced by the site-wide SiteFooter. */
 function isDesignFooter(n: DcNode) {
   return typeof n !== "string" && n[0] === "footer";
 }
 
-/** The design's top-level nodes other than the shared header/footer imports and its own footer. */
+/** The design's top-level nodes other than the shared header/footer imports and its own header/footer. */
 export function dcBody(page: DcPageData): DcNode[] {
-  return page.tree.filter((n) => !isImport(n) && !isDesignFooter(n) && !(typeof n === "string" && !n.trim()));
+  return page.tree.filter((n) => !isImport(n) && !isDesignHeader(n) && !isDesignFooter(n) && !(typeof n === "string" && !n.trim()));
 }
 
 /**
@@ -117,7 +122,7 @@ export function DcPage({
   fitDesign?: boolean;
 }) {
   const imports = page.tree.filter(isImport) as [string, Record<string, string>, DcNode[]][];
-  const header = withHeader ?? imports.some((n) => n[1].name === "NoxtillHeader");
+  const header = withHeader ?? (imports.some((n) => n[1].name === "NoxtillHeader") || true);
   return (
     <div data-theme="light">
       {(page.head.jsonLd ?? []).map((ld, i) => (
