@@ -20,11 +20,7 @@ const MAX_VARIABLES_PER_BUSINESS = 500;
 const MAX_SERIALIZED_VALUE_LENGTH = 65_536;
 const MAX_JSON_DEPTH = 16;
 const MAX_JSON_VALUES = 5_000;
-const FORBIDDEN_JSON_KEYS = new Set([
-  '__proto__',
-  'prototype',
-  'constructor',
-]);
+const FORBIDDEN_JSON_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const SECRET_REFERENCE_PATTERN = /^env:[A-Z][A-Z0-9_]{0,127}$/;
 
 type SafeWorkflowVariable = Omit<WorkflowVariable, 'secretReference'> & {
@@ -87,7 +83,11 @@ export class WorkflowVariablesService {
     );
     const environment =
       dto.environment ?? WorkflowVariableEnvironment.production;
-    const value = this.resolveValue(dto.valueType, dto.value, dto.secretReference);
+    const value = this.resolveValue(
+      dto.valueType,
+      dto.value,
+      dto.secretReference,
+    );
 
     try {
       const row = await this.tenantPrisma.client.workflowVariable.create({
@@ -129,37 +129,43 @@ export class WorkflowVariablesService {
     const environment = dto.environment ?? existing.environment;
     const name = dto.name ?? existing.name;
     const valueType = dto.valueType ?? existing.valueType;
-    const hasValue = Object.prototype.hasOwnProperty.call(dto, 'value');
+    const hasValue = Boolean(
+      Object.prototype.hasOwnProperty.call(dto, 'value'),
+    );
     const value = this.resolveValue(
       valueType,
       hasValue ? dto.value : existing.value,
       valueType === WorkflowVariableType.secret_reference
-        ? dto.secretReference ?? existing.secretReference ?? undefined
+        ? (dto.secretReference ?? existing.secretReference ?? undefined)
         : dto.secretReference,
       hasValue,
     );
 
     try {
-      const result = await this.tenantPrisma.client.workflowVariable.updateMany({
-        where: { id, businessId },
-        data: {
-          scope,
-          scopeKey,
-          environment,
-          name,
-          valueType,
-          value: value.value,
-          secretReference: value.secretReference,
-          ...(dto.description === undefined
-            ? {}
-            : { description: dto.description?.trim() || null }),
-          updatedByUserId: userId,
+      const result = await this.tenantPrisma.client.workflowVariable.updateMany(
+        {
+          where: { id, businessId },
+          data: {
+            scope,
+            scopeKey,
+            environment,
+            name,
+            valueType,
+            value: value.value,
+            secretReference: value.secretReference,
+            ...(dto.description === undefined
+              ? {}
+              : { description: dto.description?.trim() || null }),
+            updatedByUserId: userId,
+          },
         },
-      });
+      );
       if (result.count !== 1) this.notFound();
-      const updated = await this.tenantPrisma.client.workflowVariable.findFirst({
-        where: { id, businessId },
-      });
+      const updated = await this.tenantPrisma.client.workflowVariable.findFirst(
+        {
+          where: { id, businessId },
+        },
+      );
       if (!updated) this.notFound();
       return this.toSafeVariable(updated);
     } catch (error) {
@@ -194,38 +200,44 @@ export class WorkflowVariablesService {
     scopeId?: string | null,
   ): Promise<string> {
     if (scope === WorkflowVariableScope.business) {
-      if (scopeId) this.invalidScope('Business variables do not take a scope ID.');
+      if (scopeId)
+        this.invalidScope('Business variables do not take a scope ID.');
       return BUSINESS_SCOPE_KEY;
     }
     if (!scopeId?.trim()) {
-      this.invalidScope('Choose the workflow or branch that owns this variable.');
+      this.invalidScope(
+        'Choose the workflow or branch that owns this variable.',
+      );
     }
 
     if (scope === WorkflowVariableScope.workflow) {
-      const workflow =
-        await this.tenantPrisma.client.workflow.findFirst({
-          where: { id: scopeId, businessId },
-          select: { id: true },
-        });
+      const workflow = await this.tenantPrisma.client.workflow.findFirst({
+        where: { id: scopeId, businessId },
+        select: { id: true },
+      });
       if (!workflow) {
-        this.invalidScope('The selected workflow does not belong to this business.');
+        this.invalidScope(
+          'The selected workflow does not belong to this business.',
+        );
       }
       return workflow.id;
     }
 
-    const currentBusiness =
-      await this.tenantPrisma.client.business.findUnique({
-        where: { id: businessId },
-        select: { parentId: true },
-      });
-    if (!currentBusiness) this.invalidScope('The current business was not found.');
+    const currentBusiness = await this.tenantPrisma.client.business.findUnique({
+      where: { id: businessId },
+      select: { parentId: true },
+    });
+    if (!currentBusiness)
+      this.invalidScope('The current business was not found.');
     const rootId = currentBusiness.parentId ?? businessId;
     const branch = await this.tenantPrisma.client.business.findFirst({
       where: { id: scopeId, parentId: rootId, active: true },
       select: { id: true },
     });
     if (!branch) {
-      this.invalidScope('The selected active branch does not belong to this business group.');
+      this.invalidScope(
+        'The selected active branch does not belong to this business group.',
+      );
     }
     return branch.id;
   }
@@ -252,7 +264,9 @@ export class WorkflowVariablesService {
       return { value: Prisma.DbNull, secretReference };
     }
     if (secretReference !== undefined) {
-      this.invalidValue('Only secret-reference variables can contain a secret reference.');
+      this.invalidValue(
+        'Only secret-reference variables can contain a secret reference.',
+      );
     }
     if (!hasInput) this.invalidValue('Enter a value for this variable.');
 
@@ -284,7 +298,7 @@ export class WorkflowVariablesService {
       this.validateJsonObject(input);
     }
     return {
-      value: input as Prisma.InputJsonValue,
+      value: input,
       secretReference: null,
     };
   }
@@ -297,20 +311,16 @@ export class WorkflowVariablesService {
     while (stack.length > 0) {
       const current = stack.pop()!;
       valueCount += 1;
-      if (
-        current.depth > MAX_JSON_DEPTH ||
-        valueCount > MAX_JSON_VALUES
-      ) {
-        this.invalidValue('JSON values may be at most 16 levels deep and contain 5000 values.');
+      if (current.depth > MAX_JSON_DEPTH || valueCount > MAX_JSON_VALUES) {
+        this.invalidValue(
+          'JSON values may be at most 16 levels deep and contain 5000 values.',
+        );
       }
       if (Array.isArray(current.value)) {
         for (const value of current.value) {
           stack.push({ value, depth: current.depth + 1 });
         }
-      } else if (
-        typeof current.value === 'object' &&
-        current.value !== null
-      ) {
+      } else if (typeof current.value === 'object' && current.value !== null) {
         for (const [key, value] of Object.entries(current.value)) {
           if (FORBIDDEN_JSON_KEYS.has(key)) {
             this.invalidValue(`JSON key "${key}" is not allowed.`);
@@ -325,7 +335,8 @@ export class WorkflowVariablesService {
     const { secretReference, ...safe } = row;
     return {
       ...safe,
-      scopeId: row.scope === WorkflowVariableScope.business ? null : row.scopeKey,
+      scopeId:
+        row.scope === WorkflowVariableScope.business ? null : row.scopeKey,
       secretReferenceConfigured: secretReference !== null,
     };
   }

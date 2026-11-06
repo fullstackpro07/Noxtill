@@ -10,7 +10,20 @@ const DAY_MS = 86_400_000;
 
 const csvCell = (value: unknown) => {
   if (value === null || value === undefined) return '';
-  const text = value instanceof Date ? value.toISOString() : String(value);
+  let text: string;
+  if (value instanceof Date) {
+    text = value.toISOString();
+  } else if (typeof value === 'string') {
+    text = value;
+  } else if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    text = value.toString();
+  } else {
+    text = JSON.stringify(value) ?? '';
+  }
   // Neutralise spreadsheet formula injection and quote anything with separators.
   const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;

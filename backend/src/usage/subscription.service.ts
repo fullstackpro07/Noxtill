@@ -355,9 +355,9 @@ export class SubscriptionService {
     });
     const now = new Date();
     // A Super Admin override on AI credits survives a plan change (it never edits the plan).
-    const creditOverride = (await this.entitlements.activeOverrides(rootId)).find(
-      (o) => o.metricCode === 'ai_credits',
-    );
+    const creditOverride = (
+      await this.entitlements.activeOverrides(rootId)
+    ).find((o) => o.metricCode === 'ai_credits');
     const included =
       creditOverride?.includedQuantity ??
       plan.entitlements.find((e) => e.metricCode === 'ai_credits')

@@ -181,7 +181,9 @@ describe('validateWorkflowDefinition', () => {
           { type: 'notify_owner', messageBody: 'Hello' },
         ],
       ),
-    ).toBe('Action 1 needs a valid variable name and business or workflow scope.');
+    ).toBe(
+      'Action 1 needs a valid variable name and business or workflow scope.',
+    );
   });
 
   it('accepts an AI draft prompt using only fields from the selected trigger', () => {

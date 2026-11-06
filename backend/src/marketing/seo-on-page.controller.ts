@@ -7,7 +7,6 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { SeoContentRevisionStatus } from '@prisma/client';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
@@ -81,7 +80,7 @@ export class SeoOnPageController {
       user.businessId,
       user.sub,
       id,
-      dto.status as SeoContentRevisionStatus,
+      dto.status,
       dto.note,
     );
   }

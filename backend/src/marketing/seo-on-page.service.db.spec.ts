@@ -298,7 +298,8 @@ describe('SeoOnPageService (MySQL)', () => {
       proposedTitle: 'About On Page Co',
       proposedH1: 'About us',
     });
-    const prompt = complete.mock.calls[0][1] as string;
+    const calls = complete.mock.calls as unknown as Array<[unknown, string]>;
+    const prompt = calls[0][1];
     expect(prompt).toContain('Do not invent');
     expect(prompt).toContain('About us');
 

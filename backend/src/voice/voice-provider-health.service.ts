@@ -171,11 +171,13 @@ export class VoiceProviderHealthService {
     const speech = !!this.config.get<string>('OPENAI_API_KEY');
     const aiReplies = !!this.config.get<string>('ANTHROPIC_API_KEY');
     checks.push({
-      key: 'realtime_voice', label: 'Live AI audio',
+      key: 'realtime_voice',
+      label: 'Live AI audio',
       status: speech && publicUrl ? 'warning' : 'not_configured',
-      detail: speech && publicUrl
-        ? 'OpenAI credentials and public HTTPS are present. Published agents can select live audio; an actual stream is still required to verify account access, audio and interruption behavior.'
-        : 'Live audio requires OpenAI credentials and a public HTTPS address that forwards the media WebSocket. Recorded-turn mode remains separate.',
+      detail:
+        speech && publicUrl
+          ? 'OpenAI credentials and public HTTPS are present. Published agents can select live audio; an actual stream is still required to verify account access, audio and interruption behavior.'
+          : 'Live audio requires OpenAI credentials and a public HTTPS address that forwards the media WebSocket. Recorded-turn mode remains separate.',
     });
     const turns = Array.isArray(lastCall?.transcript)
       ? (lastCall.transcript as unknown as {

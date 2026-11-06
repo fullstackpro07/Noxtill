@@ -1102,16 +1102,17 @@ export class WorkflowsService {
     }
     const variableReadEntries = await Promise.all(
       [...variableReadConfigs.entries()].map(async ([key, config]) => {
-        const variable = await this.tenantPrisma.client.workflowVariable.findFirst({
-          where: {
-            businessId: workflow.businessId,
-            environment: 'production',
-            scope: config.scope,
-            scopeKey: config.scope === 'business' ? '*' : workflow.id,
-            name: config.name,
-          },
-          select: { valueType: true, value: true },
-        });
+        const variable =
+          await this.tenantPrisma.client.workflowVariable.findFirst({
+            where: {
+              businessId: workflow.businessId,
+              environment: 'production',
+              scope: config.scope,
+              scopeKey: config.scope === 'business' ? '*' : workflow.id,
+              name: config.name,
+            },
+            select: { valueType: true, value: true },
+          });
         return [key, variable] as const;
       }),
     );
@@ -1175,14 +1176,18 @@ export class WorkflowsService {
             },
           ];
         }
-        if (variable.valueType === 'secret_reference' || variable.value === null) {
+        if (
+          variable.valueType === 'secret_reference' ||
+          variable.value === null
+        ) {
           return [
             {
               actionIndex,
               body: 'Dry run only: variable was not added to run context.',
-              error: variable.valueType === 'secret_reference'
-                ? 'Secret-reference variables cannot be read into workflow templates.'
-                : 'Workflow variable has no stored value.',
+              error:
+                variable.valueType === 'secret_reference'
+                  ? 'Secret-reference variables cannot be read into workflow templates.'
+                  : 'Workflow variable has no stored value.',
             },
           ];
         }

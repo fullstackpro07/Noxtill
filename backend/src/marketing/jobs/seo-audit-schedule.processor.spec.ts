@@ -55,7 +55,7 @@ describe('SeoAuditScheduleProcessor', () => {
           lastRunId: 'audit_1',
           lastStatus: 'completed',
           processingAt: null,
-        }),
+        }) as Record<string, unknown>,
       }),
     );
   });

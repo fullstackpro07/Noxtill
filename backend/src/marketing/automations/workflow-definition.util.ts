@@ -231,7 +231,10 @@ export function validateWorkflowDefinition(
       continue;
     }
     if (action.type === 'get_variable') {
-      if (!allowForwardMappedDataReferences) {
+      if (
+        !allowForwardMappedDataReferences &&
+        typeof action.name === 'string'
+      ) {
         workflowVariableFields.add(`variables.${action.name}`);
       }
       continue;

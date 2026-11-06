@@ -259,7 +259,11 @@ describe('workflow graph compiler', () => {
       ],
     };
     expect(
-      validateWorkflowGraph(validGraph, WorkflowTriggerKey.sale, 'Variable use'),
+      validateWorkflowGraph(
+        validGraph,
+        WorkflowTriggerKey.sale,
+        'Variable use',
+      ),
     ).toBeNull();
 
     const bypassGraph: WorkflowGraph = {
@@ -301,7 +305,11 @@ describe('workflow graph compiler', () => {
       ],
     };
     expect(
-      validateWorkflowGraph(bypassGraph, WorkflowTriggerKey.sale, 'Variable bypass'),
+      validateWorkflowGraph(
+        bypassGraph,
+        WorkflowTriggerKey.sale,
+        'Variable bypass',
+      ),
     ).toContain('can bypass its Get workflow variable action');
   });
 });

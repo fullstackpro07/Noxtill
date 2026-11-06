@@ -18,13 +18,11 @@ describe('KeywordRankProcessor provider wiring', () => {
       },
     };
     const serpRank = {
-      fetchRank: jest
-        .fn()
-        .mockResolvedValue({
-          rank: 5,
-          topResultTitle: 'Order online',
-          businessResultUrls: ['https://www.noxtill.example/menu'],
-        }),
+      fetchRank: jest.fn().mockResolvedValue({
+        rank: 5,
+        topResultTitle: 'Order online',
+        businessResultUrls: ['https://www.noxtill.example/menu'],
+      }),
     };
     const trends = { fetchInterest: jest.fn().mockResolvedValue(42) };
     const processor = new KeywordRankProcessor(
@@ -73,13 +71,11 @@ describe('KeywordRankProcessor provider wiring', () => {
       keywordRankSnapshot: { create: jest.fn().mockResolvedValue({}) },
     };
     const serpRank = {
-      fetchRank: jest
-        .fn()
-        .mockResolvedValue({
-          rank: 5,
-          topResultTitle: 'Order online',
-          businessResultUrls: ['https://www.noxtill.example/menu'],
-        }),
+      fetchRank: jest.fn().mockResolvedValue({
+        rank: 5,
+        topResultTitle: 'Order online',
+        businessResultUrls: ['https://www.noxtill.example/menu'],
+      }),
     };
     const trends = { fetchInterest: jest.fn().mockResolvedValue(null) };
     const processor = new KeywordRankProcessor(

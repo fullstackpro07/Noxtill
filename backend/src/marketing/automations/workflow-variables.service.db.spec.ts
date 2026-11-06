@@ -38,7 +38,10 @@ describe('WorkflowVariablesService (MySQL)', () => {
     const suffix = Date.now().toString();
     const [business, otherBusiness] = await Promise.all([
       prisma.business.create({
-        data: { name: 'Workflow Variables Test', slug: `workflow-vars-${suffix}` },
+        data: {
+          name: 'Workflow Variables Test',
+          slug: `workflow-vars-${suffix}`,
+        },
       }),
       prisma.business.create({
         data: {
@@ -152,7 +155,7 @@ describe('WorkflowVariablesService (MySQL)', () => {
         value: 'not a number',
       }),
     ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'workflow.variable_invalid_value' }),
+      response: { code: 'workflow.variable_invalid_value' },
     });
 
     await expect(
@@ -164,7 +167,7 @@ describe('WorkflowVariablesService (MySQL)', () => {
         value: 'no',
       }),
     ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'workflow.variable_invalid_scope' }),
+      response: { code: 'workflow.variable_invalid_scope' },
     });
 
     cls.set(CLS_KEY_BUSINESS_ID, otherBusinessId);
@@ -181,12 +184,10 @@ describe('WorkflowVariablesService (MySQL)', () => {
       valueType: 'string',
       value: 'Before update',
     });
-    const updated = await service.update(
-      businessId,
-      'test-owner',
-      created.id,
-      { value: 'After update', description: 'A real business variable' },
-    );
+    const updated = await service.update(businessId, 'test-owner', created.id, {
+      value: 'After update',
+      description: 'A real business variable',
+    });
 
     expect(updated).toMatchObject({
       name: 'supportMessage',
@@ -197,7 +198,7 @@ describe('WorkflowVariablesService (MySQL)', () => {
       deleted: true,
     });
     await expect(service.remove(businessId, created.id)).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'workflow.variable_not_found' }),
+      response: { code: 'workflow.variable_not_found' },
     });
   });
 });

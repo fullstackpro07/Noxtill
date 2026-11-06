@@ -505,7 +505,9 @@ describe('Voice platform usage billing (real MySQL)', () => {
     });
     await expect(
       service.overview(otherBusinessId, [month] as unknown as string),
-    ).rejects.toMatchObject({ response: { code: 'VOICE_BILLING_MONTH_INVALID' } });
+    ).rejects.toMatchObject({
+      response: { code: 'VOICE_BILLING_MONTH_INVALID' },
+    });
     cls.businessId = businessId;
   });
 });

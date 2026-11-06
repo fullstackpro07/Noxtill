@@ -75,7 +75,12 @@ export class VoiceMeetingsService {
         recordings: {
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 1,
-          select: { status: true, retentionExpiresAt: true, finalizedAt: true, sizeBytes: true },
+          select: {
+            status: true,
+            retentionExpiresAt: true,
+            finalizedAt: true,
+            sizeBytes: true,
+          },
         },
         invites: {
           where: { revokedAt: null },
@@ -118,8 +123,10 @@ export class VoiceMeetingsService {
         ? ('configured' as const)
         : ('not_configured' as const),
       recording: meeting.recordings[0]?.status ?? 'not_started',
-      recordingExpiresAt: meeting.recordings[0]?.retentionExpiresAt.toISOString() ?? null,
-      recordingFinalizedAt: meeting.recordings[0]?.finalizedAt?.toISOString() ?? null,
+      recordingExpiresAt:
+        meeting.recordings[0]?.retentionExpiresAt.toISOString() ?? null,
+      recordingFinalizedAt:
+        meeting.recordings[0]?.finalizedAt?.toISOString() ?? null,
       recordingSizeBytes: meeting.recordings[0]?.sizeBytes?.toString() ?? null,
     }));
   }
@@ -145,19 +152,23 @@ export class VoiceMeetingsService {
 
     const recordingPolicyVersionId = dto.recordingPolicyVersionId || null;
     if (recordingPolicyVersionId) {
-      const policy = await this.tenantPrisma.client.voiceCompliancePolicyVersion.findFirst({
-        where: {
-          id: recordingPolicyVersionId,
-          businessId,
-          status: 'published',
-          recordingAllowed: true,
-          recordingNoticeText: { not: null },
-          recordingRetentionDays: { not: null },
-          pack: { businessId, disabledAt: null },
-        },
-        select: { id: true },
-      });
-      if (!policy) throw this.invalid('Choose an active published recording policy that permits recording and defines retention.');
+      const policy =
+        await this.tenantPrisma.client.voiceCompliancePolicyVersion.findFirst({
+          where: {
+            id: recordingPolicyVersionId,
+            businessId,
+            status: 'published',
+            recordingAllowed: true,
+            recordingNoticeText: { not: null },
+            recordingRetentionDays: { not: null },
+            pack: { businessId, disabledAt: null },
+          },
+          select: { id: true },
+        });
+      if (!policy)
+        throw this.invalid(
+          'Choose an active published recording policy that permits recording and defines retention.',
+        );
     }
 
     let customerId = dto.customerId || null;

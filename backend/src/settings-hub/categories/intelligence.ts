@@ -75,7 +75,12 @@ const AI_FEATURES: { key: string; label: string; description: string }[] = [
     description:
       'Drafts, translates and summarises Unified Inbox replies for a person to send.',
   },
-  { key: 'workflowAgents', label: 'Workflow AI drafts & agents', description: 'AI-draft and read-only AI agent workflow steps. Their output appears in run history and is not sent automatically.' },
+  {
+    key: 'workflowAgents',
+    label: 'Workflow AI drafts & agents',
+    description:
+      'AI-draft and read-only AI agent workflow steps. Their output appears in run history and is not sent automatically.',
+  },
 ];
 
 /** Provider display names — one source, the Integrations catalog, so this screen never lags the directory. */
@@ -448,8 +453,15 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                 description: `Runs when: ${w.triggerKey.replace(/_/g, ' ')}.`,
                 risk: 'Medium',
                 requires: CAPABILITIES.AUTOMATIONS_MANAGE,
-                link: { label: 'Edit workflow', href: '/marketing/automations' },
-                state: () => ({ value: w.active ? 'On' : 'Off', tone: w.active ? 'green' : 'neutral', control: { type: 'toggle', on: w.active } }),
+                link: {
+                  label: 'Edit workflow',
+                  href: '/marketing/automations',
+                },
+                state: () => ({
+                  value: w.active ? 'On' : 'Off',
+                  tone: w.active ? 'green' : 'neutral',
+                  control: { type: 'toggle', on: w.active },
+                }),
                 write: async (ctx, v) => {
                   const on = Boolean(v);
                   if (on && !w.active) {
@@ -467,7 +479,10 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                       graph,
                     });
                   }
-                  await d.prisma.workflow.update({ where: { id: w.id }, data: { active: on } });
+                  await d.prisma.workflow.update({
+                    where: { id: w.id },
+                    data: { active: on },
+                  });
                 },
               }),
             );
@@ -584,7 +599,8 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'wf-actions',
               label: 'What a workflow can do',
-              description: 'The actions currently supported by the workflow engine.',
+              description:
+                'The actions currently supported by the workflow engine.',
               state: () => ({
                 value:
                   'Message · notify · tag · custom field · wait · approval · AI draft',
