@@ -1,4 +1,4 @@
-import "../(app)/app-theme.css";
+import "@/app/(app)/app-theme.css";
 
 export default function CustomerPortalLayout({
   children,
