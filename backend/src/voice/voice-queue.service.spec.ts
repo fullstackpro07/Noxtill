@@ -2,9 +2,18 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
-import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_USER_ID,
+} from '../common/tenancy/tenant.constants';
 import { VoiceQueueService } from './voice-queue.service';
-import { PhoneCallOutcome, PhoneCallStatus } from '@prisma/client';
+import {
+  PhoneCallOutcome,
+  PhoneCallStatus,
+  Role,
+  VoiceAgentPresenceStatus,
+} from '@prisma/client';
+import { AppException } from '../common/filters/app.exception';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -20,6 +29,8 @@ describe('VoiceQueueService (Call Queue, UPD-BE-129)', () => {
   let prisma: PrismaService;
   let service: VoiceQueueService;
   let businessId: string;
+  let userId: string;
+  let businessUserId: string;
   let callCounter = 0;
 
   beforeAll(async () => {
@@ -40,14 +51,32 @@ describe('VoiceQueueService (Call Queue, UPD-BE-129)', () => {
       data: { name: 'Voice Queue Test Biz', slug: `voice-queue-${Date.now()}` },
     });
     businessId = business.id;
+    const user = await prisma.user.create({
+      data: {
+        email: `voice-queue-${Date.now()}@example.com`,
+        passwordHash: 'test-only',
+        name: 'Queue Agent',
+        phone: '+15550001234',
+      },
+    });
+    userId = user.id;
+    const member = await prisma.businessUser.create({
+      data: { businessId, userId, role: Role.staff },
+    });
+    businessUserId = member.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    cls.set(CLS_KEY_USER_ID, userId);
   });
 
   afterAll(async () => {
     await prisma.phoneCall.deleteMany({ where: { businessId } });
+    await prisma.auditLog.deleteMany({ where: { businessId } });
+    await prisma.voiceHumanAgentProfile.deleteMany({ where: { businessId } });
+    await prisma.businessUser.deleteMany({ where: { businessId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
+      await tx.user.delete({ where: { id: userId } });
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     });
     await prisma.$disconnect();
@@ -157,6 +186,68 @@ describe('VoiceQueueService (Call Queue, UPD-BE-129)', () => {
     const item = result.items.find((i) => i.id === call.id);
     expect(item).toBeDefined();
     expect(item?.callbackRequestedAt).not.toBeNull();
+  });
+
+  it('takeNext claims the highest-priority follow-up matching the available agent skills', async () => {
+    await prisma.phoneCall.updateMany({
+      where: { businessId, resolvedAt: null },
+      data: { resolvedAt: new Date() },
+    });
+    await prisma.voiceHumanAgentProfile.create({
+      data: {
+        businessId,
+        staffUserId: businessUserId,
+        active: true,
+        presenceStatus: VoiceAgentPresenceStatus.available,
+        lastHeartbeatAt: new Date(),
+        skillTags: ['billing'],
+      },
+    });
+    const olderNormal = await createCall({
+      outcome: PhoneCallOutcome.message,
+      startedAt: new Date(Date.now() - 120_000),
+      customIntentName: 'billing',
+    });
+    const missed = await createCall({
+      status: PhoneCallStatus.missed,
+      outcome: PhoneCallOutcome.none,
+      customIntentName: 'billing',
+    });
+    await createCall({
+      outcome: PhoneCallOutcome.message,
+      customIntentName: 'returns',
+    });
+
+    const result = await service.takeNext(businessId, businessId, userId);
+    expect(result).toEqual({ id: missed.id, assignedToUserId: userId });
+    const claimed = await prisma.phoneCall.findUniqueOrThrow({
+      where: { id: missed.id },
+    });
+    const untouched = await prisma.phoneCall.findUniqueOrThrow({
+      where: { id: olderNormal.id },
+    });
+    expect(claimed.assignedToUserId).toBe(userId);
+    expect(untouched.assignedToUserId).toBeNull();
+    await prisma.voiceHumanAgentProfile.deleteMany({ where: { businessId } });
+  });
+
+  it('takeNext refuses an inactive or stale agent and a queue outside the tenant', async () => {
+    await prisma.voiceHumanAgentProfile.deleteMany({ where: { businessId } });
+    await prisma.phoneCall.updateMany({
+      where: { businessId, resolvedAt: null },
+      data: { resolvedAt: new Date() },
+    });
+    const call = await createCall({});
+    await expect(
+      service.takeNext(businessId, 'another-business', userId),
+    ).rejects.toBeInstanceOf(AppException);
+    await expect(
+      service.takeNext(businessId, businessId, userId),
+    ).rejects.toBeInstanceOf(AppException);
+    expect(
+      (await prisma.phoneCall.findUniqueOrThrow({ where: { id: call.id } }))
+        .assignedToUserId,
+    ).toBeNull();
   });
 
   it('clear() bulk-resolves every currently pending item', async () => {

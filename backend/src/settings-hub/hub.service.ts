@@ -4,7 +4,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { EntitlementsService } from '../usage/entitlements.service';
 import { ConfigService } from '@nestjs/config';
 import { ClsService } from 'nestjs-cls';
 import { Queue } from 'bullmq';
@@ -47,6 +49,9 @@ import {
 } from './hub.core';
 import { HubDeps, QueueSnapshot } from './categories/hub.deps';
 import { platformCategories } from './categories/platform';
+import { modulesCategories } from './categories/modules';
+import { seoCategories } from './categories/seo';
+import { procurementCategories } from './categories/procurement';
 import {
   accessCategories,
   SENSITIVE_CAPS,
@@ -108,6 +113,7 @@ const CATEGORY_ORDER = [
   'language',
   'business',
   'branches',
+  'modules',
   'shortcuts',
   'accessibility',
   'sessions',
@@ -128,6 +134,8 @@ const CATEGORY_ORDER = [
   'sounds',
   'communication',
   'automations',
+  'business-intelligence',
+  'seo',
   'ai',
   'integrations',
   'api',
@@ -171,6 +179,7 @@ export class SettingsHubService {
     s3: S3Service,
     policies: PoliciesService,
     private readonly backups: BackupService,
+    @Optional() entitlements?: EntitlementsService,
   ) {
     this.deps = {
       prisma,
@@ -180,6 +189,7 @@ export class SettingsHubService {
       s3,
       policies,
       queueSnapshot: () => this.queueSnapshot(),
+      entitlements,
     };
   }
 
@@ -224,6 +234,9 @@ export class SettingsHubService {
     if (!this.categoriesCache) {
       this.categoriesCache = [
         ...platformCategories(this.deps),
+        ...modulesCategories(this.deps),
+        ...seoCategories(this.deps),
+        ...procurementCategories(this.deps),
         ...accessCategories(this.deps),
         ...moneyCategories(this.deps),
         ...operationsCategories(this.deps),

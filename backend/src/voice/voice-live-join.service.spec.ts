@@ -7,7 +7,11 @@ import { AuditService } from '../common/audit/audit.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { VoiceLiveJoinService } from './voice-live-join.service';
 import { AppException } from '../common/filters/app.exception';
-import { PhoneCallStatus } from '@prisma/client';
+import {
+  PhoneCallStatus,
+  Role,
+  VoiceAgentPresenceStatus,
+} from '@prisma/client';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -27,6 +31,7 @@ describe('VoiceLiveJoinService (Live Calls listen/take-over depth fix)', () => {
   let service: VoiceLiveJoinService;
   let businessId: string;
   let userId: string;
+  let userPhone: string;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -57,11 +62,12 @@ describe('VoiceLiveJoinService (Live Calls listen/take-over depth fix)', () => {
     businessId = business.id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
 
+    userPhone = `+1555${String(Date.now()).slice(-7)}`;
     const user = await prisma.user.create({
       data: {
         name: 'Staff Member',
         email: `staff-${Date.now()}@example.com`,
-        phone: '+15557778888',
+        phone: userPhone,
         passwordHash: 'hash',
       },
     });
@@ -80,12 +86,15 @@ describe('VoiceLiveJoinService (Live Calls listen/take-over depth fix)', () => {
 
   afterEach(() => {
     mockedAxios.post.mockReset();
+    mockedAxios.get.mockReset();
   });
 
   afterAll(async () => {
     await prisma.phoneCall.deleteMany({ where: { businessId } });
     await prisma.phoneNumber.deleteMany({ where: { businessId } });
-    await prisma.user.delete({ where: { id: userId } });
+    await prisma.voiceHumanAgentProfile.deleteMany({ where: { businessId } });
+    await prisma.businessUser.deleteMany({ where: { businessId } });
+    if (userId) await prisma.user.delete({ where: { id: userId } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
@@ -117,7 +126,7 @@ describe('VoiceLiveJoinService (Live Calls listen/take-over depth fix)', () => {
 
     const [dialUrl, dialBody] = mockedAxios.post.mock.calls[1];
     expect(dialUrl).toContain('/Calls.json');
-    expect(String(dialBody)).toContain('To=%2B15557778888');
+    expect(String(dialBody)).toContain(`To=${encodeURIComponent(userPhone)}`);
     expect(String(dialBody)).toContain('muted%3Dtrue');
   });
 
@@ -195,5 +204,69 @@ describe('VoiceLiveJoinService (Live Calls listen/take-over depth fix)', () => {
     const staffXml = service.conferenceTwiml('room-1', true, 'staff');
     expect(staffXml).toContain('endConferenceOnExit="false"');
     expect(staffXml).toContain('muted="true"');
+  });
+
+  it('uses Twilio coaching for whisper and returns the supervisor to the shared call for barge', async () => {
+    const member = await prisma.businessUser.create({
+      data: { businessId, userId, role: Role.staff },
+    });
+    const profile = await prisma.voiceHumanAgentProfile.create({
+      data: {
+        businessId,
+        staffUserId: member.id,
+        presenceStatus: VoiceAgentPresenceStatus.available,
+        lastHeartbeatAt: new Date(),
+      },
+    });
+    const call = await prisma.phoneCall.create({
+      data: {
+        businessId,
+        callSid: 'CA-coach-1',
+        fromNumber: '+15550005555',
+        status: PhoneCallStatus.in_progress,
+      },
+    });
+    const agentCallSid = `CA${'a'.repeat(32)}`;
+    const conferenceSid = `CF${'b'.repeat(32)}`;
+    await prisma.voiceHumanAgentAssignment.create({
+      data: {
+        businessId,
+        callId: call.id,
+        attemptNumber: 1,
+        staffUserId: member.id,
+        profileId: profile.id,
+        status: 'connected',
+        connected: true,
+        providerCallSid: agentCallSid,
+        conferenceSid,
+      },
+    });
+
+    mockedAxios.get.mockRejectedValueOnce({ response: { status: 404 } });
+    mockedAxios.post.mockResolvedValue({ data: { call_sid: 'CA-supervisor' } });
+
+    await service.coach(businessId, userId, call.id, 'whisper');
+    const createUrl = mockedAxios.post.mock.calls[0][0];
+    const createBody = String(mockedAxios.post.mock.calls[0][1]);
+    expect(createUrl).toContain(
+      `/Conferences/${conferenceSid}/Participants.json`,
+    );
+    expect(createBody).toContain('Coaching=true');
+    expect(createBody).toContain(`CallSidToCoach=${agentCallSid}`);
+    expect(createBody).toContain('Muted=false');
+
+    mockedAxios.get.mockResolvedValueOnce({
+      data: { call_sid: 'CA-supervisor' },
+    });
+    await service.coach(businessId, userId, call.id, 'barge');
+    const updateUrl = mockedAxios.post.mock.calls[1][0];
+    const updateBody = String(mockedAxios.post.mock.calls[1][1]);
+    expect(updateUrl).toContain(`/Participants/supervisor-${userId}.json`);
+    expect(updateBody).toContain('Coaching=false');
+    expect(updateBody).toContain('Muted=false');
+
+    await prisma.phoneCall.delete({ where: { id: call.id } });
+    await prisma.voiceHumanAgentProfile.delete({ where: { id: profile.id } });
+    await prisma.businessUser.delete({ where: { id: member.id } });
   });
 });

@@ -53,7 +53,9 @@ export class BusinessTypesService {
     // No businessId: this runs pre-signup, before a business exists to rate-limit/cost-cap against.
     let response: string;
     try {
-      response = (await this.aiInfra.complete(undefined, prompt)).trim();
+      response = (
+        await this.aiInfra.complete(undefined, prompt, 0, 'business_type_map')
+      ).trim();
     } catch (error) {
       if (error instanceof AppException) {
         throw error;

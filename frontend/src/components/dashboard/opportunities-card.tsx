@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useWidgetData } from "@/hooks/use-widget-data";
+import { useDisabledModules } from "@/components/layout/module-gate";
 import { formatCurrency, formatNumber } from "@/lib/format";
 
 interface Opportunity {
@@ -17,15 +18,19 @@ interface Opportunity {
  * the design's "Opportunities" panel generates estimated-impact prose from an AI model that doesn't
  * exist here, so each card shows the real underlying number instead of a fabricated dollar estimate. */
 export function OpportunitiesCard({ currency }: { currency: string }) {
-  const lowStock = useWidgetData("low_stock_count");
-  const lapsed = useWidgetData("lapsed_customers");
-  const credit = useWidgetData("credit_outstanding");
+  const disabledModules = useDisabledModules();
+  const inventoryEnabled = !disabledModules.has("inventory");
+  const customersEnabled = !disabledModules.has("customers");
+  const creditEnabled = !disabledModules.has("credit");
+  const lowStock = useWidgetData("low_stock_count", 30, inventoryEnabled);
+  const lapsed = useWidgetData("lapsed_customers", 30, customersEnabled);
+  const credit = useWidgetData("credit_outstanding", 30, creditEnabled);
   const [dismissed, setDismissed] = useState<string[]>([]);
 
   const opportunities: Opportunity[] = [];
 
   const lowStockCount = (lowStock.data as { count: number } | undefined)?.count ?? 0;
-  if (lowStockCount > 0) {
+  if (inventoryEnabled && lowStockCount > 0) {
     opportunities.push({
       key: "stock",
       title: `${formatNumber(lowStockCount)} product${lowStockCount === 1 ? "" : "s"} running low on stock`,
@@ -36,7 +41,7 @@ export function OpportunitiesCard({ currency }: { currency: string }) {
   }
 
   const lapsedCount = (lapsed.data as { count: number } | undefined)?.count ?? 0;
-  if (lapsedCount > 0) {
+  if (customersEnabled && lapsedCount > 0) {
     opportunities.push({
       key: "lapsed",
       title: `${formatNumber(lapsedCount)} customer${lapsedCount === 1 ? "" : "s"} haven't come back recently`,
@@ -48,7 +53,7 @@ export function OpportunitiesCard({ currency }: { currency: string }) {
 
   const creditAmount = (credit.data as { revenue?: number; total?: number } | undefined);
   const creditValue = creditAmount?.revenue ?? creditAmount?.total ?? 0;
-  if (creditValue > 0) {
+  if (creditEnabled && creditValue > 0) {
     opportunities.push({
       key: "credit",
       title: `${formatCurrency(creditValue, currency)} in outstanding credit`,
@@ -58,7 +63,15 @@ export function OpportunitiesCard({ currency }: { currency: string }) {
     });
   }
 
-  const isPending = lowStock.isPending || lapsed.isPending || credit.isPending;
+  const hasEnabledSources = inventoryEnabled || customersEnabled || creditEnabled;
+  const isPending =
+    (inventoryEnabled && lowStock.isPending) ||
+    (customersEnabled && lapsed.isPending) ||
+    (creditEnabled && credit.isPending);
+  const hasLoadError =
+    (inventoryEnabled && lowStock.isError) ||
+    (customersEnabled && lapsed.isError) ||
+    (creditEnabled && credit.isError);
   const visible = opportunities.filter((o) => !dismissed.includes(o.key));
 
   return (
@@ -68,7 +81,13 @@ export function OpportunitiesCard({ currency }: { currency: string }) {
         {isPending ? (
           Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-[76px] animate-pulse rounded-[12px]" style={{ background: "var(--app-surface-2)" }} />)
         ) : visible.length === 0 ? (
-          <p className="py-6 text-center text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>Nothing stands out right now — check back later.</p>
+          <p className="py-6 text-center text-[12.5px]" style={{ color: "var(--app-text-faintest)" }}>
+            {!hasEnabledSources
+              ? "Turn on Inventory, Customers or Credit to see opportunities here."
+              : hasLoadError
+                ? "Opportunity data couldn't be loaded right now."
+                : "Nothing stands out right now — check back later."}
+          </p>
         ) : (
           visible.map((o) => (
             <div key={o.key} className="rounded-[12px] p-3" style={{ border: "1px solid var(--app-border)" }}>

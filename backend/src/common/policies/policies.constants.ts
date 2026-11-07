@@ -24,6 +24,16 @@ export const POLICY_DEFS = {
     max: 100,
   },
   'sales.restrictPriceOverride': { kind: 'boolean', default: false },
+  // commerce/commerce-pause.util.ts (channel sync, AI listing generation, subscription renewals)
+  'commerce.actionsPaused': { kind: 'boolean', default: false },
+  // commerce/commerce-agent-tools.service.ts (which tool risk classes agents may use)
+  'commerce.autonomyLevel': {
+    kind: 'number',
+    default: 1,
+    min: 0,
+    max: 5,
+    integer: true,
+  },
   'sales.requireCustomer': { kind: 'boolean', default: false },
   'sales.allowNegativeStock': { kind: 'boolean', default: false },
   // orders/tables/quotations/public-ordering (computeOrderTotals) and report reconciliation
@@ -122,6 +132,142 @@ export const POLICY_DEFS = {
   'digitizer.rejectUnreadable': { kind: 'boolean', default: true },
   // business-brain/brain-detectors.service.ts (what counts as worth raising)
   'brain.overdueDays': {
+    kind: 'number',
+    default: 30,
+    min: 1,
+    max: 365,
+    integer: true,
+  },
+  // marketing/seo-on-page.service.ts (suggest), seo-content.service.ts (generateBrief/generateDraft)
+  'seo.aiDraftsEnabled': { kind: 'boolean', default: true },
+  // marketing/seo-content.service.ts (opportunities: "improve page" below this rank)
+  'seo.improveBelowRank': {
+    kind: 'number',
+    default: 10,
+    min: 1,
+    max: 100,
+    integer: true,
+  },
+  // marketing/seo-content.service.ts (refresh queue), seo-workspace/seo-calendar.service.ts
+  'seo.refreshDropPositions': {
+    kind: 'number',
+    default: 5,
+    min: 1,
+    max: 50,
+    integer: true,
+  },
+  // business-intelligence.service.ts (BI Overview, Opportunity Radar, Simulator)
+  'bi.confidenceReviewBelow': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0,
+    max: 100,
+    integer: true,
+  },
+  'bi.confidenceHighAtOrAbove': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0,
+    max: 100,
+    integer: true,
+  },
+  'bi.insightImpactAlertThreshold': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0,
+    max: 100_000_000,
+  },
+  'bi.simulationPriceChangePercent': {
+    kind: 'nullableNumber',
+    default: null,
+    min: -90,
+    max: 500,
+  },
+  'bi.simulationAdditionalStockUnits': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 1_000_000,
+    integer: true,
+  },
+  'bi.simulationStaffCountChange': {
+    kind: 'nullableNumber',
+    default: null,
+    min: -100,
+    max: 100,
+    integer: true,
+  },
+  'bi.simulationMarketingBudgetChange': {
+    kind: 'nullableNumber',
+    default: null,
+    min: -1_000_000,
+    max: 1_000_000,
+  },
+  // marketing/automations/automation-governance.util.ts (workflow editor, version restore, Settings toggle)
+  'automations.maxActiveWorkflows': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 1000,
+    integer: true,
+  },
+  // marketing/automations/workflow-trigger.service.ts (monthly workflow run quota)
+  'automations.maxRunsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    integer: true,
+  },
+  // marketing/automations/jobs/workflow-retention.processor.ts (completed run history cleanup)
+  'automations.runRetentionDays': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 30,
+    max: 3650,
+    integer: true,
+  },
+  'automations.requireApprovalBeforeCustomerMessages': {
+    kind: 'boolean',
+    default: false,
+  },
+  // voice/voice-call.service.ts (inbound automated-receptionist cap; null preserves current behavior)
+  'voice.maxInboundCallsPerMonth': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 100_000,
+    integer: true,
+  },
+  'voice.monthlySpendCapUsd': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 0.01,
+    max: 100_000,
+  },
+  'voice.bookingsRequireStaffApproval': { kind: 'boolean', default: false },
+  'voice.meetingGuestLimit': {
+    kind: 'number',
+    default: 20,
+    min: 1,
+    max: 200,
+    integer: true,
+  },
+  // voice/voice-call.service.ts (Twilio hold queue; null keeps the existing immediate fallback)
+  'voice.holdQueueMaxWaitSeconds': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 30,
+    max: 3600,
+    integer: true,
+  },
+  'voice.holdQueueOverflowToAi': { kind: 'boolean', default: false },
+  'voice.holdQueueOverflowToHuman': { kind: 'boolean', default: false },
+  // voice/missed-call.service.ts (text a missed caller; on preserves the existing behavior)
+  'voice.missedCallTextBack': { kind: 'boolean', default: true },
+  // voice/voice-transcript-redaction.service.ts (post-call PII masking; off preserves current behavior)
+  'voice.redactTranscripts': { kind: 'boolean', default: false },
+  // procurement/contracts (renewal alert job + Supplier Contracts screen)
+  'procurement.contractRenewalAlertDays': {
     kind: 'number',
     default: 30,
     min: 1,

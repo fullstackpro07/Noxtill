@@ -5,6 +5,9 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { ActionItemPriority, ActionItemType, Role } from '@prisma/client';
+import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
+import { RequireCapability } from '../common/decorators/require-capability.decorator';
+import { RejectProcurementActionDto } from './dto/reject-procurement-action.dto';
 
 @Controller('actions')
 export class ActionCenterController {
@@ -48,6 +51,34 @@ export class ActionCenterController {
     @Body() dto: SnoozeActionItemDto,
   ) {
     return this.actionCenterService.snooze(user.businessId, id, dto);
+  }
+
+  @RequireCapability(CAPABILITIES.PURCHASES_MANAGE)
+  @Post(':id/approve')
+  approveProcurementRequest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.actionCenterService.approveProcurementRequestAction(
+      user.businessId,
+      user.sub,
+      id,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.PURCHASES_MANAGE)
+  @Post(':id/reject')
+  rejectProcurementRequest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RejectProcurementActionDto,
+  ) {
+    return this.actionCenterService.rejectProcurementRequestAction(
+      user.businessId,
+      user.sub,
+      id,
+      dto.reason,
+    );
   }
 
   private async resolveBusinessUserId(

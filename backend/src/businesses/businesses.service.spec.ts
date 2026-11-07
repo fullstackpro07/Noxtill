@@ -74,6 +74,8 @@ describe('BusinessesService (UPD-FE-M16 fix-it)', () => {
       country: 'GB',
       taxLabel: 'Tax',
       taxRate: 0,
+      email: null,
+      type: null,
     });
 
     const refetched = await service.getProfile(businessId);

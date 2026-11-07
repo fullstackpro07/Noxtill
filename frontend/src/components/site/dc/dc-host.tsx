@@ -2,8 +2,20 @@
 
 import { Component, type ReactNode } from "react";
 import { renderDc, type DcContext, type DcNode, type DcVals } from "./dc-render";
+import lucideIcons from "@/lib/marketing/dc/lucide-icons.json";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+// The design logic reads icons from globalThis.lucide. Set it on the server too (not just window),
+// so server render and client hydration produce the same SVGs.
+{
+  const w = globalThis as any;
+  if (!w.lucide) {
+    w.lucide = { icons: lucideIcons };
+  } else if (!w.lucide.icons) {
+    w.lucide.icons = lucideIcons;
+  }
+}
 
 /**
  * Base class for the design files' component logic (`class Component extends DCLogic` in each

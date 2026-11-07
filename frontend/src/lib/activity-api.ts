@@ -10,7 +10,15 @@ export type ActivityEventType =
   | "low_stock"
   | "customer_lapsed"
   | "credit_overdue"
-  | "birthday";
+  | "birthday"
+  | "commerce_validation"
+  | "commerce_rfq_created"
+  | "commerce_rfq_response_received"
+  | "commerce_rfq_awarded"
+  | "commerce_supplier_claim_created"
+  | "commerce_supplier_claim_settled"
+  | "delivery"
+  | "seo_issue_detected";
 
 export interface LiveActivityEvent {
   id: string;
@@ -34,6 +42,14 @@ export const ACTIVITY_EVENT_TYPE_LABEL: Record<ActivityEventType, string> = {
   customer_lapsed: "Customer lapsed",
   credit_overdue: "Credit overdue",
   birthday: "Birthday",
+  commerce_validation: "Product validation",
+  commerce_rfq_created: "RFQ created",
+  commerce_rfq_response_received: "RFQ response received",
+  commerce_rfq_awarded: "RFQ awarded",
+  commerce_supplier_claim_created: "Supplier claim created",
+  commerce_supplier_claim_settled: "Supplier claim recovered",
+  delivery: "Delivery",
+  seo_issue_detected: "SEO issue detected",
 };
 
 /** How many live events the feed keeps in memory (the initial SSE backfill is already capped at 50 server-side). */

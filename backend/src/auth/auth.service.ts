@@ -1,5 +1,6 @@
 import { emailVerificationSkipped } from './email-verification.flag';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Optional, UnauthorizedException } from '@nestjs/common';
+import { SecurityEventsService } from '../common/security/security-events.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -50,6 +51,14 @@ export interface Pending2fa {
 
 const BCRYPT_ROUNDS = 10;
 
+/** A business a member can sign into: owner-active, and not suspended/archived by Noxtill (itself
+ * or, for a branch, its root). */
+const PLATFORM_ACTIVE_BUSINESS: Prisma.BusinessWhereInput = {
+  active: true,
+  platformStatus: 'active',
+  OR: [{ parentId: null }, { parent: { platformStatus: 'active' } }],
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -60,6 +69,7 @@ export class AuthService {
     private readonly sessions: SessionsService,
     private readonly twoFactor: TwoFactorService,
     private readonly authTokens: AuthTokensService,
+    @Optional() private readonly securityEvents?: SecurityEventsService,
   ) {}
 
   /**
@@ -154,11 +164,27 @@ export class AuthService {
       where: { OR: [{ email: dto.emailOrPhone }, { phone: dto.emailOrPhone }] },
     });
 
+    const evt = {
+      identifier: dto.emailOrPhone,
+      ipAddress: meta.ipAddress ?? null,
+      userAgent: meta.userAgent ?? null,
+    };
+
     if (!user) {
+      await this.securityEvents?.record({
+        ...evt,
+        type: 'login_unknown_account',
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
+      await this.securityEvents?.record({
+        ...evt,
+        type: 'login_failed',
+        userId: user.id,
+        metadata: { reason: 'account_locked' },
+      });
       throw new AppException(
         'ACCOUNT_LOCKED',
         `Too many failed attempts — try again after ${user.lockedUntil.toISOString()}`,
@@ -168,7 +194,19 @@ export class AuthService {
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) {
-      await this.registerFailedAttempt(user.id, user.failedLoginAttempts);
+      const locked = await this.registerFailedAttempt(
+        user.id,
+        user.failedLoginAttempts,
+      );
+      await this.securityEvents?.record({
+        ...evt,
+        type: locked ? 'account_locked' : 'login_failed',
+        userId: user.id,
+        metadata: {
+          reason: 'bad_password',
+          attempts: user.failedLoginAttempts + 1,
+        },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -177,7 +215,44 @@ export class AuthService {
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
 
-    const businessUser = await this.resolveActiveBusinessUser(user.id);
+    let businessUser: Awaited<
+      ReturnType<AuthService['resolveActiveBusinessUser']>
+    >;
+    try {
+      businessUser = await this.resolveActiveBusinessUser(user.id);
+    } catch (error) {
+      if (
+        error instanceof AppException &&
+        ['ACCOUNT_SUSPENDED', 'BUSINESS_SUSPENDED'].includes(
+          (error.getResponse() as { code?: string }).code ?? '',
+        )
+      ) {
+        await this.securityEvents?.record({
+          ...evt,
+          type: 'login_blocked_suspended',
+          userId: user.id,
+          metadata: {
+            code: (error.getResponse() as { code?: string }).code,
+          },
+        });
+      }
+      throw error;
+    }
+
+    if (this.securityEvents) {
+      const newDevice = await this.securityEvents.isNewDevice(
+        user.id,
+        meta.ipAddress,
+        meta.userAgent,
+      );
+      await this.securityEvents.record({
+        ...evt,
+        type: newDevice ? 'login_new_device' : 'login_success',
+        userId: user.id,
+        businessId: businessUser.businessId,
+        metadata: { twoFactorPending: user.twoFactorEnabled },
+      });
+    }
 
     if (user.twoFactorEnabled) {
       if (!user.phone) {
@@ -241,7 +316,17 @@ export class AuthService {
       );
     }
 
-    await this.twoFactor.verify(payload.sub, code);
+    try {
+      await this.twoFactor.verify(payload.sub, code);
+    } catch (error) {
+      await this.securityEvents?.record({
+        type: 'two_factor_failed',
+        userId: payload.sub,
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent ?? null,
+      });
+      throw error;
+    }
 
     const businessUser = await this.resolveActiveBusinessUser(payload.sub);
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -287,6 +372,10 @@ export class AuthService {
       where: { id: userId },
       data: { twoFactorEnabled: true },
     });
+    await this.securityEvents?.record({
+      type: 'two_factor_enabled',
+      userId,
+    });
     return { enabled: true };
   }
 
@@ -305,6 +394,10 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { twoFactorEnabled: false },
+    });
+    await this.securityEvents?.record({
+      type: 'two_factor_disabled',
+      userId,
     });
     return { enabled: false };
   }
@@ -347,7 +440,8 @@ export class AuthService {
         userId: payload.sub,
         businessId: payload.businessId,
         active: true,
-        business: { active: true },
+        business: PLATFORM_ACTIVE_BUSINESS,
+        user: { platformStatus: 'active' },
       },
     });
     if (!businessUser) {
@@ -397,8 +491,21 @@ export class AuthService {
    * separate from the business's.
    */
   private async resolveActiveBusinessUser(userId: string) {
+    // Super Admin suspension (platform level) beats every business membership.
+    const person = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { platformStatus: true },
+    });
+    if (person && person.platformStatus !== 'active') {
+      throw new AppException(
+        'ACCOUNT_SUSPENDED',
+        'This account has been suspended by Noxtill — contact Noxtill support',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     const businessUser = await this.prisma.businessUser.findFirst({
-      where: { userId, active: true, business: { active: true } },
+      where: { userId, active: true, business: PLATFORM_ACTIVE_BUSINESS },
       orderBy: { createdAt: 'asc' },
     });
     if (businessUser) {
@@ -410,9 +517,27 @@ export class AuthService {
       select: {
         id: true,
         active: true,
-        business: { select: { active: true } },
+        business: {
+          select: {
+            active: true,
+            platformStatus: true,
+            parent: { select: { platformStatus: true } },
+          },
+        },
       },
     });
+    const platformBlocked =
+      anyMembership &&
+      (anyMembership.business.platformStatus !== 'active' ||
+        (anyMembership.business.parent?.platformStatus ?? 'active') !==
+          'active');
+    if (anyMembership?.active !== false && platformBlocked) {
+      throw new AppException(
+        'BUSINESS_SUSPENDED',
+        'This business account has been suspended by Noxtill — contact Noxtill support',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     if (anyMembership?.active === false) {
       throw new AppException(
         'STAFF_DEACTIVATED',
@@ -430,7 +555,11 @@ export class AuthService {
     throw new UnauthorizedException('No business associated with this account');
   }
 
-  private async registerFailedAttempt(userId: string, currentAttempts: number) {
+  /** Returns true when this attempt locked the account. */
+  private async registerFailedAttempt(
+    userId: string,
+    currentAttempts: number,
+  ): Promise<boolean> {
     const maxAttempts = Number(this.config.get('LOGIN_MAX_ATTEMPTS') ?? 5);
     const lockMinutes = Number(this.config.get('LOGIN_LOCK_MINUTES') ?? 15);
     const attempts = currentAttempts + 1;
@@ -445,6 +574,7 @@ export class AuthService {
             : undefined,
       },
     });
+    return attempts >= maxAttempts;
   }
 
   private async issueTokens(

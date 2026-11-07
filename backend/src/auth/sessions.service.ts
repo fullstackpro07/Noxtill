@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { SecurityEventsService } from '../common/security/security-events.service';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -11,7 +12,10 @@ const BCRYPT_ROUNDS = 10;
  */
 @Injectable()
 export class SessionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly securityEvents?: SecurityEventsService,
+  ) {}
 
   /** Creates the row first (with a placeholder hash) so its real id can be embedded in the JWT before the refresh token — which needs that same id — is even signed. */
   create(
@@ -73,5 +77,11 @@ export class SessionsService {
       throw new NotFoundException('Session not found');
     }
     await this.revoke(sessionId);
+    await this.securityEvents?.record({
+      type: 'session_revoked',
+      userId,
+      businessId: session.businessId,
+      metadata: { sessionId, by: 'self' },
+    });
   }
 }

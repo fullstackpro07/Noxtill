@@ -1,13 +1,19 @@
+import { HttpStatus } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { KeywordsService } from './keywords.service';
 import { AppException } from '../common/filters/app.exception';
-import { MAX_TRACKED_KEYWORDS } from './marketing.constants';
+import {
+  MARKETING_ERROR_CODES,
+  MAX_TRACKED_KEYWORDS,
+} from './marketing.constants';
 import type { KeywordRankProcessor } from './jobs/keyword-rank.processor';
 import type { AiInfraService } from '../ai/ai-infra.service';
 import type { MasterListingService } from '../listings/master-listing.service';
+
+jest.setTimeout(60_000);
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -135,6 +141,22 @@ describe('KeywordsService (BE-063 extension)', () => {
     );
   });
 
+  it('propagates the typed provider-not-configured error from a manual rank check', async () => {
+    const keyword = await prisma.trackedKeyword.create({
+      data: { businessId, keyword: 'provider-not-configured-test' },
+    });
+    const providerError = new AppException(
+      MARKETING_ERROR_CODES.SERP_PROVIDER_NOT_CONFIGURED,
+      'Rank provider is not configured.',
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+    rankProcessor.checkOne.mockRejectedValueOnce(providerError);
+
+    await expect(service.triggerCheck(businessId, keyword.id)).rejects.toBe(
+      providerError,
+    );
+  });
+
   it('lists the latest rank per keyword', async () => {
     const keyword = await prisma.trackedKeyword.create({
       data: { businessId, keyword: 'latest-rank-test' },
@@ -209,5 +231,55 @@ describe('KeywordsService (BE-063 extension)', () => {
         AppException,
       );
     });
+  });
+
+  it('persists intent and target pages and flags shared mappings without inventing SERP cannibalization', async () => {
+    const first = await prisma.trackedKeyword.create({
+      data: { businessId, keyword: 'coffee shop downtown' },
+    });
+    const second = await prisma.trackedKeyword.create({
+      data: { businessId, keyword: 'best espresso downtown' },
+    });
+    const third = await prisma.trackedKeyword.create({
+      data: { businessId, keyword: 'coffee beans downtown' },
+    });
+
+    await service.update(first.id, {
+      intent: 'commercial',
+      targetPageUrl: 'https://Example.com/menu/coffee/?ref=seo#drinks',
+    });
+    await service.update(second.id, {
+      intent: 'local',
+      targetPageUrl: 'https://example.com/menu/coffee/?ref=seo',
+    });
+    await prisma.keywordRankSnapshot.create({
+      data: {
+        keywordId: first.id,
+        rank: 3,
+        businessResultUrls: [
+          'https://example.com/menu/coffee',
+          'https://example.com/cafe/downtown',
+        ],
+      },
+    });
+    await prisma.keywordRankSnapshot.create({
+      data: { keywordId: third.id, rank: null, businessResultUrls: [] },
+    });
+
+    const list = await service.list();
+    const firstRow = list.find((row) => row.id === first.id)!;
+    const secondRow = list.find((row) => row.id === second.id)!;
+    const thirdRow = list.find((row) => row.id === third.id)!;
+    expect(firstRow.intent).toBe('commercial');
+    expect(firstRow.targetPageUrl).toBe(
+      'https://example.com/menu/coffee?ref=seo',
+    );
+    expect(firstRow.mappingOverlap).toBe(true);
+    expect(firstRow.mappedKeywordCount).toBe(2);
+    expect(firstRow.cannibalizationFlag).toBe(true);
+    expect(firstRow.businessResultUrls).toHaveLength(2);
+    expect(secondRow.mappingOverlap).toBe(true);
+    expect(secondRow.cannibalizationFlag).toBeNull();
+    expect(thirdRow.cannibalizationFlag).toBe(false);
   });
 });

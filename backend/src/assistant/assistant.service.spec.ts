@@ -117,6 +117,9 @@ describe('AssistantService (BE-074)', () => {
   const aiInfra = {
     checkGuardrails: jest.fn().mockResolvedValue(undefined),
     recordUsage: jest.fn().mockResolvedValue(undefined),
+    // Usage & Limits: each turn reserves credits first (none owed in this unit spec).
+    reserveCredits: jest.fn().mockResolvedValue(null),
+    releaseCredits: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeAll(async () => {

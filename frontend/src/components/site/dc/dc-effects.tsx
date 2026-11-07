@@ -143,29 +143,65 @@ function fitScaleBlog(): Cleanup {
 
 /** Blog pages' component logic: highlight the table-of-contents entry for the section in view. */
 function toc(): Cleanup {
-  let io: IntersectionObserver | undefined;
-  const t = setTimeout(() => {
-    const hs = [...document.querySelectorAll("main h2[id]")];
-    if (!hs.length || !window.IntersectionObserver) return;
-    const set = (id: string) =>
-      document.querySelectorAll<HTMLElement>("[data-toc]").forEach((a) => {
-        const on = a.getAttribute("data-toc") === id;
-        a.style.color = on ? "#07784C" : "#5F6B67";
-        a.style.borderLeftColor = on ? "#07784C" : "rgba(9,71,55,.10)";
-        a.style.fontWeight = on ? "700" : "500";
-      });
-    io = new IntersectionObserver(
-      (es) =>
-        es.forEach((e) => {
-          if (e.isIntersecting) set(e.target.id);
-        }),
-      { rootMargin: "-110px 0px -65% 0px" },
-    );
-    hs.forEach((h) => io!.observe(h));
-  }, 400);
+  let cleanupScroll: (() => void) | undefined;
+
+  const timer = setTimeout(() => {
+    const links = [...document.querySelectorAll<HTMLElement>("[data-toc]")];
+    if (!links.length) return;
+
+    const targets: { id: string; el: HTMLElement; link: HTMLElement }[] = [];
+    for (const a of links) {
+      const id = a.getAttribute("data-toc");
+      if (!id) continue;
+      const el = document.getElementById(id);
+      if (el) targets.push({ id, el, link: a });
+    }
+
+    if (!targets.length) return;
+
+    let activeId = targets[0].id;
+
+    const update = () => {
+      // Find the last heading that has scrolled past the header offset (~160px from top of viewport)
+      const offset = 160;
+      let currentId = targets[0].id;
+      for (const t of targets) {
+        const rect = t.el.getBoundingClientRect();
+        if (rect.top <= offset) {
+          currentId = t.id;
+        } else {
+          break;
+        }
+      }
+
+      if (currentId !== activeId) {
+        activeId = currentId;
+      }
+
+      for (const t of targets) {
+        const on = t.id === activeId;
+        t.link.style.color = on ? "#0C4B3B" : "#5C6762";
+        t.link.style.borderLeftColor = on ? "#FF6347" : "rgba(12,75,59,.12)";
+        t.link.style.borderLeftWidth = "2px";
+        t.link.style.borderLeftStyle = "solid";
+        t.link.style.fontWeight = on ? "700" : "500";
+      }
+    };
+
+    update();
+
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update, { passive: true });
+
+    cleanupScroll = () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, 250);
+
   return () => {
-    clearTimeout(t);
-    io?.disconnect();
+    clearTimeout(timer);
+    cleanupScroll?.();
   };
 }
 
@@ -288,11 +324,73 @@ function motion(): Cleanup {
   };
 }
 
-const EFFECTS: Record<string, () => Cleanup> = { robots, scale, fit, fitScaleBlog, toc, motion };
+function fit1040(cap = 1.85): Cleanup {
+  // Most designs are drawn at 1024px (scaled from 1040), but some are 1222-1240px wide; scaling those by
+  // clientWidth/1040 pushes their pixel-placed content past the viewport edge and cuts it off.
+  function designWidth(dcx: HTMLElement) {
+    let max = 0;
+    dcx.querySelectorAll<HTMLElement>("[data-z]").forEach((el) => {
+      const m = parseInt(el.style.maxWidth || "", 10);
+      if (m > max) max = m;
+    });
+    return max > 1100 ? max : 1040;
+  }
+  function apply() {
+    const dcx = document.querySelector<HTMLElement>(".dcx");
+    if (!dcx) return;
+    const w = document.documentElement.clientWidth || window.innerWidth;
+    const base = designWidth(dcx);
+    if (w > base) {
+      const z = Math.min(w / base, cap);
+      dcx.style.zoom = z.toFixed(3);
+    } else {
+      dcx.style.zoom = "";
+    }
+  }
+  apply();
+  window.addEventListener("resize", apply);
+  return () => {
+    window.removeEventListener("resize", apply);
+    const dcx = document.querySelector<HTMLElement>(".dcx");
+    if (dcx) dcx.style.zoom = "";
+  };
+}
+
+/**
+ * Fixed-size design mockups ([data-mock], absolutely positioned inside) that are wider than their
+ * column are scaled down to fit instead of scrolling sideways or overlapping neighbouring content.
+ */
+function fitMocks(): Cleanup {
+  function apply() {
+    document.querySelectorAll<HTMLElement>(".dcx [data-mock]").forEach((el) => {
+      if (/hero$/.test(el.dataset.mock || "")) return;
+      const par = el.parentElement;
+      if (!par) return;
+      el.style.zoom = "";
+      const natural = el.offsetWidth;
+      const avail = par.clientWidth;
+      if (natural > 0 && avail > 0 && natural > avail + 1) {
+        el.style.zoom = (avail / natural).toFixed(4);
+        par.style.overflowX = "hidden";
+      }
+    });
+  }
+  const timers = [0, 300, 1200].map((ms) => window.setTimeout(apply, ms));
+  window.addEventListener("resize", apply);
+  return () => {
+    timers.forEach(clearTimeout);
+    window.removeEventListener("resize", apply);
+  };
+}
+
+const EFFECTS: Record<string, () => Cleanup> = { robots, scale, fit, fitScaleBlog, toc, motion, fit1040, fitMocks, fit1040Md: () => fit1040(1.5) };
 
 export function DcEffects({ effects }: { effects: string[] }) {
   const key = effects.join(",");
   useEffect(() => {
+    if (typeof document !== "undefined" && document.documentElement.style.zoom) {
+      document.documentElement.style.zoom = "";
+    }
     const cleanups = key
       .split(",")
       .filter(Boolean)

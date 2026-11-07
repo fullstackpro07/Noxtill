@@ -66,6 +66,7 @@ export class CreditOverdueScanProcessor extends WorkerHost {
 
       void this.workflowTrigger
         .dispatch(businessId, event.type, {
+          eventId: event.id,
           description: event.description,
           entityType: event.entityType,
           entityId: event.entityId,

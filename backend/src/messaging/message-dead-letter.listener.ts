@@ -3,7 +3,9 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, QueueEvents } from 'bullmq';
@@ -39,6 +41,7 @@ export class MessageDeadLetterListener
     }>,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @Optional() private readonly meters?: MetersService,
   ) {
     // An unlistened 'error' event on either queue's connection (e.g. Redis
     // over quota) throws and crashes the whole process, not just this listener.
@@ -85,9 +88,17 @@ export class MessageDeadLetterListener
       { originalJobId: jobId, data: job.data, failedReason },
       { jobId },
     );
-    await this.prisma.message
+    const message = await this.prisma.message
       .update({ where: { id: job.data.messageId }, data: { status: 'failed' } })
-      .catch(() => undefined);
+      .catch(() => null);
+    // A failed operation is never charged: give back what the send gate set aside.
+    if (message && this.meters) {
+      const hold = await this.meters.findHold(
+        message.businessId,
+        `msg:${message.id}`,
+      );
+      if (hold) await this.meters.releaseHold(hold.id, 'send failed');
+    }
   }
 
   async onModuleDestroy() {

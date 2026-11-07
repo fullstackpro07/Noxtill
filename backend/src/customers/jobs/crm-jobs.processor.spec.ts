@@ -6,8 +6,8 @@ import { OutboundWebhookDispatchService } from '../../integrations/automation/ou
 import { CrmJobsProcessor } from './crm-jobs.processor';
 import { VIP_LIFETIME_SPEND_THRESHOLD } from './crm-jobs.constants';
 
-// The processor's unscoped `business.findMany()` scans the whole shared test DB;
-// under full-suite parallel load that occasionally exceeds Jest's 5000ms default.
+// Real database queries below are restricted to this suite's fixture. Global
+// processor scans otherwise race other suites' cleanup and mutate unrelated tenants.
 jest.setTimeout(20000);
 
 describe('CrmJobsProcessor (BE-041)', () => {
@@ -27,14 +27,6 @@ describe('CrmJobsProcessor (BE-041)', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    processor = new CrmJobsProcessor(
-      prisma,
-      new LocaleService(),
-      sendGate as unknown as SendGateService,
-      workflowTrigger as unknown as WorkflowTriggerService,
-      outboundWebhookDispatch as unknown as OutboundWebhookDispatchService,
-    );
-
     const business = await prisma.business.create({
       data: {
         name: 'CRM Jobs Test Biz',
@@ -43,6 +35,29 @@ describe('CrmJobsProcessor (BE-041)', () => {
       },
     });
     businessId = business.id;
+    const fixturePrisma = prisma.$extends({
+      query: {
+        business: {
+          findMany({ args, query }) {
+            args.where = { AND: [args.where ?? {}, { id: businessId }] };
+            return query(args);
+          },
+        },
+        membership: {
+          updateMany({ args, query }) {
+            args.where = { AND: [args.where ?? {}, { businessId }] };
+            return query(args);
+          },
+        },
+      },
+    });
+    processor = new CrmJobsProcessor(
+      fixturePrisma as unknown as PrismaService,
+      new LocaleService(),
+      sendGate as unknown as SendGateService,
+      workflowTrigger as unknown as WorkflowTriggerService,
+      outboundWebhookDispatch as unknown as OutboundWebhookDispatchService,
+    );
   });
 
   afterEach(() => {

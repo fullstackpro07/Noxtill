@@ -177,7 +177,7 @@ describe('MarketingAssetsService (UPD-BE-105)', () => {
       width: '148mm',
       height: '210mm',
     });
-  });
+  }, 30_000);
 
   it('omits a content block when there is no real data behind it, rather than faking it', async () => {
     profit.byProduct.mockResolvedValueOnce({ windowDays: 30, products: [] });

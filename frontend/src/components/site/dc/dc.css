@@ -17,3 +17,29 @@
 .dcxh {
   line-height: normal;
 }
+
+/* Ensure the page wrapper never traps overflow or breaks position: sticky sidebars */
+.dcx {
+  overflow-x: visible !important;
+}
+
+/* Blog sticky sidebar positioning */
+.dcx .nxb-side {
+  position: relative;
+}
+
+.dcx .nxb-side > div {
+  position: -webkit-sticky !important;
+  position: sticky !important;
+  top: 96px !important;
+  max-height: calc(100vh - 120px) !important;
+  overflow-y: auto !important;
+}
+
+/* Picture-based blog hero images: preserve full 3:2 aspect ratio with no cropping */
+.dcx figure > img[src*="-hero."],
+.dcx figure picture > img[src*="-hero."] {
+  aspect-ratio: 3 / 2 !important;
+  object-fit: cover !important;
+}
+

@@ -59,6 +59,6 @@ import { SettingsModule } from '../settings/settings.module';
     InvoicesService,
     ReceiptsService,
   ],
-  exports: [OrdersService, InvoiceService],
+  exports: [OrdersService, InvoiceService, ReturnsService],
 })
 export class OrdersModule {}

@@ -201,7 +201,12 @@ export class ProfitService {
       'Reply with ONLY a JSON array of strings, one per candidate, in the same order. No other text.',
     ].join('\n');
 
-    const raw = await this.aiInfra.complete(businessId, prompt);
+    const raw = await this.aiInfra.complete(
+      businessId,
+      prompt,
+      0,
+      'profit_insight',
+    );
     const jsonStart = raw.indexOf('[');
     const jsonEnd = raw.lastIndexOf(']');
     if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
@@ -645,7 +650,12 @@ export class ProfitService {
       'Reply with ONLY a JSON array of strings, one per candidate, in the same order. No other text.',
     ].join('\n');
 
-    const raw = await this.aiInfra.complete(businessId, prompt);
+    const raw = await this.aiInfra.complete(
+      businessId,
+      prompt,
+      0,
+      'profit_insight',
+    );
     const jsonStart = raw.indexOf('[');
     const jsonEnd = raw.lastIndexOf(']');
     if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {

@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
 import { ImportStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../common/storage/s3.service';
@@ -91,6 +92,7 @@ export class DigitizerService {
     private readonly pipeline: DigitizerPipelineService,
     private readonly assessment: DigitizerAssessmentService,
     private readonly view: DigitizerViewService,
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   // ───────────────────────────── upload ─────────────────────────────
@@ -154,6 +156,8 @@ export class DigitizerService {
         { stage: 'queued', startedAt: now.toISOString(), finishedAt: null },
       ],
     };
+    // Usage & Limits: digitizer pages have their own meter (never AI credits).
+    await this.meters?.assertAllowance(businessId, 'digitizer_pages');
     const batch = await this.prisma.importBatch.create({
       data: {
         businessId,

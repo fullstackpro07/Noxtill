@@ -13,7 +13,8 @@
     "start": "next start",
     "start:frontend": "next start",
     "start:backend": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -22,12 +23,14 @@
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-table": "^8.21.3",
+    "@twilio/voice-sdk": "^2.18.3",
     "@types/leaflet": "^1.9.22",
     "@zxing/browser": "^0.2.1",
     "axios": "^1.20.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "leaflet": "^1.9.4",
+    "livekit-client": "^2.22.4",
     "lucide-react": "^1.25.0",
     "next": "16.3.6",
     "qrcode.react": "^4.2.0",
@@ -41,8 +44,10 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@emnapi/core": "1.11.3",
     "@emnapi/runtime": "1.11.3",
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -52,5 +57,10 @@
     "mammoth": "^1.12.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@axe-core/playwright": {
+      "playwright-core": "1.56.1"
+    }
   }
 }

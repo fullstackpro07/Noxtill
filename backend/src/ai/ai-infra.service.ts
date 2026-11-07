@@ -1,6 +1,14 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { randomUUID } from 'crypto';
+import { CreditsService, Reservation } from '../usage/credits.service';
+import {
+  BAND_CREDITS,
+  bandForTokens,
+  KIND_TO_OPERATION,
+  VOICE_TEXT_KINDS,
+} from '../usage/usage.constants';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import {
@@ -31,24 +39,123 @@ import { Prisma } from '@prisma/client';
  */
 @Injectable()
 export class AiInfraService {
+  private readonly logger = new Logger(AiInfraService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly claude: ClaudeClient,
     private readonly config: ConfigService,
+    /** Usage & Limits AI credits. Optional only so unit specs can construct this without it. */
+    @Optional() private readonly credits?: CreditsService,
   ) {}
+
+  /**
+   * Reserves the operation's nominal credits before the model is called (spec §4.7–4.8). Returns
+   * null when nothing is owed: no business (pre-signup), or a kind billed on its own meter (live
+   * call turns → voice minutes, digitizer scans → pages). Throws a 402 limit error with remedies
+   * when the balance can't cover it, so the provider is never called.
+   */
+  async reserveCredits(
+    businessId: string | undefined,
+    kind: string,
+    voiceAgentVersionId?: string,
+  ): Promise<Reservation | null> {
+    if (!businessId || !this.credits || voiceAgentVersionId) return null;
+    let op = KIND_TO_OPERATION[kind];
+    if (op === undefined) {
+      this.logger.warn(
+        `AI kind "${kind}" has no credit operation; billing as a generic request`,
+      );
+      op = KIND_TO_OPERATION.complete;
+    }
+    if (op === null) return null;
+    return this.credits.reserve({
+      businessId,
+      operationCode: op.code,
+      band: op.band,
+      idempotencyKey: `ai:${kind}:${randomUUID()}`,
+    });
+  }
+
+  /** Commits the ACTUAL credits from the call's real token count (spec §4.8). */
+  async commitCredits(
+    reservation: Reservation | null | undefined,
+    tokens: number | null,
+  ): Promise<void> {
+    if (!reservation || !this.credits) return;
+    const actual =
+      tokens == null
+        ? reservation.reservedQty
+        : BAND_CREDITS[bandForTokens(tokens)];
+    await this.credits.commit(reservation.reservationId, actual);
+  }
+
+  /** A failed operation is never charged (spec §1.3). */
+  async releaseCredits(
+    reservation: Reservation | null | undefined,
+    reason: string,
+  ): Promise<void> {
+    if (!reservation || !this.credits) return;
+    await this.credits.release(reservation.reservationId, reason);
+  }
 
   async complete(
     businessId: string | undefined,
     prompt: string,
     temperature = 0,
     kind = 'complete',
+    maxTokens?: number,
+    voiceBudget?: {
+      voiceAgentVersionId: string;
+      monthlyBudgetUsd?: number | null;
+    },
   ): Promise<string> {
-    const result = await this.createMessage(businessId, kind, {
-      messages: [{ role: 'user', content: prompt }],
-      temperature,
-    });
+    if (businessId && voiceBudget?.monthlyBudgetUsd != null) {
+      await this.enforceVoiceVersionBudget(
+        businessId,
+        voiceBudget.voiceAgentVersionId,
+        voiceBudget.monthlyBudgetUsd,
+      );
+    }
+    const result = await this.createMessage(
+      businessId,
+      kind,
+      {
+        messages: [{ role: 'user', content: prompt }],
+        temperature,
+        ...(maxTokens ? { maxTokens } : {}),
+      },
+      undefined,
+      voiceBudget?.voiceAgentVersionId,
+    );
     const text = result.content.find((block) => block.type === 'text')?.text;
     return text ?? '';
+  }
+
+  private async enforceVoiceVersionBudget(
+    businessId: string,
+    versionId: string,
+    monthlyBudgetUsd: number,
+  ): Promise<void> {
+    const now = new Date();
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const usage = await this.prisma.aiCallLog.aggregate({
+      where: {
+        businessId,
+        voiceAgentVersionId: versionId,
+        createdAt: { gte: monthStart },
+      },
+      _sum: { estimatedCostUsd: true },
+    });
+    if (Number(usage._sum.estimatedCostUsd ?? 0) >= monthlyBudgetUsd) {
+      throw new AppException(
+        'VOICE_AI_VERSION_BUDGET_REACHED',
+        'This AI agent version has reached its monthly call budget.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
   }
 
   /**
@@ -64,16 +171,25 @@ export class AiInfraService {
     prompt: string,
   ): Promise<{ url: string }> {
     await this.checkGuardrails(businessId, 'generate_image');
+    const reservation = await this.reserveCredits(businessId, 'generate_image');
 
-    const response = await axios.post<{ data: { url: string }[] }>(
-      'https://api.openai.com/v1/images/generations',
-      { prompt, n: 1, size: '1024x1024' },
-      {
-        headers: {
-          Authorization: `Bearer ${this.config.get<string>('OPENAI_API_KEY') ?? ''}`,
+    let response: { data: { data: { url: string }[] } };
+    try {
+      response = await axios.post<{ data: { url: string }[] }>(
+        'https://api.openai.com/v1/images/generations',
+        { prompt, n: 1, size: '1024x1024' },
+        {
+          headers: {
+            Authorization: `Bearer ${this.config.get<string>('OPENAI_API_KEY') ?? ''}`,
+          },
         },
-      },
-    );
+      );
+    } catch (error) {
+      await this.releaseCredits(reservation, 'provider_error');
+      throw error;
+    }
+    // A flat-priced image: the reserved amount is the actual amount.
+    await this.commitCredits(reservation, null);
 
     await this.prisma.aiCallLog.create({
       data: {
@@ -94,10 +210,49 @@ export class AiInfraService {
     kind: string,
     params: CreateMessageParams,
     toolCalls?: unknown,
+    voiceAgentVersionId?: string,
   ): Promise<CreateMessageResult> {
     await this.checkGuardrails(businessId, kind);
-    const result = await this.claude.createMessage(params);
-    await this.recordUsage(businessId, kind, result, toolCalls);
+    if (businessId && voiceAgentVersionId) {
+      const version = await this.prisma.voiceAiAgentVersion.findFirst({
+        where: { id: voiceAgentVersionId, businessId },
+        select: { config: true },
+      });
+      if (!version)
+        throw new AppException(
+          'VOICE_AI_VERSION_NOT_FOUND',
+          'The AI agent version is not available in this business.',
+          HttpStatus.NOT_FOUND,
+        );
+      const budget = (version.config as { monthlyBudgetUsd?: unknown })
+        .monthlyBudgetUsd;
+      if (typeof budget === 'number' && Number.isFinite(budget))
+        await this.enforceVoiceVersionBudget(
+          businessId,
+          voiceAgentVersionId,
+          budget,
+        );
+    }
+    const reservation = await this.reserveCredits(
+      businessId,
+      kind,
+      voiceAgentVersionId,
+    );
+    let result: CreateMessageResult;
+    try {
+      result = await this.claude.createMessage(params);
+    } catch (error) {
+      await this.releaseCredits(reservation, 'provider_error');
+      throw error;
+    }
+    await this.recordUsage(
+      businessId,
+      kind,
+      result,
+      toolCalls,
+      voiceAgentVersionId,
+      reservation,
+    );
     return result;
   }
 
@@ -108,7 +263,7 @@ export class AiInfraService {
    * stream — it still needs the exact same rate-limit/cost-cap/logging path.
    *
    * `kind` is optional and, when given, also enforced against AI Settings' per-feature toggle
-   * (UPD-BE-115) — only for kinds that map to one of the 7 named toggleable features
+   * (UPD-BE-115) — only for kinds that map to one of the named toggleable features
    * (`KIND_TO_FEATURE`); everything else (e.g. the bare `'complete'` default) has no toggle to
    * check and is always allowed through this gate.
    */
@@ -150,8 +305,21 @@ export class AiInfraService {
     kind: string,
     result: CreateMessageResult,
     toolCalls?: unknown,
+    voiceAgentVersionId?: string,
+    /** The credit reservation made for this call (see `reserveCredits`); committed at actual. */
+    reservation?: Reservation | null,
   ): Promise<void> {
-    await this.logCall(businessId, kind, result, toolCalls);
+    await this.logCall(
+      businessId,
+      kind,
+      result,
+      toolCalls,
+      voiceAgentVersionId,
+    );
+    await this.commitCredits(
+      reservation,
+      result.inputTokens + result.outputTokens,
+    );
   }
 
   private async enforceRateLimit(businessId: string): Promise<void> {
@@ -198,12 +366,13 @@ export class AiInfraService {
     kind: string,
     result: CreateMessageResult,
     toolCalls?: unknown,
+    voiceAgentVersionId?: string,
   ): Promise<void> {
     const cost =
       result.inputTokens * HAIKU_INPUT_COST_PER_TOKEN +
       result.outputTokens * HAIKU_OUTPUT_COST_PER_TOKEN;
 
-    await this.prisma.aiCallLog.create({
+    const log = await this.prisma.aiCallLog.create({
       data: {
         businessId,
         kind,
@@ -211,7 +380,28 @@ export class AiInfraService {
         outputTokens: result.outputTokens,
         estimatedCostUsd: cost,
         toolCalls: toolCalls as Prisma.InputJsonValue,
+        voiceAgentVersionId,
       },
     });
+    if (businessId && VOICE_TEXT_KINDS.has(kind)) {
+      await this.prisma.voiceUsageRecord.create({
+        data: {
+          businessId,
+          eventKey: `anthropic:voice:${log.id}`,
+          provider: 'anthropic',
+          unit: 'voice_text_tokens',
+          quantity: result.inputTokens + result.outputTokens,
+          cost,
+          currency: 'USD',
+          state: 'estimated',
+          evidence: {
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            costBasis: 'haiku_default_list_price_estimate',
+            voiceAgentVersionId: voiceAgentVersionId ?? null,
+          },
+        },
+      });
+    }
   }
 }

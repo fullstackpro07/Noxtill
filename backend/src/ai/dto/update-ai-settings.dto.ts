@@ -15,6 +15,14 @@ export class AiFeatureTogglesDto {
 
   @IsOptional()
   @IsBoolean()
+  voiceQualityAssist?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  voiceMeetingSummary?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   photoDigitizer?: boolean;
 
   @IsOptional()
@@ -40,6 +48,8 @@ export class AiFeatureTogglesDto {
   @IsOptional()
   @IsBoolean()
   inboxReplies?: boolean;
+
+  workflowAgents?: boolean;
 }
 
 export class UpdateAiSettingsDto {

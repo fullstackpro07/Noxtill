@@ -18,5 +18,5 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function BlogArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const page = await loadDcPage(BLOG_PAGES[(await params).slug]);
   if (!page) notFound();
-  return <DcPage page={page} effects={["toc"]} />;
+  return <DcPage page={page} withHeader effects={["toc"]} />;
 }

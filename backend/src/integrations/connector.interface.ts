@@ -91,6 +91,21 @@ export interface EcommerceOrder {
   lines: EcommerceOrderLine[];
 }
 
+/** Commerce listing sync creates or updates an unpublished provider-side draft only. */
+export interface EcommerceListingDraftInput {
+  businessId: string;
+  productId: string;
+  handle: string;
+  sku: string;
+  title: string;
+  description: string;
+  sellingPrice: number;
+}
+
+export interface EcommerceListingDraftResult {
+  externalProductId: string;
+}
+
 /** The Master Business Record's push-able fields (UPD-BE-041) — see `MasterListing` in schema.prisma. */
 /** A charge, refund or payout read from a payment processor (Stripe, Square, PayPal). */
 export interface ExternalPaymentInput {
@@ -359,4 +374,12 @@ export interface Connector {
     meta: Record<string, unknown>,
     products: CatalogProductInput[],
   ): Promise<{ pushed: number; failed: number; errors: string[] }>;
+
+  /** Commerce Listing Builder — upserts an unpublished product draft, never a live listing. */
+  upsertListingDraft?(
+    tokens: OAuthTokens,
+    meta: Record<string, unknown>,
+    input: EcommerceListingDraftInput,
+    externalProductId?: string,
+  ): Promise<EcommerceListingDraftResult>;
 }

@@ -63,7 +63,7 @@ export function RowTable({ rows, compact = false }: { rows: PanelRow[]; compact?
 export function Bullets({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="flex-none">
-      <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[.09em] text-[#94A3B8]">{title}</div>
+      <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[.09em] text-[color:var(--app-text-faintest,#667085)]">{title}</div>
       <div className="flex flex-col gap-[9px]">
         {items.map((b, i) => (
           <div key={i} className="flex items-start gap-[9px]">
@@ -81,7 +81,7 @@ export function Bullets({ title, items }: { title: string; items: string[] }) {
 export function NoteBox({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-none gap-[9px] rounded-[12px] border border-[#E6E8EC] bg-[#FCFCFD] p-[13px]">
-      <Ico name="info" size={15} className="mt-px text-[#7A8798]" />
+      <Ico name="info" size={15} className="mt-px text-[color:var(--app-text-faintest,#667085)]" />
       <div className="text-[11.5px] leading-[1.55] text-[#5B6675]" style={{ textWrap: "pretty" }}>
         {children}
       </div>
@@ -117,7 +117,7 @@ function DetailPanel() {
       >
         <div className="flex items-start gap-3 border-b border-[#EEF0F3] px-5 py-[18px]">
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-bold uppercase tracking-[.09em] text-[#94A3B8]">{panel.kicker}</div>
+            <div className="text-[11px] font-bold uppercase tracking-[.09em] text-[color:var(--app-text-faintest,#667085)]">{panel.kicker}</div>
             <div className="mt-1 text-[16px] font-extrabold tracking-[-.01em]" style={{ textWrap: "pretty" }}>
               {panel.title}
             </div>
@@ -129,7 +129,7 @@ function DetailPanel() {
               </div>
             ) : null}
           </div>
-          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[#7A8798] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
+          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[color:var(--app-text-faintest,#667085)] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
             <Ico name="x" size={16} strokeWidth={2.25} />
           </button>
         </div>
@@ -163,7 +163,7 @@ function DetailPanel() {
               onClick={() => void primary()}
               disabled={busy}
               className="flex h-[38px] cursor-pointer items-center rounded-[10px] border-0 px-3.5 text-[13px] font-bold text-white disabled:opacity-60"
-              style={{ background: panel.primaryTone === "red" ? "#DC2626" : "#16A34A" }}
+              style={{ background: panel.primaryTone === "red" ? "#DC2626" : "var(--app-primary-hover, #0e8442)" }}
             >
               {busy ? "Working…" : panel.primary}
             </button>
@@ -210,7 +210,7 @@ function ConfirmDialog() {
               {confirm.body}
             </div>
           </div>
-          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[#7A8798] hover:bg-[#F1F3F6]">
+          <button type="button" onClick={closeOverlays} aria-label="Close" className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent text-[color:var(--app-text-faintest,#667085)] hover:bg-[#F1F3F6]">
             <Ico name="x" size={16} strokeWidth={2.25} />
           </button>
         </div>
@@ -228,7 +228,7 @@ function ConfirmDialog() {
             onClick={() => void run()}
             disabled={busy}
             className="flex h-[38px] cursor-pointer items-center rounded-[10px] border-0 px-3.5 text-[13px] font-bold text-white disabled:opacity-60"
-            style={{ background: confirm.tone === "red" ? "#DC2626" : "#16A34A" }}
+            style={{ background: confirm.tone === "red" ? "#DC2626" : "var(--app-primary-hover, #0e8442)" }}
           >
             {busy ? "Working…" : confirm.primary}
           </button>
@@ -269,7 +269,7 @@ function ToastView() {
           </div>
         ) : null}
       </div>
-      <button type="button" onClick={closeToast} aria-label="Dismiss" className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-[7px] border-0 bg-transparent text-[#94A3B8] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
+      <button type="button" onClick={closeToast} aria-label="Dismiss" className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-[7px] border-0 bg-transparent text-[color:var(--app-text-faintest,#667085)] hover:bg-[#F1F3F6] hover:text-[#0F172A]">
         <Ico name="x" size={14} strokeWidth={2.25} />
       </button>
     </div>

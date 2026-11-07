@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { parse } from 'csv-parse/sync';
 import { Workbook } from 'exceljs';
 import { extractRawText } from 'mammoth';
 import { ClaudeClient } from '../ai/claude.client';
+import { AiInfraService } from '../ai/ai-infra.service';
 import { RawImportRow } from './customer-import.types';
 import {
   applyMapping,
@@ -32,14 +33,18 @@ const CLAUDE_CHUNK_SIZE = 6000;
 export class CustomerImportParser {
   private readonly logger = new Logger(CustomerImportParser.name);
 
-  constructor(private readonly claude: ClaudeClient) {}
+  constructor(
+    private readonly claude: ClaudeClient,
+    /** Routes extraction through the shared guardrails + AI-credit metering when a business is known. */
+    @Optional() private readonly aiInfra?: AiInfraService,
+  ) {}
 
-  async parse(file: ImportFile): Promise<RawImportRow[]> {
+  async parse(file: ImportFile, businessId?: string): Promise<RawImportRow[]> {
     const records = await this.parseRecords(file);
     if (records) {
       return applyMapping(records.rows, suggestMapping(records.headers));
     }
-    return this.parseUnstructured(await this.readAsText(file));
+    return this.parseUnstructured(await this.readAsText(file), businessId);
   }
 
   /** Column-mapping (UPD-BE-099) — raw header-keyed rows for csv/xlsx, null for txt/docx (Claude already returns structured fields, nothing to map). */
@@ -114,7 +119,10 @@ export class CustomerImportParser {
   }
 
   /** Unstructured text (txt/docx) → Claude extraction, chunked, temperature 0. */
-  private async parseUnstructured(text: string): Promise<RawImportRow[]> {
+  private async parseUnstructured(
+    text: string,
+    businessId?: string,
+  ): Promise<RawImportRow[]> {
     const chunks: string[] = [];
     for (let i = 0; i < text.length; i += CLAUDE_CHUNK_SIZE) {
       chunks.push(text.slice(i, i + CLAUDE_CHUNK_SIZE));
@@ -133,7 +141,15 @@ export class CustomerImportParser {
       ].join('\n');
 
       try {
-        const response = await this.claude.complete(prompt, 0);
+        const response =
+          this.aiInfra && businessId
+            ? await this.aiInfra.complete(
+                businessId,
+                prompt,
+                0,
+                'customer_import',
+              )
+            : await this.claude.complete(prompt, 0);
         const parsed = JSON.parse(this.stripCodeFences(response)) as {
           name: string;
           phone: string;

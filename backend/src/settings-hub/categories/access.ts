@@ -140,6 +140,14 @@ export const SENSITIVE_CAPS: SensitiveCap[] = [
     impact:
       'An API key acts with staff-level access plus the capabilities granted to it.',
   },
+  {
+    key: CAPABILITIES.VOICE_SUPERVISE,
+    label: 'Live call supervision',
+    description:
+      'View masked live-call operations and join a call muted or take it over using the supervisor’s own phone.',
+    impact:
+      'Can expose live conversations and initiate a real provider call to the supervisor; whisper and barge are not supported.',
+  },
 ];
 
 const WHO = [

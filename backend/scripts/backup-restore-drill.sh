@@ -17,7 +17,7 @@ export MYSQL_PWD="${MYSQL_PASSWORD:-}"
 
 # `--protocol=TCP` is required: `mysql -h localhost` prefers the Unix socket, which does not
 # exist on the GitHub Actions runner (the MySQL service is a container published on TCP 3306).
-MYSQL=(mysql --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER")
+MYSQL=(mysql --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --default-character-set=utf8mb4)
 RESTORE_DB="${MYSQL_DATABASE}_restore_drill"
 DUMP_FILE="$(mktemp -t noxtill-backup-drill-XXXXXX).sql"
 CANARY_SLUG="backup-drill-canary-$(date +%s)"
@@ -56,7 +56,7 @@ done <<<"$REQUIRED"
 "${MYSQL[@]}" -D "$MYSQL_DATABASE" -e "INSERT INTO businesses (${COLS}) VALUES (${VALS});"
 
 echo "==> mysqldump ${MYSQL_DATABASE} -> ${DUMP_FILE}"
-mysqldump --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --single-transaction --routines "$MYSQL_DATABASE" >"$DUMP_FILE"
+mysqldump --protocol=TCP -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --default-character-set=utf8mb4 --single-transaction --routines "$MYSQL_DATABASE" >"$DUMP_FILE"
 
 echo "==> Creating a fresh database for the restore drill: ${RESTORE_DB}"
 "${MYSQL[@]}" -e "DROP DATABASE IF EXISTS \`${RESTORE_DB}\`;"

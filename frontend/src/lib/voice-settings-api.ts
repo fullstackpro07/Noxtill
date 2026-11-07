@@ -36,8 +36,9 @@ export interface UpdateVoiceSettingsInput {
 /**
  * Receptionist Settings (UPD-FE-051e) — every field here is real, wired into `VoiceCallService` on
  * the very next call (not inert config). `voiceId` picks among Twilio's own built-in `<Say>`
- * voices — there's no custom TTS service in this app, and Twilio exposes no preview API, so there
- * is deliberately no in-app voice sample playback (only actually heard on a real call).
+ * voices. Twilio exposes no preview endpoint, so the Settings preview uses Polly for Polly-prefixed
+ * voices and honestly has no preview for Twilio's three legacy voice names. AI-agent Realtime voice
+ * samples are a separate control in the AI agent builder.
  */
 export function fetchVoiceSettings(): Promise<VoiceSettings> {
   return apiFetch<VoiceSettings>("/voice/settings");

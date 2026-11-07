@@ -56,6 +56,29 @@ export class AuthMailerService {
     });
   }
 
+  /** Account notices (usage alerts, trial reminders) — same transport and template as auth mail. */
+  sendNotice(
+    to: string,
+    notice: {
+      subject: string;
+      heading: string;
+      body: string;
+      cta: string;
+      path: string;
+      footnote: string;
+    },
+  ) {
+    return this.send({
+      to,
+      subject: notice.subject,
+      heading: notice.heading,
+      body: notice.body,
+      cta: notice.cta,
+      url: this.frontendUrl(notice.path),
+      footnote: notice.footnote,
+    });
+  }
+
   /** Returns true when the provider accepted the email. Never throws the provider's raw error (it carries the API key). */
   private async send(mail: AuthEmail): Promise<boolean> {
     const apiKey = this.config.get<string>('EMAIL_PROVIDER_KEY');

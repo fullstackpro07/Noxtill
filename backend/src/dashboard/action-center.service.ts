@@ -1,12 +1,21 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CREDIT_NOTABLE_OVERDUE_DAYS } from './dashboard.constants';
 import { SnoozeActionItemDto } from './dto/snooze-action-item.dto';
+import { parseDisabled } from '../business-modules/business-modules.service';
+import { AppException } from '../common/filters/app.exception';
+import { ProcurementService } from '../procurement/procurement.service';
 import {
   ActionItemPriority,
   ActionItemStatus,
   ActionItemType,
+  CommerceExperimentStatus,
+  CommerceListingDraftStatus,
+  CommerceRiskCaseStatus,
+  CommerceRiskSeverity,
+  CommerceSubscriptionStatus,
+  CommerceWorkOrderStatus,
   FeedbackStatus,
   AmDowntime,
   AmWorkOrder,
@@ -80,6 +89,7 @@ export class ActionCenterService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly prisma: PrismaService,
+    private readonly procurement: ProcurementService,
   ) {}
 
   async list(
@@ -175,6 +185,44 @@ export class ActionCenterService {
     );
   }
 
+  approveProcurementRequestAction(
+    businessId: string,
+    actorUserId: string,
+    actionId: string,
+  ) {
+    const { type, entityId } = decodeId(actionId);
+    if (type !== ActionItemType.procurement_request || !entityId) {
+      throw new AppException(
+        'PROCUREMENT_ACTION_NOT_FOUND',
+        'Purchase approval action not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.procurement.decideRequest(businessId, actorUserId, entityId, {
+      decision: 'approve',
+    });
+  }
+
+  rejectProcurementRequestAction(
+    businessId: string,
+    actorUserId: string,
+    actionId: string,
+    reason: string,
+  ) {
+    const { type, entityId } = decodeId(actionId);
+    if (type !== ActionItemType.procurement_request || !entityId) {
+      throw new AppException(
+        'PROCUREMENT_ACTION_NOT_FOUND',
+        'Purchase approval action not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.procurement.decideRequest(businessId, actorUserId, entityId, {
+      decision: 'reject',
+      reason,
+    });
+  }
+
   private async setStatus(
     businessId: string,
     id: string,
@@ -184,6 +232,13 @@ export class ActionCenterService {
     const { type, entityId } = decodeId(id);
     if (!Object.values(ActionItemType).includes(type)) {
       throw new NotFoundException('Action item not found');
+    }
+    if (type === ActionItemType.procurement_request) {
+      throw new AppException(
+        'PROCUREMENT_ACTION_REQUIRES_DECISION',
+        'Purchase requests must be approved or rejected; they cannot be dismissed or snoozed.',
+        HttpStatus.CONFLICT,
+      );
     }
 
     return this.tenantPrisma.client.actionItemState.upsert({
@@ -198,7 +253,7 @@ export class ActionCenterService {
     role: Role,
     businessUserId: string | null,
   ): Promise<RawActionItem[]> {
-    // Staff only see items assigned to them — of the 4 real types, only complaints carry an
+    // Staff only see items assigned to them — of the current types, only complaints carry an
     // assignee at all, so a staff caller sees complaints-assigned-to-them and nothing else.
     if (role === Role.staff) {
       return this.complaintItems(businessId, businessUserId);
@@ -214,6 +269,8 @@ export class ActionCenterService {
       assets,
       field,
       contracts,
+      commerce,
+      procurementRequests,
     ] = await Promise.all([
       this.complaintItems(businessId, null),
       this.lowStockItems(businessId),
@@ -224,6 +281,8 @@ export class ActionCenterService {
       this.assetItems(businessId, role),
       this.fieldItems(businessId, role),
       this.contractItems(businessId, role),
+      this.commerceItems(businessId),
+      this.procurementRequestItems(businessId),
     ]);
     return [
       ...complaints,
@@ -235,7 +294,69 @@ export class ActionCenterService {
       ...assets,
       ...field,
       ...contracts,
+      ...commerce,
+      ...procurementRequests,
     ];
+  }
+
+  private async procurementRequestItems(
+    businessId: string,
+  ): Promise<RawActionItem[]> {
+    const db = this.tenantPrisma.client;
+    const business = await db.business.findUnique({
+      where: { id: businessId },
+      select: {
+        parentId: true,
+        disabledModules: true,
+        parent: { select: { disabledModules: true } },
+      },
+    });
+    const disabled = parseDisabled(
+      business?.parentId
+        ? business.parent?.disabledModules
+        : business?.disabledModules,
+    );
+    if (disabled.includes('procurement')) return [];
+
+    const requests = await db.procurementRequest.findMany({
+      where: { businessId, status: 'submitted' },
+      orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+      take: 100,
+      select: {
+        id: true,
+        reason: true,
+        urgency: true,
+        currency: true,
+        createdAt: true,
+        submittedAt: true,
+        requester: { select: { name: true } },
+        items: {
+          select: { quantity: true, estimatedUnitCost: true },
+        },
+      },
+    });
+
+    return requests.map((request) => {
+      const estimate = request.items.reduce(
+        (sum, item) =>
+          sum + Number(item.quantity) * Number(item.estimatedUnitCost),
+        0,
+      );
+      return {
+        type: ActionItemType.procurement_request,
+        entityId: request.id,
+        priority:
+          request.urgency === 'urgent'
+            ? ActionItemPriority.urgent
+            : request.urgency === 'low'
+              ? ActionItemPriority.low
+              : ActionItemPriority.normal,
+        title: `Purchase request from ${request.requester.name}`,
+        reason: `${request.items.length} line(s) · ${estimate.toFixed(2)} ${request.currency} · ${request.reason}`,
+        occurredAt: request.submittedAt ?? request.createdAt,
+        deepLink: '/procurement/requests',
+      };
+    });
   }
 
   /**
@@ -790,5 +911,166 @@ export class ActionCenterService {
       occurredAt: row.createdAt,
       deepLink: '/reviews',
     }));
+  }
+
+  /**
+   * Autonomous Commerce work waiting on a person, from the commerce records themselves: listings
+   * awaiting approval, experiments awaiting a decision, open high-severity risk cases, work orders on
+   * quality hold and subscription renewals that are due. Hidden when the business turned the
+   * Autonomous Commerce module off.
+   */
+  private async commerceItems(businessId: string): Promise<RawActionItem[]> {
+    const db = this.tenantPrisma.client;
+    const business = await db.business.findUnique({
+      where: { id: businessId },
+      select: {
+        parentId: true,
+        disabledModules: true,
+        parent: { select: { disabledModules: true } },
+      },
+    });
+    const disabled = parseDisabled(
+      business?.parentId
+        ? business.parent?.disabledModules
+        : business?.disabledModules,
+    );
+    if (disabled.includes('autonomous-commerce')) return [];
+    const now = new Date();
+    const [drafts, experiments, risks, holds, renewals] = await Promise.all([
+      db.commerceListingDraft.findMany({
+        where: {
+          businessId,
+          status: CommerceListingDraftStatus.review_required,
+        },
+        select: {
+          id: true,
+          channel: true,
+          updatedAt: true,
+          product: { select: { name: true } },
+        },
+        take: 100,
+      }),
+      db.commerceExperiment.findMany({
+        where: { businessId, status: CommerceExperimentStatus.stopped },
+        select: { id: true, name: true, stoppedAt: true, updatedAt: true },
+        take: 100,
+      }),
+      db.commerceRiskCase.findMany({
+        where: {
+          businessId,
+          severity: CommerceRiskSeverity.high,
+          status: {
+            in: [
+              CommerceRiskCaseStatus.open,
+              CommerceRiskCaseStatus.investigating,
+            ],
+          },
+        },
+        select: {
+          id: true,
+          ruleKey: true,
+          entityLabel: true,
+          firstDetectedAt: true,
+        },
+        take: 100,
+      }),
+      db.commerceWorkOrder.findMany({
+        where: { businessId, status: CommerceWorkOrderStatus.quality_hold },
+        select: {
+          id: true,
+          qtyPlanned: true,
+          updatedAt: true,
+          product: { select: { name: true } },
+        },
+        take: 100,
+      }),
+      db.commerceSubscription.findMany({
+        where: {
+          businessId,
+          status: CommerceSubscriptionStatus.active,
+          nextRenewalAt: { lte: now },
+        },
+        select: {
+          id: true,
+          nextRenewalAt: true,
+          customer: { select: { name: true } },
+        },
+        take: 100,
+      }),
+    ]);
+    const item = (
+      kind: string,
+      id: string,
+      priority: ActionItemPriority,
+      title: string,
+      reason: string,
+      occurredAt: Date,
+      deepLink: string,
+    ): RawActionItem => ({
+      type: ActionItemType.commerce,
+      entityId: `${kind}:${id}`,
+      priority,
+      title,
+      reason,
+      occurredAt,
+      deepLink,
+    });
+    return [
+      ...drafts.map((row) =>
+        item(
+          'listing_draft',
+          row.id,
+          ActionItemPriority.normal,
+          `Approve listing: ${row.product.name}`,
+          `${row.channel} draft is waiting for review`,
+          row.updatedAt,
+          '/autonomous-commerce/listing-builder',
+        ),
+      ),
+      ...experiments.map((row) =>
+        item(
+          'experiment',
+          row.id,
+          ActionItemPriority.normal,
+          `Decide experiment: ${row.name}`,
+          'Stopped — results frozen, waiting for adopt / revert / inconclusive',
+          row.stoppedAt ?? row.updatedAt,
+          '/autonomous-commerce/experiment-lab',
+        ),
+      ),
+      ...risks.map((row) =>
+        item(
+          'risk_case',
+          row.id,
+          ActionItemPriority.urgent,
+          `High-risk case: ${row.entityLabel}`,
+          `Open high-severity ${row.ruleKey.replaceAll('_', ' ')} case`,
+          row.firstDetectedAt,
+          '/autonomous-commerce/risk-compliance',
+        ),
+      ),
+      ...holds.map((row) =>
+        item(
+          'quality_hold',
+          row.id,
+          ActionItemPriority.urgent,
+          `Quality hold: ${row.qtyPlanned} × ${row.product.name}`,
+          'Finished goods are held and cannot be sold until released',
+          row.updatedAt,
+          '/autonomous-commerce/production',
+        ),
+      ),
+      ...renewals.map((row) =>
+        item(
+          'renewal',
+          row.id,
+          ActionItemPriority.normal,
+          `Renewal due: ${row.customer.name}`,
+          `Subscription renewal was due ${row.nextRenewalAt.toISOString().slice(0, 10)}`,
+          row.nextRenewalAt,
+          '/autonomous-commerce/subscriptions-preorders',
+        ),
+      ),
+    ];
   }
 }

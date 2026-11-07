@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/session";
 import { formatCurrency } from "@/lib/format";
 import { bookingRef, callerName, fmtDateTime, type Tone } from "@/lib/receptionist-derive";
-import { Card, ChipFor, EmptyState, Footnote, KpiCard, Notice, RowAction, SmallBtn, TableWrap, Th, kpiGrid } from "../rx-ui";
+import { Card, CardHead, ChipFor, EmptyState, Footnote, KpiCard, Notice, RowAction, SmallBtn, TableWrap, Th, kpiGrid } from "../rx-ui";
 import { useRx } from "../rx-data";
 import { useRxStore } from "../rx-store";
 import { RxGate } from "../rx-gate";
@@ -34,6 +34,10 @@ function Bookings() {
   const money = (n: number) => formatCurrency(n, business.currency, business.locale);
 
   const rows = rx.calls.filter((c) => c.appointment);
+  const failedCalls = rx.calls.filter((call) => call.bookingAttempts.length > 0);
+  const failedAttempts = failedCalls.flatMap((call) =>
+    call.bookingAttempts.map((attempt) => ({ call, attempt })),
+  );
   const now = rx.now.getTime();
   const upcoming = rows.filter((c) => new Date(c.appointment!.startsAt).getTime() > now && ["requested", "booked", "confirmed"].includes(c.appointment!.status));
   const count = (s: string) => rows.filter((c) => c.appointment!.status === s).length;
@@ -65,7 +69,7 @@ function Bookings() {
           </SmallBtn>
         }
       >
-        Bookings the AI creates go through the same booking engine as your own: a time that isn&apos;t free is rejected and the caller is asked for another. Only successful bookings are recorded here — a failed attempt isn&apos;t logged on the call.
+        Phone bookings use the canonical booking engine. A saved request can still await staff approval or a deposit — check its current status before promising confirmation. Failed attempts are listed separately below with the requested details and a safe reason code.
       </Notice>
 
       <Card overflow>
@@ -83,6 +87,7 @@ function Bookings() {
                 <Th>Staff</Th>
                 <Th>Deposit</Th>
                 <Th>Created by</Th>
+                <Th>Caller number match</Th>
                 <Th>Status</Th>
                 <Th align="right">Actions</Th>
               </>
@@ -102,7 +107,23 @@ function Bookings() {
                     <ChipFor spec={{ label: a.depositPaid > 0 ? `${money(a.depositPaid)} paid` : "None recorded", tone: a.depositPaid > 0 ? "green" : "neutral" }} />
                   </td>
                   <td className="px-3 py-[11px]">
-                    <ChipFor spec={{ label: "AI", tone: "purple", icon: "sparkles" }} />
+                    <ChipFor
+                      spec={{
+                        label: c.aiAgentVersion ? `${c.aiAgentVersion.agentName} · v${c.aiAgentVersion.version}` : "AI receptionist",
+                        tone: "purple",
+                        icon: "sparkles",
+                      }}
+                    />
+                    {c.humanAgentConnected || c.joinedAt ? <div className="mt-1 text-[10.5px] text-[#667085]">A person also joined the call</div> : null}
+                  </td>
+                  <td className="px-3 py-[11px]">
+                    <ChipFor
+                      spec={
+                        c.customer && c.customer.id === a.customerId
+                          ? { label: "Matches caller's number", tone: "green" }
+                          : { label: "Not verified", tone: "amber" }
+                      }
+                    />
                   </td>
                   <td className="px-3 py-[11px]">
                     <ChipFor spec={st} />
@@ -115,8 +136,26 @@ function Bookings() {
             })}
           </TableWrap>
         )}
-        <Footnote>Bookings owns these records — this is the phone-created subset, with each appointment&apos;s live status. Opening a row shows the call that created it.</Footnote>
+        <Footnote>Bookings owns these records — this is the phone-created subset, with each appointment&apos;s live status. Opening a row shows the call that created it. &ldquo;Created by&rdquo; shows the pinned AI agent version. A caller number match is only a saved-phone match, not verified identity.</Footnote>
       </Card>
+
+      {failedAttempts.length ? (
+        <Card overflow>
+          <CardHead title="Unsuccessful booking requests" sub="Recorded from call transcripts; no appointment was created" />
+          <div className="divide-y divide-[#EEF0F3] px-4">
+            {failedAttempts.map(({ call, attempt }, index) => (
+              <button key={`${call.id}-${attempt.at}-${index}`} type="button" onClick={() => openCall(call.id, "Booking")} className="flex w-full flex-wrap items-center justify-between gap-2 py-3 text-left hover:bg-[#FAFBFC]">
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-bold">{attempt.serviceRequested || "Service not resolved"} · {attempt.startsAtRequested || "Time not resolved"}</span>
+                  <span className="text-[10.5px] text-[#697586]">{call.callerName || callerName(call)} · {fmtDateTime(call.startedAt, rx.timezone)}</span>
+                </span>
+                <ChipFor spec={{ label: attempt.reasonCode.replaceAll("_", " "), tone: "amber" }} />
+              </button>
+            ))}
+          </div>
+          <Footnote>These records show only failed booking attempts; they do not count as appointments. Reasons are stored as codes, not raw provider or database errors.</Footnote>
+        </Card>
+      ) : null}
     </div>
   );
 }

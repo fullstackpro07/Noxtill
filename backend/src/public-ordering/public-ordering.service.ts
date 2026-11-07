@@ -7,11 +7,18 @@ import {
 } from '../orders/order-totals.util';
 import { ORDER_ERROR_CODES } from '../orders/orders.constants';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
-import { OrderStatus } from '@prisma/client';
+import { Order, OrderStatus, Prisma, ProductKind } from '@prisma/client';
 import { resolvePolicies } from '../common/policies/policies.service';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { computeDeliveryPricing } from '../delivery/delivery-pricing.util';
 import { DELIVERY_ERROR_CODES } from '../delivery/delivery.constants';
+import { ActivityService } from '../activity/activity.service';
+import { readStorefront } from '../website/website-content.util';
+import { PayRequestsService } from '../payments/pay-requests.service';
+
+type PublicPayment =
+  | { status: 'requested'; payUrl: string }
+  | { status: 'not_requested'; reason: string };
 
 /**
  * Public online-ordering / dine-in endpoints (BE-029). No auth — the
@@ -20,7 +27,91 @@ import { DELIVERY_ERROR_CODES } from '../delivery/delivery.constants';
  */
 @Injectable()
 export class PublicOrderingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activity: ActivityService,
+    /** Payments & Billing; absent where Payments isn't wired (online payment then reads as not set up). */
+    private readonly payRequests?: PayRequestsService,
+  ) {}
+
+  /** Whether this store asks for online payment: the owner's switch plus a live payment-link method. */
+  private async onlinePaymentStatus(
+    business: { id: string; parentId: string | null; currency: string },
+    enabled: boolean,
+  ) {
+    if (!enabled)
+      return {
+        availability: 'not_configured' as const,
+        detail:
+          'Online payment is off for this store. Orders submitted here are unpaid until the business confirms payment.',
+      };
+    if (
+      !this.payRequests ||
+      !(await this.payRequests.storefrontReady(
+        business.parentId ?? business.id,
+        business.currency,
+      ))
+    )
+      return {
+        availability: 'not_configured' as const,
+        detail:
+          'Online payment is not set up yet (no payment method is enabled for payment links in Payments). Orders submitted here are unpaid until the business confirms payment.',
+      };
+    return {
+      availability: 'available' as const,
+      detail:
+        'After you place your order you get a link to pay the business online.',
+    };
+  }
+
+  /** Asks Payments for the order total. The order already exists, so a failure here never undoes it. */
+  private async requestPayment(
+    business: { id: string; parentId: string | null; currency: string },
+    order: Pick<Order, 'id' | 'orderNo' | 'total' | 'customerId'>,
+  ): Promise<PublicPayment> {
+    if (!order.customerId)
+      return {
+        status: 'not_requested',
+        reason:
+          'Online payment needs a phone number on the order. Pay the business directly.',
+      };
+    try {
+      const req = await this.payRequests!.createForStorefrontOrder(
+        business.parentId ?? business.id,
+        {
+          id: order.id,
+          orderNo: order.orderNo,
+          customerId: order.customerId,
+          total: Number(order.total),
+        },
+        business.currency,
+      );
+      return { status: 'requested', payUrl: this.payRequests!.url(req) };
+    } catch (error) {
+      return {
+        status: 'not_requested',
+        reason:
+          error instanceof AppException
+            ? `Online payment isn't available for this order: ${(error.getResponse() as { message?: string }).message ?? 'payment request refused'}. Pay the business directly.`
+            : 'Online payment could not be started for this order. Pay the business directly.',
+      };
+    }
+  }
+
+  /** The open payment link for an order already placed (a repeated submit of the same checkout). */
+  private async existingPayment(
+    business: { id: string; parentId: string | null },
+    orderId: string,
+  ): Promise<PublicPayment | undefined> {
+    if (!this.payRequests) return undefined;
+    const req = await this.payRequests.openForOrder(
+      business.parentId ?? business.id,
+      orderId,
+    );
+    return req
+      ? { status: 'requested', payUrl: this.payRequests.url(req) }
+      : undefined;
+  }
 
   private async resolveBusiness(slug: string) {
     const business = await this.prisma.business.findUnique({ where: { slug } });
@@ -32,10 +123,33 @@ export class PublicOrderingService {
 
   async getMenu(slug: string) {
     const business = await this.resolveBusiness(slug);
+    const allowNegativeStock = resolvePolicies(business).bool(
+      'sales.allowNegativeStock',
+    );
     const products = await this.prisma.product.findMany({
       where: { businessId: business.id, active: true },
       orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        sellingPrice: true,
+        kind: true,
+        stockQty: true,
+      },
     });
+
+    const [site, productSettings] = await Promise.all([
+      this.prisma.websiteSite.findUnique({
+        where: { businessId: business.id },
+        select: { settings: true },
+      }),
+      this.prisma.websiteProductSetting.findMany({
+        where: { businessId: business.id },
+      }),
+    ]);
+    const storefront = readStorefront(site?.settings);
+    const presentation = new Map(productSettings.map((s) => [s.productId, s]));
 
     // Zone rules the owner switched on: the storefront lists the zones a customer can pick, and
     // shows each fee only when "fee shown before checkout" is on.
@@ -53,6 +167,12 @@ export class PublicOrderingService {
         : [];
 
     return {
+      checkout: {
+        deliveryAvailable: Boolean(
+          settings && (!settings.enforceZoneCoverage || zones.length > 0),
+        ),
+        deliveryRequiresZone: settings?.enforceZoneCoverage ?? false,
+      },
       deliveryZones: zones.map((z) => ({
         id: z.id,
         name: z.name,
@@ -72,14 +192,150 @@ export class PublicOrderingService {
         currency: business.currency,
         locale: business.locale,
         branding: business.branding,
+        acceptedPaymentMethods: Array.isArray(business.acceptedPaymentMethods)
+          ? business.acceptedPaymentMethods.filter(
+              (method): method is string => typeof method === 'string',
+            )
+          : [],
+        onlinePayment: await this.onlinePaymentStatus(
+          business,
+          storefront.onlinePayment,
+        ),
       },
-      // Cost is the business's own margin — a public storefront has no use for it.
-      products: products.map(({ costPrice: _cost, ...rest }) => rest),
+      // Website & Commerce storefront presentation: hidden products are left out, the owner's
+      // out-of-stock rule applies, and web-only wording replaces the display name only.
+      storefront: {
+        showPrices: storefront.showPrices,
+        checkoutEnabled: storefront.checkoutEnabled,
+      },
+      // Return only fields the storefront needs; never expose cost, SKU, stock counts or internal thresholds.
+      products: products
+        .map((product) => ({
+          product,
+          setting: presentation.get(product.id),
+          available:
+            product.kind === ProductKind.service ||
+            product.stockQty > 0 ||
+            allowNegativeStock,
+        }))
+        .filter(
+          ({ setting, available }) =>
+            setting?.visible !== false &&
+            (available || storefront.outOfStockBehavior === 'show_unavailable'),
+        )
+        .sort(
+          (a, b) =>
+            (b.setting?.sortPriority ?? 0) - (a.setting?.sortPriority ?? 0),
+        )
+        .map(({ product, setting, available }) => ({
+          id: product.id,
+          name: setting?.webTitle || product.name,
+          category: product.category,
+          sellingPrice: Number(product.sellingPrice),
+          kind: product.kind,
+          available,
+          badge: setting?.badge ?? null,
+          summary: setting?.webSummary ?? null,
+        })),
     };
   }
 
-  async createOrder(slug: string, dto: CreatePublicOrderDto) {
+  async createOrder(
+    slug: string,
+    dto: CreatePublicOrderDto,
+    idempotencyKey?: string,
+  ) {
     const business = await this.resolveBusiness(slug);
+    const normalizedKey = idempotencyKey?.trim();
+    if (
+      !normalizedKey ||
+      normalizedKey.length > 128 ||
+      !/^[A-Za-z0-9._~:-]+$/.test(normalizedKey)
+    ) {
+      throw new AppException(
+        'PUBLIC_ORDER_IDEMPOTENCY_KEY_REQUIRED',
+        'A valid Idempotency-Key header is required to submit an order.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const idempotencyKeyHash = createHash('sha256')
+      .update(normalizedKey)
+      .digest('hex');
+    const requestFingerprint = {
+      items: dto.items.map((item) => ({
+        productId: item.productId,
+        qty: item.qty,
+      })),
+      orderType: dto.orderType ?? 'online',
+      tableNo: dto.tableNo ?? null,
+      customerPhone: dto.customerPhone ?? null,
+      customerName: dto.customerName ?? null,
+      deliveryAddress: dto.deliveryAddress?.trim() ?? null,
+      deliveryZoneId: dto.deliveryZoneId ?? null,
+      deliveryLat: dto.deliveryLat ?? null,
+      deliveryLng: dto.deliveryLng ?? null,
+      deliveryNote: dto.deliveryNote?.trim() ?? null,
+    };
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify(requestFingerprint))
+      .digest('hex');
+    const priorResponse = await this.findIdempotentResponse(
+      business,
+      idempotencyKeyHash,
+      requestHash,
+    );
+    if (priorResponse) return priorResponse;
+
+    // Website & Commerce storefront: honour the owner's checkout switch and hidden products.
+    const [site, hiddenSettings] = await Promise.all([
+      this.prisma.websiteSite.findUnique({
+        where: { businessId: business.id },
+        select: { settings: true },
+      }),
+      this.prisma.websiteProductSetting.findMany({
+        where: {
+          businessId: business.id,
+          visible: false,
+          productId: { in: dto.items.map((item) => item.productId) },
+        },
+        select: { productId: true },
+      }),
+    ]);
+    if (
+      !readStorefront(site?.settings).checkoutEnabled &&
+      dto.orderType !== 'dine_in'
+    ) {
+      throw new AppException(
+        'PUBLIC_ORDER_CHECKOUT_DISABLED',
+        'Online ordering is turned off for this store right now.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (hiddenSettings.length > 0) {
+      throw new AppException(
+        ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
+        'One of these items is no longer available online.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (dto.items.length === 0) {
+      throw new AppException(
+        'PUBLIC_ORDER_ITEMS_REQUIRED',
+        'Add at least one item before placing an order.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const allowNegativeStock = resolvePolicies(business).bool(
+      'sales.allowNegativeStock',
+    );
+    const requestedQuantityByProduct = new Map<string, number>();
+    for (const item of dto.items) {
+      requestedQuantityByProduct.set(
+        item.productId,
+        (requestedQuantityByProduct.get(item.productId) ?? 0) + item.qty,
+      );
+    }
 
     // Delivery orders: enforce the owner's zone rules before anything is created.
     const isDelivery = dto.orderType === 'delivery';
@@ -125,144 +381,257 @@ export class PublicOrderingService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      let customerId: string | undefined;
-      if (dto.customerPhone) {
-        const customer = await tx.customer.upsert({
-          where: {
-            businessId_phone: {
+    let deliveryId: string | undefined;
+    let order: Order;
+    try {
+      order = await this.prisma.$transaction(async (tx) => {
+        let customerId: string | undefined;
+        if (dto.customerPhone) {
+          const customer = await tx.customer.upsert({
+            where: {
+              businessId_phone: {
+                businessId: business.id,
+                phone: dto.customerPhone,
+              },
+            },
+            create: {
               businessId: business.id,
               phone: dto.customerPhone,
+              name: dto.customerName ?? dto.customerPhone,
             },
-          },
-          create: {
-            businessId: business.id,
-            phone: dto.customerPhone,
-            name: dto.customerName ?? dto.customerPhone,
-          },
-          update: {},
-        });
-        customerId = customer.id;
-      }
-
-      const productIds = [...new Set(dto.items.map((i) => i.productId))];
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds }, businessId: business.id },
-      });
-      const productMap = new Map(products.map((p) => [p.id, p]));
-      const taxRules = await tx.taxRule.findMany({
-        where: { businessId: business.id },
-      });
-
-      const itemsData = dto.items.map((item) => {
-        const product = productMap.get(item.productId);
-        if (!product) {
-          throw new AppException(
-            ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
-            `Product ${item.productId} not found`,
-            HttpStatus.BAD_REQUEST,
-          );
+            update: {},
+          });
+          customerId = customer.id;
         }
-        return {
-          productId: product.id,
-          name: product.name,
-          price: Number(product.sellingPrice),
-          cost: Number(product.costPrice),
-          qty: item.qty,
-          taxRatePercent: resolveTaxRatePercent(
-            taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
-            product.category,
-            Number(business.taxRate),
-          ),
-        };
-      });
 
-      const taxInclusive = resolvePolicies(business).bool(
-        'sales.pricesIncludeTax',
-      );
-      const { subtotal, tax, total, cogs } = computeOrderTotals(
-        itemsData,
-        0,
-        Number(business.taxRate),
-        taxInclusive,
-      );
+        const productIds = [...new Set(dto.items.map((i) => i.productId))];
+        const products = await tx.product.findMany({
+          where: {
+            id: { in: productIds },
+            businessId: business.id,
+            active: true,
+          },
+        });
+        const productMap = new Map(products.map((p) => [p.id, p]));
+        if (!allowNegativeStock) {
+          for (const [productId, requestedQty] of requestedQuantityByProduct) {
+            const product = productMap.get(productId);
+            if (
+              product?.kind === ProductKind.product &&
+              product.stockQty < requestedQty
+            ) {
+              throw new AppException(
+                ORDER_ERROR_CODES.INSUFFICIENT_STOCK,
+                `Insufficient stock for "${product.name}" (have ${product.stockQty}, need ${requestedQty})`,
+                HttpStatus.BAD_REQUEST,
+              );
+            }
+          }
+        }
+        const taxRules = await tx.taxRule.findMany({
+          where: { businessId: business.id },
+        });
 
-      const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
+        const itemsData = dto.items.map((item) => {
+          const product = productMap.get(item.productId);
+          if (!product) {
+            throw new AppException(
+              ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
+              `Product ${item.productId} not found`,
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          return {
+            productId: product.id,
+            name: product.name,
+            price: Number(product.sellingPrice),
+            cost: Number(product.costPrice),
+            qty: item.qty,
+            taxRatePercent: resolveTaxRatePercent(
+              taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
+              product.category,
+              Number(business.taxRate),
+            ),
+          };
+        });
+
+        const taxInclusive = resolvePolicies(business).bool(
+          'sales.pricesIncludeTax',
+        );
+        const { subtotal, tax, total, cogs } = computeOrderTotals(
+          itemsData,
+          0,
+          Number(business.taxRate),
+          taxInclusive,
+        );
+
+        const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
         SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${business.id}
       `;
-      // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
-      // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
-      const orderNo = Number(orderNoRaw);
+        // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
+        // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
+        const orderNo = Number(orderNoRaw);
 
-      const order = await tx.order.create({
-        data: {
-          businessId: business.id,
-          orderNo,
-          customerId,
-          orderType: dto.orderType ?? 'online',
-          tableNo: dto.tableNo,
-          status: OrderStatus.pending,
-          subtotal,
-          tax,
-          discount: 0,
-          total,
-          taxInclusive,
-          cogs,
-        },
-      });
-
-      await tx.orderItem.createMany({
-        data: itemsData.map((item) => ({
-          orderId: order.id,
-          productId: item.productId,
-          name: item.name,
-          price: item.price,
-          cost: item.cost,
-          qty: item.qty,
-        })),
-      });
-
-      if (isDelivery) {
-        const lat = dto.deliveryLat ?? null;
-        const lng = dto.deliveryLng ?? null;
-        const priced = computeDeliveryPricing({
-          zone,
-          settings: settings ?? {
-            hubLat: null,
-            hubLng: null,
-            costPerKm: null,
-            riderPayPerDelivery: null,
-          },
-          orderTotal: total,
-          lat,
-          lng,
-        });
-        await tx.delivery.create({
+        const order = await tx.order.create({
           data: {
             businessId: business.id,
+            orderNo,
+            customerId,
+            orderType: dto.orderType ?? 'online',
+            tableNo: dto.tableNo,
+            status: OrderStatus.pending,
+            subtotal,
+            tax,
+            discount: 0,
+            total,
+            taxInclusive,
+            cogs,
+            publicIdempotencyKeyHash: idempotencyKeyHash,
+            publicIdempotencyRequestHash: requestHash,
+          },
+        });
+
+        await tx.orderItem.createMany({
+          data: itemsData.map((item) => ({
             orderId: order.id,
-            addressLine: dto.deliveryAddress!.trim(),
+            productId: item.productId,
+            name: item.name,
+            price: item.price,
+            cost: item.cost,
+            qty: item.qty,
+          })),
+        });
+
+        if (isDelivery) {
+          const lat = dto.deliveryLat ?? null;
+          const lng = dto.deliveryLng ?? null;
+          const priced = computeDeliveryPricing({
+            zone,
+            settings: settings ?? {
+              hubLat: null,
+              hubLng: null,
+              costPerKm: null,
+              riderPayPerDelivery: null,
+            },
+            orderTotal: total,
             lat,
             lng,
-            zoneId: zone?.id,
-            deliveryNote: dto.deliveryNote?.trim() || null,
-            deliveryFee: priced.fee,
-            deliveryCost: priced.cost,
-            distanceKm: priced.distanceKm,
-            trackingToken: randomBytes(16).toString('hex'),
-          },
-        });
-        await tx.activityEvent.create({
-          data: {
-            businessId: business.id,
-            type: 'delivery',
-            description: `New online delivery order #${orderNo} — waiting for a rider`,
-            entityType: 'Delivery',
-          },
-        });
-      }
+          });
+          const delivery = await tx.delivery.create({
+            data: {
+              businessId: business.id,
+              orderId: order.id,
+              addressLine: dto.deliveryAddress!.trim(),
+              lat,
+              lng,
+              zoneId: zone?.id,
+              deliveryNote: dto.deliveryNote?.trim() || null,
+              deliveryFee: priced.fee,
+              deliveryCost: priced.cost,
+              distanceKm: priced.distanceKm,
+              trackingToken: randomBytes(16).toString('hex'),
+            },
+          });
+          deliveryId = delivery.id;
+        }
 
-      return order;
+        return order;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const racedResponse = await this.findIdempotentResponse(
+          business,
+          idempotencyKeyHash,
+          requestHash,
+        );
+        if (racedResponse) return racedResponse;
+      }
+      throw error;
+    }
+
+    // Record business events after the transaction commits so the shared activity pipeline can
+    // trigger native workflows and outbound webhooks without firing for a rolled-back order.
+    await this.activity.record(business.id, {
+      type: 'sale',
+      description: `Sale #${order.orderNo} — ${Number(order.total)}`,
+      amount: Number(order.total),
+      entityType: 'Order',
+      entityId: order.id,
     });
+    if (deliveryId) {
+      await this.activity.record(business.id, {
+        type: 'delivery',
+        description: `New online delivery order #${order.orderNo} — waiting for a rider`,
+        entityType: 'Delivery',
+        entityId: deliveryId,
+      });
+    }
+
+    const payment =
+      this.payRequests && readStorefront(site?.settings).onlinePayment
+        ? (await this.onlinePaymentStatus(business, true)).availability ===
+          'available'
+          ? await this.requestPayment(business, order)
+          : undefined
+        : undefined;
+    return this.serializePublicOrder(order, business.currency, payment);
+  }
+
+  private async findIdempotentResponse(
+    business: { id: string; parentId: string | null; currency: string },
+    keyHash: string,
+    requestHash: string,
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: {
+        businessId_publicIdempotencyKeyHash: {
+          businessId: business.id,
+          publicIdempotencyKeyHash: keyHash,
+        },
+      },
+      select: {
+        id: true,
+        orderNo: true,
+        total: true,
+        publicIdempotencyRequestHash: true,
+      },
+    });
+    if (!order) return null;
+    if (order.publicIdempotencyRequestHash !== requestHash) {
+      throw this.idempotencyConflict();
+    }
+    return this.serializePublicOrder(
+      order,
+      business.currency,
+      await this.existingPayment(business, order.id),
+    );
+  }
+
+  private serializePublicOrder(
+    order: Pick<Order, 'id' | 'orderNo' | 'total'>,
+    currency: string,
+    payment?: PublicPayment,
+  ) {
+    return {
+      id: order.id,
+      orderNo: order.orderNo,
+      status: OrderStatus.pending,
+      total: Number(order.total),
+      currency,
+      // Paid only once Payments confirms it; the link starts a checkout, it doesn't mark anything paid.
+      paymentStatus: 'unpaid' as const,
+      ...(payment ? { payment } : {}),
+    };
+  }
+
+  private idempotencyConflict() {
+    return new AppException(
+      'PUBLIC_ORDER_IDEMPOTENCY_CONFLICT',
+      'This Idempotency-Key was already used for a different order. Start a new checkout attempt.',
+      HttpStatus.CONFLICT,
+    );
   }
 }

@@ -13,7 +13,7 @@ import { useRxStore } from "./rx-store";
 import { FormBox, inputCls, labelCls, saveCls, useSaveSettings } from "./rx-settings-forms";
 
 const E164 = /^\+[1-9]\d{6,14}$/;
-const hint = "mt-1.5 text-[11px] leading-[1.5] text-[#94A3B8]";
+const hint = "mt-1.5 text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]";
 
 /** Where a "caller asks for a person" transfer rings — a real, saved setting the next call uses. */
 export function TransferNumberForm() {
@@ -54,7 +54,7 @@ function ShareRow({ id, checked, onChange, title, body }: { id: string; checked:
       <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-4 w-4 flex-none accent-[#16A34A]" />
       <span className="min-w-0">
         <span className="block text-[12.5px] font-bold">{title}</span>
-        <span className="mt-0.5 block text-[11px] leading-[1.5] text-[#7A8798]">{body}</span>
+        <span className="mt-0.5 block text-[11px] leading-[1.5] text-[color:var(--app-text-faintest,#667085)]">{body}</span>
       </span>
     </label>
   );
@@ -75,8 +75,8 @@ export function SharingForm() {
     <FormBox>
       <div className="flex flex-col gap-2">
         <ShareRow id="rx-share-catalog" checked={catalog} onChange={setCatalog} title="Prices, stock, services, hours and address" body="When a caller names a product or service, or asks about hours or where you are, the AI is given that record so it can answer instead of guessing." />
-        <ShareRow id="rx-share-orders" checked={orders} onChange={setOrders} title="A caller's own order status" body="Only when the calling number exactly matches a saved customer. Caller ID can be faked, so this is off until you choose to turn it on." />
-        <ShareRow id="rx-share-credit" checked={credit} onChange={setCredit} title="A caller's own credit balance" body="Only when the calling number exactly matches a saved customer. Off by default for the same reason — a balance is more sensitive than an order status." />
+        <ShareRow id="rx-share-orders" checked={orders} onChange={setOrders} title="A caller's own order status" body="Recorded-turn replies require a matching caller number and a valid private booking-management reference for that customer (upcoming or within the last 90 days), supplied with the question. Caller ID alone never authorizes account details." />
+        <ShareRow id="rx-share-credit" checked={credit} onChange={setCredit} title="A caller's own credit balance" body="Requires the same private-reference verification as order details. Off by default. If the caller cannot verify, the AI offers staff help rather than revealing whether an account exists." />
       </div>
       <button
         type="button"

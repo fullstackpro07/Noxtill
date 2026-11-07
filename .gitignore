@@ -1,5 +1,4 @@
 .claude
-.github
 Homepage first section design.zip
 # ── Dependencies ─────────────────────────────────────────────────────────
 node_modules/
@@ -62,3 +61,4 @@ temp_interactive_push.bat
 config.bat
 docs/Noxtill Pages/
 docs/policies/
+docs/Features pages/

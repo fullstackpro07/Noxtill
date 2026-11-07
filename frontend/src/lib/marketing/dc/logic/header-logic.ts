@@ -4,7 +4,7 @@ import { dcIcon } from "@/components/site/dc/dc-icon";
 
 /**
  * Component logic of `docs/Noxtill Header Build/NoxtillHeader.dc.html`, ported verbatim. Changes:
- * icons come from dcIcon (same lucide@0.460.0 geometry) instead of window.lucide, and the initial
+ * icons come from dcIcon (same lucide@0.460.0 geometry) instead of globalThis.lucide, and the initial
  * width is fixed so server and client render the same markup — the real width is read on mount.
  */
 type Props = { previewMenu?: string; forceMobile?: boolean; collapseUtility?: boolean };

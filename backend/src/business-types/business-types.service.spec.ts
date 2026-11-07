@@ -58,6 +58,8 @@ describe('BusinessTypesService (BE-069)', () => {
     expect(aiInfra.complete).toHaveBeenCalledWith(
       undefined,
       expect.any(String),
+      0,
+      'business_type_map',
     );
   });
 

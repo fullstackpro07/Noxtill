@@ -6,6 +6,7 @@ import { SystemRoleOverridesService } from '../../roles/system-role-overrides.se
 import { S3Service } from '../../common/storage/s3.service';
 import { PoliciesService } from '../../common/policies/policies.service';
 import { HubCtx } from '../hub.core';
+import type { EntitlementsService } from '../../usage/entitlements.service';
 
 export interface QueueSnapshot {
   configured: boolean;
@@ -28,6 +29,8 @@ export interface HubDeps {
   s3: S3Service;
   policies: PoliciesService;
   queueSnapshot: () => Promise<QueueSnapshot>;
+  /** Usage & Limits entitlement set (plan, seats, credits). Optional only for unit specs. */
+  entitlements?: EntitlementsService;
 }
 
 export const asJson = (v: unknown) => v as Prisma.InputJsonValue;

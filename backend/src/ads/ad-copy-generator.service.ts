@@ -21,12 +21,7 @@ export class AdCopyGeneratorService {
     const prompt = `Write ad copy for a paid social/search ad promoting this product or service: "${dto.productName}". Campaign goal: ${dto.goal ?? 'Sales'}. Reply with exactly two lines: the first line is the headline (under 40 characters), the second line is the body text (under 150 characters). No labels, no quote marks, no extra commentary.`;
     let raw: string;
     try {
-      raw = await this.aiInfra.complete(
-        businessId,
-        prompt,
-        0.4,
-        'campaign_copy',
-      );
+      raw = await this.aiInfra.complete(businessId, prompt, 0.4, 'ad_copy');
     } catch (error) {
       if (error instanceof AppException) throw error;
       throw new AppException(

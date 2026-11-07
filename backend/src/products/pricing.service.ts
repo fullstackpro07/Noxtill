@@ -161,7 +161,9 @@ export class PricingService {
       'Reply with ONLY the sentence text. No quotes, no other text.',
     ].join('\n');
 
-    const raw = (await this.aiInfra.complete(businessId, prompt)).trim();
+    const raw = (
+      await this.aiInfra.complete(businessId, prompt, 0, 'pricing_rationale')
+    ).trim();
     if (!raw) {
       throw new Error('Empty AI response');
     }

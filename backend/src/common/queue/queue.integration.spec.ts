@@ -1,3 +1,4 @@
+import { DynamicModule } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bullmq';
@@ -28,12 +29,30 @@ function isRedisReachable(
 
 describe('QueueModule DLQ (BE-010)', () => {
   let redisAvailable = false;
+  let configModule: DynamicModule;
+  let originalRedisHost: string | undefined;
+  let originalRedisPort: string | undefined;
 
   beforeAll(async () => {
-    redisAvailable = await isRedisReachable(
-      process.env.REDIS_HOST ?? 'localhost',
-      Number(process.env.REDIS_PORT ?? 6379),
-    );
+    configModule = await ConfigModule.forRoot({ isGlobal: true });
+    originalRedisHost = process.env.REDIS_HOST;
+    originalRedisPort = process.env.REDIS_PORT;
+    const host = process.env.REDIS_HOST ?? 'localhost';
+    const port = Number(process.env.REDIS_PORT ?? 6379);
+    redisAvailable = await isRedisReachable(host, port);
+    // QueueModule.forRoot() selects its BullMQ providers from process.env, while the
+    // reachability probe above also supports the local defaults. Keep both decisions aligned.
+    if (redisAvailable && !process.env.REDIS_URL) {
+      process.env.REDIS_HOST = host;
+      process.env.REDIS_PORT = String(port);
+    }
+  });
+
+  afterAll(() => {
+    if (originalRedisHost === undefined) delete process.env.REDIS_HOST;
+    else process.env.REDIS_HOST = originalRedisHost;
+    if (originalRedisPort === undefined) delete process.env.REDIS_PORT;
+    else process.env.REDIS_PORT = originalRedisPort;
   });
 
   it('lands a job on the DLQ after exhausting all 5 retry attempts', async () => {
@@ -45,10 +64,7 @@ describe('QueueModule DLQ (BE-010)', () => {
     }
 
     const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({ isGlobal: true }),
-        QueueModule.forRoot(),
-      ],
+      imports: [configModule, QueueModule.forRoot()],
     }).compile();
 
     const app = moduleRef.createNestApplication();

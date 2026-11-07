@@ -10,7 +10,7 @@ import { MasterListingData } from '../integrations/connector.interface';
 import { IntegrationStatus, Prisma } from '@prisma/client';
 
 const RECENT_SYNC_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-const NAP_FIELDS = [
+export const NAP_FIELDS = [
   'name',
   'phone',
   'website',

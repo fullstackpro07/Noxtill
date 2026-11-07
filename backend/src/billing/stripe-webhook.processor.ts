@@ -1,6 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
+import { UsageStripeEventsService } from '../usage/usage-stripe-events.service';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlanAssignmentService } from './plan-assignment.service';
@@ -35,11 +36,18 @@ export class StripeWebhookProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly planAssignment: PlanAssignmentService,
     private readonly stripeAdapter: StripeGatewayAdapter,
+    /** Usage & Limits' side of each event (subscriptions, dunning, purchases, cards). */
+    @Optional() private readonly usageEvents?: UsageStripeEventsService,
   ) {
     super();
   }
 
   async process(job: Job): Promise<void> {
+    await this.processBilling(job);
+    await this.usageEvents?.handle(job.name, job.data);
+  }
+
+  private async processBilling(job: Job): Promise<void> {
     switch (job.name) {
       case 'checkout.session.completed':
         return this.handleCheckoutCompleted(

@@ -116,6 +116,7 @@ export const BUSINESS_NEEDS_CLUSTERS: BusinessNeedCluster[] = [
       { label: "Auto Dialer & Power Dialer", href: "/features/auto-dialer-power-dialer" },
       { label: "IVR & Call Menus", href: "/features/ivr-call-menus" },
       { label: "Call Analytics", href: "/features/call-analytics" },
+      { label: "Audio Conference Calls", href: "/features/audio-conference-calls" },
     ],
   },
   {
@@ -152,6 +153,8 @@ export const BUSINESS_NEEDS_CLUSTERS: BusinessNeedCluster[] = [
       { label: "Instagram & Messenger", href: "/features/instagram-messenger" },
       { label: "AI Reply Drafting", href: "/features/ai-reply-drafting" },
       { label: "Team Assignment", href: "/features/team-assignment" },
+      { label: "Video Meetings", href: "/features/video-meetings" },
+      { label: "Screen Sharing", href: "/features/screen-sharing" },
     ],
   },
   {

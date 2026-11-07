@@ -20,6 +20,13 @@ export const CAPABILITIES = {
   CUSTOMERS_ERASE: 'customers.erase',
   INTEGRATIONS_MANAGE: 'integrations.manage',
   AUTOMATIONS_MANAGE: 'automations.manage',
+  /// SEO Autopilot can initiate site crawls and manage search visibility settings.
+  SEO_MANAGE: 'seo.manage',
+  /** Website & Commerce: edit, publish and configure the owned website and storefront. */
+  WEBSITE_MANAGE: 'website.manage',
+  /// Product Radar candidates are commercial research records. They are not Products, but
+  /// creating, dismissing or moving one into validation is still an operational change.
+  COMMERCE_MANAGE: 'commerce.manage',
   COUPONS_MANAGE: 'coupons.manage',
   VOUCHERS_MANAGE: 'vouchers.manage',
   REFERRALS_MANAGE: 'referrals.manage',
@@ -41,6 +48,8 @@ export const CAPABILITIES = {
   SOCIAL_MANAGE: 'social.manage',
   COMPETITIVE_MANAGE: 'competitive.manage',
   VOICE_MANAGE: 'voice.manage',
+  /** Supervisor-only live call visibility and participant join controls. */
+  VOICE_SUPERVISE: 'voice.supervise',
   DELIVERY_MANAGE: 'delivery.manage',
   /// Delivery zones, automations and settings change how every delivery is priced, routed and
   /// messaged — owner-only by design (never added to OWNER_AND_MANAGER_CAPABILITIES below), while
@@ -218,6 +227,9 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.CUSTOMERS_ERASE,
   CAPABILITIES.INTEGRATIONS_MANAGE,
   CAPABILITIES.AUTOMATIONS_MANAGE,
+  CAPABILITIES.SEO_MANAGE,
+  CAPABILITIES.WEBSITE_MANAGE,
+  CAPABILITIES.COMMERCE_MANAGE,
   CAPABILITIES.COUPONS_MANAGE,
   CAPABILITIES.VOUCHERS_MANAGE,
   CAPABILITIES.REFERRALS_MANAGE,
@@ -235,6 +247,7 @@ const OWNER_AND_MANAGER_CAPABILITIES: Capability[] = [
   CAPABILITIES.SOCIAL_MANAGE,
   CAPABILITIES.COMPETITIVE_MANAGE,
   CAPABILITIES.VOICE_MANAGE,
+  CAPABILITIES.VOICE_SUPERVISE,
   CAPABILITIES.DELIVERY_MANAGE,
   CAPABILITIES.ADS_MANAGE,
   CAPABILITIES.BOOKINGS_MANAGE,

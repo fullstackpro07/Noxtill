@@ -4,6 +4,10 @@ import type { PhoneCallStatus, PhoneCallOutcome } from "@/lib/voice-calls-api";
 export interface VoiceQueueItem {
   id: string;
   position: number;
+  priority: "high" | "normal";
+  requiredSkill: string | null;
+  /** Null means the call language was not captured in the source records. */
+  language: string | null;
   fromNumber: string;
   status: PhoneCallStatus;
   outcome: PhoneCallOutcome;
@@ -14,6 +18,8 @@ export interface VoiceQueueItem {
 }
 
 export interface VoiceQueueResult {
+  /** One tenant-scoped default follow-up queue; not a live caller-on-hold queue. */
+  queueId: string | null;
   items: VoiceQueueItem[];
   /** Real average resolution time over recent history — null (not a guess) until there are at least 3 real resolved samples. */
   estimatedWaitMinutes: number | null;
@@ -39,4 +45,8 @@ export function offerQueueCallback(id: string): Promise<unknown> {
 
 export function clearVoiceQueue(): Promise<{ cleared: number }> {
   return apiFetch<{ cleared: number }>("/voice/queue/clear", { method: "POST" });
+}
+
+export function takeNextVoiceQueueCall(queueId: string): Promise<{ id: string; assignedToUserId: string }> {
+  return apiFetch(`/voice/queues/${encodeURIComponent(queueId)}/take-next`, { method: "POST" });
 }

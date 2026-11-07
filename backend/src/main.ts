@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import { raw } from 'express';
 import { AppModule } from './app.module';
 import { resolveDatabaseUrl } from './prisma/resolve-database-url';
+import { requestIdMiddleware } from './common/request-id.middleware';
 
 const MIN_SECRET_LENGTH = 22; // spec §6
 const PLACEHOLDER_SECRETS = new Set(['your-secret', 'your-refresh-secret']);
@@ -42,7 +44,13 @@ async function bootstrap() {
 
   // rawBody is needed to verify webhook signatures (Meta/Stripe HMAC) against the exact bytes sent.
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  // LiveKit signs the exact application/webhook+json bytes, not re-serialized JSON.
+  app.use(
+    '/api/v1/voice/webhook/livekit',
+    raw({ type: 'application/webhook+json', limit: '128kb' }),
+  );
 
+  app.use(requestIdMiddleware);
   app.use(helmet());
 
   const corsAllowlist = (process.env.CORS_ALLOWLIST ?? 'http://localhost:3000')
@@ -52,7 +60,7 @@ async function bootstrap() {
   app.enableCors({
     origin: corsAllowlist,
     credentials: true,
-    exposedHeaders: ['Content-Disposition', 'X-Row-Count'],
+    exposedHeaders: ['Content-Disposition', 'X-Row-Count', 'X-Request-Id'],
   });
 
   app.useGlobalPipes(

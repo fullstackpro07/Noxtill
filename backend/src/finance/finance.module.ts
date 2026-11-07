@@ -55,6 +55,7 @@ import { FinanceProcessor, FinanceScheduler } from './finance.processor';
   ],
   exports: [
     FinanceContextService,
+    FinanceBudgetsService,
     FinanceLedgerService,
     FinanceAssetsService,
     FinanceSourcesService,

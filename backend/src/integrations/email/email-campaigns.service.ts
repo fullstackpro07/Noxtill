@@ -110,9 +110,11 @@ export class EmailCampaignsService {
         where: { type: EmailEventType.unsub, emailCampaign: { businessId } },
       }),
     ]);
-    // No provider webhook is wired up to record real bounces yet (deliberately deferred, see
-    // plan) — 0 is the honest current value, not a placeholder standing in for real tracking.
-    return { subscribed: subscribedCustomers, unsubscribed, bounced: 0 };
+    // Bounces are recorded by the email webhook (see WebhookEventsProcessor.handleEmailEvent).
+    const bounced = await this.tenantPrisma.client.emailEvent.count({
+      where: { type: EmailEventType.bounce, emailCampaign: { businessId } },
+    });
+    return { subscribed: subscribedCustomers, unsubscribed, bounced };
   }
 
   /** Verifies a signed unsubscribe link and records the suppression. Public — no auth available at this point. */
@@ -166,15 +168,18 @@ export class EmailCampaignsService {
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
     const unsubscribeLink = `${frontendUrl}/unsubscribe?token=${unsubscribeToken}`;
     const textBody = `${dto.body}\n\n---\nUnsubscribe: ${unsubscribeLink}`;
+    // An HTML part is required for the provider's open/click tracking (pixel + link rewriting).
+    const htmlBody = `<div>${escapeHtml(dto.body).replace(/\r?\n/g, '<br>')}</div><hr><p style="font-size:12px;color:#666"><a href="${escapeHtml(unsubscribeLink)}">Unsubscribe</a></p>`;
 
     try {
-      await axios.post(
+      const response = await axios.post<{ id?: string }>(
         'https://api.resend.com/emails',
         {
           from: this.config.get<string>('EMAIL_FROM_ADDRESS'),
           to: email,
           subject: dto.subject,
           text: textBody,
+          html: htmlBody,
         },
         {
           headers: {
@@ -189,6 +194,8 @@ export class EmailCampaignsService {
           emailCampaignId: campaignId,
           recipient: email,
           type: EmailEventType.sent,
+          providerRef:
+            typeof response.data?.id === 'string' ? response.data.id : null,
         },
       });
       return true;
@@ -203,4 +210,13 @@ export class EmailCampaignsService {
   private unsubscribeSecret(): string {
     return this.config.get<string>('EMAIL_UNSUBSCRIBE_SECRET') ?? '';
   }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

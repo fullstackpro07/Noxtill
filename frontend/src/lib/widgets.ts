@@ -115,3 +115,38 @@ export const WIDGETS: WidgetDef[] = [
 export function widgetByKey(key: string): WidgetDef | undefined {
   return WIDGETS.find((w) => w.key === key);
 }
+
+/** The owning module for dashboard KPI widgets; unmapped shared metrics stay part of Dashboard. */
+const WIDGET_MODULE_KEYS: Record<string, string> = {
+  revenue_today: "sales",
+  orders_today: "sales",
+  avg_order_value_month: "sales",
+  revenue_this_month: "sales",
+  top_products_month: "products",
+  expenses_this_month: "profit",
+  new_customers_month: "customers",
+  lapsed_customers: "customers",
+  vip_customers: "customers",
+  low_stock_count: "inventory",
+  credit_outstanding: "credit",
+  upcoming_appointments: "bookings",
+  no_show_rate_month: "bookings",
+  appointments_completed_month: "bookings",
+  pending_appointments_today: "bookings",
+  reviews_average: "reviews",
+  open_complaints: "reviews",
+  pending_review_requests: "reviews",
+  campaign_performance_month: "marketing",
+  referral_count: "marketing",
+  competitor_comparison: "competitive",
+  staff_leaderboard_month: "staff",
+  staff_count: "staff",
+  attendance_today: "staff",
+  message_quota_usage: "unified-inbox",
+  channel_breakdown_month: "unified-inbox",
+  delivery_rate_month: "unified-inbox",
+};
+
+export function widgetModuleKey(key: string): string | null {
+  return WIDGET_MODULE_KEYS[key] ?? null;
+}

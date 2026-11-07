@@ -155,7 +155,12 @@ export class SegmentsService {
       'Return ONLY JSON: {"name": string, "description": string}',
     ].join('\n');
 
-    const raw = await this.aiInfra.complete(businessId, prompt, 0.7);
+    const raw = await this.aiInfra.complete(
+      businessId,
+      prompt,
+      0.7,
+      'segment_persona',
+    );
     try {
       const start = raw.indexOf('{');
       const end = raw.lastIndexOf('}');

@@ -274,7 +274,7 @@ export class Logic extends DcLogic {
   }
   fillIcons() {
     return;
-    const L = window.lucide;
+    const L = globalThis.lucide;
     if (!L || !L.icons) { clearTimeout(this.iconT); this.iconT = setTimeout(() => this.schedule(), 150); return; }
     document.querySelectorAll('[data-icon]').forEach(el => {
       const n = el.getAttribute('data-icon');

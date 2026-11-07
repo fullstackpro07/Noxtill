@@ -5,12 +5,14 @@ export const AI_ERROR_CODES = {
 } as const;
 
 /**
- * AI Settings (UPD-BE-115) — the named toggles (the spec's 7, plus Unified Inbox replies). A key not present in
+ * AI Settings (UPD-BE-115) — named owner-controlled AI feature toggles. A key not present in
  * `Business.aiFeatureToggles` defaults to enabled, so adding a new feature here never silently
  * disables it for existing businesses.
  */
 export type AiFeatureKey =
   | 'voiceEntry'
+  | 'voiceQualityAssist'
+  | 'voiceMeetingSummary'
   | 'photoDigitizer'
   | 'reviewReplies'
   | 'campaignCopy'
@@ -18,10 +20,13 @@ export type AiFeatureKey =
   | 'whatIf'
   | 'assistant'
   /** Unified Inbox drafts, translations and long-thread summaries. */
-  | 'inboxReplies';
+  | 'inboxReplies'
+  | 'workflowAgents';
 
 export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'voiceEntry',
+  'voiceQualityAssist',
+  'voiceMeetingSummary',
   'photoDigitizer',
   'reviewReplies',
   'campaignCopy',
@@ -29,6 +34,7 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
   'whatIf',
   'assistant',
   'inboxReplies',
+  'workflowAgents',
 ];
 
 /**
@@ -37,18 +43,29 @@ export const AI_FEATURE_KEYS: AiFeatureKey[] = [
  * per-feature usage figures. Deliberately incomplete: several real AI call sites (branch advisor,
  * pricing-rationale phrasing, segment personas, competitive opportunities, the AI phone
  * receptionist, bundle-pitch copy, the pre-signup business-type mapper) don't correspond to any of
- * the spec's 7 named features and are left off this map on purpose — their usage isn't
+ * the named features and are left off this map on purpose — their usage isn't
  * independently toggleable and is reported under "Other" rather than force-fit into a bucket that
  * doesn't really describe it.
  */
 export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   voice_entry: 'voiceEntry',
+  pos_voice_entry: 'voiceEntry',
+  voice_realtime: 'voiceEntry',
+  voice_quality_assist: 'voiceQualityAssist',
+  voice_meeting_summary: 'voiceMeetingSummary',
   digitizer_scan: 'photoDigitizer',
   digitizer_assistant: 'photoDigitizer',
   review_reply: 'reviewReplies',
   campaign_copy: 'campaignCopy',
+  // Usage & Limits split these out of `campaign_copy`/`ai_insights` so each is billed as its own
+  // credit operation; they keep the toggle they were always governed by.
+  social_post: 'campaignCopy',
+  social_caption: 'campaignCopy',
+  ad_copy: 'campaignCopy',
+  offer_copy: 'campaignCopy',
   generate_image: 'campaignCopy',
   ai_insights: 'insights',
+  bi_insights: 'insights',
   marketing_reallocation: 'insights',
   what_if: 'whatIf',
   assistant_chat: 'assistant',
@@ -58,20 +75,24 @@ export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   inbox_draft: 'inboxReplies',
   inbox_translate: 'inboxReplies',
   inbox_summary: 'inboxReplies',
+  workflow_agent: 'workflowAgents',
 };
 
 /** EU AI Act transparency requirement (UPD-BE-115) — shown verbatim on the AI Settings screen. */
 export const AI_USAGE_DISCLOSURE_TEXT =
-  'Noxtill uses AI (Anthropic Claude, and OpenAI for voice transcription and image generation) to ' +
+  'Noxtill uses AI (Anthropic Claude, and OpenAI for live voice, transcription and image generation) to ' +
   "power the features below. AI-generated text and suggestions are based on this business's own " +
-  'data and are never presented as human-written. AI features never take an irreversible action ' +
+  'data and are clearly presented as AI-generated. Workflow AI drafts are saved to run history ' +
+  'and are not sent automatically. Meeting audio is transcribed and summarized only when the ' +
+  'published policy allows it and every participant consents; those results are for human review. ' +
+  'AI features never take an irreversible action ' +
   '(sending a message, writing a sale, changing stock) without a human explicitly confirming it ' +
   'first. Usage is metered per business against the monthly cost cap and per-minute rate limit set ' +
-  'below.';
+  'below. Voice QA suggestions send the selected transcript (with email, phone and payment-card-like numbers masked) and rubric to Anthropic; a human reviewer must verify every suggestion before saving.';
 
-/** claude-3-5-haiku pricing (USD per token, public list price) — good enough for a cost-cap estimate. */
-export const HAIKU_INPUT_COST_PER_TOKEN = 0.8 / 1_000_000;
-export const HAIKU_OUTPUT_COST_PER_TOKEN = 4 / 1_000_000;
+/** Haiku 4.5 standard USD token rates, matching ClaudeClient's default model; still an estimate, not a provider invoice. */
+export const HAIKU_INPUT_COST_PER_TOKEN = 1 / 1_000_000;
+export const HAIKU_OUTPUT_COST_PER_TOKEN = 5 / 1_000_000;
 
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 

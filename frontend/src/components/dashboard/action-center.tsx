@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, X, ListChecks, CheckCheck, Check } from "lucide-react";
+import { Clock, ListChecks, CheckCheck, Check } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownTrigger, DropdownContent, DropdownItem } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -12,11 +12,14 @@ import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
 import { formatRelativeTime } from "@/lib/format";
 import { useNow } from "@/hooks/use-now";
+import { askText } from "@/lib/ask-dialog";
 import {
   ACTION_ITEM_TYPE_LABEL,
+  approveProcurementAction,
   completeAction,
   dismissAction,
   fetchActions,
+  rejectProcurementAction,
   snoozeAction,
   type ActionItemPriority,
   type ActionItemType,
@@ -75,9 +78,25 @@ export function ActionCenter() {
     onSuccess: onMutationSuccess,
     onError: onMutationError,
   });
+  const approveProcurementMutation = useMutation({
+    mutationFn: approveProcurementAction,
+    onSuccess: () => {
+      onMutationSuccess();
+      toast.success("Purchase request approved.");
+    },
+    onError: onMutationError,
+  });
+  const rejectProcurementMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => rejectProcurementAction(id, reason),
+    onSuccess: () => {
+      onMutationSuccess();
+      toast.success("Purchase request rejected.");
+    },
+    onError: onMutationError,
+  });
   const markAllReadMutation = useMutation({
     mutationFn: async () => {
-      const items = data?.items ?? [];
+      const items = (data?.items ?? []).filter((item) => item.type !== "procurement_request");
       await Promise.all(items.map((item) => snoozeAction(item.id, "tomorrow")));
     },
     onSuccess: () => {
@@ -99,7 +118,20 @@ export function ActionCenter() {
     onError: onMutationError,
   });
 
-  const pending = completeMutation.isPending || dismissMutation.isPending || snoozeMutation.isPending;
+  const pending = completeMutation.isPending || dismissMutation.isPending || snoozeMutation.isPending || approveProcurementMutation.isPending || rejectProcurementMutation.isPending;
+  const markableCount = data?.items.filter((item) => item.type !== "procurement_request").length ?? 0;
+
+  async function requestRejection(itemId: string) {
+    const reason = await askText({
+      title: "Reject purchase request",
+      description: "Add a reason for the requester. This decision will be recorded in the approval history.",
+      placeholder: "Required reason",
+      minLength: 3,
+      confirmLabel: "Reject request",
+      tone: "danger",
+    });
+    if (reason !== null) rejectProcurementMutation.mutate({ id: itemId, reason });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -125,7 +157,7 @@ export function ActionCenter() {
               <option key={t} value={t}>{ACTION_ITEM_TYPE_LABEL[t]}</option>
             ))}
           </select>
-          {data && data.items.length > 0 && (
+          {markableCount > 0 && (
             <button
               type="button"
               onClick={() => setConfirmMarkAllRead(true)}
@@ -180,7 +212,7 @@ export function ActionCenter() {
 
       {!isPending && !isError && data && data.items.length === 0 && (
         <div className="rounded-[14px] p-4" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
-          <EmptyState icon={ListChecks} title="Nothing needs your attention" description="Open complaints, low stock, overdue credit, and unreplied reviews will show up here." />
+          <EmptyState icon={ListChecks} title="Nothing needs your attention" description="Open complaints, low stock, overdue credit, unreplied reviews, commerce decisions, and purchase approvals will show up here." />
         </div>
       )}
 
@@ -193,9 +225,10 @@ export function ActionCenter() {
               disabled={pending}
               selected={selected.includes(item.id)}
               onToggleSelect={() => setSelected((s) => (s.includes(item.id) ? s.filter((id) => id !== item.id) : [...s, item.id]))}
-              onComplete={() => completeMutation.mutate(item.id)}
               onDismiss={() => dismissMutation.mutate(item.id)}
               onSnooze={(duration) => snoozeMutation.mutate({ id: item.id, duration })}
+              onApprove={() => approveProcurementMutation.mutate(item.id)}
+              onReject={() => void requestRejection(item.id)}
             />
           ))}
         </div>
@@ -205,7 +238,7 @@ export function ActionCenter() {
         open={confirmMarkAllRead}
         onClose={() => setConfirmMarkAllRead(false)}
         title="Mark all read?"
-        description={`This snoozes all ${data?.items.length ?? 0} visible item(s) until tomorrow — anything still open will resurface then. Nothing is dismissed permanently.`}
+        description={`This snoozes ${markableCount} regular item(s) until tomorrow. Purchase approvals are not snoozed and must be approved or rejected.`}
         footer={
           <>
             <button type="button" onClick={() => setConfirmMarkAllRead(false)} className="rounded-[9px] px-3.5 py-2 text-[12.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>
@@ -241,32 +274,37 @@ function ActionRow({
   disabled,
   selected,
   onToggleSelect,
-  onComplete,
   onDismiss,
   onSnooze,
+  onApprove,
+  onReject,
 }: {
   item: LiveActionItem;
   disabled: boolean;
   selected: boolean;
   onToggleSelect: () => void;
-  onComplete: () => void;
   onDismiss: () => void;
   onSnooze: (duration: SnoozeDuration) => void;
+  onApprove: () => void;
+  onReject: () => void;
 }) {
   const tone = PRIORITY_STYLE[item.priority];
+  const isProcurementApproval = item.type === "procurement_request";
   return (
     <div
       className="flex flex-wrap items-center gap-3.5 rounded-[14px] p-[14px_16px]"
       style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggleSelect}
-        aria-label="Select item"
-        className="h-4 w-4 shrink-0"
-        style={{ accentColor: "var(--app-primary)" }}
-      />
+      {isProcurementApproval ? <span className="h-4 w-4 shrink-0" aria-hidden /> : (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label="Select item"
+          className="h-4 w-4 shrink-0"
+          style={{ accentColor: "var(--app-primary)" }}
+        />
+      )}
       <span className="shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-extrabold" style={{ background: tone.bg, color: tone.fg }}>
         {PRIORITY_LABEL[item.priority]}
       </span>
@@ -278,6 +316,22 @@ function ActionRow({
       </div>
       <span className="shrink-0 text-[11.5px] font-semibold" style={{ color: "var(--app-text-disabled)" }}>Age {formatRelativeTime(item.ageMs)}</span>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {isProcurementApproval ? <>
+          <button
+            type="button"
+            onClick={onReject}
+            disabled={disabled}
+            className="rounded-[9px] px-3 py-1.5 text-[12px] font-semibold disabled:opacity-60"
+            style={{ border: "1px solid var(--app-border)", color: "var(--app-danger-strong)" }}
+          >Reject</button>
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={disabled}
+            className="rounded-[9px] px-3.5 py-1.5 text-[12px] font-bold text-white disabled:opacity-60"
+            style={{ background: "var(--app-primary)" }}
+          >Approve</button>
+        </> : <>
         <button
           onClick={onDismiss}
           disabled={disabled}
@@ -304,13 +358,14 @@ function ActionRow({
             ))}
           </DropdownContent>
         </DropdownMenu>
+        </>}
         <Link
           href={item.deepLink}
           className="flex items-center gap-1.5 rounded-[9px] px-3.5 py-1.5 text-[12px] font-bold text-white"
           style={{ background: "var(--app-primary)" }}
         >
           <Check className="h-3.5 w-3.5" aria-hidden />
-          Take action
+          {isProcurementApproval ? "Open request" : "Take action"}
         </Link>
       </div>
     </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+import { fetchCallLegs } from "@/lib/voice-calls-api";
 import { callerName, confidenceChip, fmtShortDuration, handlerChip, intentLabel, matchChip, sentimentChip } from "@/lib/receptionist-derive";
 import { Ico } from "../rx-icon";
 import { Card, CardHead, ChipFor, EmptyState, Chip } from "../rx-ui";
@@ -13,6 +15,34 @@ export function LiveScreen() {
     <RxGate>
       <Live />
     </RxGate>
+  );
+}
+
+function LiveCallLegs({ callId }: { callId: string }) {
+  const query = useQuery({
+    queryKey: ["rx-call-legs", callId],
+    queryFn: () => fetchCallLegs(callId),
+    refetchInterval: 5_000,
+    staleTime: 2_000,
+  });
+  return (
+    <div className="border-b border-[#EEF0F3] bg-[#FCFCFD] px-[17px] py-3">
+      <div className="mb-2 text-[10px] font-extrabold uppercase tracking-[.08em] text-[color:var(--app-text-faintest,#667085)]">Call legs</div>
+      {query.isPending ? <div className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">Loading provider legs…</div> : null}
+      {query.isError ? <div className="text-[11px] text-[#B42318]">Call-leg status is temporarily unavailable.</div> : null}
+      {query.data?.legs.map((leg) => (
+        <div key={leg.id} className="flex flex-wrap items-center gap-2 py-1 text-[11px]">
+          <span className="font-bold text-[#344054]">{leg.label}</span>
+          {leg.attemptNumber ? <span className="text-[color:var(--app-text-faintest,#667085)]">attempt {leg.attemptNumber}</span> : null}
+          <span className={`ml-auto rounded-full px-2 py-0.5 font-bold ${leg.confirmation === "provider-confirmed" ? "bg-[#ECFDF3] text-[#15803D]" : leg.confirmation === "failed" ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#FFFAEB] text-[#B54708]"}`}>
+            {leg.confirmation === "provider-confirmed" ? "Provider-confirmed" : leg.confirmation === "failed" ? "Failed" : "Pending"}
+          </span>
+          <span className="basis-full pl-1 text-[10px] text-[#98A2B3]">
+            {leg.mode ? `${leg.mode} · ` : ""}{leg.providerStatus ?? leg.status}{leg.providerCallSid ? ` · ${leg.providerCallSid}` : " · provider leg ID not reported"}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -42,7 +72,7 @@ function Live() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[14px] font-extrabold">{callerName(c)}</div>
-                    <div className="mt-0.5 font-mono text-[11px] text-[#7A8798]">{c.fromNumber}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-[color:var(--app-text-faintest,#667085)]">{c.fromNumber}</div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <ChipFor spec={matchChip(c)} />
                       <Chip tone={c.joinedAt ? "blue" : "purple"}>{c.joinedAt ? "Person joined" : handler.label === "AI" ? "AI answering" : handler.label}</Chip>
@@ -52,14 +82,16 @@ function Live() {
                   </div>
                   <div className="flex-none text-right">
                     <div className="text-[15px] font-extrabold tabular-nums">{fmtShortDuration(secs)}</div>
-                    <div className="mt-0.5 text-[10px] text-[#94A3B8]">{conf ? conf.label : "Confidence not reported yet"}</div>
-                    <div className="mt-0.5 text-[10px] text-[#94A3B8]">{c.previousCalls ? `${c.previousCalls} earlier call${c.previousCalls === 1 ? "" : "s"}` : "first call from this number"}</div>
+                    <div className="mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{conf ? conf.label : "Confidence not reported yet"}</div>
+                    <div className="mt-0.5 text-[10px] text-[color:var(--app-text-faintest,#667085)]">{c.previousCalls ? `${c.previousCalls} earlier call${c.previousCalls === 1 ? "" : "s"}` : "first call from this number"}</div>
                   </div>
                 </div>
 
+                <LiveCallLegs callId={c.id} />
+
                 <div className="flex max-h-[232px] flex-col gap-[9px] overflow-y-auto px-[17px] py-3.5">
                   {c.transcript.length === 0 ? (
-                    <div className="py-3 text-center text-[12px] text-[#94A3B8]">The conversation hasn&apos;t started yet — the transcript fills in after each thing the caller says.</div>
+                    <div className="py-3 text-center text-[12px] text-[color:var(--app-text-faintest,#667085)]">The conversation hasn&apos;t started yet — the transcript fills in after each thing the caller says.</div>
                   ) : (
                     c.transcript.map((t, i) => {
                       const ai = t.speaker === "assistant";
@@ -74,7 +106,7 @@ function Live() {
                             {t.text}
                             {sources.length ? <div className="mt-1 text-[10px] font-semibold text-[#1D4ED8]">Given to the AI: {sources.join(" · ")}</div> : null}
                           </div>
-                          <div className="flex-none font-mono text-[9.5px] text-[#94A3B8]">{fmtShortDuration(at)}</div>
+                          <div className="flex-none font-mono text-[9.5px] text-[color:var(--app-text-faintest,#667085)]">{fmtShortDuration(at)}</div>
                         </div>
                       );
                     })
@@ -109,7 +141,7 @@ function Live() {
       )}
 
       <Card overflow>
-        <CardHead title="Waiting" right={<span className="text-[11px] text-[#94A3B8]">Nobody is ever put on hold</span>} />
+        <CardHead title="Waiting" right={<span className="text-[11px] text-[color:var(--app-text-faintest,#667085)]">Nobody is ever put on hold</span>} />
         <EmptyState
           icon="list-ordered"
           title="No caller is waiting"

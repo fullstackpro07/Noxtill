@@ -158,6 +158,7 @@ export function EmailMarketingView() {
               <p className="mb-3 text-sm font-medium text-fg">Funnel {!lastCampaignId && <span className="text-xs font-normal text-fg-faint">(send an email to see this)</span>}</p>
               <div className="flex flex-col gap-1.5 text-sm">
                 <div className="flex justify-between"><span className="text-fg-muted">Sent</span><span className="text-fg">{funnel?.sent ?? 0}</span></div>
+                <div className="flex justify-between"><span className="text-fg-muted">Delivered</span><span className="text-fg">{funnel?.delivered ?? 0}</span></div>
                 <div className="flex justify-between"><span className="text-fg-muted">Opened</span><span className="text-fg">{funnel?.opened ?? 0}</span></div>
                 <div className="flex justify-between"><span className="text-fg-muted">Clicked</span><span className="text-fg">{funnel?.clicked ?? 0}</span></div>
                 <div className="flex justify-between"><span className="text-fg-muted">Unsubscribed</span><span className="text-destructive">{funnel?.unsubscribed ?? 0}</span></div>
@@ -172,6 +173,9 @@ export function EmailMarketingView() {
               </div>
             </div>
           </div>
+          <p className="text-xs text-fg-faint">
+            Delivered, opened, clicked and bounced come from your email provider&rsquo;s webhook. They stay at 0 until the webhook and open/click tracking are set up. Opens are approximate: some mail apps load or block images automatically.
+          </p>
         </div>
 
         <div>

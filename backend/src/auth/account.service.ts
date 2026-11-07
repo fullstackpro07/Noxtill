@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { SecurityEventsService } from '../common/security/security-events.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import axios from 'axios';
@@ -47,6 +48,7 @@ export class AccountService {
     private readonly config: ConfigService,
     private readonly auth: AuthService,
     private readonly tokens: AuthTokensService,
+    @Optional() private readonly securityEvents?: SecurityEventsService,
   ) {}
 
   // ---------------------------------------------------------------- email confirmation
@@ -166,6 +168,12 @@ export class AccountService {
     });
     if (user?.email) {
       await this.tokens.sendPasswordReset(user.id, user.email);
+      await this.securityEvents?.record({
+        type: 'password_reset_requested',
+        userId: user.id,
+        identifier: user.email,
+        metadata: { via: 'self_service' },
+      });
     }
     return { ok: true };
   }
@@ -248,6 +256,11 @@ export class AccountService {
         data: { revokedAt: new Date() },
       }),
     ]);
+    await this.securityEvents?.record({
+      type: 'password_reset_completed',
+      userId: user.id,
+      metadata: { sessionsRevoked: true },
+    });
     return { reset: true };
   }
 

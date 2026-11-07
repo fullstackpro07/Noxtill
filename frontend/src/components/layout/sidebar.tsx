@@ -6,7 +6,8 @@ import { X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { HUB_KEYS, fetchHubOverview } from "@/lib/integrations-hub-api";
 import { cn } from "@/lib/utils";
-import { navItemsForRole, type Role } from "@/lib/nav-items";
+import { navItemsForRole, visibleNavItems, type Role } from "@/lib/nav-items";
+import { useDisabledModules } from "./module-gate";
 import { useTranslation } from "@/hooks/use-translation";
 import { useAuthStore } from "@/store/auth-store";
 
@@ -33,7 +34,8 @@ function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string;
   const integrationsAttention = useIntegrationsAttention(role);
   // Auth & Onboarding: only the modules the owner approved (plus Dashboard/Settings); an empty list = not curated.
   const enabled = useAuthStore((s) => s.business?.enabledModules);
-  const items = navItemsForRole(role).filter((item) => !enabled?.length || enabled.includes(item.key));
+  const disabledModules = useDisabledModules();
+  const items = visibleNavItems(navItemsForRole(role), disabledModules).filter((item) => !enabled?.length || enabled.includes(item.key));
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2.5 pb-3.5" style={{ paddingTop: 0 }}>
       {items.map((rawItem) => {
@@ -146,9 +148,10 @@ function HelpCard() {
       <Link
         href="/assistant/help"
         className="block w-full rounded-lg py-2 text-center text-[11.5px] font-bold text-white transition-colors"
-        style={{ background: "var(--app-primary)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--app-primary-hover)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--app-primary)")}
+        // Small bold text: the darker theme green keeps white text above the 4.5:1 WCAG AA ratio.
+        style={{ background: "var(--app-primary-hover)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(0.9)")}
+        onMouseLeave={(e) => (e.currentTarget.style.filter = "")}
       >
         Go to Help Center
       </Link>
