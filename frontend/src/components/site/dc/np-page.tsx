@@ -70,9 +70,6 @@ export async function NpPage({ pageKey }: { pageKey: string }) {
     !pageKey.includes("powered-operations") &&
     // Designed at ~1240px (responsive), not 1040px: zooming them up makes type far too large.
     !WIDE_FEATURE_KEYS.has(pageKey) &&
-    // These designs already scale themselves with `.dcx [data-z]{zoom}` media rules; zooming the whole
-    // page as well compounds to ~3x and wrecks the layout.
-    !page.css.includes("[data-z]{zoom") &&
     // Responsive (non-1024px) designs have no [data-z] containers; they size themselves, so don't zoom them.
     JSON.stringify(page.tree).includes('"data-z"');
 

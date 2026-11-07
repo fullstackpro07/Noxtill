@@ -6,6 +6,11 @@
    call — clear of the header on both mobile and desktop, without touching each anchored section. */
 html {
   scroll-padding-top: 88px;
+  overflow-x: clip;
+}
+
+body {
+  overflow-x: clip;
 }
 
 /*
