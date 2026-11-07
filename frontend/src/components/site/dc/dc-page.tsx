@@ -123,13 +123,14 @@ export function DcPage({
 }) {
   const imports = page.tree.filter(isImport) as [string, Record<string, string>, DcNode[]][];
   const header = withHeader ?? (imports.some((n) => n[1].name === "NoxtillHeader") || true);
+  const hasFit1040 = effects.includes("fit1040") || effects.includes("fit1040Md");
   return (
     <div data-theme="light">
       {(page.head.jsonLd ?? []).map((ld, i) => (
         <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: ld }} />
       ))}
       {header ? DC_IMPORTS.NoxtillHeader : null}
-      <div className={`dcx ${jakarta.variable}${fontClass ? " " + fontClass : ""}${fitDesign ? " dcx-fit" : ""}`}>
+      <div className={`dcx ${jakarta.variable}${fontClass ? " " + fontClass : ""}${fitDesign ? " dcx-fit" : ""}${hasFit1040 ? " dcx-fit1040" : ""}`}>
         <style dangerouslySetInnerHTML={{ __html: page.css }} />
         {body ?? renderDc(dcBody(page), {}, ctx)}
       </div>

@@ -18,9 +18,13 @@
   line-height: normal;
 }
 
-/* Ensure the page wrapper never traps overflow or breaks position: sticky sidebars */
+/* Prevent horizontal page overflow while preserving vertical sticky positioning */
 .dcx {
-  overflow-x: visible !important;
+  overflow-x: clip;
+}
+
+.dcx:has(.nxb-side) {
+  overflow-x: visible;
 }
 
 /* Blog sticky sidebar positioning */
@@ -42,4 +46,10 @@
   aspect-ratio: 3 / 2 !important;
   object-fit: cover !important;
 }
+
+/* When fit1040 scales the page dynamically to viewport width, neutralize hardcoded design zooms on [data-z] */
+.dcx.dcx-fit1040 [data-z] {
+  zoom: 1 !important;
+}
+
 

@@ -338,6 +338,7 @@ function fit1040(cap = 1.85): Cleanup {
   function apply() {
     const dcx = document.querySelector<HTMLElement>(".dcx");
     if (!dcx) return;
+    dcx.classList.add("dcx-fit1040");
     const w = document.documentElement.clientWidth || window.innerWidth;
     const base = designWidth(dcx);
     if (w > base) {
@@ -352,7 +353,10 @@ function fit1040(cap = 1.85): Cleanup {
   return () => {
     window.removeEventListener("resize", apply);
     const dcx = document.querySelector<HTMLElement>(".dcx");
-    if (dcx) dcx.style.zoom = "";
+    if (dcx) {
+      dcx.style.zoom = "";
+      dcx.classList.remove("dcx-fit1040");
+    }
   };
 }
 
