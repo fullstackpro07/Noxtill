@@ -67,6 +67,10 @@ export class AuthTokensService {
     );
   }
 
+  getLatestDevVerifyUrl(email: string): string | undefined {
+    return this.mailer.getLatestDevVerifyUrl(email);
+  }
+
   async sendPasswordReset(userId: string, email: string): Promise<boolean> {
     const token = await this.create(userId, AUTH_TOKEN_PURPOSE.RESET_PASSWORD);
     return this.mailer.sendPasswordReset(

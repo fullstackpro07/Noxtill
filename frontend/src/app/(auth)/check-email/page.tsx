@@ -192,6 +192,43 @@ export default function CheckEmailPage() {
       </div>
 
       {notice && <InfoNote tone={notice.tone} margin="0 0 12px">{notice.text}</InfoNote>}
+      {status?.devVerifyUrl && (
+        <div
+          style={{
+            margin: "0 0 14px",
+            padding: "11px 14px",
+            background: "#EFF6FF",
+            border: "1px solid #BFDBFE",
+            borderRadius: 12,
+            fontSize: 13,
+            color: "#1E40AF",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
+        >
+          <span>
+            <strong>Dev link:</strong> Test confirmation link
+          </span>
+          <button
+            type="button"
+            onClick={() => router.push(status.devVerifyUrl!)}
+            style={{
+              border: 0,
+              background: "#2563EB",
+              color: "#fff",
+              borderRadius: 8,
+              padding: "6px 12px",
+              fontWeight: 700,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            Verify now
+          </button>
+        </div>
+      )}
       <InfoNote>Once confirmed, you&apos;ll be taken to the next setup step automatically.</InfoNote>
       <BackToLogin onClick={backToLogin} />
     </AuthCard>
