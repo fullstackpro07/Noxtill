@@ -58,12 +58,21 @@ export class AccountService {
       where: { id: userId },
       select: { email: true, emailVerifiedAt: true },
     });
+    const resendInSeconds = user.emailVerifiedAt
+      ? 0
+      : await this.tokens.resendWaitSeconds(userId);
+    const devVerifyUrl =
+      !user.emailVerifiedAt &&
+      process.env.NODE_ENV !== 'production' &&
+      user.email
+        ? this.tokens.getLatestDevVerifyUrl(user.email)
+        : undefined;
+
     return {
       email: user.email,
       verified: Boolean(user.emailVerifiedAt),
-      resendInSeconds: user.emailVerifiedAt
-        ? 0
-        : await this.tokens.resendWaitSeconds(userId),
+      resendInSeconds,
+      ...(devVerifyUrl ? { devVerifyUrl } : {}),
     };
   }
 

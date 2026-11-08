@@ -20,8 +20,13 @@ interface AuthEmail {
 @Injectable()
 export class AuthMailerService {
   private readonly logger = new Logger(AuthMailerService.name);
+  private readonly devVerifyUrls = new Map<string, string>();
 
   constructor(private readonly config: ConfigService) {}
+
+  getLatestDevVerifyUrl(email: string): string | undefined {
+    return this.devVerifyUrls.get(email.toLowerCase());
+  }
 
   frontendUrl(path: string): string {
     const base = (
@@ -81,19 +86,22 @@ export class AuthMailerService {
 
   /** Returns true when the provider accepted the email. Never throws the provider's raw error (it carries the API key). */
   private async send(mail: AuthEmail): Promise<boolean> {
+    this.devVerifyUrls.set(mail.to.toLowerCase(), mail.url);
+
     const apiKey = this.config.get<string>('EMAIL_PROVIDER_KEY');
-    const from = this.config.get<string>('EMAIL_FROM_ADDRESS');
-    if (!apiKey || !from) {
+    const configuredFrom = this.config.get<string>('EMAIL_FROM_ADDRESS');
+    if (!apiKey || !configuredFrom) {
       this.logger.warn(
         `Email provider not configured — "${mail.subject}" for ${mail.to}: ${mail.url}`,
       );
       return false;
     }
-    try {
-      await axios.post(
+
+    const postEmail = (fromAddress: string) =>
+      axios.post(
         'https://api.resend.com/emails',
         {
-          from,
+          from: fromAddress,
           to: mail.to,
           subject: mail.subject,
           text: `${mail.heading}\n\n${mail.body}\n\n${mail.cta}: ${mail.url}\n\n${mail.footnote}`,
@@ -107,11 +115,39 @@ export class AuthMailerService {
           },
         },
       );
+
+    let deliveryError: unknown = null;
+    try {
+      await postEmail(configuredFrom);
       return true;
-    } catch (err) {
+    } catch (err: unknown) {
+      deliveryError = err;
+      const axiosErr = err as {
+        response?: { status?: number; data?: { message?: string } };
+      };
+      const status = axiosErr?.response?.status;
+      const msg = axiosErr?.response?.data?.message ?? '';
+
+      // When the configured domain isn't authorized in Resend yet (dev/staging), fallback to onboarding@resend.dev
+      if (
+        status === 403 &&
+        msg.includes('not authorized to send emails from') &&
+        configuredFrom !== 'onboarding@resend.dev'
+      ) {
+        this.logger.warn(
+          `Domain not authorized for "${configuredFrom}" — retrying with onboarding@resend.dev`,
+        );
+        try {
+          await postEmail('onboarding@resend.dev');
+          return true;
+        } catch (retryErr) {
+          deliveryError = retryErr;
+        }
+      }
+
       this.logger.error(
         `Failed to deliver "${mail.subject}" to ${mail.to}`,
-        err instanceof Error ? err.message : undefined,
+        deliveryError instanceof Error ? deliveryError.message : undefined,
       );
       if (this.config.get<string>('NODE_ENV') !== 'production') {
         this.logger.warn(`Undelivered link for ${mail.to}: ${mail.url}`);

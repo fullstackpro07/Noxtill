@@ -11,8 +11,6 @@ node_modules/
 !.yarn/versions
 
 # ── Env files ────────────────────────────────────────────────────────────
-.env
-.env.*
 !.env.example
 
 # ── Logs / debug ─────────────────────────────────────────────────────────
@@ -61,4 +59,4 @@ temp_interactive_push.bat
 config.bat
 docs/Noxtill Pages/
 docs/policies/
-docs/Features pages/
+docs/Features pages/.gitignore
