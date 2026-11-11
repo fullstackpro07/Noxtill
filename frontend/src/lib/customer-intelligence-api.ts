@@ -174,6 +174,16 @@ export interface CustomerAgentRun {
   status: string;
   output: {
     summary?: string;
+    answer?: string | null;
+    answerStatus?: "ready" | "unavailable";
+    message?: string | null;
+    tools?: Array<{
+      tool: string;
+      outcome: "succeeded" | "refused" | "failed" | "blocked";
+      summary: string;
+      screen: string | null;
+      toolRunId: string | null;
+    }>;
     snapshot?: CustomerAgentSnapshot;
     aiSummary?: {
       status: string;
@@ -213,6 +223,19 @@ export function runCustomerAgent(): Promise<CustomerAgentRun> {
       headers: idempotencyKey
         ? { "Idempotency-Key": idempotencyKey }
         : undefined,
+    }),
+  );
+}
+
+export function askCustomerAgent(question: string): Promise<CustomerAgentRun> {
+  const body = { question: question.trim() };
+  return postSpecialistAgentRun("customer", body, (idempotencyKey) =>
+    apiFetch<CustomerAgentRun>("/analytics/customers/agent-questions", {
+      method: "POST",
+      headers: idempotencyKey
+        ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
+      body: JSON.stringify(body),
     }),
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCustomers } from "@/lib/customers-api";
@@ -20,6 +20,7 @@ import {
   CUSTOMER_FOLLOW_UP_OUTCOME_LABELS,
   proposeCustomerFollowUpTaskFromRecommendation,
   fetchCustomerAgentRuns,
+  askCustomerAgent,
   runCustomerAgent,
   prepareCustomerSegmentDraft,
   type CustomerFollowUpOutcome,
@@ -30,6 +31,7 @@ function CustomerIntelligenceAgentPanel() {
   const session = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [question, setQuestion] = useState("");
   const canRun = session.user.role !== "staff";
   const { data: runs = [], isLoading } = useQuery({
     queryKey: ["customer-agent-runs"],
@@ -48,6 +50,22 @@ function CustomerIntelligenceAgentPanel() {
         error instanceof ApiError
           ? error.message
           : "Couldn't run the customer review.",
+      ),
+  });
+  const askMutation = useMutation({
+    mutationFn: askCustomerAgent,
+    onSuccess: async () => {
+      setQuestion("");
+      await queryClient.invalidateQueries({
+        queryKey: ["customer-agent-runs"],
+      });
+      toast.success("Customer Agent answer saved with its source tools.");
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : "Couldn't answer the customer data question.",
       ),
   });
   const latest = runs[0];
@@ -132,7 +150,7 @@ function CustomerIntelligenceAgentPanel() {
           >
             {latest?.triggerType === "event"
               ? "Reviews qualifying CRM events using tenant-scoped source records. Any follow-up task requires a manager action; no message is sent automatically."
-              : "Read-only review of the existing customer analytics summary. Only anonymized aggregate counts may be sent for an optional AI explanation; names, contacts, notes and messages are excluded."}
+              : "Run a read-only customer review or ask about current business aggregates. The question flow uses source tools and does not change CRM records."}
           </p>
         </div>
         {canRun && (
@@ -147,6 +165,44 @@ function CustomerIntelligenceAgentPanel() {
           </button>
         )}
       </div>
+      {canRun && (
+        <form
+          className="mt-4 flex flex-col gap-2 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            askMutation.mutate(question);
+          }}
+        >
+          <input
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            maxLength={1_000}
+            aria-label="Ask the Customer Intelligence Agent"
+            placeholder="Ask about recorded customer data"
+            className="min-w-0 flex-1 rounded-[10px] px-3 py-2.5 text-[12px] outline-none"
+            style={{
+              color: "var(--app-text)",
+              background: "var(--app-surface-2)",
+              border: "1px solid var(--app-border)",
+            }}
+          />
+          <button
+            type="submit"
+            disabled={askMutation.isPending || question.trim().length < 4}
+            className="rounded-[10px] px-4 py-2.5 text-[12px] font-extrabold text-white disabled:opacity-60"
+            style={{ background: "var(--app-primary)" }}
+          >
+            {askMutation.isPending ? "Checking…" : "Ask"}
+          </button>
+        </form>
+      )}
+      <p
+        className="mb-0 mt-2 text-[10.5px]"
+        style={{ color: "var(--app-text-disabled)" }}
+      >
+        Answers use current-business aggregate CRM data only. Individual customer details,
+        notes and message content are excluded; no message or record is changed.
+      </p>
       {isLoading ? (
         <p
           className="mb-0 mt-4 text-[12px]"
@@ -170,6 +226,52 @@ function CustomerIntelligenceAgentPanel() {
               {latest.status === "completed" ? "Saved" : latest.status}
             </span>
           </div>
+          {latest.output?.answer ? (
+            <div
+              className="mt-3 rounded-[10px] p-3"
+              style={{
+                background: "var(--app-surface)",
+                border: "1px solid var(--app-border)",
+              }}
+            >
+              <strong
+                className="text-[11px]"
+                style={{ color: "var(--app-text)" }}
+              >
+                Customer Agent answer
+              </strong>
+              <p
+                className="mb-0 mt-1 whitespace-pre-wrap text-[12px] leading-relaxed"
+                style={{ color: "var(--app-text-muted)" }}
+              >
+                {latest.output.answer}
+              </p>
+              {(latest.output.tools?.length ?? 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {latest.output.tools?.map((tool, index) => (
+                    <span
+                      key={`${tool.tool}:${index}`}
+                      className="rounded-full px-2 py-1 text-[10px]"
+                      style={{
+                        color: "var(--app-text-muted)",
+                        background: "var(--app-surface-2)",
+                      }}
+                    >
+                      {tool.tool} · {tool.outcome}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : latest.output?.message ? (
+            <p
+              role="status"
+              className="mb-0 mt-3 text-[11px]"
+              style={{ color: "var(--app-text-muted)" }}
+            >
+              {latest.output.message}
+            </p>
+          ) : null}
           {snapshot && (
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               {[

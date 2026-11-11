@@ -7,6 +7,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 import { AnalyticsService } from './analytics.service';
 import { MessageAtRiskDto } from './dto/message-at-risk.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
@@ -14,6 +15,13 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { CustomerIntelligenceService } from '../customers/customer-intelligence.service';
+
+class CustomerAgentQuestionDto {
+  @IsString()
+  @MinLength(4)
+  @MaxLength(1_000)
+  question!: string;
+}
 
 /** UPD-BE-108 fix-it: no capability gate previously existed on real KPI/cohort/staff-sales data. */
 @RequireCapability(CAPABILITIES.PROFIT_VIEW)
@@ -102,6 +110,21 @@ export class AnalyticsController {
         : 'current_business',
       idempotencyKey,
       branchId ?? user.businessId,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.CUSTOMER_AGENT_RUN)
+  @Post('customers/agent-questions')
+  askCustomerAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CustomerAgentQuestionDto,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+  ) {
+    return this.customerIntelligence.ask(
+      user.businessId,
+      user.sub,
+      dto.question,
+      idempotencyKey,
     );
   }
 
