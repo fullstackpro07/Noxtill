@@ -19,6 +19,7 @@ import {
   type CompletedSpecialistAgentToolCallStatus,
   type RecordSpecialistAgentToolCallInput,
 } from './specialist-agent-tool-call.util';
+import { recordSpecialistAgentToolEvent } from './specialist-agent-run-events.util';
 
 export interface RegisteredSpecialistAgentTool extends SpecialistAgentToolContract {
   riskClass: string;
@@ -352,9 +353,12 @@ export class SpecialistAgentToolGatewayService {
   }
 
   async record(input: RecordSpecialistAgentToolCallInput): Promise<void> {
-    await this.tenantPrisma.client.specialistAgentToolCall.upsert(
-      specialistAgentToolCallUpsertArgs(input),
-    );
+    await this.tenantPrisma.client.$transaction(async (tx) => {
+      await tx.specialistAgentToolCall.upsert(
+        specialistAgentToolCallUpsertArgs(input),
+      );
+      await recordSpecialistAgentToolEvent(tx, input);
+    });
   }
 
   private async reserveToolCallSlot(
@@ -396,20 +400,21 @@ export class SpecialistAgentToolGatewayService {
         },
       });
       const allowed = priorToolCalls < limit;
+      const toolCall = {
+        ...this.recordContext(input),
+        actorUserId: input.actorUserId,
+        toolKey: tool.key,
+        toolVersion: specialistAgentToolVersion(tool),
+        status: allowed ? 'running' : 'blocked',
+        input: allowed ? normalizedInput : { validation: 'call_limit' },
+        durationMs: allowed ? null : 0,
+        errorCode: allowed ? null : 'SPECIALIST_AGENT_TOOL_CALL_LIMIT_REACHED',
+        finishedAt: allowed ? null : new Date(),
+      } satisfies RecordSpecialistAgentToolCallInput;
       await tx.specialistAgentToolCall.upsert(
-        specialistAgentToolCallUpsertArgs({
-          ...this.recordContext(input),
-          toolKey: tool.key,
-          toolVersion: specialistAgentToolVersion(tool),
-          status: allowed ? 'running' : 'blocked',
-          input: allowed ? normalizedInput : { validation: 'call_limit' },
-          durationMs: allowed ? null : 0,
-          errorCode: allowed
-            ? null
-            : 'SPECIALIST_AGENT_TOOL_CALL_LIMIT_REACHED',
-          finishedAt: allowed ? null : new Date(),
-        }),
+        specialistAgentToolCallUpsertArgs(toolCall),
       );
+      await recordSpecialistAgentToolEvent(tx, toolCall);
       return { allowed, limit };
     });
   }
@@ -420,6 +425,7 @@ export class SpecialistAgentToolGatewayService {
       runId: input.runId,
       agentKey: input.agentKey,
       moduleId: input.moduleId,
+      actorUserId: input.actorUserId,
       round: input.round,
       sequence: input.sequence,
       correlationId: input.correlationId,

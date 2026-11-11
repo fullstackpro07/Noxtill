@@ -139,6 +139,23 @@ async function createVersionIfChanged(
   return version;
 }
 
+/** Persist the immutable snapshot for one specialist while its business is locked. */
+export function recordSpecialistAgentConfigVersion(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  agentKey: string,
+  businessConfiguration: unknown,
+  changedByUserId: string | null,
+): Promise<number> {
+  return createVersionIfChanged(
+    tx,
+    businessId,
+    agentKey,
+    businessConfiguration,
+    changedByUserId,
+  );
+}
+
 /** Must be called while the Business row is locked by the surrounding transaction. */
 export async function recordSpecialistAgentConfigVersions(
   tx: Prisma.TransactionClient,
@@ -147,7 +164,7 @@ export async function recordSpecialistAgentConfigVersions(
   changedByUserId: string | null,
 ): Promise<void> {
   for (const agent of SPECIALIST_AGENT_REGISTRY) {
-    await createVersionIfChanged(
+    await recordSpecialistAgentConfigVersion(
       tx,
       businessId,
       agent.agentKey,

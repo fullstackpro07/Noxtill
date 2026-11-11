@@ -25,7 +25,9 @@ and unsupported data/provider boundaries.
 
 1. Open **Settings → AI & Governance** (`/assistant/settings`) as the business owner. Check the
    relevant specialist switch, monthly request/spend caps, provider configuration and the
-   30-day specialist operations summary. That summary uses application-estimated AI cost, not a
+   30-day specialist operations summary. The owner can optionally configure a queued-run age
+   warning; leave it unset to disable that alert. It evaluates persisted run timestamps, not live
+   Redis/BullMQ state. That summary uses application-estimated AI cost, not a
    provider invoice; active-run age is measured from saved `startedAt`, not enqueue time. Material
    action execution p50/p95 is based on saved `executing` to terminal transitions, both by agent and
    action type; it is not provider-tool latency or business impact. Commerce registry tool p50/p95
@@ -86,14 +88,22 @@ and unsupported data/provider boundaries.
 3. In AI Settings, inspect cross-agent runs and the persisted specialist operations summary. The
    cross-agent section shows measured time from saved parent-run creation to first persisted worker
    pickup, plus saved reviews currently awaiting pickup and their oldest age. A running row's age
-   starts at `startedAt`. These values are sampled from persisted rows and do not prove live queue
-   depth, worker liveness or per-tool latency; use the deployment's queue monitoring for those.
+   starts at `startedAt`. Each specialist also shows its persisted `queued` run count and oldest
+   saved age for the current business. These values are read from database run states; they do not
+   prove live Redis/BullMQ depth or worker liveness. Use the deployment's queue monitoring for those.
 4. Restore Redis/worker health first. The orchestration recovery job resumes eligible persisted
    runs, but inspect each run's children before retrying. Retry only failed children through the
    owner UI after confirming they have no completed canonical side effect. Do not replay an entire
    run to recover a single child.
 
 ## Bad agent version or configuration
+
+The shared API also exposes `GET /api/v1/agents/:agentKey/config` for the selected agent's
+allowlisted, resolved settings and current `configVersion`. An owner can update allowed settings
+with `PATCH /api/v1/agents/:agentKey/config`, sending that `expectedVersion` and a `settings`
+object. The server validates each setting against the policy definition, rejects stale versions,
+records immutable configuration history and writes an audit record. This is an API contract; it is
+not a replacement for the Settings UI, and it does not make provider/model keys editable there.
 
 1. Identify the agent key/version from the saved run, then inspect the business's current owner
    settings and the run's policy result. Check whether the agent was disabled, a monthly cap was
@@ -137,10 +147,13 @@ and unsupported data/provider boundaries.
 - `/health/ready` checks the database and configured Redis readiness, not queue depth or worker
   liveness. Deployment monitoring must separately alert on worker health and queue age.
 - The specialist operations view reports persisted run outcomes, error codes, latency percentiles,
-  active-run age, recommendation and material-action states, proposal revision events, and linked AI
-  usage. It exposes one narrow business-wide count of audited cross-tenant run probes denied by the
-  orchestration service; it is not general security-event monitoring. Per-tool latency, enqueue
-  wait, and comprehensive action/approval/verification rates remain unavailable there.
+  queued-run counts and oldest saved age, active-run age, recommendation and material-action states,
+  proposal revision events, and linked AI usage. It also reports registered-tool status counts by
+  tool and measured execution-time percentiles from saved completed/failed calls. It exposes one
+  narrow business-wide count of audited cross-tenant run probes denied by the orchestration service;
+  it is not general security-event monitoring. Generic per-agent enqueue-to-worker latency, live
+  Redis/BullMQ depth, worker liveness and comprehensive action/approval/verification rates remain
+  unavailable there.
 - External paging, durable production Redis, backups/restore drills, production secrets storage and
   provider invoice reconciliation require deployment configuration and operational evidence. A
   local passing test suite does not establish these controls.

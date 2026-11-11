@@ -368,6 +368,78 @@ describe('Procurement requests (real MySQL)', () => {
     ).resolves.toMatchObject({ status: 'cancelled' });
   });
 
+  it('cancels an approved request with an exact version before purchase-order conversion', async () => {
+    const request = await service.createRequest(businessId, userId, {
+      reason: 'Approved request cancellation QA',
+      currency: 'USD',
+      items: [
+        {
+          lineType: 'service',
+          description: 'Approved service request cancellation fixture',
+          quantity: 1,
+          estimatedUnitCost: 25,
+        },
+      ],
+    });
+    const submitted = await service.submitRequest(
+      businessId,
+      userId,
+      request.id,
+    );
+    const approved = await service.decideRequest(
+      businessId,
+      userId,
+      request.id,
+      { decision: 'approve', expectedVersion: submitted.version },
+    );
+
+    await expect(
+      service.cancelApprovedRequest(
+        businessId,
+        userId,
+        request.id,
+        false,
+        'The operating need changed before conversion.',
+        approved.version + 1,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'PROCUREMENT_REQUEST_VERSION_CONFLICT' },
+    });
+
+    const cancelled = await service.cancelApprovedRequest(
+      businessId,
+      userId,
+      request.id,
+      false,
+      'The operating need changed before conversion.',
+      approved.version,
+    );
+    expect(cancelled).toMatchObject({
+      status: 'cancelled',
+      version: approved.version + 1,
+      convertedPurchaseOrder: null,
+    });
+    expect(cancelled.events.map((event) => event.type)).toEqual([
+      'created',
+      'submitted',
+      'approved',
+      'cancelled',
+    ]);
+    expect(cancelled.events.at(-1)?.reason).toBe(
+      'The operating need changed before conversion.',
+    );
+    await expect(
+      service.convertRequestToPurchaseOrder(
+        businessId,
+        userId,
+        request.id,
+        cancelled.version,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'PROCUREMENT_REQUEST_INVALID_TRANSITION' },
+    });
+  });
+
   it('surfaces submitted requests in Action Center and approves them there', async () => {
     const request = await service.createRequest(businessId, userId, {
       reason: 'Action Center approval flow check',

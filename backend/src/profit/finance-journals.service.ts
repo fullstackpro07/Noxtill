@@ -194,6 +194,51 @@ export class FinanceJournalsService {
     };
   }
 
+  async listPostedEntriesForAgent(businessId: string, month: string) {
+    const scopedBusinessId = this.scopedBusinessId(businessId);
+    const { start, end } = parseMonth(month);
+    const entries = await this.tenantPrisma.client.financeJournalEntry.findMany(
+      {
+        where: {
+          businessId: scopedBusinessId,
+          status: 'posted',
+          entryDate: { gte: start, lt: end },
+        },
+        orderBy: [{ entryDate: 'desc' }, { id: 'desc' }],
+        take: 101,
+        select: {
+          id: true,
+          reference: true,
+          entryDate: true,
+          currencyCode: true,
+          status: true,
+          lines: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: 21,
+            select: {
+              accountCode: true,
+              accountName: true,
+              debit: true,
+              credit: true,
+            },
+          },
+        },
+      },
+    );
+    return {
+      month,
+      coverage: 'posted_manual_journals_only' as const,
+      disclosure:
+        'Only posted manual Noxtill journals are included. Automatic sales/expense postings, opening balances, bank reconciliation, Xero journals and a certified accounting close are excluded. At most 100 entries and 20 lines per entry are returned.',
+      entries: entries.slice(0, 100).map((entry) => ({
+        ...entry,
+        lines: entry.lines.slice(0, 20),
+        hasMoreLines: entry.lines.length > 20,
+      })),
+      hasMoreEntries: entries.length > 100,
+    };
+  }
+
   async activitySummary(businessId: string, month: string) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
     const { start, end } = parseMonth(month);

@@ -514,6 +514,46 @@ export interface InventoryAgentActionOutcome {
   measurementNote: string;
 }
 
+export interface InventoryAgentBranchTransferOutcome {
+  recommendationId: string;
+  title: string;
+  recommendationStatus: string;
+  recommendationCreatedAt: string;
+  source: {
+    businessId: string;
+    businessName: string;
+    productId: string;
+    productName: string;
+    currentStock: number | null;
+  };
+  destination: {
+    businessId: string;
+    businessName: string;
+    productId: string;
+    productName: string | null;
+    currentStock: number | null;
+  };
+  suggestedQuantity: number | null;
+  transfer: {
+    id: string;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    requestedQuantity: number;
+    receivedQuantity: number | null;
+  } | null;
+  observedAt: string;
+  measurementNote: string;
+}
+
+export function fetchInventoryAgentBranchTransferOutcomes(): Promise<
+  InventoryAgentBranchTransferOutcome[]
+> {
+  return apiFetch<InventoryAgentBranchTransferOutcome[]>(
+    "/inventory/agent-transfer-outcomes",
+  );
+}
+
 export function fetchInventoryAgentActionOutcomes(): Promise<
   InventoryAgentActionOutcome[]
 > {

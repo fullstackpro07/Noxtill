@@ -160,9 +160,12 @@ export class InventoryService {
     return movement;
   }
 
-  async listInventory() {
+  async listInventory(productId?: string) {
     const products = await this.tenantPrisma.client.product.findMany({
-      where: { kind: ProductKind.product },
+      where: {
+        kind: ProductKind.product,
+        ...(productId ? { id: productId } : {}),
+      },
       orderBy: { name: 'asc' },
     });
     const productIds = products.map((p) => p.id);

@@ -13,6 +13,7 @@ export interface RecordSpecialistAgentToolCallInput {
   runId: string;
   agentKey: string;
   moduleId: string;
+  actorUserId?: string | null;
   toolKey: string;
   toolVersion?: number;
   round?: number;

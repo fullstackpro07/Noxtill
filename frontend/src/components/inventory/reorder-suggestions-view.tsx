@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Check, Sparkles } from "lucide-react";
 import {
   fetchInventory,
+  fetchInventoryAgentBranchTransferOutcomes,
   fetchInventoryAgentActionOutcomes,
   fetchInventoryAgentRuns,
   fetchLowStock,
@@ -104,6 +105,14 @@ export function ReorderSuggestionsView() {
     queryKey: ["inventory-agent-outcomes"],
     queryFn: fetchInventoryAgentActionOutcomes,
   });
+  const {
+    data: branchTransferOutcomes = [],
+    isPending: branchTransferOutcomesPending,
+    isError: branchTransferOutcomesError,
+  } = useQuery({
+    queryKey: ["inventory-agent-branch-transfer-outcomes"],
+    queryFn: fetchInventoryAgentBranchTransferOutcomes,
+  });
   const agentMutation = useMutation({
     mutationFn: runInventoryAgent,
     onSuccess: async () => {
@@ -112,6 +121,9 @@ export function ReorderSuggestionsView() {
       });
       await queryClient.invalidateQueries({
         queryKey: ["inventory-agent-outcomes"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["inventory-agent-branch-transfer-outcomes"],
       });
       toast.success("Inventory analysis saved with its source evidence");
     },
@@ -165,6 +177,9 @@ export function ReorderSuggestionsView() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["inventory-agent-runs"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["inventory-agent-branch-transfer-outcomes"],
       });
       toast.success(
         "Pending stock-transfer request saved. Approval and shipping remain human actions; stock was not changed.",
@@ -1894,6 +1909,110 @@ export function ReorderSuggestionsView() {
             </div>
           )}
         </div>
+      </section>
+      <section
+        aria-labelledby="inventory-branch-transfer-follow-through"
+        style={{
+          border: `1px solid ${INV.border}`,
+          borderRadius: 12,
+          background: "#FFFFFF",
+          padding: 16,
+          marginTop: 14,
+        }}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <h3
+            id="inventory-branch-transfer-follow-through"
+            style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#101828" }}
+          >
+            Branch transfer follow-through
+          </h3>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#667085" }}>
+            Shows linked Stock Transfer status, requested and received units,
+            and current branch stock. Approval and receipt stay in Stock
+            Transfers.
+          </p>
+        </div>
+        {branchTransferOutcomesPending ? (
+          <div style={{ fontSize: 11.5, color: "#667085" }}>
+            Loading branch transfer records…
+          </div>
+        ) : branchTransferOutcomesError ? (
+          <div role="alert" style={{ fontSize: 11.5, color: "#B42318" }}>
+            Branch transfer follow-through could not be loaded.
+          </div>
+        ) : branchTransferOutcomes.length === 0 ? (
+          <div style={{ fontSize: 11.5, color: "#667085" }}>
+            No saved branch-rebalance findings to follow yet.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: 760,
+                fontSize: 11.5,
+                color: "#344054",
+              }}
+            >
+              <thead>
+                <tr style={{ textAlign: "left", color: "#667085" }}>
+                  {["Product", "Source branch", "Destination branch", "Transfer", "Current stock"].map((label) => (
+                    <th
+                      key={label}
+                      style={{
+                        padding: "7px 8px",
+                        borderBottom: `1px solid ${INV.border}`,
+                      }}
+                    >
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {branchTransferOutcomes.slice(0, 10).map((outcome) => (
+                  <tr key={outcome.recommendationId}>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${INV.border}` }}>
+                      <strong>{outcome.source.productName}</strong>
+                      <div style={{ marginTop: 3, color: "#667085" }}>
+                        Suggested {outcome.suggestedQuantity ?? "Not recorded"} units
+                      </div>
+                    </td>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${INV.border}` }}>
+                      {outcome.source.businessName}
+                    </td>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${INV.border}` }}>
+                      {outcome.destination.businessName}
+                    </td>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${INV.border}` }}>
+                      {outcome.transfer ? (
+                        <Link
+                          href="/branches/transfers"
+                          style={{ color: "var(--app-primary)", textDecoration: "underline" }}
+                        >
+                          {outcome.transfer.status.replaceAll("_", " ")} · {outcome.transfer.requestedQuantity} requested
+                          {outcome.transfer.receivedQuantity !== null
+                            ? ` · ${outcome.transfer.receivedQuantity} received`
+                            : " · Not received"}
+                        </Link>
+                      ) : (
+                        "No transfer prepared"
+                      )}
+                    </td>
+                    <td style={{ padding: 8, borderBottom: `1px solid ${INV.border}` }}>
+                      {outcome.source.currentStock ?? "Not available"} source · {outcome.destination.currentStock ?? "Not available"} destination
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p style={{ margin: "7px 5px 0", fontSize: 10.5, color: "#667085" }}>
+              {branchTransferOutcomes[0]?.measurementNote} Observed {branchTransferOutcomes[0]?.observedAt ? new Date(branchTransferOutcomes[0].observedAt).toLocaleString() : "time not recorded"}.
+            </p>
+          </div>
+        )}
       </section>
       <div
         style={{

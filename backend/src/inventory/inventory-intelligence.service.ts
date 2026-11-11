@@ -53,7 +53,7 @@ import {
 } from '../common/agents/specialist-agent-run-options';
 
 const AGENT_KEY = 'inventory_intelligence';
-const AGENT_VERSION = '1.8.0';
+const AGENT_VERSION = '1.10.0';
 const FORMULA_VERSION =
   'reorder-suggestions-v1+tenant-lead-time-v1+open-purchase-offset-v1+lead-time-sensitivity-v1+demand-backtest-interval-v1+prior-year-recorded-sales-comparison-v1+purchase-pack-rounding-v1+product-minimum-reorder-v1+branch-transfer-availability-v1+no-recent-demand-review-v1';
 const DEMAND_HISTORY_WEEKS = 52;
@@ -73,6 +73,18 @@ const SUPPLIER_LEAD_TIME_SCENARIO_MIN_SAMPLES = 3;
 const ACTION_OUTCOME_SALES_WINDOW_DAYS = 56;
 const ACTION_OUTCOME_SALES_WINDOW_WEEKS = ACTION_OUTCOME_SALES_WINDOW_DAYS / 7;
 const INVENTORY_REORDER_TOOL_KEY = 'get_reorder_suggestions';
+const INVENTORY_BRANCH_REBALANCE_TOOL_KEY =
+  'get_branch_rebalance_recommendations';
+const INVENTORY_BRANCH_REBALANCE_TOOL_RESULT_LIMIT = 50;
+const INVENTORY_STOCK_BALANCE_TOOL_KEY = 'get_stock_balance';
+const INVENTORY_STOCK_MOVEMENTS_TOOL_KEY = 'get_stock_movements';
+const INVENTORY_SALES_VELOCITY_TOOL_KEY = 'get_sales_velocity';
+const INVENTORY_OPEN_PURCHASE_ORDERS_TOOL_KEY = 'get_open_purchase_orders';
+const INVENTORY_STOCK_COUNT_VARIANCES_TOOL_KEY = 'get_stock_count_variances';
+const INVENTORY_STOCK_MOVEMENTS_DEFAULT_DAYS = 30;
+const INVENTORY_STOCK_MOVEMENTS_MAX_DAYS = 365;
+const INVENTORY_STOCK_MOVEMENTS_DEFAULT_LIMIT = 50;
+const INVENTORY_STOCK_MOVEMENTS_MAX_LIMIT = 100;
 const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
   {
     key: INVENTORY_REORDER_TOOL_KEY,
@@ -85,6 +97,84 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     executable: true,
     exposedToReadOnlyAssistant: true,
     maxOutputBytes: 1_048_576,
+    screen: '/inventory/reorder-suggestions',
+  },
+  {
+    key: INVENTORY_STOCK_BALANCE_TOOL_KEY,
+    label: 'Read a product stock balance',
+    description:
+      'Read one product’s current Noxtill business-level on-hand stock, low-stock threshold and recorded-sales velocity. This is not provider-confirmed or branch-allocated availability.',
+    inputs: ['productId'],
+    requiredInputs: ['productId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 32_000,
+    screen: '/inventory',
+  },
+  {
+    key: INVENTORY_STOCK_MOVEMENTS_TOOL_KEY,
+    label: 'Read recorded stock movements',
+    description:
+      'Read a bounded recent movement history for one product from Noxtill. The history does not establish unrecorded or off-platform demand.',
+    inputs: ['productId', 'daysBack', 'limit'],
+    requiredInputs: ['productId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 64_000,
+    screen: '/inventory/movements',
+  },
+  {
+    key: INVENTORY_SALES_VELOCITY_TOOL_KEY,
+    label: 'Calculate recorded sales velocity',
+    description:
+      'Calculate average daily units from recorded sale movements for one product over a bounded lookback window. This is recorded activity, not a complete demand forecast.',
+    inputs: ['productId', 'daysBack'],
+    requiredInputs: ['productId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 32_000,
+    screen: '/inventory/reorder-suggestions',
+  },
+  {
+    key: INVENTORY_OPEN_PURCHASE_ORDERS_TOOL_KEY,
+    label: 'Read open purchase orders',
+    description:
+      'Read open Noxtill purchase-order quantities for one product, including received and remaining units. Draft and sent status are internal workflow states, not proof of supplier shipment.',
+    inputs: ['productId', 'limit'],
+    requiredInputs: ['productId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 64_000,
+    screen: '/inventory/purchases',
+  },
+  {
+    key: INVENTORY_STOCK_COUNT_VARIANCES_TOOL_KEY,
+    label: 'Review physical stock-count variances',
+    description:
+      'Read open physical-count snapshots for one product and compare each counted quantity to the current book stock. This is a review only; it never applies a count or adjusts stock.',
+    inputs: ['productId', 'limit'],
+    requiredInputs: ['productId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 64_000,
+    screen: '/inventory/stock-count',
+  },
+  {
+    key: INVENTORY_BRANCH_REBALANCE_TOOL_KEY,
+    label: 'Review branch rebalance opportunities',
+    description:
+      'Read current stock, recorded sales and open branch transfers to find branches that may be able to rebalance stock. This tool never creates or approves a transfer.',
+    inputs: [],
+    requiredInputs: [],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 262_144,
     screen: '/inventory/reorder-suggestions',
   },
 ];
@@ -377,7 +467,428 @@ export class InventoryIntelligenceService {
       AGENT_KEY,
       '13',
       INVENTORY_AGENT_TOOLS,
-      async (context, _tool, input) => {
+      async (context, tool, input) => {
+        if (tool.key === INVENTORY_STOCK_BALANCE_TOOL_KEY) {
+          const productId = input.productId.trim();
+          if (!productId) {
+            throw new AppException(
+              'INVENTORY_AGENT_TOOL_INPUT_INVALID',
+              'Enter a product ID to read its stock balance.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const [item] = await this.inventoryService.listInventory(productId);
+          if (!item) {
+            throw new AppException(
+              'INVENTORY_AGENT_PRODUCT_NOT_FOUND',
+              'That product is not available in this business.',
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          return {
+            output: {
+              scope: 'current_business_product',
+              observedAt: new Date().toISOString(),
+              product: {
+                productId: item.id,
+                name: item.name,
+                sku: item.sku,
+                stockQty: item.stockQty,
+                lowStockThreshold: item.lowStockThreshold,
+                status: item.status,
+                recordedSalesVelocityPerDay: item.velocityPerDay,
+                daysOfCover: item.daysOfCover,
+                lastRecordedSaleAt: item.lastSoldAt?.toISOString() ?? null,
+              },
+              disclosure:
+                'Stock and recorded-sales velocity come from current Noxtill Product and StockMovement records. This business-level snapshot is not branch-allocated or provider-confirmed availability and excludes unrecorded reservations and off-platform sales.',
+            },
+            status: 'succeeded',
+            summary: `Read the current Noxtill stock balance for ${item.name}; no inventory record was changed.`,
+            outputResourceType: 'ProductStockBalance',
+            outputResourceId: item.id,
+          };
+        }
+
+        if (tool.key === INVENTORY_STOCK_MOVEMENTS_TOOL_KEY) {
+          const productId = input.productId.trim();
+          const daysBack = input.daysBack
+            ? Number(input.daysBack)
+            : INVENTORY_STOCK_MOVEMENTS_DEFAULT_DAYS;
+          const limit = input.limit
+            ? Number(input.limit)
+            : INVENTORY_STOCK_MOVEMENTS_DEFAULT_LIMIT;
+          if (
+            !productId ||
+            !Number.isSafeInteger(daysBack) ||
+            daysBack < 1 ||
+            daysBack > INVENTORY_STOCK_MOVEMENTS_MAX_DAYS ||
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            limit > INVENTORY_STOCK_MOVEMENTS_MAX_LIMIT
+          ) {
+            throw new AppException(
+              'INVENTORY_AGENT_TOOL_INPUT_INVALID',
+              `Enter a product ID, daysBack from 1 to ${INVENTORY_STOCK_MOVEMENTS_MAX_DAYS}, and limit from 1 to ${INVENTORY_STOCK_MOVEMENTS_MAX_LIMIT}.`,
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const product = await this.tenantPrisma.client.product.findFirst({
+            where: { id: productId, businessId: context.businessId },
+            select: { id: true, name: true },
+          });
+          if (!product) {
+            throw new AppException(
+              'INVENTORY_AGENT_PRODUCT_NOT_FOUND',
+              'That product is not available in this business.',
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          const observedAt = new Date();
+          const rows = await this.tenantPrisma.client.stockMovement.findMany({
+            where: {
+              businessId: context.businessId,
+              productId,
+              createdAt: {
+                gte: new Date(observedAt.getTime() - daysBack * 86_400_000),
+                lte: observedAt,
+              },
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: limit + 1,
+            select: { id: true, kind: true, qty: true, createdAt: true },
+          });
+          const hasMore = rows.length > limit;
+          const movements = rows.slice(0, limit).map((row) => ({
+            movementId: row.id,
+            kind: row.kind,
+            quantityUnits: row.qty,
+            recordedAt: row.createdAt.toISOString(),
+          }));
+          return {
+            output: {
+              scope: 'current_business_product',
+              productId: product.id,
+              productName: product.name,
+              windowDays: daysBack,
+              maximumRows: limit,
+              movementCount: movements.length,
+              hasMore,
+              observedAt: observedAt.toISOString(),
+              movements,
+              disclosure:
+                'These are Noxtill-recorded stock movements only. Missing movements do not establish zero demand; unrecorded reservations, stockout-censored demand and off-platform sales are not included.',
+            },
+            status: 'succeeded',
+            summary: `Read ${movements.length} recorded stock movement(s) for ${product.name} in the last ${daysBack} days; no inventory record was changed.`,
+            outputResourceType: 'StockMovementHistory',
+            outputResourceId: product.id,
+          };
+        }
+
+        if (tool.key === INVENTORY_SALES_VELOCITY_TOOL_KEY) {
+          const productId = input.productId.trim();
+          const daysBack = input.daysBack ? Number(input.daysBack) : 30;
+          if (
+            !productId ||
+            !Number.isSafeInteger(daysBack) ||
+            daysBack < 1 ||
+            daysBack > 365
+          ) {
+            throw new AppException(
+              'INVENTORY_AGENT_TOOL_INPUT_INVALID',
+              'Enter a product ID and daysBack from 1 to 365.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const product = await this.tenantPrisma.client.product.findFirst({
+            where: { id: productId, businessId: context.businessId },
+            select: { id: true, name: true },
+          });
+          if (!product) {
+            throw new AppException(
+              'INVENTORY_AGENT_PRODUCT_NOT_FOUND',
+              'That product is not available in this business.',
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          const observedAt = new Date();
+          const aggregate = await this.tenantPrisma.client.stockMovement.aggregate({
+            where: {
+              businessId: context.businessId,
+              productId,
+              kind: StockMovementKind.sale,
+              createdAt: {
+                gte: new Date(observedAt.getTime() - daysBack * 86_400_000),
+                lte: observedAt,
+              },
+            },
+            _sum: { qty: true },
+            _count: { _all: true },
+            _max: { createdAt: true },
+          });
+          const recordedUnits = Math.abs(Number(aggregate._sum.qty ?? 0));
+          const movementCount = aggregate._count._all;
+          return {
+            output: {
+              state: movementCount > 0 ? 'available' : 'no_recorded_sales',
+              scope: 'current_business_product',
+              productId: product.id,
+              productName: product.name,
+              windowDays: daysBack,
+              recordedUnits,
+              recordedSaleMovementCount: movementCount,
+              averageRecordedUnitsPerDay:
+                movementCount > 0
+                  ? Math.round((recordedUnits / daysBack) * 100) / 100
+                  : null,
+              lastRecordedSaleAt:
+                aggregate._max.createdAt?.toISOString() ?? null,
+              observedAt: observedAt.toISOString(),
+              disclosure:
+                'This is a deterministic average of Noxtill-recorded sale movements over the requested calendar-day window. It does not account for stockout-censored demand, off-platform sales, returns stored separately or future demand.',
+            },
+            status: 'succeeded',
+            summary:
+              movementCount > 0
+                ? `Calculated recorded sales velocity for ${product.name} over ${daysBack} days; no inventory record was changed.`
+                : `No sale movements are recorded for ${product.name} in the requested ${daysBack}-day window; velocity is unavailable rather than assumed to be zero demand.`,
+            outputResourceType: 'ProductRecordedSalesVelocity',
+            outputResourceId: product.id,
+          };
+        }
+
+        if (tool.key === INVENTORY_OPEN_PURCHASE_ORDERS_TOOL_KEY) {
+          const productId = input.productId.trim();
+          const limit = input.limit
+            ? Number(input.limit)
+            : INVENTORY_STOCK_MOVEMENTS_DEFAULT_LIMIT;
+          if (
+            !productId ||
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            limit > INVENTORY_STOCK_MOVEMENTS_MAX_LIMIT
+          ) {
+            throw new AppException(
+              'INVENTORY_AGENT_TOOL_INPUT_INVALID',
+              `Enter a product ID and a limit from 1 to ${INVENTORY_STOCK_MOVEMENTS_MAX_LIMIT}.`,
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const product = await this.tenantPrisma.client.product.findFirst({
+            where: { id: productId, businessId: context.businessId },
+            select: { id: true, name: true },
+          });
+          if (!product) {
+            throw new AppException(
+              'INVENTORY_AGENT_PRODUCT_NOT_FOUND',
+              'That product is not available in this business.',
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          const orders = await this.tenantPrisma.client.purchaseOrder.findMany({
+            where: {
+              businessId: context.businessId,
+              status: {
+                in: [
+                  PurchaseOrderStatus.draft,
+                  PurchaseOrderStatus.sent,
+                  PurchaseOrderStatus.confirmed,
+                  PurchaseOrderStatus.partially_received,
+                ],
+              },
+              items: { some: { productId } },
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: limit + 1,
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              sentAt: true,
+              confirmedAt: true,
+              items: {
+                where: { productId },
+                select: { qtyOrdered: true, qtyReceived: true },
+              },
+            },
+          });
+          const hasMore = orders.length > limit;
+          const purchaseOrders = orders.slice(0, limit).map((order) => ({
+            purchaseOrderId: order.id,
+            status: order.status,
+            createdAt: order.createdAt.toISOString(),
+            sentAt: order.sentAt?.toISOString() ?? null,
+            confirmedAt: order.confirmedAt?.toISOString() ?? null,
+            matchingItems: order.items.map((item) => ({
+              quantityOrdered: item.qtyOrdered,
+              quantityReceived: item.qtyReceived,
+              quantityRemaining: Math.max(
+                0,
+                item.qtyOrdered - item.qtyReceived,
+              ),
+            })),
+          }));
+          return {
+            output: {
+              state: purchaseOrders.length > 0 ? 'available' : 'no_open_orders',
+              scope: 'current_business_product',
+              productId: product.id,
+              productName: product.name,
+              maximumRows: limit,
+              purchaseOrderCount: purchaseOrders.length,
+              hasMore,
+              purchaseOrders,
+              observedAt: new Date().toISOString(),
+              disclosure:
+                'These are internal Noxtill purchase-order records and quantities for this product. Draft/sent/confirmed status does not prove supplier shipment; a receipt is counted only when recorded in Noxtill. Supplier costs and unrelated order items are excluded.',
+            },
+            status: 'succeeded',
+            summary: `Read ${purchaseOrders.length} open Noxtill purchase order(s) for ${product.name}; no order or stock record was changed.`,
+            outputResourceType: 'ProductOpenPurchaseOrders',
+            outputResourceId: product.id,
+          };
+        }
+
+        if (tool.key === INVENTORY_STOCK_COUNT_VARIANCES_TOOL_KEY) {
+          const productId = input.productId.trim();
+          const limit = input.limit
+            ? Number(input.limit)
+            : INVENTORY_STOCK_MOVEMENTS_DEFAULT_LIMIT;
+          if (
+            !productId ||
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            limit > INVENTORY_STOCK_MOVEMENTS_MAX_LIMIT
+          ) {
+            throw new AppException(
+              'INVENTORY_AGENT_TOOL_INPUT_INVALID',
+              `Enter a product ID and a limit from 1 to ${INVENTORY_STOCK_MOVEMENTS_MAX_LIMIT}.`,
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const product = await this.tenantPrisma.client.product.findFirst({
+            where: { id: productId, businessId: context.businessId },
+            select: { id: true, name: true },
+          });
+          if (!product) {
+            throw new AppException(
+              'INVENTORY_AGENT_PRODUCT_NOT_FOUND',
+              'That product is not available in this business.',
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          const rows = await this.tenantPrisma.client.stockCount.findMany({
+            where: {
+              businessId: context.businessId,
+              status: StockCountStatus.draft,
+              lines: { some: { productId } },
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: limit + 1,
+            select: {
+              id: true,
+              createdAt: true,
+              lines: {
+                where: { productId },
+                select: {
+                  expectedQty: true,
+                  countedQty: true,
+                  variance: true,
+                  product: { select: { stockQty: true } },
+                },
+              },
+            },
+          });
+          const hasMore = rows.length > limit;
+          const counts = rows.slice(0, limit).map((row) => ({
+            stockCountId: row.id,
+            createdAt: row.createdAt.toISOString(),
+            lines: row.lines.map((line) => ({
+              expectedQtyAtCount: line.expectedQty,
+              countedQty: line.countedQty,
+              savedSnapshotVariance: line.variance,
+              currentBookQty: line.product.stockQty,
+              currentVariance: line.countedQty - line.product.stockQty,
+              bookStockChangedSinceCount:
+                line.expectedQty !== line.product.stockQty,
+            })),
+          }));
+          return {
+            output: {
+              state: counts.length > 0 ? 'available' : 'no_open_count',
+              scope: 'current_business_product',
+              productId: product.id,
+              productName: product.name,
+              maximumRows: limit,
+              countRecordCount: counts.length,
+              hasMore,
+              counts,
+              observedAt: new Date().toISOString(),
+              disclosure:
+                'Only open draft count rows are included. The current variance is counted quantity minus current Product.stockQty, matching the canonical apply-time basis; the saved variance is only a creation-time snapshot. No count was applied and no stock was changed.',
+            },
+            status: 'succeeded',
+            summary: `Read ${counts.length} open physical-count record(s) for ${product.name}; no count or stock record was changed.`,
+            outputResourceType: 'ProductStockCountVariances',
+            outputResourceId: product.id,
+          };
+        }
+
+        if (tool.key === INVENTORY_BRANCH_REBALANCE_TOOL_KEY) {
+          const review = await this.buildBranchRebalanceRecommendations(
+            context.businessId,
+            new Date(),
+          );
+          const findings = review.recommendations
+            .slice(0, INVENTORY_BRANCH_REBALANCE_TOOL_RESULT_LIMIT)
+            .map((recommendation) => {
+              const details = recommendation.details;
+              return {
+                title: recommendation.title,
+                summary: recommendation.summary,
+                productName: details.productName,
+                sku: details.sku,
+                sourceBranch: details.sourceBusinessName,
+                destinationBranch: details.destinationBusinessName,
+                sourceAvailableAfterOpenTransfers:
+                  details.sourceAvailableAfterOpenTransfers,
+                sourceRecordedSalesVelocityPerDay:
+                  details.sourceSalesVelocityPerDay,
+                sourceDaysOfCover: details.sourceDaysOfCover,
+                sourceTargetCoverDays: details.sourceTargetCoverDays,
+                destinationProjectedStock: details.destinationProjectedStock,
+                destinationLowStockThreshold:
+                  details.destinationLowStockThreshold,
+                suggestedQuantity: details.suggestedQty,
+                formulaVersion: details.formulaVersion,
+                assumptions: recommendation.assumptions,
+                missingData: recommendation.missingData,
+                observedAt:
+                  recommendation.evidence.observedAt?.toISOString() ?? null,
+              };
+            });
+          return {
+            output: {
+              availability: review.availability,
+              activeLocationCount: review.activeLocationCount,
+              totalFindings: review.recommendations.length,
+              findings,
+              truncated:
+                review.recommendations.length >
+                INVENTORY_BRANCH_REBALANCE_TOOL_RESULT_LIMIT,
+              disclosure:
+                'These are calculated review findings from current Noxtill records, not guaranteed availability or a transfer order. Open a finding in Inventory and request human review before any transfer is approved or shipped. Calculations do not include unrecorded reservations, seasonality, transfer lead time or unit conversions.',
+            },
+            status: 'succeeded',
+            summary:
+              review.availability === 'single_location'
+                ? 'Branch rebalance review is unavailable because this business has only one active location.'
+                : `Read ${review.recommendations.length} current branch rebalance finding(s) across ${review.activeLocationCount} active location(s); no transfer was created.`,
+            outputResourceType: 'InventoryBranchRebalanceReview',
+          };
+        }
+
         const leadTimeDays = Number(input.leadTimeDays);
         if (
           !Number.isSafeInteger(leadTimeDays) ||
@@ -821,6 +1332,189 @@ export class InventoryIntelligenceService {
         },
         measurementNote:
           'Current stock is a later canonical snapshot and may reflect sales, returns, transfers, counts or other purchases. It is not attributed to this recommendation.',
+      };
+    });
+  }
+
+  /**
+   * Read-only follow-through for branch-rebalance findings. Transfer status and received units
+   * come from the canonical Stock Transfer records; current stock is a branch-scoped snapshot,
+   * not proof that this recommendation caused the observed balance.
+   */
+  async listBranchTransferOutcomes(businessId: string) {
+    const scopedBusinessId = this.scopedBusinessId(businessId);
+    const recommendations =
+      await this.prisma.specialistAgentRecommendation.findMany({
+        where: { businessId: scopedBusinessId, agentKey: AGENT_KEY },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          createdAt: true,
+          details: true,
+        },
+      });
+    const branchRecommendations = recommendations.filter((recommendation) => {
+      const details = recommendation.details as Prisma.JsonObject;
+      return (
+        details.signalType === 'branch_rebalance' &&
+        typeof details.sourceBusinessId === 'string' &&
+        typeof details.destinationBusinessId === 'string' &&
+        typeof details.sourceProductId === 'string' &&
+        typeof details.destinationProductId === 'string'
+      );
+    });
+    if (branchRecommendations.length === 0) return [];
+
+    const recommendationIds = branchRecommendations.map(({ id }) => id);
+    const transferRecords = await this.prisma.stockTransfer.findMany({
+      where: {
+        sourceSpecialistAgentRecommendationId: { in: recommendationIds },
+        OR: [
+          { sourceBusinessId: scopedBusinessId },
+          { destBusinessId: scopedBusinessId },
+        ],
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        sourceBusinessId: true,
+        destBusinessId: true,
+        sourceSpecialistAgentRecommendationId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        items: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: {
+            sourceProductId: true,
+            qty: true,
+            receivedQty: true,
+          },
+        },
+      },
+    });
+    const transferByRecommendation = new Map(
+      transferRecords
+        .filter((transfer) => transfer.sourceSpecialistAgentRecommendationId)
+        .map((transfer) => [
+          transfer.sourceSpecialistAgentRecommendationId as string,
+          transfer,
+        ]),
+    );
+    const productScopes = branchRecommendations.flatMap((recommendation) => {
+      const details = recommendation.details as Prisma.JsonObject;
+      return [
+        {
+          id: details.sourceProductId as string,
+          businessId: details.sourceBusinessId as string,
+        },
+        {
+          id: details.destinationProductId as string,
+          businessId: details.destinationBusinessId as string,
+        },
+      ];
+    });
+    const branchProducts = await this.prisma.product.findMany({
+      where: {
+        OR: productScopes.map((scope) => ({
+          id: scope.id,
+          businessId: scope.businessId,
+        })),
+      },
+      orderBy: [{ businessId: 'asc' }, { name: 'asc' }, { id: 'asc' }],
+      select: { id: true, businessId: true, name: true, stockQty: true },
+    });
+    const branchProductByKey = new Map(
+      branchProducts.map((product) => [
+        `${product.businessId}:${product.id}`,
+        product,
+      ]),
+    );
+    const observedAt = new Date();
+
+    return branchRecommendations.map((recommendation) => {
+      const details = recommendation.details as Prisma.JsonObject;
+      const sourceBusinessId = details.sourceBusinessId as string;
+      const destinationBusinessId = details.destinationBusinessId as string;
+      const sourceProductId = details.sourceProductId as string;
+      const destinationProductId = details.destinationProductId as string;
+      const transfer = transferByRecommendation.get(recommendation.id);
+      // A linked transfer must still match the branches in the saved finding before it is shown.
+      const matchingTransfer =
+        transfer?.sourceBusinessId === sourceBusinessId &&
+        transfer.destBusinessId === destinationBusinessId
+          ? transfer
+          : null;
+      const receivedQuantities =
+        matchingTransfer?.items
+          .map((item) => item.receivedQty)
+          .filter((quantity): quantity is number => quantity !== null) ?? [];
+
+      return {
+        recommendationId: recommendation.id,
+        title: recommendation.title,
+        recommendationStatus: recommendation.status,
+        recommendationCreatedAt: recommendation.createdAt,
+        source: {
+          businessId: sourceBusinessId,
+          businessName:
+            typeof details.sourceBusinessName === 'string'
+              ? details.sourceBusinessName
+              : 'Branch name not recorded',
+          productId: sourceProductId,
+          productName:
+            typeof details.productName === 'string'
+              ? details.productName
+              : 'Product name not recorded',
+          currentStock:
+            branchProductByKey.get(`${sourceBusinessId}:${sourceProductId}`)
+              ?.stockQty ?? null,
+        },
+        destination: {
+          businessId: destinationBusinessId,
+          businessName:
+            typeof details.destinationBusinessName === 'string'
+              ? details.destinationBusinessName
+              : 'Branch name not recorded',
+          productId: destinationProductId,
+          productName:
+            branchProductByKey.get(
+              `${destinationBusinessId}:${destinationProductId}`,
+            )?.name ?? null,
+          currentStock:
+            branchProductByKey.get(
+              `${destinationBusinessId}:${destinationProductId}`,
+            )?.stockQty ?? null,
+        },
+        suggestedQuantity:
+          typeof details.suggestedQty === 'number'
+            ? details.suggestedQty
+            : null,
+        transfer: matchingTransfer
+          ? {
+              id: matchingTransfer.id,
+              status: matchingTransfer.status,
+              createdAt: matchingTransfer.createdAt,
+              updatedAt: matchingTransfer.updatedAt,
+              requestedQuantity: matchingTransfer.items.reduce(
+                (sum, item) => sum + item.qty,
+                0,
+              ),
+              receivedQuantity:
+                receivedQuantities.length > 0
+                  ? receivedQuantities.reduce(
+                      (sum, quantity) => sum + quantity,
+                      0,
+                    )
+                  : null,
+            }
+          : null,
+        observedAt,
+        measurementNote:
+          'Transfer quantities and status are read from Stock Transfers. Branch stock is a current snapshot and is not attributed to this recommendation.',
       };
     });
   }

@@ -97,6 +97,13 @@ export class InventoryController {
     return this.inventoryIntelligence.listActionOutcomes(user.businessId);
   }
 
+  @Get('inventory/agent-transfer-outcomes')
+  listInventoryAgentTransferOutcomes(@CurrentUser() user: AuthenticatedUser) {
+    return this.inventoryIntelligence.listBranchTransferOutcomes(
+      user.businessId,
+    );
+  }
+
   @RequireCapability(CAPABILITIES.INVENTORY_AGENT_RUN)
   @Post('inventory/agent-runs')
   runInventoryAgent(

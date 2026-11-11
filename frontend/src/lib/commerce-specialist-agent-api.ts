@@ -184,6 +184,25 @@ export type CommerceProductionReview = {
   limitations: string[];
 };
 
+export type CommerceInventoryAvailabilityReview = {
+  state: 'available' | 'no_synced_channel_products';
+  source: 'Product.stockQty + Product.lowStockThreshold' | null;
+  totalSyncedProducts: number;
+  maximumProductsReviewed: number;
+  reviewedProductCount: number;
+  hasMore: boolean;
+  reviewedAtOrBelowThresholdCount: number;
+  products: {
+    productId: string;
+    stockQty: number;
+    lowStockThreshold: number;
+    thresholdState: 'at_or_below_recorded_threshold' | 'above_recorded_threshold';
+    providers: string[];
+  }[];
+  observedAt: string;
+  limitations: string[];
+};
+
 export type CommerceAgentRecommendation = {
   id: string;
   title: string;
@@ -287,6 +306,7 @@ export type CommerceAgentSpecialistRun = {
     deliveryExceptionReview?: CommerceDeliveryExceptionReview;
     fulfillmentReview?: CommerceFulfillmentReview;
     productionReview?: CommerceProductionReview;
+    inventoryAvailabilityReview?: CommerceInventoryAvailabilityReview | null;
     reviewSteps?: {
       key: string;
       label: string;

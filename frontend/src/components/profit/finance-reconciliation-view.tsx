@@ -7,6 +7,7 @@ import { toast } from "@/lib/toast";
 import { ApiError } from "@/lib/api-client";
 import { askText } from "@/lib/ask-dialog";
 import { useSession } from "@/lib/session";
+import { FinancialAgentQuickReview } from "@/components/profit/financial-agent-quick-review";
 import {
   acceptFinanceReconciliationMatch,
   downloadFinanceStatementImport,
@@ -264,6 +265,8 @@ export function FinanceReconciliationView() {
           </>}
         </section>
       </div>
+
+      <FinancialAgentQuickReview month={new Date().toISOString().slice(0, 7)} />
     </main>
   );
 }

@@ -1023,6 +1023,93 @@ export class ProcurementService {
     return this.getRequest(businessId, id);
   }
 
+  /**
+   * Cancels an approved request before it is converted into a purchase order.
+   * This is intentionally separate from withdrawing a submitted request so the
+   * canonical state transition and audit history remain explicit.
+   */
+  async cancelApprovedRequest(
+    businessId: string,
+    actorUserId: string,
+    id: string,
+    canManageAll: boolean,
+    reason: string,
+    expectedVersion: number,
+  ) {
+    const request = await this.findRequest(businessId, id);
+    if (request.version !== expectedVersion) {
+      throw new AppException(
+        'PROCUREMENT_REQUEST_VERSION_CONFLICT',
+        'This approved request changed after it was reviewed. Refresh it before cancelling.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (request.status !== ProcurementRequestStatus.approved) {
+      throw this.invalidTransition(
+        'Only an approved request that has not entered sourcing or purchase-order conversion can be cancelled.',
+      );
+    }
+    if (request.requesterUserId !== actorUserId && !canManageAll) {
+      throw new AppException(
+        'PROCUREMENT_REQUEST_FORBIDDEN',
+        'Only the requester or a procurement manager can cancel this approved request.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    const cancellationReason = reason.trim();
+    if (!cancellationReason) {
+      throw new AppException(
+        'PROCUREMENT_CANCELLATION_REASON_REQUIRED',
+        'Enter a reason to cancel this approved request.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.tenantPrisma.client.$transaction(async (tx) => {
+      const updated = await tx.procurementRequest.updateMany({
+        where: {
+          id,
+          businessId,
+          status: ProcurementRequestStatus.approved,
+          version: expectedVersion,
+          convertedPurchaseOrderId: null,
+        },
+        data: {
+          status: ProcurementRequestStatus.cancelled,
+          version: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) {
+        throw this.invalidTransition(
+          'This request changed or entered purchase-order conversion before it could be cancelled.',
+        );
+      }
+      await tx.procurementRequestEvent.create({
+        data: {
+          businessId,
+          requestId: id,
+          actorUserId,
+          eventType: ProcurementRequestEventType.cancelled,
+          fromStatus: ProcurementRequestStatus.approved,
+          toStatus: ProcurementRequestStatus.cancelled,
+          version: expectedVersion + 1,
+          reason: cancellationReason,
+        },
+      });
+      await this.transitionLinkedAgentAction(
+        tx,
+        businessId,
+        request,
+        'approved',
+        'cancelled',
+        actorUserId,
+        cancellationReason,
+        { closedAt: new Date() },
+      );
+    });
+    return this.getRequest(businessId, id);
+  }
+
   private async validateRequestReferences(
     businessId: string,
     dto: CreateProcurementRequestDto,

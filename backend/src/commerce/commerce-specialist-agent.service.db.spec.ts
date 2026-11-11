@@ -87,6 +87,8 @@ describe('CommerceSpecialistAgentService (MySQL)', () => {
   let supplierIds: string[] = [];
   let experimentId: string;
   let agentProductId: string;
+  let inventoryListingDraftId: string | undefined;
+  let inventoryChannelListingId: string | undefined;
   const cls = new FakeClsService();
   const createMessage = jest.fn();
   const stamp = Date.now();
@@ -501,6 +503,25 @@ describe('CommerceSpecialistAgentService (MySQL)', () => {
       },
     });
     agentProductId = experimentProduct.id;
+    const inventoryListingDraft = await prisma.commerceListingDraft.create({
+      data: {
+        businessId,
+        productId: experimentProduct.id,
+        channel: 'shopify',
+        status: 'approved',
+      },
+    });
+    inventoryListingDraftId = inventoryListingDraft.id;
+    const inventoryChannelListing = await prisma.commerceChannelListing.create({
+      data: {
+        businessId,
+        draftId: inventoryListingDraft.id,
+        productId: experimentProduct.id,
+        provider: 'shopify',
+        status: 'synced',
+      },
+    });
+    inventoryChannelListingId = inventoryChannelListing.id;
     const privateProductionComponent = await prisma.product.create({
       data: {
         businessId,
@@ -646,6 +667,16 @@ describe('CommerceSpecialistAgentService (MySQL)', () => {
     await prisma.commerceWorkOrderAudit.deleteMany({ where: { businessId } });
     await prisma.commerceWorkOrder.deleteMany({ where: { businessId } });
     await prisma.commerceBom.deleteMany({ where: { businessId } });
+    if (inventoryChannelListingId) {
+      await prisma.commerceChannelListing.deleteMany({
+        where: { id: inventoryChannelListingId },
+      });
+    }
+    if (inventoryListingDraftId) {
+      await prisma.commerceListingDraft.deleteMany({
+        where: { id: inventoryListingDraftId },
+      });
+    }
     await prisma.commerceReconciliationItem.deleteMany({
       where: { businessId: { in: [businessId, otherBusinessId] } },
     });
@@ -769,6 +800,46 @@ describe('CommerceSpecialistAgentService (MySQL)', () => {
       productOpportunities: { validation_requested: 1 },
       rfqs: { open: 2 },
     });
+    const inventoryAvailability = (
+      result.output as unknown as {
+        inventoryAvailabilityReview: {
+          state: string;
+          totalSyncedProducts: number;
+          reviewedProductCount: number;
+          reviewedAtOrBelowThresholdCount: number;
+          products: {
+            productId: string;
+            stockQty: number;
+            lowStockThreshold: number;
+            providers: string[];
+            thresholdState: string;
+          }[];
+        };
+      }
+    ).inventoryAvailabilityReview;
+    expect(inventoryAvailability).toMatchObject({
+      state: 'available',
+      totalSyncedProducts: 1,
+      reviewedProductCount: 1,
+      reviewedAtOrBelowThresholdCount: 1,
+      products: [
+        {
+          productId: agentProductId,
+          stockQty: 0,
+          lowStockThreshold: 5,
+          providers: ['shopify'],
+          thresholdState: 'at_or_below_recorded_threshold',
+        },
+      ],
+    });
+    expect(
+      result.recommendations[0].evidence.some(
+        (item) =>
+          item.resourceType === 'commerce_internal_inventory_availability' &&
+          Array.isArray(item.fieldRefs) &&
+          item.fieldRefs.includes('Product.stockQty'),
+      ),
+    ).toBe(true);
     const sourcingReview = (
       result.output as unknown as {
         sourcingReview: {
@@ -1623,6 +1694,39 @@ describe('CommerceSpecialistAgentService (MySQL)', () => {
       correlationId,
     });
     expect(JSON.stringify(callRecord)).not.toContain(agentProductId);
+    const toolEvents = await prisma.specialistAgentRunEvent.findMany({
+      where: {
+        businessId,
+        runId: result.id,
+        eventName: { startsWith: 'agent.tool.' },
+      },
+      orderBy: [{ occurredAt: 'asc' }, { eventName: 'asc' }],
+      select: {
+        eventName: true,
+        actorUserId: true,
+        sourceModule: true,
+        entityVersion: true,
+        payload: true,
+      },
+    });
+    expect(toolEvents.map((event) => event.eventName)).toEqual([
+      'agent.tool.started',
+      'agent.tool.succeeded',
+    ]);
+    expect(toolEvents[0]).toMatchObject({
+      actorUserId,
+      sourceModule: '29',
+      entityVersion: '2',
+      payload: {
+        agentKey: 'autonomous_commerce',
+        toolKey: 'get_product',
+        toolVersion: 2,
+        sequence: 1,
+        status: 'running',
+      },
+    });
+    expect(JSON.stringify(toolEvents)).not.toContain(agentProductId);
+    expect(JSON.stringify(toolEvents)).not.toContain(question);
     expect(
       await prisma.auditLog.count({
         where: {

@@ -65,6 +65,14 @@ export type SpecialistOrchestrationChild = {
   reasonCode: string | null;
 };
 
+const CHILD_STATE_EVENT_NAMES: Record<OrchestrationChildStatus, string> = {
+  running: 'agent.run.child_started',
+  completed: 'agent.run.child_completed',
+  partially_succeeded: 'agent.run.child_partial',
+  failed: 'agent.run.child_failed',
+  skipped: 'agent.run.child_skipped',
+};
+
 type OrchestrationOutput = {
   summary: string;
   correlationId: string;
@@ -230,6 +238,18 @@ export class SpecialistAgentOrchestrationService {
     data: Prisma.SpecialistAgentRunUpdateManyMutationInput;
   }) {
     return this.prisma.$transaction(async (tx) => {
+      const lockedRows = await tx.$queryRaw<
+        Array<{ output: Prisma.JsonValue }>
+      >(Prisma.sql`
+        SELECT output
+        FROM specialist_agent_runs
+        WHERE id = ${input.runId}
+          AND business_id = ${input.businessId}
+          AND agent_key = ${input.agentKey}
+          AND status IN (${Prisma.join(input.expectedStatuses)})
+        FOR UPDATE
+      `);
+      if (lockedRows.length === 0) return false;
       const run = await tx.specialistAgentRun.findFirst({
         where: {
           id: input.runId,
@@ -247,6 +267,7 @@ export class SpecialistAgentOrchestrationService {
           triggerType: true,
           initiatedByUserId: true,
           createdAt: true,
+          output: true,
         },
       });
       if (!run) return false;
@@ -268,7 +289,93 @@ export class SpecialistAgentOrchestrationService {
         input.status,
         input.occurredAt,
       );
+      if (
+        input.agentKey === ORCHESTRATOR_AGENT_KEY &&
+        input.data.output !== undefined
+      ) {
+        await this.recordChildStateEvents(
+          tx,
+          input.businessId,
+          input.runId,
+          run.output,
+          input.data.output as Prisma.JsonValue,
+          input.occurredAt,
+        );
+      }
       return true;
+    });
+  }
+
+  private async recordChildStateEvents(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    parentRunId: string,
+    previousOutput: Prisma.JsonValue,
+    nextOutput: Prisma.JsonValue,
+    occurredAt: Date,
+  ) {
+    const previousByAgent = new Map(
+      readPersistedChildren(previousOutput).map((child) => [
+        child.agentKey,
+        child,
+      ]),
+    );
+    const events = readPersistedChildren(nextOutput).flatMap((child) => {
+      const previous = previousByAgent.get(child.agentKey);
+      if (
+        previous?.status === child.status &&
+        previous.runId === child.runId &&
+        previous.reasonCode === child.reasonCode
+      ) {
+        return [];
+      }
+      const eventName = CHILD_STATE_EVENT_NAMES[child.status];
+      const reasonCode =
+        child.reasonCode && /^[A-Z0-9_]{1,64}$/.test(child.reasonCode)
+          ? child.reasonCode
+          : null;
+      const transitionKey = createHash('sha256')
+        .update(
+          [
+            businessId,
+            parentRunId,
+            child.agentKey,
+            previous?.status ?? 'not_started',
+            child.status,
+            child.runId ?? 'no_child_run',
+            reasonCode ?? 'no_reason',
+            occurredAt.toISOString(),
+          ].join(':'),
+        )
+        .digest('hex');
+      return [
+        {
+          id: randomUUID(),
+          dedupeKey: transitionKey,
+          businessId,
+          runId: parentRunId,
+          eventName,
+          occurredAt,
+          sourceModule: 'shared',
+          entityId: parentRunId,
+          entityVersion: ORCHESTRATOR_VERSION,
+          schemaVersion: 1,
+          correlationId: parentRunId,
+          actorUserId: null,
+          payload: {
+            agentKey: child.agentKey,
+            moduleId: child.moduleId,
+            fromStatus: previous?.status ?? null,
+            status: child.status,
+            reasonCode,
+          },
+        },
+      ];
+    });
+    if (events.length === 0) return;
+    await tx.specialistAgentRunEvent.createMany({
+      data: events,
+      skipDuplicates: true,
     });
   }
 
@@ -1603,9 +1710,22 @@ export class SpecialistAgentOrchestrationService {
     businessId: string,
     children: SpecialistOrchestrationChild[],
   ) {
-    const output = this.buildOutput(children, new Date(), runId);
-    const updated =
-      await this.tenantPrisma.client.specialistAgentRun.updateMany({
+    const observedAt = new Date();
+    const output = this.buildOutput(children, observedAt, runId);
+    return this.prisma.$transaction(async (tx) => {
+      const lockedRows = await tx.$queryRaw<
+        Array<{ output: Prisma.JsonValue }>
+      >(Prisma.sql`
+        SELECT output
+        FROM specialist_agent_runs
+        WHERE id = ${runId}
+          AND business_id = ${businessId}
+          AND agent_key = ${ORCHESTRATOR_AGENT_KEY}
+          AND status = 'running'
+        FOR UPDATE
+      `);
+      if (lockedRows.length === 0) return false;
+      const updated = await tx.specialistAgentRun.updateMany({
         where: {
           id: runId,
           businessId,
@@ -1614,9 +1734,19 @@ export class SpecialistAgentOrchestrationService {
           // race and changed the parent to cancel_requested, no later specialist may start.
           status: 'running',
         },
-        data: { output: output as unknown as Prisma.InputJsonObject },
+        data: { output },
       });
-    return updated.count === 1;
+      if (updated.count !== 1) return false;
+      await this.recordChildStateEvents(
+        tx,
+        businessId,
+        runId,
+        lockedRows[0].output,
+        output,
+        observedAt,
+      );
+      return true;
+    });
   }
 
   private buildOutput(

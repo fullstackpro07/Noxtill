@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
+import type { RecordSpecialistAgentToolCallInput } from './specialist-agent-tool-call.util';
 
 type RunCreatedEventSource = {
   id: string;
@@ -18,9 +19,13 @@ export async function recordSpecialistAgentRunCreatedEvent(
   tx: object,
   run: RunCreatedEventSource,
 ) {
-  await recordSpecialistAgentRunEvent(tx, run, 'agent.run.created', run.createdAt, {
-    triggerType: run.triggerType,
-  });
+  await recordSpecialistAgentRunEvent(
+    tx,
+    run,
+    'agent.run.created',
+    run.createdAt,
+    { triggerType: run.triggerType },
+  );
 }
 
 export type SpecialistAgentTerminalStatus =
@@ -55,6 +60,67 @@ export async function recordSpecialistAgentRunTerminalEvent(
     { status, triggerType: run.triggerType },
     status,
   );
+}
+
+const TOOL_EVENT_NAMES: Record<string, string> = {
+  running: 'agent.tool.started',
+  succeeded: 'agent.tool.succeeded',
+  refused: 'agent.tool.refused',
+  blocked: 'agent.tool.blocked',
+  failed: 'agent.tool.failed',
+};
+
+/** Persist a metadata-only tool lifecycle event alongside its redacted tool-call record. */
+export async function recordSpecialistAgentToolEvent(
+  tx: object,
+  input: RecordSpecialistAgentToolCallInput,
+  occurredAt = new Date(),
+) {
+  const eventName = TOOL_EVENT_NAMES[input.status];
+  const round = input.round ?? 1;
+  const sequence = input.sequence;
+  const dedupeKey = createHash('sha256')
+    .update(
+      `${input.businessId}:${input.runId}:${input.agentKey}:${round}:${sequence}:${input.status}`,
+    )
+    .digest('hex');
+  const safeErrorCode =
+    input.errorCode && /^[A-Z0-9_]{1,64}$/.test(input.errorCode)
+      ? input.errorCode
+      : null;
+
+  // Tool inputs, output values, and resource identifiers stay in canonical module
+  // storage (or the redacted tool-call ledger), never in this shared timeline.
+  const transactionClient = tx as Prisma.TransactionClient;
+  await transactionClient.specialistAgentRunEvent.createMany({
+    data: [
+      {
+        id: randomUUID(),
+        dedupeKey,
+        businessId: input.businessId,
+        runId: input.runId,
+        eventName,
+        occurredAt,
+        sourceModule: input.moduleId,
+        entityId: `tool:${round}:${sequence}`,
+        entityVersion: String(input.toolVersion ?? 1),
+        schemaVersion: 1,
+        correlationId: input.correlationId,
+        actorUserId: input.actorUserId ?? null,
+        payload: {
+          agentKey: input.agentKey,
+          toolKey: input.toolKey,
+          toolVersion: input.toolVersion ?? 1,
+          round,
+          sequence,
+          status: input.status,
+          durationMs: input.durationMs ?? null,
+          errorCode: safeErrorCode,
+        },
+      },
+    ],
+    skipDuplicates: true,
+  });
 }
 
 async function recordSpecialistAgentRunEvent(

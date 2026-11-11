@@ -245,7 +245,7 @@ export class SpecialistAgentRunsService {
         }),
       ),
       eventHistoryNote:
-        'New run-created and terminal outcome events are written in the same transaction as their run state. Older run-created events and terminal outcomes are materialized from saved timestamps when this timeline opens. Action events reflect saved state changes and proposal revisions. Cross-agent orchestration also records worker pickup, owner stop requests and retry queueing. Other intermediate run-state changes and non-action activity are not captured here.',
+        'New run-created, terminal outcome, and registered-tool start/result events are saved with their source records. Tool timeline payloads contain metadata only; tool inputs and outputs remain redacted in the separate ledger. Older run lifecycle and action events are materialized from saved timestamps and state when this timeline opens. Cross-agent orchestration also records worker pickup, each specialist child start/result/skip, owner stop requests, and retry queueing. Intermediate state changes in other run types and non-action activity are not captured here; legacy tool calls are not backfilled.',
       nextCursor,
       hasMore,
       pageSize: limit,

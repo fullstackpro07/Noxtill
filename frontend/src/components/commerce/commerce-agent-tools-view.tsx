@@ -9,7 +9,7 @@ import { toast } from "@/lib/toast";
 import { useModuleHeader } from "@/components/layout/module-header-context";
 import { saveHubChanges } from "@/lib/settings-hub-api";
 import { decideAgentToolRun, fetchAgentToolRuns, fetchAgentTools, runAgentTool, type AgentRiskClass, type AgentTool, type AgentToolRun } from "@/lib/commerce-agent-tools-api";
-import { askCommerceAgent, fetchCommerceAgentSpecialistRuns, runCommerceAgentOrderFulfillmentOrchestration, runCommerceAgentProductSourcingOrchestration, runCommerceAgentReview, type CommerceAgentSpecialistRun, type CommerceAgentStatusSnapshot, type CommerceDeliveryExceptionReview, type CommerceExperimentReview, type CommerceFulfillmentReview, type CommerceOrderFulfillmentOrchestration, type CommerceProductSourcingOrchestration, type CommerceProductionReview, type CommerceReconciliationReview, type CommerceSupplierClaimReview, type CommerceValidationScorecardReview } from "@/lib/commerce-specialist-agent-api";
+import { askCommerceAgent, fetchCommerceAgentSpecialistRuns, runCommerceAgentOrderFulfillmentOrchestration, runCommerceAgentProductSourcingOrchestration, runCommerceAgentReview, type CommerceAgentSpecialistRun, type CommerceAgentStatusSnapshot, type CommerceDeliveryExceptionReview, type CommerceExperimentReview, type CommerceFulfillmentReview, type CommerceInventoryAvailabilityReview, type CommerceOrderFulfillmentOrchestration, type CommerceProductSourcingOrchestration, type CommerceProductionReview, type CommerceReconciliationReview, type CommerceSupplierClaimReview, type CommerceValidationScorecardReview } from "@/lib/commerce-specialist-agent-api";
 import { SpecialistAgentUsage } from "@/components/agents/specialist-agent-usage";
 
 const RISK_COLOR: Record<AgentRiskClass, string> = {
@@ -496,6 +496,61 @@ function ProductionAssemblyReview({ review }: { review: CommerceProductionReview
             <li key={status}><strong className="capitalize">{status.replaceAll("_", " ")}</strong> · {unit.format(totals.count)} order(s) · {unit.format(totals.plannedUnits)} planned units</li>
           ))}
         </ul>
+      )}
+      <ul className="mb-0 mt-3 flex list-none flex-col gap-1 p-0 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+        {review.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
+      </ul>
+    </section>
+  );
+}
+
+function InternalInventoryAvailability({
+  review,
+}: {
+  review: CommerceInventoryAvailabilityReview;
+}) {
+  const qty = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+  return (
+    <section className="mt-4 rounded-xl border p-3" style={{ borderColor: "var(--app-border)", background: "var(--app-surface-2)" }} aria-label="Internal stock availability for channel products">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="m-0 text-sm font-bold">Internal stock for channel products</h3>
+          <p className="mb-0 mt-1 text-xs" style={{ color: "var(--app-text-muted)" }}>
+            {review.state === "no_synced_channel_products"
+              ? "No active products with a saved synced channel listing were found."
+              : `${review.totalSyncedProducts} active product(s) have a saved synced channel listing; ${review.reviewedAtOrBelowThresholdCount} of the ${review.reviewedProductCount} reviewed are at or below their recorded stock threshold${review.hasMore ? ` · capped at ${review.maximumProductsReviewed}` : ""}.`}
+          </p>
+        </div>
+        <div className="flex gap-3 text-xs font-bold">
+          <Link href="/inventory" className="underline">Open Inventory</Link>
+          <Link href="/autonomous-commerce/channel-listings" className="underline">Open Channel Listings</Link>
+        </div>
+      </div>
+      {review.products.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-xs">
+            <thead style={{ color: "var(--app-text-faint)" }}>
+              <tr>
+                <th className="px-2 py-1 font-semibold">Product</th>
+                <th className="px-2 py-1 font-semibold">Recorded stock</th>
+                <th className="px-2 py-1 font-semibold">Recorded threshold</th>
+                <th className="px-2 py-1 font-semibold">Listing providers</th>
+                <th className="px-2 py-1 font-semibold">Review</th>
+              </tr>
+            </thead>
+            <tbody>
+              {review.products.map((product) => (
+                <tr key={product.productId} className="border-t" style={{ borderColor: "var(--app-border)" }}>
+                  <td className="px-2 py-2 font-semibold">Product {product.productId.slice(0, 8)}</td>
+                  <td className="px-2 py-2">{qty.format(product.stockQty)}</td>
+                  <td className="px-2 py-2">{qty.format(product.lowStockThreshold)}</td>
+                  <td className="px-2 py-2">{product.providers.map((provider) => provider.replaceAll("_", " ")).join(", ")}</td>
+                  <td className="px-2 py-2">{product.thresholdState === "at_or_below_recorded_threshold" ? "At or below threshold" : "Above threshold"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       <ul className="mb-0 mt-3 flex list-none flex-col gap-1 p-0 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
         {review.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
@@ -1068,6 +1123,9 @@ export function CommerceAgentToolsView() {
             )}
             {specialistRuns.data[0].output.productionReview && (
               <ProductionAssemblyReview review={specialistRuns.data[0].output.productionReview} />
+            )}
+            {specialistRuns.data[0].output.inventoryAvailabilityReview && (
+              <InternalInventoryAvailability review={specialistRuns.data[0].output.inventoryAvailabilityReview} />
             )}
             <p className="mb-0 mt-3 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
               Any next step must be reviewed and completed in its canonical Commerce screen. A risk case is not automatically a policy hold.

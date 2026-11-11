@@ -1,10 +1,13 @@
 import { ClsService } from 'nestjs-cls';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { SpecialistAgentDirectoryService } from './specialist-agent-directory.service';
 import { ensureSpecialistAgentConfigVersion } from '../common/agents/specialist-agent-config.util';
+import { PoliciesService } from '../common/policies/policies.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 
 jest.setTimeout(30_000);
 
@@ -26,11 +29,29 @@ describe('SpecialistAgentDirectoryService (MySQL)', () => {
   let cls: FakeClsService;
   let businessId: string;
   let disabledBusinessId: string;
+  let ownerUserId: string;
   const stamp = Date.now();
 
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
+    const staleFixtures = await prisma.business.findMany({
+      where: { slug: { startsWith: 'specialist-agent-directory-' } },
+      select: { id: true },
+    });
+    const staleIds = staleFixtures.map((business) => business.id);
+    if (staleIds.length > 0) {
+      await prisma.auditLog.deleteMany({
+        where: { businessId: { in: staleIds } },
+      });
+      await prisma.businessUser.deleteMany({
+        where: { businessId: { in: staleIds } },
+      });
+      await prisma.business.deleteMany({ where: { id: { in: staleIds } } });
+    }
+    await prisma.user.deleteMany({
+      where: { email: { startsWith: 'specialist-agent-config-owner-' } },
+    });
     cls = new FakeClsService();
     const tenant = new TenantPrismaService(
       prisma,
@@ -39,6 +60,12 @@ describe('SpecialistAgentDirectoryService (MySQL)', () => {
     service = new SpecialistAgentDirectoryService(
       tenant,
       new SpecialistAgentPolicyService(prisma, cls as unknown as ClsService),
+      prisma,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        new CapabilitiesService(prisma),
+      ),
     );
     businessId = (
       await prisma.business.create({
@@ -52,6 +79,17 @@ describe('SpecialistAgentDirectoryService (MySQL)', () => {
         },
       })
     ).id;
+    const owner = await prisma.user.create({
+      data: {
+        name: 'Specialist Agent Config Owner',
+        email: `specialist-agent-config-owner-${stamp}@example.test`,
+        passwordHash: 'not-used-by-this-spec',
+      },
+    });
+    ownerUserId = owner.id;
+    await prisma.businessUser.create({
+      data: { businessId, userId: ownerUserId, role: Role.owner },
+    });
     disabledBusinessId = (
       await prisma.business.create({
         data: {
@@ -66,9 +104,21 @@ describe('SpecialistAgentDirectoryService (MySQL)', () => {
   });
 
   afterAll(async () => {
-    await prisma.business.deleteMany({
-      where: { id: { in: [businessId, disabledBusinessId] } },
+    const fixtureIds = [businessId, disabledBusinessId].filter(
+      (id): id is string => Boolean(id),
+    );
+    await prisma.auditLog.deleteMany({
+      where: { businessId: { in: fixtureIds } },
     });
+    await prisma.businessUser.deleteMany({
+      where: { businessId: { in: fixtureIds } },
+    });
+    await prisma.business.deleteMany({
+      where: { id: { in: fixtureIds } },
+    });
+    if (ownerUserId) {
+      await prisma.user.deleteMany({ where: { id: ownerUserId } });
+    }
     await prisma.$disconnect();
   });
 
@@ -151,5 +201,120 @@ describe('SpecialistAgentDirectoryService (MySQL)', () => {
     ).rejects.toMatchObject({
       response: { code: 'SPECIALIST_AGENT_CONFIG_HISTORY_LIMIT_INVALID' },
     });
+  });
+
+  it('returns only safe agent-owned configuration values and a current version', async () => {
+    const result = await service.configuration(
+      businessId,
+      'inventory_intelligence',
+    );
+
+    expect(result).toMatchObject({
+      agentKey: 'inventory_intelligence',
+      moduleId: '13',
+      configVersion: 1,
+      settings: {
+        'agents.inventoryEnabled': true,
+        'agents.inventoryDailyReviewEnabled': true,
+        'agents.inventoryMaxRequestsPerMonth': null,
+      },
+    });
+    expect(result.settings).not.toHaveProperty('ai.monthlyCostCapUsd');
+    expect(JSON.stringify(result)).not.toContain('secret');
+    expect(
+      await prisma.specialistAgentConfigVersion.count({
+        where: { businessId },
+      }),
+    ).toBe(1);
+  });
+
+  it('updates allowlisted config with optimistic versioning, immutable history and audit', async () => {
+    const current = await service.configuration(
+      businessId,
+      'inventory_intelligence',
+    );
+    const updated = await service.updateConfiguration(
+      businessId,
+      ownerUserId,
+      'inventory_intelligence',
+      {
+        expectedVersion: current.configVersion,
+        settings: {
+          'agents.inventoryEnabled': false,
+          'agents.inventoryMaxRequestsPerMonth': 12,
+        },
+      },
+    );
+
+    expect(updated).toMatchObject({
+      configVersion: current.configVersion + 1,
+      changed: true,
+      settings: {
+        'agents.inventoryEnabled': false,
+        'agents.inventoryMaxRequestsPerMonth': 12,
+      },
+    });
+    const history = await prisma.specialistAgentConfigVersion.findMany({
+      where: { businessId, agentKey: 'inventory_intelligence' },
+      orderBy: { version: 'asc' },
+      select: { version: true, changedByUserId: true },
+    });
+    expect(history).toEqual([
+      { version: 1, changedByUserId: null },
+      { version: 2, changedByUserId: ownerUserId },
+    ]);
+    await expect(
+      service.updateConfiguration(
+        businessId,
+        ownerUserId,
+        'inventory_intelligence',
+        {
+          expectedVersion: current.configVersion,
+          settings: { 'agents.inventoryEnabled': true },
+        },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'SPECIALIST_AGENT_CONFIG_VERSION_CONFLICT' },
+    });
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          businessId,
+          actorUserId: ownerUserId,
+          action: 'specialist_agent.configuration_updated',
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it('refuses global, unknown and out-of-range settings', async () => {
+    const current = await service.configuration(
+      businessId,
+      'inventory_intelligence',
+    );
+    await expect(
+      service.updateConfiguration(
+        businessId,
+        ownerUserId,
+        'inventory_intelligence',
+        {
+          expectedVersion: current.configVersion,
+          settings: { 'ai.monthlyCostCapUsd': 5 },
+        },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'SPECIALIST_AGENT_CONFIG_KEY_NOT_ALLOWED' },
+    });
+    await expect(
+      service.updateConfiguration(
+        businessId,
+        ownerUserId,
+        'inventory_intelligence',
+        {
+          expectedVersion: current.configVersion,
+          settings: { 'agents.inventoryMaxRequestsPerMonth': -1 },
+        },
+      ),
+    ).rejects.toMatchObject({ response: { code: 'SETTING_INVALID' } });
   });
 });

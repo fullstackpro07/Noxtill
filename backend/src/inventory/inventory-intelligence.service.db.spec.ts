@@ -27,6 +27,7 @@ class FakeClsService {
 describe('InventoryIntelligenceService (MySQL)', () => {
   let prisma: PrismaService;
   let service: InventoryIntelligenceService;
+  let toolGateway: SpecialistAgentToolGatewayService;
   let stockCounts: StockCountService;
   let cls: FakeClsService;
   let businessId: string;
@@ -64,6 +65,7 @@ describe('InventoryIntelligenceService (MySQL)', () => {
     } as never;
     const inventory = new InventoryService(tenant, activity);
     stockCounts = new StockCountService(tenant, activity);
+    toolGateway = new SpecialistAgentToolGatewayService(tenant);
     service = new InventoryIntelligenceService(
       tenant,
       reorder,
@@ -74,7 +76,7 @@ describe('InventoryIntelligenceService (MySQL)', () => {
       new SpecialistAgentPolicyService(prisma, cls as unknown as ClsService),
       prisma,
       new StockTransfersService(prisma),
-      new SpecialistAgentToolGatewayService(tenant),
+      toolGateway,
     );
 
     const stamp = Date.now();
@@ -380,6 +382,103 @@ describe('InventoryIntelligenceService (MySQL)', () => {
       'inventory-agent-test-user',
       'inventory-real-mysql-run-0001',
     );
+    const transferCountBeforeRead = await prisma.stockTransfer.count({
+      where: {
+        OR: [
+          { sourceBusinessId: businessId },
+          { sourceBusinessId: otherBusinessId },
+          { sourceBusinessId: receiverBusinessId },
+          { destBusinessId: businessId },
+          { destBusinessId: otherBusinessId },
+          { destBusinessId: receiverBusinessId },
+        ],
+      },
+    });
+    const branchReviewTool = await toolGateway.execute({
+      agentKey: 'inventory_intelligence',
+      moduleId: '13',
+      businessId,
+      actorUserId: 'inventory-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      sequence: 2,
+      toolKey: 'get_branch_rebalance_recommendations',
+      input: {},
+      mode: 'read_only',
+      authorize: () => Promise.resolve(),
+    });
+    const stockBalanceTool = await toolGateway.execute({
+      agentKey: 'inventory_intelligence',
+      moduleId: '13',
+      businessId,
+      actorUserId: 'inventory-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      sequence: 3,
+      toolKey: 'get_stock_balance',
+      input: { productId },
+      mode: 'read_only',
+      authorize: () => Promise.resolve(),
+    });
+    const stockMovementsTool = await toolGateway.execute({
+      agentKey: 'inventory_intelligence',
+      moduleId: '13',
+      businessId,
+      actorUserId: 'inventory-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      sequence: 4,
+      toolKey: 'get_stock_movements',
+      input: { productId, daysBack: '30', limit: '10' },
+      mode: 'read_only',
+      authorize: () => Promise.resolve(),
+    });
+    await expect(
+      toolGateway.execute({
+        agentKey: 'inventory_intelligence',
+        moduleId: '13',
+        businessId,
+        actorUserId: 'inventory-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        sequence: 5,
+        toolKey: 'get_stock_balance',
+        input: { productId: rebalanceReceiverProductId },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'INVENTORY_AGENT_PRODUCT_NOT_FOUND' },
+    });
+    await expect(
+      toolGateway.execute({
+        agentKey: 'inventory_intelligence',
+        moduleId: '13',
+        businessId,
+        actorUserId: 'inventory-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        sequence: 6,
+        toolKey: 'get_stock_movements',
+        input: { productId, daysBack: '366' },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'INVENTORY_AGENT_TOOL_INPUT_INVALID' },
+    });
+    const transferCountAfterRead = await prisma.stockTransfer.count({
+      where: {
+        OR: [
+          { sourceBusinessId: businessId },
+          { sourceBusinessId: otherBusinessId },
+          { sourceBusinessId: receiverBusinessId },
+          { destBusinessId: businessId },
+          { destBusinessId: otherBusinessId },
+          { destBusinessId: receiverBusinessId },
+        ],
+      },
+    });
     const retriedRun = await service.run(
       businessId,
       'inventory-agent-test-user',
@@ -400,7 +499,7 @@ describe('InventoryIntelligenceService (MySQL)', () => {
       where: { businessId, runId: run.id },
       orderBy: [{ round: 'asc' }, { sequence: 'asc' }],
     });
-    expect(recordedTools).toHaveLength(1);
+    expect(recordedTools).toHaveLength(6);
     expect(recordedTools[0]).toMatchObject({
       agentKey: 'inventory_intelligence',
       moduleId: '13',
@@ -411,6 +510,107 @@ describe('InventoryIntelligenceService (MySQL)', () => {
       inputFields: ['leadTimeDays'],
     });
     expect(recordedTools[0]?.inputSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(recordedTools[1]).toMatchObject({
+      toolKey: 'get_branch_rebalance_recommendations',
+      status: 'succeeded',
+      outputResourceType: 'InventoryBranchRebalanceReview',
+      inputFields: [],
+    });
+    expect(recordedTools[2]).toMatchObject({
+      toolKey: 'get_stock_balance',
+      status: 'succeeded',
+      outputResourceType: 'ProductStockBalance',
+      inputFields: ['productId'],
+    });
+    expect(recordedTools[3]).toMatchObject({
+      toolKey: 'get_stock_movements',
+      status: 'succeeded',
+      outputResourceType: 'StockMovementHistory',
+      inputFields: ['daysBack', 'limit', 'productId'],
+    });
+    expect(recordedTools[4]).toMatchObject({
+      toolKey: 'get_stock_balance',
+      status: 'refused',
+      errorCode: 'INVENTORY_AGENT_PRODUCT_NOT_FOUND',
+    });
+    expect(recordedTools[5]).toMatchObject({
+      toolKey: 'get_stock_movements',
+      status: 'refused',
+      errorCode: 'INVENTORY_AGENT_TOOL_INPUT_INVALID',
+    });
+    const stockBalanceOutput = stockBalanceTool.output as {
+      scope: string;
+      product: {
+        productId: string;
+        stockQty: number;
+        lowStockThreshold: number;
+        status: string;
+        recordedSalesVelocityPerDay: number;
+      };
+      disclosure: string;
+    };
+    expect(stockBalanceOutput).toMatchObject({
+      scope: 'current_business_product',
+      product: {
+        productId,
+        stockQty: 5,
+        lowStockThreshold: 10,
+        status: 'low_stock',
+        recordedSalesVelocityPerDay: 2,
+      },
+    });
+    expect(stockBalanceOutput.disclosure).toContain(
+      'not branch-allocated or provider-confirmed availability',
+    );
+    expect(JSON.stringify(stockBalanceOutput)).not.toContain('costPrice');
+    expect(JSON.stringify(stockBalanceOutput)).not.toContain('stockValue');
+    const stockMovementsOutput = stockMovementsTool.output as {
+      movementCount: number;
+      hasMore: boolean;
+      movements: Array<{
+        kind: string;
+        quantityUnits: number;
+      }>;
+    };
+    expect(stockMovementsOutput).toMatchObject({
+      movementCount: 1,
+      hasMore: false,
+      movements: [{ kind: 'sale', quantityUnits: -60 }],
+    });
+    expect(JSON.stringify(stockMovementsOutput)).not.toContain('reason');
+    const branchReviewOutput = branchReviewTool.output as {
+      availability: string;
+      activeLocationCount: number;
+      totalFindings: number;
+      truncated: boolean;
+      findings: Array<{
+        productName: string;
+        sku: string;
+        sourceBranch: string;
+        destinationBranch: string;
+        suggestedQuantity: number;
+        formulaVersion: string;
+      }>;
+      disclosure: string;
+    };
+    expect(branchReviewOutput.availability).toBe('available');
+    expect(branchReviewOutput.activeLocationCount).toBe(3);
+    expect(branchReviewOutput.totalFindings).toBe(1);
+    expect(branchReviewOutput.truncated).toBe(false);
+    expect(branchReviewOutput.findings).toHaveLength(1);
+    const [branchFinding] = branchReviewOutput.findings;
+    expect(branchFinding).toBeDefined();
+    if (!branchFinding) throw new Error('Expected a branch rebalance finding');
+    expect(branchFinding.productName).toBe('Rebalance sender surplus');
+    expect(branchFinding.sku).toMatch(/^REBALANCE-/);
+    expect(branchFinding.sourceBranch.length).toBeGreaterThan(0);
+    expect(branchFinding.destinationBranch.length).toBeGreaterThan(0);
+    expect(branchFinding.suggestedQuantity).toBeGreaterThan(0);
+    expect(branchFinding.formulaVersion).toBe('branch-rebalance-v1');
+    expect(branchReviewOutput.disclosure).toContain(
+      'before any transfer is approved or shipped',
+    );
+    expect(transferCountAfterRead).toBe(transferCountBeforeRead);
     expect(JSON.stringify(recordedTools)).not.toContain('leadTimeDays":"14');
     expect(run.inputRefs).toEqual(
       expect.arrayContaining([
@@ -740,6 +940,207 @@ describe('InventoryIntelligenceService (MySQL)', () => {
         where: { id: rebalanceReceiverProductId },
       }),
     ).toMatchObject({ stockQty: 1 });
+  });
+
+  it('reads recorded sales velocity and open purchase quantities through the specialist gateway', async () => {
+    const supplier = await prisma.supplier.create({
+      data: { businessId, name: 'Inventory agent open-supply supplier' },
+    });
+    const purchaseOrder = await prisma.purchaseOrder.create({
+      data: {
+        businessId,
+        supplierId: supplier.id,
+        status: PurchaseOrderStatus.partially_received,
+        items: {
+          create: {
+            productId,
+            qtyOrdered: 12,
+            qtyReceived: 3,
+            unitCost: 4,
+          },
+        },
+      },
+    });
+
+    try {
+      const run = await service.run(
+        businessId,
+        null,
+        'inventory-agent-recorded-sales-and-open-supply',
+        { includeAiSummary: false },
+      );
+      const velocity = await toolGateway.execute({
+        agentKey: 'inventory_intelligence',
+        moduleId: '13',
+        businessId,
+        actorUserId: null,
+        runId: run.id,
+        correlationId: run.id,
+        sequence: 3,
+        toolKey: 'get_sales_velocity',
+        input: { productId, daysBack: '30' },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      });
+      const openOrders = await toolGateway.execute({
+        agentKey: 'inventory_intelligence',
+        moduleId: '13',
+        businessId,
+        actorUserId: null,
+        runId: run.id,
+        correlationId: run.id,
+        sequence: 4,
+        toolKey: 'get_open_purchase_orders',
+        input: { productId, limit: '10' },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      });
+
+      expect(velocity.output).toMatchObject({
+        state: 'available',
+        productId,
+        windowDays: 30,
+        recordedUnits: 60,
+        averageRecordedUnitsPerDay: 2,
+      });
+      expect(JSON.stringify(velocity.output)).toContain(
+        'does not account for stockout-censored demand',
+      );
+      expect(openOrders.output).toMatchObject({
+        state: 'available',
+        productId,
+        purchaseOrderCount: 1,
+        purchaseOrders: [
+          {
+            purchaseOrderId: purchaseOrder.id,
+            status: 'partially_received',
+            matchingItems: [
+              {
+                quantityOrdered: 12,
+                quantityReceived: 3,
+                quantityRemaining: 9,
+              },
+            ],
+          },
+        ],
+      });
+      expect(JSON.stringify(openOrders.output)).not.toContain('unitCost');
+      expect(JSON.stringify(openOrders.output)).not.toContain('supplierId');
+      expect(
+        await prisma.specialistAgentToolCall.count({
+          where: {
+            businessId,
+            runId: run.id,
+            status: 'succeeded',
+            toolKey: {
+              in: ['get_sales_velocity', 'get_open_purchase_orders'],
+            },
+          },
+        }),
+      ).toBe(2);
+    } finally {
+      await prisma.purchaseOrderItem.deleteMany({
+        where: { purchaseOrderId: purchaseOrder.id },
+      });
+      await prisma.purchaseOrder.delete({ where: { id: purchaseOrder.id } });
+      await prisma.supplier.delete({ where: { id: supplier.id } });
+    }
+  });
+
+  it('rechecks open physical-count variance against current book stock without applying it', async () => {
+    const originalStock = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: { stockQty: true },
+    });
+    const count = await prisma.stockCount.create({
+      data: {
+        businessId,
+        status: 'draft',
+        lines: {
+          create: {
+            productId,
+            expectedQty: originalStock.stockQty,
+            countedQty: originalStock.stockQty + 2,
+            variance: 2,
+          },
+        },
+      },
+    });
+    await prisma.product.update({
+      where: { id: productId },
+      data: { stockQty: originalStock.stockQty + 1 },
+    });
+    const movementCountBefore = await prisma.stockMovement.count({
+      where: { businessId, productId },
+    });
+
+    try {
+      const run = await service.run(
+        businessId,
+        null,
+        'inventory-agent-open-stock-count-variance',
+        { includeAiSummary: false },
+      );
+      const varianceReview = await toolGateway.execute({
+        agentKey: 'inventory_intelligence',
+        moduleId: '13',
+        businessId,
+        actorUserId: null,
+        runId: run.id,
+        correlationId: run.id,
+        sequence: 3,
+        toolKey: 'get_stock_count_variances',
+        input: { productId, limit: '1' },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      });
+
+      expect(varianceReview.output).toMatchObject({
+        state: 'available',
+        productId,
+        countRecordCount: 1,
+        hasMore: true,
+        counts: [
+          {
+            stockCountId: count.id,
+            lines: [
+              {
+                expectedQtyAtCount: originalStock.stockQty,
+                countedQty: originalStock.stockQty + 2,
+                savedSnapshotVariance: 2,
+                currentBookQty: originalStock.stockQty + 1,
+                currentVariance: 1,
+                bookStockChangedSinceCount: true,
+              },
+            ],
+          },
+        ],
+      });
+      expect(
+        await prisma.stockCount.findUniqueOrThrow({
+          where: { id: count.id },
+          select: { status: true },
+        }),
+      ).toEqual({ status: 'draft' });
+      expect(
+        await prisma.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { stockQty: true },
+        }),
+      ).toEqual({ stockQty: originalStock.stockQty + 1 });
+      expect(
+        await prisma.stockMovement.count({ where: { businessId, productId } }),
+      ).toBe(movementCountBefore);
+    } finally {
+      await prisma.product.update({
+        where: { id: productId },
+        data: { stockQty: originalStock.stockQty },
+      });
+      await prisma.stockCountLine.deleteMany({
+        where: { stockCountId: count.id },
+      });
+      await prisma.stockCount.delete({ where: { id: count.id } });
+    }
   });
 
   it('subtracts confirmed open supply before rounding the remaining need to whole purchase units', async () => {
@@ -1591,6 +1992,30 @@ describe('InventoryIntelligenceService (MySQL)', () => {
           sourceProduct: { id: rebalanceSourceProductId },
         },
       ],
+    });
+    const transferOutcomes =
+      await service.listBranchTransferOutcomes(businessId);
+    const transferOutcome = transferOutcomes.find(
+      (outcome) => outcome.recommendationId === finding.id,
+    );
+    expect(transferOutcome).toBeDefined();
+    if (!transferOutcome) throw new Error('Expected linked transfer outcome');
+    expect(transferOutcome.source).toMatchObject({
+      businessId,
+      productId: rebalanceSourceProductId,
+      currentStock: sourceBefore.stockQty,
+    });
+    expect(transferOutcome.destination).toMatchObject({
+      businessId: receiverBusinessId,
+      productId: rebalanceReceiverProductId,
+      currentStock: destinationBefore.stockQty,
+    });
+    expect(transferOutcome.suggestedQuantity).toBe(5);
+    expect(transferOutcome.transfer).toMatchObject({
+      id: transfer.id,
+      status: 'pending',
+      requestedQuantity: 5,
+      receivedQuantity: null,
     });
     const retry = await service.prepareBranchTransfer(
       businessId,

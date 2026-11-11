@@ -170,6 +170,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
           'agents.seoMaxSpendUsdPerMonth': 0.04,
           'agents.inventoryMaxRequestsPerMonth': null,
           'agents.inventoryMaxSpendUsdPerMonth': null,
+          'agents.queuedRunWarningAgeMinutes': 1,
         },
       },
     });
@@ -283,6 +284,22 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       });
       await makeRun({
         businessId,
+        agentKey: 'seo_autopilot',
+        moduleId: '28',
+        status: 'queued',
+        triggerType: 'scheduled',
+        createdAt: new Date(now.getTime() - 120_000),
+      });
+      await makeRun({
+        businessId,
+        agentKey: 'seo_autopilot',
+        moduleId: '28',
+        status: 'queued',
+        triggerType: 'event',
+        createdAt: new Date(now.getTime() - 20_000),
+      });
+      await makeRun({
+        businessId,
         agentKey: 'specialist_agent_orchestrator',
         moduleId: 'shared',
         status: 'completed',
@@ -320,6 +337,14 @@ describe('AiSettingsService (UPD-BE-115)', () => {
         triggerType: 'event',
         elapsedMs: 9000,
         errorCode: 'OTHER_TENANT_ERROR',
+      });
+      await makeRun({
+        businessId: otherBusiness.id,
+        agentKey: 'seo_autopilot',
+        moduleId: '28',
+        status: 'queued',
+        triggerType: 'event',
+        createdAt: new Date(now.getTime() - 180_000),
       });
       await prisma.specialistAgentToolCall.createMany({
         data: [
@@ -1079,6 +1104,9 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       expect(operations.scope).toBe('current_business');
       expect(operations.windowDays).toBe(30);
       expect(operations.agents).toHaveLength(5);
+      expect(seo?.queuedRuns.count).toBe(2);
+      expect(seo?.queuedRuns.oldestAgeMs).toBeGreaterThanOrEqual(120_000);
+      expect(inventory?.queuedRuns).toEqual({ count: 0, oldestAgeMs: null });
       expect(commerce?.toolExecutionByKey).toEqual([
         {
           toolKey: 'get_order',
@@ -1198,10 +1226,10 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       expect(verifiedAudit).not.toHaveProperty('verificationResult');
       expect(seo).toMatchObject({
         moduleId: '28',
-        totalRuns: 3,
+        totalRuns: 5,
         uniqueOperators: 2,
         totalRecommendations: 2,
-        statusCounts: { completed: 2, failed: 1 },
+        statusCounts: { completed: 2, failed: 1, queued: 2 },
         recommendationStatusCounts: { proposed: 1, dismissed: 1 },
         actionStateCounts: { verified: 1, rejected: 1, verification_failed: 1 },
         openActionAttention: { count: 1 },
@@ -1257,6 +1285,13 @@ describe('AiSettingsService (UPD-BE-115)', () => {
           total: 5,
           statusCounts: { blocked: 3, failed: 1, succeeded: 1 },
         },
+        registeredToolStatusByKey: [
+          {
+            toolKey: 'registered_read_example',
+            total: 5,
+            statusCounts: { succeeded: 1, blocked: 3, failed: 1 },
+          },
+        ],
         registeredToolExecutionByKey: [
           {
             toolKey: 'registered_read_example',
@@ -1266,7 +1301,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
             sampleLimit: 5000,
           },
         ],
-        triggerCounts: { manual: 1, event: 1, scheduled: 1 },
+        triggerCounts: { manual: 1, event: 2, scheduled: 2 },
         failuresByCode: [{ code: 'SEO_TEST_ERROR', count: 1 }],
         aiUsage: {
           calls: 3,
@@ -1345,6 +1380,13 @@ describe('AiSettingsService (UPD-BE-115)', () => {
             unit: 'records',
           }),
           expect.objectContaining({
+            code: 'queued_run_age',
+            agentKey: 'seo_autopilot',
+            severity: 'warning',
+            thresholdValue: 1,
+            unit: 'minutes',
+          }),
+          expect.objectContaining({
             code: 'monthly_request_budget',
             agentKey: 'seo_autopilot',
             severity: 'warning',
@@ -1367,6 +1409,10 @@ describe('AiSettingsService (UPD-BE-115)', () => {
           (alert) => alert.code === 'open_actions_awaiting_attention',
         )?.message,
       ).toContain('oldest last updated');
+      expect(
+        operations.alerts.find((alert) => alert.code === 'queued_run_age')
+          ?.observedValue,
+      ).toBeGreaterThanOrEqual(1);
       expect(seo?.actionExecutionLatency).toEqual({
         p50Ms:
           actionExecutionFinishedAt.getTime() -
@@ -1438,10 +1484,13 @@ describe('AiSettingsService (UPD-BE-115)', () => {
         'Cross-agent queue pickup is measured from the saved parent review row to its first persisted worker pickup, for up to the 5,000 most recent rows in this 30-day window. It is not a queue-depth monitor or an uptime target; waiting count and oldest age cover parent rows not yet picked up.',
       );
       expect(operations.disclosures).toContain(
+        "Per-agent queued-run count and oldest age come from this business's persisted SpecialistAgentRun rows with status queued. They are not live Redis/BullMQ depth, worker-liveness checks, or proof that a job is still present in Redis.",
+      );
+      expect(operations.disclosures).toContain(
         'Security counters include only audited denied cross-tenant run probes, Commerce unregistered/over-limit tool attempts, Commerce approval refusals after policy recheck, and Customer Agent message-queue refusals. They are not comprehensive security-event monitoring; other permission, stale-data, prompt-injection and policy blocks are not counted here.',
       );
       expect(operations.disclosures).toContain(
-        'Operational alerts are deterministic signals over saved specialist runs, AI call logs, action verification events, open material actions, sampled evidence freshness and configured monthly AI request/spend limits. Budget bands are 70% and 90%; spend is an application estimate, not an invoice. This does not detect unusual cost spikes, external provider outages, or conditions outside the sampled 30-day evidence window.',
+        'Operational alerts are deterministic signals over saved specialist runs, AI call logs, action verification events, open material actions, sampled evidence freshness and configured monthly AI request/spend limits. A queued-run age warning is optional and uses the current business policy against saved run timestamps; it does not inspect live Redis/BullMQ. Budget bands are 70% and 90%; spend is an application estimate, not an invoice. This does not detect unusual cost spikes, external provider outages, or conditions outside the sampled 30-day evidence window.',
       );
       await prisma.business.update({
         where: { id: businessId },
@@ -1481,6 +1530,11 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       const otherBusinessOperations = await service.getSpecialistOperations(
         otherBusiness.id,
       );
+      expect(
+        otherBusinessOperations.agents.find(
+          (agent) => agent.agentKey === 'seo_autopilot',
+        )?.queuedRuns,
+      ).toMatchObject({ count: 1 });
       expect(otherBusinessOperations.alerts.map((alert) => alert.code)).toEqual(
         [
           'cross_tenant_probe_denied',

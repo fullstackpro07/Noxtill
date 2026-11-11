@@ -53,6 +53,9 @@ describe('SpecialistAgentToolGatewayService', () => {
   let countToolCalls: jest.MockedFunction<
     (args: Prisma.SpecialistAgentToolCallCountArgs) => Promise<number>
   >;
+  let recordRunEvents: jest.MockedFunction<
+    (args: Prisma.SpecialistAgentRunEventCreateManyArgs) => Promise<unknown>
+  >;
   let handler: jest.Mock;
 
   const fakeTenantPrisma = (
@@ -62,6 +65,7 @@ describe('SpecialistAgentToolGatewayService', () => {
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'run-1' }]),
       business: { findUnique: findBusiness },
       specialistAgentToolCall: { upsert, count: countToolCalls },
+      specialistAgentRunEvent: { createMany: recordRunEvents },
       specialistAgentAction: { findFirst: findApproval },
     };
     return {
@@ -84,6 +88,9 @@ describe('SpecialistAgentToolGatewayService', () => {
     countToolCalls = jest
       .fn<Promise<number>, [Prisma.SpecialistAgentToolCallCountArgs]>()
       .mockResolvedValue(0);
+    recordRunEvents = jest
+      .fn<Promise<unknown>, [Prisma.SpecialistAgentRunEventCreateManyArgs]>()
+      .mockResolvedValue({ count: 1 });
     gateway = new SpecialistAgentToolGatewayService(fakeTenantPrisma());
     handler = jest.fn().mockResolvedValue({
       output: { customerId: 'customer-1', orders: 2 },
@@ -175,6 +182,30 @@ describe('SpecialistAgentToolGatewayService', () => {
       outputResourceId: 'customer-1',
     });
     expect(JSON.stringify(args)).not.toContain('private-customer@example.com');
+    expect(recordRunEvents).toHaveBeenCalledTimes(2);
+    expect(
+      recordRunEvents.mock.calls.flatMap(([eventArgs]) => eventArgs.data),
+    ).toMatchObject([
+      {
+        eventName: 'agent.tool.started',
+        actorUserId: 'user-1',
+        payload: {
+          toolKey: readTool.key,
+          status: 'running',
+        },
+      },
+      {
+        eventName: 'agent.tool.succeeded',
+        actorUserId: 'user-1',
+        payload: {
+          toolKey: readTool.key,
+          status: 'succeeded',
+        },
+      },
+    ]);
+    expect(JSON.stringify(recordRunEvents.mock.calls)).not.toContain(
+      'private-customer@example.com',
+    );
   });
 
   it('blocks write tools in read-only mode and requires an approval ID for actions', async () => {

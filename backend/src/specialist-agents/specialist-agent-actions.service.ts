@@ -137,7 +137,7 @@ export class SpecialistAgentActionsService {
     businessId: string;
     actorUserId: string;
     actionId: string;
-    fromState: 'approval_required';
+    fromState: 'approval_required' | 'approved';
     toState: 'approved' | 'rejected' | 'cancelled';
     reason: string;
     update: Prisma.SpecialistAgentActionUpdateManyMutationInput;
@@ -163,26 +163,28 @@ export class SpecialistAgentActionsService {
     actorUserId: string;
     actionId: string;
     recommendationId: string;
+    fromState: 'approved' | 'failed';
   }) {
-    // The canonical CRM service rechecks the source version, customer status, agent policy and
-    // idempotency key before creating the internal task. A retry after a lost response returns
-    // the same task instead of creating a duplicate.
-    const task = await this.customerActions.createTaskFromRecommendation(
-      input.businessId,
-      input.actorUserId,
-      input.recommendationId,
-    );
-
     await this.tenantPrisma.client.$transaction(async (tx) => {
       await transitionSpecialistAgentAction(tx, {
         businessId: input.businessId,
         actionId: input.actionId,
-        fromState: 'approved',
+        fromState: input.fromState,
         toState: 'execution_queued',
         actorUserId: input.actorUserId,
-        eventType: 'execution_queued',
-        reason: 'Owner approved creation of the internal CRM follow-up task.',
-        update: { executionAttemptCount: { increment: 1 } },
+        eventType:
+          input.fromState === 'failed'
+            ? 'execution_retry_queued'
+            : 'execution_queued',
+        reason:
+          input.fromState === 'failed'
+            ? 'Owner retried the failed internal CRM task action.'
+            : 'Owner approved creation of the internal CRM follow-up task.',
+        update: {
+          executionAttemptCount: { increment: 1 },
+          errorCode: null,
+          errorMessage: null,
+        },
       });
       await transitionSpecialistAgentAction(tx, {
         businessId: input.businessId,
@@ -195,6 +197,19 @@ export class SpecialistAgentActionsService {
           'Delegated task creation to the canonical Customer CRM service.',
         update: { executedByUserId: input.actorUserId },
       });
+    });
+
+    try {
+      // Claim execution before calling the canonical CRM service. This makes cancel and execute
+      // mutually exclusive; the CRM service's idempotency key makes retries safe after a lost
+      // response or a failed verification transaction.
+      const task = await this.customerActions.createTaskFromRecommendation(
+        input.businessId,
+        input.actorUserId,
+        input.recommendationId,
+      );
+
+      await this.tenantPrisma.client.$transaction(async (tx) => {
       await transitionSpecialistAgentAction(tx, {
         businessId: input.businessId,
         actionId: input.actionId,
@@ -250,16 +265,48 @@ export class SpecialistAgentActionsService {
           },
         },
       });
-    });
+      });
 
-    return {
-      actionId: input.actionId,
-      state: 'verified',
-      canonicalOperationId: task.id,
-      taskStatus: task.status,
-      sendsMessage: false,
-      providerConfirmed: false,
-    };
+      return {
+        actionId: input.actionId,
+        state: 'verified',
+        canonicalOperationId: task.id,
+        taskStatus: task.status,
+        sendsMessage: false,
+        providerConfirmed: false,
+      };
+    } catch (error) {
+      const response =
+        error instanceof AppException ? error.getResponse() : null;
+      const errorCode =
+        response &&
+        typeof response === 'object' &&
+        'code' in response &&
+        typeof response.code === 'string'
+          ? response.code
+          : 'CUSTOMER_AGENT_TASK_CREATION_FAILED';
+      const current =
+        await this.tenantPrisma.client.specialistAgentAction.findFirst({
+          where: { id: input.actionId, businessId: input.businessId },
+          select: { state: true },
+        });
+      if (current?.state === 'executing') {
+        await this.tenantPrisma.client.$transaction(async (tx) => {
+          await transitionSpecialistAgentAction(tx, {
+            businessId: input.businessId,
+            actionId: input.actionId,
+            fromState: 'executing',
+            toState: 'failed',
+            actorUserId: input.actorUserId,
+            eventType: 'execution_failed',
+            reason:
+              'The canonical Customer CRM task could not be confirmed. The owner can safely retry after reviewing the action.',
+            update: { errorCode, errorMessage: null },
+          });
+        });
+      }
+      throw error;
+    }
   }
 
   async approve(
@@ -411,11 +458,24 @@ export class SpecialistAgentActionsService {
     input: DecideSpecialistAgentActionDto,
   ) {
     const action = await this.actionForDecision(businessId, actionId);
-    this.requireActionState(action, 'approved');
     await this.agentPolicy.assertAgentEnabled(
       businessId,
       action.agentKey as SpecialistAgentPersistedKey,
     );
+    if (this.isCustomerFollowUpAction(action)) {
+      this.requireCustomerFollowUpActionVersion(action, input.expectedVersion);
+      const fromState = action.state === 'failed' ? 'failed' : 'approved';
+      this.requireActionState(action, fromState);
+      return this.executeCustomerFollowUpAction({
+        businessId,
+        actorUserId,
+        actionId,
+        recommendationId: action.canonicalResourceId,
+        fromState,
+      });
+    }
+
+    this.requireActionState(action, 'approved');
     if (
       action.actionType === 'inventory_reorder_request' &&
       action.canonicalResourceType === 'ProcurementRequest'
@@ -429,15 +489,6 @@ export class SpecialistAgentActionsService {
       );
     }
 
-    if (this.isCustomerFollowUpAction(action)) {
-      this.requireCustomerFollowUpActionVersion(action, input.expectedVersion);
-      return this.executeCustomerFollowUpAction({
-        businessId,
-        actorUserId,
-        actionId,
-        recommendationId: action.canonicalResourceId,
-      });
-    }
     throw this.unsupportedAction(action.actionType);
   }
 
@@ -753,7 +804,6 @@ export class SpecialistAgentActionsService {
     input: DecideSpecialistAgentActionDto,
   ) {
     const action = await this.actionForDecision(businessId, actionId);
-    this.requireActionState(action, 'approval_required');
     const reason = input.reason?.trim();
     if (!reason) {
       throw new AppException(
@@ -767,6 +817,17 @@ export class SpecialistAgentActionsService {
       action.canonicalResourceType === 'ProcurementRequest'
     ) {
       this.requireInventoryActionVersion(action, input.expectedVersion);
+      if (action.state === 'approved') {
+        return this.procurement.cancelApprovedRequest(
+          businessId,
+          actorUserId,
+          action.canonicalResourceId,
+          true,
+          reason,
+          input.expectedVersion!,
+        );
+      }
+      this.requireActionState(action, 'approval_required');
       return this.procurement.withdrawRequest(
         businessId,
         actorUserId,
@@ -779,6 +840,26 @@ export class SpecialistAgentActionsService {
 
     if (this.isCustomerFollowUpAction(action)) {
       this.requireCustomerFollowUpActionVersion(action, input.expectedVersion);
+      if (action.state === 'approved') {
+        if (action.canonicalOperationId) {
+          throw new AppException(
+            'SPECIALIST_ACTION_STATE_CONFLICT',
+            'This follow-up task has already been created and can no longer be cancelled from the action review.',
+            HttpStatus.CONFLICT,
+          );
+        }
+        return this.decideCustomerFollowUpAction({
+          businessId,
+          actorUserId,
+          actionId,
+          fromState: 'approved',
+          toState: 'cancelled',
+          reason,
+          eventType: 'cancellation_recorded',
+          update: { closedAt: new Date() },
+        });
+      }
+      this.requireActionState(action, 'approval_required');
       return this.decideCustomerFollowUpAction({
         businessId,
         actorUserId,
@@ -790,6 +871,8 @@ export class SpecialistAgentActionsService {
         update: { closedAt: new Date() },
       });
     }
+
+    this.requireActionState(action, 'approval_required');
 
     const customerVersion = this.customerSegmentVersion(action);
     if (customerVersion !== null) {

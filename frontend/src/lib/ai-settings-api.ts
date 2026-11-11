@@ -91,6 +91,11 @@ export interface SpecialistAgentOperationsAgent {
     total: number;
     statusCounts: Record<string, number>;
   };
+  registeredToolStatusByKey: {
+    toolKey: string;
+    total: number;
+    statusCounts: Record<string, number>;
+  }[];
   registeredToolExecutionByKey: {
     toolKey: string;
     p50Ms: number | null;
@@ -106,6 +111,7 @@ export interface SpecialistAgentOperationsAgent {
     sampleLimit: number;
   }[];
   activeRuns: { count: number; oldestAgeMs: number | null };
+  queuedRuns: { count: number; oldestAgeMs: number | null };
   triggerCounts: Record<string, number>;
   failuresByCode: { code: string; count: number }[];
   unclassifiedFailures: number;
@@ -173,7 +179,7 @@ export interface SpecialistAgentOperations {
     severity: "warning" | "critical";
     observedValue: number;
     thresholdValue: number | null;
-    unit: "runs" | "calls" | "events" | "records" | "requests" | "USD";
+    unit: "runs" | "calls" | "events" | "records" | "requests" | "minutes" | "USD";
     message: string;
   }[];
   agents: SpecialistAgentOperationsAgent[];

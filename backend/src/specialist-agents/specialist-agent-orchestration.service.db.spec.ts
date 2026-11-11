@@ -234,10 +234,50 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     expect(completed.result?.completedCount).toBe(1);
     expect(completed.result?.skippedCount).toBe(4);
     expect(inventoryRuns).toHaveBeenCalledTimes(1);
+    const childLifecycleEvents = await prisma.specialistAgentRunEvent.findMany({
+      where: {
+        businessId,
+        runId: first.id,
+        eventName: {
+          in: [
+            'agent.run.child_started',
+            'agent.run.child_completed',
+            'agent.run.child_partial',
+            'agent.run.child_failed',
+            'agent.run.child_skipped',
+          ],
+        },
+      },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+      select: { eventName: true, payload: true },
+    });
+    expect(childLifecycleEvents.map((event) => event.eventName)).toEqual(
+      expect.arrayContaining([
+        'agent.run.child_started',
+        'agent.run.child_completed',
+        'agent.run.child_skipped',
+      ]),
+    );
+    const completedChildEvent = childLifecycleEvents.find(
+      (event) => event.eventName === 'agent.run.child_completed',
+    );
+    expect(completedChildEvent?.payload).toMatchObject({
+      agentKey: 'inventory_intelligence',
+      status: 'completed',
+    });
+    const skippedChildEvent = childLifecycleEvents.find(
+      (event) => event.eventName === 'agent.run.child_skipped',
+    );
+    expect(skippedChildEvent?.payload).toMatchObject({
+      agentKey: 'financial_intelligence',
+      status: 'skipped',
+      reasonCode: 'AGENT_DISABLED',
+    });
 
     const child = await prisma.specialistAgentRun.findFirstOrThrow({
       where: { businessId, agentKey: 'inventory_intelligence' },
     });
+    expect(JSON.stringify(childLifecycleEvents)).not.toContain(child.id);
     expect(child.inputRefs).toEqual([
       createSpecialistAgentParentRunRef(first.id),
     ]);

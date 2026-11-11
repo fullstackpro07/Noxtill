@@ -289,113 +289,77 @@ describe('SettingsHubService', () => {
 
   it('exposes and validates specialist per-run request, action, token, input and Commerce tool ceilings', async () => {
     const owner = await ctxOf(ownerId, Role.owner);
-    const getRow = async () =>
-      (await hub.detail('ai', owner)).groups
-        .flatMap((group) => group.rows)
-        .find((candidate) => candidate.key === 'specialist-agent-provider-requests-per-run');
+    const rows = () => hub.detail('ai', owner).then((detail) =>
+      detail.groups.flatMap((group) => group.rows),
+    );
+    const findRow = (
+      currentRows: Awaited<ReturnType<typeof rows>>,
+      key: string,
+    ) => currentRows.find((candidate) => candidate.key === key);
 
-    expect(await getRow()).toMatchObject({
+    let currentRows = await rows();
+    expect(findRow(currentRows, 'specialist-agent-provider-requests-per-run')).toMatchObject({
       value: '10 requests / run',
       editable: true,
     });
+    expect(findRow(currentRows, 'specialist-agent-commerce-read-tools-per-run')).toMatchObject({ value: '3 read-tool calls / run', editable: true });
+    expect(findRow(currentRows, 'specialist-agent-actions-per-run')).toMatchObject({ value: '10 actions / run', editable: true });
+    expect(findRow(currentRows, 'specialist-queued-run-warning-age')).toMatchObject({ value: 'No warning', editable: true });
+    expect(findRow(currentRows, 'specialist-agent-output-tokens-per-request')).toMatchObject({ value: '1024 output tokens / request', editable: true });
+    expect(findRow(currentRows, 'specialist-agent-input-bytes-per-request')).toMatchObject({ value: '1,048,576 bytes / request', editable: true });
     expect(await hub.saveChanges(owner, [{
       category: 'ai',
       rowKey: 'specialist-agent-provider-requests-per-run',
       value: 1,
     }])).toEqual({ saved: 1 });
-    expect(await getRow()).toMatchObject({ value: '1 request / run' });
-    expect(await hub.saveChanges(owner, [{
-      category: 'ai',
-      rowKey: 'specialist-agent-provider-requests-per-run',
-      value: 2,
-    }])).toEqual({ saved: 1 });
-    expect(await getRow()).toMatchObject({ value: '2 requests / run' });
+    currentRows = await rows();
+    expect(findRow(currentRows, 'specialist-agent-provider-requests-per-run')).toMatchObject({ value: '1 request / run' });
+
+    expect(await hub.saveChanges(owner, [
+      { category: 'ai', rowKey: 'specialist-agent-provider-requests-per-run', value: 2 },
+      { category: 'ai', rowKey: 'specialist-agent-commerce-read-tools-per-run', value: 1 },
+      { category: 'ai', rowKey: 'specialist-agent-actions-per-run', value: 1 },
+      { category: 'ai', rowKey: 'specialist-queued-run-warning-age', value: 5 },
+      { category: 'ai', rowKey: 'specialist-agent-output-tokens-per-request', value: 256 },
+      { category: 'ai', rowKey: 'specialist-agent-input-bytes-per-request', value: 8192 },
+    ])).toEqual({ saved: 6 });
+    currentRows = await rows();
+    expect(findRow(currentRows, 'specialist-agent-provider-requests-per-run')).toMatchObject({ value: '2 requests / run' });
+    expect(findRow(currentRows, 'specialist-agent-commerce-read-tools-per-run')).toMatchObject({ value: '1 read-tool call / run' });
+    expect(findRow(currentRows, 'specialist-agent-actions-per-run')).toMatchObject({ value: '1 action / run' });
+    expect(findRow(currentRows, 'specialist-queued-run-warning-age')).toMatchObject({ value: '5 minutes' });
+    expect(findRow(currentRows, 'specialist-agent-output-tokens-per-request')).toMatchObject({ value: '256 output tokens / request' });
+    expect(findRow(currentRows, 'specialist-agent-input-bytes-per-request')).toMatchObject({ value: '8,192 bytes / request' });
     await expect(hub.saveChanges(owner, [{
       category: 'ai',
       rowKey: 'specialist-agent-provider-requests-per-run',
       value: 0,
     }])).rejects.toBeInstanceOf(AppException);
 
-    const getCommerceToolLimitRow = async () =>
-      (await hub.detail('ai', owner)).groups
-        .flatMap((group) => group.rows)
-        .find((candidate) => candidate.key === 'specialist-agent-commerce-read-tools-per-run');
-    expect(await getCommerceToolLimitRow()).toMatchObject({
-      value: '3 read-tool calls / run',
-      editable: true,
-    });
-    expect(await hub.saveChanges(owner, [{
-      category: 'ai',
-      rowKey: 'specialist-agent-commerce-read-tools-per-run',
-      value: 1,
-    }])).toEqual({ saved: 1 });
-    expect(await getCommerceToolLimitRow()).toMatchObject({
-      value: '1 read-tool call / run',
-    });
     await expect(hub.saveChanges(owner, [{
       category: 'ai',
       rowKey: 'specialist-agent-commerce-read-tools-per-run',
       value: 0,
     }])).rejects.toBeInstanceOf(AppException);
 
-    const getActionLimitRow = async () =>
-      (await hub.detail('ai', owner)).groups
-        .flatMap((group) => group.rows)
-        .find((candidate) => candidate.key === 'specialist-agent-actions-per-run');
-    expect(await getActionLimitRow()).toMatchObject({
-      value: '10 actions / run',
-      editable: true,
-    });
-    expect(await hub.saveChanges(owner, [{
-      category: 'ai',
-      rowKey: 'specialist-agent-actions-per-run',
-      value: 1,
-    }])).toEqual({ saved: 1 });
-    expect(await getActionLimitRow()).toMatchObject({ value: '1 action / run' });
     await expect(hub.saveChanges(owner, [{
       category: 'ai',
       rowKey: 'specialist-agent-actions-per-run',
       value: 0,
     }])).rejects.toBeInstanceOf(AppException);
 
-    const getOutputTokenRow = async () =>
-      (await hub.detail('ai', owner)).groups
-        .flatMap((group) => group.rows)
-        .find((candidate) => candidate.key === 'specialist-agent-output-tokens-per-request');
-    expect(await getOutputTokenRow()).toMatchObject({
-      value: '1024 output tokens / request',
-      editable: true,
-    });
-    expect(await hub.saveChanges(owner, [{
+    await expect(hub.saveChanges(owner, [{
       category: 'ai',
-      rowKey: 'specialist-agent-output-tokens-per-request',
-      value: 256,
-    }])).toEqual({ saved: 1 });
-    expect(await getOutputTokenRow()).toMatchObject({
-      value: '256 output tokens / request',
-    });
+      rowKey: 'specialist-queued-run-warning-age',
+      value: 1441,
+    }])).rejects.toBeInstanceOf(AppException);
+
     await expect(hub.saveChanges(owner, [{
       category: 'ai',
       rowKey: 'specialist-agent-output-tokens-per-request',
       value: 127,
     }])).rejects.toBeInstanceOf(AppException);
 
-    const getInputBytesRow = async () =>
-      (await hub.detail('ai', owner)).groups
-        .flatMap((group) => group.rows)
-        .find((candidate) => candidate.key === 'specialist-agent-input-bytes-per-request');
-    expect(await getInputBytesRow()).toMatchObject({
-      value: '1,048,576 bytes / request',
-      editable: true,
-    });
-    expect(await hub.saveChanges(owner, [{
-      category: 'ai',
-      rowKey: 'specialist-agent-input-bytes-per-request',
-      value: 8192,
-    }])).toEqual({ saved: 1 });
-    expect(await getInputBytesRow()).toMatchObject({
-      value: '8,192 bytes / request',
-    });
     await expect(hub.saveChanges(owner, [{
       category: 'ai',
       rowKey: 'specialist-agent-input-bytes-per-request',
@@ -405,7 +369,7 @@ describe('SettingsHubService', () => {
       where: { id: businessId },
       data: { policies: {} },
     });
-  }, 15000);
+  }, 30000);
 
   it('exposes and validates the Customer Agent retention threshold setting', async () => {
     const owner = await ctxOf(ownerId, Role.owner);

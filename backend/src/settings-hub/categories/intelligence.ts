@@ -1935,6 +1935,27 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
           ],
         },
         {
+          title: 'Specialist queued-run warning',
+          hint: 'Owner-configured · saved queue state · all five agents',
+          footer:
+            'This warns from saved queued-run timestamps for this business. It does not inspect Redis/BullMQ or prove that a worker is healthy.',
+          rows: [
+            policyRow(d, {
+              key: 'specialist-queued-run-warning-age',
+              policy: 'agents.queuedRunWarningAgeMinutes',
+              kind: 'number',
+              label: 'Warn when a specialist run stays queued longer than',
+              description:
+                'Shows a warning when the oldest persisted queued run for an agent reaches this age. Leave empty to disable this warning. Check Redis/BullMQ monitoring separately for live queue depth and worker health.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Low',
+              unit: 'minutes',
+              emptyLabel: 'No warning',
+              format: (value) => `${value} minute${value === 1 ? '' : 's'}`,
+            }),
+          ],
+        },
+        {
           title: 'Specialist action budget',
           hint: 'Server-enforced · per specialist run · all five agents',
           footer:

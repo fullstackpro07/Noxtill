@@ -104,6 +104,14 @@ export const POLICY_DEFS = {
     max: 100,
     integer: true,
   },
+  // ai/ai-settings.service.ts (owner-configured advisory for saved queued runs)
+  'agents.queuedRunWarningAgeMinutes': {
+    kind: 'nullableNumber',
+    default: null,
+    min: 1,
+    max: 1440,
+    integer: true,
+  },
   // Specialist agent runs are manually started and read-only by default. AI explanations have
   // separate per-feature toggles in Business.aiFeatureToggles.
   'agents.inventoryEnabled': { kind: 'boolean', default: true },

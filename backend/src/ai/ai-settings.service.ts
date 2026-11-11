@@ -106,10 +106,13 @@ type SpecialistAgentOperationAccumulator = {
   };
   recordedToolCounts: Record<string, number>;
   persistedToolCallCounts: Record<string, number>;
+  registeredToolStatusCountsByKey: Record<string, Record<string, number>>;
   persistedToolExecutionSamplesByKey: Record<string, number[]>;
   toolExecutionSamplesByKey: Record<string, number[]>;
   activeRunCount: number;
   oldestActiveRunStartedAt: Date | null;
+  queuedRunCount: number;
+  oldestQueuedRunCreatedAt: Date | null;
   triggerCounts: Record<string, number>;
   failuresByCode: { code: string; count: number }[];
   unclassifiedFailures: number;
@@ -173,6 +176,7 @@ export class AiSettingsService {
       actionExecutionEvents,
       errorGroups,
       activeRunGroups,
+      queuedRunGroups,
       orchestrationQueueSamples,
       waitingOrchestrations,
       latencyRuns,
@@ -315,6 +319,12 @@ export class AiSettingsService {
         _count: { _all: true },
         _min: { startedAt: true },
       }),
+      this.prisma.specialistAgentRun.groupBy({
+        by: ['agentKey'],
+        where: { businessId, status: 'queued' },
+        _count: { _all: true },
+        _min: { createdAt: true },
+      }),
       this.prisma.specialistAgentRun.findMany({
         where: {
           businessId,
@@ -393,7 +403,7 @@ export class AiSettingsService {
         },
       }),
       this.prisma.specialistAgentToolCall.groupBy({
-        by: ['agentKey', 'status'],
+        by: ['agentKey', 'toolKey', 'status'],
         where: {
           businessId,
           createdAt: { gte: windowStart, lte: observedAt },
@@ -604,6 +614,9 @@ export class AiSettingsService {
     );
 
     const policies = resolvePolicies({ policies: business?.policies ?? null });
+    const queuedRunWarningAgeMinutes = policies.num(
+      'agents.queuedRunWarningAgeMinutes',
+    );
 
     const securityDenials = [
       ...securityAuditRows.map((row) => ({
@@ -786,10 +799,13 @@ export class AiSettingsService {
             },
             recordedToolCounts: {},
             persistedToolCallCounts: {},
+            registeredToolStatusCountsByKey: {},
             persistedToolExecutionSamplesByKey: {},
             toolExecutionSamplesByKey: {},
             activeRunCount: 0,
             oldestActiveRunStartedAt: null,
+            queuedRunCount: 0,
+            oldestQueuedRunCreatedAt: null,
             triggerCounts: {},
             failuresByCode: [],
             unclassifiedFailures: 0,
@@ -944,6 +960,13 @@ export class AiSettingsService {
       stats.oldestActiveRunStartedAt = row._min.startedAt;
     }
 
+    for (const row of queuedRunGroups) {
+      const stats = agentStats.get(row.agentKey as SpecialistAgentKey);
+      if (!stats) continue;
+      stats.queuedRunCount = row._count._all;
+      stats.oldestQueuedRunCreatedAt = row._min.createdAt;
+    }
+
     for (const row of errorGroups) {
       const stats = agentStats.get(row.agentKey as SpecialistAgentKey);
       if (!stats) continue;
@@ -1001,6 +1024,10 @@ export class AiSettingsService {
       if (stats) {
         stats.persistedToolCallCounts[row.status] =
           (stats.persistedToolCallCounts[row.status] ?? 0) + count;
+        const toolCounts =
+          stats.registeredToolStatusCountsByKey[row.toolKey] ?? {};
+        toolCounts[row.status] = (toolCounts[row.status] ?? 0) + count;
+        stats.registeredToolStatusCountsByKey[row.toolKey] = toolCounts;
       }
       if (row.status === 'blocked' || row.status === 'refused') {
         persistedToolCallRefusals += count;
@@ -1193,6 +1220,18 @@ export class AiSettingsService {
         ),
         statusCounts: stats.persistedToolCallCounts,
       },
+      registeredToolStatusByKey: Object.entries(
+        stats.registeredToolStatusCountsByKey,
+      )
+        .map(([toolKey, statusCounts]) => ({
+          toolKey,
+          total: Object.values(statusCounts).reduce(
+            (sum, count) => sum + count,
+            0,
+          ),
+          statusCounts,
+        }))
+        .sort((left, right) => left.toolKey.localeCompare(right.toolKey)),
       registeredToolExecutionByKey: Object.entries(
         stats.persistedToolExecutionSamplesByKey,
       )
@@ -1219,6 +1258,15 @@ export class AiSettingsService {
           ? Math.max(
               0,
               observedAt.getTime() - stats.oldestActiveRunStartedAt.getTime(),
+            )
+          : null,
+      },
+      queuedRuns: {
+        count: stats.queuedRunCount,
+        oldestAgeMs: stats.oldestQueuedRunCreatedAt
+          ? Math.max(
+              0,
+              observedAt.getTime() - stats.oldestQueuedRunCreatedAt.getTime(),
             )
           : null,
       },
@@ -1294,7 +1342,14 @@ export class AiSettingsService {
       severity: 'warning' | 'critical';
       observedValue: number;
       thresholdValue: number | null;
-      unit: 'runs' | 'calls' | 'events' | 'records' | 'requests' | 'USD';
+      unit:
+        | 'runs'
+        | 'calls'
+        | 'events'
+        | 'records'
+        | 'requests'
+        | 'minutes'
+        | 'USD';
       message: string;
     }[] = [];
     const addCountAlert = (
@@ -1392,6 +1447,23 @@ export class AiSettingsService {
           message: `${agent.openActionAttention.count} open material action(s) await attention; oldest last updated ${formatAge(agent.openActionAttention.oldestUpdatedAgeMs)} ago.`,
         });
       }
+      if (
+        queuedRunWarningAgeMinutes !== null &&
+        agent.queuedRuns.count > 0 &&
+        agent.queuedRuns.oldestAgeMs !== null &&
+        agent.queuedRuns.oldestAgeMs >= queuedRunWarningAgeMinutes * 60_000
+      ) {
+        alerts.push({
+          code: 'queued_run_age',
+          agentKey: agent.agentKey,
+          agentName: agent.name,
+          severity: 'warning',
+          observedValue: Math.floor(agent.queuedRuns.oldestAgeMs / 60_000),
+          thresholdValue: queuedRunWarningAgeMinutes,
+          unit: 'minutes',
+          message: `${agent.queuedRuns.count} persisted queued run(s); oldest has been queued for ${formatAge(agent.queuedRuns.oldestAgeMs)}. Check saved run status and deployment queue monitoring.`,
+        });
+      }
       addBudgetAlert(
         agent,
         'monthly_request_budget',
@@ -1478,17 +1550,18 @@ export class AiSettingsService {
         'Recommendation status counts reflect persisted workflow states; they are not acceptance rates or measured business outcomes.',
         'Successful and failed provider latency percentiles use measured AI provider round trips stored in AiCallLog, each sampled separately and capped at the 5,000 most recent rows in the 30-day window. Failed-call timing is unavailable for failures that occurred before a provider request or did not persist a measured duration. Local processing and queue wait are not included.',
         'Cross-agent queue pickup is measured from the saved parent review row to its first persisted worker pickup, for up to the 5,000 most recent rows in this 30-day window. It is not a queue-depth monitor or an uptime target; waiting count and oldest age cover parent rows not yet picked up.',
+        "Per-agent queued-run count and oldest age come from this business's persisted SpecialistAgentRun rows with status queued. They are not live Redis/BullMQ depth, worker-liveness checks, or proof that a job is still present in Redis.",
         'Material-action execution duration is measured from its persisted executing transition to its first terminal execution transition. Approval wait and provider latency are separate; actions without both timestamps are omitted. This is not business impact.',
         'Proposal revision counts include only append-only proposal_updated events on specialist material actions; other recommendation or canonical-record edits are outside this count.',
         'Approval rejection and verification failure shares are calculated from persisted decision/verification events in this 30-day window. Repeated events on one action count separately; these are event shares, not action success rates or business outcomes.',
         'Recorded tool names are the tool/context metadata attached to AI provider-call logs; they do not prove independent external execution. Per-tool elapsed-time samples are available only for completed or failed Commerce registry calls made by the Commerce agent or its internal orchestrations, using the recorded CommerceAgentToolRun duration. Manual user calls, blocked/refused calls, other agents, provider latency, queue wait, and business impact are excluded. The sample is capped at the 5,000 most recent calls in the 30-day window.',
         'Persisted registered tool-call counts come from actual SpecialistAgentToolCall records in this 30-day window. The Commerce specialist loop is the only current producer; the status counts are business-scoped and do not represent provider invoices or comprehensive security monitoring.',
-        'Registered tool execution timing uses persisted succeeded/failed SpecialistAgentToolCall durations grouped by tool and agent; calls without a saved duration and blocked/refused calls are excluded. It is capped at the 5,000 most recent timed calls per business and is not provider latency or business impact.',
+        'Registered tool status counts use saved SpecialistAgentToolCall rows grouped by agent and tool in this 30-day window; elapsed-time percentiles use only succeeded/failed rows with a saved duration, capped at the 5,000 most recent timed calls per business. Status counts are not external execution confirmation; elapsed time is not provider latency or business impact.',
         'Security counters include only audited denied cross-tenant run probes, Commerce unregistered/over-limit tool attempts, Commerce approval refusals after policy recheck, and Customer Agent message-queue refusals. They are not comprehensive security-event monitoring; other permission, stale-data, prompt-injection and policy blocks are not counted here.',
         'Recent security-denial rows include only those four audited action types plus persisted blocked/refused specialist tool calls from this business in the 30-day window. Arbitrary audit payloads and tool inputs are not returned; the list is capped at 50 and is not a complete security-event feed.',
         'Monthly request and spend usage uses the current UTC month. Requests include reserved, failed and abandoned provider attempts; spend is a Haiku 4.5 application estimate from returned tokens plus the maximum reserved amount for pending or failed attempts, not a provider invoice.',
         'Evidence freshness shows the saved freshness labels and source/fetch timestamps on up to the 5,000 most recently fetched specialist evidence records in the 30-day window. It does not re-evaluate freshness, prove complete source coverage, or measure connector availability.',
-        'Operational alerts are deterministic signals over saved specialist runs, AI call logs, action verification events, open material actions, sampled evidence freshness and configured monthly AI request/spend limits. Budget bands are 70% and 90%; spend is an application estimate, not an invoice. This does not detect unusual cost spikes, external provider outages, or conditions outside the sampled 30-day evidence window.',
+        'Operational alerts are deterministic signals over saved specialist runs, AI call logs, action verification events, open material actions, sampled evidence freshness and configured monthly AI request/spend limits. A queued-run age warning is optional and uses the current business policy against saved run timestamps; it does not inspect live Redis/BullMQ. Budget bands are 70% and 90%; spend is an application estimate, not an invoice. This does not detect unusual cost spikes, external provider outages, or conditions outside the sampled 30-day evidence window.',
       ],
     };
   }

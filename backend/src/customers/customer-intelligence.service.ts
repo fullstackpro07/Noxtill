@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
+import { ClsService } from 'nestjs-cls';
 import { isEmail } from 'class-validator';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { describeAiSummaryProviderFailure } from '../ai/ai-provider-error.util';
@@ -18,10 +19,16 @@ import {
   specialistAgentUntrustedData,
 } from '../common/agents/specialist-agent-prompt.util';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_USER_ID,
+} from '../common/tenancy/tenant.constants';
 import { SegmentsService } from './segments.service';
 import { CustomerDuplicatesService } from './customer-duplicates.service';
 import { CustomerAgentActionsService } from './customer-agent-actions.service';
 import { CustomerAnalyticsSummaryService } from './customer-analytics-summary.service';
+import { CustomerChannelConsentService } from './customer-channel-consent.service';
+import { CustomerProfileIntelligenceService } from './customer-profile-intelligence.service';
 import {
   createOrReuseSpecialistAgentRun,
   SPECIALIST_AGENT_RUN_DETAILS_INCLUDE,
@@ -46,12 +53,68 @@ const DAY_MS = 86_400_000;
 const CUSTOMER_SEGMENT_PREVIEW_TOOL = 'preview_repeat_visitor_segment';
 const CUSTOMER_ANALYTICS_SUMMARY_TOOL = 'get_customer_analytics_summary';
 const CUSTOMER_REVIEW_CONTEXT_TOOL = 'get_customer_review_context';
+const CUSTOMER_CONSENT_TOOL = 'get_customer_consent';
+const CUSTOMER_ACTIVITY_TOOL = 'get_customer_activity';
+const CUSTOMER_ORDERS_TOOL = 'get_customer_orders';
+const CUSTOMER_BOOKINGS_TOOL = 'get_booking_history';
 const CUSTOMER_REPEAT_VISITOR_RULES = {
   combinator: 'AND',
   conditions: [{ field: 'visitCount', operator: 'gt', value: 1 }],
 } satisfies SegmentRules;
 
 const CUSTOMER_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
+  {
+    key: CUSTOMER_CONSENT_TOOL,
+    label: 'Get customer channel-consent status',
+    description:
+      'Read the latest recorded email, SMS and WhatsApp consent states for one customer in the current business. This is not final send authorization and returns no contact details.',
+    inputs: ['customerId'],
+    requiredInputs: ['customerId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 8_192,
+    screen: '/customers',
+  },
+  {
+    key: CUSTOMER_ACTIVITY_TOOL,
+    label: 'Get customer activity summary',
+    description:
+      'Read one selected customer’s permission-checked CRM activity, including recorded visits, order and booking counts, message statuses and loyalty summary. Contact details, notes, message contents, lifetime spend and customer identifiers are excluded from the result.',
+    inputs: ['customerId'],
+    requiredInputs: ['customerId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 24_576,
+    screen: '/customers',
+  },
+  {
+    key: CUSTOMER_ORDERS_TOOL,
+    label: 'Get customer orders',
+    description:
+      'Read up to 10 recent non-quotation customer orders from the current business. Includes status, order type and date; includes totals only when the signed-in user is allowed to view profit data. Never returns customer contact details or order identifiers.',
+    inputs: ['customerId'],
+    requiredInputs: ['customerId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 12_288,
+    screen: '/orders',
+  },
+  {
+    key: CUSTOMER_BOOKINGS_TOOL,
+    label: 'Get customer booking history',
+    description:
+      'Read up to 10 recent booking statuses and scheduled times from the current business for a selected customer. Never returns customer contact details, booking identifiers or private notes.',
+    inputs: ['customerId'],
+    requiredInputs: ['customerId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 12_288,
+    screen: '/bookings',
+  },
   {
     key: CUSTOMER_REVIEW_CONTEXT_TOOL,
     label: 'Get customer review context',
@@ -145,12 +208,308 @@ export class CustomerIntelligenceService {
     private readonly customerActions: CustomerAgentActionsService,
     private readonly toolGateway: SpecialistAgentToolGatewayService,
     private readonly customerAnalyticsSummary: CustomerAnalyticsSummaryService,
+    private readonly customerChannelConsent: CustomerChannelConsentService,
+    private readonly customerProfileIntelligence: CustomerProfileIntelligenceService,
+    private readonly cls: ClsService,
   ) {
     this.toolGateway.registerAgentTools(
       AGENT_KEY,
       '7',
       CUSTOMER_AGENT_TOOLS,
       async (context, tool, toolInput) => {
+        if (tool.key === CUSTOMER_BOOKINGS_TOOL) {
+          const customerId = toolInput.customerId;
+          if (
+            typeof customerId !== 'string' ||
+            !customerId.trim() ||
+            customerId.length > 191
+          ) {
+            throw new AppException(
+              'CUSTOMER_AGENT_TOOL_INPUT_INVALID',
+              'The booking-history tool requires a valid customer ID.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          if (
+            !context.actorUserId ||
+            this.cls.get<string>(CLS_KEY_USER_ID) !== context.actorUserId ||
+            this.cls.get<string>(CLS_KEY_BUSINESS_ID) !== context.businessId
+          ) {
+            throw new AppException(
+              'CUSTOMER_AGENT_ACTOR_SCOPE_MISMATCH',
+              'A matching authenticated user and business context are required to read customer bookings.',
+              HttpStatus.FORBIDDEN,
+            );
+          }
+          const profile = await this.customerProfileIntelligence.review(customerId);
+          const observedAt = new Date().toISOString();
+          if (profile.bookings.state === 'module_disabled') {
+            return {
+              output: {
+                source: 'Appointment',
+                state: 'not_available',
+                reason: 'The Bookings module is disabled for this business.',
+                recentBookings: [],
+              },
+              status: 'succeeded',
+              summary: 'Booking history is unavailable because the module is disabled.',
+              outputResourceType: 'CustomerBookingHistory',
+              outputResourceId: context.businessId,
+            };
+          }
+          const where = { businessId: context.businessId, customerId };
+          const [count, rows] = await Promise.all([
+            this.tenantPrisma.client.appointment.count({ where }),
+            this.tenantPrisma.client.appointment.findMany({
+              where,
+              orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
+              take: 10,
+              select: { status: true, startsAt: true, createdAt: true },
+            }),
+          ]);
+          return {
+            output: {
+              source: 'Appointment',
+              observedAt,
+              state: 'available',
+              allTimeBookingCount: count,
+              recentBookings: rows.map((appointment) => ({
+                status: appointment.status,
+                startsAt: appointment.startsAt.toISOString(),
+                recordedAt: appointment.createdAt.toISOString(),
+              })),
+              excluded: [
+                'customer names and contact details',
+                'booking identifiers and free-text notes',
+              ],
+              limitation:
+                'Bookings are ordered by scheduled start time and reflect the current recorded status; this does not establish attendance or customer contact.',
+            },
+            status: 'succeeded',
+            summary: `Read ${rows.length} of ${count} recorded customer bookings; statuses are current canonical records.`,
+            outputResourceType: 'CustomerBookingHistory',
+            outputResourceId: context.businessId,
+          };
+        }
+        if (tool.key === CUSTOMER_ORDERS_TOOL) {
+          const customerId = toolInput.customerId;
+          if (
+            typeof customerId !== 'string' ||
+            !customerId.trim() ||
+            customerId.length > 191
+          ) {
+            throw new AppException(
+              'CUSTOMER_AGENT_TOOL_INPUT_INVALID',
+              'The customer-orders tool requires a valid customer ID.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          if (
+            !context.actorUserId ||
+            this.cls.get<string>(CLS_KEY_USER_ID) !== context.actorUserId ||
+            this.cls.get<string>(CLS_KEY_BUSINESS_ID) !== context.businessId
+          ) {
+            throw new AppException(
+              'CUSTOMER_AGENT_ACTOR_SCOPE_MISMATCH',
+              'A matching authenticated user and business context are required to read customer orders.',
+              HttpStatus.FORBIDDEN,
+            );
+          }
+
+          const profile = await this.customerProfileIntelligence.review(customerId);
+          const observedAt = new Date().toISOString();
+          if (profile.orders.state === 'module_disabled') {
+            return {
+              output: {
+                source: 'Order',
+                state: 'not_available',
+                reason: 'The Orders module is disabled for this business.',
+                recentOrders: [],
+                contactDetails: 'excluded',
+              },
+              status: 'succeeded',
+              summary: 'Orders are unavailable because the module is disabled.',
+              outputResourceType: 'CustomerOrderSummary',
+              outputResourceId: context.businessId,
+            };
+          }
+
+          const where = {
+            businessId: context.businessId,
+            customerId,
+            isQuotation: false,
+            status: { not: OrderStatus.draft },
+          };
+          const canSeeAmounts = profile.financial.state === 'available';
+          const [count, rows, business] = await Promise.all([
+            this.tenantPrisma.client.order.count({ where }),
+            canSeeAmounts
+              ? this.tenantPrisma.client.order.findMany({
+                  where,
+                  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                  take: 10,
+                  select: {
+                    status: true,
+                    orderType: true,
+                    createdAt: true,
+                    total: true,
+                  },
+                })
+              : this.tenantPrisma.client.order.findMany({
+                  where,
+                  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                  take: 10,
+                  select: {
+                    status: true,
+                    orderType: true,
+                    createdAt: true,
+                  },
+                }),
+            canSeeAmounts
+              ? this.tenantPrisma.client.business.findUniqueOrThrow({
+                  where: { id: context.businessId },
+                  select: { currency: true },
+                })
+              : Promise.resolve(null),
+          ]);
+          const recentOrders = rows.map((order) => ({
+            status: order.status,
+            orderType: order.orderType,
+            createdAt: order.createdAt.toISOString(),
+            ...(canSeeAmounts && 'total' in order
+              ? { total: Number(order.total) }
+              : {}),
+          }));
+          return {
+            output: {
+              source: 'Order',
+              observedAt,
+              state: 'available',
+              calculation:
+                'Count and newest-first list of non-quotation orders excluding drafts, scoped to this tenant and customer. The list is capped at 10; amounts are included only when the signed-in user has canonical profit-view permission.',
+              allTimeNonQuotationNonDraftCount: count,
+              recentOrders,
+              amountAccess: canSeeAmounts ? 'authorized' : 'restricted',
+              ...(canSeeAmounts && business
+                ? { currency: business.currency }
+                : {}),
+              excluded: [
+                'customer names and contact details',
+                'order identifiers and free-text notes',
+                'draft and quotation records',
+                ...(!canSeeAmounts ? ['order totals and currency'] : []),
+              ],
+            },
+            status: 'succeeded',
+            summary: `Read ${rows.length} of ${count} eligible customer orders; amounts ${canSeeAmounts ? 'were permission-checked' : 'were withheld'}.`,
+            outputResourceType: 'CustomerOrderSummary',
+            outputResourceId: context.businessId,
+          };
+        }
+        if (tool.key === CUSTOMER_ACTIVITY_TOOL) {
+          const customerId = toolInput.customerId;
+          if (
+            typeof customerId !== 'string' ||
+            !customerId.trim() ||
+            customerId.length > 191
+          ) {
+            throw new AppException(
+              'CUSTOMER_AGENT_TOOL_INPUT_INVALID',
+              'The customer-activity tool requires a valid customer ID.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          if (
+            !context.actorUserId ||
+            this.cls.get<string>(CLS_KEY_USER_ID) !== context.actorUserId ||
+            this.cls.get<string>(CLS_KEY_BUSINESS_ID) !== context.businessId
+          ) {
+            throw new AppException(
+              'CUSTOMER_AGENT_ACTOR_SCOPE_MISMATCH',
+              'A matching authenticated user and business context are required to read customer activity.',
+              HttpStatus.FORBIDDEN,
+            );
+          }
+          const review = await this.customerProfileIntelligence.review(customerId);
+          return {
+            output: {
+              source: 'CustomerProfileIntelligenceService.review',
+              observedAt: review.observedAt,
+              calculationVersion: review.calculationVersion,
+              coverage: review.coverage,
+              confidence: 'not_calibrated',
+              profile: review.profile,
+              windows: review.windows,
+              orders: review.orders,
+              bookings: review.bookings,
+              messages: review.messages,
+              support: review.support,
+              loyalty: review.loyalty,
+              feedback: review.feedback,
+              followUp: {
+                state: review.followUp.state,
+                reason: review.followUp.reason,
+                confidence: review.followUp.confidence,
+              },
+              sources: review.sources.map(({ source, fields, window }) => ({
+                source,
+                fields,
+                window,
+              })),
+              excluded: [
+                'customer identifiers and contact details',
+                'customer notes and message contents',
+                'lifetime spend and financial values',
+                'direct marketing or messaging actions',
+              ],
+              limitation:
+                'This is a permission-checked snapshot of canonical CRM records, not proof of message delivery or a calibrated prediction. Any future send must use the canonical sender and recheck consent and suppression.',
+            },
+            status: 'succeeded',
+            summary:
+              'Read one customer’s privacy-minimized CRM activity using the canonical profile review.',
+            outputResourceType: 'CustomerActivitySummary',
+            outputResourceId: context.businessId,
+          };
+        }
+        if (tool.key === CUSTOMER_CONSENT_TOOL) {
+          const customerId = toolInput.customerId;
+          if (
+            typeof customerId !== 'string' ||
+            !customerId.trim() ||
+            customerId.length > 191
+          ) {
+            throw new AppException(
+              'CUSTOMER_AGENT_TOOL_INPUT_INVALID',
+              'The customer-consent tool requires a valid customer ID.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const consent = await this.customerChannelConsent.list(
+            context.businessId,
+            customerId,
+          );
+          return {
+            output: {
+              source: 'CustomerChannelConsentService.list',
+              channels: consent.channels.map((channel) => ({
+                channel: channel.channel,
+                state: channel.state,
+                updatedAt: channel.updatedAt?.toISOString() ?? null,
+              })),
+              finalSendAuthorization:
+                'not_established_by_consent_records_alone',
+              limitation:
+                'The canonical sender must recheck contact destination, customer status, global and channel consent, suppression, quiet hours, frequency limits and provider configuration before sending.',
+              contactDetails: 'excluded',
+            },
+            status: 'succeeded',
+            summary:
+              'Read latest recorded channel-consent states without exposing contact details; sending still requires the canonical send gate.',
+            outputResourceType: 'CustomerChannelConsentSummary',
+            outputResourceId: context.businessId,
+          };
+        }
         if (tool.key === CUSTOMER_REVIEW_CONTEXT_TOOL) {
           const scope = toolInput.scope;
           const branchId = toolInput.branchId;

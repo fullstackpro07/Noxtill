@@ -33,6 +33,7 @@ import {
 import { findPotentialExpenseDuplicateGroups } from '../expenses/expense-duplicate-candidates.util';
 import { FinancePeriodCloseService } from './finance-period-close.service';
 import { FinanceJournalsService } from './finance-journals.service';
+import { FinanceReconciliationService } from './finance-reconciliation.service';
 import {
   createOrReuseSpecialistAgentRun,
   SPECIALIST_AGENT_RUN_DETAILS_INCLUDE,
@@ -47,6 +48,17 @@ const AGENT_KEY = 'financial_intelligence';
 const AGENT_VERSION = '1.0.0';
 const DAY_MS = 86_400_000;
 const FINANCE_PROFIT_ANALYTICS_TOOL = 'get_profit_analytics_statement';
+const FINANCE_VARIANCE_TOOL = 'calculate_variance';
+const FINANCE_BUDGET_ACTUALS_TOOL = 'get_approved_budget_actuals';
+const FINANCE_CASH_FLOW_TOOL = 'get_relative_cash_flow_projection';
+const FINANCE_XERO_OPEN_ITEMS_TOOL = 'get_xero_open_items_summary';
+const FINANCE_XERO_BANK_STATUS_TOOL = 'get_xero_bank_transaction_status';
+const FINANCE_RECONCILIATION_TOOL = 'get_reconciliation_items';
+const FINANCE_PERIOD_CLOSE_TOOL = 'get_period_close_checklist';
+const FINANCE_TRIAL_BALANCE_TOOL = 'get_manual_journal_trial_balance';
+const FINANCE_GENERAL_LEDGER_TOOL = 'get_manual_general_ledger_entries';
+const FINANCE_AR_AP_AGING_TOOL = 'get_ar_ap_aging';
+const FINANCE_DUPLICATE_CANDIDATES_TOOL = 'detect_duplicate_candidates';
 const FINANCE_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
   {
     key: FINANCE_PROFIT_ANALYTICS_TOOL,
@@ -60,6 +72,145 @@ const FINANCE_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     exposedToReadOnlyAssistant: true,
     maxOutputBytes: 1_048_576,
     screen: '/profit',
+  },
+  {
+    key: FINANCE_VARIANCE_TOOL,
+    label: 'Calculate descriptive Profit Analytics variance',
+    description:
+      'Compare one calendar month with the immediately preceding month using the same canonical Profit Analytics scope. This calculation describes a difference and does not infer a cause.',
+    inputs: ['month', 'branchId'],
+    requiredInputs: ['month'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 65_536,
+    screen: '/profit',
+  },
+  {
+    key: FINANCE_BUDGET_ACTUALS_TOOL,
+    label: 'Get approved budget actuals',
+    description:
+      'Read approved monthly FinanceBudget amounts beside recorded Expense totals for the same business scope and currency.',
+    inputs: ['month', 'branchId'],
+    requiredInputs: ['month'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 262_144,
+    screen: '/profit/budgets',
+  },
+  {
+    key: FINANCE_CASH_FLOW_TOOL,
+    label: 'Get relative cash-flow projection',
+    description:
+      'Read the canonical Cash Flow projection derived from recorded sales, expenses and scheduled recurring obligations; it is not a bank balance.',
+    inputs: ['days', 'branchId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 262_144,
+    screen: '/profit/cash-flow',
+  },
+  {
+    key: FINANCE_XERO_OPEN_ITEMS_TOOL,
+    label: 'Get Xero open-items summary',
+    description:
+      'Read authorized Xero receivables and supplier-bill totals grouped by currency and due-date aging; invoice details are not returned.',
+    inputs: ['branchId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 65_536,
+    screen: '/integrations',
+  },
+  {
+    key: FINANCE_XERO_BANK_STATUS_TOOL,
+    label: 'Get Xero bank transaction status',
+    description:
+      'Read the connected Xero organization’s authorized bank-transaction totals by currency and reconciliation status for the latest 30-day window; this is not Noxtill reconciliation.',
+    inputs: ['branchId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 65_536,
+    screen: '/integrations',
+  },
+  {
+    key: FINANCE_RECONCILIATION_TOOL,
+    label: 'Get bank-statement match suggestions',
+    description:
+      'Read one imported Noxtill statement page and its existing deterministic candidate matches. Suggestions are not reconciled until a person accepts them.',
+    inputs: ['importId', 'page'],
+    requiredInputs: ['importId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 262_144,
+    screen: '/profit/reconciliation',
+  },
+  {
+    key: FINANCE_PERIOD_CLOSE_TOOL,
+    label: 'Get period-close readiness checklist',
+    description:
+      'Read the existing Finance period-close preparation checklist for a month and optional branch. It is not an authoritative or certified close.',
+    inputs: ['month', 'branchId'],
+    requiredInputs: ['month'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 262_144,
+    screen: '/profit/period-close',
+  },
+  {
+    key: FINANCE_TRIAL_BALANCE_TOOL,
+    label: 'Get partial manual-journal trial balance',
+    description:
+      'Read cumulative balances from posted Noxtill manual journal entries only, optionally filtered to an account code. This is not a complete ledger.',
+    inputs: ['asOf', 'branchId', 'accountCode'],
+    requiredInputs: ['asOf'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 262_144,
+    screen: '/profit/journals',
+  },
+  {
+    key: FINANCE_GENERAL_LEDGER_TOOL,
+    label: 'Get posted manual journal entries',
+    description:
+      'Read up to 100 posted Noxtill manual journal entries in a month with up to 20 lines each. Descriptions and line memos are excluded; automatic postings and external ledgers are not included.',
+    inputs: ['month'],
+    requiredInputs: ['month'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 262_144,
+    screen: '/profit/journals',
+  },
+  {
+    key: FINANCE_AR_AP_AGING_TOOL,
+    label: 'Get available receivable and payable aging sources',
+    description:
+      'Read separate privacy-minimized customer Credit aging and connected Xero open-item summaries. These are partial source views, not a finance-owned A/R or A/P ledger.',
+    inputs: [],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 65_536,
+    screen: '/credit',
+  },
+  {
+    key: FINANCE_DUPLICATE_CANDIDATES_TOOL,
+    label: 'Detect expense duplicate candidates',
+    description:
+      'Read exact-match expense candidate counts for one calendar month and same-currency business scope. A match is for human review only; recurring identical expenses may be legitimate.',
+    inputs: ['month', 'branchId'],
+    requiredInputs: ['month'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 65_536,
+    screen: '/profit/expenses',
   },
 ];
 
@@ -266,44 +417,545 @@ export class FinancialIntelligenceService {
     private readonly periodClose: FinancePeriodCloseService,
     private readonly financeJournals: FinanceJournalsService,
     private readonly toolGateway: SpecialistAgentToolGatewayService,
+    private readonly financeReconciliation: FinanceReconciliationService,
   ) {
     this.toolGateway.registerAgentTools(
       AGENT_KEY,
       '30',
       FINANCE_AGENT_TOOLS,
       async (context, tool, toolInput) => {
-        if (tool.key !== FINANCE_PROFIT_ANALYTICS_TOOL) {
-          throw new AppException(
-            'FINANCE_AGENT_TOOL_NOT_SUPPORTED',
-            'This Finance tool is not supported by the canonical service.',
-            HttpStatus.NOT_IMPLEMENTED,
+        if (tool.key === FINANCE_PROFIT_ANALYTICS_TOOL) {
+          const { month, period, branchId } = toolInput;
+          if (
+            !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ||
+            !(PNL_PERIODS as readonly string[]).includes(period ?? '') ||
+            (branchId !== undefined && !branchId.trim())
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The Profit Analytics tool requires a valid month, period and optional branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const statement = await this.profit.pnl(
+            context.businessId,
+            month,
+            period as PnlPeriod,
+            branchId,
           );
+          return {
+            output: statement,
+            status: 'succeeded',
+            summary: 'Read the canonical Profit Analytics statement.',
+            outputResourceType: 'ProfitAnalyticsStatement',
+            outputResourceId: context.businessId,
+          };
         }
-        const { month, period, branchId } = toolInput;
-        if (
-          !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ||
-          !(PNL_PERIODS as readonly string[]).includes(period ?? '') ||
-          (branchId !== undefined && !branchId.trim())
-        ) {
-          throw new AppException(
-            'FINANCE_AGENT_TOOL_INPUT_INVALID',
-            'The Profit Analytics tool requires a valid month, period and optional branch scope.',
-            HttpStatus.BAD_REQUEST,
+
+        if (tool.key === FINANCE_VARIANCE_TOOL) {
+          const { month, branchId } = toolInput;
+          if (
+            !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ||
+            (branchId !== undefined && !branchId.trim())
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The variance tool requires a valid calendar month and optional non-empty branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const scopeBusinessIds = await this.branchScope.resolveIds(
+            context.businessId,
+            branchId,
           );
+          const scopedBusinesses = await this.prisma.business.findMany({
+            where: { id: { in: scopeBusinessIds } },
+            orderBy: { id: 'asc' },
+            select: { id: true, currency: true },
+          });
+          if (
+            scopedBusinesses.length !== scopeBusinessIds.length ||
+            new Set(scopedBusinesses.map((business) => business.currency))
+              .size > 1
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_CURRENCY_SCOPE_UNSUPPORTED',
+              'Profit Analytics variance needs an available single-currency business scope. Select one branch at a time.',
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            );
+          }
+          const statement = await this.profit.pnl(
+            context.businessId,
+            month,
+            'month',
+            branchId,
+          );
+          const variance = this.compareCalendarMonths(statement);
+          return {
+            output: {
+              ...variance,
+              currency: scopedBusinesses[0]?.currency ?? null,
+              businessId: context.businessId,
+              branchId: branchId ?? null,
+            },
+            status: 'succeeded',
+            summary:
+              variance.status === 'available'
+                ? `Calculated descriptive Profit Analytics differences for ${month} and the prior calendar month.`
+                : `Profit Analytics variance is unavailable for ${month}; no difference was inferred.`,
+            outputResourceType: 'ProfitPeriodVariance',
+            outputResourceId: `${context.businessId}:${month}:${branchId ?? 'all'}`,
+          };
         }
-        const statement = await this.profit.pnl(
-          context.businessId,
-          month,
-          period as PnlPeriod,
-          branchId,
+
+        if (tool.key === FINANCE_BUDGET_ACTUALS_TOOL) {
+          const { month, branchId } = toolInput;
+          if (
+            !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ||
+            (branchId !== undefined && !branchId.trim())
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The approved budget actuals tool requires a valid month and optional branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const scopeBusinessIds = await this.branchScope.resolveIds(
+            context.businessId,
+            branchId,
+          );
+          const scopedBusinesses = await this.prisma.business.findMany({
+            where: { id: { in: scopeBusinessIds } },
+            orderBy: { id: 'asc' },
+            select: { id: true, name: true, currency: true },
+          });
+          if (
+            new Set(scopedBusinesses.map((business) => business.currency))
+              .size > 1
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_CURRENCY_SCOPE_UNSUPPORTED',
+              'Approved budget actuals cannot combine businesses with different currencies. Select one branch at a time.',
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            );
+          }
+          const review = await this.reviewBudgetActuals(
+            scopeBusinessIds,
+            scopedBusinesses,
+            month,
+          );
+          return {
+            output: review,
+            status: 'succeeded',
+            summary:
+              review.status === 'available'
+                ? `Read approved budgets and recorded expense actuals for ${month}.`
+                : `No approved budget was recorded for ${month}; expense actuals remain available for review.`,
+            outputResourceType: 'FinanceBudgetActualReview',
+            outputResourceId: `${context.businessId}:${month}`,
+          };
+        }
+
+        if (tool.key === FINANCE_CASH_FLOW_TOOL) {
+          const { days: requestedDays, branchId } = toolInput;
+          const days = requestedDays === undefined ? 30 : Number(requestedDays);
+          if (
+            !Number.isSafeInteger(days) ||
+            days < 7 ||
+            days > 90 ||
+            (branchId !== undefined && !branchId.trim())
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The cash-flow projection supports 7 to 90 days and an optional branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const scopeBusinessIds = await this.branchScope.resolveIds(
+            context.businessId,
+            branchId,
+          );
+          const scopedBusinesses = await this.prisma.business.findMany({
+            where: { id: { in: scopeBusinessIds } },
+            orderBy: { id: 'asc' },
+            select: { id: true, currency: true },
+          });
+          if (
+            scopedBusinesses.length !== scopeBusinessIds.length ||
+            new Set(scopedBusinesses.map((business) => business.currency))
+              .size > 1
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_CURRENCY_SCOPE_UNSUPPORTED',
+              'The relative cash-flow projection needs an available single-currency business scope.',
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            );
+          }
+          const forecast = await this.cashForecast.forecast(
+            context.businessId,
+            days,
+            branchId,
+          );
+          return {
+            output: {
+              source: 'CashForecastService.forecast',
+              basis: 'relative_net_flow_not_bank_balance',
+              currency: scopedBusinesses[0]?.currency ?? null,
+              days: forecast.days,
+              dailyAvgRevenue: forecast.dailyAvgRevenue,
+              dailyAvgExpense: forecast.dailyAvgExpense,
+              projection: forecast.projection,
+              shortfallDates: forecast.shortfallDates,
+              calculation:
+                'Uses recorded completed non-quotation order revenue and recorded expenses over the canonical trailing history window, then adds active recurring obligations on their scheduled dates. Cumulative net flow starts at zero; it is not a cash balance or a certainty. Scheduled receivables and payables are not included.',
+            },
+            status: 'succeeded',
+            summary: `Read a ${days}-day relative cash-flow projection from the canonical Cash Flow service.`,
+            outputResourceType: 'RelativeCashFlowProjection',
+            outputResourceId: `${context.businessId}:${branchId ?? 'current'}:${days}`,
+          };
+        }
+
+        if (tool.key === FINANCE_XERO_OPEN_ITEMS_TOOL) {
+          const { branchId } = toolInput;
+          if (branchId !== undefined && !branchId.trim()) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The Xero open-items tool accepts an optional non-empty branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const scopeBusinessIds = await this.branchScope.resolveIds(
+            context.businessId,
+            branchId,
+          );
+          const review = await this.reviewXeroOpenItems(
+            context.businessId,
+            scopeBusinessIds,
+          );
+          return {
+            output: review,
+            status: 'succeeded',
+            summary:
+              review.status === 'available'
+                ? 'Read the connected Xero open-items summary by currency and due-date bucket.'
+                : 'Xero open-items were not available for this business scope; no receivables or payables were inferred.',
+            outputResourceType: 'XeroOpenItemsReview',
+            outputResourceId: context.businessId,
+          };
+        }
+
+        if (tool.key === FINANCE_XERO_BANK_STATUS_TOOL) {
+          const { branchId } = toolInput;
+          if (branchId !== undefined && !branchId.trim()) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The Xero bank-status tool accepts an optional non-empty branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const scopeBusinessIds = await this.branchScope.resolveIds(
+            context.businessId,
+            branchId,
+          );
+          const review = await this.reviewXeroBankTransactionStatus(
+            context.businessId,
+            scopeBusinessIds,
+          );
+          return {
+            output: review,
+            status: 'succeeded',
+            summary:
+              review.status === 'available'
+                ? 'Read authorized Xero bank-transaction totals and their provider reconciliation flags for the latest 30-day window.'
+                : 'Xero bank-transaction status is not available for this business scope; no reconciliation state was inferred.',
+            outputResourceType: 'XeroBankTransactionStatusReview',
+            outputResourceId: context.businessId,
+          };
+        }
+
+        if (tool.key === FINANCE_RECONCILIATION_TOOL) {
+          const { importId, page: requestedPage } = toolInput;
+          const page = requestedPage === undefined ? 1 : Number(requestedPage);
+          if (
+            !importId?.trim() ||
+            importId.length > 191 ||
+            !Number.isSafeInteger(page) ||
+            page < 1 ||
+            page > 10_000
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'Choose a valid imported statement and a page number from 1 to 10000.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const review = await this.financeReconciliation.getImport(
+            context.businessId,
+            importId,
+            page,
+          );
+          return {
+            output: {
+              source: 'FinanceReconciliationService.getImport',
+              statement: review.statement,
+              lines: review.lines.map((line) => ({
+                lineNumber: line.lineNumber,
+                statementDate: line.statementDate.toISOString().slice(0, 10),
+                amount: line.amount.toFixed(2),
+                status: line.status,
+                candidates: line.candidates.map((candidate) => ({
+                  reference: candidate.reference,
+                  entryDate: candidate.entryDate.toISOString().slice(0, 10),
+                  debit: candidate.debit.toFixed(2),
+                  credit: candidate.credit.toFixed(2),
+                })),
+              })),
+              page: review.page,
+              pageSize: review.pageSize,
+              total: review.total,
+              disclosure: review.disclosure,
+            },
+            status: 'succeeded',
+            summary:
+              'Read existing statement-line match candidates. No match was accepted or reconciled.',
+            outputResourceType: 'FinanceReconciliationCandidates',
+            outputResourceId: importId,
+          };
+        }
+
+        if (tool.key === FINANCE_PERIOD_CLOSE_TOOL) {
+          const { month, branchId } = toolInput;
+          if (
+            !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ||
+            (branchId !== undefined && !branchId.trim())
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The period-close checklist requires a valid month and optional non-empty branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const checklist = await this.periodClose.readiness(
+            context.businessId,
+            month,
+            branchId,
+          );
+          return {
+            output: {
+              source: 'FinancePeriodCloseService.readiness',
+              checklist,
+            },
+            status: 'succeeded',
+            summary:
+              'Read the canonical period-close preparation checklist; it does not certify or close the accounting period.',
+            outputResourceType: 'FinancePeriodCloseReadiness',
+            outputResourceId: `${context.businessId}:${month}`,
+          };
+        }
+
+        if (tool.key === FINANCE_TRIAL_BALANCE_TOOL) {
+          const { asOf, branchId, accountCode: requestedAccountCode } = toolInput;
+          const accountCode = requestedAccountCode?.trim();
+          const parsedAsOf = /^\d{4}-\d{2}-\d{2}$/.test(asOf ?? '')
+            ? new Date(`${asOf}T00:00:00.000Z`)
+            : null;
+          const validAsOf =
+            parsedAsOf !== null &&
+            !Number.isNaN(parsedAsOf.getTime()) &&
+            parsedAsOf.toISOString().slice(0, 10) === asOf;
+          if (
+            !validAsOf ||
+            (branchId !== undefined && !branchId.trim()) ||
+            (accountCode !== undefined &&
+              !/^[A-Za-z0-9_-]{1,32}$/.test(accountCode))
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'The partial trial balance requires a valid as-of date, optional branch, and optional account code.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const review = await this.financeJournals.trialBalanceForScope(
+            context.businessId,
+            asOf,
+            branchId,
+          );
+          const entities = review.entities.map((entity) => ({
+            businessId: entity.businessId,
+            currencies: entity.currencies.map((currency) => {
+              const matched = accountCode
+                ? currency.accounts.filter(
+                    (account) => account.accountCode === accountCode,
+                  )
+                : currency.accounts;
+              return {
+                currencyCode: currency.currencyCode,
+                totalDebitBalances: currency.totalDebitBalances,
+                totalCreditBalances: currency.totalCreditBalances,
+                balanced: currency.balanced,
+                accounts: matched.slice(0, 100),
+                omittedAccountCount: Math.max(0, matched.length - 100),
+              };
+            }),
+          }));
+          return {
+            output: {
+              source: 'FinanceJournalsService.trialBalanceForScope',
+              asOf: review.asOf,
+              coverage: review.coverage,
+              disclosure: review.disclosure,
+              scopeBusinessCount: review.scopeBusinessCount,
+              accountCode: accountCode ?? null,
+              entities,
+            },
+            status: 'succeeded',
+            summary:
+              'Read the partial trial balance of posted manual Noxtill journals; automatic postings and external ledgers are excluded.',
+            outputResourceType: 'PartialManualJournalTrialBalance',
+            outputResourceId: `${context.businessId}:${asOf}`,
+          };
+        }
+
+        if (tool.key === FINANCE_GENERAL_LEDGER_TOOL) {
+          const { month } = toolInput;
+          if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '')) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'Choose a valid calendar month in YYYY-MM format.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const ledger = await this.financeJournals.listPostedEntriesForAgent(
+            context.businessId,
+            month,
+          );
+          const entries = ledger.entries.map((entry) => ({
+              id: entry.id,
+              reference: entry.reference,
+              entryDate: entry.entryDate.toISOString().slice(0, 10),
+              currencyCode: entry.currencyCode,
+              status: entry.status,
+              lines: entry.lines.map((line) => ({
+                accountCode: line.accountCode,
+                accountName: line.accountName,
+                debit: line.debit.toFixed(2),
+                credit: line.credit.toFixed(2),
+              })),
+              hasMoreLines: entry.hasMoreLines,
+            }));
+          return {
+            output: {
+              source: 'FinanceJournalsService.listPostedEntriesForAgent',
+              month,
+              coverage: ledger.coverage,
+              disclosure: ledger.disclosure,
+              entries,
+              cappedAt: 100,
+              hasMoreEntries: ledger.hasMoreEntries,
+            },
+            status: 'succeeded',
+            summary:
+              'Read posted manual Noxtill journal entries for the selected month. Descriptions, line memos, automatic postings and external ledgers are excluded.',
+            outputResourceType: 'ManualGeneralLedgerEntries',
+            outputResourceId: `${context.businessId}:${month}`,
+          };
+        }
+
+        if (tool.key === FINANCE_AR_AP_AGING_TOOL) {
+          const [creditSummary, xeroOpenItems] = await Promise.all([
+            this.credit.financialAgingSummary(),
+            this.reviewXeroOpenItems(context.businessId, [context.businessId]),
+          ]);
+          return {
+            output: {
+              coverage: 'partial_operational_credit_and_external_xero_sources',
+              financeOwnedLedger: {
+                status: 'not_available',
+                reason:
+                  'No finance-owned Noxtill A/R or A/P subledger is available in the current source model.',
+              },
+              customerCredit: {
+                ...creditSummary,
+                disclosure:
+                  'This is the Credit module’s outstanding-balance age since the last zero balance or first credit entry. It is not invoice due-date aging, a finance-owned A/R control account, or proof of collection.',
+              },
+              xeroOpenItems,
+              scope: {
+                businessId: context.businessId,
+                currencyConversion: 'none',
+                sourcesAreCombined: false,
+              },
+            },
+            status: 'succeeded',
+            summary:
+              'Read customer-credit aging and connected Xero open items as separate partial sources; no native accounting A/R or A/P balance was inferred.',
+            outputResourceType: 'PartialReceivablePayableAgingSources',
+            outputResourceId: context.businessId,
+          };
+        }
+
+        if (tool.key === FINANCE_DUPLICATE_CANDIDATES_TOOL) {
+          const { month, branchId } = toolInput;
+          if (
+            !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '') ||
+            (branchId !== undefined && !branchId.trim())
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_TOOL_INPUT_INVALID',
+              'Choose a valid calendar month and optional non-empty branch scope.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const scopeBusinessIds = await this.branchScope.resolveIds(
+            context.businessId,
+            branchId,
+          );
+          const scopedBusinesses = await this.prisma.business.findMany({
+            where: { id: { in: scopeBusinessIds } },
+            orderBy: { id: 'asc' },
+            select: { id: true, currency: true },
+          });
+          if (
+            scopedBusinesses.length !== scopeBusinessIds.length ||
+            new Set(scopedBusinesses.map((business) => business.currency))
+              .size > 1
+          ) {
+            throw new AppException(
+              'FINANCE_AGENT_CURRENCY_SCOPE_UNSUPPORTED',
+              'Expense duplicate candidates need an available single-currency business scope. Select one branch at a time.',
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            );
+          }
+          const review = await this.reviewExpenseDuplicates(
+            scopeBusinessIds,
+            month,
+          );
+          return {
+            output: {
+              source: 'Expense',
+              month,
+              currency: scopedBusinesses[0]?.currency ?? null,
+              review,
+              calculation:
+                'A candidate group has the same business, UTC incurred date, normalized description, normalized category, exact two-decimal amount and recurring flag. Additional entries and amounts are candidate totals only; this does not confirm duplicates, fraud or a removal decision.',
+              descriptionsAndRecordIds: 'excluded_from_agent_output',
+            },
+            status: 'succeeded',
+            summary:
+              review.candidateGroups > 0
+                ? `Found ${review.candidateGroups} exact-match expense candidate group(s) for human review in ${month}.`
+                : `No exact-match expense candidate groups were found in the selected recorded expenses for ${month}.`,
+            outputResourceType: 'ExpenseDuplicateCandidateReview',
+            outputResourceId: `${context.businessId}:${month}:${branchId ?? 'current'}`,
+          };
+        }
+
+        throw new AppException(
+          'FINANCE_AGENT_TOOL_NOT_SUPPORTED',
+          'This Finance tool is not supported by the canonical service.',
+          HttpStatus.NOT_IMPLEMENTED,
         );
-        return {
-          output: statement,
-          status: 'succeeded',
-          summary: 'Read the canonical Profit Analytics statement.',
-          outputResourceType: 'ProfitAnalyticsStatement',
-          outputResourceId: context.businessId,
-        };
       },
     );
   }

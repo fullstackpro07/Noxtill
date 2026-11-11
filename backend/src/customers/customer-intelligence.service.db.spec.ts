@@ -1,7 +1,12 @@
+import { Role } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
+import {
+  CLS_KEY_BUSINESS_ID,
+  CLS_KEY_ROLE,
+  CLS_KEY_USER_ID,
+} from '../common/tenancy/tenant.constants';
 import { BranchScopeService } from '../common/tenancy/branch-scope.service';
 import { SegmentsService } from './segments.service';
 import { AnalyticsService } from '../analytics/analytics.service';
@@ -14,6 +19,11 @@ import { AppException } from '../common/filters/app.exception';
 import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
 import { SpecialistAgentToolGatewayService } from '../common/agents/specialist-agent-tool-gateway.service';
 import { CustomerAnalyticsSummaryService } from './customer-analytics-summary.service';
+import { CustomerChannelConsentService } from './customer-channel-consent.service';
+import { CustomerPrivacySettingsService } from './customer-privacy-settings.service';
+import { CustomerProfileIntelligenceService } from './customer-profile-intelligence.service';
+import { PoliciesService } from '../common/policies/policies.service';
+import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { specialistAgentIdempotencyHash } from '../common/agents/specialist-agent-run-idempotency.util';
 import type { AiInfraService } from '../ai/ai-infra.service';
 import type { SendGateService } from '../messaging/send-gate.service';
@@ -35,8 +45,10 @@ describe('CustomerIntelligenceService (MySQL)', () => {
   let businessId: string;
   let otherBusinessId: string;
   let childBusinessId: string | undefined;
+  let actorUserId: string;
   let cls: FakeClsService;
   let tenant: TenantPrismaService;
+  let toolGateway: SpecialistAgentToolGatewayService;
   const createMessage = jest.fn();
   let customerActions: CustomerAgentActionsService;
 
@@ -64,6 +76,16 @@ describe('CustomerIntelligenceService (MySQL)', () => {
       branchScope,
       segments,
     );
+    const customerProfileIntelligence = new CustomerProfileIntelligenceService(
+      tenant,
+      new PoliciesService(
+        prisma,
+        cls as unknown as ClsService,
+        new CapabilitiesService(prisma),
+      ),
+      agentPolicy,
+      new CustomerPrivacySettingsService(tenant),
+    );
     analytics = new AnalyticsService(
       tenant,
       prisma,
@@ -73,6 +95,7 @@ describe('CustomerIntelligenceService (MySQL)', () => {
       { send: jest.fn() } as unknown as SendGateService,
       customerAnalyticsSummary,
     );
+    toolGateway = new SpecialistAgentToolGatewayService(tenant);
     service = new CustomerIntelligenceService(
       tenant,
       ai,
@@ -83,8 +106,11 @@ describe('CustomerIntelligenceService (MySQL)', () => {
         new CustomerMergeSettingsService(tenant),
       ),
       customerActions,
-      new SpecialistAgentToolGatewayService(tenant),
+      toolGateway,
       customerAnalyticsSummary,
+      new CustomerChannelConsentService(tenant),
+      customerProfileIntelligence,
+      cls as unknown as ClsService,
     );
 
     const stamp = Date.now();
@@ -106,6 +132,17 @@ describe('CustomerIntelligenceService (MySQL)', () => {
       })
     ).id;
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    const actor = await prisma.user.create({
+      data: {
+        name: 'Customer Agent QA Owner',
+        email: `customer-agent-owner-${stamp}@example.test`,
+        passwordHash: 'unused-test-hash',
+      },
+    });
+    actorUserId = actor.id;
+    await prisma.businessUser.create({
+      data: { businessId, userId: actorUserId, role: Role.owner },
+    });
 
     await prisma.customer.createMany({
       data: [
@@ -159,16 +196,23 @@ describe('CustomerIntelligenceService (MySQL)', () => {
     await prisma.customerFollowUpTask.deleteMany({
       where: { businessId: { in: cleanupBusinessIds } },
     });
+    await prisma.customerChannelConsent.deleteMany({
+      where: { businessId: { in: cleanupBusinessIds } },
+    });
     await prisma.specialistAgentRun.deleteMany({
       where: { businessId: { in: cleanupBusinessIds } },
     });
     await prisma.customer.deleteMany({
       where: { businessId: { in: cleanupBusinessIds } },
     });
+    await prisma.businessUser.deleteMany({
+      where: { businessId: { in: cleanupBusinessIds } },
+    });
     await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
     await prisma.business.deleteMany({
       where: { id: { in: cleanupBusinessIds } },
     });
+    await prisma.user.deleteMany({ where: { id: actorUserId } });
     await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
     await prisma.$disconnect();
   });
@@ -502,6 +546,407 @@ describe('CustomerIntelligenceService (MySQL)', () => {
     });
     const listed = await service.listRuns();
     expect(listed.map((item) => item.businessId)).toEqual([businessId]);
+  });
+
+  it('exposes only latest channel-consent states through the audited customer-agent tool', async () => {
+    const stamp = Date.now();
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: `Consent tool private fixture ${stamp}`,
+        phone: `+1555${String(stamp).slice(-7)}91`,
+        email: `consent-tool-${stamp}@example.test`,
+      },
+    });
+    const otherCustomer = await prisma.customer.create({
+      data: {
+        businessId: otherBusinessId,
+        name: `Foreign consent tool fixture ${stamp}`,
+        phone: `+1666${String(stamp).slice(-7)}91`,
+        email: `foreign-consent-tool-${stamp}@example.test`,
+      },
+    });
+    const run = await prisma.specialistAgentRun.create({
+      data: {
+        businessId,
+        agentKey: 'customer_intelligence',
+        agentVersion: '1.0.0',
+        moduleId: '7',
+        status: 'running',
+      },
+    });
+
+    try {
+      await prisma.customerChannelConsent.createMany({
+        data: [
+          {
+            businessId,
+            customerId: customer.id,
+            channel: 'email',
+            state: 'granted',
+            source: 'qa_form',
+            evidenceReference: `qa-consent-tool-${stamp}-email-1`,
+            revision: 1,
+            recordedByUserId: 'customer-agent-test-actor',
+          },
+          {
+            businessId,
+            customerId: customer.id,
+            channel: 'email',
+            state: 'revoked',
+            source: 'qa_portal',
+            evidenceReference: `qa-consent-tool-${stamp}-email-2`,
+            revision: 2,
+            recordedByUserId: 'customer-agent-test-actor',
+          },
+          {
+            businessId,
+            customerId: customer.id,
+            channel: 'sms',
+            state: 'revoked',
+            source: 'qa_form',
+            evidenceReference: `qa-consent-tool-${stamp}-sms`,
+            revision: 1,
+            recordedByUserId: 'customer-agent-test-actor',
+          },
+        ],
+      });
+
+      const result = await toolGateway.execute({
+        agentKey: 'customer_intelligence',
+        moduleId: '7',
+        businessId,
+        actorUserId: null,
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 1,
+        toolKey: 'get_customer_consent',
+        input: { customerId: customer.id },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      });
+
+      expect(result.output).toMatchObject({
+        source: 'CustomerChannelConsentService.list',
+        channels: [
+          { channel: 'email', state: 'revoked' },
+          { channel: 'sms', state: 'revoked' },
+          { channel: 'whatsapp', state: 'unknown', updatedAt: null },
+        ],
+        finalSendAuthorization: 'not_established_by_consent_records_alone',
+        contactDetails: 'excluded',
+      });
+      const serializedOutput = JSON.stringify(result.output);
+      expect(serializedOutput).not.toContain(customer.id);
+      expect(serializedOutput).not.toContain(customer.name);
+      expect(serializedOutput).not.toContain(customer.phone);
+      expect(serializedOutput).not.toContain(customer.email);
+      expect(serializedOutput).not.toContain(`qa-consent-tool-${stamp}`);
+
+      await expect(
+        toolGateway.execute({
+          agentKey: 'customer_intelligence',
+          moduleId: '7',
+          businessId,
+          actorUserId: null,
+          runId: run.id,
+          correlationId: run.id,
+          round: 1,
+          sequence: 2,
+          toolKey: 'get_customer_consent',
+          input: { customerId: otherCustomer.id },
+          mode: 'read_only',
+          authorize: () => Promise.resolve(),
+        }),
+      ).rejects.toMatchObject({ response: { code: 'CUSTOMER_NOT_FOUND' } });
+
+      const calls = await prisma.specialistAgentToolCall.findMany({
+        where: { businessId, runId: run.id },
+        orderBy: { sequence: 'asc' },
+        select: {
+          toolKey: true,
+          status: true,
+          inputFields: true,
+          outputResourceType: true,
+          outputResourceId: true,
+        },
+      });
+      expect(calls).toEqual([
+        {
+          toolKey: 'get_customer_consent',
+          status: 'succeeded',
+          inputFields: ['customerId'],
+          outputResourceType: 'CustomerChannelConsentSummary',
+          outputResourceId: businessId,
+        },
+        {
+          toolKey: 'get_customer_consent',
+          status: 'refused',
+          inputFields: ['customerId'],
+          outputResourceType: null,
+          outputResourceId: null,
+        },
+      ]);
+    } finally {
+      await prisma.customerChannelConsent.deleteMany({
+        where: { businessId, customerId: customer.id },
+      });
+      await prisma.specialistAgentRun.delete({ where: { id: run.id } });
+      await prisma.customer.delete({ where: { id: customer.id } });
+      await prisma.customer.delete({ where: { id: otherCustomer.id } });
+    }
+  });
+
+  it('reads permission-checked customer activity without exposing identity or sensitive fields', async () => {
+    const stamp = Date.now();
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: `Activity private fixture ${stamp}`,
+        phone: `+1555${String(stamp).slice(-7)}81`,
+        email: `activity-private-${stamp}@example.test`,
+        notes: `PRIVATE NOTE ${stamp}`,
+        lifetimeSpend: 9876.54,
+        visitCount: 7,
+      },
+    });
+    const foreignCustomer = await prisma.customer.create({
+      data: {
+        businessId: otherBusinessId,
+        name: `Activity foreign fixture ${stamp}`,
+        phone: `+1666${String(stamp).slice(-7)}81`,
+      },
+    });
+    const run = await prisma.specialistAgentRun.create({
+      data: {
+        businessId,
+        agentKey: 'customer_intelligence',
+        agentVersion: '1.0.0',
+        moduleId: '7',
+        status: 'running',
+      },
+    });
+
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    cls.set(CLS_KEY_ROLE, Role.owner);
+    cls.set(CLS_KEY_USER_ID, actorUserId);
+
+    try {
+      const result = await toolGateway.execute({
+        agentKey: 'customer_intelligence',
+        moduleId: '7',
+        businessId,
+        actorUserId,
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 1,
+        toolKey: 'get_customer_activity',
+        input: { customerId: customer.id },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      });
+
+      const output = result.output as Record<string, unknown>;
+      expect(output).toMatchObject({
+        source: 'CustomerProfileIntelligenceService.review',
+        confidence: 'not_calibrated',
+        profile: { status: 'active', recordedVisits: 7 },
+        orders: { state: 'available', currentCount: 0 },
+      });
+      expect(output.excluded).toEqual([
+          'customer identifiers and contact details',
+          'customer notes and message contents',
+          'lifetime spend and financial values',
+          'direct marketing or messaging actions',
+        ]);
+      const serializedOutput = JSON.stringify(result.output);
+      expect(serializedOutput).not.toContain(customer.id);
+      expect(serializedOutput).not.toContain(customer.name);
+      expect(serializedOutput).not.toContain(customer.phone);
+      expect(serializedOutput).not.toContain(customer.email);
+      expect(serializedOutput).not.toContain(`PRIVATE NOTE ${stamp}`);
+      expect(serializedOutput).not.toContain('9876.54');
+
+      await expect(
+        toolGateway.execute({
+          agentKey: 'customer_intelligence',
+          moduleId: '7',
+          businessId,
+          actorUserId: 'different-user',
+          runId: run.id,
+          correlationId: run.id,
+          round: 1,
+          sequence: 2,
+          toolKey: 'get_customer_activity',
+          input: { customerId: customer.id },
+          mode: 'read_only',
+          authorize: () => Promise.resolve(),
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'CUSTOMER_AGENT_ACTOR_SCOPE_MISMATCH' },
+      });
+
+      await expect(
+        toolGateway.execute({
+          agentKey: 'customer_intelligence',
+          moduleId: '7',
+          businessId,
+          actorUserId,
+          runId: run.id,
+          correlationId: run.id,
+          round: 1,
+          sequence: 3,
+          toolKey: 'get_customer_activity',
+          input: { customerId: foreignCustomer.id },
+          mode: 'read_only',
+          authorize: () => Promise.resolve(),
+        }),
+      ).rejects.toMatchObject({ response: { code: 'CUSTOMER_NOT_FOUND' } });
+
+      const calls = await prisma.specialistAgentToolCall.findMany({
+        where: { businessId, runId: run.id },
+        orderBy: { sequence: 'asc' },
+        select: {
+          toolKey: true,
+          status: true,
+          inputFields: true,
+          outputResourceType: true,
+        },
+      });
+      expect(calls).toEqual([
+        {
+          toolKey: 'get_customer_activity',
+          status: 'succeeded',
+          inputFields: ['customerId'],
+          outputResourceType: 'CustomerActivitySummary',
+        },
+        {
+          toolKey: 'get_customer_activity',
+          status: 'refused',
+          inputFields: ['customerId'],
+          outputResourceType: null,
+        },
+        {
+          toolKey: 'get_customer_activity',
+          status: 'refused',
+          inputFields: ['customerId'],
+          outputResourceType: null,
+        },
+      ]);
+    } finally {
+      await prisma.specialistAgentRun.delete({ where: { id: run.id } });
+      await prisma.customer.delete({ where: { id: customer.id } });
+      await prisma.customer.delete({ where: { id: foreignCustomer.id } });
+    }
+  });
+
+  it('reads bounded canonical orders and omits draft, quotation and customer identity data', async () => {
+    const stamp = Date.now();
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: `Order private fixture ${stamp}`,
+        phone: `+1555${String(stamp).slice(-7)}82`,
+        email: `order-private-${stamp}@example.test`,
+        notes: `PRIVATE ORDER NOTE ${stamp}`,
+        lifetimeSpend: 9999,
+      },
+    });
+    const orders = await prisma.order.createMany({
+      data: [
+        {
+          businessId,
+          customerId: customer.id,
+          orderNo: Number(String(stamp).slice(-7)),
+          status: 'completed',
+          total: 123.45,
+        },
+        {
+          businessId,
+          customerId: customer.id,
+          orderNo: Number(String(stamp).slice(-7)) + 1,
+          status: 'draft',
+          total: 200,
+        },
+        {
+          businessId,
+          customerId: customer.id,
+          orderNo: Number(String(stamp).slice(-7)) + 2,
+          status: 'completed',
+          isQuotation: true,
+          total: 500,
+        },
+      ],
+    });
+    expect(orders.count).toBe(3);
+    const run = await prisma.specialistAgentRun.create({
+      data: {
+        businessId,
+        agentKey: 'customer_intelligence',
+        agentVersion: '1.0.0',
+        moduleId: '7',
+        status: 'running',
+      },
+    });
+    cls.set(CLS_KEY_BUSINESS_ID, businessId);
+    cls.set(CLS_KEY_ROLE, Role.owner);
+    cls.set(CLS_KEY_USER_ID, actorUserId);
+
+    try {
+      const result = await toolGateway.execute({
+        agentKey: 'customer_intelligence',
+        moduleId: '7',
+        businessId,
+        actorUserId,
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 1,
+        toolKey: 'get_customer_orders',
+        input: { customerId: customer.id },
+        mode: 'read_only',
+        authorize: () => Promise.resolve(),
+      });
+      const output = result.output as Record<string, unknown>;
+      expect(output).toMatchObject({
+        source: 'Order',
+        state: 'available',
+        allTimeNonQuotationNonDraftCount: 1,
+        amountAccess: 'authorized',
+        currency: expect.any(String),
+      });
+      expect(output.recentOrders).toEqual([
+        expect.objectContaining({
+          status: 'completed',
+          total: 123.45,
+        }),
+      ]);
+      const serializedOutput = JSON.stringify(output);
+      expect(serializedOutput).not.toContain(customer.id);
+      expect(serializedOutput).not.toContain(customer.name);
+      expect(serializedOutput).not.toContain(customer.phone);
+      expect(serializedOutput).not.toContain(customer.email);
+      expect(serializedOutput).not.toContain(`PRIVATE ORDER NOTE ${stamp}`);
+      expect(serializedOutput).not.toContain('9999');
+      expect(serializedOutput).not.toContain('200');
+      expect(serializedOutput).not.toContain('500');
+
+      const call = await prisma.specialistAgentToolCall.findFirstOrThrow({
+        where: { businessId, runId: run.id },
+        select: { status: true, inputFields: true, outputResourceType: true },
+      });
+      expect(call).toEqual({
+        status: 'succeeded',
+        inputFields: ['customerId'],
+        outputResourceType: 'CustomerOrderSummary',
+      });
+    } finally {
+      await prisma.specialistAgentRun.delete({ where: { id: run.id } });
+      await prisma.order.deleteMany({ where: { businessId, customerId: customer.id } });
+      await prisma.customer.delete({ where: { id: customer.id } });
+    }
   });
 
   it('adds real privacy-minimized booking and support aggregates while excluding erased and other-business records', async () => {

@@ -35,6 +35,11 @@ test("Period Close shows current source activity and discloses unavailable accou
   expect(signup.ok(), await signup.text()).toBeTruthy();
   const { accessToken } = (await signup.json()) as { accessToken: string };
   const headers = { Authorization: `Bearer ${accessToken}` };
+  const aiSettings = await request.patch(`${API}/ai/settings`, {
+    headers,
+    data: { featureToggles: { financeAgent: false } },
+  });
+  expect(aiSettings.ok(), await aiSettings.text()).toBeTruthy();
   const moduleResponse = await request.get(`${API}/business-modules`, {
     headers,
   });
@@ -125,6 +130,19 @@ test("Period Close shows current source activity and discloses unavailable accou
   await expect(
     page.getByText("Bank reconciliation and an authoritative accounting close"),
   ).toBeVisible();
+  const agentReview = page.getByRole("region", {
+    name: "Financial Intelligence Agent review",
+  });
+  await expect(agentReview).toBeVisible();
+  const reviewResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/profit/agent-runs") &&
+      response.request().method() === "POST",
+  );
+  await agentReview.getByRole("button", { name: "Run finance review" }).click();
+  const reviewResponse = await reviewResponsePromise;
+  expect(reviewResponse.ok(), await reviewResponse.text()).toBeTruthy();
+  await expect(agentReview.getByText("Latest review saved")).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("period-close-readiness.png"),
     fullPage: true,

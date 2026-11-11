@@ -15,7 +15,7 @@ capability is already implemented. It defines no delivery timeline.
 | AI provider guardrails | `AiInfraService` centralizes model requests, rate limits, cost cap, feature toggles and usage logging; specialist requests reserve per-agent caps and link completed usage to runs | Reuse; cost is an application estimate, not a provider invoice |
 | Human action queue | Dashboard Action Center synthesizes canonical work and records complete/dismiss/snooze state; Procurement approvals already use canonical decisions | Reuse; do not build a second approval inbox |
 | Workflow execution | Automations has workflow runs, retries, approvals, schedules and agent steps | Reuse for scheduled/event-driven work where appropriate |
-| Shared specialist run/evidence/action records | Tenant-scoped `SpecialistAgentRun`, `SpecialistAgentRecommendation`, `SpecialistAgentEvidence`, `SpecialistAgentAction`, run-linked AI usage, per-agent request reservations, and idempotent run/action creation exist. Run-created/terminal snapshots are materialized when an owner opens run history; all saved action transitions and proposal revisions are normalized there in cursor-paged metadata events. Intermediate run-state changes are not captured. A shared typed tool gateway records redacted tenant-scoped calls for registered providers; Commerce, Inventory, SEO and Finance use it, and Customer uses it for canonical analytics, customer-review context and repeat-visitor preview. A configurable per-run tool-call cap is enforced by the gateway. There is no generic metric-snapshot model. | Partial foundation; canonical module services still own approval and writes |
+| Shared specialist run/evidence/action records | Tenant-scoped `SpecialistAgentRun`, `SpecialistAgentRecommendation`, `SpecialistAgentEvidence`, `SpecialistAgentAction`, run-linked AI usage, per-agent request reservations, and idempotent run/action creation exist. Run-created/terminal snapshots are materialized when an owner opens run history; all saved action transitions and proposal revisions are normalized there in cursor-paged metadata events. Intermediate run-state changes are not captured. A shared typed tool gateway records redacted tenant-scoped calls for registered providers; Commerce, Inventory, SEO and Finance use it, and Customer uses it for canonical analytics, customer-review context, repeat-visitor preview and latest channel-consent status. A configurable per-run tool-call cap is enforced by the gateway. There is no generic metric-snapshot model. | Partial foundation; canonical module services still own approval and writes |
 | Shared specialist directory / workspace | AI Assistant and Action Center exist; no cross-module Specialist Agent Center route was found in the initial route search | Reuse existing surfaces where possible; confirm UX before adding navigation |
 
 ## Agent-by-agent map
@@ -26,7 +26,7 @@ capability is already implemented. It defines no delivery timeline.
 | Autonomous Commerce Agent (Module 29) | Product Radar/validation, RFQs, listings, fulfillment/routing, risk, experiments, B2B, subscriptions, permissioned read/write tools, approved RFQ/claim actions, event reviews and a bounded order-to-route read orchestration | Broader multi-domain plan orchestration and worker delegation are partial. Not every connector action has provider-confirmed execution, independent verification, recovery and measured outcomes. |
 | Inventory Intelligence Agent (Module 13) | Canonical stock/movements/counts, historical demand baselines and backtests, reorder evidence, supplier/product lead-time and pack context, open-purchase offsets, branch transfer checks, recount/wastage tasks and a consent-gated waitlist preview | No calibrated forecast is claimed; seasonality and stockout-censored demand are not established. Event reviews are opt-in and limited to implemented source events. Post-action follow-through includes PO receipt, current stock and a descriptive Noxtill-recorded sales comparison; causal attribution and external sales coverage are unavailable. |
 | Financial Intelligence Agent (Module 30) | Profit Analytics, approved budgets, manual Noxtill journals and reversals, partial manual-journal trial balance, imported statement suggestions, Xero open items/status, budget actuals, anomaly cues and period-close readiness | Automatic finance postings, a complete accounting ledger, Finance-owned A/R and A/P, authoritative cash balances, full provider reconciliation and a certified accounting close remain unavailable. |
-| Customer Intelligence & Retention Agent (Module 7) | Customer profile/activity reviews, source-backed summaries, rule-based retention cues, segment drafts and approval, privacy-minimized business reviews, follow-up tasks and consent-checked message drafts/actions | Customer-channel consent and activity coverage depend on canonical module records. Broad all-channel delivery and post-contact outcome measurement are not claimed unless the canonical provider confirms them. |
+| Customer Intelligence & Retention Agent (Module 7) | Customer profile/activity reviews, source-backed summaries, rule-based retention cues, segment drafts and approval, privacy-minimized business reviews, follow-up tasks, consent-checked message drafts/actions, and a registered read-only latest-consent-status tool | Customer-channel consent and activity coverage depend on canonical module records. Broad all-channel delivery and post-contact outcome measurement are not claimed unless the canonical provider confirms them. |
 
 ## Implementation order
 
@@ -3930,18 +3930,18 @@ the spec; it must not be counted as a release pass.
 
 | Spec section | Current repository status | Remaining proof/gap |
 | --- | --- | --- |
-| 4–8 Shared architecture, lifecycle, evidence, policies and records | Partial | Shared run/evidence/recommendation/action records, immutable tenant configuration history, AI guardrails, audit, idempotency and tenant scope exist. The typed gateway records redacted calls for Commerce, Inventory, SEO, Finance's canonical P&L read, and Customer's canonical analytics summary, review context and repeat-visitor preview. Owner-configurable provider/input/output limits, shared and per-agent tool-call ceilings, and a shared material-action cap apply per run; Commerce also has a read-tool ceiling and a per-business write-tool allow-list rechecked before approval execution. Full evidence authorization and approval coverage across every action class remain incomplete. |
+| 4–8 Shared architecture, lifecycle, evidence, policies and records | Partial | Shared run/evidence/recommendation/action records, immutable tenant configuration history, AI guardrails, audit, idempotency and tenant scope exist. The typed gateway records redacted calls for Commerce, Inventory, SEO, Finance's canonical P&L and descriptive month-over-month variance, approved-budget/expense comparison, relative cash-flow projection, Xero open-items, Xero bank-transaction status, imported-statement match candidates, period-close readiness, partial manual-journal trial balance, bounded posted manual-journal entries, a partial A/R-A/P source summary and exact-match expense duplicate candidates, and Customer's canonical analytics summary, review context and repeat-visitor preview. Owner-configurable provider/input/output limits, shared and per-agent tool-call ceilings, and a shared material-action cap apply per run; Commerce also has a read-tool ceiling and a per-business write-tool allow-list rechecked before approval execution. Full evidence authorization and approval coverage across every action class remain incomplete. |
 | 9 SEO Autopilot | Partial | Module screens, GSC/GA4/rank evidence, versioned drafts and approval handoffs exist. Backlink authority is unavailable without a provider; full publish confirmation, independent verification and action-linked outcome measurement remain incomplete. |
 | 10 Autonomous Commerce | Partial | Canonical Commerce sources, permissioned tools, drafts and some approved actions exist. A bounded order-to-route review is not the spec's multi-domain orchestrator; worker delegation, end-to-end provider confirmation, recovery and measured outcomes are not complete across connectors. |
-| 11 Inventory Intelligence | Partial | Deterministic reorder, history/backtest evidence, Procurement handoff, transfer checks, count/wastage reviews and waitlist preview exist. Forecasts are not calibrated; seasonality, stockout-censored demand and complete reservation/in-transit coverage are not established. |
-| 12 Financial Intelligence | Partial | Profit summaries, budgets, manual journals, statement suggestions, Xero status, anomaly cues and close readiness exist. Complete finance-owned ledger, authoritative cash flow, A/R and A/P subledgers, full reconciliation and certified close are unavailable in the current source model. |
+| 11 Inventory Intelligence | Partial | Deterministic reorder, history/backtest evidence, Procurement handoff, transfer checks, count/wastage reviews, waitlist preview, and bounded read-only stock-balance, movement-history, recorded-sales-velocity, open-purchase-order and live stock-count-variance tools exist. Forecasts are not accepted as calibrated; seasonal adjustment, stockout-censored demand and complete reservation/in-transit coverage are not established. |
+| 12 Financial Intelligence | Partial | Profit summaries, budgets, manual journals, statement suggestions, Xero status, anomaly cues and close readiness exist. The Finance specialist can read the canonical Profit Analytics statement and descriptive month-over-month comparison, approved-budget versus recorded-expense comparison, relative Cash Flow projection, privacy-minimized Xero open-items and bank-transaction status summaries, imported-statement match candidates, period-close readiness, partial posted-manual-journal trial balance, bounded posted manual-journal entries, a partial receivable/payable aging source summary and exact-match expense duplicate candidates through the shared tool gateway. That aging summary keeps Credit balance age and connected Xero open items separate; customer-credit age is not invoice due-date aging or a finance-owned A/R control account, and the absence of a native Noxtill finance ledger is explicit. Duplicate groups are human-review candidates, not confirmed duplicates, fraud or savings. Xero bank transaction flags are not Noxtill reconciliation; imported match candidates remain suggestions until a human accepts them; the projection is not a bank balance and Xero data remains an external connected-organization summary, not a native Noxtill subledger. A complete finance-owned ledger, authoritative cash balance, A/R and A/P subledgers, full reconciliation and certified close are unavailable in the current source model. |
 | 13 Customer Intelligence & Retention | Partial | Customer reviews, privacy-minimized context, deterministic segment drafts, duplicate review, follow-up tasks and consent-gated message drafts/actions exist. All-channel activity, provider-confirmed delivery and broad post-contact outcome coverage remain incomplete. |
 | 14 Cross-agent boundaries and normalized events | Partial | Tenant-scoped, versioned event references, dedupe/retry and opt-in scheduled/event reviews exist. Twenty-two source paths are currently wired (verified from the 22 policy switches and producer processors); the remaining illustrative event families and material cross-agent action handoffs are not implemented. |
-| 15 Shared and module API contracts | Partial | Shared `GET /agents`, owner-only `GET /agents/:agentKey/configuration-history`, `GET /agent-actions`, `GET /agent-runs/:id`, redacted `GET /agent-runs/:id/evidence`, and metadata-only cursor-paged `GET /agent-runs/:id/events` expose safe directory/lifecycle metadata; module APIs and canonical actions exist. Action decision endpoints have canonical adapters for Inventory reorder requests (including shared Commerce RFQ sourcing and purchase-order execution), Customer segment actions and Customer event follow-up tasks; broader action-class coverage remains incomplete. |
+| 15 Shared and module API contracts | Partial | Shared `GET /agents`, owner-only `GET/PATCH /agents/:agentKey/config` with an allowlisted policy-key set, validation, optimistic config versions and audit history, owner-only `GET /agents/:agentKey/configuration-history`, `GET /agent-actions`, `GET /agent-runs/:id`, redacted `GET /agent-runs/:id/evidence`, and metadata-only cursor-paged `GET /agent-runs/:id/events` expose safe directory/lifecycle metadata; module APIs and canonical actions exist. Action decision endpoints have canonical adapters for Inventory reorder requests (including shared Commerce RFQ sourcing, purchase-order execution and cancellation before conversion), Customer segment actions and Customer event follow-up tasks; broader action-class coverage remains incomplete. The specialist config API is not a replacement UI for the existing Settings screens. |
 | 16 Jobs, idempotency and recovery | Partial | Durable cross-agent review jobs, per-event idempotency/retries and several worker recovery paths exist. Cross-agent material-action orchestration, provider-timeout reconciliation and all action-class cancellation/compensation paths remain incomplete. |
 | 17 UX and accessibility | Partial | Existing module screens expose evidence, missing-data, approval, failure and partial states; browser journeys cover key QA flows. Keyboard/screen-reader/mobile acceptance has not been completed across all relevant screens. |
 | 18 Security, privacy and compliance | Partial | Tenant isolation, capability gates, consent checks, redaction and audit coverage have real tests. AI Settings now exposes a limited redacted feed of selected saved denial events. Full field-level scope on every cross-module tool, prompt-injection evaluation, comprehensive security-event monitoring and independent security review remain outstanding. |
-| 19 Observability, analytics and cost controls | Partial | Persisted usage, caps, run/action summaries, selected latency/denial metrics and redacted monthly budget-limit events exist. Provider invoices, complete tool/provider latency, queue telemetry, outcome rates and production alerting are not verified. |
+| 19 Observability, analytics and cost controls | Partial | Persisted usage, caps, run/action summaries, selected latency/denial metrics, redacted monthly budget-limit events, and tenant-scoped queued-run age with an optional owner threshold alert exist. Provider invoices, complete tool/provider latency, live Redis/BullMQ depth, worker health, outcome rates and production alert delivery are not verified. |
 | 20 QA and acceptance | Incomplete | Full backend tests, both type checks, touched-file lint and isolated Playwright journeys pass at current checkpoints. Load/resilience, red-team, broad accessibility, live provider acceptance and complete cross-agent end-to-end journeys remain. |
 | 21–22 Roadmap and definition of done | Not satisfied yet | These sections require the applicable gaps and acceptance gates above to be closed and evidenced; prior passing tests or a complete spec document alone do not satisfy them. |
 
@@ -4707,3 +4707,342 @@ Verification: backend and frontend `tsc --noEmit`, touched backend ESLint, both 
 specs (**2 suites / 5 tests**), and full backend Jest (**457 suites / 2,884 tests**) pass. No schema
 migration, provider call, browser QA, commit or push was needed. This closes only the partial-crawl
 false-mismatch case; SEO outcome measurement and the other specialist gaps remain open.
+
+## Shared specialist tool lifecycle events (2026-11-04)
+
+Registered tool calls now emit `agent.tool.started` plus a final `succeeded`, `refused`, `blocked`,
+or `failed` event into the existing specialist run timeline. The tool-call row and corresponding
+event are written in one transaction. Timeline entries retain tenant, actor, correlation, tool
+version, round/sequence, safe status, duration and allowlisted error code; they never include raw
+inputs, outputs or resource IDs. The AI Settings timeline labels tool events and distinguishes tool
+version from agent version. Its copy discloses that old tool calls are not backfilled and other
+intermediate non-tool activity remains outside the timeline.
+
+The Commerce real-MySQL spec verifies start/success entries, actor attribution and input/question
+redaction. Gateway unit tests verify the metadata-only events, and the run-history browser spec now
+checks real registered-call counts and event labels rather than assuming an empty tool ledger. The
+focused tests pass (**3 suites / 34 tests**); backend and frontend `tsc --noEmit`, touched-file
+ESLint and full backend Jest pass (**457 suites / 2,884 tests**). Browser QA passes (**1/1**) on an
+isolated QA business with zero captured page/console errors or API 5xx responses. Turbopack failed
+to spawn a Node worker in this local environment, so the visual check used Next's Webpack dev mode.
+No migration, provider call, commit or push was made. This captures lifecycle for current registered
+tool calls; it does not close the other cross-agent action, evidence, live-provider or production
+acceptance gaps in the master reconciliation.
+
+## Inventory Agent — branch rebalance read tool (2026-11-05)
+
+Registered `get_branch_rebalance_recommendations` as a bounded, read-only Inventory tool for the
+existing AI assistant/tool gateway. It reuses the canonical branch rebalance calculation over the
+business's active branch group and returns current stock, recorded-sales pace, open-transfer
+adjustments, assumptions, missing-data notes and observation time. The result is capped at 50
+findings and labels the result as a review, not a guaranteed transfer or an order. It never creates,
+approves or ships a transfer. The Inventory Agent version is now 1.9.0.
+
+The real-MySQL Inventory Agent spec verifies a branch finding is returned through the gateway and
+that calling this read tool does not create a stock transfer (**1 suite / 14 tests**). Backend and
+frontend `tsc --noEmit` pass. Touched-file ESLint reports only existing Prettier formatting errors
+in an untouched section of the Inventory service; no non-format lint errors remain in the new code.
+Full backend Jest passes (**457 suites / 2,884 tests**). No migration, live-provider call, browser
+change, commit or push was made. This adds a branch-analysis tool only; transfer approval and the
+other action, cross-agent, provider and production-acceptance gaps remain open.
+
+## Inventory Agent — branch transfer follow-through (2026-11-05)
+
+Added a read-only follow-through endpoint and table for saved branch-rebalance findings. It joins
+the finding to its canonical Stock Transfer, shows its real status and requested/received units,
+and reads current stock for the source and destination branch products. The table links operators
+to Stock Transfers for approval and receipt; it does not alter stock and explicitly labels branch
+balances as current snapshots, not effects caused by the recommendation.
+
+The Inventory real-MySQL spec verifies a prepared transfer appears with its true pending status,
+requested quantity and unchanged branch stock (**1 suite / 14 tests**). Backend/frontend
+`tsc --noEmit` and frontend ESLint pass. Backend ESLint with Prettier disabled passes; standard
+backend ESLint reports only existing Prettier drift in an older, untouched service section. Full
+backend Jest passes (**457 suites / 2,884 tests**). Live route compilation succeeds in Next Webpack
+dev mode, but the page redirects to sign-in in the available browser session, so authenticated
+visual/API QA remains unverified. No migration, commit or push was made.
+
+## Cross-agent specialist orchestration timeline (2026-11-05)
+
+Cross-agent orchestration now persists metadata-only lifecycle events when a specialist child
+starts, completes, partially succeeds, fails or is skipped. Event writes are atomic with the saved
+orchestration progress or terminal outcome. The event metadata contains the agent/module, transition,
+safe status and allowlisted reason code; it excludes child run IDs and child output. AI Settings
+labels these events and describes which intermediate activity is still not captured.
+
+The real-MySQL orchestration spec verifies transitions for an enabled child and a disabled specialist,
+including exclusion of sensitive child-run details (**1 suite / 12 tests**). Backend/frontend
+`tsc --noEmit`, touched-file ESLint and `git diff --check` pass. Full backend Jest passes (**457
+suites / 2,884 tests**). Browser visual QA was not completed because the available browser session
+is signed out. No schema migration, commit or push was made. This closes the cross-agent child-run
+timeline gap only; broad action coverage, provider confirmation, outcome measurement and production
+acceptance remain open.
+
+## Commerce Agent — internal inventory availability review (2026-11-05)
+
+Added a read-only Commerce Agent review of real active Noxtill products that have at least one
+synced channel listing. It reports the saved Noxtill stock quantity and low-stock threshold, and
+names which providers have synced listings. The review is capped at 50 products and shows whether
+the result was capped. The UI links to Inventory and Channel Listings; it never changes stock or
+channel listings. Product names are omitted from the agent result. The evidence labels this as an
+internal Noxtill snapshot and does not claim provider-side inventory, branch availability,
+reservations, or a customer delivery promise.
+
+The real-MySQL Commerce Agent spec verifies a synced Shopify listing and a zero-stock product below
+its configured threshold, including the evidence references (**1 suite / 18 tests**). Backend and
+frontend `tsc --noEmit`, touched-file ESLint, full backend Jest (**457 suites / 2,884 tests**) and
+`git diff --check` pass. No migration, provider call, commit or push was made. Authenticated browser
+visual QA remains unverified; provider-side stock and fulfilment availability are still unsupported
+by this read-only snapshot.
+
+## Specialist Operations — per-tool outcome breakdown (2026-11-05)
+
+AI Settings now groups registered tool-call records by agent, tool and saved status. The operations
+view shows per-tool totals and succeeded, failed, blocked or refused counts next to the existing
+measured elapsed-time percentiles. These are tenant-scoped 30-day records; status counts do not
+claim provider confirmation, and blocked/refused calls do not enter the elapsed-time sample. No
+tool inputs, outputs, resource identifiers or secrets are returned.
+
+The real-MySQL AI Settings spec verifies per-tool status counts, time-window filtering and business
+isolation (**1 suite / 4 tests**). Backend/frontend `tsc --noEmit` and touched-file ESLint pass. The
+full backend run reported **456/457 suites and 2,883/2,884 tests**; only the unrelated Booking QR
+poster PDF test timed out under full-suite load, then its suite passed alone (**1 suite / 5 tests**).
+`git diff --check` passes. Browser visual QA remains unverified: the default frontend proxy targeted
+port 5001 while the backend runs on 5000; after overriding it to 5000, the local sign-in attempt
+returned Forbidden, so the protected view could not be opened. No migration, provider call, commit or
+push was made. Queue depth, enqueue wait and worker health remain outside this per-tool summary.
+
+## Specialist Operations — per-agent queued-run age (2026-11-05)
+
+AI Settings now shows each specialist's persisted `queued` run count and age of its oldest queued
+run, plus an aggregate queued-run card. Counts come from `SpecialistAgentRun` rows scoped to the
+current business, with a real-MySQL test covering two tenants. Owners can set an optional 1–1,440
+minute warning threshold in Settings → AI & Governance; null disables the alert and preserves the
+existing behavior. The alert checks the saved timestamp, and the UI and runbook state explicitly
+that saved run state is not live Redis/BullMQ depth or worker health. The 19 Observability row in
+the reconciliation now reflects this without marking the full section accepted.
+
+Verification: AI Settings real-MySQL spec (**1 suite / 4 tests**), backend/frontend `tsc --noEmit`,
+touched-file ESLint, full backend Jest (**457 suites / 2,884 tests**) and `git diff --check` pass.
+No migration, commit or push was made. Isolated signup-based Playwright QA passes (**1/1**) on a
+new QA business: the owner page loads, persisted run history and empty alerts render, retention and
+the queued-age threshold save and survive reload, and no browser/console errors or API 5xx responses
+were observed. Live queue depth, queue worker liveness and per-agent enqueue-to-worker timing remain
+operational gaps.
+
+## Shared specialist allowlisted configuration API (2026-11-05)
+
+Added `GET /api/v1/agents/:agentKey/config` and owner-only `PATCH` for each registered specialist.
+Reads return only that agent's resolved, allowlisted policy keys and the current immutable config
+version; global AI controls and provider secrets are excluded. Writes validate values using the
+existing policy definitions, require an expected version, reject stale writes, save the updated
+policy JSON and immutable snapshot atomically, and record the actor plus before/after values in the
+business audit log. This fills an API contract gap; existing Settings pages remain the configuration
+UI and have not been replaced.
+
+The real-MySQL spec covers safe fields, per-agent snapshot creation, valid and invalid values,
+version increments, stale-write conflicts and audit attribution; the controller spec covers the
+owner-only write gate (**3 suites / 11 tests**). Backend/frontend `tsc --noEmit`, touched-file
+ESLint, full backend Jest (**457 suites / 2,889 tests**) and `git diff --check` pass. An
+isolated signup-based Playwright API journey passes (**1/1**), including reading config, rejecting a
+global setting, updating an agent setting, refusing a stale version and restoring the original
+value. No schema migration, live provider call, commit or push. Broader cross-agent action coverage,
+provider confirmation, outcome measurement and production acceptance remain open.
+
+## Financial Intelligence — budget and cash-flow reads through the shared tool gateway (2026-11-05)
+
+Registered two more read-only Finance tools with the shared specialist gateway. Approved-budget
+actuals reuse the existing `FinanceBudget + Expense` comparison for the requested month and
+validated branch scope; mixed-currency group reads are refused. The cash-flow tool reuses
+`CashForecastService.forecast`, accepts only a bounded 7–90 day horizon, returns the business
+currency and exact projection, and labels cumulative net flow as a relative projection rather than
+a bank balance. Both tools require the Finance Agent policy check and their shared tool-call limits;
+the telemetry stores input field names and a hash, not the returned financial values.
+
+The real-MySQL Finance Agent spec verifies the saved budget variance, read-only cash projection,
+currency/disclosure fields and refusal of a branch outside the business group (**1 suite / 17
+tests**). Backend/frontend `tsc --noEmit`, backend ESLint with the repository's existing
+Prettier-only findings in untouched portions excluded, and full backend Jest (**457 suites / 2,891
+tests**) pass; `git diff --check` passes. No new browser surface, schema migration, provider call,
+commit or push. This adds Finance read paths; it does not supply complete accounting ledgers,
+provider-confirmed balances, or the remaining cross-agent and production-acceptance requirements.
+
+## Finance Agent — Xero bank-transaction status through the shared tool gateway (2026-11-05)
+
+Registered a read-only Finance Agent tool that reuses the existing Xero bank-transaction status
+service. It reports the connected organization's authorized transaction totals by currency and
+provider-reported reconciled/unreconciled flag for that service's latest 30-day window. It does not
+mark Noxtill reconciliation items reconciled. Disconnected Xero returns the real `not_connected`
+state with no inferred totals. Tool inputs remain field-name-only in telemetry.
+
+The real-MySQL Finance Agent spec verifies the disconnected state, empty totals and safe tool-call
+record (**1 suite / 19 tests**). Backend and frontend `tsc --noEmit`, touched-file backend ESLint
+with existing Prettier-only noise excluded, full backend Jest (**457 suites / 2,893 tests**) and
+`git diff --check` pass. No migration, live provider call, browser change, commit or push. Full
+Finance reconciliation, accounting ledgers and production acceptance remain incomplete.
+
+## Customer Agent — consent status through the shared tool gateway (2026-11-05)
+
+Registered `get_customer_consent` as a read-only Customer Intelligence tool. It reuses
+`CustomerChannelConsentService.list` and exposes only the latest email, SMS and WhatsApp states with
+their update times. Customer identifiers, names, phone/email destinations, consent evidence
+references and history are excluded from the result. The result states that consent records alone
+do not authorize a send; the canonical send gate must still check destination, customer status,
+global and channel consent, suppression, quiet hours, frequency limits and provider configuration.
+The lookup is tenant-scoped and refuses an existing customer from another business. No schema
+change or migration was needed.
+
+The real-MySQL Customer Intelligence spec verifies latest revision selection, missing-channel
+`unknown` state, contact/evidence minimization, tool-call audit metadata and cross-business refusal
+(**1 suite / 10 tests**). Backend/frontend `tsc --noEmit`, targeted backend ESLint with the touched
+legacy file's existing Prettier-only noise excluded, full backend Jest (**457 suites / 2,907 tests**),
+and `git diff --check` pass. No browser page changed, provider call,
+migration, commit or push was made. Customer-specific order, loyalty and richer activity reads, broad
+all-channel delivery, provider-confirmed outcomes and production acceptance remain incomplete.
+
+## Finance Agent — imported statement candidates through the shared tool gateway (2026-11-05)
+
+Added `get_reconciliation_items`, a bounded read-only tool that reuses
+`FinanceReconciliationService.getImport` for one tenant-owned imported statement and page. It
+returns the stored date/amount rows and the canonical service's candidate journal matches, without
+bank memo text. The tool does not accept a match or claim that a provider transaction is settled;
+the existing human decision endpoint remains responsible for acceptance.
+
+The real-MySQL Finance Agent spec verifies an exact candidate from a posted manual journal, the
+human-acceptance disclosure, omission of bank free text, field-name-only telemetry and invalid-page
+refusal (**1 suite / 20 tests**). Backend/frontend `tsc --noEmit`, touched-file backend ESLint with
+existing Prettier-only findings outside this addition excluded, full backend Jest (**457 suites /
+2,894 tests**) and `git diff --check` pass. No migration, provider call, browser change, commit or
+push. Automatic finance postings, full reconciliation and production acceptance remain incomplete.
+
+## Finance Agent — ledger reads, period-close and partial trial-balance tools (2026-11-05)
+
+Registered `get_period_close_checklist`, `get_manual_journal_trial_balance` and
+`get_manual_general_ledger_entries` in the shared specialist tool gateway. All call existing Finance
+services and are read-only. The close checklist is labeled partial and cannot close or certify a
+period. Trial-balance results are explicitly limited to posted manual Noxtill journals and cap
+returned account rows. The general-ledger read filters posted entries before limiting output to 100
+entries and 20 lines per entry, so drafts do not hide posted activity. Descriptions and line memos
+are omitted. Malformed dates/months are refused. These tools do not add a second ledger or change
+finance records.
+
+The real-MySQL Finance Agent spec verifies period readiness, missing bank-reconciliation coverage,
+posted manual-journal totals and entries, free-text omission, safe tool-call metadata and invalid
+input refusal (**1 suite / 23 tests**). Backend/frontend `tsc --noEmit` and touched-file ESLint
+pass. The full backend run passes (**457 suites / 2,897 tests**) after the general-ledger query
+refinement. A signup-based Period Close browser test is still blocked: Next.js was served on port
+3001 while the local API CORS allowlist only permits port 3000. The first attempt also exposed that
+starting the API against the shared local database resumes old message and voice jobs for existing
+businesses; that API process was stopped. Authenticated visual QA is therefore not claimed, and the
+API should only be restarted for this check against an isolated QA database or with a safe worker
+configuration. No schema migration, code commit or push. Automatic finance postings, complete
+reconciliation, accounting subledgers, certified close, and broader cross-agent/provider/production
+acceptance remain incomplete.
+
+## Finance Agent — descriptive month-over-month variance tool (2026-11-05)
+
+Added `calculate_variance` to the shared specialist tool gateway. It reuses canonical Profit
+Analytics monthly P&L and comparison logic, validates branch scope and currency consistency, and
+returns the source period values with an explicit statement that the differences are descriptive
+and do not establish a cause. It is read-only; tool telemetry records input field names without
+storing the financial output.
+
+The real-MySQL Finance Agent spec compares the tool response to the saved canonical Profit
+Analytics run, checks scope/currency/disclosure and telemetry, and verifies malformed months are
+refused (**1 suite / 24 tests**). Backend/frontend `tsc --noEmit`, touched-file ESLint,
+`git diff --check`, and full backend Jest (**457 suites / 2,898 tests**) pass. No migration,
+commit, push, live provider call or authenticated browser QA was performed. Authenticated visual
+QA remains blocked by the local API CORS allowlist mismatch described above. Complete accounting
+subledgers, provider-confirmed finance state, broad cross-agent acceptance and production
+acceptance remain incomplete.
+
+## Inventory Agent — cancel approved Procurement handoff before conversion (2026-11-05)
+
+The shared specialist action cancellation path now supports an approved Inventory procurement
+request while it is still in the canonical `approved` state and has not been converted to a
+purchase order. It requires the exact request version and a non-empty reason, performs an
+optimistic status/version update through `ProcurementService`, appends a canonical cancelled
+request event, and transitions the linked specialist action in the same database transaction.
+Submitted requests continue to use the existing withdrawal path; requests that entered sourcing
+or conversion cannot use this cancellation path.
+
+The owner action audit shows a Cancel request control for an approved Inventory action only while
+it has no canonical operation ID, and records the required cancellation reason through the shared
+action decision API.
+
+Real-MySQL coverage verifies approval → reasoned cancellation, stale-version refusal, the saved
+event/reason and that conversion is refused afterward. The specialist-action database spec verifies
+that the central endpoint delegates an approved Inventory cancellation only with the exact version
+and reason. Focused tests pass (**2 suites / 24 tests**); backend/frontend `tsc --noEmit`, touched-
+file ESLint, `git diff --check` and full backend Jest (**457 suites / 2,900 tests**) pass. No
+migration, provider call, browser QA, commit or push. Cancellation for other specialist action classes and full
+cross-agent action coverage remain incomplete.
+
+## Customer Agent — race-safe CRM follow-up execution and retry (2026-11-05)
+
+Customer follow-up actions now claim `execution_queued`/`executing` before invoking the canonical
+CRM task service. Cancellation can atomically win only while an approved action is still unstarted,
+so the service cannot create a task after the action has been cancelled. A canonical-service or
+verification failure is audited as `failed` with a typed error code and can be retried through the
+owner action review; the CRM idempotency key makes retries safe if the first task was created but
+its response was lost. The UI exposes cancel for unstarted approvals and retry for failed actions.
+
+The real-MySQL specialist-action spec verifies execution is claimed before the CRM call, a failed
+attempt is recorded and retry reaches a verified task, stale-version cancellation is refused, and
+both cancellation/execution orderings are safe (**1 suite / 19 tests**). Backend/frontend `tsc --noEmit`, touched-
+file ESLint and `git diff --check` pass. The full backend run completed with **454/457 suites and
+2,897/2,901 tests**; QR Poster and Reports passed in serial reruns, and the changed specialist
+action suite passes (**19 tests**). One unrelated Settings Hub per-run-policy test still times out
+when run alone; the selected retention-threshold test passes alone. No migration, provider call,
+commit or push. Browser QA remains unverified because the open Chrome tab could not be attached and
+a fresh local-app navigation timed out. Live authenticated browser QA and broader specialist action
+coverage remain open.
+
+## Inventory Agent — bounded stock-balance and movement tools (2026-11-05)
+
+Added four read-only tools to the shared Inventory specialist gateway. `get_stock_balance` reads
+one product through the canonical Inventory listing calculation and returns its current Noxtill
+business-level stock, low-stock threshold, recorded-sales velocity and days of cover; cost values
+are excluded. `get_stock_movements` validates a 1–365 day window, caps results at 100 rows and
+returns only the selected product's movement IDs, kinds, quantities and timestamps.
+`get_sales_velocity` calculates recorded units per calendar day for a bounded 1–365 day window and
+returns no estimate when the window has no saved sale movements. `get_open_purchase_orders` returns
+up to 100 internal purchase-order records and remaining quantities for one product, without costs
+or unrelated lines. `get_stock_count_variances` reads bounded draft counts and recomputes the
+variance against current book stock, distinguishing that result from the stored creation-time
+snapshot; it does not apply counts or write adjustments. The tools disclose that internal records
+do not prove branch allocation, provider availability, supplier shipment or unrecorded demand.
+They refuse products outside the active business and never write inventory.
+
+The real-MySQL Inventory Agent spec verifies canonical values, cost-field exclusion, bounded
+movement and purchase-order output, recorded-sales velocity, current-vs-saved count variances,
+cross-location refusal, invalid-window refusal and audited tool-call statuses (1 suite / 16 tests).
+Backend/frontend `tsc --noEmit`, backend ESLint with the repository's
+pre-existing Prettier-only findings in older portions of the touched Inventory files excluded, and
+full backend Jest (**457 suites / 2,904 tests**) pass. The first full run hit an unrelated Commerce
+MySQL deadlock under parallel workers; the Commerce suite passed alone (18/18), and the complete
+suite then passed on rerun. `git diff --check` passes. No migration, provider call, browser QA,
+commit or push. Forecast calibration, seasonal adjustment, stockout-censored demand and broader
+agent action coverage remain incomplete.
+
+## Finance Agent — partial A/R and A/P source summary tool (2026-11-05)
+
+Added two registered read-only Finance tools. `get_ar_ap_aging`, named in the Finance spec, returns
+`CreditService.financialAgingSummary` and `XeroOpenItemsService` as separate sources, explicitly
+labels the result partial, and states that a native Noxtill finance-owned A/R or A/P ledger is not
+available. The Credit source contains aggregate debtor counts, balances, aging buckets, source and
+observation time only; it excludes customer identifiers, names, phone numbers and credit-entry
+details. `detect_duplicate_candidates` reuses the existing exact-match Expense helper and scoped
+review, restricts combined business scopes to one currency and returns aggregate counts/amounts
+without descriptions or record IDs. It labels matches as candidates for human review, not confirmed
+duplicates, fraud or savings. Neither tool writes finance data or combines currencies. No schema
+change or migration was added.
+
+The real-MySQL Finance Agent spec verifies current-business aggregation, excludes another business's
+balance and customer details, checks disconnected Xero is not represented as zero, verifies duplicate
+candidate scope/privacy and rejects invalid-month and mixed-currency requests (**1 suite / 26 tests**).
+Backend and frontend `tsc --noEmit`,
+backend ESLint with existing Prettier-only findings excluded, `git diff --check`, and full backend
+Jest (**457 suites / 2,906 tests**) pass. No browser surface changed, so browser QA was not needed.
+No provider call, migration, commit or push was made. Native Finance A/R and A/P ledgers, provider
+acceptance and production QA remain incomplete.

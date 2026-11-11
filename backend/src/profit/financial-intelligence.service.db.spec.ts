@@ -20,6 +20,7 @@ import { XeroOpenItemsService } from '../integrations/accounting/xero-open-items
 import { XeroBankTransactionStatusService } from '../integrations/accounting/xero-bank-transaction-status.service';
 import { FinancePeriodCloseService } from './finance-period-close.service';
 import { FinanceJournalsService } from './finance-journals.service';
+import { FinanceReconciliationService } from './finance-reconciliation.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -43,7 +44,14 @@ describe('FinancialIntelligenceService (MySQL)', () => {
   let productId: string;
   let creditService: CreditService;
   let financeJournals: FinanceJournalsService;
+  let financeAccountId: string;
+  let financeReconciliation: FinanceReconciliationService;
   let xeroOpenItemsService: XeroOpenItemsService;
+  let cashForecast: CashForecastService;
+  let agentPolicy: SpecialistAgentPolicyService;
+  let toolGateway: SpecialistAgentToolGatewayService;
+  const financeGatewayBudgetIds: string[] = [];
+  const financeGatewayExpenseIds: string[] = [];
   const createMessage = jest.fn();
 
   beforeAll(async () => {
@@ -74,19 +82,30 @@ describe('FinancialIntelligenceService (MySQL)', () => {
       prisma,
       branchScope,
     );
+    financeReconciliation = new FinanceReconciliationService(
+      tenant,
+      cls as unknown as ClsService,
+      { add: jest.fn().mockResolvedValue(undefined) } as never,
+    );
     xeroOpenItemsService = new XeroOpenItemsService(
       tenant,
       { getFreshTokens: jest.fn() } as never,
       { getAuthorizedOpenInvoicesPage: jest.fn() } as never,
       cls as unknown as ClsService,
     );
+    agentPolicy = new SpecialistAgentPolicyService(
+      prisma,
+      cls as unknown as ClsService,
+    );
+    toolGateway = new SpecialistAgentToolGatewayService(tenant);
+    cashForecast = new CashForecastService(prisma, branchScope);
     service = new FinancialIntelligenceService(
       prisma,
       profit,
       branchScope,
-      new CashForecastService(prisma, branchScope),
+      cashForecast,
       { createMessage } as unknown as AiInfraService,
-      new SpecialistAgentPolicyService(prisma, cls as unknown as ClsService),
+      agentPolicy,
       creditService,
       xeroOpenItemsService,
       new XeroBankTransactionStatusService(
@@ -97,7 +116,8 @@ describe('FinancialIntelligenceService (MySQL)', () => {
       ),
       new FinancePeriodCloseService(prisma, branchScope),
       financeJournals,
-      new SpecialistAgentToolGatewayService(tenant),
+      toolGateway,
+      financeReconciliation,
     );
 
     const stamp = Date.now();
@@ -135,6 +155,7 @@ describe('FinancialIntelligenceService (MySQL)', () => {
         type: 'asset',
       },
     );
+    financeAccountId = cashAccount.id;
     const equityAccount = await financeJournals.createAccount(
       businessId,
       'finance-agent-test-author',
@@ -247,6 +268,21 @@ describe('FinancialIntelligenceService (MySQL)', () => {
     });
   });
 
+  afterEach(async () => {
+    if (financeGatewayExpenseIds.length > 0) {
+      await prisma.expense.deleteMany({
+        where: { id: { in: [...financeGatewayExpenseIds] } },
+      });
+      financeGatewayExpenseIds.length = 0;
+    }
+    if (financeGatewayBudgetIds.length > 0) {
+      await prisma.financeBudget.deleteMany({
+        where: { id: { in: [...financeGatewayBudgetIds] } },
+      });
+      financeGatewayBudgetIds.length = 0;
+    }
+  });
+
   afterAll(async () => {
     if (businessId && unrelatedBusinessId) {
       const financeScopeBusinessIds = [businessId, foreignCurrencyBranchId];
@@ -259,6 +295,9 @@ describe('FinancialIntelligenceService (MySQL)', () => {
         where: {
           businessId: { in: [businessId, unrelatedBusinessId] },
         },
+      });
+      await prisma.financeBankStatementImport.deleteMany({
+        where: { businessId: { in: financeScopeBusinessIds } },
       });
       await prisma.financeBudget.deleteMany({
         where: { businessId: { in: financeScopeBusinessIds } },
@@ -585,6 +624,908 @@ describe('FinancialIntelligenceService (MySQL)', () => {
     expect(run.output).toMatchObject({
       snapshot: { netProfit: 120 },
       aiSummary: { status: 'unavailable', text: null },
+    });
+  });
+
+  it('calculates descriptive month-over-month variance through canonical Profit Analytics', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 2,
+      sequence: 1,
+      toolKey: 'calculate_variance',
+      input: { month },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+    const expected = (run.output as Prisma.JsonObject)
+      .periodVariance as Prisma.JsonObject;
+
+    expect(
+      toolGateway.schemasForAgent('financial_intelligence'),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'calculate_variance' }),
+      ]),
+    );
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('ProfitPeriodVariance');
+    expect(result.output).toMatchObject({
+      ...expected,
+      currency: 'USD',
+      businessId,
+      branchId: null,
+    });
+    expect(JSON.stringify(result.output)).toContain(
+      'Differences are descriptive; no cause is inferred.',
+    );
+
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'calculate_variance',
+      },
+    });
+    expect(savedCall.inputFields).toEqual(['month']);
+    expect(savedCall).not.toHaveProperty('output');
+
+    await expect(
+      toolGateway.execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 3,
+        sequence: 1,
+        toolKey: 'calculate_variance',
+        input: { month: '2026-13' },
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      }),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('reads approved budget actuals through the Finance tool gateway', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const [year, monthNumber] = month.split('-').map(Number);
+    const stamp = Date.now();
+    const category = `Finance gateway QA ${stamp}`;
+    const [budget, expense] = await Promise.all([
+      prisma.financeBudget.create({
+        data: {
+          businessId,
+          monthStart: new Date(Date.UTC(year, monthNumber - 1, 1)),
+          category,
+          currencyCode: 'USD',
+          amount: '18.50',
+          version: 1,
+          status: 'approved',
+          createdByUserId: 'finance-agent-test-user',
+          reviewedByUserId: 'finance-agent-reviewer',
+          reviewReason: 'Approved fixture for Finance gateway test',
+          reviewedAt: new Date(),
+        },
+      }),
+      prisma.expense.create({
+        data: {
+          businessId,
+          description: 'Finance gateway approved budget actual fixture',
+          category,
+          amount: '24.75',
+          incurredOn: new Date(),
+        },
+      }),
+    ]);
+    financeGatewayBudgetIds.push(budget.id);
+    financeGatewayExpenseIds.push(expense.id);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 2,
+      toolKey: 'get_approved_budget_actuals',
+      input: { month },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(toolGateway.schemasForAgent('financial_intelligence')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'get_approved_budget_actuals' }),
+      ]),
+    );
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('FinanceBudgetActualReview');
+    expect(result.output).toEqual(
+      expect.objectContaining({
+        status: 'available',
+        source: 'FinanceBudget + Expense',
+        month,
+      }),
+    );
+    const review = result.output as {
+      lines: {
+        category: string;
+        status: string;
+        approvedAmount: string | null;
+        actualAmount: string;
+        variance: string | null;
+      }[];
+    };
+    expect(review.lines).toContainEqual({
+      businessName: 'Finance Agent Test',
+      category,
+      status: 'approved',
+      approvedAmount: '18.50',
+      actualAmount: '24.75',
+      variance: '6.25',
+      budgetVersion: 1,
+    });
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'get_approved_budget_actuals',
+      },
+    });
+    expect(savedCall.inputFields).toEqual(['month']);
+    expect(savedCall).not.toHaveProperty('output');
+
+    await expect(
+      toolGateway.execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 3,
+        toolKey: 'get_approved_budget_actuals',
+        input: { month, branchId: unrelatedBusinessId },
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('reads the canonical relative cash-flow projection through the gateway', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const expected = await cashForecast.forecast(businessId, 14);
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 2,
+      toolKey: 'get_relative_cash_flow_projection',
+      input: { days: '14' },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('RelativeCashFlowProjection');
+    expect(result.output).toMatchObject({
+      source: 'CashForecastService.forecast',
+      basis: 'relative_net_flow_not_bank_balance',
+      currency: 'USD',
+      days: 14,
+      dailyAvgRevenue: expected.dailyAvgRevenue,
+      dailyAvgExpense: expected.dailyAvgExpense,
+      projection: expected.projection,
+      shortfallDates: expected.shortfallDates,
+    });
+    expect(JSON.stringify(result.output)).toContain(
+      'Cumulative net flow starts at zero; it is not a cash balance or a certainty.',
+    );
+    const cashFlowSchema = toolGateway
+      .schemasForAgent('financial_intelligence')
+      .find((tool) => tool.name === 'get_relative_cash_flow_projection');
+    expect(cashFlowSchema).toBeDefined();
+    expect(cashFlowSchema?.input_schema.additionalProperties).toBe(false);
+    expect(cashFlowSchema?.input_schema).not.toHaveProperty('required');
+  });
+
+  it('reports disconnected Xero without inferring receivables or payables', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 2,
+      toolKey: 'get_xero_open_items_summary',
+      input: {},
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('XeroOpenItemsReview');
+    const xeroOutput = result.output as {
+      status: string;
+      source: string | null;
+      currencies: unknown[];
+      unavailableReason: string | null;
+    };
+    expect(xeroOutput).toMatchObject({
+      status: 'not_connected',
+      source: null,
+      currencies: [],
+    });
+    expect(xeroOutput.unavailableReason).toContain('Connect Xero');
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'get_xero_open_items_summary',
+      },
+    });
+    expect(savedCall.inputFields).toEqual([]);
+  });
+
+  it('reads privacy-minimized customer credit aging without treating it as accounting receivables', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const stamp = Date.now();
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: `Private Finance Agent Credit ${stamp}`,
+        phone: `+1${stamp}1`,
+      },
+    });
+    const unrelatedCustomer = await prisma.customer.create({
+      data: {
+        businessId: unrelatedBusinessId,
+        name: `Unrelated Finance Credit ${stamp}`,
+        phone: `+1${stamp}2`,
+      },
+    });
+    const entries = await Promise.all([
+      prisma.creditEntry.create({
+        data: {
+          businessId,
+          customerId: customer.id,
+          kind: 'credit',
+          amount: '275.00',
+          createdAt: new Date(Date.now() - 12 * 86_400_000),
+        },
+      }),
+      prisma.creditEntry.create({
+        data: {
+          businessId: unrelatedBusinessId,
+          customerId: unrelatedCustomer.id,
+          kind: 'credit',
+          amount: '999.00',
+        },
+      }),
+    ]);
+
+    try {
+      const run = await service.run(
+        businessId,
+        'finance-agent-test-user',
+        { month, period: 'month' },
+        undefined,
+        { includeAiSummary: false },
+      );
+      const result = await toolGateway.execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 2,
+        toolKey: 'get_ar_ap_aging',
+        input: {},
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      });
+
+      expect(result.status).toBe('succeeded');
+      expect(result.outputResourceType).toBe(
+        'PartialReceivablePayableAgingSources',
+      );
+      expect(result.summary).toContain('no native accounting A/R or A/P');
+      expect(result.output).toMatchObject({
+        coverage: 'partial_operational_credit_and_external_xero_sources',
+        financeOwnedLedger: { status: 'not_available' },
+        customerCredit: {
+          source: 'v_credit_balances',
+          debtorCount: 1,
+          totalBalance: '275.00',
+          disclosure:
+            'This is the Credit module’s outstanding-balance age since the last zero balance or first credit entry. It is not invoice due-date aging, a finance-owned A/R control account, or proof of collection.',
+        },
+        xeroOpenItems: {
+          status: 'not_connected',
+          currencies: [],
+        },
+        scope: {
+          businessId,
+          currencyConversion: 'none',
+          sourcesAreCombined: false,
+        },
+      });
+      expect(JSON.stringify(result.output)).not.toContain(customer.id);
+      expect(JSON.stringify(result.output)).not.toContain(customer.name);
+      expect(JSON.stringify(result.output)).not.toContain(customer.phone);
+      expect(JSON.stringify(result.output)).not.toContain('999.00');
+      const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+        where: {
+          businessId,
+          runId: run.id,
+          toolKey: 'get_ar_ap_aging',
+        },
+      });
+      expect(savedCall.inputFields).toEqual([]);
+    } finally {
+      await prisma.creditEntry.deleteMany({
+        where: { id: { in: entries.map((entry) => entry.id) } },
+      });
+      await prisma.customer.deleteMany({
+        where: { id: { in: [customer.id, unrelatedCustomer.id] } },
+      });
+    }
+  });
+
+  it('detects exact-match expense candidates through the Finance Agent gateway', async () => {
+    const now = new Date();
+    const month = now.toISOString().slice(0, 7);
+    const incurredOn = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 10, 12),
+    );
+    const description = `Private duplicate review ${Date.now()}`;
+    const fixtures = await Promise.all([
+      prisma.expense.create({
+        data: {
+          businessId,
+          description,
+          category: 'Software',
+          amount: '45.50',
+          incurredOn,
+        },
+      }),
+      prisma.expense.create({
+        data: {
+          businessId,
+          description: `  ${description.toUpperCase()}  `,
+          category: ' software ',
+          amount: '45.50',
+          incurredOn,
+        },
+      }),
+      prisma.expense.create({
+        data: {
+          businessId: unrelatedBusinessId,
+          description,
+          category: 'Software',
+          amount: '45.50',
+          incurredOn,
+        },
+      }),
+    ]);
+    financeGatewayExpenseIds.push(...fixtures.map((expense) => expense.id));
+
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 2,
+      toolKey: 'detect_duplicate_candidates',
+      input: { month },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('ExpenseDuplicateCandidateReview');
+    expect(result.summary).toContain('1 exact-match expense candidate group');
+    expect(result.output).toMatchObject({
+      source: 'Expense',
+      month,
+      currency: 'USD',
+      review: {
+        calendarMonth: month,
+        candidateGroups: 1,
+        additionalEntries: 1,
+        additionalEntryAmount: '45.50',
+        scopeBusinessCount: 1,
+      },
+      descriptionsAndRecordIds: 'excluded_from_agent_output',
+    });
+    expect(JSON.stringify(result.output)).not.toContain(description);
+    expect(JSON.stringify(result.output)).not.toContain(fixtures[0].id);
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'detect_duplicate_candidates',
+      },
+    });
+    expect(savedCall.inputFields).toEqual(['month']);
+
+    const invalidMonth = await toolGateway
+      .execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 3,
+        toolKey: 'detect_duplicate_candidates',
+        input: { month: '2026-13' },
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      })
+      .catch((error: unknown) => error);
+    expect(invalidMonth).toBeInstanceOf(AppException);
+    expect((invalidMonth as AppException).getResponse()).toMatchObject({
+      code: 'FINANCE_AGENT_TOOL_INPUT_INVALID',
+    });
+
+    const mixedCurrencyScope = await toolGateway
+      .execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 4,
+        toolKey: 'detect_duplicate_candidates',
+        input: { month, branchId: 'all' },
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      })
+      .catch((error: unknown) => error);
+    expect(mixedCurrencyScope).toBeInstanceOf(AppException);
+    expect((mixedCurrencyScope as AppException).getResponse()).toMatchObject({
+      code: 'FINANCE_AGENT_CURRENCY_SCOPE_UNSUPPORTED',
+    });
+  });
+
+  it('reports disconnected Xero bank status without inferring reconciliation results', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 3,
+      toolKey: 'get_xero_bank_transaction_status',
+      input: {},
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('XeroBankTransactionStatusReview');
+    const xeroOutput = result.output as {
+      status: string;
+      source: string | null;
+      currencies: unknown[];
+      unavailableReason: string | null;
+    };
+    expect(xeroOutput).toMatchObject({
+      status: 'not_connected',
+      source: null,
+      currencies: [],
+    });
+    expect(xeroOutput.unavailableReason).toContain('Connect Xero');
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'get_xero_bank_transaction_status',
+      },
+    });
+    expect(savedCall.inputFields).toEqual([]);
+    const schema = toolGateway
+      .schemasForAgent('financial_intelligence')
+      .find((tool) => tool.name === 'get_xero_bank_transaction_status');
+    expect(schema?.input_schema.additionalProperties).toBe(false);
+  });
+
+  it('reads statement match suggestions through the canonical reconciliation service', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const imported = await financeReconciliation.importStatement(
+      businessId,
+      'finance-agent-test-user',
+      {
+        financeAccountId,
+        currencyCode: 'USD',
+        csv: `date,amount,description\n${today},125.00,private bank memo`,
+      },
+    );
+    const month = new Date().toISOString().slice(0, 7);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 4,
+      toolKey: 'get_reconciliation_items',
+      input: { importId: imported.id },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('FinanceReconciliationCandidates');
+    const output = result.output as {
+      source: string;
+      statement: { id: string; currencyCode: string };
+      lines: {
+        lineNumber: number;
+        statementDate: string;
+        amount: string;
+        status: string;
+        candidates: { reference: string; debit: string; credit: string }[];
+        description?: string;
+      }[];
+      disclosure: string;
+    };
+    expect(output.source).toBe('FinanceReconciliationService.getImport');
+    expect(output.statement).toMatchObject({
+      id: imported.id,
+      currencyCode: 'USD',
+    });
+    expect(output.lines).toHaveLength(1);
+    expect(output.lines[0]).toMatchObject({
+      lineNumber: 1,
+      statementDate: today,
+      amount: '125.00',
+      status: 'unmatched',
+    });
+    expect(
+      output.lines[0].candidates.some((candidate) =>
+        candidate.reference.startsWith('FI-'),
+      ),
+    ).toBe(true);
+    expect(output.lines[0]).not.toHaveProperty('description');
+    expect(output.disclosure).toContain('only recorded after a human accepts');
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'get_reconciliation_items',
+      },
+    });
+    expect(savedCall.inputFields).toEqual(['importId']);
+
+    const invalidPage = await toolGateway
+      .execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 5,
+        toolKey: 'get_reconciliation_items',
+        input: { importId: imported.id, page: '0' },
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      })
+      .catch((error: unknown) => error);
+    expect(invalidPage).toBeInstanceOf(AppException);
+    expect((invalidPage as AppException).getResponse()).toMatchObject({
+      code: 'FINANCE_AGENT_TOOL_INPUT_INVALID',
+    });
+  });
+
+  it('reads period-close readiness without claiming an authoritative close', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 10,
+      toolKey: 'get_period_close_checklist',
+      input: { month },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('FinancePeriodCloseReadiness');
+    expect(result.summary).toContain('does not certify or close');
+    const output = result.output as Prisma.JsonObject;
+    const checklist = output.checklist as Prisma.JsonObject;
+    expect(output.source).toBe('FinancePeriodCloseService.readiness');
+    expect(checklist).toMatchObject({ month, coverage: 'partial' });
+    const checklistBusiness = ((checklist.businesses as Prisma.JsonArray) ?? [])
+      .map((item) => item as Prisma.JsonObject)
+      .find((item) => item.businessId === businessId);
+    expect(checklistBusiness).toBeDefined();
+    expect(checklistBusiness?.manualJournals).toMatchObject({
+      postedCount: 1,
+      balancedPostedCount: 1,
+      postingLocked: false,
+    });
+    expect(
+      ((checklist.unavailable as Prisma.JsonArray) ?? []).map(
+        (item) => item as Prisma.JsonObject,
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        key: 'bank_reconciliation',
+        status: 'not_available',
+      }),
+    );
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'get_period_close_checklist',
+      },
+    });
+    expect(savedCall.inputFields).toEqual(['month']);
+  });
+
+  it('reads posted manual-journal balances as partial trial balance only', async () => {
+    const asOf = new Date().toISOString().slice(0, 10);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month: asOf.slice(0, 7), period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 10,
+      toolKey: 'get_manual_journal_trial_balance',
+      input: { asOf },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('PartialManualJournalTrialBalance');
+    expect(result.summary).toContain(
+      'automatic postings and external ledgers are excluded',
+    );
+    const output = result.output as Prisma.JsonObject;
+    expect(output).toMatchObject({
+      source: 'FinanceJournalsService.trialBalanceForScope',
+      asOf,
+      coverage: 'posted_manual_journals_only',
+    });
+    const entity = ((output.entities as Prisma.JsonArray) ?? [])
+      .map((item) => item as Prisma.JsonObject)
+      .find((item) => item.businessId === businessId);
+    const currency = ((entity?.currencies as Prisma.JsonArray) ?? [])
+      .map((item) => item as Prisma.JsonObject)
+      .find((item) => item.currencyCode === 'USD');
+    expect(currency).toMatchObject({
+      totalDebitBalances: '125.00',
+      totalCreditBalances: '125.00',
+      balanced: true,
+      omittedAccountCount: 0,
+    });
+    expect(
+      ((currency?.accounts as Prisma.JsonArray) ?? []).some(
+        (item) =>
+          typeof (item as Prisma.JsonObject).accountCode === 'string' &&
+          ((item as Prisma.JsonObject).accountCode as string).startsWith('FIA'),
+      ),
+    ).toBe(true);
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'get_manual_journal_trial_balance',
+      },
+    });
+    expect(savedCall.inputFields).toEqual(['asOf']);
+
+    const invalidDate = await toolGateway
+      .execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 11,
+        toolKey: 'get_manual_journal_trial_balance',
+        input: { asOf: '2026-02-30' },
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      })
+      .catch((error: unknown) => error);
+    expect(invalidDate).toBeInstanceOf(AppException);
+    expect((invalidDate as AppException).getResponse()).toMatchObject({
+      code: 'FINANCE_AGENT_TOOL_INPUT_INVALID',
+    });
+  });
+
+  it('reads posted manual general-ledger entries without free-text fields', async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const run = await service.run(
+      businessId,
+      'finance-agent-test-user',
+      { month, period: 'month' },
+      undefined,
+      { includeAiSummary: false },
+    );
+    const result = await toolGateway.execute({
+      agentKey: 'financial_intelligence',
+      moduleId: '30',
+      businessId,
+      actorUserId: 'finance-agent-test-user',
+      runId: run.id,
+      correlationId: run.id,
+      round: 1,
+      sequence: 10,
+      toolKey: 'get_manual_general_ledger_entries',
+      input: { month },
+      mode: 'read_only',
+      authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.outputResourceType).toBe('ManualGeneralLedgerEntries');
+    expect(result.summary).toContain('automatic postings and external ledgers are excluded');
+    const output = result.output as Prisma.JsonObject;
+    expect(output).toMatchObject({
+      source: 'FinanceJournalsService.listPostedEntriesForAgent',
+      month,
+      coverage: 'posted_manual_journals_only',
+      cappedAt: 100,
+      hasMoreEntries: false,
+    });
+    const entries = ((output.entries as Prisma.JsonArray) ?? []).map(
+      (item) => item as Prisma.JsonObject,
+    );
+    const fixture = entries.find(
+      (entry) =>
+        entry.status === 'posted' &&
+        typeof entry.reference === 'string' &&
+        entry.reference.startsWith('FI-'),
+    );
+    expect(fixture).toBeDefined();
+    expect(fixture).not.toHaveProperty('description');
+    const lines = ((fixture?.lines as Prisma.JsonArray) ?? []).map(
+      (item) => item as Prisma.JsonObject,
+    );
+    expect(lines.length).toBeGreaterThan(0);
+    expect(
+      lines.some((line) => line.debit === '125.00' && line.credit === '0.00'),
+    ).toBe(true);
+    expect(lines.every((line) => !Object.hasOwn(line, 'memo'))).toBe(true);
+    const savedCall = await prisma.specialistAgentToolCall.findFirstOrThrow({
+      where: {
+        businessId,
+        runId: run.id,
+        toolKey: 'get_manual_general_ledger_entries',
+      },
+    });
+    expect(savedCall.inputFields).toEqual(['month']);
+
+    const invalidMonth = await toolGateway
+      .execute({
+        agentKey: 'financial_intelligence',
+        moduleId: '30',
+        businessId,
+        actorUserId: 'finance-agent-test-user',
+        runId: run.id,
+        correlationId: run.id,
+        round: 1,
+        sequence: 11,
+        toolKey: 'get_manual_general_ledger_entries',
+        input: { month: '2026-13' },
+        mode: 'read_only',
+        authorize: () => agentPolicy.assertEnabled(businessId, 'finance'),
+      })
+      .catch((error: unknown) => error);
+    expect(invalidMonth).toBeInstanceOf(AppException);
+    expect((invalidMonth as AppException).getResponse()).toMatchObject({
+      code: 'FINANCE_AGENT_TOOL_INPUT_INVALID',
     });
   });
 

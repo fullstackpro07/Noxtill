@@ -29,10 +29,12 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
   let businessId: string;
   let otherBusinessId: string;
   let followUpActionCustomerId: string | undefined;
+  let racingFollowUpActionCustomerId: string | undefined;
   let procurement: {
     decideRequest: jest.Mock;
     convertRequestToPurchaseOrder: jest.Mock;
     withdrawRequest: jest.Mock;
+    cancelApprovedRequest: jest.Mock;
   };
   let commerceRfqs: { createFromProcurementRequest: jest.Mock };
   let customerSegments: {
@@ -55,6 +57,7 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
       decideRequest: jest.fn(),
       convertRequestToPurchaseOrder: jest.fn(),
       withdrawRequest: jest.fn(),
+      cancelApprovedRequest: jest.fn(),
     };
     commerceRfqs = { createFromProcurementRequest: jest.fn() };
     customerSegments = {
@@ -97,6 +100,14 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
       });
       await prisma.customer.deleteMany({
         where: { id: followUpActionCustomerId, businessId },
+      });
+    }
+    if (racingFollowUpActionCustomerId) {
+      await prisma.customerFollowUpTask.deleteMany({
+        where: { businessId, customerId: racingFollowUpActionCustomerId },
+      });
+      await prisma.customer.deleteMany({
+        where: { id: racingFollowUpActionCustomerId, businessId },
       });
     }
     await prisma.business.deleteMany({
@@ -776,7 +787,16 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
         createdByUserId: 'reviewer-id',
       },
     });
-    customerActions.createTaskFromRecommendation.mockResolvedValue(task);
+    customerActions.createTaskFromRecommendation.mockImplementationOnce(
+      async () => {
+        const claimed = await prisma.specialistAgentAction.findFirstOrThrow({
+          where: { id: pending.id, businessId },
+          select: { state: true },
+        });
+        expect(claimed.state).toBe('executing');
+        return task;
+      },
+    );
 
     const approval = await service.approve(
       businessId,
@@ -825,6 +845,186 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
       'verification_pending',
       'verified',
     ]);
+
+    const retryAction = await createAction({
+      businessId,
+      agentKey: 'customer_intelligence',
+      actionType: 'customer_follow_up_task',
+      state: 'approved',
+      createdAt: new Date(),
+      expectedVersion: 1,
+      canonicalResourceType: 'specialist_agent_recommendation',
+      canonicalResourceId: 'customer-follow-up-recommendation-retry',
+    });
+    const retryTask = await prisma.customerFollowUpTask.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        title: 'Retry customer follow-up',
+        reason: 'An owner-approved internal CRM follow-up task retry.',
+        idempotencyKey: 'qa-specialist-follow-up-action-retry',
+        payloadHash: 'b'.repeat(64),
+        createdByUserId: 'reviewer-id',
+      },
+    });
+    customerActions.createTaskFromRecommendation
+      .mockImplementationOnce(async () => {
+        const claimed = await prisma.specialistAgentAction.findFirstOrThrow({
+          where: { id: retryAction.id, businessId },
+          select: { state: true },
+        });
+        expect(claimed.state).toBe('executing');
+        throw new AppException(
+          'CUSTOMER_TEST_TASK_FAILURE',
+          'The canonical task operation failed for this test.',
+          409,
+        );
+      })
+      .mockResolvedValueOnce(retryTask);
+
+    await expect(
+      service.execute(businessId, 'reviewer-id', retryAction.id, {
+        expectedVersion: 1,
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'CUSTOMER_TEST_TASK_FAILURE' },
+    });
+    await expect(
+      prisma.specialistAgentAction.findFirstOrThrow({
+        where: { id: retryAction.id, businessId },
+        select: { state: true, errorCode: true, executionAttemptCount: true },
+      }),
+    ).resolves.toMatchObject({
+      state: 'failed',
+      errorCode: 'CUSTOMER_TEST_TASK_FAILURE',
+      executionAttemptCount: 1,
+    });
+
+    await expect(
+      service.execute(businessId, 'reviewer-id', retryAction.id, {
+        expectedVersion: 1,
+      }),
+    ).resolves.toMatchObject({
+      state: 'verified',
+      canonicalOperationId: retryTask.id,
+    });
+    await expect(
+      prisma.specialistAgentAction.findFirstOrThrow({
+        where: { id: retryAction.id, businessId },
+        select: { state: true, executionAttemptCount: true },
+      }),
+    ).resolves.toMatchObject({ state: 'verified', executionAttemptCount: 2 });
+  });
+
+  it('cancels an approved Customer follow-up before execution and blocks later execution', async () => {
+    customerActions.createTaskFromRecommendation.mockClear();
+    const approved = await createAction({
+      businessId,
+      agentKey: 'customer_intelligence',
+      actionType: 'customer_follow_up_task',
+      state: 'approved',
+      createdAt: new Date(),
+      expectedVersion: 7,
+      canonicalResourceType: 'specialist_agent_recommendation',
+      canonicalResourceId: 'customer-follow-up-cancel-before-execution',
+    });
+
+    await expect(
+      service.cancel(businessId, 'reviewer-id', approved.id, {
+        expectedVersion: 6,
+        reason: 'Stale version should not cancel this task.',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'SPECIALIST_ACTION_VERSION_CONFLICT' },
+    });
+
+    const cancelled = await service.cancel(
+      businessId,
+      'reviewer-id',
+      approved.id,
+      {
+        expectedVersion: 7,
+        reason: 'The follow-up is no longer needed.',
+      },
+    );
+    expect(cancelled).toMatchObject({ state: 'cancelled' });
+
+    await expect(
+      service.execute(businessId, 'reviewer-id', approved.id, {
+        expectedVersion: 7,
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'SPECIALIST_ACTION_STATE_CONFLICT' },
+    });
+    expect(customerActions.createTaskFromRecommendation).not.toHaveBeenCalled();
+  });
+
+  it('refuses cancellation after Customer follow-up execution has claimed the action', async () => {
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        name: 'Specialist follow-up race QA',
+        phone: '+15555550124',
+      },
+      select: { id: true },
+    });
+    racingFollowUpActionCustomerId = customer.id;
+    const action = await createAction({
+      businessId,
+      agentKey: 'customer_intelligence',
+      actionType: 'customer_follow_up_task',
+      state: 'approved',
+      createdAt: new Date(),
+      expectedVersion: 2,
+      canonicalResourceType: 'specialist_agent_recommendation',
+      canonicalResourceId: 'customer-follow-up-race-recommendation',
+    });
+    const task = await prisma.customerFollowUpTask.create({
+      data: {
+        businessId,
+        customerId: customer.id,
+        title: 'Race-safe customer follow-up',
+        reason: 'A test-only internal CRM follow-up task.',
+        idempotencyKey: 'qa-specialist-follow-up-race',
+        payloadHash: 'c'.repeat(64),
+        createdByUserId: 'reviewer-id',
+      },
+    });
+    let enteredCanonicalTaskCreation!: () => void;
+    let releaseCanonicalTaskCreation!: () => void;
+    const canonicalTaskCreationEntered = new Promise<void>((resolve) => {
+      enteredCanonicalTaskCreation = resolve;
+    });
+    const holdCanonicalTaskCreation = new Promise<void>((resolve) => {
+      releaseCanonicalTaskCreation = resolve;
+    });
+    customerActions.createTaskFromRecommendation.mockImplementationOnce(
+      async () => {
+        enteredCanonicalTaskCreation();
+        await holdCanonicalTaskCreation;
+        return task;
+      },
+    );
+
+    const execution = service.execute(businessId, 'reviewer-id', action.id, {
+      expectedVersion: 2,
+    });
+    await canonicalTaskCreationEntered;
+    await expect(
+      service.cancel(businessId, 'reviewer-id', action.id, {
+        expectedVersion: 2,
+        reason: 'Must not cancel a task while canonical execution is active.',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'SPECIALIST_ACTION_STATE_CONFLICT' },
+    });
+
+    releaseCanonicalTaskCreation();
+    await expect(execution).resolves.toMatchObject({
+      actionId: action.id,
+      state: 'verified',
+      canonicalOperationId: task.id,
+    });
   });
 
   it('executes approved inventory proposals only through canonical Procurement', async () => {
@@ -932,5 +1132,47 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
       'Supplier terms changed.',
       2,
     );
+  });
+
+  it('cancels an approved Inventory request before conversion through canonical Procurement', async () => {
+    procurement.cancelApprovedRequest.mockResolvedValue({
+      status: 'cancelled',
+      version: 3,
+    });
+    const approved = await createAction({
+      businessId,
+      agentKey: 'inventory_intelligence',
+      actionType: 'inventory_reorder_request',
+      state: 'approved',
+      createdAt: new Date(),
+      expectedVersion: 3,
+      canonicalResourceType: 'ProcurementRequest',
+      canonicalResourceId: 'canonical-approved-request-5',
+    });
+
+    await expect(
+      service.cancel(businessId, 'owner-id', approved.id, {
+        expectedVersion: 3,
+        reason: 'Demand changed before a purchase order was created.',
+      }),
+    ).resolves.toEqual({ status: 'cancelled', version: 3 });
+    expect(procurement.cancelApprovedRequest).toHaveBeenCalledWith(
+      businessId,
+      'owner-id',
+      'canonical-approved-request-5',
+      true,
+      'Demand changed before a purchase order was created.',
+      3,
+    );
+
+    await expect(
+      service.cancel(businessId, 'owner-id', approved.id, {
+        expectedVersion: 2,
+        reason: 'Stale cancellation must be rejected.',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'SPECIALIST_ACTION_VERSION_CONFLICT' },
+    });
+    expect(procurement.cancelApprovedRequest).toHaveBeenCalledTimes(1);
   });
 });

@@ -128,6 +128,26 @@ type ReconciliationReview = {
   limitations: string[];
 };
 
+type CommerceInventoryAvailabilityReview = {
+  state: 'available' | 'no_synced_channel_products';
+  source: 'Product.stockQty + Product.lowStockThreshold' | null;
+  totalSyncedProducts: number;
+  maximumProductsReviewed: number;
+  reviewedProductCount: number;
+  hasMore: boolean;
+  reviewedAtOrBelowThresholdCount: number;
+  products: {
+    productId: string;
+    stockQty: number;
+    lowStockThreshold: number;
+    thresholdState:
+      'at_or_below_recorded_threshold' | 'above_recorded_threshold';
+    providers: string[];
+  }[];
+  observedAt: string;
+  limitations: string[];
+};
+
 type ReviewCandidate = {
   title: string;
   summary: string;
@@ -532,6 +552,7 @@ export class CommerceSpecialistAgentService {
               runId: reservation.run.id,
               agentKey: AGENT_KEY,
               moduleId: '29',
+              actorUserId,
               toolKey: 'invalid_tool_request',
               toolVersion,
               sequence: index + 1,
@@ -575,6 +596,7 @@ export class CommerceSpecialistAgentService {
               runId: reservation.run.id,
               agentKey: AGENT_KEY,
               moduleId: '29',
+              actorUserId,
               toolKey: registeredKey,
               toolVersion,
               sequence: index + 1,
@@ -1712,6 +1734,13 @@ export class CommerceSpecialistAgentService {
           includesDemandSourceText: false,
           includesCosts: false,
         },
+        {
+          source: 'canonical_product_inventory_snapshot',
+          scope: 'current_business',
+          fields: ['Product.stockQty', 'Product.lowStockThreshold'],
+          linkedBy: 'CommerceChannelListing.status=synced',
+          excludesProviderStockClaims: true,
+        },
       ],
       policyResult: {
         autonomyLevel: 'L0',
@@ -1831,6 +1860,15 @@ export class CommerceSpecialistAgentService {
         'Production and assembly records',
         () => this.production.agentReview(scopedBusinessId, observedAt),
       );
+      const inventoryAvailabilityReview = await captureReviewStep(
+        'inventory_availability',
+        'Internal stock for synced channel products',
+        () =>
+          this.reviewInternalInventoryAvailability(
+            scopedBusinessId,
+            observedAt,
+          ),
+      );
       const candidate = this.nextReview(snapshot, productionReview);
       const failedReviewSteps = reviewSteps.filter(
         (step) => step.status === 'failed',
@@ -1856,6 +1894,7 @@ export class CommerceSpecialistAgentService {
       ];
       const missingData = [
         'Provider sales, traffic, conversion, listing reach, external inventory and fulfillment confirmation are not included unless their canonical connected records are present; no external status is inferred.',
+        'The internal inventory review uses the business-level Product stock snapshot only for active products linked to a CommerceChannelListing saved as synced. It is not a provider inventory confirmation, branch allocation, reservation or customer promise.',
         'Profitability, demand, supplier quality and delivery performance metrics are not calculated by this aggregate review. Recorded failed-delivery follow-up is summarized separately.',
         'Fulfillment external-node inventory, live node capacity and carrier confirmation are not available from this review. No route is assigned and no stock is reserved.',
         'Product-level compliance and return-risk evidence remain unavailable in Product Radar; validation candidates retain the canonical launch gate.',
@@ -1889,6 +1928,8 @@ export class CommerceSpecialistAgentService {
         fulfillmentReview:
           fulfillmentReview as unknown as Prisma.InputJsonObject | null,
         productionReview: productionReview as unknown as Prisma.InputJsonObject,
+        inventoryAvailabilityReview:
+          inventoryAvailabilityReview as unknown as Prisma.InputJsonObject | null,
         summary,
         aiSummary,
         coverage: 'canonical_status_counts_and_saved_operational_evidence',
@@ -2190,6 +2231,35 @@ export class CommerceSpecialistAgentService {
                         calculation:
                           'Reuse CommerceProductionService.agentReview and tenant-scoped database aggregates. Late counts include planned/in-progress work orders with due dates before observation time; completed output units use recorded good and scrap quantities. No product names, demand-source text or costs are included, and no capacity or delay cause is inferred.',
                       },
+                      {
+                        business: { connect: { id: scopedBusinessId } },
+                        run: { connect: { id: run.id } },
+                        sourceType:
+                          inventoryAvailabilityReview?.state === 'available'
+                            ? 'database_records'
+                            : 'unavailable',
+                        resourceType:
+                          'commerce_internal_inventory_availability',
+                        resourceId: scopedBusinessId,
+                        fieldRefs: [
+                          'Product.stockQty',
+                          'Product.lowStockThreshold',
+                          'Product.active',
+                          'CommerceChannelListing.status',
+                          'CommerceChannelListing.provider',
+                        ],
+                        observedValues: (inventoryAvailabilityReview ?? {
+                          state: 'unavailable',
+                        }) as unknown as Prisma.InputJsonObject,
+                        observedAt,
+                        fetchedAt: finishedAt,
+                        freshness:
+                          inventoryAvailabilityReview?.state === 'available'
+                            ? 'fresh'
+                            : 'unavailable',
+                        calculation:
+                          'Read active Product rows linked to at least one saved CommerceChannelListing with status synced, ordered by stockQty, name and id, capped at 50. Compare Product.stockQty <= Product.lowStockThreshold only for returned rows. This is a Noxtill business-level snapshot; it does not establish provider stock, branch-level allocation, reservation or availability on the external storefront.',
+                      },
                     ],
                   },
                 },
@@ -2315,6 +2385,79 @@ export class CommerceSpecialistAgentService {
       riskCases: counts(riskCases),
       channelListings: counts(channelListings),
       experiments: counts(experiments),
+    };
+  }
+
+  /**
+   * Read the canonical Noxtill product stock snapshot for products with a saved synced-channel
+   * listing. The listing status is not revalidated against a provider in this review.
+   */
+  private async reviewInternalInventoryAvailability(
+    businessId: string,
+    observedAt: Date,
+  ): Promise<CommerceInventoryAvailabilityReview> {
+    const maximumProductsReviewed = 50;
+    const where = {
+      businessId,
+      active: true,
+      commerceChannelListings: { some: { status: 'synced' as const } },
+    };
+    const [totalSyncedProducts, products] = await Promise.all([
+      this.tenantPrisma.client.product.count({ where }),
+      this.tenantPrisma.client.product.findMany({
+        where,
+        select: {
+          id: true,
+          stockQty: true,
+          lowStockThreshold: true,
+          commerceChannelListings: {
+            where: { status: 'synced' },
+            select: { provider: true },
+          },
+        },
+        orderBy: [{ stockQty: 'asc' }, { name: 'asc' }, { id: 'asc' }],
+        take: maximumProductsReviewed,
+      }),
+    ]);
+    const reviewedProducts = products.map((product) => ({
+      productId: product.id,
+      stockQty: product.stockQty,
+      lowStockThreshold: product.lowStockThreshold,
+      thresholdState:
+        product.stockQty <= product.lowStockThreshold
+          ? ('at_or_below_recorded_threshold' as const)
+          : ('above_recorded_threshold' as const),
+      providers: [
+        ...new Set(product.commerceChannelListings.map((row) => row.provider)),
+      ].sort(),
+    }));
+    return {
+      state:
+        totalSyncedProducts > 0 ? 'available' : 'no_synced_channel_products',
+      source:
+        totalSyncedProducts > 0
+          ? 'Product.stockQty + Product.lowStockThreshold'
+          : null,
+      totalSyncedProducts,
+      maximumProductsReviewed,
+      reviewedProductCount: reviewedProducts.length,
+      hasMore: totalSyncedProducts > reviewedProducts.length,
+      reviewedAtOrBelowThresholdCount: reviewedProducts.filter(
+        (product) =>
+          product.thresholdState === 'at_or_below_recorded_threshold',
+      ).length,
+      products: reviewedProducts,
+      observedAt: observedAt.toISOString(),
+      limitations: [
+        'Stock and threshold are read from Noxtill Product records, not from the connected provider.',
+        'Only active products with a saved CommerceChannelListing status of synced are included; provider state is not rechecked during this review.',
+        'Product.stockQty is a business-level snapshot and does not represent branch allocation, reserved units or a customer availability promise.',
+        ...(totalSyncedProducts > reviewedProducts.length
+          ? [
+              'The list is capped at 50 products, ordered by lowest recorded stock first; the threshold count applies only to the displayed rows.',
+            ]
+          : []),
+      ],
     };
   }
 

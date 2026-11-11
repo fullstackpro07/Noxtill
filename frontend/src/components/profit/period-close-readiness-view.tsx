@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { fetchFinancePeriodCloseReadiness } from "@/lib/profit-api";
+import { FinancialAgentQuickReview } from "@/components/profit/financial-agent-quick-review";
 
 function currentMonth() {
   const today = new Date();
@@ -146,6 +147,8 @@ export function PeriodCloseReadinessView() {
           </section>
         </>
       )}
+
+      <FinancialAgentQuickReview month={month} branchId={branchId} />
     </main>
   );
 }
