@@ -190,7 +190,7 @@ const PRICING_JSON_LD = {
           "name": "Can I change plans anytime?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. Upgrades apply immediately and are prorated. Downgrades take effect at your next renewal.",
+            "text": "Yes. Upgrades apply immediately and are prorated. Downgrades take effect at your next renewal. If you cancel a paid plan, you keep access until the end of the period you have paid for, and you have 30 days after that to export your data.",
           },
         },
         {
@@ -198,7 +198,7 @@ const PRICING_JSON_LD = {
           "name": "How does yearly billing work?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "You pay upfront for 12 months at about 25% off monthly pricing. For example, Growth is $708 billed once a year, which works out to $59 a month.",
+            "text": "You pay upfront for 12 months at 25% off monthly pricing. For example, Growth is $711 billed once a year instead of $948, which saves you $237.",
           },
         },
         {
@@ -211,10 +211,10 @@ const PRICING_JSON_LD = {
         },
         {
           "@type": "Question",
-          "name": "Are there per-user fees?",
+          "name": "Do you charge per user?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Each plan includes a set number of users. If you need more, extra users are $10/month each.",
+            "text": "Each plan includes a set number of users, and everyone on your team can use every part of Noxtill your plan includes. If you need more users, extra users are $10/month each. Taking or making phone calls needs an agent seat ($19/month each); AI voice agents never need a seat.",
           },
         },
         {
@@ -238,7 +238,7 @@ const PRICING_JSON_LD = {
           "name": "How is AI Receptionist billed?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "There is no monthly fee. On Growth and above you pay $0.35 per AI minute, $19 a month for each team member who takes calls, $0.03 per human call minute in the U.S., and $3 a month per local number. Usage alerts and spending limits keep you in control. Outbound calls go only to customers who have agreed to be contacted.",
+            "text": "There is no monthly fee. On Growth and above you pay $0.35 per AI minute, $19 a month for each team member who takes calls, $0.03 per human call minute in the U.S. when your team answers inside Noxtill, and phone numbers from $4 a month depending on country and number type. Usage alerts and spending limits keep you in control. Outbound calls go only to customers who have agreed to be contacted.",
           },
         },
         {
@@ -246,7 +246,15 @@ const PRICING_JSON_LD = {
           "name": "How does WhatsApp billing work?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "You connect your own WhatsApp Business account. Meta bills its message fees directly to you, and Noxtill adds no markup.",
+            "text": "You connect your own WhatsApp Business account. Meta bills its message fees directly to you, and Noxtill adds no markup. Connecting your account requires Meta Business verification, which usually takes a few days. We guide you through it.",
+          },
+        },
+        {
+          "@type": "Question",
+          "name": "Who pays for my advertising?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You do. Connect your own Google Ads and Meta Ads accounts. They bill your ad spend directly to you. Noxtill adds no markup and never takes a percentage of your ad spend.",
           },
         },
         {
@@ -254,7 +262,7 @@ const PRICING_JSON_LD = {
           "name": "Can I use Noxtill outside the United States?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. Set your own currency, tax rules and business terms. SMS rates and payroll availability vary by country.",
+            "text": "Yes. Set your own currency, tax rules and business terms. Subscription prices are billed in USD. SMS rates and phone number prices vary by country.",
           },
         },
         {

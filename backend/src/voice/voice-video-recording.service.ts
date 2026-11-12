@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   EgressClient,
@@ -13,6 +13,7 @@ import {
 } from 'livekit-server-sdk';
 import { Prisma } from '@prisma/client';
 import { S3Service } from '../common/storage/s3.service';
+import { VoiceVideoLimitsService } from './voice-video-limits.service';
 import { AppException } from '../common/filters/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -35,6 +36,7 @@ export class VoiceVideoRecordingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly s3: S3Service,
+    @Optional() private readonly limits?: VoiceVideoLimitsService,
   ) {}
 
   protected egressClient() {
@@ -100,6 +102,7 @@ export class VoiceVideoRecordingService {
     accepted: boolean,
   ) {
     const meeting = await this.meetingHost(businessId, actorUserId, meetingId);
+    await this.limits?.assertCanRecord(businessId);
     if (!accepted)
       throw this.invalid(
         'Recording cannot be prepared without the host accepting its notice.',
@@ -439,6 +442,7 @@ export class VoiceVideoRecordingService {
   async start(businessId: string, actorUserId: string, meetingId: string) {
     const meeting = await this.meetingHost(businessId, actorUserId, meetingId);
     if (!this.configured()) throw this.notConfigured();
+    await this.limits?.assertCanRecord(businessId);
     if (
       meeting.status !== 'scheduled' ||
       meeting.roomState !== 'active' ||
@@ -1219,6 +1223,13 @@ export class VoiceVideoRecordingService {
           failureMessage: null,
         },
       });
+      if (updated.count && duration != null)
+        await this.limits?.recordRecording(
+          row.businessId,
+          recordingId,
+          Number(duration),
+          tx,
+        );
       if (updated.count)
         await this.audit(
           tx,

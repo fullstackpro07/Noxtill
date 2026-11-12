@@ -16,6 +16,7 @@ import { VoiceQualityService } from './voice-quality.service';
 import { VoiceComplianceService } from './voice-compliance.service';
 import { VoiceMeetingsService } from './voice-meetings.service';
 import { VoiceVideoRoomService } from './voice-video-room.service';
+import { VoiceVideoLimitsService } from './voice-video-limits.service';
 import { VoiceVideoRecordingService } from './voice-video-recording.service';
 import { VoiceMeetingArtifactsService } from './voice-meeting-artifacts.service';
 import { VoiceOutboundCampaignService } from './voice-outbound-campaign.service';
@@ -95,6 +96,7 @@ import { MessagingModule } from '../messaging/messaging.module';
     VoiceComplianceService,
     VoiceMeetingsService,
     VoiceVideoRoomService,
+    VoiceVideoLimitsService,
     VoiceVideoRecordingService,
     VoiceMeetingArtifactsService,
     VoiceOutboundCampaignService,

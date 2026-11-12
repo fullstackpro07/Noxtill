@@ -17,6 +17,7 @@ import {
 } from './voice-meeting-access.util';
 import { VOICE_ERROR_CODES } from './voice.constants';
 import { VoiceVideoRecordingService } from './voice-video-recording.service';
+import { VoiceVideoLimitsService } from './voice-video-limits.service';
 
 /** Control plane for the existing meeting, not a second calendar or simulated media room. */
 @Injectable()
@@ -25,6 +26,7 @@ export class VoiceVideoRoomService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     @Optional() private readonly recordings?: VoiceVideoRecordingService,
+    @Optional() private readonly limits?: VoiceVideoLimitsService,
   ) {}
 
   protected roomClient() {
@@ -797,6 +799,15 @@ export class VoiceVideoRoomService {
     actorUserId: string | null,
   ) {
     const cfg = this.requireConfig();
+    // Plan gating, monthly minutes and participant cap are refused before any token exists.
+    if (this.limits) {
+      const live = await this.providerParticipants(meeting.id);
+      await this.limits.assertCanJoin(
+        meeting.businessId,
+        identity,
+        live.map((p) => p.identity),
+      );
+    }
     // Admission is re-checked under the same meeting mutex immediately before token issuance.
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM voice_video_meetings WHERE id = ${meeting.id} FOR UPDATE`;

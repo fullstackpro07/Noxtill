@@ -19,6 +19,7 @@ import { EntitlementsService } from './entitlements.service';
 import { CreditsService } from './credits.service';
 import { MetersService } from './meters.service';
 import { PurchasesService } from './purchases.service';
+import { NumberPricingService } from './number-pricing.service';
 import { UsageReadService } from './usage-read.service';
 import type { CommPeriod } from './usage-read.service';
 import {
@@ -42,6 +43,7 @@ export class UsageController {
     private readonly credits: CreditsService,
     private readonly meters: MetersService,
     private readonly purchases: PurchasesService,
+    private readonly numberPricing: NumberPricingService,
     private readonly read: UsageReadService,
     private readonly prisma: PrismaService,
   ) {}
@@ -130,6 +132,18 @@ export class UsageController {
     return this.read.communication(user.businessId, period, from, to);
   }
 
+  /** Exact monthly price of a phone number in a country (live provider price x markup rule). */
+  @Get('number-price')
+  numberPrice(
+    @Query('country') country: string,
+    @Query('type') type: string = 'local',
+  ) {
+    return this.numberPricing.quote(
+      country ?? '',
+      type === 'tollfree' ? 'tollfree' : 'local',
+    );
+  }
+
   @Get('country-prices')
   async countryPrices(@Query('metric') metric = 'sms_segments') {
     const rows = await this.meters.prices();
@@ -177,6 +191,7 @@ export class UsageController {
       user.sub,
       dto.key,
       dto.approved,
+      dto.country,
     );
   }
 

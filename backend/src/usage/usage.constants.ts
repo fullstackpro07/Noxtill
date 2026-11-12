@@ -53,6 +53,9 @@ export const METRICS = {
   WEBSITES: 'websites',
   INTEGRATIONS: 'integrations',
   VIDEO_MINUTES: 'video_minutes',
+  VIDEO_PARTICIPANTS: 'video_participants',
+  INTELLIGENCE_RUNS: 'intelligence_runs',
+  VIDEO_RECORDING_MINUTES: 'video_recording_minutes',
   TRANSCRIPTION_MINUTES: 'transcription_minutes',
   AI_PHONE_RECEPTIONIST: 'ai_phone_receptionist',
 } as const;
@@ -263,10 +266,40 @@ export const METER_SEEDS: MeterSeed[] = [
     enforced: false,
   },
   {
+    metricCode: 'video_recording_minutes',
+    displayName: 'Meeting recording minutes',
+    unit: 'minute',
+    kind: 'allowance',
+    provider: 'livekit',
+    resetRule: 'period',
+    isBillable: false,
+    enforced: false,
+  },
+  {
+    metricCode: 'intelligence_runs',
+    displayName: 'Intelligence runs',
+    unit: 'run',
+    kind: 'allowance',
+    provider: null,
+    resetRule: 'period',
+    isBillable: false,
+    enforced: false,
+  },
+  {
+    metricCode: 'video_participants',
+    displayName: 'Video meeting participants',
+    unit: 'participant',
+    kind: 'capacity',
+    provider: null,
+    resetRule: 'none',
+    isBillable: false,
+    enforced: false,
+  },
+  {
     metricCode: 'video_minutes',
     displayName: 'Video participant minutes',
     unit: 'minute',
-    kind: 'passthrough',
+    kind: 'allowance',
     provider: 'livekit',
     resetRule: 'period',
     isBillable: false,
@@ -399,6 +432,41 @@ export const PLAN_SEEDS: PlanSeed[] = [
   },
 ];
 
+/**
+ * Video Meetings limits per plan (pricing page C6). 0 = not included. null = custom (Enterprise),
+ * not capped here. The trial figures are a cost-protecting default, not from the pricing page.
+ */
+export const VIDEO_PLAN_LIMITS: Record<
+  string,
+  {
+    minutes: number | null;
+    participants: number | null;
+    /** Recorded minutes per month: 20 h on Professional, 100 h on Business, none on a trial. */
+    recordingMinutes: number | null;
+  }
+> = {
+  trial: { minutes: 100, participants: 10, recordingMinutes: 0 },
+  starter: { minutes: 0, participants: 0, recordingMinutes: 0 },
+  growth: { minutes: 0, participants: 0, recordingMinutes: 0 },
+  professional: { minutes: 2000, participants: 25, recordingMinutes: 1200 },
+  business: { minutes: 10000, participants: 50, recordingMinutes: 6000 },
+  enterprise: { minutes: null, participants: null, recordingMinutes: null },
+};
+
+/**
+ * The heavy intelligence features (pricing page C10 / owner decision 5): on a plan with a number
+ * here, each run uses one Intelligence run instead of AI credits, so daily use of the flagship
+ * features never drains the credit pool. Plans without a number keep paying for them in credits.
+ */
+export const INTELLIGENCE_OPERATION_CODES = new Set([
+  'bi.diagnosis',
+  'bi.business_simulator',
+  'competitive.recommendations',
+]);
+export const INTELLIGENCE_RUN_LIMITS: Record<string, number | null> = {
+  business: 150,
+};
+
 export const TRIAL_PLAN_KEY = 'trial';
 export const ENTERPRISE_PLAN_KEY = 'enterprise';
 export const TRIAL_DAYS = 14;
@@ -433,15 +501,15 @@ export const SMS_COUNTRY_PRICES =
 
 export const PRICE_SEEDS: PriceSeed[] = [
   ...SMS_COUNTRY_PRICES.map((p) => ({ metricCode: 'sms_segments', ...p })),
-  { metricCode: 'emails', unitPriceUsd: 1, per: 1000 },
+  { metricCode: 'emails', unitPriceUsd: 1.5, per: 1000 },
   { metricCode: 'ai_voice_minutes', unitPriceUsd: 0.35 },
   { metricCode: 'voice_minutes', countryCode: 'US', unitPriceUsd: 0.03 },
   { metricCode: 'speech_analysis_minutes', unitPriceUsd: 0.05 },
-  { metricCode: 'phone_numbers_local', numberType: 'local', unitPriceUsd: 3 },
+  { metricCode: 'phone_numbers_local', numberType: 'local', unitPriceUsd: 4 },
   {
     metricCode: 'phone_numbers_tollfree',
     numberType: 'tollfree',
-    unitPriceUsd: 5,
+    unitPriceUsd: 7,
   },
   { metricCode: 'agent_seats', unitPriceUsd: 19 },
   { metricCode: 'digitizer_pages', unitPriceUsd: 5, per: 100 },

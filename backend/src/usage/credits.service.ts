@@ -8,6 +8,8 @@ import {
 import { RemediesService } from './remedies.service';
 import {
   BAND_CREDITS,
+  INTELLIGENCE_OPERATION_CODES,
+  METRICS,
   CreditBand,
   ESTIMATE_EXCEEDED_RATIO,
   RESERVATION_TTL_MS,
@@ -42,6 +44,7 @@ interface LockedLedger {
   reserved_qty: number;
   state: string;
   operation_code: string;
+  band: string;
 }
 
 interface LockedBalance {
@@ -190,7 +193,7 @@ export class CreditsService {
 
   async reserve(input: ReserveInput): Promise<Reservation> {
     const rootId = await this.entitlements.rootId(input.businessId);
-    const quantity = Math.max(
+    let quantity = Math.max(
       1,
       Math.ceil(input.quantity ?? BAND_CREDITS[input.band]),
     );
@@ -242,6 +245,28 @@ export class CreditsService {
         },
       );
     }
+    // Heavy intelligence features use their own monthly run allowance, not AI credits.
+    const runMetered =
+      INTELLIGENCE_OPERATION_CODES.has(input.operationCode) &&
+      this.entitlements.includedFor(sub, METRICS.INTELLIGENCE_RUNS) != null;
+    if (runMetered) {
+      const set = await this.entitlements.resolve(rootId, { fresh: true });
+      const runs = set.metrics[METRICS.INTELLIGENCE_RUNS];
+      const limit = runs ? (runs.included ?? 0) + runs.purchased : 0;
+      if (!runs || runs.used + 1 > limit) {
+        await this.remedies.throwLimit(
+          USAGE_ERROR_CODES.ALLOWANCE_EXHAUSTED,
+          `You have used all ${limit.toLocaleString('en-US')} Intelligence runs for this period.`,
+          METRICS.INTELLIGENCE_RUNS,
+          ctx,
+          {
+            remaining: Math.max(0, limit - (runs?.used ?? 0)),
+            resetsAt: runs?.resetsAt ?? undefined,
+          },
+        );
+      }
+      quantity = 0;
+    }
     const balance = await this.ensureBalance(rootId, sub);
     const expiresAt = new Date(Date.now() + RESERVATION_TTL_MS);
 
@@ -259,7 +284,7 @@ export class CreditsService {
             businessId: rootId,
             idempotencyKey: input.idempotencyKey,
             operationCode: input.operationCode,
-            band: input.band,
+            band: runMetered ? 'run' : input.band,
             reservedQty: quantity,
             state: 'reserved',
             actorUserId: input.actorUserId ?? null,
@@ -325,7 +350,7 @@ export class CreditsService {
   ): Promise<{ charged: number }> {
     const result = await this.prisma.$transaction(async (tx) => {
       const [ledger] = await tx.$queryRaw<LockedLedger[]>`
-        SELECT id, business_id, reserved_qty, state, operation_code
+        SELECT id, business_id, reserved_qty, state, operation_code, band
           FROM credit_ledger WHERE id = ${reservationId} FOR UPDATE`;
       if (!ledger) {
         throw new AppException(
@@ -336,6 +361,25 @@ export class CreditsService {
       }
       if (ledger.state !== 'reserved')
         return { charged: 0, rootId: ledger.business_id, settled: false };
+      if (ledger.band === 'run') {
+        // Settled as one Intelligence run; no credits move.
+        await tx.creditLedger.update({
+          where: { id: reservationId },
+          data: { state: 'committed', actualQty: 0, settledAt: new Date() },
+        });
+        await tx.usageEvent.create({
+          data: {
+            businessId: ledger.business_id,
+            metricCode: METRICS.INTELLIGENCE_RUNS,
+            operationCode: ledger.operation_code,
+            quantity: 1,
+            unit: 'run',
+            idempotencyKey: `run:${reservationId}`,
+            occurredAt: new Date(),
+          },
+        });
+        return { charged: 0, rootId: ledger.business_id, settled: true };
+      }
       const reservedQty = Number(ledger.reserved_qty);
       const actual = Math.max(0, Math.ceil(actualQuantity ?? reservedQty));
       const [bal] = await tx.$queryRaw<LockedBalance[]>`
@@ -443,7 +487,7 @@ export class CreditsService {
   ): Promise<void> {
     const rootId = await this.prisma.$transaction(async (tx) => {
       const [ledger] = await tx.$queryRaw<LockedLedger[]>`
-        SELECT id, business_id, reserved_qty, state, operation_code
+        SELECT id, business_id, reserved_qty, state, operation_code, band
           FROM credit_ledger WHERE id = ${reservationId} FOR UPDATE`;
       if (!ledger || ledger.state !== 'reserved') return null;
       await tx.creditLedger.update({

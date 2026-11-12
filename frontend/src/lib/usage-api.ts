@@ -207,11 +207,25 @@ export const updateSpendCap = (group: "voice" | "messaging", body: { capUsd: num
   apiFetch<Record<string, SpendCapState>>(`/usage/spend-caps/${group}`, { method: "PUT", body: JSON.stringify(body) });
 
 export type PurchaseKey = "credits" | "seat" | "location" | "localnum" | "tollfree" | "agentseat";
-export const startPurchase = (key: PurchaseKey) =>
+export const startPurchase = (key: PurchaseKey, country?: string) =>
   apiFetch<{ status: "checkout" | "active"; checkoutUrl?: string; purchaseId: string }>("/usage/purchase", {
     method: "POST",
-    body: JSON.stringify({ key, approved: true }),
+    body: JSON.stringify({ key, approved: true, ...(country ? { country } : {}) }),
   });
+
+/** Exact monthly price of a phone number in a country (live provider price x markup rule). */
+export interface NumberQuote {
+  countryCode: string;
+  numberType: "local" | "tollfree";
+  priceUsd: number;
+  source: "live" | "floor";
+}
+export const fetchNumberPrice = (country: string, type: "local" | "tollfree") =>
+  apiFetch<NumberQuote>(`/usage/number-price?country=${encodeURIComponent(country)}&type=${type}`);
+
+/** Countries we publish prices for (the SMS catalogue), used to offer a country list. */
+export const fetchPriceCountries = () =>
+  apiFetch<{ countryCode: string; unitPriceUsd: number }[]>("/usage/country-prices?metric=sms_segments");
 
 export const fetchPlans = () => apiFetch<PlanCatalog>("/plans");
 

@@ -4,6 +4,8 @@ import { WebhookReceiver } from 'livekit-server-sdk';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { VoiceVideoRoomService } from './voice-video-room.service';
+import { MetersService } from '../usage/meters.service';
+import { METRICS } from '../usage/usage.constants';
 
 /** Provider-authenticated event times, not browser timers or scheduled meeting duration. */
 @Injectable()
@@ -12,6 +14,7 @@ export class VoiceMediaMeteringService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     @Optional() private readonly videoRooms?: VoiceVideoRoomService,
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
   async livekit(body: Buffer, authorization?: string) {
@@ -134,6 +137,26 @@ export class VoiceMediaMeteringService {
         },
       });
     });
+    // Participant minutes count against the plan's monthly video allowance. Same key as the
+    // measurement above, so a redelivered webhook is recorded once.
+    if (
+      event.event === 'participant_left' &&
+      Number.isSafeInteger(joinedAt) &&
+      joinedAt > 0 &&
+      joinedAt <= at
+    ) {
+      await this.meters?.record({
+        businessId: meeting.businessId,
+        metricCode: METRICS.VIDEO_MINUTES,
+        quantity: Math.round(((at - joinedAt) / 60) * 100) / 100,
+        unit: 'minute',
+        provider: 'livekit',
+        providerRef: participant.sid,
+        idempotencyKey: `livekit:participant:${participant.sid}`,
+        occurredAt: new Date(at * 1000),
+        metadata: { meetingId: meeting.id },
+      });
+    }
     return { accepted: true };
   }
 
