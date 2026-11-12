@@ -9,6 +9,8 @@ import { describeAiProviderFailure } from '../ai/ai-provider-error.util';
 import { AppException } from '../common/filters/app.exception';
 import { redactText } from './voice-redaction.util';
 import { VOICE_RETENTION_QUEUE } from './voice.constants';
+import { STT_MODEL, STT_PROVIDER } from '../ai/specialised-services';
+import { isAiNotConfiguredError } from '../ai/routing/ai-router.service';
 
 const MAX_TRANSCRIPTION_BYTES = 25 * 1024 * 1024;
 const MAX_TRANSCRIPT_CHARS = 80_000;
@@ -248,13 +250,13 @@ export class VoiceMeetingArtifactsService {
               create: {
                 businessId,
                 eventKey: `meeting-transcription-audio:${recordingId}`,
-                provider: 'openai',
+                provider: STT_PROVIDER,
                 unit: 'transcription_audio_seconds',
                 quantity: transcription.audioSeconds,
                 state: 'unpriced',
                 evidence: {
                   source: 'openai_verbose_transcription_response',
-                  model: 'whisper-1',
+                  model: STT_MODEL,
                   recordingId,
                   providerInvoiceCostAvailable: false,
                   unitIsMeasuredInputDurationNotCost: true,
@@ -275,7 +277,7 @@ export class VoiceMeetingArtifactsService {
         create: {
           businessId,
           eventKey: `meeting-transcription:${recordingId}`,
-          provider: 'openai',
+          provider: STT_PROVIDER,
           unit: 'meeting_transcription_bytes',
           quantity: object.sizeBytes,
           state: 'unpriced',
@@ -287,7 +289,7 @@ export class VoiceMeetingArtifactsService {
         },
       });
 
-      const summaryInput = await this.ai.complete(
+      const summaryResult = await this.ai.completeDetailed(
         businessId,
         [
           'Prepare a concise, factual meeting summary and an optional customer follow-up message using only the transcript below.',
@@ -301,6 +303,7 @@ export class VoiceMeetingArtifactsService {
         'voice_meeting_summary',
         900,
       );
+      const summaryInput = summaryResult.text;
       const generated = this.parseSummary(summaryInput);
       const safeSummary = redactText(generated.summary);
       const safeDraft = redactText(generated.followUpDraft);
@@ -359,8 +362,9 @@ export class VoiceMeetingArtifactsService {
             entityId: recordingId,
             action: 'voice.meeting.ai_artifacts_generated',
             after: {
-              provider: 'anthropic',
-              providerModelReported: false,
+              provider: summaryResult.provider ?? 'unknown',
+              model: summaryResult.model ?? null,
+              providerModelReported: Boolean(summaryResult.model),
               transcriptCharacters: transcript.length,
               redactions,
               followUpDraftAvailable: Boolean(safeDraft.text),
@@ -596,7 +600,7 @@ export class VoiceMeetingArtifactsService {
     if (responseCode.startsWith('AI_PROVIDER_'))
       return describeAiProviderFailure(error).message;
     if (text.includes('AI feature has been turned off')) return text;
-    if (text.includes('AI provider') || text.includes('ANTHROPIC_API_KEY'))
+    if (text.includes('AI provider') || isAiNotConfiguredError(error))
       return 'AI summary provider is unavailable or not configured. No summary was saved.';
     if (text.includes('SPEECH_TO_TEXT_UNAVAILABLE'))
       return 'Speech transcription provider is unavailable or not configured. No summary was saved.';

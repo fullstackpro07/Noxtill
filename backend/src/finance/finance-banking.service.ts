@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { FinBankAccount, FinBankLine, Prisma } from '@prisma/client';
 import { parse as csvParse } from 'csv-parse/sync';
 
@@ -18,6 +18,8 @@ import {
   ymd,
 } from './finance-context.service';
 import { FinancePostingService, LineInput } from './finance-posting.service';
+import { AiInfraService } from '../ai/ai-infra.service';
+import { expectJson, resultText } from '../ai/routing/validate';
 import { FinanceJournalsService } from './finance-journals.service';
 import { FIN_ERRORS } from './finance.constants';
 
@@ -33,7 +35,20 @@ export interface Suggestion {
   evidence: string;
   /** Why matching is not possible yet (shown as the disabled reason). */
   blocked?: string;
+  /** `ai` = model-suggested account (finance.categorise); never auto-applied. */
+  source?: 'ai';
+  /** The model's self-reported confidence, 0-100 (AI suggestions only). */
+  aiConfidence?: number;
 }
+
+/**
+ * finance.categorise review threshold (AI Model Routing spec §3.2): AI category suggestions at or
+ * above this go to "Suggested"; anything below lands in "Needs Review". Either way a person
+ * confirms before anything posts — AI suggestions are never auto-applied.
+ */
+export const AI_CATEGORISE_MIN_CONFIDENCE = 85;
+/** Upper bound on the chart-of-accounts list sent to the model. */
+const AI_CATEGORISE_MAX_ACCOUNTS = 200;
 
 interface ParsedLine {
   date: Date;
@@ -63,11 +78,15 @@ const words = (s: string) =>
  */
 @Injectable()
 export class FinanceBankingService {
+  private readonly logger = new Logger(FinanceBankingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ctx: FinanceContextService,
     private readonly posting: FinancePostingService,
     private readonly journals: FinanceJournalsService,
+    /** Optional so specs without the AI module still construct; no AI → no AI suggestion. */
+    @Optional() private readonly aiInfra?: AiInfraService,
   ) {}
 
   // ── accounts ─────────────────────────────────────────────────────────────
@@ -796,11 +815,22 @@ export class FinanceBankingService {
       }
     }
 
+    // finance.categorise: only when nothing deterministic matched. A line that already carries an
+    // AI suggestion keeps it (re-suggesting after a new rule must not re-bill every open line).
+    if (best.length === 0) {
+      const prior = line.suggestion as unknown as Suggestion | null;
+      const ai =
+        prior?.source === 'ai' && prior.accountId
+          ? { s: prior, conf: prior.aiConfidence ?? line.confidence ?? 0 }
+          : await this.aiCategorise(rootId, line, amt);
+      if (ai) best.push(ai);
+    }
+
     best.sort((x, y) => y.conf - x.conf);
     const top = best[0];
     const status = !top
       ? 'New'
-      : top.conf >= 85 && !top.s.blocked
+      : top.conf >= AI_CATEGORISE_MIN_CONFIDENCE && !top.s.blocked
         ? 'Suggested'
         : 'Needs Review';
     let updated = await this.prisma.finBankLine.update({
@@ -826,6 +856,107 @@ export class FinanceBankingService {
         );
     }
     return updated;
+  }
+
+  /**
+   * Asks the routed `finance.categorise` operation (Easy tier) to pick one account from this
+   * business's postable chart of accounts, with a confidence. Returns null — leaving the line
+   * "New", exactly as before — when AI is unavailable, capped, rate-limited, or the answer is not
+   * an account on the list.
+   */
+  private async aiCategorise(
+    rootId: string,
+    line: FinBankLine,
+    amt: number,
+  ): Promise<{ s: Suggestion; conf: number } | null> {
+    if (!this.aiInfra || amt === 0) return null;
+    const accounts = await this.prisma.finAccount.findMany({
+      where: {
+        businessId: rootId,
+        active: true,
+        isHeader: false,
+        control: null,
+        reconcilable: false,
+        type:
+          amt > 0
+            ? { in: ['revenue', 'liability', 'equity', 'asset'] }
+            : { in: ['expense', 'asset', 'liability', 'equity'] },
+      },
+      select: { id: true, code: true, name: true, type: true },
+      orderBy: { code: 'asc' },
+      take: AI_CATEGORISE_MAX_ACCOUNTS,
+    });
+    if (!accounts.length) return null;
+    const byCode = new Map(accounts.map((a) => [a.code, a]));
+    const prompt = [
+      'Categorise one bank transaction for a small business into exactly one account from the chart of accounts below.',
+      `Transaction: ${amt > 0 ? 'money in' : 'money out'} of ${Math.abs(amt).toFixed(2)} on ${ymd(line.date)}.`,
+      `Description: ${line.description}`,
+      line.payee ? `Payee: ${line.payee}` : '',
+      line.reference ? `Reference: ${line.reference}` : '',
+      'Accounts (code | name | type):',
+      accounts.map((a) => `${a.code} | ${a.name} | ${a.type}`).join('\n'),
+      'Reply with ONLY a JSON object: {"accountCode": "<one code from the list>", "confidence": <0-100, how sure you are>}.',
+      'Use a low confidence when the description is vague; never invent a code.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const isAnswer = (v: unknown) => {
+      const o = v as { accountCode?: unknown; confidence?: unknown } | null;
+      return (
+        typeof o?.accountCode === 'string' &&
+        byCode.has(o.accountCode) &&
+        typeof o.confidence === 'number'
+      );
+    };
+    let raw: string;
+    try {
+      raw = await this.aiInfra.complete(
+        rootId,
+        prompt,
+        0,
+        'finance_categorise',
+        120,
+        undefined,
+        expectJson(isAnswer),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `finance.categorise skipped for bank line ${line.id}: ${(error as Error).message}`,
+      );
+      return null;
+    }
+    let parsed: { accountCode?: unknown; confidence?: unknown };
+    try {
+      const text = resultText({
+        content: [{ type: 'text', text: raw }],
+        stopReason: null,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      parsed = JSON.parse(
+        text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1),
+      ) as typeof parsed;
+    } catch {
+      return null;
+    }
+    if (!isAnswer(parsed)) return null;
+    const acct = byCode.get(parsed.accountCode as string)!;
+    const conf = Math.max(
+      0,
+      Math.min(100, Math.round(Number(parsed.confidence))),
+    );
+    return {
+      conf,
+      s: {
+        kind: 'account',
+        source: 'ai',
+        aiConfidence: conf,
+        accountId: acct.id,
+        label: `AI: ${acct.code} · ${acct.name}`,
+        evidence: `AI suggestion · ${conf}% confident — confirm before matching${conf < AI_CATEGORISE_MIN_CONFIDENCE ? ' (below the review threshold)' : ''}`,
+      },
+    };
   }
 
   async resuggestAll(rootId: string) {

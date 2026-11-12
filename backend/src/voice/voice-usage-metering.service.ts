@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolvePolicies } from '../common/policies/policies.service';
+import { STT_MODEL, STT_PROVIDER } from '../ai/specialised-services';
 
 type SpendClient = Pick<
   Prisma.TransactionClient,
@@ -266,13 +267,13 @@ export class VoiceUsageMeteringService {
         businessId,
         callId: call.id,
         eventKey,
-        provider: 'openai',
+        provider: STT_PROVIDER,
         unit: 'transcription_audio_seconds',
         quantity: audioSeconds,
         state: 'unpriced',
         evidence: {
           source: 'openai_verbose_transcription_response',
-          model: 'whisper-1',
+          model: STT_MODEL,
           providerInvoiceCostAvailable: false,
           unitIsMeasuredInputDurationNotCost: true,
         },

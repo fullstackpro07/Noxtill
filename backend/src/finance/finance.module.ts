@@ -23,12 +23,14 @@ import { FinanceRecordsService } from './finance-records.service';
 import { FinanceDocsService } from './finance-docs.service';
 import { FinanceJobsService } from './finance-jobs.service';
 import { FinanceProcessor, FinanceScheduler } from './finance.processor';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: FINANCE_QUEUE }),
     CreditModule,
     DigitizerModule,
+    AiModule,
   ],
   controllers: [FinanceController],
   providers: [

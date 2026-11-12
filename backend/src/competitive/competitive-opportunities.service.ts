@@ -10,6 +10,7 @@ import { AiInfraService } from '../ai/ai-infra.service';
 import { ListingSyncService } from '../listings/listing-sync.service';
 import { CompetitiveSettingsService } from './competitive-settings.service';
 import { CompetitiveOpportunityKind } from '@prisma/client';
+import { expectJson } from '../ai/routing/validate';
 
 interface GapFact {
   kind: CompetitiveOpportunityKind;
@@ -133,6 +134,9 @@ export class CompetitiveOpportunitiesService {
       prompt,
       0,
       'competitive_recommendation',
+      undefined,
+      undefined,
+      expectJson((v) => Array.isArray(v)),
     );
     const parsed = this.parseArray(raw, facts.length);
     if (!parsed) {

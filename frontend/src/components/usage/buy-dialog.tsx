@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
-import { startPurchase, type PriceRow, type PurchaseKey, type UsageOverview } from "@/lib/usage-api";
+import { fetchNumberPrice, fetchPriceCountries, startPurchase, type PriceRow, type PurchaseKey, type UsageOverview } from "@/lib/usage-api";
 import { Modal, U, ghostBtn, money2, primaryBtn } from "./usage-ui";
 
 const DEFS: Record<PurchaseKey, { title: string; item: string; metric: string; billing: string; recurring: boolean; note: string }> = {
@@ -25,6 +25,7 @@ export function buyLabel(o: UsageOverview, key: PurchaseKey): string {
   const p = priceFor(o.prices, d.metric);
   if (p == null) return d.title;
   const short = { credits: "Buy 1,000 credits", seat: "Add a seat", location: "Add a location", localnum: "Add local number", tollfree: "Add toll-free number", agentseat: "Add agent seat" }[key];
+  if (key === "localnum" || key === "tollfree") return `${short} · from ${money2(p).replace(".00", "")}/month`;
   return `${short} · ${key === "credits" ? money2(p).replace(".00", "") : `${money2(p).replace(".00", "")}/month`}`;
 }
 
@@ -41,12 +42,20 @@ export function BuyDialog({ o, k, onClose, onDone }: { o: UsageOverview; k: Purc
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState("");
   const d = DEFS[k];
+  const isNumber = k === "localnum" || k === "tollfree";
+  const [country, setCountry] = useState("US");
+  const countries = useQuery({ queryKey: ["usage", "price-countries"], queryFn: fetchPriceCountries, enabled: isNumber, staleTime: 3600_000 });
+  const quote = useQuery({ queryKey: ["usage", "number-price", country, k], queryFn: () => fetchNumberPrice(country, k === "tollfree" ? "tollfree" : "local"), enabled: isNumber, retry: false });
   const price = priceFor(o.prices, d.metric);
-  // Seed prices are per pack (1,000 credits) or per unit (one seat/location/number).
-  const amount = price;
+  // Numbers are priced per country from the provider's live price; everything else is a seed price
+  // per pack (1,000 credits) or per unit (one seat/location).
+  const amount = isNumber ? (quote.data?.priceUsd ?? null) : price;
   const blocker = buyBlocker(o, k);
+  const names = typeof Intl !== "undefined" && "DisplayNames" in Intl ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
+  const countryName = (c: string) => { try { return names?.of(c) ?? c; } catch { return c; } };
+  const countryList = [...new Set(["US", ...(countries.data ?? []).map((c) => c.countryCode)])].sort((a, b) => (a === "US" ? -1 : b === "US" ? 1 : countryName(a).localeCompare(countryName(b))));
   const buy = useMutation({
-    mutationFn: () => startPurchase(k),
+    mutationFn: () => startPurchase(k, isNumber ? country : undefined),
     onSuccess: (r) => {
       if (r.checkoutUrl) {
         window.location.assign(r.checkoutUrl);
@@ -62,7 +71,7 @@ export function BuyDialog({ o, k, onClose, onDone }: { o: UsageOverview; k: Purc
       <dl style={{ margin: 0, background: U.subtle, borderRadius: 11, padding: "4px 14px" }}>
         {[
           ["Item", d.item],
-          ["Price", amount == null ? "No published price" : `${money2(amount)}${d.recurring ? " / month" : ""}`],
+          ["Price", isNumber && quote.isLoading ? "Checking current price…" : amount == null ? (isNumber ? "Price unavailable right now" : "No published price") : `${money2(amount)}${d.recurring ? " / month" : ""}`],
           ["Billing", d.billing],
           ["Tax", "Calculated by Stripe"],
         ].map(([kk, v], i) => (
@@ -72,6 +81,24 @@ export function BuyDialog({ o, k, onClose, onDone }: { o: UsageOverview; k: Purc
           </div>
         ))}
       </dl>
+      {isNumber ? (
+        <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, color: U.text2, fontWeight: 600 }}>
+          Country for this number
+          <select value={country} onChange={(e) => { setCountry(e.target.value); setOk(false); setErr(""); }} style={{ height: 38, borderRadius: 9, border: "1px solid #D9DEE4", padding: "0 10px", fontSize: 13 }}>
+            {countryList.map((c) => (
+              <option key={c} value={c}>
+                {countryName(c)}
+              </option>
+            ))}
+          </select>
+          <span style={{ fontWeight: 400, color: U.text3, lineHeight: 1.5 }}>Number prices vary by country and number type. The exact price is shown here before you buy.</span>
+        </label>
+      ) : null}
+      {isNumber && quote.isError ? (
+        <div role="alert" style={{ fontSize: 12, color: U.warnText, fontWeight: 700, lineHeight: 1.5 }}>
+          {quote.error instanceof ApiError ? quote.error.message : "We couldn't check the price for this country right now."}
+        </div>
+      ) : null}
       <div style={{ fontSize: 12, color: U.text3, lineHeight: 1.55 }}>{d.note}</div>
       {blocker ? <div style={{ fontSize: 12, color: U.warnText, fontWeight: 700, lineHeight: 1.5 }}>{blocker}</div> : null}
       {err ? (

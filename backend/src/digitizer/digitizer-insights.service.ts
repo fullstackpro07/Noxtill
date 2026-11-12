@@ -8,7 +8,6 @@ import { isOpenStatus, needsHuman } from './digitizer-summary';
 import { formatAmount, parseAmount, parseIsoDate } from './digitizer-rules';
 import {
   DIGITIZER_ERROR_CODES,
-  DIGITIZER_MODEL,
   OUTLIER_AMOUNT_MULTIPLE,
   OUTLIER_MIN_SAMPLES,
   STOCK_JUMP_MULTIPLE,
@@ -842,7 +841,6 @@ export class DigitizerInsightsService {
         businessId,
         'digitizer_assistant',
         {
-          model: DIGITIZER_MODEL,
           temperature: 0,
           maxTokens: 1200,
           system:

@@ -33,7 +33,7 @@ export function SettingsScreen() {
     }));
 
   // The only real AI capability this module has is ad-copy generation, via the same assistant
-  // used elsewhere in Noxtill (Claude, through AiInfraService) — not OpenAI, Adobe Firefly or
+  // used elsewhere in Noxtill (routed AI, through AiInfraService) — no OpenAI image tools, Adobe Firefly or
   // Canva, none of which are integrated here. A previous version of this screen listed all three
   // as "Connected".
   const providers = [

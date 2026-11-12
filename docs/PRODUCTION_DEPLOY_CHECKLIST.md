@@ -53,7 +53,11 @@ to. A production deploy must replace every placeholder row before going live.
 
 | Var | Status here | Notes |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | **Disclosed placeholder (empty)** | Every AI feature (assistant, reviews AI-draft, what-if, branch-advisor, business-type AI-map) reaches the real Claude call and fails with a clean `AI_UNAVAILABLE` typed error without it. |
+| `OPENAI_API_KEY` | Empty locally | AI Model Routing primary for the Easy and Medium tiers, fallback for Hard. Also live phone audio, speech-to-text and image generation. |
+| `ANTHROPIC_API_KEY` | Empty locally | AI Model Routing primary for the Hard tier, fallback for Easy, Medium and Vision. |
+| `GEMINI_API_KEY` | Empty locally | AI Model Routing primary for the Vision service (Photo Digitizer, chat image attachments). |
+
+Models per tier are set only in `backend/src/ai/routing/ai-routing.config.ts`. A provider with no key is skipped and its fallback is used; with no key on either side of a route, that AI feature returns its clean "not configured" error. Every call is logged to `ai_usage`.
 
 ### Marketing external lookups
 
@@ -192,7 +196,7 @@ Status here is this dev machine's `backend/.env` (names checked, values never pr
 | `SERPAPI_KEY` | Set locally; SEO rank tracking provider reports configured. |
 | `EMAIL_PROVIDER_KEY` | Set locally. |
 | Redis | Reachable locally (Redis 8.10.2 built from source, running as a foreground process — not a service). Production still needs managed Redis ≥5. Full backend suite incl. `queue.integration.spec` passes against it. |
-| AI model | `backend/src/ai/claude.client.ts` hard-codes `DEFAULT_MODEL = 'claude-3-5-haiku-20241022'`. **Confirm Anthropic still serves this model before launch** — if not, every AI feature fails. |
+| AI model | Superseded 2026-11-12: models are routed per tier in `backend/src/ai/routing/ai-routing.config.ts`. **Confirm each provider account can access the configured model IDs and verify the prices there before launch.** |
 
 ### 7.2 Env vars used by code but not listed above (all unset locally)
 
@@ -201,7 +205,8 @@ Status here is this dev machine's `backend/.env` (names checked, values never pr
 | `REDIS_URL`, `REDIS_USERNAME`, `REDIS_PASSWORD`, `REDIS_TLS` | Managed-Redis connection (`common/queue/redis-connection.util.ts`) | **Yes** — use these for a managed/TLS Redis instead of host/port. |
 | `PLATFORM_ADMIN_KEY` | Platform admin routes guard | **Yes** — set a fresh random value. |
 | `LOCAL_STORAGE_ROOT` | Local file storage fallback when S3 isn't set | Only if not using S3. |
-| `OPENAI_API_KEY` | AI image generation, voice transcription | If those features launch. |
+| `OPENAI_API_KEY` | AI Model Routing (Easy/Medium primary, Hard fallback), image generation, voice transcription | **Yes** — see §1 AI. |
+| `GEMINI_API_KEY` | AI Model Routing Vision service (Photo Digitizer) | Recommended; Anthropic is the vision fallback without it. |
 | `SHOPIFY_CLIENT_ID` / `_SECRET` | Shopify connector (Commerce channel listings publish/sync) | If Shopify launches. WooCommerce uses per-store keys, no env var. |
 | `FACEBOOK_APP_SECRET` | Social inbox webhook + Instagram connector | If social inbox launches. |
 | `TELNYX_PUBLIC_KEY`, `VOICE_TRANSFER_NUMBER`, `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` (Polly) | AI Phone / voice | If AI Phone launches. |

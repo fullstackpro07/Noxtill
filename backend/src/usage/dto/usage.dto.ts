@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Length,
   Max,
   MaxLength,
   Min,
@@ -33,6 +34,12 @@ export class PurchaseDto {
   /** "I approve this purchase at the price shown." */
   @IsBoolean()
   approved!: boolean;
+
+  /** Required for phone numbers: the country the number is for (price is per country). */
+  @IsOptional()
+  @IsString()
+  @Length(2, 2)
+  country?: string;
 }
 
 export class SpendCapDto {

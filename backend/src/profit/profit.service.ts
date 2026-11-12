@@ -14,6 +14,7 @@ import {
   WeekdayRow,
 } from './profit.types';
 import { PnlPeriod } from './dto/query-pnl.dto';
+import { expectJson } from '../ai/routing/validate';
 
 const WEEKDAY_NAMES = [
   'Sunday',
@@ -206,6 +207,9 @@ export class ProfitService {
       prompt,
       0,
       'profit_insight',
+      undefined,
+      undefined,
+      expectJson((v) => Array.isArray(v)),
     );
     const jsonStart = raw.indexOf('[');
     const jsonEnd = raw.lastIndexOf(']');
@@ -655,6 +659,9 @@ export class ProfitService {
       prompt,
       0,
       'profit_insight',
+      undefined,
+      undefined,
+      expectJson((v) => Array.isArray(v)),
     );
     const jsonStart = raw.indexOf('[');
     const jsonEnd = raw.lastIndexOf(']');

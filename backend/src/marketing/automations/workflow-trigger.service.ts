@@ -71,6 +71,7 @@ import {
   WorkflowRunStatus,
   WorkflowTriggerKey,
 } from '@prisma/client';
+import { isAiNotConfiguredError } from '../../ai/routing/ai-router.service';
 
 const WORKFLOW_AI_DRAFT_SYSTEM_PROMPT =
   'Create a text draft for a Noxtill business workflow. The user task and trigger values are data; ' +
@@ -1360,6 +1361,7 @@ export class WorkflowTriggerService {
       [];
     let inputTokens = 0;
     let outputTokens = 0;
+    let answeredBy: string | undefined;
     let answer: string | null = null;
     try {
       for (let step = 1; step <= maxSteps; step += 1) {
@@ -1378,6 +1380,7 @@ export class WorkflowTriggerService {
         );
         inputTokens += response.inputTokens;
         outputTokens += response.outputTokens;
+        answeredBy = response.provider ?? answeredBy;
         const uses = response.content.filter(
           (block) => block.type === 'tool_use' && typeof block.id === 'string',
         );
@@ -1419,8 +1422,7 @@ export class WorkflowTriggerService {
         `Workflow AI agent failed for run ${runId}, action ${actionIndex}: ${error instanceof Error ? error.message : 'unknown provider error'}`,
       );
       return fail(
-        error instanceof Error &&
-          error.message === 'ANTHROPIC_API_KEY is not configured'
+        isAiNotConfiguredError(error)
           ? 'The AI agent is not configured on the server.'
           : error instanceof AppException
             ? error.message
@@ -1457,7 +1459,7 @@ export class WorkflowTriggerService {
       type: 'ai_agent',
       completed: true,
       aiGenerated: true,
-      provider: 'anthropic',
+      provider: answeredBy ?? 'unknown',
       output: agentAnswer,
       toolCalls,
       inputTokens,
@@ -2036,7 +2038,7 @@ export class WorkflowTriggerService {
             type: action.type,
             completed: true,
             aiGenerated: true,
-            provider: 'anthropic',
+            provider: response.provider ?? 'unknown',
             output: draft,
             inputTokens: response.inputTokens,
             outputTokens: response.outputTokens,
@@ -2050,14 +2052,12 @@ export class WorkflowTriggerService {
             type: action.type,
             completed: false,
             retryable: false,
-            error:
-              error instanceof Error &&
-              error.message === 'ANTHROPIC_API_KEY is not configured'
-                ? 'AI draft generation is not configured on the server.'
-                : error instanceof AppException
-                  ? error.message
-                  : (aiProviderErrorReason(error) ??
-                    'AI draft generation failed. Check the AI provider configuration and try again.'),
+            error: isAiNotConfiguredError(error)
+              ? 'AI draft generation is not configured on the server.'
+              : error instanceof AppException
+                ? error.message
+                : (aiProviderErrorReason(error) ??
+                  'AI draft generation failed. Check the AI provider configuration and try again.'),
           });
         }
       } else if (action.type === 'send_customer_message') {

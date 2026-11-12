@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { VoiceProviderHealthService } from './voice-provider-health.service';
+import { AiRouterService } from '../ai/routing/ai-router.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -33,9 +34,13 @@ describe('VoiceProviderHealthService (real MySQL)', () => {
     prisma = new PrismaService();
     await prisma.$connect();
     const cls = new FakeClsService();
+    const configService = {
+      get: (key: string) => config[key],
+    } as unknown as ConfigService;
     service = new VoiceProviderHealthService(
       new TenantPrismaService(prisma, cls as unknown as ClsService),
-      { get: (key: string) => config[key] } as unknown as ConfigService,
+      configService,
+      new AiRouterService(configService),
     );
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     businessId = (
@@ -123,7 +128,10 @@ describe('VoiceProviderHealthService (real MySQL)', () => {
   });
 
   it('checks speech and AI reply configuration independently without paid requests', async () => {
-    config.OPENAI_API_KEY = 'test-speech-key';
+    // AI replies are routed: with no OpenAI or Anthropic key, replies are not configured even
+    // though another key (Gemini, vision only) is present.
+    config.GEMINI_API_KEY = 'test-vision-key';
+    delete config.OPENAI_API_KEY;
     delete config.ANTHROPIC_API_KEY;
     mockedAxios.get
       .mockResolvedValueOnce({ data: { status: 'active' } })
@@ -136,14 +144,33 @@ describe('VoiceProviderHealthService (real MySQL)', () => {
       const health = await service.health(businessId);
       expect(health.checks.find((c) => c.key === 'speech_ai')).toMatchObject({
         label: 'Speech transcription',
-        status: 'warning',
+        status: 'not_configured',
       });
       expect(health.checks.find((c) => c.key === 'ai_replies')).toMatchObject({
         status: 'not_configured',
       });
       expect(mockedAxios.post.mock.calls).toHaveLength(0);
+
+      // An OpenAI key alone now serves both speech and (routed) AI replies.
+      config.OPENAI_API_KEY = 'test-openai-key';
+      mockedAxios.get
+        .mockResolvedValueOnce({ data: { status: 'active' } })
+        .mockResolvedValueOnce({
+          data: {
+            voice_url: 'https://api.example.com/api/v1/voice/webhook/incoming',
+          },
+        });
+      const withOpenAi = await service.health(businessId);
+      expect(
+        withOpenAi.checks.find((c) => c.key === 'speech_ai'),
+      ).toMatchObject({ status: 'warning' });
+      const replies = withOpenAi.checks.find((c) => c.key === 'ai_replies');
+      expect(replies).toMatchObject({ status: 'warning' });
+      expect(replies?.detail).toContain('OpenAI');
+      expect(mockedAxios.post.mock.calls).toHaveLength(0);
     } finally {
       delete config.OPENAI_API_KEY;
+      delete config.GEMINI_API_KEY;
     }
   });
 

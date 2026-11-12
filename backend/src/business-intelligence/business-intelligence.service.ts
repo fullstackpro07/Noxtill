@@ -16,6 +16,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { WidgetsService } from '../widgets/widgets.service';
 import { BI_OVERVIEW_WIDGETS } from './business-intelligence.constants';
 import { CreateBiScenarioDto } from './dto/create-bi-scenario.dto';
+import { isAiNotConfiguredError } from '../ai/routing/ai-router.service';
 
 const INSIGHT_DESTINATIONS: Partial<Record<AiInsightCategory, string>> = {
   sales: '/profit',
@@ -904,8 +905,8 @@ export class BusinessIntelligenceService {
       const providerMessage = this.providerErrorMessage(error);
       throw new AppException(
         'BI_AI_UNAVAILABLE',
-        providerMessage.includes('ANTHROPIC_API_KEY')
-          ? 'Business Brain AI is not configured on this server. Configure an Anthropic API key in the server environment.'
+        isAiNotConfiguredError(error)
+          ? 'Business Brain AI is not configured on this server. Configure an AI provider API key in the server environment.'
           : `Business Brain could not get an answer from the AI provider: ${providerMessage}`,
         HttpStatus.SERVICE_UNAVAILABLE,
       );

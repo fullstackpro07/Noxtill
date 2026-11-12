@@ -390,7 +390,7 @@ function ReviewEditor({
                 <div className="text-[11px] font-extrabold">AI review suggestions</div>
                 <button type="button" className="h-[31px] rounded-[7px] border border-[#B8D5F5] bg-white px-2.5 text-[10.5px] font-bold disabled:opacity-50" disabled={suggesting} onClick={onSuggest}>{suggesting ? "Reviewing transcript…" : "Suggest scores with AI"}</button>
               </div>
-              <div className="mt-1 text-[10.5px] leading-[1.5] text-[#5B6675]">The selected transcript and rubric are sent to Anthropic; obvious email, phone and payment-card-like numbers are masked. Suggestions stay unsaved until you verify and save them.</div>
+              <div className="mt-1 text-[10.5px] leading-[1.5] text-[#5B6675]">The selected transcript and rubric are sent to Noxtill&apos;s AI provider; obvious email, phone and payment-card-like numbers are masked. Suggestions stay unsaved until you verify and save them.</div>
               {aiSuggestionDraft ? <div role="status" className="mt-2 text-[10.5px] font-bold text-[#175CD3]">AI draft loaded — check every score and cited turn before saving.</div> : null}
             </div>
           ) : null}

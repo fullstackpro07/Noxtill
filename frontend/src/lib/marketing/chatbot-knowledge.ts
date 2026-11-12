@@ -104,30 +104,30 @@ running several locations from one account.
 
 ## 5. PRICING
 Four plans plus Enterprise, billed monthly or yearly (yearly is paid upfront for 12 months and is
-about 25% cheaper than monthly). No per-user fees: each plan includes a set number of users. Every
+about 25% cheaper than monthly). Noxtill never takes a percentage of your sales. Each plan includes a set number of users; extra users are $10/month, and people who take or make phone calls need an agent seat ($19/month each; AI agents never need a seat). Every
 plan starts with a 14-day free trial with no credit card required (trials include 200 AI credits;
 AI Receptionist calls and paid SMS or marketing campaigns unlock after a payment method is added).
 When a trial ends there is a 72-hour grace period to activate a plan and a 30-day window to export
 data.
 
-- Starter — $39/mo, or $29/mo billed yearly ($348/year). For single-location businesses getting
+- Starter — $39/mo, or $29/mo billed yearly ($351/year). For single-location businesses getting
   organized. 2 users, 1 location, 500 AI credits/month, 2,000 emails/month. Includes Dashboard &
   Nightly Close, Fast Sale (POS), orders/quotes/invoices, Products & Services, Inventory, Customer
   Credit, Bookings, Customers (CRM), Staff, AI Assistant, AI Photo Digitizer, WhatsApp alerts and
   receipts, Reports, integrations.
-- Growth — $79/mo, or $59/mo billed yearly ($708/year). Most popular. For growing businesses that
+- Growth — $79/mo, or $59/mo billed yearly ($711/year). Most popular. For growing businesses that
   market and message customers. 5 users, 1 location, 1,500 AI credits, 10,000 emails, 2,000
   automation runs. Everything in Starter, plus Unified Inbox, Marketing & Campaigns, Reviews &
   Reputation, Social Media Management, Business Listings, Website & Commerce, Automations &
   Workflows, Projects & Tasks, Delivery & Riders, Profit & Analytics, sales pipeline, the AI
   Receptionist agent and calling tools, live chat support.
-- Professional — $159/mo, or $119/mo billed yearly ($1,428/year). For established businesses
+- Professional — $159/mo, or $119/mo billed yearly ($1,431/year). For established businesses
   running finance, field teams and support. 15 users, 3 locations, 4,000 AI credits, 25,000 emails,
   10,000 automation runs. Everything in Growth, plus Finance & Accounting, People & Payroll,
   Payments & Billing, Field Service, Helpdesk, Customer Portal, Contracts & eSign, more AI voice
   agents, AI agents in workflows, AI Copilot, custom roles, full audit trail, guided onboarding call.
-- Business — $319/mo, or $239/mo billed yearly ($2,868/year). The complete 40-module Business OS
-  for multi-location teams. 40 users, 10 locations, 8,000 AI credits, 75,000 emails, 50,000
+- Business — $319/mo, or $239/mo billed yearly ($2,871/year). The complete 40-module Business OS
+  for multi-location teams. 40 users, 10 locations, 8,000 AI credits, 150 Intelligence runs (Business Intelligence, Business Simulator and Competitive Insights use runs instead of credits), 75,000 emails, 50,000
   automation runs. Everything in Professional, plus Branches, Business Intelligence, SEO Autopilot,
   Autonomous Commerce, Procurement, Assets & Maintenance, Advertising, Competitive Insights, all 8
   AI voice agents, sandbox environments, priority support.
@@ -142,12 +142,12 @@ cannot be combined with other offers).
 Usage-based add-ons (not included in plan prices):
 - AI Receptionist: $0.35 per AI minute, no monthly fee (Growth and above). Human agent seat
   $19/month per agent who takes or makes calls; human call minutes $0.03/min in the U.S.; phone
-  numbers $3/month local, $5/month toll-free; Speech & Quality Intelligence $0.05 per analyzed
+  numbers from $4/month (price varies by country and number type); Speech & Quality Intelligence $0.05 per analyzed
   minute (Professional and above).
 - Extra user $10/month; extra location $39/month; extra website $15/month.
-- AI credits $10 per 1,000; extra emails $1 per 1,000; AI Photo Digitizer pages $5 per 100; extra
+- AI credits $10 per 1,000; extra emails $1.50 per 1,000; AI Photo Digitizer pages $5 per 100; extra
   SEO keywords $10 per 100; extra eSign envelopes $1 each. SMS rates vary by country and are shown
-  before sending. People & Payroll is $29 + $6 per employee (Professional and Business).
+  before sending; U.S. SMS requires carrier registration (A2P 10DLC), which normally takes 1-2 weeks. People & Payroll is $29 + $6 per employee (Professional and Business).
 
 Billing facts:
 - Cancel anytime. Upgrades apply immediately and are prorated; downgrades take effect at the next

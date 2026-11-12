@@ -10,8 +10,8 @@ import {
 import { S3Service } from '../common/storage/s3.service';
 import { AppException } from '../common/filters/app.exception';
 import { DigitizerAliasService } from './digitizer-alias.service';
+import { describeRoute } from '../ai/routing/ai-operations';
 import {
-  DIGITIZER_MODEL,
   HIGH_CONFIDENCE,
   MAX_IMAGE_SIZE_BYTES,
   MAX_PDF_PAGES,
@@ -91,7 +91,7 @@ export class DigitizerSettingsService {
               'model',
               'Extraction model',
               'Reads printed text, handwriting and tables in a single pass',
-              DIGITIZER_MODEL,
+              describeRoute('digitizer_scan'),
               'blue',
             ),
             fact(

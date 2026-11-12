@@ -13,6 +13,7 @@ import {
   MAX_TRACKED_KEYWORDS,
 } from './marketing.constants';
 import { KeywordRankProcessor } from './jobs/keyword-rank.processor';
+import { expectJson } from '../ai/routing/validate';
 
 const HISTORY_CHECKS = 12;
 const SUGGESTION_COUNT = 10;
@@ -251,6 +252,9 @@ export class KeywordsService {
         prompt,
         0.4,
         'keyword_suggestions',
+        undefined,
+        undefined,
+        expectJson((v) => Array.isArray(v)),
       );
     } catch (error) {
       if (error instanceof AppException) throw error;

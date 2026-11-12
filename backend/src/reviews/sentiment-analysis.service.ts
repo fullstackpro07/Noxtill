@@ -8,6 +8,7 @@ import {
   SENTIMENT_REVIEW_LOOKBACK,
 } from './sentiment-analysis.constants';
 import { ReviewSentimentSource } from '@prisma/client';
+import { expectJson } from '../ai/routing/validate';
 
 interface RawThemeResponse {
   theme: string;
@@ -163,6 +164,9 @@ export class SentimentAnalysisService {
         prompt,
         0,
         'review_sentiment',
+        undefined,
+        undefined,
+        expectJson((v) => Array.isArray(v)),
       );
     } catch (error) {
       this.logger.warn(

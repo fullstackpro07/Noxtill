@@ -5,6 +5,7 @@ import { AppException } from '../common/filters/app.exception';
 import { EntitlementsService } from './entitlements.service';
 import { CreditsService } from './credits.service';
 import { MetersService } from './meters.service';
+import { NumberPricingService } from './number-pricing.service';
 import { UsageStripeHelper } from './usage-stripe.helper';
 import {
   PURCHASABLES,
@@ -26,6 +27,7 @@ export class PurchasesService {
     private readonly credits: CreditsService,
     private readonly meters: MetersService,
     private readonly stripeHelper: UsageStripeHelper,
+    private readonly numberPricing: NumberPricingService,
   ) {}
 
   async list(businessId: string) {
@@ -42,6 +44,7 @@ export class PurchasesService {
     actorUserId: string,
     key: PurchaseKey,
     approved: boolean,
+    country?: string,
   ): Promise<{
     status: 'checkout' | 'active';
     checkoutUrl?: string;
@@ -82,7 +85,22 @@ export class PurchasesService {
         HttpStatus.FORBIDDEN,
       );
     }
-    const unit = await this.meters.unitPrice(def.metricCode);
+    // Phone numbers are priced per country from the provider's live price (never a flat table).
+    const isNumber = key === 'localnum' || key === 'tollfree';
+    if (isNumber && !country)
+      throw new AppException(
+        USAGE_ERROR_CODES.PURCHASE_NOT_AVAILABLE,
+        'Choose the country for this number. Number prices vary by country.',
+        HttpStatus.BAD_REQUEST,
+      );
+    const unit = isNumber
+      ? (
+          await this.numberPricing.quote(
+            country!,
+            key === 'localnum' ? 'local' : 'tollfree',
+          )
+        ).priceUsd
+      : await this.meters.unitPrice(def.metricCode);
     if (unit == null)
       throw new AppException(
         USAGE_ERROR_CODES.PURCHASE_NOT_AVAILABLE,
@@ -171,7 +189,11 @@ export class PurchasesService {
         },
         proration_behavior: 'always_invoice',
         payment_behavior: 'error_if_incomplete',
-        metadata: { noxtill_addon: key, purchaseId: purchase.id },
+        metadata: {
+          noxtill_addon: key,
+          purchaseId: purchase.id,
+          ...(country ? { country: country.toUpperCase() } : {}),
+        },
       });
     } catch (error) {
       await this.prisma.capacityPurchase.update({

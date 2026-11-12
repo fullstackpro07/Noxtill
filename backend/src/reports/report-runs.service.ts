@@ -28,6 +28,7 @@ import {
   previousMonth,
   round2,
 } from './reports.types';
+import { expectJson } from '../ai/routing/validate';
 
 export type ReportTrigger = 'manual' | 'schedule' | 'ai_builder';
 
@@ -953,6 +954,9 @@ export class ReportRunsService {
         prompt,
         0,
         AI_BUILDER_KIND,
+        undefined,
+        undefined,
+        expectJson((v) => typeof v === 'object' && v !== null),
       );
       const start = raw.indexOf('{');
       const end = raw.lastIndexOf('}');

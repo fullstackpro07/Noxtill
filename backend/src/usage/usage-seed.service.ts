@@ -7,6 +7,8 @@ import {
   METER_SEEDS,
   PLAN_SEEDS,
   PRICE_SEEDS,
+  VIDEO_PLAN_LIMITS,
+  INTELLIGENCE_RUN_LIMITS,
   ZERO_INCLUDED_CAPACITY,
 } from './usage.constants';
 
@@ -107,6 +109,42 @@ export class UsageSeedService implements OnModuleInit {
             p.receptionist == null ? null : p.receptionist ? 1 : 0,
           resetRule: 'none',
         },
+        ...(VIDEO_PLAN_LIMITS[p.key]
+          ? [
+              {
+                planId: plan.id,
+                metricCode: 'video_minutes',
+                kind: 'allowance',
+                includedQuantity: VIDEO_PLAN_LIMITS[p.key].minutes,
+                resetRule: 'period',
+              },
+              {
+                planId: plan.id,
+                metricCode: 'video_participants',
+                kind: 'capacity',
+                includedQuantity: VIDEO_PLAN_LIMITS[p.key].participants,
+                resetRule: 'none',
+              },
+              {
+                planId: plan.id,
+                metricCode: 'video_recording_minutes',
+                kind: 'allowance',
+                includedQuantity: VIDEO_PLAN_LIMITS[p.key].recordingMinutes,
+                resetRule: 'period',
+              },
+            ]
+          : []),
+        ...(p.key in INTELLIGENCE_RUN_LIMITS
+          ? [
+              {
+                planId: plan.id,
+                metricCode: 'intelligence_runs',
+                kind: 'allowance',
+                includedQuantity: INTELLIGENCE_RUN_LIMITS[p.key],
+                resetRule: 'period',
+              },
+            ]
+          : []),
         ...ZERO_INCLUDED_CAPACITY.map((metricCode) => ({
           planId: plan.id,
           metricCode,

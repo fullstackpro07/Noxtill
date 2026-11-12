@@ -78,21 +78,23 @@ export const KIND_TO_FEATURE: Record<string, AiFeatureKey> = {
   workflow_agent: 'workflowAgents',
 };
 
-/** EU AI Act transparency requirement (UPD-BE-115) — shown verbatim on the AI Settings screen. */
+/**
+ * EU AI Act transparency requirement (UPD-BE-115) — shown verbatim on the AI Settings screen.
+ * The provider list follows `routing/ai-routing.config.ts`.
+ */
 export const AI_USAGE_DISCLOSURE_TEXT =
-  'Noxtill uses AI (Anthropic Claude, and OpenAI for live voice, transcription and image generation) to ' +
-  "power the features below. AI-generated text and suggestions are based on this business's own " +
-  'data and are clearly presented as AI-generated. Workflow AI drafts are saved to run history ' +
+  'Noxtill uses AI from OpenAI and Anthropic for text features (each AI operation runs on one ' +
+  'provider and automatically falls back to the other if it is unavailable), Google Gemini for ' +
+  'reading photos and documents (with Anthropic as fallback), and OpenAI for live voice, ' +
+  "transcription and image generation. AI-generated text and suggestions are based on this business's own " +
+  'data and are clearly presented as AI-generated. Bank-transaction category suggestions are ' +
+  'never applied without a person confirming them. Workflow AI drafts are saved to run history ' +
   'and are not sent automatically. Meeting audio is transcribed and summarized only when the ' +
   'published policy allows it and every participant consents; those results are for human review. ' +
   'AI features never take an irreversible action ' +
   '(sending a message, writing a sale, changing stock) without a human explicitly confirming it ' +
   'first. Usage is metered per business against the monthly cost cap and per-minute rate limit set ' +
-  'below. Voice QA suggestions send the selected transcript (with email, phone and payment-card-like numbers masked) and rubric to Anthropic; a human reviewer must verify every suggestion before saving.';
-
-/** Haiku 4.5 standard USD token rates, matching ClaudeClient's default model; still an estimate, not a provider invoice. */
-export const HAIKU_INPUT_COST_PER_TOKEN = 1 / 1_000_000;
-export const HAIKU_OUTPUT_COST_PER_TOKEN = 5 / 1_000_000;
+  'below. Voice QA suggestions send the selected transcript (with email, phone and payment-card-like numbers masked) and rubric to the AI provider; a human reviewer must verify every suggestion before saving.';
 
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 

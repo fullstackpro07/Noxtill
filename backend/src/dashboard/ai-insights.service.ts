@@ -14,6 +14,7 @@ import {
   SALES_NOTABLE_DELTA_PERCENT,
 } from './dashboard.constants';
 import { AiInsightCategory } from '@prisma/client';
+import { expectJson } from '../ai/routing/validate';
 
 interface CategoryFact {
   category: AiInsightCategory;
@@ -153,6 +154,9 @@ export class AiInsightsService {
       prompt,
       0,
       'ai_insights',
+      undefined,
+      undefined,
+      expectJson((v) => Array.isArray(v)),
     );
     const parsed = this.parseObservationArray(raw, facts.length);
     if (!parsed) {

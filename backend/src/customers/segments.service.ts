@@ -6,6 +6,7 @@ import { UpdateSegmentDto } from './dto/update-segment.dto';
 import { SegmentRulesDto } from './dto/segment-rules.dto';
 import { SegmentRules, rulesToWhere } from './segment-rules.util';
 import { Prisma } from '@prisma/client';
+import { expectJson } from '../ai/routing/validate';
 
 const NEW_CUSTOMER_WINDOW_DAYS = 30;
 const UUID_RE =
@@ -160,6 +161,9 @@ export class SegmentsService {
       prompt,
       0.7,
       'segment_persona',
+      undefined,
+      undefined,
+      expectJson((v) => typeof v === 'object' && v !== null),
     );
     try {
       const start = raw.indexOf('{');

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { AppException } from '../common/filters/app.exception';
+import { isAiNotConfiguredError } from './routing/ai-router.service';
 
 export interface AiProviderFailure {
   code: string;
@@ -28,9 +29,12 @@ export function describeAiProviderFailure(error: unknown): AiProviderFailure {
       { error?: { type?: unknown; message?: unknown } } | undefined;
     const message =
       typeof data?.error?.message === 'string' ? data.error.message : '';
+    // Anthropic reports low credit as 400; OpenAI reports exhausted quota as 429.
     if (
-      status === 400 &&
-      /credit balance.*(?:low|insufficient)|insufficient.*credit/i.test(message)
+      (status === 400 || status === 429) &&
+      /credit balance.*(?:low|insufficient)|insufficient.*credit|insufficient_quota|exceeded your current quota/i.test(
+        message,
+      )
     ) {
       return {
         code: 'AI_PROVIDER_INSUFFICIENT_CREDIT',
@@ -45,7 +49,13 @@ export function describeAiProviderFailure(error: unknown): AiProviderFailure {
           'The AI provider rejected server access. Ask the platform administrator to check the API key and permissions.',
       };
     }
-    if (status === 404 && data?.error?.type === 'not_found_error') {
+    if (
+      status === 404 &&
+      (data?.error?.type === 'not_found_error' ||
+        /model/i.test(message) ||
+        (data?.error as { code?: unknown } | undefined)?.code ===
+          'model_not_found')
+    ) {
       return {
         code: 'AI_PROVIDER_MODEL_UNAVAILABLE',
         message:
@@ -60,10 +70,7 @@ export function describeAiProviderFailure(error: unknown): AiProviderFailure {
       };
     }
   }
-  if (
-    error instanceof Error &&
-    error.message === 'ANTHROPIC_API_KEY is not configured'
-  ) {
+  if (isAiNotConfiguredError(error)) {
     return {
       code: 'AI_PROVIDER_NOT_CONFIGURED',
       message: 'The AI reply provider is not configured on this server.',

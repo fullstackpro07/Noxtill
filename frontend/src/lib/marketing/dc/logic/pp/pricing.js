@@ -10,14 +10,15 @@ export class Logic extends DcLogic {
   build() {
     const trial = { days: 14, aiCredits: 200, graceHours: 72, exportDays: 30 };
     const plans = [
-      { id: 'starter', name: 'Starter', best: 'For single-location businesses getting organized.', monthly: 39, yearly: 29 },
-      { id: 'growth', name: 'Growth', best: 'For growing businesses that market and message customers.', monthly: 79, yearly: 59, popular: true },
-      { id: 'professional', name: 'Professional', best: 'For established businesses running finance, field teams and support.', monthly: 159, yearly: 119 },
-      { id: 'business', name: 'Business', best: 'The complete 40-module Business OS for multi-location teams.', monthly: 319, yearly: 239 }
+      { id: 'starter', name: 'Starter', best: 'For single-location businesses getting organized.', monthly: 39, yearly: 29, yearlyTotal: 351, modules: '14 of 40 modules' },
+      { id: 'growth', name: 'Growth', best: 'For growing businesses that market and message customers.', monthly: 79, yearly: 59, yearlyTotal: 711, modules: '25 of 40 modules', popular: true },
+      { id: 'professional', name: 'Professional', best: 'For established businesses running finance, field teams and support.', monthly: 159, yearly: 119, yearlyTotal: 1431, modules: '32 of 40 modules' },
+      { id: 'business', name: 'Business', best: 'The complete 40-module Business OS for multi-location teams.', monthly: 319, yearly: 239, yearlyTotal: 2871, modules: 'All 40 modules' }
     ];
-    const addons = { calling: { fromPlan: 1, proPlan: 2, voicePerMin: 0.35, seat: 19, callMin: 0.03, numberLocal: 3, numberTollFree: 5, speechMin: 0.05 }, user: 10, location: 39, website: 15, credits: [10, 1000], emails: [1, 1000], pages: [5, 100], keywords: [10, 100], envelope: 1, payroll: { base: 29, per: 6 } };
+    // Phone numbers are priced per country (live provider price x markup rule), never a flat table: only the floor is quoted.
+    const addons = { calling: { fromPlan: 1, proPlan: 2, voicePerMin: 0.35, seat: 19, callMin: 0.03, numberFrom: 4, speechMin: 0.05 }, user: 10, location: 39, website: 15, credits: [10, 1000], emails: [1.5, 1000], pages: [5, 100], keywords: [10, 100], envelope: 1, payroll: { base: 29, per: 6 }, storage: [5, 100], videoMin: 0.01, meetRec: 0.5 };
     const enterpriseFrom = 799;
-    const enterprise = { id: 'enterprise', name: 'Enterprise', pill: 'For complex organizations', best: 'For franchises, multi-brand groups and large teams that need a dedicated team.', price: 'Custom', from: enterpriseFrom, users: 'Custom users', locations: 'Custom locations', after: 'business' };
+    const enterprise = { id: 'enterprise', name: 'Enterprise', pill: 'For complex organizations', best: 'For franchises, multi-brand groups and large teams that need a dedicated team.', price: 'Custom', from: enterpriseFrom, users: 'Custom users', locations: 'Custom locations', after: 'business', modules: 'All 40 modules + custom' };
     const offer = { name: 'Founding Member Offer', short: 'Founding member', plans: ['professional', 'business'], extraMonths: 2, termMonths: 12, limit: 100 };
     const usage = { users: ['2', '5', '15', '40'], locations: ['1', '1', '3', '10'], credits: ['500', '1,500', '4,000', '8,000'], emails: ['2,000', '10,000', '25,000', '75,000'], runs: [0, '2,000', '10,000', '50,000'] };
     const A = 1, N = 0, all = [A, A, A, A];
@@ -33,7 +34,7 @@ export class Logic extends DcLogic {
     const payroll5 = [N, N, payrollCell, payrollCell, 'Volume rates'];
     const sections = [
       { id: 'sales', name: 'Sales & Checkout', icon: 'shopping-cart', desc: 'POS, orders, products, inventory, payments and customer credit.', rows: [
-        r('pos', 'Fast Sale (POS)', all5, 'A fast checkout screen for in-person sales, with cash, card and split payments.'),
+        r('pos', 'Fast Sale (POS)', all5, 'A fast checkout screen for in-person sales, with cash, card, digital and split payments on every plan. Card processing is handled by your own payment provider; Noxtill never takes a percentage.'),
         r('orders', 'Orders, quotes and invoices', all5, 'Create quotes, turn them into orders and send invoices in a few clicks.', { short: 'Orders' }),
         r('products', 'Products & Services', all5, 'One catalogue for everything you sell, with prices, variants and service durations.'),
         r('inventory', 'Inventory', all5, 'Track stock levels and get alerts before items run out.'),
@@ -47,13 +48,13 @@ export class Logic extends DcLogic {
       { id: 'marketing', name: 'Marketing & Growth', icon: 'megaphone', desc: 'Reviews, campaigns, social media, listings and your website.', rows: [
         r('reviews', 'Reviews & Reputation', gr, 'Ask happy customers for reviews and reply to every review from one place.'),
         r('campaigns', 'Marketing & Campaigns', gr, 'Send email and SMS campaigns to the right customers at the right time.'),
-        r('social', 'Social Media Management', [N, '3 profiles', '10 profiles', '25 profiles', 'Custom'], 'Plan, schedule and publish posts across your connected social profiles.'),
+        r('social', 'Social Media Management', [N, '3 profiles', '10 profiles', '25 profiles', 'Custom'], 'Plan, schedule and publish posts across your connected profiles on Instagram, Facebook, LinkedIn, TikTok, YouTube, Pinterest and X.'),
         r('listings', 'Business Listings', gr, 'Keep your business details consistent across online directories and maps.'),
         r('website', 'Website & Commerce', [N, '1 site', '1 site', '1 site', 'Custom'], 'Build a website with online booking and an online shop.'),
         r('ads', 'Advertising', bz, 'Create and track ad campaigns from the same place you manage customers.')] },
       { id: 'messaging', name: 'Messaging & Support', icon: 'messages-square', desc: 'Customer messages, alerts and support tickets.', rows: [
         r('whatsapp', 'WhatsApp alerts and receipts', all5, 'Send receipts, booking reminders and alerts to customers on WhatsApp.'),
-        r('inbox', 'Unified Inbox', [N, '5 channels', '5 channels', '5 channels', '5 channels'], 'WhatsApp, SMS, email, Instagram and Messenger in one shared inbox.', { brands: true }),
+        r('inbox', 'Unified Inbox', ['1 channel (WhatsApp)', '5 channels', '5 channels', '5 channels', '5 channels'], 'Starter: one shared inbox for WhatsApp, so customer replies to your receipts and reminders land somewhere you will see them. Growth and above: WhatsApp, SMS, email, Instagram and Messenger in one shared inbox.', { brands: true }),
         r('helpdesk', 'Helpdesk', pr, 'Turn customer questions into tickets, assign them and track them to resolution.')] },
       { id: 'operations', name: 'Operations', icon: 'truck', desc: 'Projects, deliveries, field work, assets, purchasing and branches.', rows: [
         r('projects', 'Projects & Tasks', gr, 'Plan work, assign tasks and track progress with your team.'),
@@ -64,7 +65,7 @@ export class Logic extends DcLogic {
         r('branches', 'Branches (multi-location roll-up)', [N, N, N, `${usage.locations[3]} locations`, 'Custom'], 'Run several locations from one place: roll-up reporting, branch comparison and branch-level permissions.', { short: 'Branches' })] },
       { id: 'team', name: 'Team & Payroll', icon: 'id-card', desc: 'Staff, shifts, attendance and payroll.', rows: [
         r('staff', 'Staff, shifts and attendance', all5, 'Manage your team, plan shifts and record attendance.', { short: 'Staff' }),
-        r('payroll', 'People & Payroll', payroll5, 'Run payroll and manage employee records; processing availability varies by country.')] },
+        r('payroll', 'People & Payroll', payroll5, 'Calculate pay, produce payslips and keep leave and attendance records, in any country Noxtill operates.')] },
       { id: 'finance', name: 'Finance & Documents', icon: 'file-text', desc: 'Reports, profit, accounting and signed documents.', rows: [
         r('reports', 'Reports', ['Basic', 'Basic', 'Advanced', 'Advanced', 'Advanced'], 'Basic: standard sales, tax and business reports. Advanced adds advanced reports and scheduled exports.', { coreFull: true }),
         r('profit', 'Profit & Analytics', gr, 'Understand margins and trends across products, services and staff.'),
@@ -73,6 +74,7 @@ export class Logic extends DcLogic {
       { id: 'ai', name: 'AI & Automation', icon: 'sparkles', desc: 'AI assistant, document digitizing, automation and intelligence.', rows: [
         r('assistant', 'AI Assistant', all5, 'Ask questions about your business and get answers, drafts and daily summaries.'),
         r('digitizer', 'AI Photo Digitizer', ['50 pages/mo', '200 pages/mo', '1,000 pages/mo', '3,000 pages/mo', 'Custom'], 'Turn photos of paper records, receipts and lists into structured data.'),
+        r('setuppages', 'One-time setup scan pages', ['300', '300', '300', '300', 'Custom'], 'Your first 300 pages of setup scanning are free on every plan, on top of your monthly allowance, so importing your products, customers and records never uses up your month.'),
         r('automations', 'Automations & Workflows', [N, 'Basic', 'Advanced', 'Advanced', 'Advanced'], 'Basic: visual workflows, triggers and actions. Advanced adds AI agents in workflows, webhooks and API workflows, versions and testing.', { coreFull: true }),
         r('aiworkflows', 'AI agents in workflows', pr, 'Add AI steps to your automations, such as drafting a reply or classifying a request.'),
         r('copilot', 'AI Copilot for your team', pr, 'An AI assistant beside your team in every module, suggesting next steps and drafting replies.'),
@@ -83,6 +85,7 @@ export class Logic extends DcLogic {
         r('autocommerce', 'Autonomous Commerce', bz, 'Let AI suggest restocking, pricing and promotions for your approval.'),
         r('knowledge', 'Custom agent knowledge base', bz, 'Give your AI agents your own documents, policies and FAQs to answer from.')] },
       { id: 'calls', name: 'AI Receptionist & Calls', icon: 'phone-call', desc: 'AI and human agents for inbound calls, consented outbound calls and video meetings.', rows: [
+        r('concurrent', 'Concurrent calls', [N, '5', '15', '40', 'Custom'], 'How many calls your business can handle at the same time.'),
         r('recagent', 'AI Receptionist agent', gr, 'An AI voice agent that answers calls, books appointments and passes callers to your team.'),
         r('salesagents', 'AI Sales, Booking and Support agents', pr, 'AI agents that answer sales questions, book appointments and resolve support requests by phone and message.'),
         r('advagents', 'AI Lead Qualifier, Follow-up, Routing and Quality Analyst agents', bz, 'AI agents that qualify new leads, follow up with customers, route calls to the right person and review call quality.'),
@@ -97,11 +100,13 @@ export class Logic extends DcLogic {
         r('consent', 'Consent & Compliance', from5(C.fromPlan, A), 'Consent records, Do Not Call lists, recording notices and calling-hour rules by region.'),
         r('supervisor', 'Supervisor Center', from5(C.proPlan, A), 'Supervisors can listen in, whisper to an agent, join the call or take it over.'),
         r('autodialer', 'Auto Dialer', from5(C.proPlan, A), 'AI or agent calling campaigns to customers who have agreed to be contacted, with retry rules and callback scheduling.'),
-        r('video', 'Video Meetings', from5(C.proPlan, A), 'Video calls with screen sharing, scheduling, recording and AI meeting summaries.'),
+        r('video', 'Video Meetings', [N, N, '25 participants', '50 participants', 'Custom'], 'Video calls with screen sharing, scheduling, recording and AI meeting summaries. There is no limit on how long a single meeting can run, only on your monthly total.'),
+        r('videomins', 'Video meeting minutes', [N, N, '2,000/mo', '10,000/mo', 'Custom'], 'Participant-minutes across all your meetings each month. Extra minutes are $0.01 per participant-minute.'),
+        r('meetrec', 'Meeting recording', [N, N, '20 hours/mo', '100 hours/mo', 'Custom'], 'Recorded meeting hours each month. Extra recording is $0.50 per hour recorded.'),
         r('speech', 'Speech & Quality Intelligence', from5(C.proPlan, money(C.speechMin) + '/min', 'Volume rates'), 'Transcripts, sentiment, call scoring and AI coaching, billed per analyzed minute.'),
-        r('seats', 'Human agent seats', from5(C.fromPlan, money(C.seat) + '/agent/mo', 'Volume rates'), 'Core plans have no per-user fees. You pay for an agent seat only when a team member takes or makes calls.'),
-        r('callmins', 'Call minutes (human agents)', from5(C.fromPlan, money(C.callMin) + '/min in the U.S.', 'Volume rates'), 'Minutes for calls handled by your human agents; other countries are shown before you call.'),
-        r('numbers', 'Phone numbers', from5(C.fromPlan, money(C.numberLocal) + ' local · ' + money(C.numberTollFree) + ' toll-free', 'Volume rates'), 'Local or toll-free numbers for your business line and call tracking.')] },
+        r('seats', 'Human agent seats', from5(C.fromPlan, money(C.seat) + '/agent/mo', 'Volume rates'), 'Only for team members who take or make calls. AI voice agents never need a seat.', { pre: "Your plan's users can use every other part of Noxtill at no extra cost. An agent seat is only needed for a person who answers or places calls. AI voice agents never need a seat." }),
+        r('callmins', 'Call minutes (human agents)', from5(C.fromPlan, money(C.callMin) + '/min in the U.S.', 'Volume rates'), "Minutes for calls your team answers inside Noxtill. Forwarding calls to an outside phone number is billed at that country's rate, shown before you enable it."),
+        r('numbers', 'Phone numbers', from5(C.fromPlan, 'From ' + money(C.numberFrom) + '/month — price varies by country and number type', 'Volume rates'), 'Local or toll-free numbers for your business line and call tracking. The exact price for your country and number type is shown before you buy.')] },
       { id: 'platform', name: 'Platform', icon: 'layout-dashboard', desc: 'Dashboard, settings, integrations and access control.', rows: [
         r('dashboard', 'Dashboard and Nightly Close', all5, 'One view of today\'s business, plus an end-of-day summary every night.', { short: 'Dashboard & Nightly Close' }),
         r('settings', 'Settings, currency and tax rules', all5, 'Set your own currency, tax rules and business settings.', { short: 'Settings' }),
@@ -117,12 +122,19 @@ export class Logic extends DcLogic {
         r('earlyaccess', 'Early access to new features', bz, 'Try new modules and features before they are released to everyone.'),
         r('sso', 'Single sign-on (SSO)', en, 'Let your team sign in with your company identity provider.'),
         r('multientity', 'Multi-entity permissions', en, 'Separate permissions and approval rules for each company, brand or entity you run.')] },
-      { id: 'usage', name: 'Usage limits', icon: 'gauge', desc: 'Users, locations, AI credits, emails and automation runs.', rows: [
+      { id: 'usage', name: 'Usage limits', icon: 'gauge', desc: 'Users, locations, AI credits, emails, storage, recordings and automation runs.', rows: [
         r('users', 'Users', lim(usage.users.slice(), 'Custom'), 'People who can sign in to your workspace.'),
         r('locations', 'Locations', lim(usage.locations.slice(), 'Custom'), 'Shops, branches or service areas you run from one account.'),
         r('credits', 'AI credits per month', lim(usage.credits.slice(), 'Custom'), 'One credit covers one standard AI action, such as a reply draft or summary.'),
+        r('intelruns', 'Intelligence runs per month', [N, N, N, '150', 'Custom'], 'Business Intelligence diagnosis, Business Simulator and Competitive Insights recommendations each use one run instead of AI credits, so using them every day never drains your AI credits.'),
         r('emails', 'Emails per month', lim(usage.emails.slice(), 'Custom'), 'Marketing and transactional emails sent from Noxtill.'),
-        r('runs', 'Automation runs per month', lim(usage.runs.map(v => v || N), 'Custom'), 'Each time an automation runs, it uses one run.')] },
+        r('runs', 'Automation runs per month', lim(usage.runs.map(v => v || N), 'Custom'), 'Each time an automation runs, it uses one run.', { post: 'An automation run that uses AI also uses AI credits. Runs without AI steps use no credits.' }),
+        r('storage', 'Storage', ['10 GB', '50 GB', '200 GB', '500 GB', 'Custom'], 'Space for recordings, scanned documents, product images and attachments. Extra storage is $5 per 100 GB per month.'),
+        r('callrec', 'Call recordings kept for', [N, '60 days', '90 days', '180 days', 'Custom'], 'How long call recordings are stored before they are removed automatically. You can download any recording while it is stored.'),
+        r('meetrecret', 'Meeting recordings kept for', [N, N, '30 days', '90 days', 'Custom'], 'How long meeting recordings are stored before they are removed automatically. You can download any recording while it is stored.'),
+        r('history', 'Message and transaction history', ['Unlimited', 'Unlimited', 'Unlimited', 'Unlimited', 'Unlimited'], 'Your message history, orders, invoices and customer records are never deleted while your account is active.'),
+        r('bandwidth', 'Website bandwidth', [N, '100 GB/mo', '250 GB/mo', '1 TB/mo', 'Custom'], 'Monthly traffic served by your Noxtill website.'),
+        r('apireq', 'API requests', ['10,000/mo', '50,000/mo', '250,000/mo', '1,000,000/mo', 'Custom'], 'Requests your own integrations can make to the Noxtill API each month.')] },
       { id: 'support', name: 'Support & onboarding', icon: 'life-buoy', desc: 'Help when you need it, from setup onwards.', rows: [
         r('help', 'Help center and email support', all5, 'Search guides anytime and email our support team.'),
         r('chat', 'Live chat', gr, 'Chat with our support team during business hours.'),
@@ -131,14 +143,15 @@ export class Logic extends DcLogic {
         r('dedicated', 'Dedicated success manager', en, 'One named person who knows your business and helps you get more from Noxtill.'),
         r('sla', 'Uptime and support SLA', en, 'A written commitment on uptime and support response times.'),
         r('migration', 'Data migration', en, 'Our team moves your data from your current tools into Noxtill.'),
-        r('security', 'Security review and DPA', en, 'Support for your security questionnaire and a signed Data Processing Addendum.'),
+        r('dpa', 'Data Processing Agreement', [A, A, A, A, 'Negotiated'], 'Our standard Data Processing Agreement, including the EU Standard Contractual Clauses and UK transfer addendum, is available on every plan. Enterprise can negotiate its terms.'),
+        r('security', 'Custom security review and negotiated DPA', en, 'Enterprise only: support for your security questionnaire and a negotiated Data Processing Agreement.'),
         r('invoice', 'Yearly invoice billing', en, 'Pay once a year by invoice instead of by card.')] }
     ];
     const bullets = {
-      starter: ['dashboard', 'pos', { label: 'Orders, quotes and invoices', needs: ['orders'] }, 'products', 'inventory', 'credit', 'bookings', 'crm', 'staff', 'assistant', 'digitizer', 'whatsapp', 'reports', 'api', { label: 'Settings and roles', needs: ['settings', 'roles'] }, { label: 'Basic approvals for AI actions', needs: ['aibasic'] }, 'help'],
-      growth: ['inbox', 'campaigns', 'reviews', 'social', 'listings', 'website', 'automations', 'projects', 'delivery', 'profit', 'pipeline', 'recagent', 'transfer', 'agents', 'workspace', 'ivr', 'powerdialer', 'calltracking', 'consent', { label: 'Live chat support', needs: ['chat'] }],
-      professional: ['accounting', 'payroll', 'payments', 'field', 'helpdesk', 'portal', 'esign', { label: '3 more AI voice agents', needs: ['salesagents'] }, 'aiworkflows', 'copilot', 'supervisor', 'autodialer', 'video', 'speech', { label: 'Custom roles and permissions', needs: ['roles'] }, { label: 'Custom approval rules for AI actions', needs: ['aibasic'] }, 'audit', { label: 'Advanced reports and scheduled exports', needs: ['reports'] }, 'webhooks', 'versions', 'onboarding'],
-      business: ['branches', 'bi', 'seo', 'autocommerce', 'procurement', 'assets', 'ads', 'competitive', { label: 'All 8 AI voice agents', needs: ['advagents', 'salesagents', 'recagent'] }, 'knowledge', 'simulator', 'branchperms', 'sandbox', 'governance', 'earlyaccess', 'priority'],
+      starter: ['dashboard', 'pos', { label: 'Orders, quotes and invoices', needs: ['orders'] }, 'products', 'inventory', 'credit', 'bookings', 'crm', 'staff', 'assistant', 'digitizer', 'whatsapp', 'reports', 'api', { label: 'Settings and roles', needs: ['settings', 'roles'] }, { label: 'Basic approvals for AI actions', needs: ['aibasic'] }, { label: 'Unified Inbox — WhatsApp only', needs: ['inbox'] }, 'help'],
+      growth: [{ label: 'Unified Inbox — 5 channels', needs: ['inbox'] }, 'campaigns', 'reviews', 'social', 'listings', 'website', 'automations', 'projects', 'delivery', 'profit', 'pipeline', { label: 'AI Receptionist agent — minutes billed at $0.35/min', needs: ['recagent'] }, { label: 'Call transfer, queuing and recording — needs a phone number and call minutes', needs: ['transfer'] }, 'agents', 'workspace', 'ivr', 'powerdialer', 'calltracking', 'consent', { label: 'Live chat support', needs: ['chat'] }],
+      professional: ['accounting', 'payroll', 'payments', 'field', 'helpdesk', 'portal', 'esign', { label: 'AI Sales, Booking and Support agents', needs: ['salesagents'] }, 'aiworkflows', 'copilot', 'supervisor', 'autodialer', { label: 'Video Meetings — up to 25 participants, 2,000 minutes/month', needs: ['video'] }, { label: 'Speech & Quality Intelligence — $0.05 per analysed minute', needs: ['speech'] }, { label: 'Custom roles and permissions', needs: ['roles'] }, { label: 'Custom approval rules for AI actions', needs: ['aibasic'] }, 'audit', { label: 'Advanced reports and scheduled exports', needs: ['reports'] }, 'webhooks', 'versions', 'onboarding'],
+      business: ['branches', 'bi', { label: 'SEO Autopilot — 100 tracked keywords', needs: ['seo'] }, 'autocommerce', 'procurement', 'assets', 'ads', 'competitive', { label: 'All 8 AI voice agents', needs: ['advagents', 'salesagents', 'recagent'] }, 'knowledge', 'simulator', 'branchperms', 'sandbox', 'governance', 'earlyaccess', 'priority'],
       enterprise: [{ label: 'Custom limits', needs: ['users', 'locations', 'credits'] }, { label: 'Custom AI agents built with our team', needs: ['customagents'] }, 'sso', 'sla', 'dedicated', { label: 'Guided onboarding and data migration', needs: ['onboarding', 'migration'] }, { label: 'Custom integrations and higher API limits', needs: ['api'] }, 'security', 'multientity', { label: 'Volume usage rates', needs: ['voicemins', 'payroll'] }, 'invoice']
     };
     const sectionsFlat = sections;
@@ -146,12 +159,13 @@ export class Logic extends DcLogic {
     const R = {}; sections.forEach(s => s.rows.forEach(x => { R[x.id] = x; }));
     const m = n => '$' + (Number.isInteger(n) ? n.toLocaleString('en-US') : n.toFixed(2));
     const k = n => n.toLocaleString('en-US');
-    const discount = Math.round(Math.min(...plans.map(p => (1 - p.yearly / p.monthly) * 100)));
+    const discount = Math.round(Math.min(...plans.map(p => (1 - p.yearlyTotal / (p.monthly * 12)) * 100)));
+    const saveOf = p => p.monthly * 12 - p.yearlyTotal;
     const addonRows = [
-      { name: 'AI Receptionist minutes', price: `${m(C.voicePerMin)} per AI minute, for every AI voice agent. No monthly fee.`, note: `${plans[C.fromPlan].name} and above` },
+      { name: 'AI Receptionist minutes', price: `${m(C.voicePerMin)} per AI minute, for every AI voice agent. No monthly fee.`, note: `${plans[C.fromPlan].name} and above`, link: { href: '/legal/ai-transparency', label: 'AI Transparency Policy' } },
       { name: 'Human agent seat', price: `${m(C.seat)}/month per agent, only for team members who take or make calls` },
-      { name: 'Call minutes (human agents)', price: `${m(C.callMin)}/minute in the U.S.; other countries shown before you call` },
-      { name: 'Phone number', price: `${m(C.numberLocal)}/month local, ${m(C.numberTollFree)}/month toll-free` },
+      { name: 'Call minutes (human agents)', price: `${m(C.callMin)}/minute in the U.S. when your team answers inside Noxtill. Forwarding calls to an outside phone number is billed at that country's rate, shown before you enable it.` },
+      { name: 'Phone number', price: `From ${m(C.numberFrom)}/month for a U.S. local number. Prices vary by country and number type, and the exact price is shown before you buy.` },
       { name: 'Speech & Quality Intelligence', price: `${m(C.speechMin)} per analyzed minute`, note: `${plans[C.proPlan].name} and above` },
       { name: 'Extra user', price: `${m(addons.user)}/month` },
       { name: 'Extra location', price: `${m(addons.location)}/month` },
@@ -161,28 +175,39 @@ export class Logic extends DcLogic {
       { name: 'AI Photo Digitizer pages', price: `${m(addons.pages[0])} per ${k(addons.pages[1])}` },
       { name: 'Extra SEO keywords', price: `${m(addons.keywords[0])} per ${k(addons.keywords[1])}` },
       { name: 'Extra eSign envelopes', price: `${m(addons.envelope)} each` },
-      { name: 'SMS', price: 'Rates by country, shown before you send' },
-      { name: 'People & Payroll', price: `${m(addons.payroll.base)}/month + ${m(addons.payroll.per)} per employee`, note: 'Payroll processing availability varies by country.' }
+      { name: 'Extra storage', price: `${m(addons.storage[0])} per ${k(addons.storage[1])} GB per month` },
+      { name: 'Extra video meeting minutes', price: `${m(addons.videoMin)} per participant-minute` },
+      { name: 'Extra meeting recording', price: `${m(addons.meetRec)} per hour recorded` },
+      { name: 'SMS', price: 'Rates by country, shown before you send. U.S. numbers must complete carrier registration (A2P 10DLC) before you can send. A one-time registration fee and a small monthly carrier fee apply, and approval normally takes 1-2 weeks. We guide you through it inside Noxtill.', link: { href: '/legal/messaging-consent', label: 'Messaging Compliance Policy' } },
+      { name: 'People & Payroll', price: `${m(addons.payroll.base)}/month + ${m(addons.payroll.per)} per employee`, note: 'Pay calculation, payslips, leave and attendance records are available everywhere Noxtill operates.' }
     ];
+
     const g = plans[1];
     const offerNames = offer.plans.map(id => plans.find(p => p.id === id).name).join(' or ');
     const faqs = [
       ['Do I need a credit card for the free trial?', `No. Start your ${trial.days}-day free trial without a credit card.`],
       ['What happens when my trial ends?', `You get a ${trial.graceHours}-hour grace period to activate a plan, and ${trial.exportDays} days to export your data.`],
-      ['Can I change plans anytime?', 'Yes. Upgrades apply immediately and are prorated. Downgrades take effect at your next renewal.'],
-      ['How does yearly billing work?', `You pay upfront for 12 months at about ${discount}% off monthly pricing. For example, ${g.name} is ${m(g.yearly * 12)} billed once a year, which works out to ${m(g.yearly)} a month.`],
+      ['Can I change plans anytime?', 'Yes. Upgrades apply immediately and are prorated. Downgrades take effect at your next renewal. If you cancel a paid plan, you keep access until the end of the period you have paid for, and you have 30 days after that to export your data.'],
+      ['How does yearly billing work?', `You pay upfront for 12 months at ${discount}% off monthly pricing. For example, ${g.name} is ${m(g.yearlyTotal)} billed once a year instead of ${m(g.monthly * 12)}, which saves you ${m(saveOf(g))}.`],
       ['What is the Founding Member Offer?', `Customers who choose yearly ${offerNames} before January 1, 2027 get ${offer.termMonths + offer.extraMonths} months for the price of ${offer.termMonths}. The extra ${offer.extraMonths} months apply to your first term only, and your plan then renews at the standard yearly price.`, false, 'yearlyOnly'],
-      ['Are there per-user fees?', `No. Each plan includes a set number of users. If you need more, extra users are ${m(addons.user)}/month each.`],
+      ['Do you charge per user?', `Each plan includes a set number of users, and everyone on your team can use every part of Noxtill your plan includes. If you need more users, extra users are ${m(addons.user)}/month each. Taking or making phone calls needs an agent seat (${m(C.seat)}/month each); AI voice agents never need a seat.`],
       ['How fast can I set up?', 'Upload one file — a spreadsheet, CSV or photo of your records — review what Noxtill found, and your workspace is ready in a few simple steps.'],
       ['What is an AI credit?', 'One standard AI action, such as a reply draft or a summary. Larger tasks use more credits, and you see how many before you run them.'],
-      ['How is AI Receptionist billed?', `There is no monthly fee. On ${plans[C.fromPlan].name} and above you pay ${m(C.voicePerMin)} per AI minute, ${m(C.seat)} a month for each team member who takes calls, ${m(C.callMin)} per human call minute in the U.S., and ${m(C.numberLocal)} a month per local number. Usage alerts and spending limits keep you in control. Outbound calls go only to customers who have agreed to be contacted.`],
-      ['How does WhatsApp billing work?', 'You connect your own WhatsApp Business account. Meta bills its message fees directly to you, and Noxtill adds no markup.'],
-      ['Can I use Noxtill outside the United States?', 'Yes. Set your own currency, tax rules and business terms. SMS rates and payroll availability vary by country.'],
+      ['How is AI Receptionist billed?', `There is no monthly fee. On ${plans[C.fromPlan].name} and above you pay ${m(C.voicePerMin)} per AI minute, ${m(C.seat)} a month for each team member who takes calls, ${m(C.callMin)} per human call minute in the U.S. when your team answers inside Noxtill, and phone numbers from ${m(C.numberFrom)} a month depending on country and number type. Usage alerts and spending limits keep you in control. Outbound calls go only to customers who have agreed to be contacted.`],
+      ['How does WhatsApp billing work?', 'You connect your own WhatsApp Business account. Meta bills its message fees directly to you, and Noxtill adds no markup. Connecting your account requires Meta Business verification, which usually takes a few days. We guide you through it.'],
+      ['Who pays for my advertising?', 'You do. Connect your own Google Ads and Meta Ads accounts. They bill your ad spend directly to you. Noxtill adds no markup and never takes a percentage of your ad spend.'],
+      ['Can I use Noxtill outside the United States?', 'Yes. Set your own currency, tax rules and business terms. Subscription prices are billed in USD. SMS rates and phone number prices vary by country.'],
       ['Do you take a percentage of my sales?', 'No. Noxtill never takes a percentage of your sales. Card processing fees are charged by your own payment provider.'],
+      ["Do I need to register before sending SMS in the United States?", "Yes. U.S. mobile carriers require every business sending automated text messages from a 10-digit number to register its brand and its messaging campaign. This applies to all providers, not only Noxtill. There is a one-time registration fee and a small monthly carrier fee, and approval normally takes 1-2 weeks. We guide you through the whole process inside Noxtill, and we will tell you the exact fees before you start. WhatsApp messaging has no such requirement."],
+      ["How long do you keep call and meeting recordings?", "Call recordings are kept for 60 days on Growth, 90 days on Professional and 180 days on Business. Meeting recordings are kept for 30 days on Professional and 90 days on Business. You can download any recording at any time while it is stored, and Enterprise plans can set a custom retention period. Your message history, orders, invoices and customer records are never deleted while your account is active."],
+      ["What happens if I run out of AI credits?", "Nothing breaks and nothing is charged automatically. Features that use AI pause, and everything else in Noxtill keeps working normally. You will have already received alerts at 50%, 75% and 90% of your allowance. An owner or admin can top up at $10 per 1,000 credits, and purchased credits never expire. You can also set a hard spending limit so that no top-up is ever possible without your approval."],
+      ["Is there a storage limit?", "Yes. Each plan includes storage for recordings, scanned documents, product images and attachments: 10 GB on Starter, 50 GB on Growth, 200 GB on Professional and 500 GB on Business. Extra storage is $5 per 100 GB per month. Recordings are removed automatically at the end of their retention period, which keeps most businesses well inside their allowance."],
+      ["What happens if I downgrade?", "Your data is not deleted. A downgrade takes effect at your next renewal, with no charge today. If you are using more users or locations than the new plan includes, we show you exactly how many to remove first, and you can keep your current plan instead. Modules that are not in your new plan stop appearing, and you can export your data at any time."],
+      ["Do video meetings have a time or participant limit?", "Professional includes meetings for up to 25 participants with 2,000 meeting minutes a month and 20 hours of recording. Business includes up to 50 participants with 10,000 minutes and 100 hours of recording. Extra minutes are $0.01 per participant-minute and extra recording is $0.50 per hour. There is no limit on how long a single meeting can run, only on your monthly total."],
       ['Can I export my data if I leave?', `Yes. Export everything anytime, and for ${trial.exportDays} days after cancelling.`, true]
     ];
     const tools = [['pos', 'POS', 'pos'], ['booking', 'Booking', 'bookings'], ['crm', 'CRM', 'crm'], ['marketing', 'Email/SMS marketing', 'campaigns'], ['social', 'Social scheduling', 'social'], ['website', 'Website builder', 'website'], ['helpdesk', 'Helpdesk', 'helpdesk'], ['accounting', 'Accounting', 'accounting'], ['payroll', 'Payroll', 'payroll'], ['esign', 'E-signature', 'esign']];
-    return { offer, trial, plans, addons, enterpriseFrom, enterprise, columns, usage, sections, bullets, R, m, discount, addonRows, faqs, tools };
+    return { saveOf, offer, trial, plans, addons, enterpriseFrom, enterprise, columns, usage, sections, bullets, R, m, discount, addonRows, faqs, tools };
   }
 
   bulletText(b) { if (typeof b === 'string') { const x = this.D.R[b]; return x ? x.short || x.name : b; } return b.label; }
@@ -316,7 +341,7 @@ export class Logic extends DcLogic {
     const D = this.D, st = this.state, m = D.m, yearly = st.billing === 'yearly';
     const isMobile = st.vw < 820, wideNav = st.vw >= 1100;
     const priceOf = p => yearly ? p.yearly : p.monthly;
-    const noteOf = p => yearly ? `${m(p.yearly * 12)} billed yearly upfront` : 'billed monthly';
+    const noteOf = p => yearly ? `${m(p.yearlyTotal)} billed yearly upfront` : 'billed monthly';
     const wide = st.vw >= 1200;
     const toCard = (b) => ({ text: this.bulletText(b), icon: 'check-circle-2', color: '#2E3E36', iconColor: '#0E7C4F' });
     const mobile = st.vw < 640, swipe = !wide && !mobile;
@@ -324,8 +349,8 @@ export class Logic extends DcLogic {
     const planCards = D.plans.map((p, i) => {
       const offer = yearly && D.offer.plans.includes(p.id);
       return {
-        hid: 'plan-' + p.id, name: p.name, best: p.best, price: m(priceOf(p)), perMonth: true, note: !yearly ? `Billed monthly · or save ${D.discount}% yearly` : `${m(p.yearly * 12)} billed yearly · ${D.offer.plans.includes(p.id) ? `${D.offer.termMonths + D.offer.extraMonths} months for the price of ${D.offer.termMonths} · ` : ''}or ${m(p.monthly)} month-to-month`,
-        users: `${D.usage.users[i]} users`, locs: `${D.usage.locations[i]} location${+D.usage.locations[i] > 1 ? 's' : ''}`,
+        hid: 'plan-' + p.id, name: p.name, best: p.best, price: m(priceOf(p)), perMonth: true, note: !yearly ? `Billed monthly · or save ${D.discount}% yearly` : `${m(p.yearly)}/mo billed ${m(p.yearlyTotal)}/year · Save ${m(D.saveOf(p))} · ${D.offer.plans.includes(p.id) ? `${D.offer.termMonths + D.offer.extraMonths} months for the price of ${D.offer.termMonths} · ` : ''}or ${m(p.monthly)} month-to-month`,
+        users: `${D.usage.users[i]} users`, modules: p.modules, usersNote: `${D.usage.users[i]} users — everyone on your team can use Noxtill.`, locs: `${D.usage.locations[i]} location${+D.usage.locations[i] > 1 ? 's' : ''}`,
         popular: !!p.popular, plain: !p.popular, std: true, ent: false, border: p.popular ? '2px solid #0E7C4F' : '1px solid #E4ECE8', icon: ['store', 'trending-up', 'briefcase', 'building-2'][i], trialBtn: `Start ${D.trial.days}-day free trial`,
         hasIntro: true, intro: i > 0 ? `Everything in ${D.plans[i - 1].name}, plus:` : 'Includes:',
         bullets: D.bullets[p.id].map(toCard), seeLabel: 'Compare all features ↓',
@@ -336,7 +361,7 @@ export class Logic extends DcLogic {
       };
     });
     const E = D.enterprise, ei = D.plans.length;
-    const entCard = { pill: E.pill, name: E.name, best: E.best, price: E.price, note: `Typically from ${m(E.from)}/month, billed yearly`, users: E.users, locs: E.locations,
+    const entCard = { modules: E.modules, usersNote: 'Custom users — everyone on your team can use Noxtill.', pill: E.pill, name: E.name, best: E.best, price: E.price, note: `Typically from ${m(E.from)}/month, billed yearly`, users: E.users, locs: E.locations,
       intro: `Everything in ${D.plans.find(p => p.id === E.after).name}, plus:`, bullets: D.bullets.enterprise.map(toCard), seeLabel: 'Compare all features ↓', seeAll: e => { e.preventDefault(); this.openCompare(ei); } };
     const entLayout = { mt: swipe ? '12px' : mobile ? '16px' : '0', w: mobile ? '100%' : st.cardW ? st.cardW + 'px' : (wide ? 'calc((100% - 48px) / 4)' : 'min(300px, calc(100vw - 72px))') };
     planCards.forEach((c, i) => Object.assign(c, { mt: c.band ? '0' : '30px', flex: cardFlex }));
@@ -348,7 +373,7 @@ export class Logic extends DcLogic {
       open: !!st.open[s.id], rot: st.open[s.id] ? 'rotate(180deg)' : 'none', hasNote: !!s.note, note: s.note || '',
       toggle: () => this.setState(x => ({ open: { ...x.open, [s.id]: !x.open[s.id] } })),
       rows: s.rows.map(r => ({
-        name: r.name, tip: r.tip, tipId: 'tip-' + r.id, tipLabel: `More about ${r.name}`, hasBrands: !!r.brands,
+        name: r.name, hasPre: !!r.pre, pre: r.pre || '', hasPost: !!r.post, post: r.post || '', tip: r.tip, tipId: 'tip-' + r.id, tipLabel: `More about ${r.name}`, hasBrands: !!r.brands,
         tipDisplay: st.tip === r.id ? 'block' : 'none',
         show: () => this.setState({ tip: r.id }), hide: () => this.setState(x => x.tip === r.id ? { tip: null } : null),
         key: e => { if (e.key === 'Escape') this.setState({ tip: null }); },
@@ -409,7 +434,7 @@ export class Logic extends DcLogic {
         { icon: 'eye', title: 'Nothing saved without you', text: 'Every detail is shown with its source for your review.' },
         { icon: 'download', title: 'Your data stays yours', text: 'Export it anytime, on any plan.' }],
       includes: [
-        { icon: 'users-round', title: 'No per-user fees', text: 'One price covers your whole team.' },
+        { icon: 'users-round', title: 'No cut of your sales', text: 'We never take a percentage of your sales.' },
         { icon: 'sparkles', title: 'AI Assistant built in', text: 'Answers, drafts and daily summaries.' },
         { icon: 'message-circle', title: 'WhatsApp alerts and receipts', text: 'Reach customers on the app they already use.' },
         { icon: 'monitor-smartphone', title: 'Mobile and desktop', text: 'Run your business from anywhere.' },
@@ -417,17 +442,19 @@ export class Logic extends DcLogic {
         { icon: 'globe', title: 'Global-ready', text: 'Set your own currency, tax rules and business terms.' }].map(x => ({ ...x, mask: `url(/marketing/pp/lucide/${x.icon}.svg) center / contain no-repeat` })),
       isMobile, cmpCols: isMobile ? 'minmax(0,1.5fr) minmax(0,1fr)' : 'minmax(0,2fr) repeat(5,minmax(0,1fr))',
       planTabs: D.columns.map((p, i) => ({ name: p.name, active: tab(i), pick: () => this.setState({ mPlan: i }), bg: tab(i) ? '#fff' : 'transparent', fg: tab(i) ? '#0B3B2A' : '#3E4F47', shadow: tab(i) ? '0 1px 3px rgba(11,59,42,0.15)' : 'none' })),
-      cmpHead: vis.map(i => { const p = D.columns[i]; const hlBg = !isMobile && st.hl === i ? '#EEF8F2' : 'transparent'; return i === ei ? { hlBg, name: p.name, price: p.price, perMonth: false, hasNote: true, note: `from ${m(p.from)}/month`, ent: true, std: false, aria: `Contact sales about ${p.name}` } : { hlBg, name: p.name, price: m(priceOf(p)), perMonth: true, hasNote: true, note: yearly ? `${m(p.yearly * 12)} billed yearly` : 'Billed monthly', ent: false, std: true, aria: `Start free trial of ${p.name}` }; }),
+      cmpHead: vis.map(i => { const p = D.columns[i]; const hlBg = !isMobile && st.hl === i ? '#EEF8F2' : 'transparent'; return i === ei ? { hlBg, name: p.name, price: p.price, perMonth: false, hasNote: true, note: `from ${m(p.from)}/month`, ent: true, std: false, aria: `Contact sales about ${p.name}` } : { hlBg, name: p.name, price: m(priceOf(p)), perMonth: true, hasNote: true, note: yearly ? `${m(p.yearlyTotal)} billed yearly` : 'Billed monthly', ent: false, std: true, aria: `Start free trial of ${p.name}` }; }),
       cmpSections, toggleAllLabel: allOpen ? 'Collapse all' : 'Expand all', toggleAllRot: allOpen ? 'rotate(180deg)' : 'none',
       toggleAll: () => { const o = {}; if (!allOpen) D.sections.forEach(s => { o[s.id] = true; }); this.setState({ open: o }); },
       brands: [{ slug: 'whatsapp', name: 'WhatsApp' }, { slug: 'instagram', name: 'Instagram' }, { slug: 'messenger', name: 'Messenger' }, { slug: 'gmail', name: 'Email' }, { slug: 'googlemessages', name: 'SMS' }].map(b => ({ ...b, src: '/marketing/pp/brands/' + b.slug + '.svg' })),
-      addonRows: D.addonRows.map(a => ({ ...a, hasNote: !!a.note, note: a.note || '' })),
+      addonRows: D.addonRows.map(a => ({ ...a, hasNote: !!a.note, note: a.note || '', hasLink: !!a.link, linkHref: a.link ? a.link.href : '', linkLabel: a.link ? a.link.label : '' })),
       surprise: [{ icon: 'bell-ring', text: 'Usage alerts at 50%, 75%, 90% and 100%' }, { icon: 'shield-check', text: 'Optional hard spending limits' }, { icon: 'badge-check', text: 'Owner approval before any top-up' }],
       trialSteps: [
         { n: '01', title: `Start free for ${D.trial.days} days`, text: 'Full access to the plan you choose. No credit card.' },
-        { n: '02', title: 'Bring one file, get set up fast', text: 'Import a spreadsheet or a photo of your records, and Noxtill recommends the right modules for your business.' },
+        { n: '02', title: 'Bring one file, get set up fast', text: 'Import a spreadsheet or a photo of your records, and Noxtill recommends the right modules for your business. Your first 300 pages of setup scanning are free on every plan, on top of your monthly allowance. Get your products, customers and records in without using up your month.' },
         { n: '03', title: 'Choose monthly or yearly', text: `Add a payment method before day ${D.trial.days} to keep going. Nothing is charged during the trial.` }],
-      trialSmall: `Trials include ${D.trial.aiCredits} AI credits. AI Receptionist calls and paid SMS or marketing campaigns unlock after you add a payment method. When a trial ends you have a ${D.trial.graceHours}-hour grace period to activate, and a ${D.trial.exportDays}-day window to export your data.`,
+      trialSmall: `Trials include ${D.trial.aiCredits} AI credits. AI Receptionist calls and paid SMS or marketing campaigns unlock after you add a payment method. Meeting recording is available on paid plans only. When a trial ends you have a ${D.trial.graceHours}-hour grace period to activate, and a ${D.trial.exportDays}-day window to export your data.`,
+      cancelLine: `If you cancel a paid plan, you keep access until the end of the period you have paid for, and you have ${D.trial.exportDays} days after that to export your data.`,
+      refundLine: 'Refund window: 7 days from your first paid activation, if you have not materially used the service.',
       tools: D.tools.map(([id, label]) => { const on = !!st.checked[id]; return {
         label, checked: on, disabled: !on, cost: st.costs[id] ?? '', aria: `Monthly cost of your current ${label} tool, in US dollars`,
         border: on ? '#9CC9B1' : '#E1E8E4', bg: on ? '#fff' : '#F4F6F5',

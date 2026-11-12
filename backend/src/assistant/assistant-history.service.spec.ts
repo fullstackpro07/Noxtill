@@ -5,7 +5,7 @@ import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AssistantService } from './assistant.service';
 import { AssistantHistoryService } from './assistant-history.service';
-import type { ClaudeClient } from '../ai/claude.client';
+import type { AiRouterService } from '../ai/routing/ai-router.service';
 import type { AiInfraService } from '../ai/ai-infra.service';
 
 class FakeClsService {
@@ -63,7 +63,7 @@ describe('AssistantHistoryService (unified Chat History)', () => {
     const assistantService = new AssistantService(
       tenantPrisma,
       prisma,
-      {} as unknown as ClaudeClient,
+      {} as unknown as AiRouterService,
       {} as unknown as AiInfraService,
     );
     service = new AssistantHistoryService(

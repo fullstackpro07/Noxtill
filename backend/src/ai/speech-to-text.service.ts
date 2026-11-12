@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { AppException } from '../common/filters/app.exception';
 
+import { STT_MODEL } from './specialised-services';
+
 interface WhisperTranscriptionResponse {
   text: string;
   duration?: number;
@@ -13,7 +15,7 @@ interface WhisperTranscriptionResponse {
  * Real speech-to-text via OpenAI's Whisper endpoint (Voice-entry Sale, UPD-BE-008 — and later the
  * AI Phone Receptionist, UPD-BE-057, which is why this lives in the shared `ai/` module rather
  * than inside `orders/`). Claude's own Messages API has no audio-input support (confirmed: no
- * multimodal audio plumbing anywhere in `ClaudeClient`), so transcription is a genuinely separate
+ * multimodal audio plumbing in the text routing layer), so transcription is a genuinely separate
  * real call, upstream of `AiInfraService.complete()` doing the structured parsing on the resulting
  * text. Needs `OPENAI_API_KEY` — same disclosed-placeholder pattern as every other external
  * credential in this app when unconfigured.
@@ -53,7 +55,7 @@ export class SpeechToTextService {
       new Blob([new Uint8Array(audioBuffer)], { type: mimeType }),
       filename,
     );
-    form.append('model', 'whisper-1');
+    form.append('model', STT_MODEL);
     form.append('response_format', 'verbose_json');
 
     try {

@@ -8,11 +8,11 @@ import {
 } from '@nestjs/common';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  ClaudeClient,
+import type {
   AnthropicContentBlock,
   AnthropicMessage,
-} from '../ai/claude.client';
+} from '../ai/ai-message.types';
+import { AiRouterService, RouteMeta } from '../ai/routing/ai-router.service';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 import { collectAnthropicStream } from '../ai/anthropic-stream.util';
@@ -47,10 +47,10 @@ const TITLE_MAX_LENGTH = 80;
 
 /**
  * Tool-calling assistant (BE-074). Every turn is streamed via
- * ClaudeClient.streamMessage so the caller sees tokens arrive live —
+ * AiRouterService.stream so the caller sees tokens arrive live —
  * including any "let me check that..." preamble before a tool call — and
  * the loop keeps calling tools (tenant-locked to `businessId`, never a
- * value the model can override) until Claude stops requesting them.
+ * value the model can override) until the model stops requesting them.
  */
 @Injectable()
 export class AssistantService {
@@ -59,7 +59,7 @@ export class AssistantService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly prisma: PrismaService,
-    private readonly claude: ClaudeClient,
+    private readonly router: AiRouterService,
     private readonly aiInfra: AiInfraService,
   ) {}
 
@@ -123,18 +123,19 @@ export class AssistantService {
       );
 
       let stream: NodeJS.ReadableStream;
+      let route: RouteMeta;
       try {
-        stream = await this.claude.streamMessage({
+        ({ stream, meta: route } = await this.router.stream(AI_CALL_KIND, {
           // Without the real date the model cannot resolve "tomorrow"/"yesterday" into the
           // YYYY-MM-DD `get_bookings_on_date` needs — it would have to guess.
           system: `${SYSTEM_PROMPT} Today's date is ${new Date().toISOString().slice(0, 10)}.`,
           messages,
           tools: toAnthropicTools(),
-        });
+        }));
       } catch (error) {
         await this.aiInfra.releaseCredits(reservation, 'provider_error');
         this.logger.error(
-          `Assistant Claude call failed: ${(error as Error).message}`,
+          `Assistant AI call failed: ${(error as Error).message}`,
         );
         throw new AppException(
           'AI_UNAVAILABLE',
@@ -165,6 +166,7 @@ export class AssistantService {
           toolCallLog,
           undefined,
           reservation,
+          route,
         );
         finalText = result.content.find((b) => b.type === 'text')?.text ?? '';
         break;
@@ -195,6 +197,7 @@ export class AssistantService {
         turnToolCalls,
         undefined,
         reservation,
+        route,
       );
     }
 

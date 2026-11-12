@@ -118,7 +118,7 @@ export interface WhatIfResult {
   disclaimer: string;
 }
 
-/** POST /ai/what-if — a real Claude call scoped to one product's own sales history; never a formula. */
+/** POST /ai/what-if — a real AI call scoped to one product's own sales history; never a formula. */
 export function whatIf(productId: string, priceDeltaPct: number): Promise<WhatIfResult> {
   return apiFetch<WhatIfResult>("/ai/what-if", {
     method: "POST",

@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiInfraService } from './ai-infra.service';
-import { ClaudeClient, CreateMessageResult } from './claude.client';
+import type { CreateMessageResult } from './ai-message.types';
+import type { AiRouterService } from './routing/ai-router.service';
 import { AppException } from '../common/filters/app.exception';
 
 jest.mock('axios');
@@ -25,7 +26,24 @@ describe('AiInfraService (BE-075)', () => {
   let prisma: PrismaService;
   let service: AiInfraService;
   let businessId: string;
+  // Stands in for the provider call; the router mock below adds the route meta the real
+  // AiRouterService returns (Medium tier fallback model, so cost is priced from PRICES).
   const claude = { createMessage: jest.fn() };
+  const router = {
+    run: async (kind: string, params: unknown) => {
+      const res = (await claude.createMessage(params)) as CreateMessageResult;
+      const meta = {
+        kind,
+        operation: 'test.operation',
+        tier: 'medium',
+        provider: 'anthropic' as const,
+        model: 'claude-sonnet-5-5',
+        usedFallback: true,
+        latencyMs: 42,
+      };
+      return { ...res, ...meta, meta };
+    },
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -33,7 +51,7 @@ describe('AiInfraService (BE-075)', () => {
     const config = new ConfigService({ OPENAI_API_KEY: 'test-openai-key' });
     service = new AiInfraService(
       prisma,
-      claude as unknown as ClaudeClient,
+      router as unknown as AiRouterService,
       config,
     );
 
@@ -54,6 +72,8 @@ describe('AiInfraService (BE-075)', () => {
 
   afterAll(async () => {
     await prisma.aiCallLog.deleteMany({ where: { businessId } });
+    // Every row this spec writes carries the mock router's operation code.
+    await prisma.aiUsage.deleteMany({ where: { operation: 'test.operation' } });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
       await tx.business.delete({ where: { id: businessId } });
@@ -71,7 +91,23 @@ describe('AiInfraService (BE-075)', () => {
     const logs = await prisma.aiCallLog.findMany({ where: { businessId } });
     expect(logs).toHaveLength(1);
     expect(logs[0].inputTokens).toBe(1000);
-    expect(Number(logs[0].estimatedCostUsd)).toBeCloseTo(0.0035, 4);
+    // Priced at the model that answered: 1000 × $2/M + 500 × $10/M.
+    expect(Number(logs[0].estimatedCostUsd)).toBeCloseTo(0.007, 4);
+
+    const usage = await prisma.aiUsage.findMany({ where: { businessId } });
+    expect(usage).toHaveLength(1);
+    expect(usage[0]).toMatchObject({
+      kind: 'complete',
+      operation: 'test.operation',
+      tier: 'medium',
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
+      tokensIn: 1000,
+      tokensOut: 500,
+      latencyMs: 42,
+      usedFallback: true,
+    });
+    expect(Number(usage[0].costCents)).toBeCloseTo(0.7, 4);
   });
 
   it('blocks further calls once the per-minute rate limit is reached', async () => {

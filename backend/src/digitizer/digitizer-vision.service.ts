@@ -7,7 +7,6 @@ import { DigitizerAliasService } from './digitizer-alias.service';
 import {
   DEFAULT_DESTINATION_BY_SCANNER_TYPE,
   DIGITIZER_ERROR_CODES,
-  DIGITIZER_MODEL,
   DESTINATIONS,
   DOCUMENT_KINDS,
   PDF_MIME_TYPE,
@@ -102,12 +101,12 @@ export class DigitizerVisionService {
 
     let raw: string;
     let truncated = false;
+    let extractionModel = 'unknown';
     try {
       const result = await this.aiInfra.createMessage(
         businessId,
         'digitizer_scan',
         {
-          model: DIGITIZER_MODEL,
           temperature: 0,
           maxTokens: 16000,
           messages: [
@@ -120,6 +119,7 @@ export class DigitizerVisionService {
       );
       raw = result.content.find((block) => block.type === 'text')?.text ?? '';
       truncated = result.stopReason === 'max_tokens';
+      extractionModel = result.model ?? extractionModel;
     } catch (error) {
       this.logger.warn(
         `Digitizer vision extraction failed: ${(error as Error).message}`,
@@ -139,7 +139,12 @@ export class DigitizerVisionService {
       );
     }
 
-    const parsed = this.parse(raw, scannerType, defaultDestination);
+    const parsed = this.parse(
+      raw,
+      scannerType,
+      defaultDestination,
+      extractionModel,
+    );
     const aliasMap = await this.aliases.getMap(businessId);
     return {
       analysis: parsed.analysis,
@@ -229,6 +234,8 @@ export class DigitizerVisionService {
     raw: string,
     scannerType: ScannerType,
     defaultDestination: DigitizerDestination | null,
+    /** The model the router actually used for this scan (recorded on the analysis). */
+    extractionModel = 'unknown',
   ): ExtractionResult {
     let parsed: unknown;
     const objStart = raw.indexOf('{');
@@ -292,7 +299,7 @@ export class DigitizerVisionService {
         lineItems: this.parseLineItems(doc.lineItems),
         totals: this.parseTotals(doc.totals),
         ledger: this.parseLedger(doc.ledger),
-        extractionModel: DIGITIZER_MODEL,
+        extractionModel,
       },
       rows,
     };
