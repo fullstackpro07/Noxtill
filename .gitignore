@@ -11,6 +11,8 @@ node_modules/
 !.yarn/versions
 
 # ── Env files ────────────────────────────────────────────────────────────
+.env
+.env.*
 !.env.example
 
 # ── Logs / debug ─────────────────────────────────────────────────────────
@@ -36,6 +38,8 @@ backend/local-storage/
 
 # ── Frontend (Next.js) ───────────────────────────────────────────────────
 frontend/.next/
+# Stray .next at repo root (Next started from the wrong directory)
+/.next/
 frontend/out/
 frontend/build/
 frontend/coverage/
@@ -59,4 +63,4 @@ temp_interactive_push.bat
 config.bat
 docs/Noxtill Pages/
 docs/policies/
-docs/Features pages/.gitignore
+docs/Features pages/
